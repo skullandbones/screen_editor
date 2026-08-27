@@ -1,17 +1,23 @@
-# Makefile for CP/M Screen Editor (Z80 / RomWBW)
+# Makefile for CP/M Full-Screen Editor (SE.COM)
+# Compiler: z88dk (zcc targeting CP/M +cpm)
 
-UZ80AS = ../../tools/romwbw_src/Tools/Linux/uz80as
+CC = zcc
+CFLAGS = +cpm -O3 -Iinclude --list
+
 TARGET = SE.COM
 
-SOURCES = editor.asm
+C_SRCS = src/main.c src/terminal.c src/buffer.c src/fileio.c
+ASM_SRCS = src/hbios_far.asm
+
+OBJS = $(C_SRCS:.c=.o)
 
 .PHONY: all clean
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCES)
-	@echo "==> Assembling $(TARGET)..."
-	$(UZ80AS) -q editor.asm $(TARGET)
+$(TARGET): $(C_SRCS) $(ASM_SRCS)
+	@echo "==> Compiling and Linking $(TARGET) with z88dk..."
+	$(CC) $(CFLAGS) -o $(TARGET) $(C_SRCS) $(ASM_SRCS)
 
 clean:
-	rm -f $(TARGET) *.lst *.obj *.tmp
+	rm -f $(TARGET) src/*.o src/*.lst src/*.sym *.lis *.def
