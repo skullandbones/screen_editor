@@ -1,0 +1,9 @@
+# Build artifacts
+*.o
+*.obj
+*.rel
+*.sym
+*.lst
+*.tmp
+*.bak
+*.COM
