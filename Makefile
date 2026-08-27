@@ -11,13 +11,17 @@ ASM_SRCS = src/hbios_far.asm
 
 OBJS = $(C_SRCS:.c=.o)
 
-.PHONY: all clean
+.PHONY: all test clean
 
 all: $(TARGET)
 
 $(TARGET): $(C_SRCS) $(ASM_SRCS)
 	@echo "==> Compiling and Linking $(TARGET) with z88dk..."
 	$(CC) $(CFLAGS) -o $(TARGET) $(C_SRCS) $(ASM_SRCS)
+
+test: $(TARGET)
+	@echo "==> Running automated SE.COM integration tests..."
+	python3 tests/test_editor_headless.py
 
 clean:
 	rm -f $(TARGET) src/*.o src/*.lst src/*.sym *.lis *.def
