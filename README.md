@@ -1,0 +1,151 @@
+# SE: CP/M Full-Screen Text Editor for RomWBW / RC2014
+
+**SE** (`SE.COM`) is an ANSI C, full-screen text editor specifically designed for CP/M 2.2 / 3.0 systems running the **RomWBW** firmware (e.g. RC2014, SC126, Zeta 2, SBC) communicating over **Minicom** or any standard VT100/ANSI terminal emulator.
+
+---
+
+## Key Features
+
+* **512KB Extended Memory Buffer**: Breaks the classic 64KB CP/M memory ceiling by utilizing RomWBW HBIOS bank switching (`RST 08H`) to allocate and edit large files (such as multi-thousand line Z80 assembly source files) in upper RAM banks.
+* **ANSI / VT100 Terminal Interface**: Full-screen editing with cursor navigation, scrolling, inverse video status bar, and dialog popups tailored for Minicom.
+* **Z80 ASM Tab Handling**: Configurable tab stops (default 8 columns or 4 columns) with visual alignment for assembly labels, opcodes, operands, and comments.
+* **Modern ANSI C Codebase**: Built using standard C89/C99 with isolated Z80 assembly primitives for bare-metal HBIOS inter-bank transfers.
+
+---
+
+## Toolchain & Build Environment Setup
+
+The build system utilizes **`z88dk`** (the modern ANSI C cross-compiler targeting Z80 CP/M).
+
+### 1. Ubuntu / Debian (x86_64 Host)
+
+#### Option A: Binary Release Archive (Recommended & Fastest)
+1. Install prerequisites:
+   ```bash
+   sudo apt update
+   sudo apt install -y build-essential curl libxml2 libboost-all-dev git
+   ```
+2. Download and unpack the latest z88dk release:
+   ```bash
+   mkdir -p ~/tools/z88dk
+   cd ~/tools/z88dk
+   curl -L https://github.com/z88dk/z88dk/releases/download/v2.3/z88dk-linux-x86_64-2.3.tgz -o z88dk.tgz
+   tar -xzf z88dk.tgz
+   ```
+3. Set your environment variables in `~/.bashrc`:
+   ```bash
+   export Z88DK_PATH="$HOME/tools/z88dk"
+   export PATH="$Z88DK_PATH/bin:$PATH"
+   export ZCCCFG="$Z88DK_PATH/lib/config"
+   ```
+4. Reload shell:
+   ```bash
+   source ~/.bashrc
+   ```
+
+---
+
+### 2. Raspberry Pi 5 (Raspberry Pi OS / Debian Trixie aarch64 Host)
+
+On a Raspberry Pi 5 running **Debian Trixie (testing / 64-bit arm64)** or Raspberry Pi OS based on Trixie:
+
+#### Option A: Quick Build from Source with System SDCC
+1. Install required packages from Debian Trixie repositories:
+   ```bash
+   sudo apt update
+   sudo apt install -y build-essential git bison flex libxml2-dev libboost-all-dev sdcc
+   ```
+2. Clone and build z88dk:
+   ```bash
+   git clone --recursive https://github.com/z88dk/z88dk.git ~/z88dk
+   cd ~/z88dk
+   export BUILD_SDCC=0
+   ./build.sh
+   ```
+3. Add environment variables to `~/.bashrc`:
+   ```bash
+   export Z88DK_PATH="$HOME/z88dk"
+   export PATH="$Z88DK_PATH/bin:$PATH"
+   export ZCCCFG="$Z88DK_PATH/lib/config"
+   ```
+4. Reload shell:
+   ```bash
+   source ~/.bashrc
+   ```
+
+#### Option B: Nightly Binary Tarball (ARM64)
+Alternatively, fetch the pre-built nightly for Linux aarch64 from the z88dk daily repository:
+```bash
+mkdir -p ~/tools/z88dk && cd ~/tools/z88dk
+curl -L http://nightly.z88dk.org/z88dk-linux-arm64-latest.tgz -o z88dk.tgz
+tar -xzf z88dk.tgz
+export ZCCCFG="$HOME/tools/z88dk/lib/config"
+export PATH="$HOME/tools/z88dk/bin:$PATH"
+```
+
+---
+
+## Building `SE.COM`
+
+Once `zcc` is in your `PATH`, compile the editor from the repository root:
+
+```bash
+cd src/screen_editor
+make
+```
+
+This will produce the binary:
+```
+SE.COM
+```
+
+To clean build artifacts:
+```bash
+make clean
+```
+
+---
+
+## Deploying & Running on RC2014
+
+### 1. In the Local RC2014 Hardware Emulator
+From the project workspace root:
+```bash
+# Inject SE.COM into the virtual SD / HD image and boot
+make run
+```
+
+### 2. On Real Hardware (RC2014 via Minicom)
+1. Copy `SE.COM` to your physical SD card or CompactFlash card using `cpmtools` or XModem (`XMODEM R SE.COM` in CP/M).
+2. Connect your RC2014 serial port to your PC / Raspberry Pi:
+   ```bash
+   minicom -b 115200 -D /dev/ttyUSB0
+   ```
+3. Set Minicom terminal emulation:
+   * Terminal type: `VT102` or `ANSI`
+   * Backspace key: `BS` (ASCII 0x08) or `DEL` (ASCII 0x7F)
+4. At the CP/M prompt, launch:
+   ```text
+   A>SE MYFILE.ASM
+   ```
+
+---
+
+## Project Structure
+
+```
+src/screen_editor/
+├── Makefile                # Cross-compilation rules for z88dk / zcc
+├── README.md               # Toolchain setup and documentation
+├── include/
+│   ├── editor.h            # Main editor state and configuration
+│   ├── terminal.h          # VT100 / ANSI escape routines & key input
+│   ├── buffer.h            # 512K Far memory buffer and line indexing
+│   └── hbios.h             # RomWBW HBIOS API (RST 08H) bindings
+└── src/
+    ├── main.c              # Application entry & main event loop
+    ├── terminal.c          # Screen renderer and ANSI key decoder
+    ├── buffer.c            # Gap buffer and line management
+    ├── fileio.c            # CP/M BDOS file load/save
+    └── hbios_far.asm       # Z80 assembly for RomWBW inter-bank transfers
+```
