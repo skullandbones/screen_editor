@@ -759,7 +759,6 @@ CURSOR_UP:
 	RET	Z
 	DEC	A
 	LD	(CUR_ROW),A
-	CALL	CLAMP_CURSOR_COL
 	RET
 
 CURSOR_DOWN:
@@ -778,7 +777,6 @@ CURSOR_DOWN:
 	RET	NC
 	INC	A
 	LD	(CUR_ROW),A
-	CALL	CLAMP_CURSOR_COL
 	RET
 
 CURSOR_LEFT:
@@ -790,33 +788,17 @@ CURSOR_LEFT:
 	RET
 
 CURSOR_RIGHT:
-	; Calculate current line length
-	CALL	GET_CUR_LINE_LEN
-	LD	B,A
-	LD	A,(CUR_COL)
-	CP	B
-	RET	NC			; Don't move right beyond end of line text!
-
-	; Also ensure CUR_COL < ACTIVE_COLS-1
+	; Check screen width boundary
 	LD	A,(ACTIVE_COLS)
 	DEC	A
 	LD	B,A
 	LD	A,(CUR_COL)
 	CP	B
 	RET	NC
+	CP	MAX_LINE_STRIDE-2
+	RET	NC
 
 	INC	A
-	LD	(CUR_COL),A
-	RET
-
-; Clamp CUR_COL so it doesn't float past the end of the new row's text
-CLAMP_CURSOR_COL:
-	CALL	GET_CUR_LINE_LEN
-	LD	B,A
-	LD	A,(CUR_COL)
-	CP	B
-	RET	C
-	LD	A,B
 	LD	(CUR_COL),A
 	RET
 
@@ -853,7 +835,7 @@ LINE_LEN_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Character Insertion at (CUR_ROW, CUR_COL)
+; Character Insertion at (CUR_ROW, CUR_COL) - with automatic space padding
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
 	PUSH	AF			; Save character to insert
@@ -870,17 +852,60 @@ DO_CHAR_INSERT:
 	ADD	HL,HL
 	ADD	HL,HL			; *128
 	LD	DE,LINE_STORAGE
-	ADD	HL,DE
-	PUSH	HL			; Save line start
+	ADD	HL,DE			; HL = line start
 
-	; 2. Calculate insertion address: DE = line_start + CUR_COL
+	; 2. Check if CUR_COL is beyond current line text length
+	CALL	GET_CUR_LINE_LEN	; A = current line length
+	LD	B,A
+	LD	A,(CUR_COL)
+	CP	B
+	JR	C,DO_NORMAL_INSERT_SHIFT
+	JR	Z,DO_NORMAL_INSERT_SHIFT
+
+	; CUR_COL > line length: pad gap from line length up to CUR_COL with spaces
+	PUSH	HL
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + line_len
+PAD_SPACES_LOOP:
+	LD	A,(CUR_COL)
+	CP	B
+	JR	Z,PAD_SPACES_DONE
+	LD	(HL),' '
+	INC	HL
+	INC	B
+	JR	PAD_SPACES_LOOP
+
+PAD_SPACES_DONE:
+	; Place new character at HL (which is line_start + CUR_COL)
+	POP	HL			; Restore line start
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	POP	AF			; Character to insert
+	LD	(HL),A
+	INC	HL
+	XOR	A
+	LD	(HL),A			; Null terminate new end of line
+
+	; Advance cursor right
+	LD	A,(CUR_COL)
+	CP	MAX_LINE_STRIDE-2
+	RET	NC
+	INC	A
+	LD	(CUR_COL),A
+	RET
+
+DO_NORMAL_INSERT_SHIFT:
+	; Shift bytes right from (line_start + 126) down to insertion point (DE)
+	PUSH	HL			; Line start
 	LD	A,(CUR_COL)
 	LD	E,A
 	LD	D,0
 	ADD	HL,DE
 	EX	DE,HL			; DE = insertion point
 
-	; 3. Shift bytes right from (line_start + 126) down to insertion point (DE)
 	POP	HL			; Line start
 	PUSH	DE			; Save insertion point
 	LD	DE,MAX_LINE_STRIDE-2
