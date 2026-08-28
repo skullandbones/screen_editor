@@ -110,8 +110,8 @@ def test_se_execution():
         read_until(master, b"SE - Screen Editor", timeout=6.0)
         time.sleep(0.5)
         os.write(master, b"e")
-        out_edit = read_until(master, b"SE v0.3.0", timeout=6.0)
-        if b"SE v0.3.0" not in out_edit:
+        out_edit = read_until(master, b"SE v0.3.1", timeout=6.0)
+        if b"SE v0.3.1" not in out_edit:
             print("[-] Failed to enter editor mode. Buffer captured:", out_edit)
             return False
         print("[+] Successfully entered full-screen editing mode.")
