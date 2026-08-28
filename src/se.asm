@@ -853,7 +853,6 @@ LINE_LEN_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-;------------------------------------------------------------------------------
 ; Character Insertion at (CUR_ROW, CUR_COL)
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
@@ -977,11 +976,10 @@ DO_INSERT_LINE:
 	LD	C,A
 
 SHIFT_LINES_LOOP:
-	LD	A,C
-	LD	HL,CUR_ROW
-	INC	(HL)			; Temporarily test against CUR_ROW+1
-	CP	(HL)
-	DEC	(HL)			; Restore CUR_ROW
+	; Compare C with (CUR_ROW + 1)
+	LD	A,(CUR_ROW)
+	INC	A
+	CP	C
 	JR	Z,SPLIT_AND_INSERT_NEW_LINE
 
 	; Source = (C-1) * 128
@@ -1064,15 +1062,28 @@ SPLIT_AND_INSERT_NEW_LINE:
 	EX	DE,HL			; DE = new line start
 	POP	HL			; HL = old line at CUR_COL
 
+	; Clear new line buffer first (fill 128 bytes with 0)
+	PUSH	HL
+	PUSH	DE
+	EX	DE,HL			; HL = new line start
+	LD	D,H
+	LD	E,L
+	INC	DE
+	LD	(HL),0
+	LD	BC,MAX_LINE_STRIDE-1
+	LDIR
+	POP	DE
+	POP	HL
+
 	; Copy text from split point to new line
 SPLIT_COPY_LOOP:
 	LD	A,(HL)
-	LD	(DE),A
-	LD	(HL),0			; Truncate old line at split point
 	OR	A
 	JR	Z,SPLIT_COPY_DONE
 	CP	'$'
 	JR	Z,SPLIT_COPY_DONE
+	LD	(DE),A
+	LD	(HL),0			; Truncate old line at split point
 	INC	HL
 	INC	DE
 	JR	SPLIT_COPY_LOOP
