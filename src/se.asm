@@ -970,21 +970,34 @@ DO_INSERT_LINE:
 	CP	MAX_BUFFER_LINES
 	RET	NC			; Buffer full
 
-	; 1. Shift all lines from CUR_ROW+1 upwards to make room for new line
-	; We iterate C from TOTAL_LINES down to CUR_ROW+1
+	; 1. Shift lines below CUR_ROW downwards using LDDR block copy
+	; Source start = LINE_STORAGE + (TOTAL_LINES * 128) - 1
+	; Dest start   = LINE_STORAGE + ((TOTAL_LINES + 1) * 128) - 1
+	; Count = (TOTAL_LINES - 1 - CUR_ROW) * 128
+
 	LD	A,(TOTAL_LINES)
-	LD	C,A
+	DEC	A
+	LD	HL,CUR_ROW
+	CP	(HL)
+	JR	Z,DO_SPLIT_LINE		; If CUR_ROW is the last line, no lines to shift!
 
-SHIFT_LINES_LOOP:
-	; Compare C with (CUR_ROW + 1)
-	LD	A,(CUR_ROW)
-	INC	A
-	CP	C
-	JR	Z,SPLIT_AND_INSERT_NEW_LINE
+	; Count = (TOTAL_LINES - 1 - CUR_ROW) * 128
+	SUB	(HL)			; A = Number of lines to shift (>= 1)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL			; HL = Byte count
+	LD	B,H
+	LD	C,L			; BC = Count
 
-	; Source = (C-1) * 128
-	DEC	C
-	LD	L,C
+	; Source HL = LINE_STORAGE + (TOTAL_LINES * 128) - 1
+	LD	A,(TOTAL_LINES)
+	LD	L,A
 	LD	H,0
 	ADD	HL,HL
 	ADD	HL,HL
@@ -995,57 +1008,24 @@ SHIFT_LINES_LOOP:
 	ADD	HL,HL
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE
-	PUSH	HL			; Source
+	DEC	HL			; HL = Source end
 
-	; Dest = (C+1) * 128
-	INC	C
-	LD	L,C
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	DE,LINE_STORAGE
+	; Dest DE = HL + 128
+	PUSH	HL			; Save Source end
+	LD	DE,MAX_LINE_STRIDE
 	ADD	HL,DE
-	EX	DE,HL			; Dest in DE
-	POP	HL			; Source in HL
+	EX	DE,HL			; DE = Dest end
+	POP	HL			; HL = Source end
 
-	LD	BC,MAX_LINE_STRIDE
-	LDIR
+	LDDR
 
-	DEC	C
-	JR	SHIFT_LINES_LOOP
-
-SPLIT_AND_INSERT_NEW_LINE:
+DO_SPLIT_LINE:
 	; Increment total lines count
 	LD	A,(TOTAL_LINES)
 	INC	A
 	LD	(TOTAL_LINES),A
 
-	; 2. Move characters from CUR_COL to end of line into the newly created line (CUR_ROW + 1)
-	; HL = Source (current line at CUR_COL)
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE
-	LD	A,(CUR_COL)
-	LD	E,A
-	LD	D,0
-	ADD	HL,DE			; HL = current line + CUR_COL
-
-	; DE = Dest (next line start: (CUR_ROW + 1) * 128)
-	PUSH	HL
+	; 2. Clear newly created line buffer at CUR_ROW + 1 (128 bytes of 0s)
 	LD	A,(CUR_ROW)
 	INC	A
 	LD	L,A
@@ -1058,24 +1038,35 @@ SPLIT_AND_INSERT_NEW_LINE:
 	ADD	HL,HL
 	ADD	HL,HL
 	LD	DE,LINE_STORAGE
-	ADD	HL,DE
-	EX	DE,HL			; DE = new line start
-	POP	HL			; HL = old line at CUR_COL
+	ADD	HL,DE			; HL = new line start
 
-	; Clear new line buffer first (fill 128 bytes with 0)
-	PUSH	HL
-	PUSH	DE
-	EX	DE,HL			; HL = new line start
-	LD	D,H
-	LD	E,L
-	INC	DE
+	PUSH	HL			; Save new line start
+	LD	B,MAX_LINE_STRIDE
+ZERO_NEW_LINE_LOOP:
 	LD	(HL),0
-	LD	BC,MAX_LINE_STRIDE-1
-	LDIR
-	POP	DE
-	POP	HL
+	INC	HL
+	DJNZ	ZERO_NEW_LINE_LOOP
+	POP	DE			; DE = new line start
 
-	; Copy text from split point to new line
+	; 3. Source text to move: HL = current line + CUR_COL
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	BC,LINE_STORAGE
+	ADD	HL,BC
+	LD	A,(CUR_COL)
+	LD	C,A
+	LD	B,0
+	ADD	HL,BC			; HL = current line + CUR_COL
+
+	; Copy text from split point to new line (DE)
 SPLIT_COPY_LOOP:
 	LD	A,(HL)
 	OR	A
@@ -1092,7 +1083,7 @@ SPLIT_COPY_DONE:
 	XOR	A
 	LD	(DE),A			; Ensure new line is null terminated
 
-	; 3. Move cursor to start of new line
+	; 4. Move cursor to start of new line
 	LD	A,(CUR_ROW)
 	INC	A
 	LD	(CUR_ROW),A
