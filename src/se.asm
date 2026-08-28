@@ -729,6 +729,21 @@ SHOW_LINUX_FMT:
 SHOW_STATUS_REST:
 	LD	DE,STR_STATUS_SUFFIX
 	CALL	PRINT_STR
+
+	; Print dynamic cursor position: Col,Row
+	LD	DE,STR_STATUS_POS
+	CALL	PRINT_STR
+	LD	A,(CUR_COL)
+	INC	A			; 1-indexed
+	CALL	PRINT_DEC_BYTE
+	LD	A,','
+	CALL	PUTC
+	LD	A,(CUR_ROW)
+	INC	A			; 1-indexed
+	CALL	PRINT_DEC_BYTE
+	LD	A,' '
+	CALL	PUTC
+
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
 	CALL	LOCATE_CURSOR
@@ -1573,7 +1588,10 @@ STR_FMT_LINUX:
 	.DB	"Linux LF ","$"
 
 STR_STATUS_SUFFIX:
-	.DB	"] | ^F:Format | ^S:Save | ^Q:Quit  ","$"
+	.DB	"] | ^F:Format | ^S:Save | ^Q:Quit | ","$"
+
+STR_STATUS_POS:
+	.DB	"","$"
 
 MSG_EXIT:
 	.DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
