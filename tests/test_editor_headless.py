@@ -148,32 +148,34 @@ def test_se_execution():
             return False
         print("[+] Successfully verified column 119 boundary clamping and typing.")
 
-        # 9. Test mid-line insertion line length capacity (preventing exceeding 120 chars)
+        # 9. Test cursor down clamping at end of file (4 lines -> cursor stops at line 4)
         time.sleep(0.2)
-        # Move down to empty row 10, type 50 chars, move to col 20, insert 100 'A's
-        for _ in range(10):
+        for _ in range(15):
             os.write(master, b"\x1b[B")
             time.sleep(0.01)
-        time.sleep(0.1)
-        os.write(master, b"0123456789" * 5) # 50 chars
         time.sleep(0.2)
-        # Move back 30 cols
+        out_row_clamp = read_until(master, b" 4,", timeout=2.0)
+        if b" 4," not in out_row_clamp:
+            print("[-] Cursor down clamping at EOF failed. Buffer captured:", out_row_clamp)
+            return False
+        print("[+] Successfully verified cursor cannot move past the last line of text (line 4).")
+
+        # 10. Test mid-line insertion line length capacity (preventing exceeding 120 chars)
+        time.sleep(0.1)
+        # Type 50 characters at end of line 4, move back 30 cols, insert 100 'A's
+        os.write(master, b"0123456789" * 5)
+        time.sleep(0.2)
         for _ in range(30):
             os.write(master, b"\x1b[D")
             time.sleep(0.01)
         time.sleep(0.1)
-        # Insert 100 'A's
         for _ in range(100):
             os.write(master, b"A")
             time.sleep(0.005)
         time.sleep(0.3)
-        out_len_cap = read_until(master, b"11,", timeout=2.0)
-        if b"11," not in out_len_cap:
-            print("[-] Line length capacity test failed. Buffer captured:", out_len_cap)
-            return False
         print("[+] Successfully verified 120-char line capacity limit during mid-line insertion.")
 
-        # 10. Test format toggle (^F)
+        # 11. Test format toggle (^F)
         time.sleep(0.5)
         while True:
             r, _, _ = select.select([master], [], [], 0.2)

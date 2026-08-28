@@ -816,50 +816,14 @@ CURSOR_UP:
 CURSOR_DOWN:
 	LD	A,(TOTAL_LINES)
 	OR	A
-	JR	Z,CURSOR_DOWN_GEOM	; If 0 lines, allow moving within active rows
-	DEC	A
+	RET	Z			; If 0 lines, cannot move down
+	DEC	A			; Max valid row index = TOTAL_LINES - 1
 	LD	B,A
 	LD	A,(CUR_ROW)
 	CP	B
-	JR	NC,CURSOR_DOWN_CHECK_EXPAND
-
-CURSOR_DOWN_GEOM:
-	LD	A,(ACTIVE_ROWS)
-	DEC	A
-	DEC	A
-	LD	B,A
-	LD	A,(CUR_ROW)
-	CP	B
-	RET	NC
+	RET	NC			; If CUR_ROW >= TOTAL_LINES - 1, do not go past text
 	INC	A
 	LD	(CUR_ROW),A
-	RET
-
-CURSOR_DOWN_CHECK_EXPAND:
-	; If user presses Down at or beyond TOTAL_LINES-1, allow cursor down up to ACTIVE_ROWS-2
-	; and expand TOTAL_LINES so user can freely edit empty rows
-	LD	A,(ACTIVE_ROWS)
-	DEC	A
-	DEC	A
-	LD	B,A
-	LD	A,(CUR_ROW)
-	CP	B
-	RET	NC
-	INC	A
-	LD	(CUR_ROW),A
-
-	; Check if CUR_ROW >= TOTAL_LINES
-	LD	A,(TOTAL_LINES)
-	LD	B,A
-	LD	A,(CUR_ROW)
-	CP	B
-	RET	C
-
-	; Expand TOTAL_LINES = CUR_ROW + 1
-	INC	A
-	CP	MAX_BUFFER_LINES+1
-	RET	NC
-	LD	(TOTAL_LINES),A
 	RET
 
 CURSOR_LEFT:
