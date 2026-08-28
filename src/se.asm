@@ -506,7 +506,7 @@ MSG_EXIT:
 	.DB	27,"[24;1H",27,"[0m",13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
 SAMPLE_TEXT:
-	.DB	"; Z80 Full-Screen Editor (SE.COM) Active Buffer",0
+	.DB	"; Z80 Full-Screen Editor (SE.COM) Active Buffer","$"
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
