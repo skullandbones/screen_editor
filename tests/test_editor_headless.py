@@ -105,10 +105,10 @@ def test_se_execution():
         print("[+] 512KB extended memory banking diagnostic PASSED.")
 
         # 6. Return to Splash and enter editor ('e')
-        time.sleep(1.0)
-        os.write(master, b"\r")
-        read_until(master, b"SE - Screen Editor", timeout=6.0)
         time.sleep(0.5)
+        os.write(master, b"\r")
+        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        time.sleep(0.3)
         os.write(master, b"e")
         out_edit = read_until(master, b"SE v0.3.1", timeout=6.0)
         if b"SE v0.3.1" not in out_edit:
@@ -117,17 +117,38 @@ def test_se_execution():
         print("[+] Successfully entered full-screen editing mode.")
 
         # 7. Test interactive character typing
-        time.sleep(0.3)
+        time.sleep(0.5)
+        r, _, _ = select.select([master], [], [], 0.3)
+        if r:
+            os.read(master, 4096)
+
+        out_type = b""
         for ch in b"HELLO":
             os.write(master, bytes([ch]))
-            time.sleep(0.05)
-        out_type = read_until(master, b"HELLO", timeout=4.0)
+            time.sleep(0.15)
+            out_type += read_until(master, bytes([ch]), timeout=1.0)
+
         if b"HELLO" not in out_type:
             print("[-] Interactive typing failed to render on screen. Buffer captured:", out_type)
             return False
         print("[+] Successfully typed and rendered 'HELLO'.")
 
-        # 8. Test format toggle (^F)
+        # 8. Test Column 119 boundary clamping (Bug fix verification)
+        time.sleep(0.2)
+        for _ in range(130):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.01)
+        time.sleep(0.2)
+        # Type 5 characters at column 119
+        os.write(master, b"12345")
+        time.sleep(0.3)
+        out_clamp = read_until(master, b"1,119", timeout=2.0)
+        if b"1,119" not in out_clamp:
+            print("[-] Col 119 boundary clamping failed. Buffer captured:", out_clamp)
+            return False
+        print("[+] Successfully verified column 119 boundary clamping and typing.")
+
+        # 9. Test format toggle (^F)
         time.sleep(0.3)
         os.write(master, b"\x06")
         out_fmt = read_until(master, b"Linux LF", timeout=4.0)
@@ -136,7 +157,7 @@ def test_se_execution():
             return False
         print("[+] Successfully exercised ^F format toggle.")
 
-        # 9. Send Ctrl+Q to exit cleanly back to CP/M
+        # 10. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
