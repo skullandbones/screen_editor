@@ -141,14 +141,52 @@ MAIN_LOOP:
 CHECK_TOGGLE_FMT:
 	; Command: Ctrl+F -> Toggle Line Ending Format (CP/M <-> Linux)
 	CP	KEY_CTRL_F
-	JR	NZ,NOT_FORMAT_TOGGLE
+	JR	NZ,CHECK_ENTER
 	LD	A,(SAVE_FORMAT)
 	XOR	1			; Toggle between 0 (CP/M) and 1 (Linux)
 	LD	(SAVE_FORMAT),A
 	CALL	RENDER_STATUS_BAR
 	JR	MAIN_LOOP
 
-NOT_FORMAT_TOGGLE:
+CHECK_ENTER:
+	; Enter -> Insert new line at CUR_ROW+1
+	CP	KEY_ENTER
+	JR	NZ,CHECK_BACKSPACE
+	CALL	DO_INSERT_LINE
+	CALL	RENDER_SCREEN
+	JR	MAIN_LOOP
+
+CHECK_BACKSPACE:
+	CP	KEY_BACKSPACE
+	JR	Z,DO_HANDLE_BS
+	CP	KEY_DEL
+	JR	NZ,CHECK_ESC_SEQ
+
+DO_HANDLE_BS:
+	CALL	DO_DELETE_CHAR
+	CALL	RENDER_SCREEN
+	JR	MAIN_LOOP
+
+CHECK_ESC_SEQ:
+	; Check for VT100 Escape sequences (Arrow keys)
+	CP	KEY_ESC
+	JR	NZ,CHECK_PRINTABLE_CHAR
+	CALL	HANDLE_VT100_ESC
+	CALL	LOCATE_CURSOR
+	JR	MAIN_LOOP
+
+CHECK_PRINTABLE_CHAR:
+	; Check if character is printable (ASCII 32..126 or Tab)
+	CP	9			; TAB
+	JR	Z,DO_INSERT_CHAR
+	CP	' '
+	JR	C,MAIN_LOOP
+	CP	127
+	JR	NC,MAIN_LOOP
+
+DO_INSERT_CHAR:
+	CALL	DO_CHAR_INSERT
+	CALL	RENDER_SCREEN
 	JR	MAIN_LOOP
 
 EXIT_PROGRAM:
@@ -612,8 +650,27 @@ SHOW_STATUS_REST:
 	RET
 
 LOCATE_CURSOR:
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
+	; Emit ESC [ <Row+1> ; <Col+1> H
+	LD	A,27
+	CALL	PUTC
+	LD	A,'['
+	CALL	PUTC
+
+	; Row (1-indexed)
+	LD	A,(CUR_ROW)
+	INC	A
+	CALL	PRINT_DEC_BYTE
+
+	LD	A,';'
+	CALL	PUTC
+
+	; Col (1-indexed)
+	LD	A,(CUR_COL)
+	INC	A
+	CALL	PRINT_DEC_BYTE
+
+	LD	A,'H'
+	CALL	PUTC
 	RET
 
 BUFFER_INIT:
@@ -623,6 +680,276 @@ BUFFER_INIT:
 	POP	IX
 	LD	A,C
 	LD	(CPM_USER_BANK),A
+	RET
+
+;------------------------------------------------------------------------------
+; VT100 Escape Sequence Handler (Arrow keys: Up, Down, Left, Right)
+;------------------------------------------------------------------------------
+HANDLE_VT100_ESC:
+	; Check if next byte is '[' or 'O'
+	CALL	GET_KEY
+	CP	'['
+	JR	Z,HANDLE_CSI
+	CP	'O'
+	JR	Z,HANDLE_CSI
+	RET
+
+HANDLE_CSI:
+	CALL	GET_KEY
+	CP	'A'			; Up Arrow
+	JR	Z,CURSOR_UP
+	CP	'B'			; Down Arrow
+	JR	Z,CURSOR_DOWN
+	CP	'C'			; Right Arrow
+	JR	Z,CURSOR_RIGHT
+	CP	'D'			; Left Arrow
+	JR	Z,CURSOR_LEFT
+	RET
+
+CURSOR_UP:
+	LD	A,(CUR_ROW)
+	OR	A
+	RET	Z
+	DEC	A
+	LD	(CUR_ROW),A
+	RET
+
+CURSOR_DOWN:
+	LD	A,(TOTAL_LINES)
+	DEC	A
+	LD	B,A
+	LD	A,(CUR_ROW)
+	CP	B
+	RET	NC
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A
+	LD	B,A
+	LD	A,(CUR_ROW)
+	CP	B
+	RET	NC
+	INC	A
+	LD	(CUR_ROW),A
+	RET
+
+CURSOR_LEFT:
+	LD	A,(CUR_COL)
+	OR	A
+	RET	Z
+	DEC	A
+	LD	(CUR_COL),A
+	RET
+
+CURSOR_RIGHT:
+	LD	A,(ACTIVE_COLS)
+	DEC	A
+	LD	B,A
+	LD	A,(CUR_COL)
+	CP	B
+	RET	NC
+	INC	A
+	LD	(CUR_COL),A
+	RET
+
+;------------------------------------------------------------------------------
+; Character Insertion at (CUR_ROW, CUR_COL)
+;------------------------------------------------------------------------------
+DO_CHAR_INSERT:
+	PUSH	AF			; Save character to insert
+
+	; Calculate target line address: LINE_STORAGE + (CUR_ROW * 128)
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+
+	; Advance to column offset
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+
+	; Shift remaining characters right to open slot
+	PUSH	HL
+	LD	DE,LINE_STORAGE
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,DE
+	LD	DE,MAX_LINE_STRIDE-2
+	ADD	HL,DE			; HL = End of line buffer
+
+	POP	DE			; DE = Insertion point
+SHIFT_RIGHT_LOOP:
+	LD	A,H
+	CP	D
+	JR	NZ,DO_SHIFT_STEP
+	LD	A,L
+	CP	E
+	JR	Z,SHIFT_RIGHT_DONE
+
+DO_SHIFT_STEP:
+	LD	A,(HL)
+	INC	HL
+	LD	(HL),A
+	DEC	HL
+	DEC	HL
+	JR	SHIFT_RIGHT_LOOP
+
+SHIFT_RIGHT_DONE:
+	; Store new character at DE
+	POP	AF
+	LD	(DE),A
+
+	; Advance cursor right
+	LD	A,(CUR_COL)
+	INC	A
+	LD	(CUR_COL),A
+	RET
+
+;------------------------------------------------------------------------------
+; Character Deletion at (CUR_ROW, CUR_COL) - Backspace Handling
+;------------------------------------------------------------------------------
+DO_DELETE_CHAR:
+	LD	A,(CUR_COL)
+	OR	A
+	RET	Z			; At column 0, nothing to delete on line
+
+	DEC	A
+	LD	(CUR_COL),A
+
+	; Calculate delete target: LINE_STORAGE + (CUR_ROW * 128) + CUR_COL
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = character to delete
+
+	; Shift characters left from HL+1 to HL
+SHIFT_LEFT_LOOP:
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	LD	(HL),A
+	OR	A
+	RET	Z
+	INC	HL
+	JR	SHIFT_LEFT_LOOP
+
+;------------------------------------------------------------------------------
+; Line Insertion at (CUR_ROW + 1) - Enter Key Handling
+;------------------------------------------------------------------------------
+DO_INSERT_LINE:
+	LD	A,(TOTAL_LINES)
+	CP	MAX_BUFFER_LINES
+	RET	NC			; Buffer full
+
+	; Shift all lines from CUR_ROW+1 upwards by 128 bytes
+	; Destination: LINE_STORAGE + ((TOTAL_LINES) * 128)
+	; Source: LINE_STORAGE + ((TOTAL_LINES - 1) * 128)
+	LD	A,(TOTAL_LINES)
+	LD	C,A
+
+SHIFT_LINES_LOOP:
+	LD	A,C
+	LD	HL,CUR_ROW
+	CP	(HL)
+	JR	Z,INSERT_EMPTY_LINE
+	DEC	A
+	CP	(HL)
+	JR	Z,INSERT_EMPTY_LINE
+
+	; Source address = (C-1) * 128
+	DEC	C
+	LD	L,C
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+	PUSH	HL			; Source
+
+	; Dest address = (C+1) * 128
+	INC	C
+	LD	L,C
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+	EX	DE,HL			; Dest in DE
+	POP	HL			; Source in HL
+
+	LD	BC,MAX_LINE_STRIDE
+	LDIR
+
+	DEC	C
+	JR	SHIFT_LINES_LOOP
+
+INSERT_EMPTY_LINE:
+	; Increment total lines
+	LD	A,(TOTAL_LINES)
+	INC	A
+	LD	(TOTAL_LINES),A
+
+	; Advance CUR_ROW to newly inserted line
+	LD	A,(CUR_ROW)
+	INC	A
+	LD	(CUR_ROW),A
+	XOR	A
+	LD	(CUR_COL),A
+
+	; Clear new line buffer with 0
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+
+	LD	(HL),0
 	RET
 
 HBIOS_DETECT:
