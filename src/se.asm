@@ -115,12 +115,18 @@ DO_MEM_TEST:
 
 DO_AUTO_LOAD:
 	CALL	LOAD_FILE
+	XOR	A
+	LD	(CUR_ROW),A
+	LD	(CUR_COL),A
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	JP	MAIN_LOOP
 
 ENTER_EDITOR:
 	CALL	LOAD_SAMPLE_BUFFER
+	XOR	A
+	LD	(CUR_ROW),A
+	LD	(CUR_COL),A
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 
@@ -455,26 +461,67 @@ TEST_END:
 	CALL	PRINT_STR
 	RET
 
+;------------------------------------------------------------------------------
+; Print 8-bit number in decimal (0 .. 255)
+;------------------------------------------------------------------------------
 PRINT_DEC_BYTE:
 	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	LD	E,A			; E = input value
+
+	; Check hundreds (100)
 	LD	C,0
-DIV10_LOOP:
-	CP	10
-	JR	C,PRINT_TENS
-	SUB	10
+HUNDREDS_LOOP:
+	LD	A,E
+	CP	100
+	JR	C,DONE_HUNDREDS
+	SUB	100
+	LD	E,A
 	INC	C
-	JR	DIV10_LOOP
-PRINT_TENS:
-	PUSH	AF
+	JR	HUNDREDS_LOOP
+
+DONE_HUNDREDS:
+	; Check tens (10)
+	LD	B,0
+TENS_LOOP:
+	LD	A,E
+	CP	10
+	JR	C,DONE_TENS
+	SUB	10
+	LD	E,A
+	INC	B
+	JR	TENS_LOOP
+
+DONE_TENS:
+	; Print Hundreds if non-zero
 	LD	A,C
 	OR	A
-	JR	Z,SKIP_TENS_ZERO
+	JR	Z,CHECK_TENS_OUTPUT
 	ADD	A,'0'
 	CALL	PUTC
-SKIP_TENS_ZERO:
-	POP	AF
+	; If hundreds was printed, tens MUST be printed even if 0
+	LD	A,B
 	ADD	A,'0'
 	CALL	PUTC
+	JR	PRINT_ONES_DIGIT
+
+CHECK_TENS_OUTPUT:
+	; Print Tens if non-zero
+	LD	A,B
+	OR	A
+	JR	Z,PRINT_ONES_DIGIT
+	ADD	A,'0'
+	CALL	PUTC
+
+PRINT_ONES_DIGIT:
+	; Print Units (E)
+	LD	A,E
+	ADD	A,'0'
+	CALL	PUTC
+
+	POP	DE
+	POP	BC
 	POP	AF
 	RET
 
@@ -712,6 +759,7 @@ CURSOR_UP:
 	RET	Z
 	DEC	A
 	LD	(CUR_ROW),A
+	CALL	CLAMP_CURSOR_COL
 	RET
 
 CURSOR_DOWN:
@@ -730,6 +778,7 @@ CURSOR_DOWN:
 	RET	NC
 	INC	A
 	LD	(CUR_ROW),A
+	CALL	CLAMP_CURSOR_COL
 	RET
 
 CURSOR_LEFT:
@@ -741,14 +790,66 @@ CURSOR_LEFT:
 	RET
 
 CURSOR_RIGHT:
+	; Calculate current line length
+	CALL	GET_CUR_LINE_LEN
+	LD	B,A
+	LD	A,(CUR_COL)
+	CP	B
+	RET	NC			; Don't move right beyond end of line text!
+
+	; Also ensure CUR_COL < ACTIVE_COLS-1
 	LD	A,(ACTIVE_COLS)
 	DEC	A
 	LD	B,A
 	LD	A,(CUR_COL)
 	CP	B
 	RET	NC
+
 	INC	A
 	LD	(CUR_COL),A
+	RET
+
+; Clamp CUR_COL so it doesn't float past the end of the new row's text
+CLAMP_CURSOR_COL:
+	CALL	GET_CUR_LINE_LEN
+	LD	B,A
+	LD	A,(CUR_COL)
+	CP	B
+	RET	C
+	LD	A,B
+	LD	(CUR_COL),A
+	RET
+
+; Returns current line length in A
+GET_CUR_LINE_LEN:
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+
+	LD	B,0
+LINE_LEN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,LINE_LEN_DONE
+	CP	'$'
+	JR	Z,LINE_LEN_DONE
+	INC	HL
+	INC	B
+	LD	A,B
+	CP	MAX_LINE_STRIDE-1
+	JR	NC,LINE_LEN_DONE
+	JR	LINE_LEN_LOOP
+LINE_LEN_DONE:
+	LD	A,B
 	RET
 
 ;------------------------------------------------------------------------------
