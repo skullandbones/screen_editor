@@ -834,7 +834,7 @@ STR_SPLASH_BODY:
 	.DB	13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~             SE - Screen Editor              ",13,10
-	.DB	"                  ~                version 0.1.0                ",13,10
+	.DB	"                  ~                version 0.2.0                ",13,10
 	.DB	"                  ~              by Dean Jenkins                ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       SE is open source and freely usable   ",13,10
@@ -882,7 +882,7 @@ STR_TEST_PROMPT:
 	.DB	"Press any key to return to Splash Screen...$"
 
 STR_STATUS_PREFIX:
-	.DB	" SE v0.1.0 | Format: [","$"
+	.DB	" SE v0.2.0 | Format: [","$"
 
 STR_FMT_CPM:
 	.DB	"CP/M CRLF","$"

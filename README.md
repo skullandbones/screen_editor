@@ -134,7 +134,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ```text
                   ~                                             
                   ~             SE - Screen Editor              
-                  ~                version 0.1.0                
+                  ~                version 0.2.0                
                   ~              by Dean Jenkins                
                   ~                                             
                   ~       SE is open source and freely usable   
