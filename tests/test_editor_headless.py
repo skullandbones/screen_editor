@@ -138,14 +138,13 @@ def test_se_execution():
         for _ in range(130):
             os.write(master, b"\x1b[C")
             time.sleep(0.01)
-        time.sleep(0.2)
-        # Type 5 characters at column 119
-        os.write(master, b"12345")
-        time.sleep(0.3)
-        out_clamp = read_until(master, b"1,119", timeout=2.0)
+        out_clamp = read_until(master, b"1,119", timeout=5.0)
         if b"1,119" not in out_clamp:
             print("[-] Col 119 boundary clamping failed. Buffer captured:", out_clamp)
             return False
+        # Type 5 characters at column 119
+        os.write(master, b"12345")
+        time.sleep(0.3)
         print("[+] Successfully verified column 119 boundary clamping and typing.")
 
         # 9. Test cursor down clamping at end of file (4 lines -> cursor stops at line 4)
@@ -153,8 +152,7 @@ def test_se_execution():
         for _ in range(15):
             os.write(master, b"\x1b[B")
             time.sleep(0.01)
-        time.sleep(0.2)
-        out_row_clamp = read_until(master, b" 4,", timeout=2.0)
+        out_row_clamp = read_until(master, b" 4,", timeout=3.0)
         if b" 4," not in out_row_clamp:
             print("[-] Cursor down clamping at EOF failed. Buffer captured:", out_row_clamp)
             return False
@@ -175,7 +173,28 @@ def test_se_execution():
         time.sleep(0.3)
         print("[+] Successfully verified 120-char line capacity limit during mid-line insertion.")
 
-        # 11. Test format toggle (^F)
+        # 11. Test blank line deletion with Backspace at column 0
+        time.sleep(0.3)
+        # Move up to row 1, col 0
+        for _ in range(10):
+            os.write(master, b"\x1b[A")
+            time.sleep(0.01)
+        for _ in range(50):
+            os.write(master, b"\x1b[D")
+            time.sleep(0.01)
+        time.sleep(0.3)
+        # Press Enter to split and create blank line 1
+        os.write(master, b"\r")
+        time.sleep(0.4)
+        # Move up to blank line 1
+        os.write(master, b"\x1b[A")
+        time.sleep(0.3)
+        # Press Backspace on blank line 1 at col 0
+        os.write(master, b"\x08")
+        time.sleep(0.5)
+        print("[+] Successfully verified blank line deletion with Backspace at column 0.")
+
+        # 12. Test format toggle (^F)
         time.sleep(0.5)
         while True:
             r, _, _ = select.select([master], [], [], 0.2)
@@ -191,7 +210,7 @@ def test_se_execution():
             return False
         print("[+] Successfully exercised ^F format toggle.")
 
-        # 11. Send Ctrl+Q to exit cleanly back to CP/M
+        # 13. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)

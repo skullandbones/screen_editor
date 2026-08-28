@@ -169,8 +169,18 @@ CHECK_BACKSPACE:
 	JR	NZ,CHECK_ESC_SEQ
 
 DO_HANDLE_BS:
+	LD	A,(CUR_COL)
+	OR	A
+	JR	Z,DO_HANDLE_BS_COL0
+
+	; Normal character deletion on current line (CUR_COL > 0)
 	CALL	DO_DELETE_CHAR
 	CALL	RENDER_CURRENT_LINE
+	JR	MAIN_LOOP
+
+DO_HANDLE_BS_COL0:
+	; Backspace at column 0: delete line if blank
+	CALL	DO_DELETE_BLANK_LINE
 	JR	MAIN_LOOP
 
 CHECK_ESC_SEQ:
@@ -1050,6 +1060,171 @@ CHAR_SHIFT_LEFT_LOOP:
 	JR	CHAR_SHIFT_LEFT_LOOP
 
 ;------------------------------------------------------------------------------
+; Delete Blank Line at (CUR_ROW, 0) - Backspace at Column 0 Handling
+;------------------------------------------------------------------------------
+DO_DELETE_BLANK_LINE:
+	; Check if TOTAL_LINES <= 1 and CUR_ROW == 0
+	LD	A,(TOTAL_LINES)
+	CP	2
+	JR	C,DEL_BLANK_SINGLE_LINE
+
+	; 1. Calculate pointer to current line: HL = LINE_STORAGE + (CUR_ROW * 128)
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = current line start
+
+	; 2. Check if current line is blank (only spaces, null, or '$')
+	PUSH	HL
+	LD	B,0
+CHECK_BLANK_SCAN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,LINE_CONFIRMED_BLANK
+	CP	'$'
+	JR	Z,LINE_CONFIRMED_BLANK
+	CP	' '
+	JR	NZ,LINE_HAS_TEXT
+	INC	HL
+	INC	B
+	LD	A,B
+	CP	MAX_LINE_STRIDE-2
+	JR	NC,LINE_CONFIRMED_BLANK
+	JR	CHECK_BLANK_SCAN
+
+LINE_HAS_TEXT:
+	POP	HL
+	RET				; Non-blank line: do not delete!
+
+LINE_CONFIRMED_BLANK:
+	POP	DE			; DE = current line start (destination for LDIR)
+
+	; 3. Check if there are lines below CUR_ROW to shift up
+	; Number of lines below = TOTAL_LINES - 1 - CUR_ROW
+	LD	A,(TOTAL_LINES)
+	DEC	A
+	LD	HL,CUR_ROW
+	CP	(HL)
+	JR	Z,DEL_BLANK_LAST_LINE	; If CUR_ROW == TOTAL_LINES - 1, no lines below!
+
+	; Count in lines = TOTAL_LINES - 1 - CUR_ROW
+	SUB	(HL)			; A = number of lines to shift (>= 1)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL			; HL = Byte count
+	LD	B,H
+	LD	C,L			; BC = Byte count
+
+	; Source HL = DE + 128 (next line start)
+	PUSH	DE			; Save dest start
+	EX	DE,HL			; HL = dest start
+	LD	DE,MAX_LINE_STRIDE
+	ADD	HL,DE			; HL = source start (dest + 128)
+	POP	DE			; DE = dest start
+
+	LDIR				; Shift lines below upwards!
+
+DEL_BLANK_LAST_LINE:
+	; Decrement TOTAL_LINES
+	LD	A,(TOTAL_LINES)
+	DEC	A
+	LD	(TOTAL_LINES),A
+
+	; Clear the newly freed line buffer at TOTAL_LINES (128 bytes of 0s)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = freed line buffer
+
+	PUSH	HL
+	LD	B,MAX_LINE_STRIDE
+CLEAR_FREED_LINE_LOOP:
+	LD	(HL),0
+	INC	HL
+	DJNZ	CLEAR_FREED_LINE_LOOP
+	POP	HL
+
+	; If CUR_ROW > 0, move cursor up to previous line and set CUR_COL to end of line
+	LD	A,(CUR_ROW)
+	OR	A
+	JR	Z,DEL_BLANK_AT_ROW0
+	DEC	A
+	LD	(CUR_ROW),A
+
+	; Calculate previous line length to set CUR_COL
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = previous line start
+
+	LD	B,0
+PREV_LINE_LEN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,PREV_LINE_LEN_DONE
+	CP	'$'
+	JR	Z,PREV_LINE_LEN_DONE
+	INC	HL
+	INC	B
+	LD	A,(ACTIVE_COLS)
+	DEC	A
+	CP	B
+	JR	C,PREV_LINE_LEN_DONE
+	JR	PREV_LINE_LEN_LOOP
+
+PREV_LINE_LEN_DONE:
+	LD	A,B
+	LD	(CUR_COL),A
+
+DEL_BLANK_AT_ROW0:
+	CALL	RENDER_SCREEN
+	RET
+
+DEL_BLANK_SINGLE_LINE:
+	; When only 1 line exists, just ensure it is cleared
+	LD	HL,LINE_STORAGE
+	LD	B,MAX_LINE_STRIDE
+CLEAR_SINGLE_LOOP:
+	LD	(HL),0
+	INC	HL
+	DJNZ	CLEAR_SINGLE_LOOP
+	XOR	A
+	LD	(CUR_ROW),A
+	LD	(CUR_COL),A
+	LD	A,1
+	LD	(TOTAL_LINES),A
+	CALL	RENDER_SCREEN
+	RET
+
+;------------------------------------------------------------------------------
 ; Line Insertion & Splitting at (CUR_ROW, CUR_COL) - Enter Key Handling
 ;------------------------------------------------------------------------------
 DO_INSERT_LINE:
@@ -1135,7 +1310,7 @@ ZERO_NEW_LINE_LOOP:
 	DJNZ	ZERO_NEW_LINE_LOOP
 	POP	DE			; DE = new line start
 
-	; 3. Source text to move: HL = current line + CUR_COL
+	; 3. Source text to move: Check if CUR_COL < line length before splitting
 	LD	A,(CUR_ROW)
 	LD	L,A
 	LD	H,0
@@ -1147,7 +1322,33 @@ ZERO_NEW_LINE_LOOP:
 	ADD	HL,HL
 	ADD	HL,HL
 	LD	BC,LINE_STORAGE
-	ADD	HL,BC
+	ADD	HL,BC			; HL = current line start
+
+	; Scan current line length
+	PUSH	HL
+	LD	B,0
+INSERT_SCAN_LEN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,INSERT_SCAN_DONE
+	CP	'$'
+	JR	Z,INSERT_SCAN_DONE
+	INC	HL
+	INC	B
+	LD	A,B
+	CP	MAX_LINE_STRIDE-2
+	JR	NC,INSERT_SCAN_DONE
+	JR	INSERT_SCAN_LEN
+
+INSERT_SCAN_DONE:
+	POP	HL			; HL = current line start
+	; B = current line length
+
+	LD	A,(CUR_COL)
+	CP	B
+	JR	NC,SPLIT_COPY_DONE	; If CUR_COL >= line length, new line is completely blank!
+
+	; CUR_COL < line length: copy text from (current line + CUR_COL) to new line (DE)
 	LD	A,(CUR_COL)
 	LD	C,A
 	LD	B,0
