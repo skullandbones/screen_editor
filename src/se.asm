@@ -170,7 +170,7 @@ CHECK_BACKSPACE:
 
 DO_HANDLE_BS:
 	CALL	DO_DELETE_CHAR
-	CALL	RENDER_SCREEN
+	CALL	RENDER_CURRENT_LINE
 	JR	MAIN_LOOP
 
 CHECK_ESC_SEQ:
@@ -192,7 +192,7 @@ CHECK_PRINTABLE_CHAR:
 
 DO_INSERT_CHAR:
 	CALL	DO_CHAR_INSERT
-	CALL	RENDER_SCREEN
+	CALL	RENDER_CURRENT_LINE
 	JR	MAIN_LOOP
 
 EXIT_PROGRAM:
@@ -590,6 +590,58 @@ RENDER_ROW_NEXT:
 	CALL	LOCATE_CURSOR
 	RET
 
+; Fast single line refresh: only rewrites CUR_ROW and restores cursor
+RENDER_CURRENT_LINE:
+	; Move to start of current line: ESC [ <CUR_ROW+1> ; 1 H
+	LD	A,27
+	CALL	PUTC
+	LD	A,'['
+	CALL	PUTC
+	LD	A,(CUR_ROW)
+	INC	A
+	CALL	PRINT_DEC_BYTE
+	LD	A,';'
+	CALL	PUTC
+	LD	A,'1'
+	CALL	PUTC
+	LD	A,'H'
+	CALL	PUTC
+
+	LD	A,(CUR_ROW)
+	LD	(CUR_RENDER_ROW),A
+
+	; Clear to EOL
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+
+	; Calculate line address: LINE_STORAGE + (CUR_ROW * 128)
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+
+PRINT_CUR_LINE_CHARS:
+	LD	A,(HL)
+	OR	A
+	JR	Z,PRINT_CUR_LINE_DONE
+	CP	'$'
+	JR	Z,PRINT_CUR_LINE_DONE
+	CALL	PUTC
+	INC	HL
+	JR	PRINT_CUR_LINE_CHARS
+
+PRINT_CUR_LINE_DONE:
+	CALL	LOCATE_CURSOR
+	RET
+
 RENDER_BUFFER_LINE:
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
@@ -608,7 +660,7 @@ RENDER_BUFFER_LINE:
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE
 
-	; Print characters directly 1-to-1 without expanding tabs to 4 spaces
+	; Print characters directly
 PRINT_LINE_CHARS:
 	LD	A,(HL)
 	OR	A
@@ -749,11 +801,15 @@ CURSOR_UP:
 
 CURSOR_DOWN:
 	LD	A,(TOTAL_LINES)
+	OR	A
+	JR	Z,CURSOR_DOWN_GEOM	; If 0 lines, allow moving within active rows
 	DEC	A
 	LD	B,A
 	LD	A,(CUR_ROW)
 	CP	B
-	RET	NC
+	JR	NC,CURSOR_DOWN_CHECK_EXPAND
+
+CURSOR_DOWN_GEOM:
 	LD	A,(ACTIVE_ROWS)
 	DEC	A
 	DEC	A
@@ -763,6 +819,33 @@ CURSOR_DOWN:
 	RET	NC
 	INC	A
 	LD	(CUR_ROW),A
+	RET
+
+CURSOR_DOWN_CHECK_EXPAND:
+	; If user presses Down at or beyond TOTAL_LINES-1, allow cursor down up to ACTIVE_ROWS-2
+	; and expand TOTAL_LINES so user can freely edit empty rows
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A
+	LD	B,A
+	LD	A,(CUR_ROW)
+	CP	B
+	RET	NC
+	INC	A
+	LD	(CUR_ROW),A
+
+	; Check if CUR_ROW >= TOTAL_LINES
+	LD	A,(TOTAL_LINES)
+	LD	B,A
+	LD	A,(CUR_ROW)
+	CP	B
+	RET	C
+
+	; Expand TOTAL_LINES = CUR_ROW + 1
+	INC	A
+	CP	MAX_BUFFER_LINES+1
+	RET	NC
+	LD	(TOTAL_LINES),A
 	RET
 
 CURSOR_LEFT:
@@ -788,44 +871,22 @@ CURSOR_RIGHT:
 	LD	(CUR_COL),A
 	RET
 
-; Returns current line length in A
-GET_CUR_LINE_LEN:
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE
-
-	LD	B,0
-LINE_LEN_LOOP:
-	LD	A,(HL)
-	OR	A
-	JR	Z,LINE_LEN_DONE
-	CP	'$'
-	JR	Z,LINE_LEN_DONE
-	INC	HL
-	INC	B
-	LD	A,B
-	CP	MAX_LINE_STRIDE-1
-	JR	NC,LINE_LEN_DONE
-	JR	LINE_LEN_LOOP
-LINE_LEN_DONE:
-	LD	A,B
-	RET
-
 ;------------------------------------------------------------------------------
-; Character Insertion at (CUR_ROW, CUR_COL) - with automatic space padding
+; Character Insertion at (CUR_ROW, CUR_COL)
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
-	LD	(CHAR_INSERT_TEMP),A	; Store character to insert safely
+	LD	(CHAR_INSERT_TEMP),A	; Save character to insert
 
+	; Ensure TOTAL_LINES >= CUR_ROW + 1
+	LD	A,(TOTAL_LINES)
+	LD	B,A
+	LD	A,(CUR_ROW)
+	CP	B
+	JR	C,ROW_IN_BOUNDS
+	INC	A
+	LD	(TOTAL_LINES),A
+
+ROW_IN_BOUNDS:
 	; 1. Calculate pointer to start of current line: HL = LINE_STORAGE + (CUR_ROW * 128)
 	LD	A,(CUR_ROW)
 	LD	L,A
@@ -840,19 +901,72 @@ DO_CHAR_INSERT:
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE			; HL = line start
 
-	; 2. Check if CUR_COL is beyond current line text length
-	CALL	GET_CUR_LINE_LEN	; A = current line length
-	LD	B,A
+	; 2. Scan current line to find its length (first 0 or '$')
+	PUSH	HL			; Save line start
+	LD	B,0
+SCAN_LEN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SCAN_LEN_DONE
+	CP	'$'
+	JR	Z,SCAN_LEN_DONE
+	INC	HL
+	INC	B
+	LD	A,B
+	CP	MAX_LINE_STRIDE-2
+	JR	NC,SCAN_LEN_DONE
+	JR	SCAN_LEN_LOOP
+
+SCAN_LEN_DONE:
+	POP	HL			; HL = line start
+	; B = current line text length
+
+	; 3. Compare CUR_COL with line length (B)
 	LD	A,(CUR_COL)
 	CP	B
-	JR	C,DO_NORMAL_INSERT_SHIFT
-	JR	Z,DO_NORMAL_INSERT_SHIFT
+	JR	NC,DO_PAD_AND_APPEND	; If CUR_COL >= length: pad spaces and append
 
-	; CUR_COL > line length: pad gap from line length up to CUR_COL with spaces
+	; 4. If CUR_COL < length: shift characters from (line_start + B) down to (line_start + CUR_COL)
+	; Source start for LDDR: HL = line_start + B
+	; Dest start for LDDR:   DE = line_start + B + 1
+	; Count for LDDR:        BC = B - CUR_COL + 1 (including null terminator)
+	PUSH	HL			; Save line start
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + B (pointing to null terminator)
+
+	LD	D,H
+	LD	E,L
+	INC	DE			; DE = line_start + B + 1
+
+	LD	A,B
+	LD	C,A
+	LD	A,(CUR_COL)
+	SUB	C
+	NEG
+	INC	A			; Count = B - CUR_COL + 1
+	LD	C,A
+	LD	B,0
+
+	LDDR
+
+	; Now insert character at line_start + CUR_COL
+	POP	HL			; Line start
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	LD	A,(CHAR_INSERT_TEMP)
+	LD	(HL),A
+	JR	ADVANCE_INSERT_CURSOR
+
+DO_PAD_AND_APPEND:
+	; Pad from line_start + B up to line_start + CUR_COL with spaces
 	PUSH	HL
 	LD	E,B
 	LD	D,0
-	ADD	HL,DE			; HL = line_start + line_len
+	ADD	HL,DE			; HL = line_start + B
+
 PAD_SPACES_LOOP:
 	LD	A,(CUR_COL)
 	CP	B
@@ -863,70 +977,16 @@ PAD_SPACES_LOOP:
 	JR	PAD_SPACES_LOOP
 
 PAD_SPACES_DONE:
-	POP	HL			; Restore line start
-
-	; Place new character at line_start + CUR_COL
-	LD	A,(CUR_COL)
-	LD	E,A
-	LD	D,0
-	ADD	HL,DE
+	; HL is now at line_start + CUR_COL
 	LD	A,(CHAR_INSERT_TEMP)
 	LD	(HL),A
 	INC	HL
 	XOR	A
 	LD	(HL),A			; Null terminate new end of line
+	POP	HL
 
+ADVANCE_INSERT_CURSOR:
 	; Advance cursor right
-	LD	A,(CUR_COL)
-	CP	MAX_LINE_STRIDE-2
-	RET	NC
-	INC	A
-	LD	(CUR_COL),A
-	RET
-
-DO_NORMAL_INSERT_SHIFT:
-	; Shift bytes right from (line_start + 126) down to insertion point (DE)
-	PUSH	HL			; Line start
-	LD	A,(CUR_COL)
-	LD	E,A
-	LD	D,0
-	ADD	HL,DE
-	EX	DE,HL			; DE = insertion point
-
-	POP	HL			; Line start
-	PUSH	DE			; Save insertion point
-	LD	DE,MAX_LINE_STRIDE-2
-	ADD	HL,DE			; HL = line_start + 126
-	POP	DE			; DE = insertion point
-
-CHAR_SHIFT_RIGHT_LOOP:
-	LD	A,H
-	CP	D
-	JR	NZ,DO_CHAR_SHIFT_STEP
-	LD	A,L
-	CP	E
-	JR	Z,CHAR_SHIFT_RIGHT_DONE
-
-DO_CHAR_SHIFT_STEP:
-	LD	A,(HL)
-	INC	HL
-	LD	(HL),A
-	DEC	HL
-	DEC	HL
-	JR	CHAR_SHIFT_RIGHT_LOOP
-
-CHAR_SHIFT_RIGHT_DONE:
-	; Copy the byte at DE into DE+1 as well
-	LD	A,(DE)
-	INC	DE
-	LD	(DE),A
-	DEC	DE
-
-	; Insert the new character at DE
-	LD	A,(CHAR_INSERT_TEMP)
-	LD	(DE),A
-
-	; Advance cursor right (up to MAX_LINE_STRIDE-2)
 	LD	A,(CUR_COL)
 	CP	MAX_LINE_STRIDE-2
 	RET	NC
@@ -1526,9 +1586,9 @@ SAMP_LINE0:
 SAMP_LINE1:
 	.DB	"; Press ^F to toggle save format between CP/M [CRLF] and Linux [LF]",0
 SAMP_LINE2:
-	.DB	"START:",9,"LD A,0",9,"; Initial register setup",0
+	.DB	"START:  LD A,0          ; Initial register setup",0
 SAMP_LINE3:
-	.DB	9,"RET",9,9,"; End of sample program",0
+	.DB	"        RET             ; End of sample program",0
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area

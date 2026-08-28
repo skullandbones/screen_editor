@@ -116,13 +116,27 @@ def test_se_execution():
             return False
         print("[+] Successfully entered full-screen editing mode.")
 
-        # 7. Test format toggle (^F)
+        # 7. Test interactive character typing
+        time.sleep(0.3)
+        for ch in b"HELLO":
+            os.write(master, bytes([ch]))
+            time.sleep(0.05)
+        out_type = read_until(master, b"HELLO", timeout=4.0)
+        if b"HELLO" not in out_type:
+            print("[-] Interactive typing failed to render on screen. Buffer captured:", out_type)
+            return False
+        print("[+] Successfully typed and rendered 'HELLO'.")
+
+        # 8. Test format toggle (^F)
         time.sleep(0.3)
         os.write(master, b"\x06")
-        time.sleep(0.3)
+        out_fmt = read_until(master, b"Linux LF", timeout=4.0)
+        if b"Linux LF" not in out_fmt:
+            print("[-] Format toggle failed. Buffer captured:", out_fmt)
+            return False
         print("[+] Successfully exercised ^F format toggle.")
 
-        # 8. Send Ctrl+Q to exit cleanly back to CP/M
+        # 9. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
