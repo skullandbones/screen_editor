@@ -6,10 +6,20 @@
 
 ## Key Features
 
-* **512KB Extended Memory Buffer**: Breaks the classic 64KB CP/M memory ceiling by utilizing RomWBW HBIOS bank switching (`RST 08H`) to allocate and edit large files (such as multi-thousand line Z80 assembly source files) in upper RAM banks.
-* **ANSI / VT100 Terminal Interface**: Full-screen editing with cursor navigation, scrolling, inverse video status bar, and dialog popups tailored for Minicom.
-* **Z80 ASM Tab Handling**: Configurable tab stops (default 8 columns or 4 columns) with visual alignment for assembly labels, opcodes, operands, and comments.
-* **Modern ANSI C Codebase**: Built using standard C89/C99 with isolated Z80 assembly primitives for bare-metal HBIOS inter-bank transfers.
+* **Vim-Style Splash Screen & Diagnostics**: Clean startup landing screen
+  with keyboard navigation, memory diagnostics, and direct editor entry.
+* **512KB Extended Memory Buffer**: Breaks the classic 64KB CP/M memory ceiling
+  by utilizing RomWBW HBIOS bank switching (`RST 08H`) to allocate and edit
+  large files (such as multi-thousand line Z80 assembly source files) in upper
+  RAM banks.
+* **ANSI / VT100 Terminal Interface**: Full-screen editing with cursor
+  navigation, scrolling, inverse video status bar, and dialog popups tailored
+  for Minicom.
+* **Z80 ASM Tab Handling**: Configurable tab stops (default 8 columns or 4
+  columns) with visual alignment for assembly labels, opcodes, operands, and
+  comments.
+* **Modern ANSI C Codebase**: Built using standard C89/C99 with isolated Z80
+  assembly primitives for bare-metal HBIOS inter-bank transfers.
 
 ---
 
@@ -59,18 +69,12 @@ On a Raspberry Pi 5 running **Debian Trixie (testing / 64-bit arm64)** or Raspbe
    ```bash
    git clone --recursive https://github.com/z88dk/z88dk.git ~/z88dk
    cd ~/z88dk
-   export BUILD_SDCC=0
    ./build.sh
    ```
-3. Add environment variables to `~/.bashrc`:
+3. Add to `~/.bashrc`:
    ```bash
-   export Z88DK_PATH="$HOME/z88dk"
-   export PATH="$Z88DK_PATH/bin:$PATH"
-   export ZCCCFG="$Z88DK_PATH/lib/config"
-   ```
-4. Reload shell:
-   ```bash
-   source ~/.bashrc
+   export PATH="$HOME/z88dk/bin:$PATH"
+   export ZCCCFG="$HOME/z88dk/lib/config"
    ```
 
 #### Option B: Nightly Binary Tarball (ARM64)
@@ -122,6 +126,50 @@ pip install -r requirements.txt
 
 ---
 
+## Using `SE.COM` (Screen Editor)
+
+### 1. Splash Screen
+Launching `SE` without arguments displays the Vim-style splash screen:
+
+```text
+                  ~                                             
+                  ~             SE - Screen Editor              
+                  ~                version 0.1.0                
+                  ~              by Dean Jenkins                
+                  ~                                             
+                  ~       SE is open source and freely usable   
+                  ~                                             
+                  ~       type   :e  or  <Enter>   to edit      
+                  ~       type   :t                for mem test 
+                  ~       type   :q  or  ^Q        to exit      
+                  ~                                             
+                  ~      Z80 CP/M with 512K Extended Storage    
+                  ~                                             
+```
+
+* Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter full-screen editing mode.
+* Press **`t`** or **`T`** to run the live **512KB Extended Memory Diagnostic**.
+* Press **`q`**, **`Q`**, or <kbd>Ctrl+Q</kbd> to return cleanly to CP/M.
+
+### 2. 512KB Extended Memory Diagnostic
+Pressing `t` on the splash screen queries the RomWBW HBIOS API (`RST 08H`), reports
+hardware memory capacity, and runs an inter-bank DMA transfer (`SYSSETCPY` / `SYSBNKCPY`)
+between CP/M User RAM and upper 32KB RAM banks:
+
+```text
+=== SE.COM 512KB Extended Memory Diagnostic ===
+
+[+] RomWBW HBIOS API (RST 08H): DETECTED
+[*] Installed RAM Banks: 16 x 32KB (512KB Total RAM)
+[*] Active CP/M User Bank ID: 0x00
+[*] Testing Inter-Bank Far Memory Transfer (Bank 0 <-> Bank 1)...
+[+] 512KB Far Memory Banking Test: PASSED! (Pattern 0xAA55 Verified)
+
+Press any key to return to Splash Screen...
+```
+
+---
+
 ## Deploying & Running on RC2014
 
 ### 1. In the Local RC2014 Hardware Emulator
@@ -134,7 +182,7 @@ make run
 ### 2. On Real Hardware (RC2014 via Minicom & XM.COM)
 
 #### Option A: Direct Minicom XMODEM Transfer
-1. Connect to your RC2014 serial port at `115200 8N1`:
+1. Connect to your RC2014 serial port at `115200 8N1` with hardware flow control:
    ```bash
    minicom -b 115200 -D /dev/ttyUSB0
    ```
