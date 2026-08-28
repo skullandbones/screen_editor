@@ -105,14 +105,14 @@ def test_se_execution():
         print("[+] 512KB extended memory banking diagnostic PASSED.")
 
         # 6. Return to Splash and enter editor ('e')
+        time.sleep(1.0)
+        os.write(master, b"\r")
+        read_until(master, b"SE - Screen Editor", timeout=6.0)
         time.sleep(0.5)
-        os.write(master, b" ")
-        read_until(master, b"SE - Screen Editor", timeout=4.0)
-        time.sleep(0.3)
         os.write(master, b"e")
-        out_edit = read_until(master, b"SE v0.2.0", timeout=4.0)
-        if b"SE v0.2.0" not in out_edit:
-            print("[-] Failed to enter editor mode.")
+        out_edit = read_until(master, b"SE v0.3.0", timeout=6.0)
+        if b"SE v0.3.0" not in out_edit:
+            print("[-] Failed to enter editor mode. Buffer captured:", out_edit)
             return False
         print("[+] Successfully entered full-screen editing mode.")
 
