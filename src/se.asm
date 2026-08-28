@@ -14,10 +14,8 @@ DEFAULT_DMA	.EQU	$0080
 CMD_LEN		.EQU	$0080
 CMD_TAIL	.EQU	$0081
 
-SCREEN_ROWS	.EQU	24
-SCREEN_COLS	.EQU	80
-MAX_LINE_LEN	.EQU	80
-MAX_EDIT_LINES	.EQU	20
+MAX_LINE_STRIDE	.EQU	128		; 128 bytes stride per line buffer
+MAX_BUFFER_LINES .EQU	40		; Up to 40 lines in local memory grid
 
 KEY_CTRL_C	.EQU	3
 KEY_CTRL_Q	.EQU	17
@@ -33,12 +31,19 @@ KEY_DEL		.EQU	127
 FMT_CPM		.EQU	0		; CR/LF (0x0D, 0x0A)
 FMT_LINUX	.EQU	1		; LF only (0x0A)
 
+; Screen Size Modes
+MODE_120X40	.EQU	0		; Modern 120 cols x 40 rows (Default)
+MODE_80X24	.EQU	1		; Classic 80 cols x 24 rows
+
 ;------------------------------------------------------------------------------
 ; Main Entry Point
 ;------------------------------------------------------------------------------
 START:
 	LD	(SAVED_SP),SP
 	LD	SP,LOCAL_STACK
+
+	; Initialize Screen Geometry to Default (120x40)
+	CALL	SET_MODE_120X40
 
 	; Initialize Terminal (Clear Screen & Home)
 	CALL	TERM_INIT
@@ -75,6 +80,14 @@ SPLASH_LOOP:
 	CP	'T'
 	JR	Z,DO_MEM_TEST
 
+	; Option: '1' -> Modern Screen Mode (120x40)
+	CP	'1'
+	JR	Z,DO_SET_120X40
+
+	; Option: '2' -> Classic Screen Mode (80x24)
+	CP	'2'
+	JR	Z,DO_SET_80X24
+
 	; Option: 'E' or 'e' or Enter or Space -> Enter Editor
 	CP	'e'
 	JR	Z,ENTER_EDITOR
@@ -86,6 +99,14 @@ SPLASH_LOOP:
 	JR	Z,ENTER_EDITOR
 
 	JR	SPLASH_LOOP
+
+DO_SET_120X40:
+	CALL	SET_MODE_120X40
+	JR	SPLASH_START
+
+DO_SET_80X24:
+	CALL	SET_MODE_80X24
+	JR	SPLASH_START
 
 DO_MEM_TEST:
 	CALL	RUN_MEM_TEST
@@ -99,7 +120,6 @@ DO_AUTO_LOAD:
 	JP	MAIN_LOOP
 
 ENTER_EDITOR:
-	; Initialize default lines into structured 80-byte stride buffer
 	CALL	LOAD_SAMPLE_BUFFER
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
@@ -129,15 +149,37 @@ CHECK_TOGGLE_FMT:
 	JR	MAIN_LOOP
 
 NOT_FORMAT_TOGGLE:
-	; Do nothing on other keys for now to prevent bad redraws
 	JR	MAIN_LOOP
 
 EXIT_PROGRAM:
-	; Restore terminal cursor to bottom line
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
 	LD	DE,MSG_EXIT
 	CALL	PRINT_STR
 
 	LD	SP,(SAVED_SP)
+	RET
+
+;------------------------------------------------------------------------------
+; Screen Geometry Setup
+;------------------------------------------------------------------------------
+SET_MODE_120X40:
+	LD	A,MODE_120X40
+	LD	(SCREEN_MODE),A
+	LD	A,40
+	LD	(ACTIVE_ROWS),A
+	LD	A,120
+	LD	(ACTIVE_COLS),A
+	RET
+
+SET_MODE_80X24:
+	LD	A,MODE_80X24
+	LD	(SCREEN_MODE),A
+	LD	A,24
+	LD	(ACTIVE_ROWS),A
+	LD	A,80
+	LD	(ACTIVE_COLS),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -212,6 +254,25 @@ RENDER_SPLASH:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
 	LD	DE,STR_SPLASH_BODY
+	CALL	PRINT_STR
+
+	; Display currently active mode
+	LD	DE,STR_SPLASH_CUR_MODE
+	CALL	PRINT_STR
+
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	NZ,SHOW_SPLASH_80X24
+	LD	DE,STR_MODE_120X40_LBL
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_CONT
+
+SHOW_SPLASH_80X24:
+	LD	DE,STR_MODE_80X24_LBL
+	CALL	PRINT_STR
+
+RENDER_SPLASH_CONT:
+	LD	DE,STR_SPLASH_TAIL
 	CALL	PRINT_STR
 	RET
 
@@ -406,7 +467,7 @@ RENDER_SCREEN:
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
 
-	LD	C,0			; Row index (0..22)
+	LD	C,0			; Row index (0 .. ACTIVE_ROWS-2)
 RENDER_ROW_LOOP:
 	PUSH	BC
 	LD	A,C
@@ -435,8 +496,9 @@ RENDER_TILDE_ROW:
 RENDER_ROW_NEXT:
 	POP	BC
 	INC	C
-	LD	A,C
-	CP	SCREEN_ROWS-1
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; Text rows = ACTIVE_ROWS - 1
+	CP	C
 	JR	NZ,RENDER_ROW_LOOP
 
 	CALL	RENDER_STATUS_BAR
@@ -447,7 +509,7 @@ RENDER_BUFFER_LINE:
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
 
-	; Calculate line address: LINE_STORAGE + (CUR_RENDER_ROW * 80)
+	; Calculate line address: LINE_STORAGE + (CUR_RENDER_ROW * 128)
 	LD	A,(CUR_RENDER_ROW)
 	LD	L,A
 	LD	H,0
@@ -455,11 +517,9 @@ RENDER_BUFFER_LINE:
 	ADD	HL,HL			; *4
 	ADD	HL,HL			; *8
 	ADD	HL,HL			; *16
-	LD	D,H
-	LD	E,L
 	ADD	HL,HL			; *32
 	ADD	HL,HL			; *64
-	ADD	HL,DE			; *80
+	ADD	HL,HL			; *128
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE
 
@@ -495,14 +555,41 @@ PRINT_LINE_END:
 	CALL	PUTC
 	RET
 
-RENDER_STATUS_BAR:
-	LD	DE,STR_GOTO_STATUS_ROW
+LOCATE_STATUS_ROW:
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	NZ,LOCATE_ROW_24
+	LD	DE,STR_GOTO_ROW_40
 	CALL	PRINT_STR
+	RET
+LOCATE_ROW_24:
+	LD	DE,STR_GOTO_ROW_24
+	CALL	PRINT_STR
+	RET
+
+RENDER_STATUS_BAR:
+	CALL	LOCATE_STATUS_ROW
 
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
 
 	LD	DE,STR_STATUS_PREFIX
+	CALL	PRINT_STR
+
+	; Print active geometry
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	NZ,SHOW_STATUS_80X24
+	LD	DE,STR_STATUS_120X40
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_FORMAT
+
+SHOW_STATUS_80X24:
+	LD	DE,STR_STATUS_80X24
+	CALL	PRINT_STR
+
+SHOW_STATUS_FORMAT:
+	LD	DE,STR_STATUS_MID
 	CALL	PRINT_STR
 
 	LD	A,(SAVE_FORMAT)
@@ -548,7 +635,7 @@ HBIOS_DETECT:
 	RET
 
 ;------------------------------------------------------------------------------
-; File Loading: Reads CP/M and Linux files into 80-byte stride LINE_STORAGE
+; File Loading: Reads CP/M and Linux files into 128-byte stride LINE_STORAGE
 ;------------------------------------------------------------------------------
 LOAD_FILE:
 	LD	DE,DEFAULT_DMA
@@ -568,7 +655,7 @@ LOAD_FILE:
 	; Clear LINE_STORAGE buffer with 0s
 	LD	HL,LINE_STORAGE
 	LD	DE,LINE_STORAGE+1
-	LD	BC,1599
+	LD	BC,5119
 	LD	(HL),0
 	LDIR
 
@@ -599,7 +686,7 @@ PARSE_BYTE_LOOP:
 
 	; Normal character: store in current line
 	LD	A,B
-	CP	MAX_LINE_LEN-1
+	CP	MAX_LINE_STRIDE-1
 	JR	NC,SKIP_LINE_OVERFLOW
 
 	LD	A,(HL)
@@ -628,9 +715,9 @@ HANDLE_LF:
 	ADD	HL,DE
 	LD	(HL),0
 
-	; Advance CUR_LINE_START by 80 bytes
+	; Advance CUR_LINE_START by 128 bytes
 	LD	HL,(CUR_LINE_START)
-	LD	DE,MAX_LINE_LEN
+	LD	DE,MAX_LINE_STRIDE
 	ADD	HL,DE
 	LD	(CUR_LINE_START),HL
 
@@ -638,7 +725,7 @@ HANDLE_LF:
 	LD	A,(TOTAL_LINES)
 	INC	A
 	LD	(TOTAL_LINES),A
-	CP	MAX_EDIT_LINES
+	CP	MAX_BUFFER_LINES
 	JR	NC,FILE_LOAD_DONE
 
 NEXT_BYTE_IN_SECTOR:
@@ -663,34 +750,31 @@ LOAD_FILE_NOT_FOUND:
 	RET
 
 ;------------------------------------------------------------------------------
-; Initialize Sample Buffer into 80-byte stride format
+; Initialize Sample Buffer into 128-byte stride format
 ;------------------------------------------------------------------------------
 LOAD_SAMPLE_BUFFER:
-	; Clear LINE_STORAGE (1600 bytes) with 0
+	; Clear LINE_STORAGE (5120 bytes) with 0
 	LD	HL,LINE_STORAGE
 	LD	DE,LINE_STORAGE+1
-	LD	BC,1599
+	LD	BC,5119
 	LD	(HL),0
 	LDIR
 
-	; Copy Line 0
+	; Copy Sample Lines
 	LD	HL,SAMP_LINE0
-	LD	DE,LINE_STORAGE + (0 * 80)
+	LD	DE,LINE_STORAGE + (0 * 128)
 	CALL	STR_COPY
 
-	; Copy Line 1
 	LD	HL,SAMP_LINE1
-	LD	DE,LINE_STORAGE + (1 * 80)
+	LD	DE,LINE_STORAGE + (1 * 128)
 	CALL	STR_COPY
 
-	; Copy Line 2
 	LD	HL,SAMP_LINE2
-	LD	DE,LINE_STORAGE + (2 * 80)
+	LD	DE,LINE_STORAGE + (2 * 128)
 	CALL	STR_COPY
 
-	; Copy Line 3
 	LD	HL,SAMP_LINE3
-	LD	DE,LINE_STORAGE + (3 * 80)
+	LD	DE,LINE_STORAGE + (3 * 128)
 	CALL	STR_COPY
 
 	LD	A,4
@@ -750,18 +834,16 @@ SAVE_LINE_LOOP:
 	JR	NC,SAVE_FLUSH_REMAINDER
 
 	PUSH	BC
-	; Calculate source line address: LINE_STORAGE + (C * 80)
+	; Calculate source line address: LINE_STORAGE + (C * 128)
 	LD	L,C
 	LD	H,0
 	ADD	HL,HL
 	ADD	HL,HL
 	ADD	HL,HL
 	ADD	HL,HL
-	LD	D,H
-	LD	E,L
 	ADD	HL,HL
 	ADD	HL,HL
-	ADD	HL,DE
+	ADD	HL,HL			; *128
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE
 
@@ -850,8 +932,11 @@ STR_CLEAR_SCREEN:
 STR_HOME:
 	.DB	27,"[H","$"
 
-STR_GOTO_STATUS_ROW:
+STR_GOTO_ROW_24:
 	.DB	27,"[24;1H","$"
+
+STR_GOTO_ROW_40:
+	.DB	27,"[40;1H","$"
 
 STR_CLEAR_EOL:
 	.DB	27,"[K","$"
@@ -877,8 +962,22 @@ STR_SPLASH_BODY:
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
 	.DB	"                  ~       type   :t                for mem test ",13,10
+	.DB	"                  ~       type   :1                set 120x40   ",13,10
+	.DB	"                  ~       type   :2                set 80x24    ",13,10
 	.DB	"                  ~       type   :q  or  ^Q        to exit      ",13,10
 	.DB	"                  ~                                             ",13,10
+	.DB	"$"
+
+STR_SPLASH_CUR_MODE:
+	.DB	"                  ~   Active Screen: [$"
+
+STR_MODE_120X40_LBL:
+	.DB	"120x40 (Modern Default)]           ",13,10,"$"
+
+STR_MODE_80X24_LBL:
+	.DB	"80x24 (Classic Terminal)]          ",13,10,"$"
+
+STR_SPLASH_TAIL:
 	.DB	"                  ~      Z80 CP/M with 512K Extended Storage    ",13,10
 	.DB	"                  ~      Auto-detects CP/M [CRLF] & Linux [LF]  ",13,10
 	.DB	"                  ~                                             ",13,10
@@ -918,7 +1017,16 @@ STR_TEST_PROMPT:
 	.DB	"Press any key to return to Splash Screen...$"
 
 STR_STATUS_PREFIX:
-	.DB	" SE v0.2.0 | Format: [","$"
+	.DB	" SE v0.2.0 | [","$"
+
+STR_STATUS_120X40:
+	.DB	"120x40","$"
+
+STR_STATUS_80X24:
+	.DB	"80x24 ","$"
+
+STR_STATUS_MID:
+	.DB	"] | Format: [","$"
 
 STR_FMT_CPM:
 	.DB	"CP/M CRLF","$"
@@ -927,10 +1035,10 @@ STR_FMT_LINUX:
 	.DB	"Linux LF ","$"
 
 STR_STATUS_SUFFIX:
-	.DB	"] | ^F:Toggle Format | ^S:Save | ^Q:Quit  ","$"
+	.DB	"] | ^F:Format | ^S:Save | ^Q:Quit  ","$"
 
 MSG_EXIT:
-	.DB	27,"[24;1H",27,"[0m",13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
+	.DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
 DEFAULT_FCB_NAME:
 	.DB	0,"OUTPUT  TXT",0,0,0,0
@@ -952,6 +1060,11 @@ CPM_USER_BANK:	.DB	0
 TARGET_RAM_BANK:.DB	0
 RAM_BANK_COUNT:	.DB	0
 ROM_BANK_COUNT:	.DB	0
+
+SCREEN_MODE:	.DB	MODE_120X40	; Default to 120x40
+ACTIVE_ROWS:	.DB	40		; Default 40 rows
+ACTIVE_COLS:	.DB	120		; Default 120 cols
+
 CUR_ROW:	.DB	0
 CUR_COL:	.DB	0
 CUR_RENDER_ROW:	.DB	0
@@ -971,7 +1084,7 @@ WORK_FCB:	.DS	36
 		.DS	128
 LOCAL_STACK:
 
-; 20 lines x 80 columns fixed stride line storage buffer in local TPA
-LINE_STORAGE:	.DS	1600
+; 40 lines x 128 bytes stride line storage buffer in local TPA (5120 bytes)
+LINE_STORAGE:	.DS	5120
 
 	.END
