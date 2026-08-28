@@ -608,28 +608,14 @@ RENDER_BUFFER_LINE:
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE
 
-	; Print characters with tab expansion up to '$' or null
+	; Print characters directly 1-to-1 without expanding tabs to 4 spaces
 PRINT_LINE_CHARS:
 	LD	A,(HL)
 	OR	A
 	JR	Z,PRINT_LINE_END
 	CP	'$'
 	JR	Z,PRINT_LINE_END
-	CP	9			; TAB
-	JR	NZ,PRINT_NORMAL_CHAR
-
-	; Tab expansion: print 4 spaces
-	LD	A,' '
 	CALL	PUTC
-	CALL	PUTC
-	CALL	PUTC
-	CALL	PUTC
-	JR	NEXT_CHAR
-
-PRINT_NORMAL_CHAR:
-	CALL	PUTC
-
-NEXT_CHAR:
 	INC	HL
 	JR	PRINT_LINE_CHARS
 
@@ -838,7 +824,7 @@ LINE_LEN_DONE:
 ; Character Insertion at (CUR_ROW, CUR_COL) - with automatic space padding
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
-	PUSH	AF			; Save character to insert
+	LD	(CHAR_INSERT_TEMP),A	; Store character to insert safely
 
 	; 1. Calculate pointer to start of current line: HL = LINE_STORAGE + (CUR_ROW * 128)
 	LD	A,(CUR_ROW)
@@ -877,13 +863,14 @@ PAD_SPACES_LOOP:
 	JR	PAD_SPACES_LOOP
 
 PAD_SPACES_DONE:
-	; Place new character at HL (which is line_start + CUR_COL)
 	POP	HL			; Restore line start
+
+	; Place new character at line_start + CUR_COL
 	LD	A,(CUR_COL)
 	LD	E,A
 	LD	D,0
 	ADD	HL,DE
-	POP	AF			; Character to insert
+	LD	A,(CHAR_INSERT_TEMP)
 	LD	(HL),A
 	INC	HL
 	XOR	A
@@ -936,7 +923,7 @@ CHAR_SHIFT_RIGHT_DONE:
 	DEC	DE
 
 	; Insert the new character at DE
-	POP	AF
+	LD	A,(CHAR_INSERT_TEMP)
 	LD	(DE),A
 
 	; Advance cursor right (up to MAX_LINE_STRIDE-2)
@@ -1562,6 +1549,7 @@ CUR_RENDER_ROW:	.DB	0
 TOTAL_LINES:	.DB	0
 HAS_FILE_ARG:	.DB	0
 SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
+CHAR_INSERT_TEMP:.DB	0
 
 CUR_LINE_START:	.DW	0
 CUR_DMA_PTR:	.DW	0
