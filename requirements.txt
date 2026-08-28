@@ -1,0 +1,3 @@
+# Python dependencies for SE.COM test harness and serial tools
+pyserial>=3.5
+xmodem>=0.4.7

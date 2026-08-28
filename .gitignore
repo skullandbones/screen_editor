@@ -7,3 +7,9 @@
 *.tmp
 *.bak
 *.COM
+
+# Python virtual environment and bytecode cache
+.venv/
+__pycache__/
+*.pyc
+
