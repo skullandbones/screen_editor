@@ -17,7 +17,6 @@ CMD_TAIL	.EQU	$0081
 SCREEN_ROWS	.EQU	24
 SCREEN_COLS	.EQU	80
 MAX_LINE_LEN	.EQU	80
-TAB_SIZE	.EQU	8
 MAX_EDIT_LINES	.EQU	20
 
 KEY_CTRL_C	.EQU	3
@@ -100,15 +99,8 @@ DO_AUTO_LOAD:
 	JP	MAIN_LOOP
 
 ENTER_EDITOR:
-	; Check if file already loaded
-	LD	A,(TOTAL_LINES)
-	OR	A
-	JR	NZ,SKIP_INIT_SAMPLE
-
-	; Load default sample file into buffer if empty
+	; Initialize default lines into structured 80-byte stride buffer
 	CALL	LOAD_SAMPLE_BUFFER
-
-SKIP_INIT_SAMPLE:
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 
@@ -137,8 +129,7 @@ CHECK_TOGGLE_FMT:
 	JR	MAIN_LOOP
 
 NOT_FORMAT_TOGGLE:
-	CALL	HANDLE_INPUT
-	CALL	RENDER_SCREEN
+	; Do nothing on other keys for now to prevent bad redraws
 	JR	MAIN_LOOP
 
 EXIT_PROGRAM:
@@ -415,27 +406,23 @@ RENDER_SCREEN:
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
 
-	LD	A,(TOTAL_LINES)
-	LD	B,A
-	LD	C,0			; Row index
+	LD	C,0			; Row index (0..22)
 RENDER_ROW_LOOP:
 	PUSH	BC
 	LD	A,C
 	LD	(CUR_RENDER_ROW),A
-	CALL	RENDER_BUFFER_LINE
-	POP	BC
-	INC	C
-	LD	A,C
-	CP	SCREEN_ROWS-1
-	JR	Z,RENDER_SCREEN_DONE
-	LD	A,C
-	LD	HL,TOTAL_LINES
-	CP	(HL)
-	JR	C,RENDER_ROW_LOOP
 
-	; Fill remainder of screen with '~'
-RENDER_TILDE_LOOP:
-	PUSH	BC
+	; Check if CUR_RENDER_ROW < TOTAL_LINES
+	LD	A,(TOTAL_LINES)
+	LD	B,A
+	LD	A,(CUR_RENDER_ROW)
+	CP	B
+	JR	NC,RENDER_TILDE_ROW
+
+	CALL	RENDER_BUFFER_LINE
+	JR	RENDER_ROW_NEXT
+
+RENDER_TILDE_ROW:
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
 	LD	A,'~'
@@ -444,13 +431,14 @@ RENDER_TILDE_LOOP:
 	CALL	PUTC
 	LD	A,10
 	CALL	PUTC
+
+RENDER_ROW_NEXT:
 	POP	BC
 	INC	C
 	LD	A,C
 	CP	SCREEN_ROWS-1
-	JR	NZ,RENDER_TILDE_LOOP
+	JR	NZ,RENDER_ROW_LOOP
 
-RENDER_SCREEN_DONE:
 	CALL	RENDER_STATUS_BAR
 	CALL	LOCATE_CURSOR
 	RET
@@ -459,7 +447,7 @@ RENDER_BUFFER_LINE:
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
 
-	; Calculate line address: LINE_STORAGE + (CUR_RENDER_ROW * MAX_LINE_LEN)
+	; Calculate line address: LINE_STORAGE + (CUR_RENDER_ROW * 80)
 	LD	A,(CUR_RENDER_ROW)
 	LD	L,A
 	LD	H,0
@@ -485,7 +473,7 @@ PRINT_LINE_CHARS:
 	CP	9			; TAB
 	JR	NZ,PRINT_NORMAL_CHAR
 
-	; Tab expansion: print spaces to next 8-col stop
+	; Tab expansion: print 4 spaces
 	LD	A,' '
 	CALL	PUTC
 	CALL	PUTC
@@ -511,7 +499,6 @@ RENDER_STATUS_BAR:
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
 
-	; Display status text with current format mode
 	LD	DE,STR_STATUS_PREFIX
 	CALL	PRINT_STR
 
@@ -538,9 +525,6 @@ LOCATE_CURSOR:
 	CALL	PRINT_STR
 	RET
 
-HANDLE_INPUT:
-	RET
-
 BUFFER_INIT:
 	PUSH	IX
 	LD	B,0F3H			; SYSGETBNK
@@ -560,15 +544,13 @@ HBIOS_DETECT:
 	RET
 
 ;------------------------------------------------------------------------------
-; File Loading: Supports both CP/M (CR/LF) and Linux (LF-only) formats
+; File Loading: Reads CP/M and Linux files into 80-byte stride LINE_STORAGE
 ;------------------------------------------------------------------------------
 LOAD_FILE:
-	; Set default DMA buffer
 	LD	DE,DEFAULT_DMA
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
 
-	; Open file
 	LD	DE,WORK_FCB
 	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
@@ -579,16 +561,23 @@ LOAD_FILE:
 	LD	(WORK_FCB+32),A		; Clear current record (CR)
 	LD	(TOTAL_LINES),A
 
-	LD	DE,LINE_STORAGE
-	LD	(CUR_STORE_PTR),DE
-	LD	B,0			; Line length counter
+	; Clear LINE_STORAGE buffer with 0s
+	LD	HL,LINE_STORAGE
+	LD	DE,LINE_STORAGE+1
+	LD	BC,1599
+	LD	(HL),0
+	LDIR
+
+	LD	HL,LINE_STORAGE
+	LD	(CUR_LINE_START),HL
+	LD	B,0			; Line length
 
 READ_SECTOR_LOOP:
 	LD	DE,WORK_FCB
 	LD	C,20			; BDOS Read Next Record
 	CALL	BDOS_ENTRY
 	OR	A
-	JR	NZ,FILE_LOAD_DONE	; EOF reached (A != 0)
+	JR	NZ,FILE_LOAD_DONE
 
 	LD	HL,DEFAULT_DMA
 	LD	C,128			; 128 bytes per sector
@@ -598,62 +587,66 @@ PARSE_BYTE_LOOP:
 	CP	26			; CP/M EOF (^Z)
 	JR	Z,FILE_LOAD_DONE
 
-	CP	13			; CR (Carriage Return)
-	JR	Z,IGNORE_CR		; Ignore CR so both CR/LF and LF work cleanly
+	CP	13			; CR
+	JR	Z,HANDLE_CR
 
-	CP	10			; LF (Line Feed - End of Line in both formats)
-	JR	Z,END_OF_LINE_FOUND
+	CP	10			; LF
+	JR	Z,HANDLE_LF
 
-	; Regular character: store in line buffer
+	; Normal character: store in current line
 	LD	A,B
 	CP	MAX_LINE_LEN-1
-	JR	NC,SKIP_OVERFLOW_CHAR
+	JR	NC,SKIP_LINE_OVERFLOW
 
 	LD	A,(HL)
-	LD	IX,(CUR_STORE_PTR)
-	LD	(IX+0),A
-	INC	IX
-	LD	(CUR_STORE_PTR),IX
+	PUSH	HL
+	LD	HL,(CUR_LINE_START)
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),A
+	POP	HL
 	INC	B
 
-SKIP_OVERFLOW_CHAR:
-	JR	NEXT_SECTOR_BYTE
+SKIP_LINE_OVERFLOW:
+	JR	NEXT_BYTE_IN_SECTOR
 
-IGNORE_CR:
-	; Check if file format was CP/M (has CR before LF)
+HANDLE_CR:
 	LD	A,FMT_CPM
 	LD	(SAVE_FORMAT),A
-	JR	NEXT_SECTOR_BYTE
+	JR	NEXT_BYTE_IN_SECTOR
 
-END_OF_LINE_FOUND:
-	; Null-terminate line in storage
-	LD	IX,(CUR_STORE_PTR)
-	LD	(IX+0),0
-	INC	IX
-	LD	(CUR_STORE_PTR),IX
+HANDLE_LF:
+	; Terminate current line
+	LD	HL,(CUR_LINE_START)
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),0
 
-	; Advance total lines
+	; Advance CUR_LINE_START by 80 bytes
+	LD	HL,(CUR_LINE_START)
+	LD	DE,MAX_LINE_LEN
+	ADD	HL,DE
+	LD	(CUR_LINE_START),HL
+
+	LD	B,0
 	LD	A,(TOTAL_LINES)
 	INC	A
 	LD	(TOTAL_LINES),A
-	LD	B,0
-
 	CP	MAX_EDIT_LINES
 	JR	NC,FILE_LOAD_DONE
 
-NEXT_SECTOR_BYTE:
+NEXT_BYTE_IN_SECTOR:
 	INC	HL
 	DEC	C
 	JR	NZ,PARSE_BYTE_LOOP
 	JR	READ_SECTOR_LOOP
 
 FILE_LOAD_DONE:
-	; Terminate last line if non-empty
 	LD	A,B
 	OR	A
 	JR	Z,LOAD_EXIT
-	LD	IX,(CUR_STORE_PTR)
-	LD	(IX+0),0
 	LD	A,(TOTAL_LINES)
 	INC	A
 	LD	(TOTAL_LINES),A
@@ -666,22 +659,54 @@ LOAD_FILE_NOT_FOUND:
 	RET
 
 ;------------------------------------------------------------------------------
-; Default Sample Buffer
+; Initialize Sample Buffer into 80-byte stride format
 ;------------------------------------------------------------------------------
 LOAD_SAMPLE_BUFFER:
-	LD	HL,DEFAULT_SAMPLE_DATA
-	LD	DE,LINE_STORAGE
-	LD	BC,SAMPLE_DATA_SIZE
+	; Clear LINE_STORAGE (1600 bytes) with 0
+	LD	HL,LINE_STORAGE
+	LD	DE,LINE_STORAGE+1
+	LD	BC,1599
+	LD	(HL),0
 	LDIR
+
+	; Copy Line 0
+	LD	HL,SAMP_LINE0
+	LD	DE,LINE_STORAGE + (0 * 80)
+	CALL	STR_COPY
+
+	; Copy Line 1
+	LD	HL,SAMP_LINE1
+	LD	DE,LINE_STORAGE + (1 * 80)
+	CALL	STR_COPY
+
+	; Copy Line 2
+	LD	HL,SAMP_LINE2
+	LD	DE,LINE_STORAGE + (2 * 80)
+	CALL	STR_COPY
+
+	; Copy Line 3
+	LD	HL,SAMP_LINE3
+	LD	DE,LINE_STORAGE + (3 * 80)
+	CALL	STR_COPY
+
 	LD	A,4
 	LD	(TOTAL_LINES),A
 	RET
+
+STR_COPY:
+STR_COPY_LOOP:
+	LD	A,(HL)
+	LD	(DE),A
+	OR	A
+	RET	Z
+	INC	HL
+	INC	DE
+	JR	STR_COPY_LOOP
 
 ;------------------------------------------------------------------------------
 ; File Saving: Saves in selected format (CP/M CR/LF or Linux LF-only)
 ;------------------------------------------------------------------------------
 SAVE_FILE:
-	; If no file argument was provided, use default name "OUTPUT.TXT"
 	LD	A,(WORK_FCB+1)
 	CP	' '
 	JR	NZ,DO_SAVE_EXISTING
@@ -713,14 +738,28 @@ DO_SAVE_EXISTING:
 	LD	(DMA_BYTES_LEFT),A
 
 	; Write lines from LINE_STORAGE
-	LD	HL,LINE_STORAGE
-	LD	A,(TOTAL_LINES)
-	LD	(LINES_TO_SAVE),A
-
+	LD	C,0			; Line counter
 SAVE_LINE_LOOP:
-	LD	A,(LINES_TO_SAVE)
-	OR	A
-	JR	Z,SAVE_FLUSH_REMAINDER
+	LD	A,C
+	LD	HL,TOTAL_LINES
+	CP	(HL)
+	JR	NC,SAVE_FLUSH_REMAINDER
+
+	PUSH	BC
+	; Calculate source line address: LINE_STORAGE + (C * 80)
+	LD	L,C
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	D,H
+	LD	E,L
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,DE
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
 
 SAVE_CHAR_LOOP:
 	LD	A,(HL)
@@ -731,33 +770,24 @@ SAVE_CHAR_LOOP:
 	JR	SAVE_CHAR_LOOP
 
 SAVE_LINE_END:
-	INC	HL			; Skip null terminator
-
 	; Write Line Ending depending on SAVE_FORMAT
 	LD	A,(SAVE_FORMAT)
 	CP	FMT_CPM
 	JR	NZ,WRITE_LF_ONLY
 
-	; CP/M format: write CR then LF
 	LD	A,13
 	CALL	WRITE_BYTE_TO_DMA
 
 WRITE_LF_ONLY:
-	; Linux & CP/M both write LF
 	LD	A,10
 	CALL	WRITE_BYTE_TO_DMA
 
-	LD	A,(LINES_TO_SAVE)
-	DEC	A
-	LD	(LINES_TO_SAVE),A
+	POP	BC
+	INC	C
 	JR	SAVE_LINE_LOOP
 
 SAVE_FLUSH_REMAINDER:
-	; Write EOF ^Z (0x1A) for CP/M compatibility if buffer has space
-	LD	A,26
-	CALL	WRITE_BYTE_TO_DMA
-
-	; Pad remaining bytes in sector with ^Z
+	; Pad remaining bytes in sector with ^Z (0x1A)
 PAD_SECTOR_LOOP:
 	LD	A,(DMA_BYTES_LEFT)
 	CP	128
@@ -767,7 +797,6 @@ PAD_SECTOR_LOOP:
 	JR	PAD_SECTOR_LOOP
 
 CLOSE_OUTPUT_FILE:
-	; Close File
 	LD	DE,WORK_FCB
 	LD	C,16			; BDOS Close File
 	CALL	BDOS_ENTRY
@@ -786,7 +815,7 @@ WRITE_BYTE_TO_DMA:
 	LD	(DMA_BYTES_LEFT),A
 	JR	NZ,WRITE_BYTE_DONE
 
-	; Sector full: write to disk
+	; Sector full: flush DMA to disk
 	PUSH	DE
 	LD	DE,DEFAULT_DMA
 	LD	C,26			; BDOS Set DMA
@@ -899,12 +928,14 @@ MSG_EXIT:
 DEFAULT_FCB_NAME:
 	.DB	0,"OUTPUT  TXT",0,0,0,0
 
-DEFAULT_SAMPLE_DATA:
+SAMP_LINE0:
 	.DB	"; Screen Editor (SE.COM) Cross-Platform Line Format Buffer",0
+SAMP_LINE1:
 	.DB	"; Press ^F to toggle save format between CP/M [CRLF] and Linux [LF]",0
+SAMP_LINE2:
 	.DB	"START:",9,"LD A,0",9,"; Initial register setup",0
+SAMP_LINE3:
 	.DB	9,"RET",9,9,"; End of sample program",0
-SAMPLE_DATA_SIZE .EQU $ - DEFAULT_SAMPLE_DATA
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
@@ -921,10 +952,9 @@ TOTAL_LINES:	.DB	0
 HAS_FILE_ARG:	.DB	0
 SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
 
-CUR_STORE_PTR:	.DW	0
+CUR_LINE_START:	.DW	0
 CUR_DMA_PTR:	.DW	0
 DMA_BYTES_LEFT:	.DB	0
-LINES_TO_SAVE:	.DB	0
 
 TEST_PATTERN:	.DB	0,0
 TEST_READBACK:	.DB	0,0
@@ -934,7 +964,7 @@ WORK_FCB:	.DS	36
 		.DS	128
 LOCAL_STACK:
 
-; 20 lines x 80 columns line storage buffer in local TPA space
+; 20 lines x 80 columns fixed stride line storage buffer in local TPA
 LINE_STORAGE:	.DS	1600
 
 	.END

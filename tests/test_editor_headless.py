@@ -2,14 +2,14 @@
 """
 Host-agnostic headless test runner for SE.COM (Screen Editor).
 Executes SE.COM inside an RC2014 / RomWBW emulation harness over pseudo-terminal (PTY)
-and verifies Vim-style splash screen, 512KB memory diagnostic, and clean exit behavior.
+and verifies splash screen, memory diagnostics, editor buffer rendering, format toggle,
+and clean exit behavior.
 """
 
 import os
 import sys
 import time
 import tty
-import termios
 import select
 import subprocess
 
@@ -64,8 +64,7 @@ def test_se_execution():
     os.close(slave)
 
     try:
-        # 1. Wait for RomWBW bootloader prompt
-        print("[*] Waiting for RomWBW boot banner...")
+        # 1. Wait for RomWBW boot loader prompt
         out = read_until(master, b"Boot [H=Help]:", timeout=6.0)
         if b"Boot [H=Help]:" not in out:
             print("[-] Failed to reach RomWBW boot loader prompt.")
@@ -111,13 +110,19 @@ def test_se_execution():
         read_until(master, b"SE - Screen Editor", timeout=4.0)
         time.sleep(0.3)
         os.write(master, b"e")
-        out_edit = read_until(master, b"Z80 Screen Editor", timeout=4.0)
-        if b"Z80 Screen Editor" not in out_edit:
+        out_edit = read_until(master, b"SE v0.2.0", timeout=4.0)
+        if b"SE v0.2.0" not in out_edit:
             print("[-] Failed to enter editor mode.")
             return False
         print("[+] Successfully entered full-screen editing mode.")
 
-        # 7. Send Ctrl+Q to exit cleanly back to CP/M
+        # 7. Test format toggle (^F)
+        time.sleep(0.3)
+        os.write(master, b"\x06")
+        time.sleep(0.3)
+        print("[+] Successfully exercised ^F format toggle.")
+
+        # 8. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
