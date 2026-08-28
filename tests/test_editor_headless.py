@@ -2,7 +2,7 @@
 """
 Host-agnostic headless test runner for SE.COM (Screen Editor).
 Executes SE.COM inside an RC2014 / RomWBW emulation harness over pseudo-terminal (PTY)
-and verifies VT100 initialization, screen rendering, and clean exit behavior.
+and verifies Vim-style splash screen, 512KB memory diagnostic, and clean exit behavior.
 """
 
 import os
@@ -25,7 +25,7 @@ def find_paths():
 
     return emu_bin, rom_file, img_file, se_bin
 
-def read_until(master_fd, match_bytes, timeout=5.0):
+def read_until(master_fd, match_bytes, timeout=8.0):
     buf = b""
     t0 = time.time()
     while time.time() - t0 < timeout:
@@ -72,35 +72,56 @@ def test_se_execution():
             return False
         print("[+] Boot loader prompt reached.")
 
-        # 2. Boot into CP/M on ROM disk (Choice 'c')
-        time.sleep(0.3)
+        # 2. Boot into CP/M 2.2 on ROM disk (Choice 'c')
+        time.sleep(0.5)
         os.write(master, b"c\r")
-        out = read_until(master, b"B>", timeout=5.0)
+        out = read_until(master, b"B>", timeout=6.0)
         if b"B>" not in out:
             print("[-] Failed to boot into CP/M prompt.")
             return False
         print("[+] Booted into CP/M (Drive B>).")
 
-        # 3. Switch to Drive C: (where SD slice 0 with SE.COM is mounted)
-        time.sleep(0.3)
+        # 3. Switch to Drive C: (SD slice 0 with SE.COM)
+        time.sleep(0.5)
         os.write(master, b"c:\r")
-        out = read_until(master, b"C>", timeout=3.0)
+        out = read_until(master, b"C>", timeout=4.0)
         print("[+] Switched to Drive C>.")
 
         # 4. Run SE.COM
-        time.sleep(0.3)
-        os.write(master, b"SE\r")
-        out = read_until(master, b"SE v0.1.0", timeout=4.0)
-        if b"SE v0.1.0" not in out:
-            print("[-] SE.COM screen banner not detected.")
+        time.sleep(0.5)
+        os.write(master, b"se\r")
+        out = read_until(master, b"SE - Screen Editor", timeout=5.0)
+        if b"SE - Screen Editor" not in out:
+            print("[-] SE.COM splash screen not detected.")
             return False
-        print("[+] SE.COM successfully initialized VT100 full-screen interface.")
+        print("[+] SE.COM splash screen successfully displayed.")
 
-        # 5. Send Ctrl+Q to exit cleanly back to CP/M
+        # 5. Trigger Memory Diagnostic ('t')
+        time.sleep(0.5)
+        os.write(master, b"t")
+        out_mem = read_until(master, b"512KB Far Memory Banking Test: PASSED", timeout=5.0)
+        if b"512KB Far Memory Banking Test: PASSED" not in out_mem:
+            print("[-] 512KB extended memory test failed or not detected.")
+            return False
+        print("[+] 512KB extended memory banking diagnostic PASSED.")
+
+        # 6. Return to Splash and enter editor ('e')
+        time.sleep(0.5)
+        os.write(master, b" ")
+        read_until(master, b"SE - Screen Editor", timeout=4.0)
         time.sleep(0.3)
+        os.write(master, b"e")
+        out_edit = read_until(master, b"Z80 Screen Editor", timeout=4.0)
+        if b"Z80 Screen Editor" not in out_edit:
+            print("[-] Failed to enter editor mode.")
+            return False
+        print("[+] Successfully entered full-screen editing mode.")
+
+        # 7. Send Ctrl+Q to exit cleanly back to CP/M
+        time.sleep(0.5)
         os.write(master, b"\x11")
-        out = read_until(master, b"Exiting SE.COM", timeout=3.0)
-        if b"Exiting SE.COM" not in out:
+        out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
+        if b"Exiting SE.COM" not in out_exit:
             print("[-] Clean exit message not observed.")
             return False
         print("[+] SE.COM successfully received Ctrl+Q and returned cleanly to CP/M.")

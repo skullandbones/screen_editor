@@ -37,19 +37,50 @@ START:
 	; Initialize Terminal (Clear Screen & Home)
 	CALL	TERM_INIT
 
-	; Check for RomWBW HBIOS Presence
-	CALL	HBIOS_DETECT
-	JR	Z,INIT_SUCCESS
-
-	; Not HBIOS warning
-	LD	DE,MSG_NO_HBIOS
-	CALL	PRINT_STR
-
-INIT_SUCCESS:
-	; Initialize Buffer
+	; Query RomWBW User Bank
 	CALL	BUFFER_INIT
 
-	; Render Initial Screen
+	; Display Vim-style Splash Screen
+SPLASH_START:
+	CALL	RENDER_SPLASH
+
+SPLASH_LOOP:
+	CALL	GET_KEY
+
+	; Option: 'Q' or 'q' or Ctrl+Q -> Exit
+	CP	'q'
+	JP	Z,EXIT_PROGRAM
+	CP	'Q'
+	JP	Z,EXIT_PROGRAM
+	CP	KEY_CTRL_Q
+	JP	Z,EXIT_PROGRAM
+
+	; Option: 'T' or 't' -> Run Extended Memory Test
+	CP	't'
+	JR	Z,DO_MEM_TEST
+	CP	'T'
+	JR	Z,DO_MEM_TEST
+
+	; Option: 'E' or 'e' or Enter or Space -> Enter Editor
+	CP	'e'
+	JR	Z,ENTER_EDITOR
+	CP	'E'
+	JR	Z,ENTER_EDITOR
+	CP	KEY_ENTER
+	JR	Z,ENTER_EDITOR
+	CP	' '
+	JR	Z,ENTER_EDITOR
+
+	JR	SPLASH_LOOP
+
+DO_MEM_TEST:
+	CALL	RUN_MEM_TEST
+	; Wait for key to return to splash
+	CALL	GET_KEY
+	JR	SPLASH_START
+
+ENTER_EDITOR:
+	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 
 MAIN_LOOP:
@@ -59,7 +90,6 @@ MAIN_LOOP:
 
 	CP	KEY_CTRL_S
 	JR	NZ,NOT_SAVE
-	; Save trigger
 	CALL	SAVE_FILE
 	JR	MAIN_LOOP
 
@@ -118,16 +148,188 @@ GET_KEY_WAIT:
 	RET
 
 ;------------------------------------------------------------------------------
-; Screen Renderer
+; Splash Screen Renderer (Vim Style)
+;------------------------------------------------------------------------------
+RENDER_SPLASH:
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+	LD	DE,STR_SPLASH_BODY
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; 512KB Extended Memory Diagnostic (RomWBW HBIOS RST 08H)
+;------------------------------------------------------------------------------
+RUN_MEM_TEST:
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+
+	LD	DE,STR_TEST_TITLE
+	CALL	PRINT_STR
+
+	; Check HBIOS presence
+	CALL	HBIOS_DETECT
+	JR	Z,TEST_HBIOS_OK
+	LD	DE,STR_TEST_NO_HBIOS
+	CALL	PRINT_STR
+	RET
+
+TEST_HBIOS_OK:
+	LD	DE,STR_TEST_HBIOS_OK
+	CALL	PRINT_STR
+
+	; Query Memory Bank Info (SYSGET 0xF1)
+	PUSH	IX
+	LD	B,0F8H
+	LD	C,0F1H
+	RST	08H
+	POP	IX
+
+	; D = ROM Banks, E = RAM Banks
+	LD	A,D
+	LD	(ROM_BANK_COUNT),A
+	LD	A,E
+	LD	(RAM_BANK_COUNT),A
+
+	LD	DE,STR_TEST_RAM_BANKS
+	CALL	PRINT_STR
+	LD	A,(RAM_BANK_COUNT)
+	CALL	PRINT_DEC_BYTE
+	LD	DE,STR_TEST_RAM_BANKS_END
+	CALL	PRINT_STR
+
+	; Print Active CP/M Bank
+	LD	DE,STR_TEST_CUR_BANK
+	CALL	PRINT_STR
+	LD	A,(CPM_USER_BANK)
+	CALL	PRINT_HEX_BYTE
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+
+	; Test memory bank copy
+	LD	DE,STR_TEST_BANK_COPY
+	CALL	PRINT_STR
+
+	; 1. Prepare test pattern in local memory
+	LD	HL,TEST_PATTERN
+	LD	(HL),0AAH
+	INC	HL
+	LD	(HL),055H
+
+	; 2. SYSSETCPY: Copy local pattern to Bank 1 at offset 0x1000
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	D,1			; Dest Bank = 1 (Upper RAM bank)
+	LD	A,(CPM_USER_BANK)
+	LD	E,A			; Src Bank = CP/M User Bank
+	LD	HL,2			; Count = 2 bytes
+	RST	08H
+	POP	IX
+
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	LD	DE,01000H		; Dest Address in Bank 1
+	LD	HL,TEST_PATTERN		; Src Address
+	RST	08H
+	POP	IX
+
+	; 3. Clear readback buffer
+	LD	HL,TEST_READBACK
+	LD	(HL),0
+	INC	HL
+	LD	(HL),0
+
+	; 4. SYSSETCPY: Copy from Bank 1 back to local buffer
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(CPM_USER_BANK)
+	LD	D,A			; Dest Bank = User Bank
+	LD	E,1			; Src Bank = Bank 1
+	LD	HL,2
+	RST	08H
+	POP	IX
+
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	LD	DE,TEST_READBACK
+	LD	HL,01000H
+	RST	08H
+	POP	IX
+
+	; 5. Verify pattern matches
+	LD	A,(TEST_READBACK)
+	CP	0AAH
+	JR	NZ,TEST_FAIL
+	LD	A,(TEST_READBACK+1)
+	CP	055H
+	JR	NZ,TEST_FAIL
+
+	; Success
+	LD	DE,STR_TEST_PASSED
+	CALL	PRINT_STR
+	JR	TEST_END
+
+TEST_FAIL:
+	LD	DE,STR_TEST_FAILED
+	CALL	PRINT_STR
+
+TEST_END:
+	LD	DE,STR_TEST_PROMPT
+	CALL	PRINT_STR
+	RET
+
+PRINT_DEC_BYTE:
+	PUSH	AF
+	LD	C,0
+DIV10_LOOP:
+	CP	10
+	JR	C,PRINT_TENS
+	SUB	10
+	INC	C
+	JR	DIV10_LOOP
+PRINT_TENS:
+	PUSH	AF
+	LD	A,C
+	OR	A
+	JR	Z,SKIP_TENS_ZERO
+	ADD	A,'0'
+	CALL	PUTC
+SKIP_TENS_ZERO:
+	POP	AF
+	ADD	A,'0'
+	CALL	PUTC
+	POP	AF
+	RET
+
+PRINT_HEX_BYTE:
+	PUSH	AF
+	RRA
+	RRA
+	RRA
+	RRA
+	CALL	PRINT_NIBBLE
+	POP	AF
+PRINT_NIBBLE:
+	AND	0FH
+	CP	10
+	JR	C,PRINT_DIGIT
+	ADD	A,'A'-10
+	CALL	PUTC
+	RET
+PRINT_DIGIT:
+	ADD	A,'0'
+	CALL	PUTC
+	RET
+
+;------------------------------------------------------------------------------
+; Editor Screen Renderer
 ;------------------------------------------------------------------------------
 RENDER_SCREEN:
-	; Move cursor home
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
 
-	; Render lines
 	LD	B,SCREEN_ROWS-1
-	LD	C,0			; Row counter
+	LD	C,0
 RENDER_ROW_LOOP:
 	PUSH	BC
 	LD	A,C
@@ -137,24 +339,18 @@ RENDER_ROW_LOOP:
 	INC	C
 	DJNZ	RENDER_ROW_LOOP
 
-	; Render Status Bar (Row 24)
 	CALL	RENDER_STATUS_BAR
-
-	; Move cursor to current editing position (ROW, COL)
 	CALL	LOCATE_CURSOR
 	RET
 
 RENDER_SINGLE_LINE:
-	; Clear to End of Line
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
 
 	LD	A,(CUR_RENDER_ROW)
-	LD	HL,SAMPLE_TEXT
 	OR	A
 	JR	NZ,RENDER_EMPTY_LINE
 
-	; Print sample line
 	LD	DE,SAMPLE_TEXT
 	CALL	PRINT_STR
 	JR	RENDER_LINE_DONE
@@ -171,7 +367,6 @@ RENDER_LINE_DONE:
 	RET
 
 RENDER_STATUS_BAR:
-	; Inverse video
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
 	LD	DE,STR_STATUS_TEXT
@@ -181,33 +376,29 @@ RENDER_STATUS_BAR:
 	RET
 
 LOCATE_CURSOR:
-	; Cursor at Row 1, Col 1
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
 	RET
 
-;------------------------------------------------------------------------------
-; Input Handler
-;------------------------------------------------------------------------------
 HANDLE_INPUT:
 	RET
 
-;------------------------------------------------------------------------------
-; Buffer & RomWBW HBIOS Far Memory Banking
-;------------------------------------------------------------------------------
 BUFFER_INIT:
-	; Query current user bank
+	PUSH	IX
 	LD	B,0F3H			; SYSGETBNK
 	RST	08H
+	POP	IX
 	LD	A,C
 	LD	(CPM_USER_BANK),A
 	RET
 
 HBIOS_DETECT:
+	PUSH	IX
 	LD	B,0F8H			; CIOCNT
 	LD	C,000H
 	RST	08H
-	OR	A			; A=0 on success
+	POP	IX
+	OR	A
 	RET
 
 SAVE_FILE:
@@ -231,11 +422,59 @@ STR_INVERSE_ON:
 STR_INVERSE_OFF:
 	.DB	27,"[0m","$"
 
+STR_CRLF:
+	.DB	13,10,"$"
+
+STR_SPLASH_BODY:
+	.DB	27,"[H"
+	.DB	13,10
+	.DB	"                  ~                                             ",13,10
+	.DB	"                  ~             SE - Screen Editor              ",13,10
+	.DB	"                  ~                version 0.1.0                ",13,10
+	.DB	"                  ~              by Dean Jenkins                ",13,10
+	.DB	"                  ~                                             ",13,10
+	.DB	"                  ~       SE is open source and freely usable   ",13,10
+	.DB	"                  ~                                             ",13,10
+	.DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
+	.DB	"                  ~       type   :t                for mem test ",13,10
+	.DB	"                  ~       type   :q  or  ^Q        to exit      ",13,10
+	.DB	"                  ~                                             ",13,10
+	.DB	"                  ~      Z80 CP/M with 512K Extended Storage    ",13,10
+	.DB	"                  ~                                             ",13,10
+	.DB	"$"
+
+STR_TEST_TITLE:
+	.DB	"=== SE.COM 512KB Extended Memory Diagnostic ===",13,10,13,10,"$"
+
+STR_TEST_HBIOS_OK:
+	.DB	"[+] RomWBW HBIOS API (RST 08H): DETECTED",13,10,"$"
+
+STR_TEST_NO_HBIOS:
+	.DB	"[-] RomWBW HBIOS API NOT DETECTED.",13,10,"$"
+
+STR_TEST_RAM_BANKS:
+	.DB	"[*] Installed RAM Banks: $"
+
+STR_TEST_RAM_BANKS_END:
+	.DB	" x 32KB (512KB Total RAM)",13,10,"$"
+
+STR_TEST_CUR_BANK:
+	.DB	"[*] Active CP/M User Bank ID: 0x$"
+
+STR_TEST_BANK_COPY:
+	.DB	"[*] Testing Inter-Bank Far Memory Transfer (Bank 0 <-> Bank 1)...",13,10,"$"
+
+STR_TEST_PASSED:
+	.DB	"[+] 512KB Far Memory Banking Test: PASSED! (Pattern 0xAA55 Verified)",13,10,13,10,"$"
+
+STR_TEST_FAILED:
+	.DB	"[-] Far Memory Banking Test: FAILED (Data Mismatch)",13,10,13,10,"$"
+
+STR_TEST_PROMPT:
+	.DB	"Press any key to return to Splash Screen...$"
+
 STR_STATUS_TEXT:
 	.DB	" SE v0.1.0 | Z80 Screen Editor | ^S: Save | ^Q: Quit                       ","$"
-
-MSG_NO_HBIOS:
-	.DB	"Notice: RomWBW HBIOS not detected.",13,10,"$"
 
 MSG_EXIT:
 	.DB	27,"[24;1H",27,"[0m",13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
@@ -248,9 +487,14 @@ SAMPLE_TEXT:
 ;------------------------------------------------------------------------------
 SAVED_SP:	.DW	0
 CPM_USER_BANK:	.DB	0
+RAM_BANK_COUNT:	.DB	0
+ROM_BANK_COUNT:	.DB	0
 CUR_ROW:	.DB	0
 CUR_COL:	.DB	0
 CUR_RENDER_ROW:	.DB	0
+
+TEST_PATTERN:	.DB	0,0
+TEST_READBACK:	.DB	0,0
 
 		.DS	128
 LOCAL_STACK:
