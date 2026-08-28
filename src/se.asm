@@ -9,7 +9,8 @@
 ; Constants & BDOS Vectors
 ;------------------------------------------------------------------------------
 BDOS_ENTRY	.EQU	$0005
-FCB1		.EQU	$005C
+DEFAULT_FCB	.EQU	$005C
+DEFAULT_DMA	.EQU	$0080
 CMD_LEN		.EQU	$0080
 CMD_TAIL	.EQU	$0081
 
@@ -17,15 +18,21 @@ SCREEN_ROWS	.EQU	24
 SCREEN_COLS	.EQU	80
 MAX_LINE_LEN	.EQU	80
 TAB_SIZE	.EQU	8
+MAX_EDIT_LINES	.EQU	20
 
 KEY_CTRL_C	.EQU	3
 KEY_CTRL_Q	.EQU	17
 KEY_CTRL_S	.EQU	19
+KEY_CTRL_F	.EQU	6		; Toggle CP/M <-> Linux line endings
 KEY_BACKSPACE	.EQU	8
 KEY_TAB		.EQU	9
 KEY_ENTER	.EQU	13
 KEY_ESC		.EQU	27
 KEY_DEL		.EQU	127
+
+; Line ending modes
+FMT_CPM		.EQU	0		; CR/LF (0x0D, 0x0A)
+FMT_LINUX	.EQU	1		; LF only (0x0A)
 
 ;------------------------------------------------------------------------------
 ; Main Entry Point
@@ -40,7 +47,15 @@ START:
 	; Query RomWBW User Bank
 	CALL	BUFFER_INIT
 
-	; Display Vim-style Splash Screen
+	; Check if filename was provided in FCB1
+	CALL	CHECK_COMMAND_LINE
+
+	; If file argument was given, load file and go straight to editor
+	LD	A,(HAS_FILE_ARG)
+	OR	A
+	JR	NZ,DO_AUTO_LOAD
+
+	; Otherwise, display Vim-style Splash Screen
 SPLASH_START:
 	CALL	RENDER_SPLASH
 
@@ -75,25 +90,53 @@ SPLASH_LOOP:
 
 DO_MEM_TEST:
 	CALL	RUN_MEM_TEST
-	; Wait for key to return to splash
 	CALL	GET_KEY
 	JR	SPLASH_START
 
+DO_AUTO_LOAD:
+	CALL	LOAD_FILE
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	JP	MAIN_LOOP
+
 ENTER_EDITOR:
+	; Check if file already loaded
+	LD	A,(TOTAL_LINES)
+	OR	A
+	JR	NZ,SKIP_INIT_SAMPLE
+
+	; Load default sample file into buffer if empty
+	CALL	LOAD_SAMPLE_BUFFER
+
+SKIP_INIT_SAMPLE:
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 
 MAIN_LOOP:
 	CALL	GET_KEY
-	CP	KEY_CTRL_Q
-	JR	Z,EXIT_PROGRAM
 
+	; Command: Ctrl+Q -> Exit
+	CP	KEY_CTRL_Q
+	JP	Z,EXIT_PROGRAM
+
+	; Command: Ctrl+S -> Save File
 	CP	KEY_CTRL_S
-	JR	NZ,NOT_SAVE
+	JR	NZ,CHECK_TOGGLE_FMT
 	CALL	SAVE_FILE
+	CALL	RENDER_STATUS_BAR
 	JR	MAIN_LOOP
 
-NOT_SAVE:
+CHECK_TOGGLE_FMT:
+	; Command: Ctrl+F -> Toggle Line Ending Format (CP/M <-> Linux)
+	CP	KEY_CTRL_F
+	JR	NZ,NOT_FORMAT_TOGGLE
+	LD	A,(SAVE_FORMAT)
+	XOR	1			; Toggle between 0 (CP/M) and 1 (Linux)
+	LD	(SAVE_FORMAT),A
+	CALL	RENDER_STATUS_BAR
+	JR	MAIN_LOOP
+
+NOT_FORMAT_TOGGLE:
 	CALL	HANDLE_INPUT
 	CALL	RENDER_SCREEN
 	JR	MAIN_LOOP
@@ -132,7 +175,6 @@ PUTC:
 	RET
 
 GET_KEY:
-	; Direct Console I/O (BDOS Function 6, E=0xFF)
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
@@ -145,6 +187,31 @@ GET_KEY_WAIT:
 	POP	HL
 	POP	DE
 	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; Command Line & FCB Initialization
+;------------------------------------------------------------------------------
+CHECK_COMMAND_LINE:
+	LD	A,(DEFAULT_FCB+1)
+	CP	' '
+	JR	Z,NO_FILE_ARG
+	CP	0
+	JR	Z,NO_FILE_ARG
+
+	LD	A,1
+	LD	(HAS_FILE_ARG),A
+
+	; Copy FCB to working FCB
+	LD	HL,DEFAULT_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
+	RET
+
+NO_FILE_ARG:
+	XOR	A
+	LD	(HAS_FILE_ARG),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -185,7 +252,6 @@ TEST_HBIOS_OK:
 	RST	08H
 	POP	IX
 
-	; D = ROM Banks, E = RAM Banks
 	LD	A,D
 	LD	(ROM_BANK_COUNT),A
 	LD	A,E
@@ -206,8 +272,7 @@ TEST_HBIOS_OK:
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
-	; Discover Target Upper RAM Bank ID
-	; In RomWBW, RAM banks start at 0x80. If User Bank is 0x8E, Target Bank is 0x80 (or 0x80 + UserBank XOR 1)
+	; Set Target RAM Bank
 	LD	A,(CPM_USER_BANK)
 	CP	080H
 	JR	NZ,USE_RAM_BANK_80
@@ -227,7 +292,6 @@ SET_TARGET_BANK:
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
-	; Test memory bank copy
 	LD	DE,STR_TEST_BANK_COPY
 	CALL	PRINT_STR
 
@@ -241,9 +305,9 @@ SET_TARGET_BANK:
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
 	LD	A,(TARGET_RAM_BANK)
-	LD	D,A			; Dest Bank = Target Upper RAM Bank (e.g. 0x80)
+	LD	D,A			; Dest Bank = Target Upper RAM Bank
 	LD	A,(CPM_USER_BANK)
-	LD	E,A			; Src Bank = CP/M User Bank (e.g. 0x8E)
+	LD	E,A			; Src Bank = CP/M User Bank
 	LD	HL,2			; Count = 2 bytes
 	RST	08H
 	POP	IX
@@ -265,9 +329,9 @@ SET_TARGET_BANK:
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
 	LD	A,(CPM_USER_BANK)
-	LD	D,A			; Dest Bank = User Bank (0x8E)
+	LD	D,A			; Dest Bank = User Bank
 	LD	A,(TARGET_RAM_BANK)
-	LD	E,A			; Src Bank = Target RAM Bank (0x80)
+	LD	E,A			; Src Bank = Target RAM Bank
 	LD	HL,2
 	RST	08H
 	POP	IX
@@ -351,38 +415,92 @@ RENDER_SCREEN:
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
 
-	LD	B,SCREEN_ROWS-1
-	LD	C,0
+	LD	A,(TOTAL_LINES)
+	LD	B,A
+	LD	C,0			; Row index
 RENDER_ROW_LOOP:
 	PUSH	BC
 	LD	A,C
 	LD	(CUR_RENDER_ROW),A
-	CALL	RENDER_SINGLE_LINE
+	CALL	RENDER_BUFFER_LINE
 	POP	BC
 	INC	C
-	DJNZ	RENDER_ROW_LOOP
+	LD	A,C
+	CP	SCREEN_ROWS-1
+	JR	Z,RENDER_SCREEN_DONE
+	LD	A,C
+	LD	HL,TOTAL_LINES
+	CP	(HL)
+	JR	C,RENDER_ROW_LOOP
 
+	; Fill remainder of screen with '~'
+RENDER_TILDE_LOOP:
+	PUSH	BC
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	POP	BC
+	INC	C
+	LD	A,C
+	CP	SCREEN_ROWS-1
+	JR	NZ,RENDER_TILDE_LOOP
+
+RENDER_SCREEN_DONE:
 	CALL	RENDER_STATUS_BAR
 	CALL	LOCATE_CURSOR
 	RET
 
-RENDER_SINGLE_LINE:
+RENDER_BUFFER_LINE:
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
 
+	; Calculate line address: LINE_STORAGE + (CUR_RENDER_ROW * MAX_LINE_LEN)
 	LD	A,(CUR_RENDER_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	LD	D,H
+	LD	E,L
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,DE			; *80
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+
+	; Print characters with tab expansion up to '$' or null
+PRINT_LINE_CHARS:
+	LD	A,(HL)
 	OR	A
-	JR	NZ,RENDER_EMPTY_LINE
+	JR	Z,PRINT_LINE_END
+	CP	'$'
+	JR	Z,PRINT_LINE_END
+	CP	9			; TAB
+	JR	NZ,PRINT_NORMAL_CHAR
 
-	LD	DE,SAMPLE_TEXT
-	CALL	PRINT_STR
-	JR	RENDER_LINE_DONE
+	; Tab expansion: print spaces to next 8-col stop
+	LD	A,' '
+	CALL	PUTC
+	CALL	PUTC
+	CALL	PUTC
+	CALL	PUTC
+	JR	NEXT_CHAR
 
-RENDER_EMPTY_LINE:
-	LD	A,'~'
+PRINT_NORMAL_CHAR:
 	CALL	PUTC
 
-RENDER_LINE_DONE:
+NEXT_CHAR:
+	INC	HL
+	JR	PRINT_LINE_CHARS
+
+PRINT_LINE_END:
 	LD	A,13
 	CALL	PUTC
 	LD	A,10
@@ -392,7 +510,24 @@ RENDER_LINE_DONE:
 RENDER_STATUS_BAR:
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
-	LD	DE,STR_STATUS_TEXT
+
+	; Display status text with current format mode
+	LD	DE,STR_STATUS_PREFIX
+	CALL	PRINT_STR
+
+	LD	A,(SAVE_FORMAT)
+	CP	FMT_CPM
+	JR	NZ,SHOW_LINUX_FMT
+	LD	DE,STR_FMT_CPM
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_REST
+
+SHOW_LINUX_FMT:
+	LD	DE,STR_FMT_LINUX
+	CALL	PRINT_STR
+
+SHOW_STATUS_REST:
+	LD	DE,STR_STATUS_SUFFIX
 	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
@@ -424,7 +559,253 @@ HBIOS_DETECT:
 	OR	A
 	RET
 
+;------------------------------------------------------------------------------
+; File Loading: Supports both CP/M (CR/LF) and Linux (LF-only) formats
+;------------------------------------------------------------------------------
+LOAD_FILE:
+	; Set default DMA buffer
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; Open file
+	LD	DE,WORK_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,LOAD_FILE_NOT_FOUND
+
+	XOR	A
+	LD	(WORK_FCB+32),A		; Clear current record (CR)
+	LD	(TOTAL_LINES),A
+
+	LD	DE,LINE_STORAGE
+	LD	(CUR_STORE_PTR),DE
+	LD	B,0			; Line length counter
+
+READ_SECTOR_LOOP:
+	LD	DE,WORK_FCB
+	LD	C,20			; BDOS Read Next Record
+	CALL	BDOS_ENTRY
+	OR	A
+	JR	NZ,FILE_LOAD_DONE	; EOF reached (A != 0)
+
+	LD	HL,DEFAULT_DMA
+	LD	C,128			; 128 bytes per sector
+
+PARSE_BYTE_LOOP:
+	LD	A,(HL)
+	CP	26			; CP/M EOF (^Z)
+	JR	Z,FILE_LOAD_DONE
+
+	CP	13			; CR (Carriage Return)
+	JR	Z,IGNORE_CR		; Ignore CR so both CR/LF and LF work cleanly
+
+	CP	10			; LF (Line Feed - End of Line in both formats)
+	JR	Z,END_OF_LINE_FOUND
+
+	; Regular character: store in line buffer
+	LD	A,B
+	CP	MAX_LINE_LEN-1
+	JR	NC,SKIP_OVERFLOW_CHAR
+
+	LD	A,(HL)
+	LD	IX,(CUR_STORE_PTR)
+	LD	(IX+0),A
+	INC	IX
+	LD	(CUR_STORE_PTR),IX
+	INC	B
+
+SKIP_OVERFLOW_CHAR:
+	JR	NEXT_SECTOR_BYTE
+
+IGNORE_CR:
+	; Check if file format was CP/M (has CR before LF)
+	LD	A,FMT_CPM
+	LD	(SAVE_FORMAT),A
+	JR	NEXT_SECTOR_BYTE
+
+END_OF_LINE_FOUND:
+	; Null-terminate line in storage
+	LD	IX,(CUR_STORE_PTR)
+	LD	(IX+0),0
+	INC	IX
+	LD	(CUR_STORE_PTR),IX
+
+	; Advance total lines
+	LD	A,(TOTAL_LINES)
+	INC	A
+	LD	(TOTAL_LINES),A
+	LD	B,0
+
+	CP	MAX_EDIT_LINES
+	JR	NC,FILE_LOAD_DONE
+
+NEXT_SECTOR_BYTE:
+	INC	HL
+	DEC	C
+	JR	NZ,PARSE_BYTE_LOOP
+	JR	READ_SECTOR_LOOP
+
+FILE_LOAD_DONE:
+	; Terminate last line if non-empty
+	LD	A,B
+	OR	A
+	JR	Z,LOAD_EXIT
+	LD	IX,(CUR_STORE_PTR)
+	LD	(IX+0),0
+	LD	A,(TOTAL_LINES)
+	INC	A
+	LD	(TOTAL_LINES),A
+
+LOAD_EXIT:
+	RET
+
+LOAD_FILE_NOT_FOUND:
+	CALL	LOAD_SAMPLE_BUFFER
+	RET
+
+;------------------------------------------------------------------------------
+; Default Sample Buffer
+;------------------------------------------------------------------------------
+LOAD_SAMPLE_BUFFER:
+	LD	HL,DEFAULT_SAMPLE_DATA
+	LD	DE,LINE_STORAGE
+	LD	BC,SAMPLE_DATA_SIZE
+	LDIR
+	LD	A,4
+	LD	(TOTAL_LINES),A
+	RET
+
+;------------------------------------------------------------------------------
+; File Saving: Saves in selected format (CP/M CR/LF or Linux LF-only)
+;------------------------------------------------------------------------------
 SAVE_FILE:
+	; If no file argument was provided, use default name "OUTPUT.TXT"
+	LD	A,(WORK_FCB+1)
+	CP	' '
+	JR	NZ,DO_SAVE_EXISTING
+	LD	HL,DEFAULT_FCB_NAME
+	LD	DE,WORK_FCB
+	LD	BC,16
+	LDIR
+
+DO_SAVE_EXISTING:
+	; Delete old file
+	LD	DE,WORK_FCB
+	LD	C,19			; BDOS Delete File
+	CALL	BDOS_ENTRY
+
+	; Create new file
+	LD	DE,WORK_FCB
+	LD	C,22			; BDOS Make File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	RET	Z			; Error creating file
+
+	XOR	A
+	LD	(WORK_FCB+32),A		; Clear CR
+
+	; Prepare DMA write pointer
+	LD	DE,DEFAULT_DMA
+	LD	(CUR_DMA_PTR),DE
+	LD	A,128
+	LD	(DMA_BYTES_LEFT),A
+
+	; Write lines from LINE_STORAGE
+	LD	HL,LINE_STORAGE
+	LD	A,(TOTAL_LINES)
+	LD	(LINES_TO_SAVE),A
+
+SAVE_LINE_LOOP:
+	LD	A,(LINES_TO_SAVE)
+	OR	A
+	JR	Z,SAVE_FLUSH_REMAINDER
+
+SAVE_CHAR_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SAVE_LINE_END
+	CALL	WRITE_BYTE_TO_DMA
+	INC	HL
+	JR	SAVE_CHAR_LOOP
+
+SAVE_LINE_END:
+	INC	HL			; Skip null terminator
+
+	; Write Line Ending depending on SAVE_FORMAT
+	LD	A,(SAVE_FORMAT)
+	CP	FMT_CPM
+	JR	NZ,WRITE_LF_ONLY
+
+	; CP/M format: write CR then LF
+	LD	A,13
+	CALL	WRITE_BYTE_TO_DMA
+
+WRITE_LF_ONLY:
+	; Linux & CP/M both write LF
+	LD	A,10
+	CALL	WRITE_BYTE_TO_DMA
+
+	LD	A,(LINES_TO_SAVE)
+	DEC	A
+	LD	(LINES_TO_SAVE),A
+	JR	SAVE_LINE_LOOP
+
+SAVE_FLUSH_REMAINDER:
+	; Write EOF ^Z (0x1A) for CP/M compatibility if buffer has space
+	LD	A,26
+	CALL	WRITE_BYTE_TO_DMA
+
+	; Pad remaining bytes in sector with ^Z
+PAD_SECTOR_LOOP:
+	LD	A,(DMA_BYTES_LEFT)
+	CP	128
+	JR	Z,CLOSE_OUTPUT_FILE
+	LD	A,26
+	CALL	WRITE_BYTE_TO_DMA
+	JR	PAD_SECTOR_LOOP
+
+CLOSE_OUTPUT_FILE:
+	; Close File
+	LD	DE,WORK_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+	RET
+
+WRITE_BYTE_TO_DMA:
+	PUSH	HL
+	PUSH	BC
+	LD	HL,(CUR_DMA_PTR)
+	LD	(HL),A
+	INC	HL
+	LD	(CUR_DMA_PTR),HL
+
+	LD	A,(DMA_BYTES_LEFT)
+	DEC	A
+	LD	(DMA_BYTES_LEFT),A
+	JR	NZ,WRITE_BYTE_DONE
+
+	; Sector full: write to disk
+	PUSH	DE
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	LD	DE,WORK_FCB
+	LD	C,21			; BDOS Write Record
+	CALL	BDOS_ENTRY
+	POP	DE
+
+	; Reset DMA buffer pointer
+	LD	HL,DEFAULT_DMA
+	LD	(CUR_DMA_PTR),HL
+	LD	A,128
+	LD	(DMA_BYTES_LEFT),A
+
+WRITE_BYTE_DONE:
+	POP	BC
+	POP	HL
 	RET
 
 ;------------------------------------------------------------------------------
@@ -463,6 +844,7 @@ STR_SPLASH_BODY:
 	.DB	"                  ~       type   :q  or  ^Q        to exit      ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~      Z80 CP/M with 512K Extended Storage    ",13,10
+	.DB	"                  ~      Auto-detects CP/M [CRLF] & Linux [LF]  ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"$"
 
@@ -499,14 +881,30 @@ STR_TEST_FAILED:
 STR_TEST_PROMPT:
 	.DB	"Press any key to return to Splash Screen...$"
 
-STR_STATUS_TEXT:
-	.DB	" SE v0.1.0 | Z80 Screen Editor | ^S: Save | ^Q: Quit                       ","$"
+STR_STATUS_PREFIX:
+	.DB	" SE v0.1.0 | Format: [","$"
+
+STR_FMT_CPM:
+	.DB	"CP/M CRLF","$"
+
+STR_FMT_LINUX:
+	.DB	"Linux LF ","$"
+
+STR_STATUS_SUFFIX:
+	.DB	"] | ^F:Toggle Format | ^S:Save | ^Q:Quit  ","$"
 
 MSG_EXIT:
 	.DB	27,"[24;1H",27,"[0m",13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
-SAMPLE_TEXT:
-	.DB	"; Z80 Full-Screen Editor (SE.COM) Active Buffer","$"
+DEFAULT_FCB_NAME:
+	.DB	0,"OUTPUT  TXT",0,0,0,0
+
+DEFAULT_SAMPLE_DATA:
+	.DB	"; Screen Editor (SE.COM) Cross-Platform Line Format Buffer",0
+	.DB	"; Press ^F to toggle save format between CP/M [CRLF] and Linux [LF]",0
+	.DB	"START:",9,"LD A,0",9,"; Initial register setup",0
+	.DB	9,"RET",9,9,"; End of sample program",0
+SAMPLE_DATA_SIZE .EQU $ - DEFAULT_SAMPLE_DATA
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
@@ -519,11 +917,24 @@ ROM_BANK_COUNT:	.DB	0
 CUR_ROW:	.DB	0
 CUR_COL:	.DB	0
 CUR_RENDER_ROW:	.DB	0
+TOTAL_LINES:	.DB	0
+HAS_FILE_ARG:	.DB	0
+SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
+
+CUR_STORE_PTR:	.DW	0
+CUR_DMA_PTR:	.DW	0
+DMA_BYTES_LEFT:	.DB	0
+LINES_TO_SAVE:	.DB	0
 
 TEST_PATTERN:	.DB	0,0
 TEST_READBACK:	.DB	0,0
 
+WORK_FCB:	.DS	36
+
 		.DS	128
 LOCAL_STACK:
+
+; 20 lines x 80 columns line storage buffer in local TPA space
+LINE_STORAGE:	.DS	1600
 
 	.END
