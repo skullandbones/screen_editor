@@ -232,7 +232,7 @@ STR_INVERSE_OFF:
 	.DB	27,"[0m","$"
 
 STR_STATUS_TEXT:
-	.DB	" SE v0.1.0 | RomWBW Z80 Screen Editor | ^S: Save | ^Q: Quit               ","$"
+	.DB	" SE v0.1.0 | Z80 Screen Editor | ^S: Save | ^Q: Quit                       ","$"
 
 MSG_NO_HBIOS:
 	.DB	"Notice: RomWBW HBIOS not detected.",13,10,"$"
@@ -241,7 +241,7 @@ MSG_EXIT:
 	.DB	27,"[24;1H",27,"[0m",13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
 SAMPLE_TEXT:
-	.DB	"; RomWBW Full-Screen Editor (SE.COM) Active Buffer",0
+	.DB	"; Z80 Full-Screen Editor (SE.COM) Active Buffer",0
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
