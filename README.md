@@ -106,28 +106,62 @@ make clean
 
 ---
 
+## Python Environment & Automated Tools
+
+The test harness and hardware serial utilities use an isolated Python
+virtual environment:
+
+```bash
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies (pyserial, xmodem)
+pip install -r requirements.txt
+```
+
+---
+
 ## Deploying & Running on RC2014
 
 ### 1. In the Local RC2014 Hardware Emulator
 From the project workspace root:
 ```bash
-# Inject SE.COM into the virtual SD / HD image and boot
+# Build SE.COM, inject into modern hd1k image, and launch emulator
 make run
 ```
 
-### 2. On Real Hardware (RC2014 via Minicom)
-1. Copy `SE.COM` to your physical SD card or CompactFlash card using `cpmtools` or XModem (`XMODEM R SE.COM` in CP/M).
-2. Connect your RC2014 serial port to your PC / Raspberry Pi:
+### 2. On Real Hardware (RC2014 via Minicom & XM.COM)
+
+#### Option A: Direct Minicom XMODEM Transfer
+1. Connect to your RC2014 serial port at `115200 8N1`:
    ```bash
    minicom -b 115200 -D /dev/ttyUSB0
    ```
-3. Set Minicom terminal emulation:
+2. Set Minicom terminal emulation:
    * Terminal type: `VT102` or `ANSI`
-   * Backspace key: `BS` (ASCII 0x08) or `DEL` (ASCII 0x7F)
-4. At the CP/M prompt, launch:
+   * Backspace key: `BS` (0x08) or `DEL` (0x7F)
+3. On the CP/M SBC, switch to your target drive (e.g. `J:`) and start receiver:
    ```text
-   A>SE MYFILE.ASM
+   A>J:
+   J>A:XM R SE.COM
    ```
+4. In Minicom, press `Ctrl+A` then `S`, choose `xmodem`, and select `SE.COM`.
+5. Launch on the SBC:
+   ```text
+   J>SE
+   ```
+
+#### Option B: Automated Python Script Transfer
+1. On your CP/M SBC, start the receiver:
+   ```text
+   J>A:XM R SE.COM
+   ```
+2. From the host terminal (ensure Minicom is closed so port is free):
+   ```bash
+   .venv/bin/python tests/send_xmodem.py SE.COM /dev/ttyUSB0
+   ```
+3. Re-open Minicom and run `J>SE`.
 
 ---
 
@@ -135,17 +169,25 @@ make run
 
 ```
 src/screen_editor/
-├── Makefile                # Cross-compilation rules for z88dk / zcc
+├── Makefile                # Cross-compilation & test targets
 ├── README.md               # Toolchain setup and documentation
+├── CODING_GUIDELINES.md    # ANSI C and Z80 assembly coding standards
+├── requirements.txt        # Python dependencies for tests & tools
 ├── include/
 │   ├── editor.h            # Main editor state and configuration
 │   ├── terminal.h          # VT100 / ANSI escape routines & key input
 │   ├── buffer.h            # 512K Far memory buffer and line indexing
 │   └── hbios.h             # RomWBW HBIOS API (RST 08H) bindings
-└── src/
-    ├── main.c              # Application entry & main event loop
-    ├── terminal.c          # Screen renderer and ANSI key decoder
-    ├── buffer.c            # Gap buffer and line management
-    ├── fileio.c            # CP/M BDOS file load/save
-    └── hbios_far.asm       # Z80 assembly for RomWBW inter-bank transfers
+├── src/
+│   ├── main.c              # Application entry & main event loop
+│   ├── terminal.c          # Screen renderer and ANSI key decoder
+│   ├── buffer.c            # Gap buffer and line management
+│   ├── fileio.c            # CP/M BDOS file load/save
+│   ├── se.asm              # Standalone assembly editor implementation
+│   └── hbios_far.asm       # Z80 assembly for RomWBW inter-bank transfers
+└── tests/
+    ├── README.md           # Test suite documentation
+    ├── test_editor_headless.py # Automated PTY integration test runner
+    ├── send_xmodem.py      # Serial XMODEM file sender for real hardware
+    └── sample_large.asm    # Large assembly file for tab/paging tests
 ```
