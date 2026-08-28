@@ -853,12 +853,13 @@ LINE_LEN_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
 ; Character Insertion at (CUR_ROW, CUR_COL)
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
 	PUSH	AF			; Save character to insert
 
-	; Calculate target line address: LINE_STORAGE + (CUR_ROW * 128)
+	; 1. Calculate pointer to start of current line: HL = LINE_STORAGE + (CUR_ROW * 128)
 	LD	A,(CUR_ROW)
 	LD	L,A
 	LD	H,0
@@ -871,54 +872,53 @@ DO_CHAR_INSERT:
 	ADD	HL,HL			; *128
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE
+	PUSH	HL			; Save line start
 
-	; Advance to column offset
+	; 2. Calculate insertion address: DE = line_start + CUR_COL
 	LD	A,(CUR_COL)
 	LD	E,A
 	LD	D,0
 	ADD	HL,DE
+	EX	DE,HL			; DE = insertion point
 
-	; Shift remaining characters right to open slot
-	PUSH	HL
-	LD	DE,LINE_STORAGE
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,DE
+	; 3. Shift bytes right from (line_start + 126) down to insertion point (DE)
+	POP	HL			; Line start
+	PUSH	DE			; Save insertion point
 	LD	DE,MAX_LINE_STRIDE-2
-	ADD	HL,DE			; HL = End of line buffer
+	ADD	HL,DE			; HL = line_start + 126
+	POP	DE			; DE = insertion point
 
-	POP	DE			; DE = Insertion point
-SHIFT_RIGHT_LOOP:
+CHAR_SHIFT_RIGHT_LOOP:
 	LD	A,H
 	CP	D
-	JR	NZ,DO_SHIFT_STEP
+	JR	NZ,DO_CHAR_SHIFT_STEP
 	LD	A,L
 	CP	E
-	JR	Z,SHIFT_RIGHT_DONE
+	JR	Z,CHAR_SHIFT_RIGHT_DONE
 
-DO_SHIFT_STEP:
+DO_CHAR_SHIFT_STEP:
 	LD	A,(HL)
 	INC	HL
 	LD	(HL),A
 	DEC	HL
 	DEC	HL
-	JR	SHIFT_RIGHT_LOOP
+	JR	CHAR_SHIFT_RIGHT_LOOP
 
-SHIFT_RIGHT_DONE:
-	; Store new character at DE
+CHAR_SHIFT_RIGHT_DONE:
+	; Copy the byte at DE into DE+1 as well
+	LD	A,(DE)
+	INC	DE
+	LD	(DE),A
+	DEC	DE
+
+	; Insert the new character at DE
 	POP	AF
 	LD	(DE),A
 
-	; Advance cursor right
+	; Advance cursor right (up to MAX_LINE_STRIDE-2)
 	LD	A,(CUR_COL)
+	CP	MAX_LINE_STRIDE-2
+	RET	NC
 	INC	A
 	LD	(CUR_COL),A
 	RET
@@ -952,8 +952,8 @@ DO_DELETE_CHAR:
 	LD	D,0
 	ADD	HL,DE			; HL = character to delete
 
-	; Shift characters left from HL+1 to HL
-SHIFT_LEFT_LOOP:
+	; Shift characters left from HL+1 into HL until null or end of line
+CHAR_SHIFT_LEFT_LOOP:
 	INC	HL
 	LD	A,(HL)
 	DEC	HL
@@ -961,32 +961,30 @@ SHIFT_LEFT_LOOP:
 	OR	A
 	RET	Z
 	INC	HL
-	JR	SHIFT_LEFT_LOOP
+	JR	CHAR_SHIFT_LEFT_LOOP
 
 ;------------------------------------------------------------------------------
-; Line Insertion at (CUR_ROW + 1) - Enter Key Handling
+; Line Insertion & Splitting at (CUR_ROW, CUR_COL) - Enter Key Handling
 ;------------------------------------------------------------------------------
 DO_INSERT_LINE:
 	LD	A,(TOTAL_LINES)
 	CP	MAX_BUFFER_LINES
 	RET	NC			; Buffer full
 
-	; Shift all lines from CUR_ROW+1 upwards by 128 bytes
-	; Destination: LINE_STORAGE + ((TOTAL_LINES) * 128)
-	; Source: LINE_STORAGE + ((TOTAL_LINES - 1) * 128)
+	; 1. Shift all lines from CUR_ROW+1 upwards to make room for new line
+	; We iterate C from TOTAL_LINES down to CUR_ROW+1
 	LD	A,(TOTAL_LINES)
 	LD	C,A
 
 SHIFT_LINES_LOOP:
 	LD	A,C
 	LD	HL,CUR_ROW
+	INC	(HL)			; Temporarily test against CUR_ROW+1
 	CP	(HL)
-	JR	Z,INSERT_EMPTY_LINE
-	DEC	A
-	CP	(HL)
-	JR	Z,INSERT_EMPTY_LINE
+	DEC	(HL)			; Restore CUR_ROW
+	JR	Z,SPLIT_AND_INSERT_NEW_LINE
 
-	; Source address = (C-1) * 128
+	; Source = (C-1) * 128
 	DEC	C
 	LD	L,C
 	LD	H,0
@@ -1001,7 +999,7 @@ SHIFT_LINES_LOOP:
 	ADD	HL,DE
 	PUSH	HL			; Source
 
-	; Dest address = (C+1) * 128
+	; Dest = (C+1) * 128
 	INC	C
 	LD	L,C
 	LD	H,0
@@ -1023,20 +1021,14 @@ SHIFT_LINES_LOOP:
 	DEC	C
 	JR	SHIFT_LINES_LOOP
 
-INSERT_EMPTY_LINE:
-	; Increment total lines
+SPLIT_AND_INSERT_NEW_LINE:
+	; Increment total lines count
 	LD	A,(TOTAL_LINES)
 	INC	A
 	LD	(TOTAL_LINES),A
 
-	; Advance CUR_ROW to newly inserted line
-	LD	A,(CUR_ROW)
-	INC	A
-	LD	(CUR_ROW),A
-	XOR	A
-	LD	(CUR_COL),A
-
-	; Clear new line buffer with 0
+	; 2. Move characters from CUR_COL to end of line into the newly created line (CUR_ROW + 1)
+	; HL = Source (current line at CUR_COL)
 	LD	A,(CUR_ROW)
 	LD	L,A
 	LD	H,0
@@ -1049,8 +1041,52 @@ INSERT_EMPTY_LINE:
 	ADD	HL,HL
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = current line + CUR_COL
 
-	LD	(HL),0
+	; DE = Dest (next line start: (CUR_ROW + 1) * 128)
+	PUSH	HL
+	LD	A,(CUR_ROW)
+	INC	A
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+	EX	DE,HL			; DE = new line start
+	POP	HL			; HL = old line at CUR_COL
+
+	; Copy text from split point to new line
+SPLIT_COPY_LOOP:
+	LD	A,(HL)
+	LD	(DE),A
+	LD	(HL),0			; Truncate old line at split point
+	OR	A
+	JR	Z,SPLIT_COPY_DONE
+	CP	'$'
+	JR	Z,SPLIT_COPY_DONE
+	INC	HL
+	INC	DE
+	JR	SPLIT_COPY_LOOP
+
+SPLIT_COPY_DONE:
+	XOR	A
+	LD	(DE),A			; Ensure new line is null terminated
+
+	; 3. Move cursor to start of new line
+	LD	A,(CUR_ROW)
+	INC	A
+	LD	(CUR_ROW),A
+	XOR	A
+	LD	(CUR_COL),A
 	RET
 
 HBIOS_DETECT:
