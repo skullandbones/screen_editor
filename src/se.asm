@@ -147,11 +147,18 @@ MAIN_LOOP:
 CHECK_TOGGLE_FMT:
 	; Command: Ctrl+F -> Toggle Line Ending Format (CP/M <-> Linux)
 	CP	KEY_CTRL_F
-	JR	NZ,CHECK_ENTER
+	JR	NZ,CHECK_CTRL_D
 	LD	A,(SAVE_FORMAT)
 	XOR	1			; Toggle between 0 (CP/M) and 1 (Linux)
 	LD	(SAVE_FORMAT),A
 	CALL	RENDER_STATUS_BAR
+	JR	MAIN_LOOP
+
+CHECK_CTRL_D:
+	; Command: Ctrl+D -> Delete character under cursor (Forward Delete)
+	CP	4
+	JR	NZ,CHECK_ENTER
+	CALL	DO_DELETE_FORWARD
 	JR	MAIN_LOOP
 
 CHECK_ENTER:
@@ -813,6 +820,14 @@ HANDLE_CSI:
 	JR	Z,CURSOR_RIGHT
 	CP	'D'			; Left Arrow
 	JR	Z,CURSOR_LEFT
+	CP	'3'			; Delete Key (ESC [ 3 ~)
+	JR	Z,HANDLE_CSI_DEL
+	RET
+
+HANDLE_CSI_DEL:
+	; Consume trailing '~'
+	CALL	GET_KEY
+	CALL	DO_DELETE_FORWARD
 	RET
 
 CURSOR_UP:
@@ -1058,6 +1073,58 @@ CHAR_SHIFT_LEFT_LOOP:
 	RET	Z
 	INC	HL
 	JR	CHAR_SHIFT_LEFT_LOOP
+
+;------------------------------------------------------------------------------
+; Forward Character Deletion at (CUR_ROW, CUR_COL) - Delete Key Handling
+;------------------------------------------------------------------------------
+DO_DELETE_FORWARD:
+	; Calculate delete target: LINE_STORAGE + (CUR_ROW * 128) + CUR_COL
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = line_start
+
+	; Check if (line_start + CUR_COL) is at or beyond end of line (0 or '$')
+	PUSH	HL
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = character to delete under cursor
+	LD	A,(HL)
+	OR	A
+	JR	Z,DEL_FWD_AT_EOL
+	CP	'$'
+	JR	Z,DEL_FWD_AT_EOL
+
+	; Character exists under cursor: shift characters left from HL+1 into HL
+DEL_FWD_SHIFT_LOOP:
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	LD	(HL),A
+	OR	A
+	JR	Z,DEL_FWD_DONE
+	CP	'$'
+	JR	Z,DEL_FWD_DONE
+	INC	HL
+	JR	DEL_FWD_SHIFT_LOOP
+
+DEL_FWD_DONE:
+	POP	HL
+	CALL	RENDER_CURRENT_LINE
+	RET
+
+DEL_FWD_AT_EOL:
+	POP	HL
+	RET
 
 ;------------------------------------------------------------------------------
 ; Delete Blank Line at (CUR_ROW, 0) - Backspace at Column 0 Handling

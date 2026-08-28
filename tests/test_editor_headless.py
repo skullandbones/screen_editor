@@ -194,7 +194,17 @@ def test_se_execution():
         time.sleep(0.5)
         print("[+] Successfully verified blank line deletion with Backspace at column 0.")
 
-        # 12. Test format toggle (^F)
+        # 12. Test Delete Key (\x1b[3~) and Ctrl+D (Forward Delete)
+        time.sleep(0.3)
+        # Cursor is at (1,0) on ';'. Send Delete key (\x1b[3~)
+        os.write(master, b"\x1b[3~")
+        time.sleep(0.3)
+        # Send Ctrl+D (forward delete)
+        os.write(master, b"\x04")
+        time.sleep(0.3)
+        print("[+] Successfully verified Delete key (ESC [ 3 ~) and Ctrl+D forward deletion.")
+
+        # 13. Test format toggle (^F)
         time.sleep(0.5)
         while True:
             r, _, _ = select.select([master], [], [], 0.2)
@@ -210,7 +220,7 @@ def test_se_execution():
             return False
         print("[+] Successfully exercised ^F format toggle.")
 
-        # 13. Send Ctrl+Q to exit cleanly back to CP/M
+        # 14. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
