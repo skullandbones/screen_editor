@@ -935,12 +935,43 @@ SCAN_LEN_DONE:
 	POP	HL			; HL = line start
 	; B = current line text length
 
-	; 3. Compare CUR_COL with line length (B)
+	; 3. Check screen width limit: Prevent line from exceeding ACTIVE_COLS (120 chars)
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,CHECK_AT_EOL_REPLACE
+	JR	C,CHECK_AT_EOL_REPLACE
+	JR	LINE_LEN_OK
+
+CHECK_AT_EOL_REPLACE:
+	; Line is already at maximum capacity (>= ACTIVE_COLS).
+	; Only allow replacing the rightmost character at CUR_COL == ACTIVE_COLS - 1
+	LD	A,(ACTIVE_COLS)
+	DEC	A
+	LD	C,A
+	LD	A,(CUR_COL)
+	CP	C
+	RET	NZ			; If not at rightmost column, cannot insert into full line!
+
+	; Replace character at CUR_COL (ACTIVE_COLS - 1)
+	PUSH	HL
+	LD	E,C
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + ACTIVE_COLS - 1
+	LD	A,(CHAR_INSERT_TEMP)
+	LD	(HL),A
+	INC	HL
+	XOR	A
+	LD	(HL),A			; Null terminate at ACTIVE_COLS
+	POP	HL
+	RET
+
+LINE_LEN_OK:
+	; 4. Compare CUR_COL with line length (B)
 	LD	A,(CUR_COL)
 	CP	B
 	JR	NC,DO_PAD_AND_APPEND	; If CUR_COL >= length: pad spaces and append
 
-	; 4. If CUR_COL < length: shift characters from (line_start + B) down to (line_start + CUR_COL)
+	; 5. If CUR_COL < length: shift characters from (line_start + B) down to (line_start + CUR_COL)
 	; Source start for LDDR: HL = line_start + B
 	; Dest start for LDDR:   DE = line_start + B + 1
 	; Count for LDDR:        BC = B - CUR_COL + 1 (including null terminator)
@@ -1243,9 +1274,10 @@ PARSE_BYTE_LOOP:
 	JR	Z,HANDLE_LF
 
 	; Normal character: store in current line
-	LD	A,B
-	CP	MAX_LINE_STRIDE-1
-	JR	NC,SKIP_LINE_OVERFLOW
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,SKIP_LINE_OVERFLOW
+	JR	C,SKIP_LINE_OVERFLOW
 
 	LD	A,(HL)
 	PUSH	HL

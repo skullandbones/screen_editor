@@ -148,7 +148,39 @@ def test_se_execution():
             return False
         print("[+] Successfully verified column 119 boundary clamping and typing.")
 
-        # 9. Test format toggle (^F)
+        # 9. Test mid-line insertion line length capacity (preventing exceeding 120 chars)
+        time.sleep(0.2)
+        # Move down to empty row 10, type 50 chars, move to col 20, insert 100 'A's
+        for _ in range(10):
+            os.write(master, b"\x1b[B")
+            time.sleep(0.01)
+        time.sleep(0.1)
+        os.write(master, b"0123456789" * 5) # 50 chars
+        time.sleep(0.2)
+        # Move back 30 cols
+        for _ in range(30):
+            os.write(master, b"\x1b[D")
+            time.sleep(0.01)
+        time.sleep(0.1)
+        # Insert 100 'A's
+        for _ in range(100):
+            os.write(master, b"A")
+            time.sleep(0.005)
+        time.sleep(0.3)
+        out_len_cap = read_until(master, b"11,", timeout=2.0)
+        if b"11," not in out_len_cap:
+            print("[-] Line length capacity test failed. Buffer captured:", out_len_cap)
+            return False
+        print("[+] Successfully verified 120-char line capacity limit during mid-line insertion.")
+
+        # 10. Test format toggle (^F)
+        time.sleep(0.5)
+        while True:
+            r, _, _ = select.select([master], [], [], 0.2)
+            if not r:
+                break
+            os.read(master, 4096)
+
         time.sleep(0.3)
         os.write(master, b"\x06")
         out_fmt = read_until(master, b"Linux LF", timeout=4.0)
@@ -157,7 +189,7 @@ def test_se_execution():
             return False
         print("[+] Successfully exercised ^F format toggle.")
 
-        # 10. Send Ctrl+Q to exit cleanly back to CP/M
+        # 11. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
