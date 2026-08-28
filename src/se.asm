@@ -206,6 +206,27 @@ TEST_HBIOS_OK:
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
+	; Discover Target Upper RAM Bank ID
+	; In RomWBW, RAM banks start at 0x80. If User Bank is 0x8E, Target Bank is 0x80 (or 0x80 + UserBank XOR 1)
+	LD	A,(CPM_USER_BANK)
+	CP	080H
+	JR	NZ,USE_RAM_BANK_80
+	LD	A,081H
+	JR	SET_TARGET_BANK
+
+USE_RAM_BANK_80:
+	LD	A,080H
+
+SET_TARGET_BANK:
+	LD	(TARGET_RAM_BANK),A
+
+	LD	DE,STR_TEST_TARGET_BANK
+	CALL	PRINT_STR
+	LD	A,(TARGET_RAM_BANK)
+	CALL	PRINT_HEX_BYTE
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+
 	; Test memory bank copy
 	LD	DE,STR_TEST_BANK_COPY
 	CALL	PRINT_STR
@@ -216,19 +237,20 @@ TEST_HBIOS_OK:
 	INC	HL
 	LD	(HL),055H
 
-	; 2. SYSSETCPY: Copy local pattern to Bank 1 at offset 0x1000
+	; 2. SYSSETCPY: Copy local pattern to TARGET_RAM_BANK at offset 0x1000
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
-	LD	D,1			; Dest Bank = 1 (Upper RAM bank)
+	LD	A,(TARGET_RAM_BANK)
+	LD	D,A			; Dest Bank = Target Upper RAM Bank (e.g. 0x80)
 	LD	A,(CPM_USER_BANK)
-	LD	E,A			; Src Bank = CP/M User Bank
+	LD	E,A			; Src Bank = CP/M User Bank (e.g. 0x8E)
 	LD	HL,2			; Count = 2 bytes
 	RST	08H
 	POP	IX
 
 	PUSH	IX
 	LD	B,0F5H			; SYSBNKCPY
-	LD	DE,01000H		; Dest Address in Bank 1
+	LD	DE,01000H		; Dest Address in Target Bank
 	LD	HL,TEST_PATTERN		; Src Address
 	RST	08H
 	POP	IX
@@ -239,12 +261,13 @@ TEST_HBIOS_OK:
 	INC	HL
 	LD	(HL),0
 
-	; 4. SYSSETCPY: Copy from Bank 1 back to local buffer
+	; 4. SYSSETCPY: Copy from TARGET_RAM_BANK back to local buffer
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
 	LD	A,(CPM_USER_BANK)
-	LD	D,A			; Dest Bank = User Bank
-	LD	E,1			; Src Bank = Bank 1
+	LD	D,A			; Dest Bank = User Bank (0x8E)
+	LD	A,(TARGET_RAM_BANK)
+	LD	E,A			; Src Bank = Target RAM Bank (0x80)
 	LD	HL,2
 	RST	08H
 	POP	IX
@@ -461,8 +484,11 @@ STR_TEST_RAM_BANKS_END:
 STR_TEST_CUR_BANK:
 	.DB	"[*] Active CP/M User Bank ID: 0x$"
 
+STR_TEST_TARGET_BANK:
+	.DB	"[*] Target Extended RAM Bank ID: 0x$"
+
 STR_TEST_BANK_COPY:
-	.DB	"[*] Testing Inter-Bank Far Memory Transfer (Bank 0 <-> Bank 1)...",13,10,"$"
+	.DB	"[*] Testing Inter-Bank Far Memory Transfer (DMA Copy)...",13,10,"$"
 
 STR_TEST_PASSED:
 	.DB	"[+] 512KB Far Memory Banking Test: PASSED! (Pattern 0xAA55 Verified)",13,10,13,10,"$"
@@ -487,6 +513,7 @@ SAMPLE_TEXT:
 ;------------------------------------------------------------------------------
 SAVED_SP:	.DW	0
 CPM_USER_BANK:	.DB	0
+TARGET_RAM_BANK:.DB	0
 RAM_BANK_COUNT:	.DB	0
 ROM_BANK_COUNT:	.DB	0
 CUR_ROW:	.DB	0
