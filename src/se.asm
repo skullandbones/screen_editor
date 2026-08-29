@@ -119,6 +119,7 @@ DO_AUTO_LOAD:
 	LD	(CUR_ROW),A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
+	LD	(TOP_LINE),A
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	JP	MAIN_LOOP
@@ -129,6 +130,7 @@ ENTER_EDITOR:
 	LD	(CUR_ROW),A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
+	LD	(TOP_LINE),A
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 
@@ -602,10 +604,12 @@ RENDER_SCREEN:
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
 
-	LD	C,0			; Row index (0 .. ACTIVE_ROWS-2)
+	LD	C,0			; Screen row index (0 .. ACTIVE_ROWS-2)
 RENDER_ROW_LOOP:
 	PUSH	BC
-	LD	A,C
+	; Calculate buffer line to render: CUR_RENDER_ROW = TOP_LINE + C
+	LD	A,(TOP_LINE)
+	ADD	A,C
 	LD	(CUR_RENDER_ROW),A
 
 	; Check if CUR_RENDER_ROW < TOTAL_LINES
@@ -642,14 +646,19 @@ RENDER_ROW_NEXT:
 
 ; Fast single line refresh: only rewrites CUR_ROW and restores cursor
 RENDER_CURRENT_LINE:
-	; Move to start of current line: ESC [ <CUR_ROW+1> ; 1 H
+	; Move to start of current screen line: ESC [ <(CUR_ROW - TOP_LINE) + 1> ; 1 H
 	LD	A,27
 	CALL	PUTC
 	LD	A,'['
 	CALL	PUTC
+
+	LD	A,(TOP_LINE)
+	LD	B,A
 	LD	A,(CUR_ROW)
-	INC	A
+	SUB	B
+	INC	A			; Screen row (1-indexed for terminal)
 	CALL	PRINT_DEC_BYTE
+
 	LD	A,';'
 	CALL	PUTC
 	LD	A,'1'
@@ -810,14 +819,17 @@ SHOW_STATUS_REST:
 	RET
 
 LOCATE_CURSOR:
-	; Emit ESC [ <Row+1> ; <Col+1> H
+	; Emit ESC [ <ScreenRow+1> ; <Col+1> H
 	LD	A,27
 	CALL	PUTC
 	LD	A,'['
 	CALL	PUTC
 
-	; Row (1-indexed)
+	; Screen Row = CUR_ROW - TOP_LINE (1-indexed for terminal)
+	LD	A,(TOP_LINE)
+	LD	B,A
 	LD	A,(CUR_ROW)
+	SUB	B
 	INC	A
 	CALL	PRINT_DEC_BYTE
 
@@ -934,9 +946,20 @@ ACT_SET_COL:
 CURSOR_UP:
 	LD	A,(CUR_ROW)
 	OR	A
-	RET	Z
+	RET	Z			; If already at top line of document, cannot move up
 	DEC	A
 	LD	(CUR_ROW),A
+	; Check if CUR_ROW < TOP_LINE (scrolled past top of screen window)
+	LD	HL,TOP_LINE
+	CP	(HL)
+	JR	NC,CUR_UP_NO_SCROLL
+	; Scrolled up: TOP_LINE = CUR_ROW
+	LD	(HL),A
+	CALL	ADJUST_COL_TO_TARGET
+	CALL	RENDER_SCREEN
+	RET
+
+CUR_UP_NO_SCROLL:
 	CALL	ADJUST_COL_TO_TARGET
 	RET
 
@@ -951,6 +974,27 @@ CURSOR_DOWN:
 	RET	NC			; If CUR_ROW >= TOTAL_LINES - 1, do not go past text
 	INC	A
 	LD	(CUR_ROW),A
+
+	; Check if CUR_ROW moved past bottom of screen window
+	LD	A,(TOP_LINE)
+	LD	B,A
+	LD	A,(CUR_ROW)
+	SUB	B			; A = screen row (0 .. )
+	LD	C,A
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A			; A = max screen row index (ACTIVE_ROWS - 2)
+	CP	C
+	JR	NC,CUR_DOWN_NO_SCROLL	; If screen_row <= max screen row index, no scroll
+	; Scrolled down: TOP_LINE = TOP_LINE + 1
+	LD	A,(TOP_LINE)
+	INC	A
+	LD	(TOP_LINE),A
+	CALL	ADJUST_COL_TO_TARGET
+	CALL	RENDER_SCREEN
+	RET
+
+CUR_DOWN_NO_SCROLL:
 	CALL	ADJUST_COL_TO_TARGET
 	RET
 
@@ -1350,6 +1394,12 @@ CLEAR_FREED_LINE_LOOP:
 	JR	Z,DEL_BLANK_AT_ROW0
 	DEC	A
 	LD	(CUR_ROW),A
+	; Check if CUR_ROW < TOP_LINE
+	LD	HL,TOP_LINE
+	CP	(HL)
+	JR	NC,DEL_BLANK_NO_SCROLL
+	LD	(HL),A
+DEL_BLANK_NO_SCROLL:
 
 	; Calculate previous line length to set CUR_COL
 	LD	L,A
@@ -1400,6 +1450,7 @@ CLEAR_SINGLE_LOOP:
 	LD	(CUR_ROW),A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
+	LD	(TOP_LINE),A
 	LD	A,1
 	LD	(TOTAL_LINES),A
 	CALL	RENDER_SCREEN
@@ -1559,6 +1610,21 @@ SPLIT_COPY_DONE:
 	XOR	A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
+
+	; Check if new line scrolled past bottom of screen window
+	LD	A,(TOP_LINE)
+	LD	B,A
+	LD	A,(CUR_ROW)
+	SUB	B			; A = screen row
+	LD	C,A
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A			; A = max screen row index (ACTIVE_ROWS - 2)
+	CP	C
+	RET	NC			; If screen row <= max, no scroll
+	LD	A,(TOP_LINE)
+	INC	A
+	LD	(TOP_LINE),A
 	RET
 
 HBIOS_DETECT:
@@ -2052,6 +2118,7 @@ ACTIVE_COLS:	.DB	120		; Default 120 cols
 CUR_ROW:	.DB	0
 CUR_COL:	.DB	0
 TARGET_COL:	.DB	0		; Sticky column for vertical (Up/Down) movement
+TOP_LINE:	.DB	0		; Top visible buffer line index on screen
 CUR_RENDER_ROW:	.DB	0
 TOTAL_LINES:	.DB	0
 HAS_FILE_ARG:	.DB	0
