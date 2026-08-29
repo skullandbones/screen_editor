@@ -80,7 +80,7 @@ DO_AUTO_LOAD:
 	JP	MAIN_LOOP
 
 ENTER_EDITOR:
-	CALL	LOAD_SAMPLE_BUFFER
+	CALL	INIT_EMPTY_DOCUMENT
 	LD	HL,0
 	LD	(CUR_DOC_ROW),HL
 	LD	(TOP_DOC_ROW),HL
@@ -357,16 +357,36 @@ CHECK_COMMAND_LINE:
 	LD	A,1
 	LD	(HAS_FILE_ARG),A
 
-	; Copy FCB to working FCB
+	; Copy drive + filename + ext (12 bytes)
 	LD	HL,DEFAULT_FCB
 	LD	DE,WORK_FCB
-	LD	BC,36
+	LD	BC,12
+	LDIR
+
+	; Zero remaining FCB bytes (12..35)
+	LD	HL,WORK_FCB+12
+	LD	(HL),0
+	LD	DE,WORK_FCB+13
+	LD	BC,23
 	LDIR
 	RET
 
 NO_FILE_ARG:
 	XOR	A
 	LD	(HAS_FILE_ARG),A
+
+	; Zero entire WORK_FCB (36 bytes)
+	LD	HL,WORK_FCB
+	LD	(HL),0
+	LD	DE,WORK_FCB+1
+	LD	BC,35
+	LDIR
+
+	; Set default filename to OUTPUT.TXT
+	LD	HL,DEFAULT_FCB_NAME
+	LD	DE,WORK_FCB
+	LD	BC,12
+	LDIR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -804,9 +824,9 @@ TEST2_READ_LOOP:
 	CALL	PRINT_STR
 
 	; -------------------------------------------------------------------------
-	; Restore Sample Document State & Display Final Success
+	; Restore Empty Document State & Display Final Success
 	; -------------------------------------------------------------------------
-	CALL	LOAD_SAMPLE_BUFFER
+	CALL	INIT_EMPTY_DOCUMENT
 
 	LD	DE,STR_TEST_ALL_PASSED
 	CALL	PRINT_STR
@@ -838,7 +858,7 @@ TEST_NO_FAR_BANKS:
 	JR	TEST_END
 
 TEST_FAIL:
-	CALL	LOAD_SAMPLE_BUFFER
+	CALL	INIT_EMPTY_DOCUMENT
 	LD	DE,STR_TEST_FAILED
 	CALL	PRINT_STR
 
@@ -2540,6 +2560,13 @@ LOAD_FILE:
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
 
+	; Zero FCB extent, s1, s2, rc, and record bytes
+	LD	HL,WORK_FCB+12
+	LD	(HL),0
+	LD	DE,WORK_FCB+13
+	LD	BC,23
+	LDIR
+
 	LD	DE,WORK_FCB
 	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
@@ -2548,6 +2575,7 @@ LOAD_FILE:
 
 	XOR	A
 	LD	(WORK_FCB+32),A		; Clear current record (CR)
+	LD	(SEEN_CR),A
 	LD	HL,0
 	LD	(DOC_TOTAL_LINES),HL
 	LD	(CUR_DOC_ROW),HL
@@ -2556,14 +2584,15 @@ LOAD_FILE:
 	LD	(CACHE_DIRTY),A
 
 	; Clear LOAD_LINE_TEMP
-	LD	HL,LOAD_LINE_TEMP
-	LD	(HL),0
+	CALL	CLEAR_LOAD_TEMP
 	LD	B,0			; Line character counter
 
 READ_SECTOR_LOOP:
+	PUSH	BC			; Preserve line character count B
 	LD	DE,WORK_FCB
 	LD	C,20			; BDOS Read Next Record
 	CALL	BDOS_ENTRY
+	POP	BC			; Restore line character count B
 	OR	A
 	JR	NZ,FILE_LOAD_DONE
 
@@ -2582,6 +2611,9 @@ PARSE_BYTE_LOOP:
 	JR	Z,HANDLE_LF
 
 	; Normal character (including 0x09 Tab): store in LOAD_LINE_TEMP
+	XOR	A
+	LD	(SEEN_CR),A
+
 	LD	A,B
 	CP	MAX_LINE_STRIDE-2
 	JR	NC,SKIP_LINE_OVERFLOW
@@ -2600,11 +2632,26 @@ SKIP_LINE_OVERFLOW:
 	JR	NEXT_BYTE_IN_SECTOR
 
 HANDLE_CR:
+	LD	A,1
+	LD	(SEEN_CR),A
 	LD	A,FMT_CPM
 	LD	(SAVE_FORMAT),A
 	JR	NEXT_BYTE_IN_SECTOR
 
 HANDLE_LF:
+	PUSH	HL			; Preserve sector buffer pointer HL!
+
+	; If no preceding CR, detect Linux format
+	LD	A,(SEEN_CR)
+	OR	A
+	JR	NZ,LF_AFTER_CR
+	LD	A,FMT_LINUX
+	LD	(SAVE_FORMAT),A
+
+LF_AFTER_CR:
+	XOR	A
+	LD	(SEEN_CR),A
+
 	; Terminate line in LOAD_LINE_TEMP
 	LD	HL,LOAD_LINE_TEMP
 	LD	E,B
@@ -2624,14 +2671,17 @@ HANDLE_LF:
 	POP	BC
 
 	; Reset line buffer
-	LD	HL,LOAD_LINE_TEMP
-	LD	(HL),0
+	CALL	CLEAR_LOAD_TEMP
 	LD	B,0
 
+	POP	HL			; Restore sector buffer pointer HL!
+
 	; Check max lines (3584 = 14 banks * 256)
+	PUSH	HL
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	A,H
 	CP	00EH
+	POP	HL
 	JR	NC,FILE_LOAD_DONE
 
 NEXT_BYTE_IN_SECTOR:
@@ -2668,63 +2718,42 @@ LOAD_FINISH:
 	JR	NZ,LOAD_INIT_CACHE
 	INC	HL
 	LD	(DOC_TOTAL_LINES),HL
+	; Write empty line to line 0 in Far RAM
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,LOAD_LINE_TEMP
+	LD	BC,0
+	CALL	WRITE_FAR_LINE
 
 LOAD_INIT_CACHE:
-	LD	BC,0
-	CALL	ENSURE_CACHE_WINDOW
+	CALL	RELOAD_CACHE_WINDOW_FORCE
 	RET
 
 LOAD_FILE_NOT_FOUND:
-	CALL	LOAD_SAMPLE_BUFFER
+	CALL	INIT_EMPTY_DOCUMENT
 	RET
 
 ;------------------------------------------------------------------------------
-; Initialize Sample Buffer into Far RAM Banks
+; Initialize Empty Document into Far RAM Banks (1 empty line)
 ;------------------------------------------------------------------------------
-LOAD_SAMPLE_BUFFER:
-	LD	HL,4
+INIT_EMPTY_DOCUMENT:
+	LD	HL,1
 	LD	(DOC_TOTAL_LINES),HL
 	LD	HL,0
 	LD	(CUR_DOC_ROW),HL
 	LD	(TOP_DOC_ROW),HL
 	LD	(CACHE_START_ROW),HL
 	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
 	LD	(CACHE_DIRTY),A
 
-	; Copy Sample Lines to Far RAM Bank 0
+	; Write empty line to line 0 in Far RAM
 	CALL	CLEAR_LOAD_TEMP
-	LD	HL,SAMP_LINE0
-	LD	DE,LOAD_LINE_TEMP
-	CALL	STR_COPY
 	LD	HL,LOAD_LINE_TEMP
 	LD	BC,0
 	CALL	WRITE_FAR_LINE
 
-	CALL	CLEAR_LOAD_TEMP
-	LD	HL,SAMP_LINE1
-	LD	DE,LOAD_LINE_TEMP
-	CALL	STR_COPY
-	LD	HL,LOAD_LINE_TEMP
-	LD	BC,1
-	CALL	WRITE_FAR_LINE
-
-	CALL	CLEAR_LOAD_TEMP
-	LD	HL,SAMP_LINE2
-	LD	DE,LOAD_LINE_TEMP
-	CALL	STR_COPY
-	LD	HL,LOAD_LINE_TEMP
-	LD	BC,2
-	CALL	WRITE_FAR_LINE
-
-	CALL	CLEAR_LOAD_TEMP
-	LD	HL,SAMP_LINE3
-	LD	DE,LOAD_LINE_TEMP
-	CALL	STR_COPY
-	LD	HL,LOAD_LINE_TEMP
-	LD	BC,3
-	CALL	WRITE_FAR_LINE
-
-	; Populate and force reload local cache window
+	; Invalidate and force reload local cache window
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	RET
 
@@ -3107,15 +3136,6 @@ MSG_EXIT:
 DEFAULT_FCB_NAME:
 	.DB	0,"OUTPUT  TXT",0,0,0,0
 
-SAMP_LINE0:
-	.DB	"; Screen Editor (SE.COM) Cross-Platform Line Format Buffer",0
-SAMP_LINE1:
-	.DB	"; Press ^F to toggle save format between CP/M [CRLF] and Linux [LF]",0
-SAMP_LINE2:
-	.DB	"START:",9,"LD A,0",9,"; Initial register setup",0
-SAMP_LINE3:
-	.DB	9,"RET",9,9,"; End of sample program",0
-
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
 ;------------------------------------------------------------------------------
@@ -3136,9 +3156,10 @@ CUR_DOC_ROW:	.DW	0		; 16-bit document cursor row (0..3583)
 CUR_COL:	.DB	0		; 8-bit character byte index in line (0..126)
 TARGET_COL:	.DB	0		; Sticky visual column (0..119)
 TOP_DOC_ROW:	.DW	0		; 16-bit top visible document line on screen
-DOC_TOTAL_LINES:.DW	4		; 16-bit total document lines count
+DOC_TOTAL_LINES:.DW	1		; 16-bit total document lines count (default 1 empty line)
 HAS_FILE_ARG:	.DB	0
 SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
+SEEN_CR:	.DB	0		; Line format auto-detection state
 CHAR_INSERT_TEMP:.DB	0
 
 CACHE_START_ROW:.DW	0		; 16-bit doc row index at LINE_STORAGE[0]

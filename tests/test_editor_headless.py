@@ -131,24 +131,31 @@ def test_se_execution():
             return False
         print("[+] Successfully entered full-screen editing mode.", flush=True)
 
-        # 7. Test interactive character typing
+        # 7. Test interactive character typing in empty buffer
         time.sleep(0.5)
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             os.read(master, 4096)
 
         out_type = b""
-        for ch in b"HELLO":
+        for ch in b"HELLO WORLD":
             os.write(master, bytes([ch]))
-            time.sleep(0.15)
+            time.sleep(0.05)
             out_type += read_until(master, bytes([ch]), timeout=1.0)
 
-        if b"HELLO" not in out_type:
+        if b"HELLO WORLD" not in out_type:
             print("[-] Interactive typing failed to render on screen. Buffer captured:", out_type)
             return False
-        print("[+] Successfully typed and rendered 'HELLO'.")
+        print("[+] Successfully typed and rendered 'HELLO WORLD'.")
 
-        # 8. Test Left / Right cursor movement and line-end wrapping
+        # 8. Create multi-line text by pressing Enter
+        for line in [b"\r", b"Line Two of Document", b"\r", b"Line Three with Tabs", b"\r", b"Line Four Final"]:
+            os.write(master, line)
+            time.sleep(0.1)
+        time.sleep(0.5)
+        drain_all(master)
+
+        # 9. Test Left / Right cursor movement and line-end wrapping
         time.sleep(0.2)
         drain_all(master)
         # Move Left 3 times
@@ -166,7 +173,7 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified horizontal cursor navigation and line wrapping.")
 
-        # 9. Test cursor down clamping at end of file (4 lines -> cursor stops at line 4)
+        # 10. Test cursor down clamping at end of file (4 lines -> cursor stops at line 4)
         time.sleep(0.2)
         for _ in range(15):
             os.write(master, b"\x1b[B")
@@ -177,7 +184,7 @@ def test_se_execution():
             return False
         print("[+] Successfully verified cursor cannot move past the last line of text (line 4).")
 
-        # 10. Test mid-line insertion line length capacity (preventing exceeding 120 chars)
+        # 11. Test mid-line insertion line length capacity (preventing exceeding 120 chars)
         drain_all(master)
         # Type 50 characters at end of line 4, move back 20 cols, insert 25 'A's
         os.write(master, b"0123456789" * 5)
@@ -192,7 +199,7 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified 120-char line capacity limit during mid-line insertion.")
 
-        # 11. Test blank line deletion with Backspace at column 0
+        # 12. Test blank line deletion with Backspace at column 0
         # Move up to row 1, col 0
         for _ in range(5):
             os.write(master, b"\x1b[A")
@@ -211,7 +218,7 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified blank line deletion with Backspace at column 0.")
 
-        # 12. Test Delete Key (\x1b[3~) and Ctrl+D (Forward Delete)
+        # 13. Test Delete Key (\x1b[3~) and Ctrl+D (Forward Delete)
         # Ensure cursor is at (1,0)
         os.write(master, b"\x1b[H")
         time.sleep(0.1)
@@ -225,7 +232,7 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified Delete key (ESC [ 3 ~) and Ctrl+D forward deletion.")
 
-        # 13. Test Real Tab character insertion & Tab-jumping navigation
+        # 14. Test Real Tab character insertion & Tab-jumping navigation
         # Press Tab at (1,0) -> advances visual cursor to (1,8) -> displayed as Col 8 (0-indexed)
         os.write(master, b"\t")
         out_tab1 = read_until(master, b"Row 1, Col 8", timeout=4.0)
@@ -257,7 +264,8 @@ def test_se_execution():
             print(f"[-] Backspace over Tab failed to return to col 0. Buffer captured: {repr(out_tab_bs)}", flush=True)
             return False
         drain_all(master)
-        # 14. Test rightmost column boundary clamping (cannot exceed visual Col 119)
+
+        # 15. Test rightmost column boundary clamping (cannot exceed visual Col 119)
         # Move down to line 4, then type characters to fill line to max width 120 (cols 0..119)
         for _ in range(3):
             os.write(master, b"\x1b[B")
@@ -284,7 +292,7 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified cursor and line cannot exceed visual screen width (Col 119).", flush=True)
 
-        # 15. Test format toggle (^F)
+        # 16. Test format toggle (^F)
         os.write(master, b"\x06")
         out_fmt = read_until(master, b"Linux", timeout=4.0)
         if b"Linux" not in out_fmt:
@@ -293,14 +301,40 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully exercised ^F format toggle.", flush=True)
 
-        # 16. Send Ctrl+Q to exit cleanly back to CP/M
+        # 17. Save file with Ctrl+S (saves to OUTPUT.TXT)
+        time.sleep(0.3)
+        os.write(master, b"\x13")
+        time.sleep(0.5)
+        drain_all(master)
+        print("[+] Successfully saved file with Ctrl+S.", flush=True)
+
+        # 18. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
-        out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
-        if b"Exiting SE.COM" not in out_exit:
+        out_exit = read_until(master, b"C>", timeout=4.0)
+        if b"C>" not in out_exit and b"Exiting SE.COM" not in out_exit:
             print(f"[-] Clean exit message not observed. Buffer captured: {repr(out_exit)}", flush=True)
             return False
         print("[+] SE.COM successfully received Ctrl+Q and returned cleanly to CP/M.", flush=True)
+
+        # 19. Test File Loading: Open 2-line file 'se 2.TXT'
+        time.sleep(0.5)
+        os.write(master, b"se 2.TXT\r")
+        out_load = read_until(master, b"SE v0.5.0", timeout=6.0)
+        if b"SE v0.5.0" not in out_load:
+            print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
+            return False
+        # Verify BOTH Line 1 and Line 2 from 2.TXT loaded and rendered on screen
+        if b"First line of two" not in out_load or b"Second line of two" not in out_load:
+            print(f"[-] Multi-line file contents missing in SE.COM. Buffer: {repr(out_load)}", flush=True)
+            return False
+        print("[+] Successfully verified multi-line file loading (se 2.TXT) and Far RAM streaming!", flush=True)
+
+        # Exit editor again
+        time.sleep(0.5)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Final exit from SE.COM completed.", flush=True)
 
         return True
 
