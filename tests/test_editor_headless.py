@@ -226,39 +226,39 @@ def test_se_execution():
         print("[+] Successfully verified Delete key (ESC [ 3 ~) and Ctrl+D forward deletion.")
 
         # 13. Test Real Tab character insertion & Tab-jumping navigation
-        # Press Tab at (1,0) -> advances visual cursor to (1,8) -> displayed as Col 9 (1-indexed)
+        # Press Tab at (1,0) -> advances visual cursor to (1,8) -> displayed as Col 8 (0-indexed)
         os.write(master, b"\t")
-        out_tab1 = read_until(master, b"Row 1, Col 9", timeout=4.0)
-        if b"Row 1, Col 9" not in out_tab1:
-            print(f"[-] Tab key from col 0 failed to reach col 9. Buffer captured: {repr(out_tab1)}", flush=True)
+        out_tab1 = read_until(master, b"Row 1, Col 8", timeout=4.0)
+        if b"Row 1, Col 8" not in out_tab1:
+            print(f"[-] Tab key from col 0 failed to reach col 8. Buffer captured: {repr(out_tab1)}", flush=True)
             return False
         drain_all(master)
 
         # Test Cursor Left jumping across the Tab in a single keystroke
         os.write(master, b"\x1b[D")
-        out_tab_left = read_until(master, b"Row 1, Col 1", timeout=4.0)
-        if b"Row 1, Col 1" not in out_tab_left:
-            print(f"[-] Left arrow over Tab failed to jump back to col 1. Buffer captured: {repr(out_tab_left)}", flush=True)
+        out_tab_left = read_until(master, b"Row 1, Col 0", timeout=4.0)
+        if b"Row 1, Col 0" not in out_tab_left:
+            print(f"[-] Left arrow over Tab failed to jump back to col 0. Buffer captured: {repr(out_tab_left)}", flush=True)
             return False
         drain_all(master)
 
         # Test Cursor Right jumping across the Tab in a single keystroke
         os.write(master, b"\x1b[C")
-        out_tab_right = read_until(master, b"Row 1, Col 9", timeout=4.0)
-        if b"Row 1, Col 9" not in out_tab_right:
-            print(f"[-] Right arrow over Tab failed to jump forward to col 9. Buffer captured: {repr(out_tab_right)}", flush=True)
+        out_tab_right = read_until(master, b"Row 1, Col 8", timeout=4.0)
+        if b"Row 1, Col 8" not in out_tab_right:
+            print(f"[-] Right arrow over Tab failed to jump forward to col 8. Buffer captured: {repr(out_tab_right)}", flush=True)
             return False
         drain_all(master)
 
         # Test Backspace deleting the entire Tab in a single keystroke
         os.write(master, b"\x08")
-        out_tab_bs = read_until(master, b"Row 1, Col 1", timeout=4.0)
-        if b"Row 1, Col 1" not in out_tab_bs:
-            print(f"[-] Backspace over Tab failed to return to col 1. Buffer captured: {repr(out_tab_bs)}", flush=True)
+        out_tab_bs = read_until(master, b"Row 1, Col 0", timeout=4.0)
+        if b"Row 1, Col 0" not in out_tab_bs:
+            print(f"[-] Backspace over Tab failed to return to col 0. Buffer captured: {repr(out_tab_bs)}", flush=True)
             return False
         drain_all(master)
-        # 14. Test rightmost column boundary clamping (cannot exceed visual Col 120 / index 119)
-        # Move down to line 4, then type characters to fill line to max width 120
+        # 14. Test rightmost column boundary clamping (cannot exceed visual Col 119)
+        # Move down to line 4, then type characters to fill line to max width 120 (cols 0..119)
         for _ in range(3):
             os.write(master, b"\x1b[B")
             time.sleep(0.05)
@@ -271,18 +271,18 @@ def test_se_execution():
             os.write(master, b"X")
             time.sleep(0.02)
         drain_all(master)
-        # Move to End of line (Col 120)
+        # Move to End of line (Col 119)
         os.write(master, b"\x1b[F")
-        out_col_clamp = read_until(master, b"Col 120", timeout=4.0)
-        if b"Col 120" not in out_col_clamp and b"Col 119" not in out_col_clamp:
+        out_col_clamp = read_until(master, b"Col 119", timeout=4.0)
+        if b"Col 119" not in out_col_clamp:
             print(f"[-] Column boundary clamping failed. Buffer captured: {repr(out_col_clamp)}", flush=True)
             return False
-        # Try to type extra characters - verify it does not exceed Col 120
+        # Try to type extra characters - verify it does not exceed Col 119
         for _ in range(5):
             os.write(master, b"Y")
             time.sleep(0.02)
         drain_all(master)
-        print("[+] Successfully verified cursor and line cannot exceed visual screen width (Col 120).", flush=True)
+        print("[+] Successfully verified cursor and line cannot exceed visual screen width (Col 119).", flush=True)
 
         # 15. Test format toggle (^F)
         os.write(master, b"\x06")

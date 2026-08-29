@@ -1167,8 +1167,7 @@ SHOW_STATUS_REST:
 	CALL	PRINT_DEC_WORD		; Print 16-bit row number
 	LD	DE,STR_STATUS_COL
 	CALL	PRINT_STR
-	CALL	CALC_VISUAL_COL		; A = Visual column (0-indexed)
-	INC	A			; 1-indexed for status bar
+	CALL	CALC_VISUAL_COL		; A = Visual column (0-indexed, 0..ACTIVE_COLS-1)
 	CALL	PRINT_DEC_BYTE
 	LD	A,' '
 	CALL	PUTC
