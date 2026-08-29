@@ -214,6 +214,16 @@ DO_INSERT_CHAR:
 	JR	MAIN_LOOP
 
 DO_HANDLE_TAB:
+	; Ensure TOTAL_LINES >= CUR_ROW + 1
+	LD	A,(TOTAL_LINES)
+	LD	B,A
+	LD	A,(CUR_ROW)
+	CP	B
+	JR	C,TAB_ROW_IN_BOUNDS
+	INC	A
+	LD	(TOTAL_LINES),A
+
+TAB_ROW_IN_BOUNDS:
 	; 1. Calculate pointer to current line: HL = LINE_STORAGE + (CUR_ROW * 128)
 	LD	A,(CUR_ROW)
 	LD	L,A
@@ -331,8 +341,9 @@ TAB_PAD_AND_APPEND:
 
 	; Fill spaces from B up to CUR_COL + K
 	LD	A,(CUR_COL)
-	LD	HL,CHAR_INSERT_TEMP
-	ADD	A,(HL)			; A = CUR_COL + K (new length)
+	LD	C,A
+	LD	A,(CHAR_INSERT_TEMP)
+	ADD	A,C			; A = CUR_COL + K (new length)
 	LD	C,A			; C = target length
 TAB_APPEND_LOOP:
 	LD	A,C
@@ -351,8 +362,9 @@ TAB_APPEND_DONE:
 TAB_ADVANCE_CURSOR:
 	; Advance CUR_COL by K, clamped to ACTIVE_COLS - 1
 	LD	A,(CUR_COL)
-	LD	HL,CHAR_INSERT_TEMP
-	ADD	A,(HL)
+	LD	C,A
+	LD	A,(CHAR_INSERT_TEMP)
+	ADD	A,C
 	LD	C,A
 	LD	A,(ACTIVE_COLS)
 	DEC	A
