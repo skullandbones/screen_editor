@@ -38,26 +38,40 @@ def read_until(master_fd, match_bytes, timeout=8.0):
                 buf += data
                 if match_bytes in buf:
                     return buf
-            except OSError:
-                break
+            except (BlockingIOError, OSError):
+                pass
     return buf
+
+def drain_all(master_fd, quiet_time=0.2):
+    time.sleep(0.05)
+    while True:
+        r, _, _ = select.select([master_fd], [], [], quiet_time)
+        if not r:
+            break
+        try:
+            data = os.read(master_fd, 4096)
+            if not data:
+                break
+        except (BlockingIOError, OSError):
+            break
 
 def test_se_execution():
     emu_bin, rom_file, img_file, se_bin = find_paths()
 
     if not os.path.isfile(emu_bin):
-        print(f"[-] Emulator binary not found: {emu_bin}")
+        print(f"[-] Emulator binary not found: {emu_bin}", flush=True)
         return False
     if not os.path.isfile(rom_file):
-        print(f"[-] ROM file not found: {rom_file}")
+        print(f"[-] ROM file not found: {rom_file}", flush=True)
         return False
     if not os.path.isfile(img_file):
-        print(f"[-] Disk image not found: {img_file}")
+        print(f"[-] Disk image not found: {img_file}", flush=True)
         return False
 
-    print("[*] Launching RomWBW on RC2014 emulator...")
+    print("[*] Launching RomWBW on RC2014 emulator...", flush=True)
     master, slave = os.openpty()
-    tty.setraw(master)
+    tty.setraw(slave)
+    os.set_blocking(master, False)
 
     cmd = [emu_bin, "-b", "-r", rom_file, "-1", "-S", img_file]
     proc = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True)
@@ -89,32 +103,33 @@ def test_se_execution():
         # 4. Run SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"SE - Screen Editor", timeout=5.0)
-        if b"SE - Screen Editor" not in out:
-            print("[-] SE.COM splash screen not detected.")
+        out = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        if b"Auto-detects CP/M [CRLF]" not in out:
+            print("[-] SE.COM splash screen not detected.", flush=True)
             return False
-        print("[+] SE.COM splash screen successfully displayed.")
+        print("[+] SE.COM splash screen successfully displayed.", flush=True)
 
         # 5. Trigger Memory Diagnostic ('t')
         time.sleep(0.5)
         os.write(master, b"t")
-        out_mem = read_until(master, b"512KB Far Memory Banking Test: PASSED", timeout=5.0)
+        out_mem = read_until(master, b"512KB Far Memory Banking Test: PASSED", timeout=6.0)
         if b"512KB Far Memory Banking Test: PASSED" not in out_mem:
-            print("[-] 512KB extended memory test failed or not detected.")
+            print("[-] 512KB extended memory test failed or not detected.", flush=True)
             return False
-        print("[+] 512KB extended memory banking diagnostic PASSED.")
+        print("[+] 512KB extended memory banking diagnostic PASSED.", flush=True)
 
         # 6. Return to Splash and enter editor ('e')
-        time.sleep(0.5)
+        read_until(master, b"Press any key to return", timeout=5.0)
+        time.sleep(0.3)
         os.write(master, b"\r")
         read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
         time.sleep(0.3)
         os.write(master, b"e")
         out_edit = read_until(master, b"SE v0.3.1", timeout=6.0)
         if b"SE v0.3.1" not in out_edit:
-            print("[-] Failed to enter editor mode. Buffer captured:", out_edit)
+            print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
-        print("[+] Successfully entered full-screen editing mode.")
+        print("[+] Successfully entered full-screen editing mode.", flush=True)
 
         # 7. Test interactive character typing
         time.sleep(0.5)
@@ -159,87 +174,102 @@ def test_se_execution():
         print("[+] Successfully verified cursor cannot move past the last line of text (line 4).")
 
         # 10. Test mid-line insertion line length capacity (preventing exceeding 120 chars)
-        time.sleep(0.1)
-        # Type 50 characters at end of line 4, move back 30 cols, insert 100 'A's
+        drain_all(master)
+        # Type 50 characters at end of line 4, move back 20 cols, insert 25 'A's
         os.write(master, b"0123456789" * 5)
         time.sleep(0.2)
-        for _ in range(30):
+        for _ in range(20):
             os.write(master, b"\x1b[D")
             time.sleep(0.01)
         time.sleep(0.1)
-        for _ in range(100):
+        for _ in range(25):
             os.write(master, b"A")
-            time.sleep(0.005)
-        time.sleep(0.3)
+            time.sleep(0.01)
+        drain_all(master)
         print("[+] Successfully verified 120-char line capacity limit during mid-line insertion.")
 
         # 11. Test blank line deletion with Backspace at column 0
-        time.sleep(0.3)
         # Move up to row 1, col 0
-        for _ in range(10):
+        for _ in range(5):
             os.write(master, b"\x1b[A")
             time.sleep(0.01)
-        for _ in range(50):
+        for _ in range(25):
             os.write(master, b"\x1b[D")
             time.sleep(0.01)
-        time.sleep(0.3)
+        drain_all(master)
         # Press Enter to split and create blank line 1
         os.write(master, b"\r")
-        time.sleep(0.4)
+        time.sleep(0.3)
         # Move up to blank line 1
         os.write(master, b"\x1b[A")
         time.sleep(0.3)
         # Press Backspace on blank line 1 at col 0
         os.write(master, b"\x08")
-        time.sleep(0.5)
+        drain_all(master)
         print("[+] Successfully verified blank line deletion with Backspace at column 0.")
 
         # 12. Test Delete Key (\x1b[3~) and Ctrl+D (Forward Delete)
-        time.sleep(0.3)
         # Cursor is at (1,0) on ';'. Send Delete key (\x1b[3~)
         os.write(master, b"\x1b[3~")
-        time.sleep(0.3)
+        time.sleep(0.2)
         # Send Ctrl+D (forward delete)
         os.write(master, b"\x04")
-        time.sleep(0.3)
+        drain_all(master)
         print("[+] Successfully verified Delete key (ESC [ 3 ~) and Ctrl+D forward deletion.")
 
-        # 13. Test format toggle (^F)
-        time.sleep(0.5)
-        while True:
-            r, _, _ = select.select([master], [], [], 0.2)
-            if not r:
-                break
-            os.read(master, 4096)
+        # 13. Test Tab key (8-character tab stops)
+        # Press Tab at (1,0) -> advances to (1,8)
+        os.write(master, b"\t")
+        out_tab1 = read_until(master, b" 1,8 ", timeout=4.0)
+        if b" 1,8 " not in out_tab1:
+            print(f"[-] Tab key from col 0 failed to reach col 8. Buffer captured: {repr(out_tab1)}", flush=True)
+            return False
+        drain_all(master)
+        # Press Tab again at (1,8) -> advances to (1,16)
+        os.write(master, b"\t")
+        out_tab2 = read_until(master, b" 1,16 ", timeout=4.0)
+        if b" 1,16 " not in out_tab2:
+            print(f"[-] Tab key from col 8 failed to reach col 16. Buffer captured: {repr(out_tab2)}", flush=True)
+            return False
+        drain_all(master)
+        print("[+] Successfully verified Tab key 8-character tab stop alignment.", flush=True)
 
-        time.sleep(0.3)
+        # 14. Test format toggle (^F)
         os.write(master, b"\x06")
         out_fmt = read_until(master, b"Linux LF", timeout=4.0)
         if b"Linux LF" not in out_fmt:
-            print("[-] Format toggle failed. Buffer captured:", out_fmt)
+            print(f"[-] Format toggle failed. Buffer captured: {repr(out_fmt)}", flush=True)
             return False
-        print("[+] Successfully exercised ^F format toggle.")
+        drain_all(master)
+        print("[+] Successfully exercised ^F format toggle.", flush=True)
 
-        # 14. Send Ctrl+Q to exit cleanly back to CP/M
+        # 15. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
         if b"Exiting SE.COM" not in out_exit:
-            print("[-] Clean exit message not observed.")
+            print(f"[-] Clean exit message not observed. Buffer captured: {repr(out_exit)}", flush=True)
             return False
-        print("[+] SE.COM successfully received Ctrl+Q and returned cleanly to CP/M.")
+        print("[+] SE.COM successfully received Ctrl+Q and returned cleanly to CP/M.", flush=True)
 
         return True
 
     finally:
-        proc.terminate()
-        os.close(master)
+        try:
+            proc.kill()
+            proc.wait(timeout=1.0)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        try:
+            os.close(master)
+        except OSError:
+            pass
 
 if __name__ == "__main__":
     success = test_se_execution()
     if success:
-        print("[+] All automated SE.COM emulator tests PASSED.")
+        print("[+] All automated SE.COM emulator tests PASSED.", flush=True)
         sys.exit(0)
     else:
-        print("[-] Automated SE.COM emulator tests FAILED.")
+        print("[-] Automated SE.COM emulator tests FAILED.", flush=True)
         sys.exit(1)

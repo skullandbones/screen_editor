@@ -199,9 +199,10 @@ CHECK_ESC_SEQ:
 	JR	MAIN_LOOP
 
 CHECK_PRINTABLE_CHAR:
-	; Check if character is printable (ASCII 32..126 or Tab)
-	CP	9			; TAB
-	JR	Z,DO_INSERT_CHAR
+	; Check if Tab key is pressed (expand to 8-character tab stops)
+	CP	KEY_TAB			; 9
+	JR	Z,DO_HANDLE_TAB
+
 	CP	' '
 	JR	C,MAIN_LOOP
 	CP	127
@@ -210,6 +211,165 @@ CHECK_PRINTABLE_CHAR:
 DO_INSERT_CHAR:
 	CALL	DO_CHAR_INSERT
 	CALL	RENDER_CURRENT_LINE
+	JR	MAIN_LOOP
+
+DO_HANDLE_TAB:
+	; 1. Calculate pointer to current line: HL = LINE_STORAGE + (CUR_ROW * 128)
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = line start
+
+	; 2. Scan current line length (first 0 or '$')
+	PUSH	HL			; Save line start
+	LD	B,0
+TAB_SCAN_LEN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,TAB_SCAN_DONE
+	CP	'$'
+	JR	Z,TAB_SCAN_DONE
+	INC	HL
+	INC	B
+	LD	A,B
+	CP	MAX_LINE_STRIDE-2
+	JR	NC,TAB_SCAN_DONE
+	JR	TAB_SCAN_LEN
+
+TAB_SCAN_DONE:
+	POP	HL			; HL = line start
+	; B = current line length
+
+	; 3. Check screen width limit: if B >= ACTIVE_COLS, line is full
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,TAB_DONE_RET
+	JR	C,TAB_DONE_RET
+
+	; 4. Calculate spaces to insert: K = 8 - (CUR_COL & 7)
+	LD	A,(CUR_COL)
+	AND	7
+	LD	C,A
+	LD	A,8
+	SUB	C			; A = K (1..8)
+	LD	C,A			; C = K
+
+	; Clamp K if B + K > ACTIVE_COLS: K = ACTIVE_COLS - B
+	LD	A,(ACTIVE_COLS)
+	SUB	B			; A = remaining capacity
+	CP	C
+	JR	NC,TAB_K_OK
+	LD	C,A			; C = clamped K
+	OR	A
+	JR	Z,TAB_DONE_RET
+
+TAB_K_OK:
+	; Save K in CHAR_INSERT_TEMP
+	LD	A,C
+	LD	(CHAR_INSERT_TEMP),A
+
+	; 5. Compare CUR_COL with line length (B)
+	LD	A,(CUR_COL)
+	CP	B
+	JR	NC,TAB_PAD_AND_APPEND
+
+	; 6. CUR_COL < B: Shift text from CUR_COL to end right by K using LDDR
+	; Source end: HL = line_start + B
+	PUSH	HL			; Save line_start for space filling
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + B (source end)
+
+	; Dest end: DE = source_end + K
+	PUSH	HL			; Save source_end
+	LD	A,(CHAR_INSERT_TEMP)	; A = K
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = source_end + K (dest end)
+	EX	DE,HL			; DE = dest_end
+	POP	HL			; HL = source_end
+
+	; Count = B - CUR_COL + 1 (including null terminator)
+	LD	A,(CUR_COL)
+	LD	C,A
+	LD	A,B
+	SUB	C
+	INC	A
+	LD	C,A
+	LD	B,0			; BC = Count
+
+	LDDR				; Shift text and null terminator right by K bytes!
+
+	; 7. Fill K spaces at line_start + CUR_COL
+	POP	HL			; HL = line_start
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + CUR_COL
+	LD	A,(CHAR_INSERT_TEMP)
+	LD	B,A			; B = K
+TAB_FILL_SPACES:
+	LD	(HL),' '
+	INC	HL
+	DJNZ	TAB_FILL_SPACES
+	JR	TAB_ADVANCE_CURSOR
+
+TAB_PAD_AND_APPEND:
+	; Pad from line_start + B up to line_start + CUR_COL + K - 1 with spaces
+	PUSH	HL
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + B
+
+	; Fill spaces from B up to CUR_COL + K
+	LD	A,(CUR_COL)
+	LD	HL,CHAR_INSERT_TEMP
+	ADD	A,(HL)			; A = CUR_COL + K (new length)
+	LD	C,A			; C = target length
+TAB_APPEND_LOOP:
+	LD	A,C
+	CP	B
+	JR	Z,TAB_APPEND_DONE
+	LD	(HL),' '
+	INC	HL
+	INC	B
+	JR	TAB_APPEND_LOOP
+
+TAB_APPEND_DONE:
+	XOR	A
+	LD	(HL),A			; Null terminate new end of line
+	POP	HL
+
+TAB_ADVANCE_CURSOR:
+	; Advance CUR_COL by K, clamped to ACTIVE_COLS - 1
+	LD	A,(CUR_COL)
+	LD	HL,CHAR_INSERT_TEMP
+	ADD	A,(HL)
+	LD	C,A
+	LD	A,(ACTIVE_COLS)
+	DEC	A
+	CP	C
+	JR	C,TAB_CLAMP_COL
+	LD	A,C
+	JR	TAB_SET_COL
+
+TAB_CLAMP_COL:
+	; A is already ACTIVE_COLS - 1
+
+TAB_SET_COL:
+	LD	(CUR_COL),A
+	CALL	RENDER_CURRENT_LINE
+	JR	MAIN_LOOP
+
+TAB_DONE_RET:
 	JR	MAIN_LOOP
 
 EXIT_PROGRAM:
@@ -252,8 +412,14 @@ TERM_INIT:
 	RET
 
 PRINT_STR:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
 	LD	C,9
 	CALL	BDOS_ENTRY
+	POP	HL
+	POP	DE
+	POP	BC
 	RET
 
 PUTC:
@@ -646,6 +812,8 @@ RENDER_CURRENT_LINE:
 	ADD	HL,DE
 
 PRINT_CUR_LINE_CHARS:
+	LD	B,0
+PRINT_CUR_LINE_LOOP:
 	LD	A,(HL)
 	OR	A
 	JR	Z,PRINT_CUR_LINE_DONE
@@ -653,7 +821,11 @@ PRINT_CUR_LINE_CHARS:
 	JR	Z,PRINT_CUR_LINE_DONE
 	CALL	PUTC
 	INC	HL
-	JR	PRINT_CUR_LINE_CHARS
+	INC	B
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,PRINT_CUR_LINE_DONE
+	JR	PRINT_CUR_LINE_LOOP
 
 PRINT_CUR_LINE_DONE:
 	CALL	RENDER_STATUS_BAR
@@ -678,6 +850,7 @@ RENDER_BUFFER_LINE:
 	ADD	HL,DE
 
 	; Print characters directly
+	LD	B,0
 PRINT_LINE_CHARS:
 	LD	A,(HL)
 	OR	A
@@ -686,6 +859,10 @@ PRINT_LINE_CHARS:
 	JR	Z,PRINT_LINE_END
 	CALL	PUTC
 	INC	HL
+	INC	B
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,PRINT_LINE_END
 	JR	PRINT_LINE_CHARS
 
 PRINT_LINE_END:
@@ -982,7 +1159,11 @@ LINE_LEN_OK:
 	LD	C,A
 	LD	B,0
 
+	PUSH	DE			; Save line_start + B + 1
 	LDDR
+	POP	DE			; DE = line_start + B + 1
+	XOR	A
+	LD	(DE), A			; Guarantee null terminator at new end of line
 
 	; Now insert character at line_start + CUR_COL
 	POP	HL			; Line start
@@ -1505,6 +1686,9 @@ PARSE_BYTE_LOOP:
 	CP	10			; LF
 	JR	Z,HANDLE_LF
 
+	CP	KEY_TAB			; TAB (expand to 8-space tab stops)
+	JR	Z,HANDLE_LOAD_TAB
+
 	; Normal character: store in current line
 	LD	A,(ACTIVE_COLS)
 	CP	B
@@ -1527,6 +1711,34 @@ SKIP_LINE_OVERFLOW:
 HANDLE_CR:
 	LD	A,FMT_CPM
 	LD	(SAVE_FORMAT),A
+	JR	NEXT_BYTE_IN_SECTOR
+
+HANDLE_LOAD_TAB:
+	; Calculate number of spaces to pad: 8 - (B & 7)
+	LD	A,B
+	AND	7
+	LD	E,A
+	LD	A,8
+	SUB	E			; A = spaces count (1..8)
+	LD	E,A			; E = loop counter
+LOAD_TAB_PAD_LOOP:
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,NEXT_BYTE_IN_SECTOR
+	JR	C,NEXT_BYTE_IN_SECTOR
+	PUSH	HL
+	LD	HL,(CUR_LINE_START)
+	LD	A,B
+	PUSH	DE
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),' '
+	POP	DE
+	POP	HL
+	INC	B
+	DEC	E
+	JR	NZ,LOAD_TAB_PAD_LOOP
 	JR	NEXT_BYTE_IN_SECTOR
 
 HANDLE_LF:
@@ -1620,12 +1832,28 @@ SAVE_FILE:
 	LD	A,(WORK_FCB+1)
 	CP	' '
 	JR	NZ,DO_SAVE_EXISTING
+
+	; Zero entire WORK_FCB (36 bytes)
+	LD	HL,WORK_FCB
+	LD	(HL),0
+	LD	DE,WORK_FCB+1
+	LD	BC,35
+	LDIR
+
+	; Copy default filename (0, "OUTPUT  TXT")
 	LD	HL,DEFAULT_FCB_NAME
 	LD	DE,WORK_FCB
-	LD	BC,16
+	LD	BC,12
 	LDIR
 
 DO_SAVE_EXISTING:
+	; Zero FCB extent and record bytes (bytes 12..35)
+	LD	HL,WORK_FCB+12
+	LD	(HL),0
+	LD	DE,WORK_FCB+13
+	LD	BC,23
+	LDIR
+
 	; Delete old file
 	LD	DE,WORK_FCB
 	LD	C,19			; BDOS Delete File
@@ -1637,9 +1865,6 @@ DO_SAVE_EXISTING:
 	CALL	BDOS_ENTRY
 	CP	0FFH
 	RET	Z			; Error creating file
-
-	XOR	A
-	LD	(WORK_FCB+32),A		; Clear CR
 
 	; Prepare DMA write pointer
 	LD	DE,DEFAULT_DMA
@@ -1907,7 +2132,7 @@ TEST_READBACK:	.DB	0,0
 
 WORK_FCB:	.DS	36
 
-		.DS	128
+		.DS	512
 LOCAL_STACK:
 
 ; 40 lines x 128 bytes stride line storage buffer in local TPA (5120 bytes)
