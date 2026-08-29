@@ -15,7 +15,7 @@ CMD_LEN		.EQU	$0080
 CMD_TAIL	.EQU	$0081
 
 MAX_LINE_STRIDE	.EQU	128		; 128 bytes stride per line buffer
-MAX_BUFFER_LINES .EQU	40		; Up to 40 lines in local memory grid
+MAX_BUFFER_LINES .EQU	200		; Up to 200 lines in local memory buffer (25.6 KB)
 
 KEY_CTRL_C	.EQU	3
 KEY_CTRL_Q	.EQU	17
@@ -782,9 +782,6 @@ SHOW_STATUS_80X24:
 	CALL	PRINT_STR
 
 SHOW_STATUS_FORMAT:
-	LD	DE,STR_STATUS_MID
-	CALL	PRINT_STR
-
 	LD	A,(SAVE_FORMAT)
 	CP	FMT_CPM
 	JR	NZ,SHOW_LINUX_FMT
@@ -800,18 +797,22 @@ SHOW_STATUS_REST:
 	LD	DE,STR_STATUS_SUFFIX
 	CALL	PRINT_STR
 
-	; Print dynamic cursor position: Row,Col
+	; Print dynamic cursor position: Row, Col
 	LD	DE,STR_STATUS_POS
 	CALL	PRINT_STR
 	LD	A,(CUR_ROW)
 	INC	A			; 1-indexed
 	CALL	PRINT_DEC_BYTE
-	LD	A,','
-	CALL	PUTC
+	LD	DE,STR_STATUS_COL
+	CALL	PRINT_STR
 	LD	A,(CUR_COL)		; 0-indexed
 	CALL	PRINT_DEC_BYTE
 	LD	A,' '
 	CALL	PUTC
+
+	; Clear remainder of status line to EOL in inverse video
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
 
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
@@ -1787,10 +1788,10 @@ LOAD_FILE_NOT_FOUND:
 ; Initialize Sample Buffer into 128-byte stride format
 ;------------------------------------------------------------------------------
 LOAD_SAMPLE_BUFFER:
-	; Clear LINE_STORAGE (5120 bytes) with 0
+	; Clear LINE_STORAGE (25600 bytes = 200 lines * 128) with 0
 	LD	HL,LINE_STORAGE
 	LD	DE,LINE_STORAGE+1
-	LD	BC,5119
+	LD	BC,25599
 	LD	(HL),0
 	LDIR
 
@@ -2064,28 +2065,28 @@ STR_TEST_PROMPT:
 	.DB	"Press any key to return to Splash Screen...$"
 
 STR_STATUS_PREFIX:
-	.DB	" SE v0.3.2 | [","$"
+	.DB	" SE v0.3.2 | ","$"
 
 STR_STATUS_120X40:
-	.DB	"120x40","$"
+	.DB	"120x40 | ","$"
 
 STR_STATUS_80X24:
-	.DB	"80x24 ","$"
-
-STR_STATUS_MID:
-	.DB	"] | Format: [","$"
+	.DB	"80x24 | ","$"
 
 STR_FMT_CPM:
-	.DB	"CP/M CRLF","$"
+	.DB	"CP/M | ","$"
 
 STR_FMT_LINUX:
-	.DB	"Linux LF ","$"
+	.DB	"Linux | ","$"
 
 STR_STATUS_SUFFIX:
-	.DB	"] | ^F:Format | ^S:Save | ^Q:Quit | ","$"
+	.DB	"^F:Fmt ^S:Save ^Q:Quit | ","$"
 
 STR_STATUS_POS:
-	.DB	"","$"
+	.DB	"Row ","$"
+
+STR_STATUS_COL:
+	.DB	", Col ","$"
 
 MSG_EXIT:
 	.DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
@@ -2137,7 +2138,7 @@ WORK_FCB:	.DS	36
 		.DS	512
 LOCAL_STACK:
 
-; 40 lines x 128 bytes stride line storage buffer in local TPA (5120 bytes)
-LINE_STORAGE:	.DS	5120
+; 200 lines x 128 bytes stride line storage buffer in local TPA (25,600 bytes)
+LINE_STORAGE:	.DS	25600
 
 	.END
