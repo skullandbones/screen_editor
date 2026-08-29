@@ -935,7 +935,15 @@ CALC_VIS_NEXT:
 	JR	NZ,CALC_VIS_LOOP
 
 CALC_VIS_DONE:
+	LD	A,(ACTIVE_COLS)
+	DEC	A			; A = max visual column (ACTIVE_COLS - 1: 119 or 79)
+	CP	B
+	JR	C,CLAMP_VIS_COL
 	LD	A,B
+	JR	EXIT_CALC_VIS
+CLAMP_VIS_COL:
+	; A is already ACTIVE_COLS - 1
+EXIT_CALC_VIS:
 	POP	HL
 	POP	DE
 	POP	BC
@@ -1085,7 +1093,7 @@ CURSOR_END:
 
 ;------------------------------------------------------------------------------
 ; Get Length of Current Line at CUR_ROW
-; Returns: B = Line length (0..120), HL = Pointer to start of line
+; Returns: B = Byte length (0..126), C = Visual length (0..ACTIVE_COLS), HL = line start
 ; Preserves: DE
 ;------------------------------------------------------------------------------
 GET_CUR_ROW_LEN:
@@ -1102,17 +1110,36 @@ GET_CUR_ROW_LEN:
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE			; HL = line start
 	PUSH	HL			; Save line start
-	LD	B,0
+
+	LD	B,0			; B = byte count
+	LD	C,0			; C = visual column accumulator
 GET_ROW_LEN_LOOP:
 	LD	A,(HL)
 	OR	A
 	JR	Z,GET_ROW_LEN_DONE
-	INC	HL
+	CP	KEY_TAB
+	JR	Z,GET_ROW_TAB
 	INC	B
+	INC	C
+	JR	GET_ROW_NEXT
+
+GET_ROW_TAB:
+	INC	B
+	LD	A,C
+	AND	7
+	LD	E,A
+	LD	A,8
+	SUB	E			; spaces to add
+	ADD	A,C
+	LD	C,A
+
+GET_ROW_NEXT:
+	INC	HL
 	LD	A,B
 	CP	MAX_LINE_STRIDE-2
 	JR	NC,GET_ROW_LEN_DONE
 	JR	GET_ROW_LEN_LOOP
+
 GET_ROW_LEN_DONE:
 	POP	HL			; HL = line start
 	RET
@@ -1262,10 +1289,22 @@ CL_NO_SCROLL:
 	RET
 
 CURSOR_RIGHT:
-	CALL	GET_CUR_ROW_LEN		; B = current line byte length
+	CALL	GET_CUR_ROW_LEN		; B = current line byte length, C = visual length
 	LD	A,(CUR_COL)
 	CP	B
 	JR	NC,CURSOR_RIGHT_NEXT_LINE ; If at or past EOL, wrap to next line!
+
+	; Check if visual cursor is already at ACTIVE_COLS - 1 (col 119 or 79)
+	CALL	CALC_VISUAL_COL
+	LD	D,A
+	LD	A,(ACTIVE_COLS)
+	DEC	A
+	CP	D
+	JR	Z,CURSOR_RIGHT_NEXT_LINE ; If at column 119, wrap to next line!
+	JR	C,CURSOR_RIGHT_NEXT_LINE
+
+	INC	A
+	LD	A,(CUR_COL)
 	INC	A
 	LD	(CUR_COL),A
 	CALL	CALC_VISUAL_COL
@@ -1321,36 +1360,39 @@ DO_CHAR_INSERT:
 	LD	(TOTAL_LINES),A
 
 ROW_IN_BOUNDS:
-	CALL	GET_CUR_ROW_LEN		; HL = line start, B = current line text length
+	CALL	GET_CUR_ROW_LEN		; HL = line start, B = byte length, C = visual length
 
-	; 3. Check screen width limit: Prevent line from exceeding ACTIVE_COLS (120 chars)
-	LD	A,(ACTIVE_COLS)
+	; 1. Check buffer byte capacity limit (126 bytes)
+	LD	A,MAX_LINE_STRIDE-2
 	CP	B
+	RET	C
+	RET	Z
+
+	; 2. Check visual screen width limit (ACTIVE_COLS: 120 or 80)
+	LD	A,(ACTIVE_COLS)
+	CP	C
 	JR	Z,CHECK_AT_EOL_REPLACE
 	JR	C,CHECK_AT_EOL_REPLACE
+
+	; If inserting a Tab, check if tab expansion would push visual length > ACTIVE_COLS
+	LD	A,(CHAR_INSERT_TEMP)
+	CP	KEY_TAB
+	JR	NZ,LINE_LEN_OK
+	CALL	CALC_VISUAL_COL		; A = visual col at CUR_COL
+	AND	7
+	LD	E,A
+	LD	A,8
+	SUB	E			; spaces added (1..8)
+	ADD	A,C			; projected visual length
+	DEC	A			; minus 1 for replaced slot
+	LD	E,A
+	LD	A,(ACTIVE_COLS)
+	CP	E
+	RET	C			; Tab would exceed screen width!
 	JR	LINE_LEN_OK
 
 CHECK_AT_EOL_REPLACE:
-	; Line is already at maximum capacity (>= ACTIVE_COLS).
-	; Only allow replacing the rightmost character at CUR_COL == ACTIVE_COLS - 1
-	LD	A,(ACTIVE_COLS)
-	DEC	A
-	LD	C,A
-	LD	A,(CUR_COL)
-	CP	C
-	RET	NZ			; If not at rightmost column, cannot insert into full line!
-
-	; Replace character at CUR_COL (ACTIVE_COLS - 1)
-	PUSH	HL
-	LD	E,C
-	LD	D,0
-	ADD	HL,DE			; HL = line_start + ACTIVE_COLS - 1
-	LD	A,(CHAR_INSERT_TEMP)
-	LD	(HL),A
-	INC	HL
-	XOR	A
-	LD	(HL),A			; Null terminate at ACTIVE_COLS
-	POP	HL
+	; Visual line is already at maximum capacity (>= ACTIVE_COLS)
 	RET
 
 LINE_LEN_OK:
@@ -1423,13 +1465,16 @@ PAD_SPACES_DONE:
 	POP	HL
 
 ADVANCE_INSERT_CURSOR:
-	; Check screen width boundary
-	LD	A,(ACTIVE_COLS)
-	DEC	A
+	; Check if visual cursor is already at or past ACTIVE_COLS - 1 (col 119 or 79)
+	CALL	CALC_VISUAL_COL		; A = visual col before advance
 	LD	B,A
-	LD	A,(CUR_COL)
+	LD	A,(ACTIVE_COLS)
+	DEC	A			; 119 or 79
 	CP	B
-	RET	NC
+	RET	C
+	RET	Z			; At column 119, cannot advance cursor further!
+
+	LD	A,(CUR_COL)
 	CP	MAX_LINE_STRIDE-2
 	RET	NC
 

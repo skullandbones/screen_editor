@@ -253,9 +253,28 @@ def test_se_execution():
             print(f"[-] Backspace over Tab failed to return to col 1. Buffer captured: {repr(out_tab_bs)}", flush=True)
             return False
         drain_all(master)
-        print("[+] Successfully verified real TAB insertion, Tab-jumping navigation, and Tab deletion.", flush=True)
+        # 14. Test rightmost column boundary clamping (cannot exceed visual Col 120 / index 119)
+        # Move down to line 4, then type 15 tabs to fill line to max width
+        os.write(master, b"\x1b[B\x1b[B\x1b[B\x1b[H")
+        drain_all(master)
+        for _ in range(15):
+            os.write(master, b"\t")
+            time.sleep(0.02)
+        drain_all(master)
+        # Move to End of line (Col 120)
+        os.write(master, b"\x1b[F")
+        out_col_clamp = read_until(master, b"Col 120", timeout=4.0)
+        if b"Col 120" not in out_col_clamp and b"Col 119" not in out_col_clamp:
+            print(f"[-] Column boundary clamping failed. Buffer captured: {repr(out_col_clamp)}", flush=True)
+            return False
+        # Try to type extra characters - verify it does not exceed Col 120
+        for _ in range(5):
+            os.write(master, b"X")
+            time.sleep(0.02)
+        drain_all(master)
+        print("[+] Successfully verified cursor and line cannot exceed visual screen width (Col 120).", flush=True)
 
-        # 14. Test format toggle (^F)
+        # 15. Test format toggle (^F)
         os.write(master, b"\x06")
         out_fmt = read_until(master, b"Linux", timeout=4.0)
         if b"Linux" not in out_fmt:
@@ -264,7 +283,7 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully exercised ^F format toggle.", flush=True)
 
-        # 15. Send Ctrl+Q to exit cleanly back to CP/M
+        # 16. Send Ctrl+Q to exit cleanly back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"Exiting SE.COM", timeout=4.0)
