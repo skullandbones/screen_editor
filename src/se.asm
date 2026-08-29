@@ -42,6 +42,9 @@ START:
 	LD	(SAVED_SP),SP
 	LD	SP,LOCAL_STACK
 
+	; Initialize Direct BIOS Console Vectors
+	CALL	INIT_BIOS_JUMPS
+
 	; Initialize Screen Geometry to Default (120x40)
 	CALL	SET_MODE_120X40
 
@@ -280,43 +283,71 @@ TERM_INIT:
 	CALL	PRINT_STR
 	RET
 
+INIT_BIOS_JUMPS:
+	LD	HL,(0001H)		; HL = Address of BIOS WBOOT (+3)
+	DEC	HL
+	DEC	HL
+	DEC	HL			; HL = BIOS Base (BOOT, +0)
+	LD	DE,6
+	ADD	HL,DE			; HL = BIOS CONST (+6)
+	LD	(BIOS_CONST_VEC),HL
+	INC	HL
+	INC	HL
+	INC	HL			; HL = BIOS CONIN (+9)
+	LD	(BIOS_CONIN_VEC),HL
+	INC	HL
+	INC	HL
+	INC	HL			; HL = BIOS CONOUT (+12)
+	LD	(BIOS_CONOUT_VEC),HL
+	RET
+
 PRINT_STR:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	C,9
-	CALL	BDOS_ENTRY
+	EX	DE,HL			; HL = pointer to string
+PRINT_STR_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,PRINT_STR_DONE
+	CP	'$'
+	JR	Z,PRINT_STR_DONE
+	CALL	PUTC
+	INC	HL
+	JR	PRINT_STR_LOOP
+PRINT_STR_DONE:
 	POP	HL
 	POP	DE
 	POP	BC
 	RET
 
 PUTC:
+	PUSH	AF
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	E,A
-	LD	C,2
-	CALL	BDOS_ENTRY
+	LD	C,A			; C = character for BIOS CONOUT
+	LD	HL,(BIOS_CONOUT_VEC)
+	CALL	CALL_HL
 	POP	HL
 	POP	DE
 	POP	BC
+	POP	AF
 	RET
 
 GET_KEY:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-GET_KEY_WAIT:
-	LD	E,0FFH
-	LD	C,6
-	CALL	BDOS_ENTRY
-	OR	A
-	JR	Z,GET_KEY_WAIT
+	LD	HL,(BIOS_CONIN_VEC)
+	CALL	CALL_HL			; Returns A = character
 	POP	HL
 	POP	DE
 	POP	BC
 	RET
+
+CALL_HL:
+	JP	(HL)
 
 ;------------------------------------------------------------------------------
 ; Command Line & FCB Initialization
@@ -745,15 +776,19 @@ PRINT_LINE_END:
 	RET
 
 LOCATE_STATUS_ROW:
-	LD	A,(SCREEN_MODE)
-	CP	MODE_120X40
-	JR	NZ,LOCATE_ROW_24
-	LD	DE,STR_GOTO_ROW_40
-	CALL	PRINT_STR
-	RET
-LOCATE_ROW_24:
-	LD	DE,STR_GOTO_ROW_24
-	CALL	PRINT_STR
+	; Move cursor to status row: ESC [ <ACTIVE_ROWS> ; 1 H
+	LD	A,27
+	CALL	PUTC
+	LD	A,'['
+	CALL	PUTC
+	LD	A,(ACTIVE_ROWS)
+	CALL	PRINT_DEC_BYTE
+	LD	A,';'
+	CALL	PUTC
+	LD	A,'1'
+	CALL	PUTC
+	LD	A,'H'
+	CALL	PUTC
 	RET
 
 RENDER_STATUS_BAR:
@@ -854,33 +889,107 @@ BUFFER_INIT:
 ;------------------------------------------------------------------------------
 ; VT100 Escape Sequence Handler (Arrow keys: Up, Down, Left, Right)
 ;------------------------------------------------------------------------------
+CHECK_KEY_READY:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	HL,(BIOS_CONST_VEC)
+	CALL	CALL_HL			; Returns A = 0xFF if char ready, 0x00 if not
+	POP	HL
+	POP	DE
+	POP	BC
+	OR	A
+	RET
+
 HANDLE_VT100_ESC:
-	; Check if next byte is '[' or 'O'
+	; Check if a character follows ESC within a short timeout
+	LD	BC,1000			; Timeout loop count
+WAIT_ESC_BYTE:
+	CALL	CHECK_KEY_READY
+	JR	NZ,GOT_ESC_BYTE
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,WAIT_ESC_BYTE
+	; Timeout: Standalone ESC key pressed (do not block or discard future keys)
+	RET
+
+GOT_ESC_BYTE:
 	CALL	GET_KEY
 	CP	'['
 	JR	Z,HANDLE_CSI
 	CP	'O'
 	JR	Z,HANDLE_CSI
+	CP	KEY_ESC
+	JR	Z,HANDLE_VT100_ESC
 	RET
 
 HANDLE_CSI:
 	CALL	GET_KEY
 	CP	'A'			; Up Arrow
-	JR	Z,CURSOR_UP
+	JP	Z,CURSOR_UP
 	CP	'B'			; Down Arrow
-	JR	Z,CURSOR_DOWN
+	JP	Z,CURSOR_DOWN
 	CP	'C'			; Right Arrow
-	JR	Z,CURSOR_RIGHT
+	JP	Z,CURSOR_RIGHT
 	CP	'D'			; Left Arrow
-	JR	Z,CURSOR_LEFT
+	JP	Z,CURSOR_LEFT
+	CP	'H'			; Home
+	JP	Z,CURSOR_HOME
+	CP	'F'			; End
+	JP	Z,CURSOR_END
 	CP	'3'			; Delete Key (ESC [ 3 ~)
-	JR	Z,HANDLE_CSI_DEL
+	JP	Z,HANDLE_CSI_DEL
+
+	; Check if parameter/modifier digits present (e.g. 1;2A, 1~, 4~)
+	CP	'0'
+	JR	C,CSI_DONE
+	CP	'9'+1
+	JR	C,HANDLE_CSI_LOOP
 	RET
 
 HANDLE_CSI_DEL:
 	; Consume trailing '~'
 	CALL	GET_KEY
 	CALL	DO_DELETE_FORWARD
+	RET
+
+HANDLE_CSI_LOOP:
+	CALL	GET_KEY
+	CP	'~'
+	RET	Z
+	CP	'A'
+	JP	Z,CURSOR_UP
+	CP	'B'
+	JP	Z,CURSOR_DOWN
+	CP	'C'
+	JP	Z,CURSOR_RIGHT
+	CP	'D'
+	JP	Z,CURSOR_LEFT
+	CP	'H'
+	JP	Z,CURSOR_HOME
+	CP	'F'
+	JP	Z,CURSOR_END
+	CP	';'
+	JR	Z,HANDLE_CSI_LOOP
+	CP	'0'
+	JR	C,CSI_DONE
+	CP	'9'+1
+	JR	C,HANDLE_CSI_LOOP
+CSI_DONE:
+	RET
+
+CURSOR_HOME:
+	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+	RET
+
+CURSOR_END:
+	CALL	GET_CUR_ROW_LEN
+	LD	A,B
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -2116,6 +2225,9 @@ SAMP_LINE3:
 ; Variables & Stack Area
 ;------------------------------------------------------------------------------
 SAVED_SP:	.DW	0
+BIOS_CONST_VEC:	.DW	0
+BIOS_CONIN_VEC:	.DW	0
+BIOS_CONOUT_VEC:.DW	0
 CPM_USER_BANK:	.DB	0
 TARGET_RAM_BANK:.DB	0
 RAM_BANK_COUNT:	.DB	0
