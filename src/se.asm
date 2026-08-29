@@ -118,6 +118,7 @@ DO_AUTO_LOAD:
 	XOR	A
 	LD	(CUR_ROW),A
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	JP	MAIN_LOOP
@@ -127,6 +128,7 @@ ENTER_EDITOR:
 	XOR	A
 	LD	(CUR_ROW),A
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 
@@ -872,12 +874,70 @@ HANDLE_CSI_DEL:
 	CALL	DO_DELETE_FORWARD
 	RET
 
+;------------------------------------------------------------------------------
+; Get Length of Current Line at CUR_ROW
+; Returns: B = Line length (0..120), HL = Pointer to start of line
+; Preserves: DE
+;------------------------------------------------------------------------------
+GET_CUR_ROW_LEN:
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = line start
+	PUSH	HL			; Save line start
+	LD	B,0
+GET_ROW_LEN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,GET_ROW_LEN_DONE
+	CP	'$'
+	JR	Z,GET_ROW_LEN_DONE
+	INC	HL
+	INC	B
+	LD	A,B
+	CP	MAX_LINE_STRIDE-2
+	JR	NC,GET_ROW_LEN_DONE
+	JR	GET_ROW_LEN_LOOP
+GET_ROW_LEN_DONE:
+	POP	HL			; HL = line start
+	RET
+
+;------------------------------------------------------------------------------
+; Adjust CUR_COL to Sticky TARGET_COL Clamped to Current Line Length
+; Preserves: TARGET_COL
+;------------------------------------------------------------------------------
+ADJUST_COL_TO_TARGET:
+	CALL	GET_CUR_ROW_LEN		; B = line length
+	LD	A,(ACTIVE_COLS)
+	DEC	A
+	CP	B
+	JR	C,ACT_USE_ACTIVE
+	LD	A,B			; Max column = min(line_length, ACTIVE_COLS - 1)
+ACT_USE_ACTIVE:
+	LD	C,A			; C = max valid column for this line
+	LD	A,(TARGET_COL)		; A = desired sticky column
+	CP	C
+	JR	C,ACT_SET_COL		; If TARGET_COL < max valid, use TARGET_COL
+	LD	A,C			; Otherwise clamp to max valid column
+ACT_SET_COL:
+	LD	(CUR_COL),A
+	RET
+
 CURSOR_UP:
 	LD	A,(CUR_ROW)
 	OR	A
 	RET	Z
 	DEC	A
 	LD	(CUR_ROW),A
+	CALL	ADJUST_COL_TO_TARGET
 	RET
 
 CURSOR_DOWN:
@@ -891,6 +951,7 @@ CURSOR_DOWN:
 	RET	NC			; If CUR_ROW >= TOTAL_LINES - 1, do not go past text
 	INC	A
 	LD	(CUR_ROW),A
+	CALL	ADJUST_COL_TO_TARGET
 	RET
 
 CURSOR_LEFT:
@@ -899,21 +960,24 @@ CURSOR_LEFT:
 	RET	Z
 	DEC	A
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A		; Horizontal movement updates sticky target column
 	RET
 
 CURSOR_RIGHT:
-	; Check screen width boundary
+	CALL	GET_CUR_ROW_LEN		; B = current line length
 	LD	A,(ACTIVE_COLS)
 	DEC	A
-	LD	B,A
-	LD	A,(CUR_COL)
 	CP	B
-	RET	NC
-	CP	MAX_LINE_STRIDE-2
-	RET	NC
-
+	JR	C,CR_USE_ACTIVE
+	LD	A,B			; Max column = min(line_length, ACTIVE_COLS - 1)
+CR_USE_ACTIVE:
+	LD	C,A
+	LD	A,(CUR_COL)
+	CP	C
+	RET	NC			; If CUR_COL >= max allowed on this line, cannot move further right
 	INC	A
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A		; Horizontal movement updates sticky target column
 	RET
 
 ;------------------------------------------------------------------------------
@@ -1078,6 +1142,7 @@ ADVANCE_INSERT_CURSOR:
 
 	INC	A
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A		; Sync sticky target column on typing
 	RET
 
 ;------------------------------------------------------------------------------
@@ -1090,6 +1155,7 @@ DO_DELETE_CHAR:
 
 	DEC	A
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A		; Sync sticky target column on Backspace
 
 	; Calculate delete target: LINE_STORAGE + (CUR_ROW * 128) + CUR_COL
 	LD	A,(CUR_ROW)
@@ -1316,6 +1382,7 @@ PREV_LINE_LEN_LOOP:
 PREV_LINE_LEN_DONE:
 	LD	A,B
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
 
 DEL_BLANK_AT_ROW0:
 	CALL	RENDER_SCREEN
@@ -1332,6 +1399,7 @@ CLEAR_SINGLE_LOOP:
 	XOR	A
 	LD	(CUR_ROW),A
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
 	LD	A,1
 	LD	(TOTAL_LINES),A
 	CALL	RENDER_SCREEN
@@ -1490,6 +1558,7 @@ SPLIT_COPY_DONE:
 	LD	(CUR_ROW),A
 	XOR	A
 	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
 	RET
 
 HBIOS_DETECT:
@@ -1982,6 +2051,7 @@ ACTIVE_COLS:	.DB	120		; Default 120 cols
 
 CUR_ROW:	.DB	0
 CUR_COL:	.DB	0
+TARGET_COL:	.DB	0		; Sticky column for vertical (Up/Down) movement
 CUR_RENDER_ROW:	.DB	0
 TOTAL_LINES:	.DB	0
 HAS_FILE_ARG:	.DB	0
