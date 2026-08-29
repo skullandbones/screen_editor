@@ -693,8 +693,6 @@ PRINT_CUR_LINE_LOOP:
 	LD	A,(HL)
 	OR	A
 	JR	Z,PRINT_CUR_LINE_DONE
-	CP	'$'
-	JR	Z,PRINT_CUR_LINE_DONE
 	CALL	PUTC
 	INC	HL
 	INC	B
@@ -730,8 +728,6 @@ RENDER_BUFFER_LINE:
 PRINT_LINE_CHARS:
 	LD	A,(HL)
 	OR	A
-	JR	Z,PRINT_LINE_END
-	CP	'$'
 	JR	Z,PRINT_LINE_END
 	CALL	PUTC
 	INC	HL
@@ -911,8 +907,6 @@ GET_ROW_LEN_LOOP:
 	LD	A,(HL)
 	OR	A
 	JR	Z,GET_ROW_LEN_DONE
-	CP	'$'
-	JR	Z,GET_ROW_LEN_DONE
 	INC	HL
 	INC	B
 	LD	A,B
@@ -1002,10 +996,36 @@ CUR_DOWN_NO_SCROLL:
 CURSOR_LEFT:
 	LD	A,(CUR_COL)
 	OR	A
-	RET	Z
+	JR	Z,CURSOR_LEFT_PREV_LINE
 	DEC	A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A		; Horizontal movement updates sticky target column
+	RET
+
+CURSOR_LEFT_PREV_LINE:
+	; Wrap to end of previous line if CUR_ROW > 0
+	LD	A,(CUR_ROW)
+	OR	A
+	RET	Z			; If at line 0, cannot wrap back
+	DEC	A
+	LD	(CUR_ROW),A
+	; Check if scrolled above top of viewport
+	LD	HL,TOP_LINE
+	CP	(HL)
+	JR	NC,CL_NO_SCROLL
+	LD	(HL),A
+	CALL	GET_CUR_ROW_LEN		; B = prev line length
+	LD	A,B
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+	CALL	RENDER_SCREEN
+	RET
+
+CL_NO_SCROLL:
+	CALL	GET_CUR_ROW_LEN		; B = prev line length
+	LD	A,B
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
 	RET
 
 CURSOR_RIGHT:
@@ -1019,10 +1039,43 @@ CR_USE_ACTIVE:
 	LD	C,A
 	LD	A,(CUR_COL)
 	CP	C
-	RET	NC			; If CUR_COL >= max allowed on this line, cannot move further right
+	JR	NC,CURSOR_RIGHT_NEXT_LINE ; If at or past EOL, wrap to next line!
 	INC	A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A		; Horizontal movement updates sticky target column
+	RET
+
+CURSOR_RIGHT_NEXT_LINE:
+	; Wrap to start of next line if CUR_ROW + 1 < TOTAL_LINES
+	LD	A,(TOTAL_LINES)
+	OR	A
+	RET	Z
+	DEC	A			; Max valid row = TOTAL_LINES - 1
+	LD	B,A
+	LD	A,(CUR_ROW)
+	CP	B
+	RET	NC			; If on last line, cannot wrap forward
+	INC	A
+	LD	(CUR_ROW),A
+	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+
+	; Check if scrolled past bottom of screen window
+	LD	A,(TOP_LINE)
+	LD	B,A
+	LD	A,(CUR_ROW)
+	SUB	B			; A = screen row
+	LD	C,A
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A			; A = max screen row index (ACTIVE_ROWS - 2)
+	CP	C
+	RET	NC			; If screen row <= max, no scroll
+	LD	A,(TOP_LINE)
+	INC	A
+	LD	(TOP_LINE),A
+	CALL	RENDER_SCREEN
 	RET
 
 ;------------------------------------------------------------------------------
@@ -1041,39 +1094,7 @@ DO_CHAR_INSERT:
 	LD	(TOTAL_LINES),A
 
 ROW_IN_BOUNDS:
-	; 1. Calculate pointer to start of current line: HL = LINE_STORAGE + (CUR_ROW * 128)
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = line start
-
-	; 2. Scan current line to find its length (first 0 or '$')
-	PUSH	HL			; Save line start
-	LD	B,0
-SCAN_LEN_LOOP:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SCAN_LEN_DONE
-	CP	'$'
-	JR	Z,SCAN_LEN_DONE
-	INC	HL
-	INC	B
-	LD	A,B
-	CP	MAX_LINE_STRIDE-2
-	JR	NC,SCAN_LEN_DONE
-	JR	SCAN_LEN_LOOP
-
-SCAN_LEN_DONE:
-	POP	HL			; HL = line start
-	; B = current line text length
+	CALL	GET_CUR_ROW_LEN		; HL = line start, B = current line text length
 
 	; 3. Check screen width limit: Prevent line from exceeding ACTIVE_COLS (120 chars)
 	LD	A,(ACTIVE_COLS)
@@ -1249,7 +1270,7 @@ DO_DELETE_FORWARD:
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE			; HL = line_start
 
-	; Check if (line_start + CUR_COL) is at or beyond end of line (0 or '$')
+	; Check if (line_start + CUR_COL) is at or beyond end of line (0)
 	PUSH	HL
 	LD	A,(CUR_COL)
 	LD	E,A
@@ -1257,8 +1278,6 @@ DO_DELETE_FORWARD:
 	ADD	HL,DE			; HL = character to delete under cursor
 	LD	A,(HL)
 	OR	A
-	JR	Z,DEL_FWD_AT_EOL
-	CP	'$'
 	JR	Z,DEL_FWD_AT_EOL
 
 	; Character exists under cursor: shift characters left from HL+1 into HL
@@ -1268,8 +1287,6 @@ DEL_FWD_SHIFT_LOOP:
 	DEC	HL
 	LD	(HL),A
 	OR	A
-	JR	Z,DEL_FWD_DONE
-	CP	'$'
 	JR	Z,DEL_FWD_DONE
 	INC	HL
 	JR	DEL_FWD_SHIFT_LOOP
@@ -1306,14 +1323,12 @@ DO_DELETE_BLANK_LINE:
 	LD	DE,LINE_STORAGE
 	ADD	HL,DE			; HL = current line start
 
-	; 2. Check if current line is blank (only spaces, null, or '$')
+	; 2. Check if current line is blank (only spaces or null)
 	PUSH	HL
 	LD	B,0
 CHECK_BLANK_SCAN:
 	LD	A,(HL)
 	OR	A
-	JR	Z,LINE_CONFIRMED_BLANK
-	CP	'$'
 	JR	Z,LINE_CONFIRMED_BLANK
 	CP	' '
 	JR	NZ,LINE_HAS_TEXT
@@ -1419,8 +1434,6 @@ DEL_BLANK_NO_SCROLL:
 PREV_LINE_LEN_LOOP:
 	LD	A,(HL)
 	OR	A
-	JR	Z,PREV_LINE_LEN_DONE
-	CP	'$'
 	JR	Z,PREV_LINE_LEN_DONE
 	INC	HL
 	INC	B
@@ -1564,8 +1577,6 @@ INSERT_SCAN_LEN:
 	LD	A,(HL)
 	OR	A
 	JR	Z,INSERT_SCAN_DONE
-	CP	'$'
-	JR	Z,INSERT_SCAN_DONE
 	INC	HL
 	INC	B
 	LD	A,B
@@ -1591,8 +1602,6 @@ INSERT_SCAN_DONE:
 SPLIT_COPY_LOOP:
 	LD	A,(HL)
 	OR	A
-	JR	Z,SPLIT_COPY_DONE
-	CP	'$'
 	JR	Z,SPLIT_COPY_DONE
 	LD	(DE),A
 	LD	(HL),0			; Truncate old line at split point
