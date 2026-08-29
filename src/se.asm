@@ -2121,7 +2121,7 @@ STR_SPLASH_BODY:
 	.DB	13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~             SE - Screen Editor              ",13,10
-	.DB	"                  ~                version 0.3.3                ",13,10
+	.DB	"                  ~                version 0.4.0                ",13,10
 	.DB	"                  ~              by Dean Jenkins                ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       SE is open source and freely usable   ",13,10
@@ -2183,7 +2183,7 @@ STR_TEST_PROMPT:
 	.DB	"Press any key to return to Splash Screen...$"
 
 STR_STATUS_PREFIX:
-	.DB	" SE v0.3.3 | ","$"
+	.DB	" SE v0.4.0 | ","$"
 
 STR_STATUS_120X40:
 	.DB	"120x40 | ","$"
