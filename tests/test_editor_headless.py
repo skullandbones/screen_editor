@@ -221,22 +221,39 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified Delete key (ESC [ 3 ~) and Ctrl+D forward deletion.")
 
-        # 13. Test Tab key (8-character tab stops)
-        # Press Tab at (1,0) -> advances to (1,8)
+        # 13. Test Real Tab character insertion & Tab-jumping navigation
+        # Press Tab at (1,0) -> advances visual cursor to (1,8) -> displayed as Col 9 (1-indexed)
         os.write(master, b"\t")
-        out_tab1 = read_until(master, b"Row 1, Col 8", timeout=4.0)
-        if b"Row 1, Col 8" not in out_tab1:
-            print(f"[-] Tab key from col 0 failed to reach col 8. Buffer captured: {repr(out_tab1)}", flush=True)
+        out_tab1 = read_until(master, b"Row 1, Col 9", timeout=4.0)
+        if b"Row 1, Col 9" not in out_tab1:
+            print(f"[-] Tab key from col 0 failed to reach col 9. Buffer captured: {repr(out_tab1)}", flush=True)
             return False
         drain_all(master)
-        # Press Tab again at (1,8) -> advances to (1,16)
-        os.write(master, b"\t")
-        out_tab2 = read_until(master, b"Row 1, Col 16", timeout=4.0)
-        if b"Row 1, Col 16" not in out_tab2:
-            print(f"[-] Tab key from col 8 failed to reach col 16. Buffer captured: {repr(out_tab2)}", flush=True)
+
+        # Test Cursor Left jumping across the Tab in a single keystroke
+        os.write(master, b"\x1b[D")
+        out_tab_left = read_until(master, b"Row 1, Col 1", timeout=4.0)
+        if b"Row 1, Col 1" not in out_tab_left:
+            print(f"[-] Left arrow over Tab failed to jump back to col 1. Buffer captured: {repr(out_tab_left)}", flush=True)
             return False
         drain_all(master)
-        print("[+] Successfully verified Tab key 8-character tab stop alignment.", flush=True)
+
+        # Test Cursor Right jumping across the Tab in a single keystroke
+        os.write(master, b"\x1b[C")
+        out_tab_right = read_until(master, b"Row 1, Col 9", timeout=4.0)
+        if b"Row 1, Col 9" not in out_tab_right:
+            print(f"[-] Right arrow over Tab failed to jump forward to col 9. Buffer captured: {repr(out_tab_right)}", flush=True)
+            return False
+        drain_all(master)
+
+        # Test Backspace deleting the entire Tab in a single keystroke
+        os.write(master, b"\x08")
+        out_tab_bs = read_until(master, b"Row 1, Col 1", timeout=4.0)
+        if b"Row 1, Col 1" not in out_tab_bs:
+            print(f"[-] Backspace over Tab failed to return to col 1. Buffer captured: {repr(out_tab_bs)}", flush=True)
+            return False
+        drain_all(master)
+        print("[+] Successfully verified real TAB insertion, Tab-jumping navigation, and Tab deletion.", flush=True)
 
         # 14. Test format toggle (^F)
         os.write(master, b"\x06")

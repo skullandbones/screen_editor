@@ -225,23 +225,11 @@ DO_INSERT_CHAR:
 	JR	MAIN_LOOP
 
 ;------------------------------------------------------------------------------
-; Tab Key Insertion at (CUR_ROW, CUR_COL) - Expands to 8-column tab stops
+; Tab Key Insertion at (CUR_ROW, CUR_COL) - Inserts real ASCII 0x09 TAB byte
 ;------------------------------------------------------------------------------
 DO_TAB_INSERT:
-	; Calculate K = 8 - (CUR_COL & 7)
-	LD	A,(CUR_COL)
-	AND	7
-	LD	C,A
-	LD	A,8
-	SUB	C			; A = K (1..8 spaces to insert)
-	LD	B,A			; B = loop counter
-
-TAB_INSERT_SPACE_LOOP:
-	PUSH	BC
-	LD	A,' '			; Insert a single space using proven DO_CHAR_INSERT
+	LD	A,KEY_TAB		; Insert literal ASCII 0x09 Tab byte
 	CALL	DO_CHAR_INSERT
-	POP	BC
-	DJNZ	TAB_INSERT_SPACE_LOOP
 	RET
 
 EXIT_PROGRAM:
@@ -719,17 +707,38 @@ RENDER_CURRENT_LINE:
 	ADD	HL,DE
 
 PRINT_CUR_LINE_CHARS:
-	LD	B,0
+	LD	B,0			; B = visual column accumulator
 PRINT_CUR_LINE_LOOP:
 	LD	A,(HL)
 	OR	A
 	JR	Z,PRINT_CUR_LINE_DONE
+	CP	KEY_TAB
+	JR	Z,PRINT_CUR_TAB
 	CALL	PUTC
 	INC	HL
 	INC	B
 	LD	A,(ACTIVE_COLS)
 	CP	B
 	JR	Z,PRINT_CUR_LINE_DONE
+	JR	PRINT_CUR_LINE_LOOP
+
+PRINT_CUR_TAB:
+	INC	HL
+	LD	A,B
+	AND	7
+	LD	C,A
+	LD	A,8
+	SUB	C			; A = spaces to emit (1..8)
+	LD	C,A
+PRINT_CUR_TAB_SPACES:
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,PRINT_CUR_LINE_DONE
+	LD	A,' '
+	CALL	PUTC
+	INC	B
+	DEC	C
+	JR	NZ,PRINT_CUR_TAB_SPACES
 	JR	PRINT_CUR_LINE_LOOP
 
 PRINT_CUR_LINE_DONE:
@@ -755,17 +764,38 @@ RENDER_BUFFER_LINE:
 	ADD	HL,DE
 
 	; Print characters directly
-	LD	B,0
+	LD	B,0			; B = visual column accumulator
 PRINT_LINE_CHARS:
 	LD	A,(HL)
 	OR	A
 	JR	Z,PRINT_LINE_END
+	CP	KEY_TAB
+	JR	Z,PRINT_LINE_TAB
 	CALL	PUTC
 	INC	HL
 	INC	B
 	LD	A,(ACTIVE_COLS)
 	CP	B
 	JR	Z,PRINT_LINE_END
+	JR	PRINT_LINE_CHARS
+
+PRINT_LINE_TAB:
+	INC	HL
+	LD	A,B
+	AND	7
+	LD	C,A
+	LD	A,8
+	SUB	C
+	LD	C,A
+PRINT_LINE_TAB_SPACES:
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,PRINT_LINE_END
+	LD	A,' '
+	CALL	PUTC
+	INC	B
+	DEC	C
+	JR	NZ,PRINT_LINE_TAB_SPACES
 	JR	PRINT_LINE_CHARS
 
 PRINT_LINE_END:
@@ -836,7 +866,8 @@ SHOW_STATUS_REST:
 	CALL	PRINT_DEC_BYTE
 	LD	DE,STR_STATUS_COL
 	CALL	PRINT_STR
-	LD	A,(CUR_COL)		; 0-indexed
+	CALL	CALC_VISUAL_COL		; A = Visual column (0-indexed)
+	INC	A			; 1-indexed for status bar
 	CALL	PRINT_DEC_BYTE
 	LD	A,' '
 	CALL	PUTC
@@ -850,8 +881,68 @@ SHOW_STATUS_REST:
 	CALL	LOCATE_CURSOR
 	RET
 
+;------------------------------------------------------------------------------
+; Calculate Visual Screen Column from (CUR_ROW, CUR_COL)
+; Returns: A = Visual Column (0-indexed, 0..ACTIVE_COLS-1)
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+CALC_VISUAL_COL:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; Calculate line start pointer: HL = LINE_STORAGE + (CUR_ROW * 128)
+	LD	A,(CUR_ROW)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = line start
+
+	LD	A,(CUR_COL)
+	LD	C,A			; C = character count to process
+	LD	B,0			; B = visual column accumulator
+	OR	A
+	JR	Z,CALC_VIS_DONE
+
+CALC_VIS_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,CALC_VIS_DONE
+	CP	KEY_TAB
+	JR	Z,CALC_VIS_TAB
+	INC	B
+	JR	CALC_VIS_NEXT
+
+CALC_VIS_TAB:
+	LD	A,B
+	AND	7
+	LD	E,A
+	LD	A,8
+	SUB	E			; A = spaces to add
+	ADD	A,B
+	LD	B,A
+
+CALC_VIS_NEXT:
+	INC	HL
+	DEC	C
+	JR	NZ,CALC_VIS_LOOP
+
+CALC_VIS_DONE:
+	LD	A,B
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
 LOCATE_CURSOR:
-	; Emit ESC [ <ScreenRow+1> ; <Col+1> H
+	; Emit ESC [ <ScreenRow+1> ; <VisualCol+1> H
 	LD	A,27
 	CALL	PUTC
 	LD	A,'['
@@ -868,8 +959,8 @@ LOCATE_CURSOR:
 	LD	A,';'
 	CALL	PUTC
 
-	; Col (1-indexed)
-	LD	A,(CUR_COL)
+	; Visual Column (1-indexed)
+	CALL	CALC_VISUAL_COL		; A = visual column (0-indexed)
 	INC	A
 	CALL	PRINT_DEC_BYTE
 
@@ -1027,23 +1118,53 @@ GET_ROW_LEN_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Adjust CUR_COL to Sticky TARGET_COL Clamped to Current Line Length
+; Adjust CUR_COL to Match Sticky TARGET_COL (Visual Column) on Current Line
 ; Preserves: TARGET_COL
 ;------------------------------------------------------------------------------
 ADJUST_COL_TO_TARGET:
-	CALL	GET_CUR_ROW_LEN		; B = line length
-	LD	A,(ACTIVE_COLS)
-	DEC	A
+	CALL	GET_CUR_ROW_LEN		; HL = line start, B = byte length
+	LD	C,0			; C = character index (0..B)
+	LD	E,0			; E = visual column accumulator
+
+MAP_TARGET_LOOP:
+	LD	A,C
 	CP	B
-	JR	C,ACT_USE_ACTIVE
-	LD	A,B			; Max column = min(line_length, ACTIVE_COLS - 1)
-ACT_USE_ACTIVE:
-	LD	C,A			; C = max valid column for this line
-	LD	A,(TARGET_COL)		; A = desired sticky column
-	CP	C
-	JR	C,ACT_SET_COL		; If TARGET_COL < max valid, use TARGET_COL
-	LD	A,C			; Otherwise clamp to max valid column
-ACT_SET_COL:
+	JR	NC,SET_TARGET_CHAR_IDX	; At end of line, use max char index (B)
+
+	; Peek character at line_start + C
+	PUSH	HL
+	PUSH	BC
+	LD	B,0
+	ADD	HL,BC
+	LD	A,(HL)
+	POP	BC
+	POP	HL
+
+	; Calculate next visual column
+	CP	KEY_TAB
+	JR	Z,MAP_TARGET_TAB
+	INC	E
+	JR	MAP_TARGET_CHECK
+
+MAP_TARGET_TAB:
+	LD	A,E
+	AND	7
+	LD	D,A
+	LD	A,8
+	SUB	D
+	ADD	A,E
+	LD	E,A
+
+MAP_TARGET_CHECK:
+	; If next visual column > TARGET_COL, current C is the closest character!
+	LD	A,(TARGET_COL)
+	CP	E
+	JR	C,SET_TARGET_CHAR_IDX
+	INC	C
+	JR	MAP_TARGET_LOOP
+
+SET_TARGET_CHAR_IDX:
+	LD	A,C
 	LD	(CUR_COL),A
 	RET
 
@@ -1108,7 +1229,8 @@ CURSOR_LEFT:
 	JR	Z,CURSOR_LEFT_PREV_LINE
 	DEC	A
 	LD	(CUR_COL),A
-	LD	(TARGET_COL),A		; Horizontal movement updates sticky target column
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A		; Horizontal movement updates sticky target visual column
 	RET
 
 CURSOR_LEFT_PREV_LINE:
@@ -1126,6 +1248,7 @@ CURSOR_LEFT_PREV_LINE:
 	CALL	GET_CUR_ROW_LEN		; B = prev line length
 	LD	A,B
 	LD	(CUR_COL),A
+	CALL	CALC_VISUAL_COL
 	LD	(TARGET_COL),A
 	CALL	RENDER_SCREEN
 	RET
@@ -1134,24 +1257,19 @@ CL_NO_SCROLL:
 	CALL	GET_CUR_ROW_LEN		; B = prev line length
 	LD	A,B
 	LD	(CUR_COL),A
+	CALL	CALC_VISUAL_COL
 	LD	(TARGET_COL),A
 	RET
 
 CURSOR_RIGHT:
-	CALL	GET_CUR_ROW_LEN		; B = current line length
-	LD	A,(ACTIVE_COLS)
-	DEC	A
-	CP	B
-	JR	C,CR_USE_ACTIVE
-	LD	A,B			; Max column = min(line_length, ACTIVE_COLS - 1)
-CR_USE_ACTIVE:
-	LD	C,A
+	CALL	GET_CUR_ROW_LEN		; B = current line byte length
 	LD	A,(CUR_COL)
-	CP	C
+	CP	B
 	JR	NC,CURSOR_RIGHT_NEXT_LINE ; If at or past EOL, wrap to next line!
 	INC	A
 	LD	(CUR_COL),A
-	LD	(TARGET_COL),A		; Horizontal movement updates sticky target column
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A		; Horizontal movement updates sticky target visual column
 	RET
 
 CURSOR_RIGHT_NEXT_LINE:
@@ -1317,7 +1435,8 @@ ADVANCE_INSERT_CURSOR:
 
 	INC	A
 	LD	(CUR_COL),A
-	LD	(TARGET_COL),A		; Sync sticky target column on typing
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A		; Sync sticky target visual column on typing
 	RET
 
 ;------------------------------------------------------------------------------
@@ -1330,7 +1449,8 @@ DO_DELETE_CHAR:
 
 	DEC	A
 	LD	(CUR_COL),A
-	LD	(TARGET_COL),A		; Sync sticky target column on Backspace
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A		; Sync sticky target visual column on Backspace
 
 	; Calculate delete target: LINE_STORAGE + (CUR_ROW * 128) + CUR_COL
 	LD	A,(CUR_ROW)
@@ -2217,9 +2337,9 @@ SAMP_LINE0:
 SAMP_LINE1:
 	.DB	"; Press ^F to toggle save format between CP/M [CRLF] and Linux [LF]",0
 SAMP_LINE2:
-	.DB	"START:  LD A,0          ; Initial register setup",0
+	.DB	"START:",9,"LD A,0",9,"; Initial register setup",0
 SAMP_LINE3:
-	.DB	"        RET             ; End of sample program",0
+	.DB	9,"RET",9,9,"; End of sample program",0
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
