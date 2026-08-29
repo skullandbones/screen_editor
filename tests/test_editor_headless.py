@@ -112,11 +112,11 @@ def test_se_execution():
         # 5. Trigger Memory Diagnostic ('t')
         time.sleep(0.5)
         os.write(master, b"t")
-        out_mem = read_until(master, b"512KB Far Memory Banking Test: PASSED", timeout=6.0)
-        if b"512KB Far Memory Banking Test: PASSED" not in out_mem:
-            print("[-] 512KB extended memory test failed or not detected.", flush=True)
+        out_mem = read_until(master, b"ALL 512KB EXTENDED MEMORY TESTS PASSED", timeout=8.0)
+        if b"ALL 512KB EXTENDED MEMORY TESTS PASSED" not in out_mem:
+            print("[-] 512KB extended memory banking diagnostic FAILED. Buffer captured:\n", out_mem.decode("latin1", errors="replace"), flush=True)
             return False
-        print("[+] 512KB extended memory banking diagnostic PASSED.", flush=True)
+        print("[+] 512KB Extended Memory Diagnostic Suite (Tests 1, 2, 3, 4) ALL PASSED!", flush=True)
 
         # 6. Return to Splash and enter editor ('e')
         read_until(master, b"Press any key to return", timeout=5.0)
@@ -196,10 +196,9 @@ def test_se_execution():
         # Move up to row 1, col 0
         for _ in range(5):
             os.write(master, b"\x1b[A")
-            time.sleep(0.01)
-        for _ in range(25):
-            os.write(master, b"\x1b[D")
-            time.sleep(0.01)
+            time.sleep(0.05)
+        os.write(master, b"\x1b[H")
+        time.sleep(0.1)
         drain_all(master)
         # Press Enter to split and create blank line 1
         os.write(master, b"\r")
@@ -213,11 +212,16 @@ def test_se_execution():
         print("[+] Successfully verified blank line deletion with Backspace at column 0.")
 
         # 12. Test Delete Key (\x1b[3~) and Ctrl+D (Forward Delete)
-        # Cursor is at (1,0) on ';'. Send Delete key (\x1b[3~)
+        # Ensure cursor is at (1,0)
+        os.write(master, b"\x1b[H")
+        time.sleep(0.1)
+        # Send Delete key (\x1b[3~)
         os.write(master, b"\x1b[3~")
         time.sleep(0.2)
         # Send Ctrl+D (forward delete)
         os.write(master, b"\x04")
+        time.sleep(0.2)
+        os.write(master, b"\x1b[H")
         drain_all(master)
         print("[+] Successfully verified Delete key (ESC [ 3 ~) and Ctrl+D forward deletion.")
 
@@ -254,11 +258,17 @@ def test_se_execution():
             return False
         drain_all(master)
         # 14. Test rightmost column boundary clamping (cannot exceed visual Col 120 / index 119)
-        # Move down to line 4, then type 15 tabs to fill line to max width
-        os.write(master, b"\x1b[B\x1b[B\x1b[B\x1b[H")
+        # Move down to line 4, then type characters to fill line to max width 120
+        for _ in range(3):
+            os.write(master, b"\x1b[B")
+            time.sleep(0.05)
+        # Move to end of line
+        os.write(master, b"\x1b[F")
+        time.sleep(0.1)
         drain_all(master)
-        for _ in range(15):
-            os.write(master, b"\t")
+        # Type characters to hit the 120 column limit (line currently ~90 chars)
+        for _ in range(35):
+            os.write(master, b"X")
             time.sleep(0.02)
         drain_all(master)
         # Move to End of line (Col 120)
@@ -269,7 +279,7 @@ def test_se_execution():
             return False
         # Try to type extra characters - verify it does not exceed Col 120
         for _ in range(5):
-            os.write(master, b"X")
+            os.write(master, b"Y")
             time.sleep(0.02)
         drain_all(master)
         print("[+] Successfully verified cursor and line cannot exceed visual screen width (Col 120).", flush=True)

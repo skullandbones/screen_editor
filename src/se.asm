@@ -15,7 +15,9 @@ CMD_LEN		.EQU	$0080
 CMD_TAIL	.EQU	$0081
 
 MAX_LINE_STRIDE	.EQU	128		; 128 bytes stride per line buffer
-MAX_BUFFER_LINES .EQU	200		; Up to 200 lines in local memory buffer (25.6 KB)
+MAX_FAR_BANKS	.EQU	14		; Up to 14 extended 32KB RAM banks (448 KB)
+CACHE_SIZE_LINES .EQU	128		; 128 lines in local working cache (16 KB)
+MAX_DOC_LINES	.EQU	3584		; 14 banks * 256 lines = 3584 total lines
 
 KEY_CTRL_C	.EQU	3
 KEY_CTRL_Q	.EQU	17
@@ -51,7 +53,7 @@ START:
 	; Initialize Terminal (Clear Screen & Home)
 	CALL	TERM_INIT
 
-	; Query RomWBW User Bank
+	; Query RomWBW User Bank and Initialize Far RAM Banks
 	CALL	BUFFER_INIT
 
 	; Check if filename was provided in FCB1
@@ -62,7 +64,33 @@ START:
 	OR	A
 	JR	NZ,DO_AUTO_LOAD
 
-	; Otherwise, display Vim-style Splash Screen
+	; Otherwise show splash screen
+	JP	SPLASH_START
+
+DO_AUTO_LOAD:
+	CALL	LOAD_FILE
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+	LD	(TOP_DOC_ROW),HL
+	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	JP	MAIN_LOOP
+
+ENTER_EDITOR:
+	CALL	LOAD_SAMPLE_BUFFER
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+	LD	(TOP_DOC_ROW),HL
+	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	JP	MAIN_LOOP
+
 SPLASH_START:
 	CALL	RENDER_SPLASH
 
@@ -115,27 +143,6 @@ DO_MEM_TEST:
 	CALL	RUN_MEM_TEST
 	CALL	GET_KEY
 	JR	SPLASH_START
-
-DO_AUTO_LOAD:
-	CALL	LOAD_FILE
-	XOR	A
-	LD	(CUR_ROW),A
-	LD	(CUR_COL),A
-	LD	(TARGET_COL),A
-	LD	(TOP_LINE),A
-	CALL	TERM_INIT
-	CALL	RENDER_SCREEN
-	JP	MAIN_LOOP
-
-ENTER_EDITOR:
-	CALL	LOAD_SAMPLE_BUFFER
-	XOR	A
-	LD	(CUR_ROW),A
-	LD	(CUR_COL),A
-	LD	(TARGET_COL),A
-	LD	(TOP_LINE),A
-	CALL	TERM_INIT
-	CALL	RENDER_SCREEN
 
 MAIN_LOOP:
 	CALL	GET_KEY
@@ -392,7 +399,7 @@ RENDER_SPLASH_CONT:
 	RET
 
 ;------------------------------------------------------------------------------
-; 512KB Extended Memory Diagnostic (RomWBW HBIOS RST 08H)
+; 512KB Extended Memory Diagnostic Suite (RomWBW HBIOS RST 08H)
 ;------------------------------------------------------------------------------
 RUN_MEM_TEST:
 	LD	DE,STR_CLEAR_SCREEN
@@ -412,7 +419,7 @@ TEST_HBIOS_OK:
 	LD	DE,STR_TEST_HBIOS_OK
 	CALL	PRINT_STR
 
-	; Query Memory Bank Info (SYSGET 0xF1)
+	; 1. Query System Memory Configuration (SYSGET 0xF1)
 	PUSH	IX
 	LD	B,0F8H
 	LD	C,0F1H
@@ -424,6 +431,7 @@ TEST_HBIOS_OK:
 	LD	A,E
 	LD	(RAM_BANK_COUNT),A
 
+	; Print Total RAM Banks
 	LD	DE,STR_TEST_RAM_BANKS
 	CALL	PRINT_STR
 	LD	A,(RAM_BANK_COUNT)
@@ -431,7 +439,7 @@ TEST_HBIOS_OK:
 	LD	DE,STR_TEST_RAM_BANKS_END
 	CALL	PRINT_STR
 
-	; Print Active CP/M Bank
+	; Print Active CP/M User Bank
 	LD	DE,STR_TEST_CUR_BANK
 	CALL	PRINT_STR
 	LD	A,(CPM_USER_BANK)
@@ -439,40 +447,53 @@ TEST_HBIOS_OK:
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
-	; Set Target RAM Bank
-	LD	A,(CPM_USER_BANK)
-	CP	080H
-	JR	NZ,USE_RAM_BANK_80
-	LD	A,081H
-	JR	SET_TARGET_BANK
+	; Initialize and Discover Far RAM Banks
+	CALL	INIT_FAR_RAM_BANKS
 
-USE_RAM_BANK_80:
-	LD	A,080H
-
-SET_TARGET_BANK:
-	LD	(TARGET_RAM_BANK),A
-
-	LD	DE,STR_TEST_TARGET_BANK
+	; Print Discovered Far RAM Banks list
+	LD	DE,STR_TEST_DISCOVERED
 	CALL	PRINT_STR
-	LD	A,(TARGET_RAM_BANK)
+	LD	A,(EXT_BANK_COUNT)
+	CALL	PRINT_DEC_BYTE
+	LD	DE,STR_TEST_BANKS_LIST
+	CALL	PRINT_STR
+
+	; Print Bank IDs
+	LD	A,(EXT_BANK_COUNT)
+	OR	A
+	JR	Z,TEST_NO_FAR_BANKS
+	LD	B,A
+	LD	HL,EXT_BANK_TABLE
+PRINT_FAR_BANKS_LOOP:
+	LD	A,(HL)
 	CALL	PRINT_HEX_BYTE
+	LD	A,' '
+	CALL	PUTC
+	INC	HL
+	DJNZ	PRINT_FAR_BANKS_LOOP
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
-	LD	DE,STR_TEST_BANK_COPY
+	LD	DE,STR_TEST_CAPACITY
 	CALL	PRINT_STR
 
-	; 1. Prepare test pattern in local memory
+	; -------------------------------------------------------------------------
+	; TEST 1: Direct Inter-Bank DMA Copy (SYSBNKCPY 0xF5)
+	; -------------------------------------------------------------------------
+	LD	DE,STR_TEST1_TITLE
+	CALL	PRINT_STR
+
+	; Prepare 2-byte test pattern in local memory
 	LD	HL,TEST_PATTERN
 	LD	(HL),0AAH
 	INC	HL
 	LD	(HL),055H
 
-	; 2. SYSSETCPY: Copy local pattern to TARGET_RAM_BANK at offset 0x1000
+	; SYSSETCPY: Copy local pattern to EXT_BANK_TABLE[0] at offset 0x1000
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
-	LD	A,(TARGET_RAM_BANK)
-	LD	D,A			; Dest Bank = Target Upper RAM Bank
+	LD	A,(EXT_BANK_TABLE)
+	LD	D,A			; Dest Bank = Target Far RAM Bank
 	LD	A,(CPM_USER_BANK)
 	LD	E,A			; Src Bank = CP/M User Bank
 	LD	HL,2			; Count = 2 bytes
@@ -486,19 +507,19 @@ SET_TARGET_BANK:
 	RST	08H
 	POP	IX
 
-	; 3. Clear readback buffer
+	; Clear readback buffer
 	LD	HL,TEST_READBACK
 	LD	(HL),0
 	INC	HL
 	LD	(HL),0
 
-	; 4. SYSSETCPY: Copy from TARGET_RAM_BANK back to local buffer
+	; SYSSETCPY: Copy from Far RAM back to local buffer
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
 	LD	A,(CPM_USER_BANK)
 	LD	D,A			; Dest Bank = User Bank
-	LD	A,(TARGET_RAM_BANK)
-	LD	E,A			; Src Bank = Target RAM Bank
+	LD	A,(EXT_BANK_TABLE)
+	LD	E,A			; Src Bank = Far RAM Bank
 	LD	HL,2
 	RST	08H
 	POP	IX
@@ -510,20 +531,314 @@ SET_TARGET_BANK:
 	RST	08H
 	POP	IX
 
-	; 5. Verify pattern matches
+	; Verify pattern matches
 	LD	A,(TEST_READBACK)
 	CP	0AAH
-	JR	NZ,TEST_FAIL
+	JP	NZ,TEST_FAIL
 	LD	A,(TEST_READBACK+1)
 	CP	055H
-	JR	NZ,TEST_FAIL
+	JP	NZ,TEST_FAIL
 
-	; Success
-	LD	DE,STR_TEST_PASSED
+	LD	DE,STR_TEST1_PASS
+	CALL	PRINT_STR
+
+	; -------------------------------------------------------------------------
+	; TEST 2: Multi-Bank Line I/O Engine (WRITE_FAR_LINE / READ_FAR_LINE)
+	; Writes unique signatures across ALL discovered Far RAM banks
+	; -------------------------------------------------------------------------
+	LD	DE,STR_TEST2_TITLE
+	CALL	PRINT_STR
+
+	; Write unique signature to Line 0 of each bank
+	LD	C,0			; Current bank index
+TEST2_WRITE_LOOP:
+	PUSH	BC
+	; Prepare 128-byte line pattern in LOAD_LINE_TEMP
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,LOAD_LINE_TEMP
+	LD	(HL),05AH		; Magic signature byte 0
+	INC	HL
+	LD	(HL),C			; Bank index in byte 1
+	INC	HL
+	; Bank ID in byte 2
+	LD	E,C
+	LD	D,0
+	LD	IY,EXT_BANK_TABLE
+	ADD	IY,DE
+	LD	A,(IY+0)
+	LD	(HL),A
+	INC	HL
+	LD	(HL),0A5H		; Magic signature byte 3
+
+	; Write to doc line: BC_doc = (C_bank << 8) | 0
+	LD	B,C
+	LD	C,0
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+	POP	BC
+	INC	C
+	LD	A,(EXT_BANK_COUNT)
+	CP	C
+	JR	NZ,TEST2_WRITE_LOOP
+
+	; Read back and verify all banks
+	LD	C,0
+TEST2_READ_LOOP:
+	PUSH	BC
+	CALL	CLEAR_LOAD_TEMP
+	LD	B,C
+	LD	C,0
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+	POP	BC
+
+	; Verify signature
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,(HL)
+	CP	05AH
+	JP	NZ,TEST_FAIL
+	INC	HL
+	LD	A,(HL)
+	CP	C
+	JP	NZ,TEST_FAIL
+	INC	HL
+	LD	E,C
+	LD	D,0
+	LD	IY,EXT_BANK_TABLE
+	ADD	IY,DE
+	LD	A,(IY+0)
+	CP	(HL)
+	JP	NZ,TEST_FAIL
+	INC	HL
+	LD	A,(HL)
+	CP	0A5H
+	JP	NZ,TEST_FAIL
+
+	INC	C
+	LD	A,(EXT_BANK_COUNT)
+	CP	C
+	JR	NZ,TEST2_READ_LOOP
+
+	LD	DE,STR_TEST2_PASS_PRE
+	CALL	PRINT_STR
+	LD	A,(EXT_BANK_COUNT)
+	CALL	PRINT_DEC_BYTE
+	LD	DE,STR_TEST2_PASS_POST
+	CALL	PRINT_STR
+
+	; -------------------------------------------------------------------------
+	; TEST 3: Bank Boundary & 32KB Stride Test (Offsets 0x0000 & 0x7F80)
+	; -------------------------------------------------------------------------
+	LD	DE,STR_TEST3_TITLE
+	CALL	PRINT_STR
+
+	; Bank 0, Line 0 (offset 0x0000)
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,LOAD_LINE_TEMP
+	LD	(HL),011H
+	INC	HL
+	LD	(HL),022H
+	LD	BC,0
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; Bank 0, Line 255 (offset 0x7F80)
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,LOAD_LINE_TEMP
+	LD	(HL),055H
+	INC	HL
+	LD	(HL),066H
+	LD	BC,000FFH		; Line 255 (Bank 0, line 255)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; Bank 1, Line 256 (offset 0x0000)
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,LOAD_LINE_TEMP
+	LD	(HL),099H
+	INC	HL
+	LD	(HL),0AAH
+	LD	BC,00100H		; Line 256 (Bank 1, line 0)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; Bank 1, Line 511 (offset 0x7F80)
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,LOAD_LINE_TEMP
+	LD	(HL),0DDH
+	INC	HL
+	LD	(HL),0EEH
+	LD	BC,001FFH		; Line 511 (Bank 1, line 255)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; Verify all 4 boundaries
+	; Line 0
+	CALL	CLEAR_LOAD_TEMP
+	LD	BC,0
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+	LD	A,(LOAD_LINE_TEMP)
+	CP	011H
+	JP	NZ,TEST_FAIL
+	LD	A,(LOAD_LINE_TEMP+1)
+	CP	022H
+	JP	NZ,TEST_FAIL
+
+	; Line 255
+	CALL	CLEAR_LOAD_TEMP
+	LD	BC,000FFH
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+	LD	A,(LOAD_LINE_TEMP)
+	CP	055H
+	JP	NZ,TEST_FAIL
+	LD	A,(LOAD_LINE_TEMP+1)
+	CP	066H
+	JP	NZ,TEST_FAIL
+
+	; Line 256
+	CALL	CLEAR_LOAD_TEMP
+	LD	BC,00100H
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+	LD	A,(LOAD_LINE_TEMP)
+	CP	099H
+	JP	NZ,TEST_FAIL
+	LD	A,(LOAD_LINE_TEMP+1)
+	CP	0AAH
+	JP	NZ,TEST_FAIL
+
+	; Line 511
+	CALL	CLEAR_LOAD_TEMP
+	LD	BC,001FFH
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+	LD	A,(LOAD_LINE_TEMP)
+	CP	0DDH
+	JP	NZ,TEST_FAIL
+	LD	A,(LOAD_LINE_TEMP+1)
+	CP	0EEH
+	JP	NZ,TEST_FAIL
+
+	LD	DE,STR_TEST3_PASS
+	CALL	PRINT_STR
+
+	; -------------------------------------------------------------------------
+	; TEST 4: Sliding Window Cache (16KB / 128 Lines) & Dirty Line Flush
+	; -------------------------------------------------------------------------
+	LD	DE,STR_TEST4_TITLE
+	CALL	PRINT_STR
+
+	; Set large document total lines
+	LD	HL,600
+	LD	(DOC_TOTAL_LINES),HL
+
+	; Access Line 0 through cache
+	LD	BC,0
+	CALL	ENSURE_CACHE_WINDOW	; HL = pointer in LINE_STORAGE
+	LD	(HL),'C'
+	INC	HL
+	LD	(HL),'A'
+	INC	HL
+	LD	(HL),'0'
+	LD	A,1
+	LD	(CACHE_DIRTY),A
+
+	; Slide window across bank boundary to Line 300 (Bank 1)
+	LD	BC,300
+	CALL	ENSURE_CACHE_WINDOW	; Flushes Line 0 to Far RAM Bank 0, loads Bank 1
+	LD	(HL),'C'
+	INC	HL
+	LD	(HL),'B'
+	INC	HL
+	LD	(HL),'1'
+	LD	A,1
+	LD	(CACHE_DIRTY),A
+
+	; Flush dirty lines to Far RAM
+	CALL	FLUSH_DIRTY_CACHE
+
+	; Clear local LINE_STORAGE memory completely to prove reload works from Far RAM
+	LD	HL,LINE_STORAGE
+	LD	DE,LINE_STORAGE+1
+	LD	BC,16383
+	LD	(HL),0
+	LDIR
+
+	; Invalidate cache pointer
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
+
+	; Reload Window at Line 0
+	LD	BC,0
+	CALL	ENSURE_CACHE_WINDOW
+	LD	A,(HL)
+	CP	'C'
+	JP	NZ,TEST4_FAIL_L0
+	INC	HL
+	LD	A,(HL)
+	CP	'A'
+	JP	NZ,TEST4_FAIL_L0
+	INC	HL
+	LD	A,(HL)
+	CP	'0'
+	JP	NZ,TEST4_FAIL_L0
+
+	; Reload Window at Line 300
+	LD	BC,300
+	CALL	ENSURE_CACHE_WINDOW
+	LD	A,(HL)
+	CP	'C'
+	JP	NZ,TEST4_FAIL_L300
+	INC	HL
+	LD	A,(HL)
+	CP	'B'
+	JP	NZ,TEST4_FAIL_L300
+	INC	HL
+	LD	A,(HL)
+	CP	'1'
+	JP	NZ,TEST4_FAIL_L300
+
+	LD	DE,STR_TEST4_PASS
+	CALL	PRINT_STR
+
+	; -------------------------------------------------------------------------
+	; Restore Sample Document State & Display Final Success
+	; -------------------------------------------------------------------------
+	CALL	LOAD_SAMPLE_BUFFER
+
+	LD	DE,STR_TEST_ALL_PASSED
+	CALL	PRINT_STR
+	JR	TEST_END
+
+TEST4_FAIL_L0:
+	PUSH	AF
+	LD	DE,STR_TEST4_FAIL_L0_MSG
+	CALL	PRINT_STR
+	POP	AF
+	CALL	PRINT_HEX_BYTE
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+	JP	TEST_FAIL
+
+TEST4_FAIL_L300:
+	PUSH	AF
+	LD	DE,STR_TEST4_FAIL_L300_MSG
+	CALL	PRINT_STR
+	POP	AF
+	CALL	PRINT_HEX_BYTE
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+	JP	TEST_FAIL
+
+TEST_NO_FAR_BANKS:
+	LD	DE,STR_TEST_NO_BANKS
 	CALL	PRINT_STR
 	JR	TEST_END
 
 TEST_FAIL:
+	CALL	LOAD_SAMPLE_BUFFER
 	LD	DE,STR_TEST_FAILED
 	CALL	PRINT_STR
 
@@ -617,6 +932,7 @@ PRINT_DIGIT:
 	RET
 
 ;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
 ; Editor Screen Renderer
 ;------------------------------------------------------------------------------
 RENDER_SCREEN:
@@ -626,18 +942,26 @@ RENDER_SCREEN:
 	LD	C,0			; Screen row index (0 .. ACTIVE_ROWS-2)
 RENDER_ROW_LOOP:
 	PUSH	BC
-	; Calculate buffer line to render: CUR_RENDER_ROW = TOP_LINE + C
-	LD	A,(TOP_LINE)
-	ADD	A,C
-	LD	(CUR_RENDER_ROW),A
+	; Calculate buffer line to render: doc_line = TOP_DOC_ROW + C
+	LD	HL,(TOP_DOC_ROW)
+	LD	E,C
+	LD	D,0
+	ADD	HL,DE			; HL = target doc_line
+	LD	B,H
+	LD	C,L			; BC = target doc_line
 
-	; Check if CUR_RENDER_ROW < TOTAL_LINES
-	LD	A,(TOTAL_LINES)
-	LD	B,A
-	LD	A,(CUR_RENDER_ROW)
+	; Check if doc_line < DOC_TOTAL_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
 	CP	B
-	JR	NC,RENDER_TILDE_ROW
+	JR	C,RENDER_TILDE_ROW
+	JR	NZ,DO_RENDER_DOC_ROW
+	LD	A,L
+	CP	C
+	JR	Z,RENDER_TILDE_ROW
+	JR	C,RENDER_TILDE_ROW
 
+DO_RENDER_DOC_ROW:
 	CALL	RENDER_BUFFER_LINE
 	JR	RENDER_ROW_NEXT
 
@@ -663,18 +987,19 @@ RENDER_ROW_NEXT:
 	CALL	LOCATE_CURSOR
 	RET
 
-; Fast single line refresh: only rewrites CUR_ROW and restores cursor
+; Fast single line refresh: rewrites current line and restores cursor
 RENDER_CURRENT_LINE:
-	; Move to start of current screen line: ESC [ <(CUR_ROW - TOP_LINE) + 1> ; 1 H
+	; Move to start of current screen line: ESC [ <(CUR_DOC_ROW - TOP_DOC_ROW) + 1> ; 1 H
 	LD	A,27
 	CALL	PUTC
 	LD	A,'['
 	CALL	PUTC
 
-	LD	A,(TOP_LINE)
-	LD	B,A
-	LD	A,(CUR_ROW)
-	SUB	B
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE
+	LD	A,L
 	INC	A			; Screen row (1-indexed for terminal)
 	CALL	PRINT_DEC_BYTE
 
@@ -685,26 +1010,13 @@ RENDER_CURRENT_LINE:
 	LD	A,'H'
 	CALL	PUTC
 
-	LD	A,(CUR_ROW)
-	LD	(CUR_RENDER_ROW),A
-
 	; Clear to EOL
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
 
-	; Calculate line address: LINE_STORAGE + (CUR_ROW * 128)
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL			; *2
-	ADD	HL,HL			; *4
-	ADD	HL,HL			; *8
-	ADD	HL,HL			; *16
-	ADD	HL,HL			; *32
-	ADD	HL,HL			; *64
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE
+	; Get pointer to current line in cache
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = pointer to line start in LINE_STORAGE
 
 PRINT_CUR_LINE_CHARS:
 	LD	B,0			; B = visual column accumulator
@@ -749,19 +1061,8 @@ RENDER_BUFFER_LINE:
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
 
-	; Calculate line address: LINE_STORAGE + (CUR_RENDER_ROW * 128)
-	LD	A,(CUR_RENDER_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL			; *2
-	ADD	HL,HL			; *4
-	ADD	HL,HL			; *8
-	ADD	HL,HL			; *16
-	ADD	HL,HL			; *32
-	ADD	HL,HL			; *64
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE
+	; BC has target doc_line
+	CALL	ENSURE_CACHE_WINDOW	; HL = pointer to line start in LINE_STORAGE
 
 	; Print characters directly
 	LD	B,0			; B = visual column accumulator
@@ -861,9 +1162,9 @@ SHOW_STATUS_REST:
 	; Print dynamic cursor position: Row, Col
 	LD	DE,STR_STATUS_POS
 	CALL	PRINT_STR
-	LD	A,(CUR_ROW)
-	INC	A			; 1-indexed
-	CALL	PRINT_DEC_BYTE
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL			; 1-indexed document row
+	CALL	PRINT_DEC_WORD		; Print 16-bit row number
 	LD	DE,STR_STATUS_COL
 	CALL	PRINT_STR
 	CALL	CALC_VISUAL_COL		; A = Visual column (0-indexed)
@@ -882,7 +1183,7 @@ SHOW_STATUS_REST:
 	RET
 
 ;------------------------------------------------------------------------------
-; Calculate Visual Screen Column from (CUR_ROW, CUR_COL)
+; Calculate Visual Screen Column from (CUR_DOC_ROW, CUR_COL)
 ; Returns: A = Visual Column (0-indexed, 0..ACTIVE_COLS-1)
 ; Preserves: BC, DE, HL
 ;------------------------------------------------------------------------------
@@ -891,19 +1192,9 @@ CALC_VISUAL_COL:
 	PUSH	DE
 	PUSH	HL
 
-	; Calculate line start pointer: HL = LINE_STORAGE + (CUR_ROW * 128)
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL			; *2
-	ADD	HL,HL			; *4
-	ADD	HL,HL			; *8
-	ADD	HL,HL			; *16
-	ADD	HL,HL			; *32
-	ADD	HL,HL			; *64
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = line start
+	; Get pointer to current line in cache
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = line start in LINE_STORAGE
 
 	LD	A,(CUR_COL)
 	LD	C,A			; C = character count to process
@@ -956,11 +1247,12 @@ LOCATE_CURSOR:
 	LD	A,'['
 	CALL	PUTC
 
-	; Screen Row = CUR_ROW - TOP_LINE (1-indexed for terminal)
-	LD	A,(TOP_LINE)
-	LD	B,A
-	LD	A,(CUR_ROW)
-	SUB	B
+	; Screen Row = CUR_DOC_ROW - TOP_DOC_ROW + 1 (1-indexed for terminal)
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE
+	LD	A,L
 	INC	A
 	CALL	PRINT_DEC_BYTE
 
@@ -976,13 +1268,424 @@ LOCATE_CURSOR:
 	CALL	PUTC
 	RET
 
+;------------------------------------------------------------------------------
+; 512KB HBIOS RAM Far-Banking Multi-Bank Document Engine
+;------------------------------------------------------------------------------
 BUFFER_INIT:
+	; Clear LINE_STORAGE (16,384 bytes) with 0
+	LD	HL,LINE_STORAGE
+	LD	DE,LINE_STORAGE+1
+	LD	BC,16383
+	LD	(HL),0
+	LDIR
+
+	; Clear LOAD_LINE_TEMP (128 bytes)
+	LD	HL,LOAD_LINE_TEMP
+	LD	DE,LOAD_LINE_TEMP+1
+	LD	BC,127
+	LD	(HL),0
+	LDIR
+
+	CALL	INIT_FAR_RAM_BANKS
+	RET
+
+INIT_FAR_RAM_BANKS:
+	; 1. Query CP/M Active User Bank
 	PUSH	IX
 	LD	B,0F3H			; SYSGETBNK
 	RST	08H
 	POP	IX
 	LD	A,C
 	LD	(CPM_USER_BANK),A
+
+	; 2. Query Total RAM Banks (SYSGET 0xF1)
+	PUSH	IX
+	LD	B,0F8H
+	LD	C,0F1H
+	RST	08H
+	POP	IX
+	LD	A,E
+	LD	(RAM_BANK_COUNT),A
+	LD	A,D
+	LD	(ROM_BANK_COUNT),A
+
+	; 3. Populate EXT_BANK_TABLE allocating downward from CPM_USER_BANK - 1
+	LD	HL,EXT_BANK_TABLE
+	LD	B,0			; Counter for populated banks
+	LD	A,(CPM_USER_BANK)
+	LD	C,A			; C = CPM_USER_BANK (e.g. 0x8F)
+
+POPULATE_BANK_LOOP:
+	DEC	C			; Allocate downward: 0x8E, 0x8D, 0x8C...
+	LD	A,C
+	CP	080H
+	JR	C,POPULATE_BANK_DONE	; Stop if below 0x80
+
+	LD	(HL),C
+	INC	HL
+	INC	B
+	LD	A,B
+	CP	MAX_FAR_BANKS
+	JR	Z,POPULATE_BANK_DONE
+	JR	POPULATE_BANK_LOOP
+
+POPULATE_BANK_DONE:
+	LD	A,B
+	LD	(EXT_BANK_COUNT),A
+	RET
+
+;------------------------------------------------------------------------------
+; WRITE_FAR_LINE: Write 128-byte line from local memory to Far RAM bank
+; Inputs: HL = Local Source Address (in CPM_USER_BANK)
+;         BC = 16-bit Document Line Index (0..3583)
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+; WRITE_FAR_LINE: Write 128-byte line from local memory to Far RAM bank
+; Inputs: HL = Local Source Address (in CPM_USER_BANK)
+;         BC = 16-bit Document Line Index (0..3583)
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+WRITE_FAR_LINE:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	(FAR_LOCAL_ADDR),HL
+
+	; bank_idx = B (high byte = doc_line / 256)
+	LD	A,B
+	LD	HL,EXT_BANK_TABLE
+	ADD	A,L
+	LD	L,A
+	JR	NC,WFL_NO_CY
+	INC	H
+WFL_NO_CY:
+	LD	A,(HL)			; A = Destination RAM Bank ID
+	LD	(FAR_DEST_BANK),A
+
+	; far_offset = C * 128 = (C << 7)
+	LD	L,C
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	LD	(FAR_DEST_ADDR),HL
+
+	; SYSSETCPY: D = Dest Bank, E = Src Bank, HL = 128
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(FAR_DEST_BANK)
+	LD	D,A
+	LD	A,(CPM_USER_BANK)
+	LD	E,A
+	LD	HL,MAX_LINE_STRIDE	; 128 bytes
+	RST	08H
+	POP	IX
+
+	; SYSBNKCPY: HL = Src Addr, DE = Dest Addr
+	LD	HL,(FAR_LOCAL_ADDR)
+	LD	DE,(FAR_DEST_ADDR)
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; READ_FAR_LINE: Read 128-byte line from Far RAM bank into local memory
+; Inputs: DE = Local Destination Address (in CPM_USER_BANK)
+;         BC = 16-bit Document Line Index (0..3583)
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+READ_FAR_LINE:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	(FAR_LOCAL_ADDR),DE
+
+	; bank_idx = B (high byte)
+	LD	A,B
+	LD	HL,EXT_BANK_TABLE
+	ADD	A,L
+	LD	L,A
+	JR	NC,RFL_NO_CY
+	INC	H
+RFL_NO_CY:
+	LD	A,(HL)			; A = Source RAM Bank ID
+	LD	(FAR_SRC_BANK),A
+
+	; far_offset = C * 128
+	LD	L,C
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	LD	(FAR_SRC_ADDR),HL
+
+	; SYSSETCPY: D = Dest Bank (CPM_USER_BANK), E = Src Bank, HL = 128
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(CPM_USER_BANK)
+	LD	D,A
+	LD	A,(FAR_SRC_BANK)
+	LD	E,A
+	LD	HL,MAX_LINE_STRIDE	; 128 bytes
+	RST	08H
+	POP	IX
+
+	; SYSBNKCPY: HL = Far Src Addr, DE = Local Dest Addr
+	LD	HL,(FAR_SRC_ADDR)
+	LD	DE,(FAR_LOCAL_ADDR)
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; FLUSH_DIRTY_CACHE: Write modified lines in local cache back to Far RAM banks
+;------------------------------------------------------------------------------
+FLUSH_DIRTY_CACHE:
+	LD	A,(CACHE_DIRTY)
+	OR	A
+	RET	Z			; Cache is clean, nothing to flush
+
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	XOR	A
+	LD	(CACHE_DIRTY),A		; Clear dirty flag before flush
+
+	LD	C,0			; Local cache line counter (0..CACHE_SIZE_LINES-1)
+FLUSH_CACHE_LOOP:
+	LD	A,C
+	CP	CACHE_SIZE_LINES
+	JR	NC,FLUSH_CACHE_DONE
+
+	; Calculate doc_line = CACHE_START_ROW + C
+	LD	HL,(CACHE_START_ROW)
+	LD	E,C
+	LD	D,0
+	ADD	HL,DE			; HL = doc_line
+	LD	B,H
+	LD	C,L			; BC = doc_line
+
+	; Check if doc_line < DOC_TOTAL_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	CP	B
+	JR	C,FLUSH_CACHE_DONE
+	JR	NZ,DO_FLUSH_LINE
+	LD	A,L
+	CP	C
+	JR	Z,FLUSH_CACHE_DONE
+	JR	C,FLUSH_CACHE_DONE
+
+DO_FLUSH_LINE:
+	; Calculate local source pointer: LINE_STORAGE + (C_local * 128)
+	LD	A,E			; E was local C index
+	LD	(SLOT_TEMP),A
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = Local source line pointer
+
+	CALL	WRITE_FAR_LINE
+	LD	A,(SLOT_TEMP)		; Restore local index
+	LD	C,A
+	INC	C
+	JR	FLUSH_CACHE_LOOP
+
+FLUSH_CACHE_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; ENSURE_CACHE_WINDOW: Ensure doc_line BC is in local LINE_STORAGE cache
+; Inputs: BC = 16-bit Document Line Index (0..3583)
+; Returns: HL = Pointer to line start in LINE_STORAGE
+; Preserves: BC, DE
+;------------------------------------------------------------------------------
+ENSURE_CACHE_WINDOW:
+	PUSH	BC
+	PUSH	DE
+
+	; Check if BC >= (CACHE_START_ROW) AND BC < (CACHE_START_ROW) + CACHE_SIZE_LINES
+	LD	HL,(CACHE_START_ROW)
+	; Check BC >= CACHE_START_ROW
+	LD	A,B
+	CP	H
+	JR	C,RELOAD_CACHE_WINDOW
+	JR	NZ,CHECK_UPPER_BOUND
+	LD	A,C
+	CP	L
+	JR	C,RELOAD_CACHE_WINDOW
+
+CHECK_UPPER_BOUND:
+	; Calculate offset = BC - CACHE_START_ROW
+	LD	A,C
+	SUB	L
+	LD	E,A
+	LD	A,B
+	SBC	A,H
+	JR	NZ,RELOAD_CACHE_WINDOW	; High byte must be 0
+	LD	A,E
+	CP	CACHE_SIZE_LINES
+	JR	NC,RELOAD_CACHE_WINDOW	; Outside cache range
+
+	; Inside cache! Offset is in E (0..CACHE_SIZE_LINES-1)
+	JR	CALC_CACHE_LINE_PTR
+
+RELOAD_CACHE_WINDOW:
+	; Flush old dirty cache if modified
+	CALL	FLUSH_DIRTY_CACHE
+
+	; Calculate new CACHE_START_ROW = max(0, BC - (CACHE_SIZE_LINES / 2))
+	LD	HL,CACHE_SIZE_LINES / 2
+	LD	A,C
+	SUB	L
+	LD	E,A
+	LD	A,B
+	SBC	A,H
+	JR	C,SET_START_ZERO
+	LD	D,A
+	LD	(CACHE_START_ROW),DE
+	JR	LOAD_CACHE_LINES
+
+SET_START_ZERO:
+	LD	DE,0
+	LD	(CACHE_START_ROW),DE
+
+LOAD_CACHE_LINES:
+	; Load CACHE_SIZE_LINES from Far RAM into LINE_STORAGE
+	LD	C,0			; Local cache slot 0..CACHE_SIZE_LINES-1
+LOAD_SLOT_LOOP:
+	LD	A,C
+	CP	CACHE_SIZE_LINES
+	JR	NC,LOAD_CACHE_DONE
+
+	; Calculate doc_line = CACHE_START_ROW + C
+	LD	HL,(CACHE_START_ROW)
+	LD	E,C
+	LD	D,0
+	ADD	HL,DE			; HL = target doc_line
+	LD	B,H
+	LD	A,L
+	LD	L,C			; Save local slot in L
+	LD	C,A			; BC = target doc_line
+
+	; Calculate local destination address: LINE_STORAGE + (local_slot * 128)
+	LD	A,L
+	LD	(SLOT_TEMP),A
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE
+	LD	D,H
+	LD	E,L			; DE = Local destination address
+
+	; Check if doc_line < DOC_TOTAL_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	CP	B
+	JR	C,FILL_EMPTY_SLOT
+	JR	NZ,DO_FETCH_SLOT
+	LD	A,L
+	CP	C
+	JR	Z,FILL_EMPTY_SLOT
+	JR	C,FILL_EMPTY_SLOT
+
+DO_FETCH_SLOT:
+	CALL	READ_FAR_LINE
+	JR	NEXT_SLOT
+
+FILL_EMPTY_SLOT:
+	; Zero fill empty slot
+	EX	DE,HL			; HL = line start
+	LD	(HL),0
+
+NEXT_SLOT:
+	LD	A,(SLOT_TEMP)
+	LD	C,A
+	INC	C
+	JR	LOAD_SLOT_LOOP
+
+LOAD_CACHE_DONE:
+	XOR	A
+	LD	(CACHE_DIRTY),A
+
+	; Calculate offset for requested line: (BC_orig - CACHE_START_ROW)
+	POP	DE
+	POP	BC
+	PUSH	BC
+	PUSH	DE
+
+	LD	HL,(CACHE_START_ROW)
+	LD	A,C
+	SUB	L
+	LD	E,A			; E = local line index (0..CACHE_SIZE_LINES-1)
+
+CALC_CACHE_LINE_PTR:
+	LD	L,E
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	LD	DE,LINE_STORAGE
+	ADD	HL,DE			; HL = pointer to line start in LINE_STORAGE
+
+	POP	DE
+	POP	BC
+	RET
+
+RELOAD_CACHE_WINDOW_FORCE:
+	PUSH	HL
+	PUSH	BC
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW
+	POP	BC
+	POP	HL
 	RET
 
 ;------------------------------------------------------------------------------
@@ -1091,24 +1794,14 @@ CURSOR_END:
 	LD	(TARGET_COL),A
 	RET
 
-;------------------------------------------------------------------------------
-; Get Length of Current Line at CUR_ROW
+;;------------------------------------------------------------------------------
+; Get Length of Current Line at CUR_DOC_ROW
 ; Returns: B = Byte length (0..126), C = Visual length (0..ACTIVE_COLS), HL = line start
 ; Preserves: DE
 ;------------------------------------------------------------------------------
 GET_CUR_ROW_LEN:
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL			; *2
-	ADD	HL,HL			; *4
-	ADD	HL,HL			; *8
-	ADD	HL,HL			; *16
-	ADD	HL,HL			; *32
-	ADD	HL,HL			; *64
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = line start
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = line start in LINE_STORAGE
 	PUSH	HL			; Save line start
 
 	LD	B,0			; B = byte count
@@ -1196,17 +1889,26 @@ SET_TARGET_CHAR_IDX:
 	RET
 
 CURSOR_UP:
-	LD	A,(CUR_ROW)
-	OR	A
-	RET	Z			; If already at top line of document, cannot move up
-	DEC	A
-	LD	(CUR_ROW),A
-	; Check if CUR_ROW < TOP_LINE (scrolled past top of screen window)
-	LD	HL,TOP_LINE
-	CP	(HL)
+	LD	HL,(CUR_DOC_ROW)
+	LD	A,H
+	OR	L
+	RET	Z			; If at doc row 0, cannot move up
+
+	DEC	HL
+	LD	(CUR_DOC_ROW),HL
+
+	; Check if CUR_DOC_ROW < TOP_DOC_ROW
+	LD	DE,(TOP_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,C_UP_SCROLL
+	JR	NZ,CUR_UP_NO_SCROLL
+	LD	A,L
+	CP	E
 	JR	NC,CUR_UP_NO_SCROLL
-	; Scrolled up: TOP_LINE = CUR_ROW
-	LD	(HL),A
+
+C_UP_SCROLL:
+	LD	(TOP_DOC_ROW),HL
 	CALL	ADJUST_COL_TO_TARGET
 	CALL	RENDER_SCREEN
 	RET
@@ -1216,38 +1918,50 @@ CUR_UP_NO_SCROLL:
 	RET
 
 CURSOR_DOWN:
-	LD	A,(TOTAL_LINES)
-	OR	A
-	RET	Z			; If 0 lines, cannot move down
-	DEC	A			; Max valid row index = TOTAL_LINES - 1
-	LD	B,A
-	LD	A,(CUR_ROW)
-	CP	B
-	RET	NC			; If CUR_ROW >= TOTAL_LINES - 1, do not go past text
-	INC	A
-	LD	(CUR_ROW),A
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	OR	L
+	RET	Z			; 0 lines
 
-	; Check if CUR_ROW moved past bottom of screen window
-	LD	A,(TOP_LINE)
-	LD	B,A
-	LD	A,(CUR_ROW)
-	SUB	B			; A = screen row (0 .. )
-	LD	C,A
+	DEC	HL			; Max valid doc row = DOC_TOTAL_LINES - 1
+	LD	DE,(CUR_DOC_ROW)
+	; If CUR_DOC_ROW >= max valid row, cannot move down
+	LD	A,D
+	CP	H
+	JR	C,C_DOWN_MOVE
+	JR	NZ,CUR_DOWN_NO_MOVE
+	LD	A,E
+	CP	L
+	JR	NC,CUR_DOWN_NO_MOVE
+
+C_DOWN_MOVE:
+	INC	DE
+	LD	(CUR_DOC_ROW),DE
+
+	; Check if CUR_DOC_ROW - TOP_DOC_ROW >= ACTIVE_ROWS - 1
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE			; HL = screen row index
 	LD	A,(ACTIVE_ROWS)
 	DEC	A
 	DEC	A			; A = max screen row index (ACTIVE_ROWS - 2)
-	CP	C
-	JR	NC,CUR_DOWN_NO_SCROLL	; If screen_row <= max screen row index, no scroll
-	; Scrolled down: TOP_LINE = TOP_LINE + 1
-	LD	A,(TOP_LINE)
-	INC	A
-	LD	(TOP_LINE),A
+	CP	L
+	JR	NC,CUR_DOWN_NO_SCROLL	; Screen row <= max, no scroll
+
+	; Scroll down by 1 line
+	LD	HL,(TOP_DOC_ROW)
+	INC	HL
+	LD	(TOP_DOC_ROW),HL
 	CALL	ADJUST_COL_TO_TARGET
 	CALL	RENDER_SCREEN
 	RET
 
 CUR_DOWN_NO_SCROLL:
 	CALL	ADJUST_COL_TO_TARGET
+	RET
+
+CUR_DOWN_NO_MOVE:
 	RET
 
 CURSOR_LEFT:
@@ -1261,17 +1975,26 @@ CURSOR_LEFT:
 	RET
 
 CURSOR_LEFT_PREV_LINE:
-	; Wrap to end of previous line if CUR_ROW > 0
-	LD	A,(CUR_ROW)
-	OR	A
-	RET	Z			; If at line 0, cannot wrap back
-	DEC	A
-	LD	(CUR_ROW),A
+	; Wrap to end of previous line if CUR_DOC_ROW > 0
+	LD	HL,(CUR_DOC_ROW)
+	LD	A,H
+	OR	L
+	RET	Z			; At line 0, cannot wrap back
+	DEC	HL
+	LD	(CUR_DOC_ROW),HL
+
 	; Check if scrolled above top of viewport
-	LD	HL,TOP_LINE
-	CP	(HL)
+	LD	DE,(TOP_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,CL_SCROLL
+	JR	NZ,CL_NO_SCROLL
+	LD	A,L
+	CP	E
 	JR	NC,CL_NO_SCROLL
-	LD	(HL),A
+
+CL_SCROLL:
+	LD	(TOP_DOC_ROW),HL
 	CALL	GET_CUR_ROW_LEN		; B = prev line length
 	LD	A,B
 	LD	(CUR_COL),A
@@ -1303,7 +2026,6 @@ CURSOR_RIGHT:
 	JR	Z,CURSOR_RIGHT_NEXT_LINE ; If at column 119, wrap to next line!
 	JR	C,CURSOR_RIGHT_NEXT_LINE
 
-	INC	A
 	LD	A,(CUR_COL)
 	INC	A
 	LD	(CUR_COL),A
@@ -1312,52 +2034,60 @@ CURSOR_RIGHT:
 	RET
 
 CURSOR_RIGHT_NEXT_LINE:
-	; Wrap to start of next line if CUR_ROW + 1 < TOTAL_LINES
-	LD	A,(TOTAL_LINES)
-	OR	A
-	RET	Z
-	DEC	A			; Max valid row = TOTAL_LINES - 1
-	LD	B,A
-	LD	A,(CUR_ROW)
-	CP	B
-	RET	NC			; If on last line, cannot wrap forward
-	INC	A
-	LD	(CUR_ROW),A
+	; Wrap to start of next line if CUR_DOC_ROW + 1 < DOC_TOTAL_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,(CUR_DOC_ROW)
+	INC	DE			; Next doc row
+	LD	A,D
+	CP	H
+	JR	C,CR_WRAP_OK
+	JR	NZ,CR_WRAP_FAIL
+	LD	A,E
+	CP	L
+	JR	NC,CR_WRAP_FAIL
+
+CR_WRAP_OK:
+	LD	(CUR_DOC_ROW),DE
 	XOR	A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
 
 	; Check if scrolled past bottom of screen window
-	LD	A,(TOP_LINE)
-	LD	B,A
-	LD	A,(CUR_ROW)
-	SUB	B			; A = screen row
-	LD	C,A
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE
 	LD	A,(ACTIVE_ROWS)
 	DEC	A
-	DEC	A			; A = max screen row index (ACTIVE_ROWS - 2)
-	CP	C
-	RET	NC			; If screen row <= max, no scroll
-	LD	A,(TOP_LINE)
-	INC	A
-	LD	(TOP_LINE),A
+	DEC	A
+	CP	L
+	RET	NC
+
+	LD	HL,(TOP_DOC_ROW)
+	INC	HL
+	LD	(TOP_DOC_ROW),HL
 	CALL	RENDER_SCREEN
 	RET
 
+CR_WRAP_FAIL:
+	RET
+
 ;------------------------------------------------------------------------------
-; Character Insertion at (CUR_ROW, CUR_COL)
+; Character Insertion at (CUR_DOC_ROW, CUR_COL)
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
 	LD	(CHAR_INSERT_TEMP),A	; Save character to insert
 
-	; Ensure TOTAL_LINES >= CUR_ROW + 1
-	LD	A,(TOTAL_LINES)
-	LD	B,A
-	LD	A,(CUR_ROW)
-	CP	B
+	; Ensure DOC_TOTAL_LINES >= CUR_DOC_ROW + 1
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,(CUR_DOC_ROW)
+	LD	A,E
+	CP	L
+	LD	A,D
+	SBC	A,H
 	JR	C,ROW_IN_BOUNDS
-	INC	A
-	LD	(TOTAL_LINES),A
+	INC	DE
+	LD	(DOC_TOTAL_LINES),DE
 
 ROW_IN_BOUNDS:
 	CALL	GET_CUR_ROW_LEN		; HL = line start, B = byte length, C = visual length
@@ -1396,15 +2126,15 @@ CHECK_AT_EOL_REPLACE:
 	RET
 
 LINE_LEN_OK:
+	LD	A,1
+	LD	(CACHE_DIRTY),A		; Mark local cache dirty
+
 	; 4. Compare CUR_COL with line length (B)
 	LD	A,(CUR_COL)
 	CP	B
 	JR	NC,DO_PAD_AND_APPEND	; If CUR_COL >= length: pad spaces and append
 
 	; 5. If CUR_COL < length: shift characters from (line_start + B) down to (line_start + CUR_COL)
-	; Source start for LDDR: HL = line_start + B
-	; Dest start for LDDR:   DE = line_start + B + 1
-	; Count for LDDR:        BC = B - CUR_COL + 1 (including null terminator)
 	PUSH	HL			; Save line start
 	LD	E,B
 	LD	D,0
@@ -1485,7 +2215,7 @@ ADVANCE_INSERT_CURSOR:
 	RET
 
 ;------------------------------------------------------------------------------
-; Character Deletion at (CUR_ROW, CUR_COL) - Backspace Handling
+; Character Deletion at (CUR_DOC_ROW, CUR_COL) - Backspace Handling
 ;------------------------------------------------------------------------------
 DO_DELETE_CHAR:
 	LD	A,(CUR_COL)
@@ -1497,19 +2227,12 @@ DO_DELETE_CHAR:
 	CALL	CALC_VISUAL_COL
 	LD	(TARGET_COL),A		; Sync sticky target visual column on Backspace
 
-	; Calculate delete target: LINE_STORAGE + (CUR_ROW * 128) + CUR_COL
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE
+	LD	A,1
+	LD	(CACHE_DIRTY),A		; Mark cache dirty
+
+	; Calculate delete target in cache
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = line start
 	LD	A,(CUR_COL)
 	LD	E,A
 	LD	D,0
@@ -1527,34 +2250,25 @@ CHAR_SHIFT_LEFT_LOOP:
 	JR	CHAR_SHIFT_LEFT_LOOP
 
 ;------------------------------------------------------------------------------
-; Forward Character Deletion at (CUR_ROW, CUR_COL) - Delete Key Handling
+;------------------------------------------------------------------------------
+; Forward Character Deletion at (CUR_DOC_ROW, CUR_COL) - Delete Key Handling
 ;------------------------------------------------------------------------------
 DO_DELETE_FORWARD:
-	; Calculate delete target: LINE_STORAGE + (CUR_ROW * 128) + CUR_COL
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = line_start
-
-	; Check if (line_start + CUR_COL) is at or beyond end of line (0)
-	PUSH	HL
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = line start in LINE_STORAGE
 	LD	A,(CUR_COL)
 	LD	E,A
 	LD	D,0
-	ADD	HL,DE			; HL = character to delete under cursor
+	ADD	HL,DE			; HL = character under cursor
+
 	LD	A,(HL)
 	OR	A
-	JR	Z,DEL_FWD_AT_EOL
+	RET	Z			; At end of line, nothing to delete forward
 
-	; Character exists under cursor: shift characters left from HL+1 into HL
+	LD	A,1
+	LD	(CACHE_DIRTY),A		; Mark cache dirty
+
+	; Shift characters left from HL+1 into HL until null
 DEL_FWD_SHIFT_LOOP:
 	INC	HL
 	LD	A,(HL)
@@ -1566,38 +2280,27 @@ DEL_FWD_SHIFT_LOOP:
 	JR	DEL_FWD_SHIFT_LOOP
 
 DEL_FWD_DONE:
-	POP	HL
 	CALL	RENDER_CURRENT_LINE
 	RET
 
-DEL_FWD_AT_EOL:
-	POP	HL
-	RET
-
 ;------------------------------------------------------------------------------
-; Delete Blank Line at (CUR_ROW, 0) - Backspace at Column 0 Handling
+; Delete Blank Line at (CUR_DOC_ROW, 0) - Backspace at Column 0 Handling
 ;------------------------------------------------------------------------------
 DO_DELETE_BLANK_LINE:
-	; Check if TOTAL_LINES <= 1 and CUR_ROW == 0
-	LD	A,(TOTAL_LINES)
+	; Check if DOC_TOTAL_LINES <= 1
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	OR	A
+	JR	NZ,DO_DEL_BLANK_MULTI
+	LD	A,L
 	CP	2
 	JR	C,DEL_BLANK_SINGLE_LINE
 
-	; 1. Calculate pointer to current line: HL = LINE_STORAGE + (CUR_ROW * 128)
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = current line start
+DO_DEL_BLANK_MULTI:
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = current line start in LINE_STORAGE
 
-	; 2. Check if current line is blank (only spaces or null)
+	; Check if current line is blank (only spaces or null)
 	PUSH	HL
 	LD	B,0
 CHECK_BLANK_SCAN:
@@ -1618,108 +2321,70 @@ LINE_HAS_TEXT:
 	RET				; Non-blank line: do not delete!
 
 LINE_CONFIRMED_BLANK:
-	POP	DE			; DE = current line start (destination for LDIR)
+	POP	HL			; Discard line pointer
+	CALL	FLUSH_DIRTY_CACHE	; Sync cache to far RAM before shifting
 
-	; 3. Check if there are lines below CUR_ROW to shift up
-	; Number of lines below = TOTAL_LINES - 1 - CUR_ROW
-	LD	A,(TOTAL_LINES)
-	DEC	A
-	LD	HL,CUR_ROW
-	CP	(HL)
-	JR	Z,DEL_BLANK_LAST_LINE	; If CUR_ROW == TOTAL_LINES - 1, no lines below!
+	; Decrement DOC_TOTAL_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	DEC	HL
+	LD	(DOC_TOTAL_LINES),HL
 
-	; Count in lines = TOTAL_LINES - 1 - CUR_ROW
-	SUB	(HL)			; A = number of lines to shift (>= 1)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL			; HL = Byte count
-	LD	B,H
-	LD	C,L			; BC = Byte count
-
-	; Source HL = DE + 128 (next line start)
-	PUSH	DE			; Save dest start
-	EX	DE,HL			; HL = dest start
-	LD	DE,MAX_LINE_STRIDE
-	ADD	HL,DE			; HL = source start (dest + 128)
-	POP	DE			; DE = dest start
-
-	LDIR				; Shift lines below upwards!
-
-DEL_BLANK_LAST_LINE:
-	; Decrement TOTAL_LINES
-	LD	A,(TOTAL_LINES)
-	DEC	A
-	LD	(TOTAL_LINES),A
-
-	; Clear the newly freed line buffer at TOTAL_LINES (128 bytes of 0s)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = freed line buffer
-
-	PUSH	HL
-	LD	B,MAX_LINE_STRIDE
-CLEAR_FREED_LINE_LOOP:
-	LD	(HL),0
-	INC	HL
-	DJNZ	CLEAR_FREED_LINE_LOOP
-	POP	HL
-
-	; If CUR_ROW > 0, move cursor up to previous line and set CUR_COL to end of line
-	LD	A,(CUR_ROW)
-	OR	A
-	JR	Z,DEL_BLANK_AT_ROW0
-	DEC	A
-	LD	(CUR_ROW),A
-	; Check if CUR_ROW < TOP_LINE
-	LD	HL,TOP_LINE
-	CP	(HL)
-	JR	NC,DEL_BLANK_NO_SCROLL
-	LD	(HL),A
-DEL_BLANK_NO_SCROLL:
-
-	; Calculate previous line length to set CUR_COL
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = previous line start
-
-	LD	B,0
-PREV_LINE_LEN_LOOP:
-	LD	A,(HL)
-	OR	A
-	JR	Z,PREV_LINE_LEN_DONE
-	INC	HL
-	INC	B
-	LD	A,(ACTIVE_COLS)
-	DEC	A
+	; Shift lines in Far RAM from CUR_DOC_ROW + 1 upwards to DOC_TOTAL_LINES
+	LD	BC,(CUR_DOC_ROW)
+DEL_SHIFT_FAR_LOOP:
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
 	CP	B
-	JR	C,PREV_LINE_LEN_DONE
-	JR	PREV_LINE_LEN_LOOP
+	JR	C,DEL_SHIFT_FAR_DONE
+	JR	NZ,DO_SHIFT_FAR_LINE
+	LD	A,L
+	CP	C
+	JR	Z,DEL_SHIFT_FAR_DONE
+	JR	C,DEL_SHIFT_FAR_DONE
 
-PREV_LINE_LEN_DONE:
+DO_SHIFT_FAR_LINE:
+	PUSH	BC
+	; Read line at (BC + 1)
+	INC	BC
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+	; Write to line at (BC - 1)
+	DEC	BC
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+	POP	BC
+	INC	BC
+	JR	DEL_SHIFT_FAR_LOOP
+
+DEL_SHIFT_FAR_DONE:
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+
+	; If CUR_DOC_ROW > 0, move cursor up to previous line
+	LD	HL,(CUR_DOC_ROW)
+	LD	A,H
+	OR	L
+	JR	Z,DEL_BLANK_AT_ROW0
+	DEC	HL
+	LD	(CUR_DOC_ROW),HL
+
+	; Check if CUR_DOC_ROW < TOP_DOC_ROW
+	LD	DE,(TOP_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,DEL_SCROLL_UP
+	JR	NZ,DEL_NO_SCROLL
+	LD	A,L
+	CP	E
+	JR	NC,DEL_NO_SCROLL
+
+DEL_SCROLL_UP:
+	LD	(TOP_DOC_ROW),HL
+
+DEL_NO_SCROLL:
+	CALL	GET_CUR_ROW_LEN		; B = prev line length
 	LD	A,B
 	LD	(CUR_COL),A
+	CALL	CALC_VISUAL_COL
 	LD	(TARGET_COL),A
 
 DEL_BLANK_AT_ROW0:
@@ -1727,188 +2392,136 @@ DEL_BLANK_AT_ROW0:
 	RET
 
 DEL_BLANK_SINGLE_LINE:
-	; When only 1 line exists, just ensure it is cleared
-	LD	HL,LINE_STORAGE
-	LD	B,MAX_LINE_STRIDE
-CLEAR_SINGLE_LOOP:
+	LD	BC,0
+	CALL	ENSURE_CACHE_WINDOW	; HL = line 0
 	LD	(HL),0
-	INC	HL
-	DJNZ	CLEAR_SINGLE_LOOP
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+	LD	(TOP_DOC_ROW),HL
 	XOR	A
-	LD	(CUR_ROW),A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
-	LD	(TOP_LINE),A
-	LD	A,1
-	LD	(TOTAL_LINES),A
+	LD	(CACHE_DIRTY),A
+	LD	HL,1
+	LD	(DOC_TOTAL_LINES),HL
 	CALL	RENDER_SCREEN
 	RET
 
 ;------------------------------------------------------------------------------
-; Line Insertion & Splitting at (CUR_ROW, CUR_COL) - Enter Key Handling
+; Line Insertion & Splitting at (CUR_DOC_ROW, CUR_COL) - Enter Key Handling
 ;------------------------------------------------------------------------------
 DO_INSERT_LINE:
-	LD	A,(TOTAL_LINES)
-	CP	MAX_BUFFER_LINES
-	RET	NC			; Buffer full
+	; Check max document lines (3584)
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	CP	00EH
+	RET	NC
 
-	; 1. Shift lines below CUR_ROW downwards using LDDR block copy
-	; Source start = LINE_STORAGE + (TOTAL_LINES * 128) - 1
-	; Dest start   = LINE_STORAGE + ((TOTAL_LINES + 1) * 128) - 1
-	; Count = (TOTAL_LINES - 1 - CUR_ROW) * 128
+	; Flush dirty cache to Far RAM first
+	CALL	FLUSH_DIRTY_CACHE
 
-	LD	A,(TOTAL_LINES)
-	DEC	A
-	LD	HL,CUR_ROW
-	CP	(HL)
-	JR	Z,DO_SPLIT_LINE		; If CUR_ROW is the last line, no lines to shift!
+	; 1. Shift lines in Far RAM downwards from DOC_TOTAL_LINES - 1 down to CUR_DOC_ROW + 1
+	LD	HL,(DOC_TOTAL_LINES)
+	DEC	HL			; HL = last doc line index
+SPLIT_FAR_SHIFT_LOOP:
+	LD	DE,(CUR_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,SPLIT_FAR_SHIFT_DONE
+	JR	NZ,DO_FAR_SHIFT_DOWN
+	LD	A,L
+	CP	E
+	JR	Z,SPLIT_FAR_SHIFT_DONE
+	JR	C,SPLIT_FAR_SHIFT_DONE
 
-	; Count = (TOTAL_LINES - 1 - CUR_ROW) * 128
-	SUB	(HL)			; A = Number of lines to shift (>= 1)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL			; HL = Byte count
-	LD	B,H
-	LD	C,L			; BC = Count
-
-	; Source HL = LINE_STORAGE + (TOTAL_LINES * 128) - 1
-	LD	A,(TOTAL_LINES)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE
-	DEC	HL			; HL = Source end
-
-	; Dest DE = HL + 128
-	PUSH	HL			; Save Source end
-	LD	DE,MAX_LINE_STRIDE
-	ADD	HL,DE
-	EX	DE,HL			; DE = Dest end
-	POP	HL			; HL = Source end
-
-	LDDR
-
-DO_SPLIT_LINE:
-	; Increment total lines count
-	LD	A,(TOTAL_LINES)
-	INC	A
-	LD	(TOTAL_LINES),A
-
-	; 2. Clear newly created line buffer at CUR_ROW + 1 (128 bytes of 0s)
-	LD	A,(CUR_ROW)
-	INC	A
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = new line start
-
-	PUSH	HL			; Save new line start
-	LD	B,MAX_LINE_STRIDE
-ZERO_NEW_LINE_LOOP:
-	LD	(HL),0
-	INC	HL
-	DJNZ	ZERO_NEW_LINE_LOOP
-	POP	DE			; DE = new line start
-
-	; 3. Source text to move: Check if CUR_COL < line length before splitting
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	LD	BC,LINE_STORAGE
-	ADD	HL,BC			; HL = current line start
-
-	; Scan current line length
+DO_FAR_SHIFT_DOWN:
 	PUSH	HL
-	LD	B,0
-INSERT_SCAN_LEN:
+	LD	B,H
+	LD	C,L
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	INC	BC
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+	POP	HL
+	DEC	HL
+	JR	SPLIT_FAR_SHIFT_LOOP
+
+SPLIT_FAR_SHIFT_DONE:
+	; Read current line at CUR_DOC_ROW into LOAD_LINE_TEMP
+	LD	BC,(CUR_DOC_ROW)
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	; Clear SPLIT_LINE_TEMP
+	LD	HL,SPLIT_LINE_TEMP
+	LD	DE,SPLIT_LINE_TEMP+1
+	LD	BC,127
+	LD	(HL),0
+	LDIR
+
+	; Split LOAD_LINE_TEMP at CUR_COL
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = split point in LOAD_LINE_TEMP
+
+	; Copy text from split point into SPLIT_LINE_TEMP
+	LD	DE,SPLIT_LINE_TEMP
+SPLIT_COPY_REMAINDER:
 	LD	A,(HL)
 	OR	A
-	JR	Z,INSERT_SCAN_DONE
-	INC	HL
-	INC	B
-	LD	A,B
-	CP	MAX_LINE_STRIDE-2
-	JR	NC,INSERT_SCAN_DONE
-	JR	INSERT_SCAN_LEN
-
-INSERT_SCAN_DONE:
-	POP	HL			; HL = current line start
-	; B = current line length
-
-	LD	A,(CUR_COL)
-	CP	B
-	JR	NC,SPLIT_COPY_DONE	; If CUR_COL >= line length, new line is completely blank!
-
-	; CUR_COL < line length: copy text from (current line + CUR_COL) to new line (DE)
-	LD	A,(CUR_COL)
-	LD	C,A
-	LD	B,0
-	ADD	HL,BC			; HL = current line + CUR_COL
-
-	; Copy text from split point to new line (DE)
-SPLIT_COPY_LOOP:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SPLIT_COPY_DONE
+	JR	Z,SPLIT_COPY_REMAINDER_DONE
 	LD	(DE),A
-	LD	(HL),0			; Truncate old line at split point
+	LD	(HL),0			; Truncate current line at split point
 	INC	HL
 	INC	DE
-	JR	SPLIT_COPY_LOOP
+	JR	SPLIT_COPY_REMAINDER
 
-SPLIT_COPY_DONE:
-	XOR	A
-	LD	(DE),A			; Ensure new line is null terminated
+SPLIT_COPY_REMAINDER_DONE:
+	; Write truncated current line back to CUR_DOC_ROW
+	LD	BC,(CUR_DOC_ROW)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
 
-	; 4. Move cursor to start of new line
-	LD	A,(CUR_ROW)
-	INC	A
-	LD	(CUR_ROW),A
+	; Write split remainder to CUR_DOC_ROW + 1
+	INC	BC
+	LD	HL,SPLIT_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; Increment DOC_TOTAL_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	INC	HL
+	LD	(DOC_TOTAL_LINES),HL
+
+	; Advance cursor to CUR_DOC_ROW + 1, Col 0
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL
+	LD	(CUR_DOC_ROW),HL
 	XOR	A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
 
-	; Check if new line scrolled past bottom of screen window
-	LD	A,(TOP_LINE)
-	LD	B,A
-	LD	A,(CUR_ROW)
-	SUB	B			; A = screen row
-	LD	C,A
+	; Check if scrolled past bottom of screen window
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE
 	LD	A,(ACTIVE_ROWS)
 	DEC	A
-	DEC	A			; A = max screen row index (ACTIVE_ROWS - 2)
-	CP	C
-	RET	NC			; If screen row <= max, no scroll
-	LD	A,(TOP_LINE)
-	INC	A
-	LD	(TOP_LINE),A
+	DEC	A
+	CP	L
+	JR	NC,SPLIT_NO_SCROLL
+
+	LD	HL,(TOP_DOC_ROW)
+	INC	HL
+	LD	(TOP_DOC_ROW),HL
+
+SPLIT_NO_SCROLL:
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	CALL	RENDER_SCREEN
 	RET
 
 HBIOS_DETECT:
@@ -1921,7 +2534,7 @@ HBIOS_DETECT:
 	RET
 
 ;------------------------------------------------------------------------------
-; File Loading: Reads CP/M and Linux files into 128-byte stride LINE_STORAGE
+; File Loading: Reads files directly into Far RAM banks
 ;------------------------------------------------------------------------------
 LOAD_FILE:
 	LD	DE,DEFAULT_DMA
@@ -1936,18 +2549,17 @@ LOAD_FILE:
 
 	XOR	A
 	LD	(WORK_FCB+32),A		; Clear current record (CR)
-	LD	(TOTAL_LINES),A
+	LD	HL,0
+	LD	(DOC_TOTAL_LINES),HL
+	LD	(CUR_DOC_ROW),HL
+	LD	(TOP_DOC_ROW),HL
+	LD	(CACHE_START_ROW),HL
+	LD	(CACHE_DIRTY),A
 
-	; Clear LINE_STORAGE buffer with 0s
-	LD	HL,LINE_STORAGE
-	LD	DE,LINE_STORAGE+1
-	LD	BC,5119
+	; Clear LOAD_LINE_TEMP
+	LD	HL,LOAD_LINE_TEMP
 	LD	(HL),0
-	LDIR
-
-	LD	HL,LINE_STORAGE
-	LD	(CUR_LINE_START),HL
-	LD	B,0			; Line length
+	LD	B,0			; Line character counter
 
 READ_SECTOR_LOOP:
 	LD	DE,WORK_FCB
@@ -1970,18 +2582,14 @@ PARSE_BYTE_LOOP:
 	CP	10			; LF
 	JR	Z,HANDLE_LF
 
-	CP	KEY_TAB			; TAB (expand to 8-space tab stops)
-	JR	Z,HANDLE_LOAD_TAB
-
-	; Normal character: store in current line
-	LD	A,(ACTIVE_COLS)
-	CP	B
-	JR	Z,SKIP_LINE_OVERFLOW
-	JR	C,SKIP_LINE_OVERFLOW
+	; Normal character (including 0x09 Tab): store in LOAD_LINE_TEMP
+	LD	A,B
+	CP	MAX_LINE_STRIDE-2
+	JR	NC,SKIP_LINE_OVERFLOW
 
 	LD	A,(HL)
 	PUSH	HL
-	LD	HL,(CUR_LINE_START)
+	LD	HL,LOAD_LINE_TEMP
 	LD	E,B
 	LD	D,0
 	ADD	HL,DE
@@ -1997,53 +2605,34 @@ HANDLE_CR:
 	LD	(SAVE_FORMAT),A
 	JR	NEXT_BYTE_IN_SECTOR
 
-HANDLE_LOAD_TAB:
-	; Calculate number of spaces to pad: 8 - (B & 7)
-	LD	A,B
-	AND	7
-	LD	E,A
-	LD	A,8
-	SUB	E			; A = spaces count (1..8)
-	LD	E,A			; E = loop counter
-LOAD_TAB_PAD_LOOP:
-	LD	A,(ACTIVE_COLS)
-	CP	B
-	JR	Z,NEXT_BYTE_IN_SECTOR
-	JR	C,NEXT_BYTE_IN_SECTOR
-	PUSH	HL
-	LD	HL,(CUR_LINE_START)
-	LD	A,B
-	PUSH	DE
-	LD	E,A
-	LD	D,0
-	ADD	HL,DE
-	LD	(HL),' '
-	POP	DE
-	POP	HL
-	INC	B
-	DEC	E
-	JR	NZ,LOAD_TAB_PAD_LOOP
-	JR	NEXT_BYTE_IN_SECTOR
-
 HANDLE_LF:
-	; Terminate current line
-	LD	HL,(CUR_LINE_START)
+	; Terminate line in LOAD_LINE_TEMP
+	LD	HL,LOAD_LINE_TEMP
 	LD	E,B
 	LD	D,0
 	ADD	HL,DE
 	LD	(HL),0
 
-	; Advance CUR_LINE_START by 128 bytes
-	LD	HL,(CUR_LINE_START)
-	LD	DE,MAX_LINE_STRIDE
-	ADD	HL,DE
-	LD	(CUR_LINE_START),HL
+	; Write line to Far RAM bank at DOC_TOTAL_LINES
+	PUSH	BC
+	LD	BC,(DOC_TOTAL_LINES)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
 
+	LD	HL,(DOC_TOTAL_LINES)
+	INC	HL
+	LD	(DOC_TOTAL_LINES),HL
+	POP	BC
+
+	; Reset line buffer
+	LD	HL,LOAD_LINE_TEMP
+	LD	(HL),0
 	LD	B,0
-	LD	A,(TOTAL_LINES)
-	INC	A
-	LD	(TOTAL_LINES),A
-	CP	MAX_BUFFER_LINES
+
+	; Check max lines (3584 = 14 banks * 256)
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	CP	00EH
 	JR	NC,FILE_LOAD_DONE
 
 NEXT_BYTE_IN_SECTOR:
@@ -2053,14 +2642,37 @@ NEXT_BYTE_IN_SECTOR:
 	JR	READ_SECTOR_LOOP
 
 FILE_LOAD_DONE:
+	; If remaining characters in buffer, flush final line
 	LD	A,B
 	OR	A
-	JR	Z,LOAD_EXIT
-	LD	A,(TOTAL_LINES)
-	INC	A
-	LD	(TOTAL_LINES),A
+	JR	Z,LOAD_FINISH
 
-LOAD_EXIT:
+	LD	HL,LOAD_LINE_TEMP
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),0
+
+	LD	BC,(DOC_TOTAL_LINES)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	LD	HL,(DOC_TOTAL_LINES)
+	INC	HL
+	LD	(DOC_TOTAL_LINES),HL
+
+LOAD_FINISH:
+	; Ensure at least 1 line exists
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	OR	L
+	JR	NZ,LOAD_INIT_CACHE
+	INC	HL
+	LD	(DOC_TOTAL_LINES),HL
+
+LOAD_INIT_CACHE:
+	LD	BC,0
+	CALL	ENSURE_CACHE_WINDOW
 	RET
 
 LOAD_FILE_NOT_FOUND:
@@ -2068,35 +2680,67 @@ LOAD_FILE_NOT_FOUND:
 	RET
 
 ;------------------------------------------------------------------------------
-; Initialize Sample Buffer into 128-byte stride format
+; Initialize Sample Buffer into Far RAM Banks
 ;------------------------------------------------------------------------------
 LOAD_SAMPLE_BUFFER:
-	; Clear LINE_STORAGE (25600 bytes = 200 lines * 128) with 0
-	LD	HL,LINE_STORAGE
-	LD	DE,LINE_STORAGE+1
-	LD	BC,25599
+	LD	HL,4
+	LD	(DOC_TOTAL_LINES),HL
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+	LD	(TOP_DOC_ROW),HL
+	LD	(CACHE_START_ROW),HL
+	XOR	A
+	LD	(CACHE_DIRTY),A
+
+	; Copy Sample Lines to Far RAM Bank 0
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,SAMP_LINE0
+	LD	DE,LOAD_LINE_TEMP
+	CALL	STR_COPY
+	LD	HL,LOAD_LINE_TEMP
+	LD	BC,0
+	CALL	WRITE_FAR_LINE
+
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,SAMP_LINE1
+	LD	DE,LOAD_LINE_TEMP
+	CALL	STR_COPY
+	LD	HL,LOAD_LINE_TEMP
+	LD	BC,1
+	CALL	WRITE_FAR_LINE
+
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,SAMP_LINE2
+	LD	DE,LOAD_LINE_TEMP
+	CALL	STR_COPY
+	LD	HL,LOAD_LINE_TEMP
+	LD	BC,2
+	CALL	WRITE_FAR_LINE
+
+	CALL	CLEAR_LOAD_TEMP
+	LD	HL,SAMP_LINE3
+	LD	DE,LOAD_LINE_TEMP
+	CALL	STR_COPY
+	LD	HL,LOAD_LINE_TEMP
+	LD	BC,3
+	CALL	WRITE_FAR_LINE
+
+	; Populate and force reload local cache window
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	RET
+
+CLEAR_LOAD_TEMP:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	HL,LOAD_LINE_TEMP
+	LD	DE,LOAD_LINE_TEMP+1
+	LD	BC,127
 	LD	(HL),0
 	LDIR
-
-	; Copy Sample Lines
-	LD	HL,SAMP_LINE0
-	LD	DE,LINE_STORAGE + (0 * 128)
-	CALL	STR_COPY
-
-	LD	HL,SAMP_LINE1
-	LD	DE,LINE_STORAGE + (1 * 128)
-	CALL	STR_COPY
-
-	LD	HL,SAMP_LINE2
-	LD	DE,LINE_STORAGE + (2 * 128)
-	CALL	STR_COPY
-
-	LD	HL,SAMP_LINE3
-	LD	DE,LINE_STORAGE + (3 * 128)
-	CALL	STR_COPY
-
-	LD	A,4
-	LD	(TOTAL_LINES),A
+	POP	HL
+	POP	DE
+	POP	BC
 	RET
 
 STR_COPY:
@@ -2110,9 +2754,12 @@ STR_COPY_LOOP:
 	JR	STR_COPY_LOOP
 
 ;------------------------------------------------------------------------------
-; File Saving: Saves in selected format (CP/M CR/LF or Linux LF-only)
+; File Saving: Streams lines directly from Far RAM banks to disk
 ;------------------------------------------------------------------------------
 SAVE_FILE:
+	; Flush local cache dirty lines first
+	CALL	FLUSH_DIRTY_CACHE
+
 	LD	A,(WORK_FCB+1)
 	CP	' '
 	JR	NZ,DO_SAVE_EXISTING
@@ -2156,28 +2803,26 @@ DO_SAVE_EXISTING:
 	LD	A,128
 	LD	(DMA_BYTES_LEFT),A
 
-	; Write lines from LINE_STORAGE
-	LD	C,0			; Line counter
+	; Stream lines from Far RAM banks to disk
+	LD	BC,0			; BC = document line counter
 SAVE_LINE_LOOP:
-	LD	A,C
-	LD	HL,TOTAL_LINES
-	CP	(HL)
-	JR	NC,SAVE_FLUSH_REMAINDER
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	CP	B
+	JR	C,SAVE_FLUSH_REMAINDER
+	JR	NZ,DO_SAVE_LINE
+	LD	A,L
+	CP	C
+	JR	Z,SAVE_FLUSH_REMAINDER
+	JR	C,SAVE_FLUSH_REMAINDER
 
+DO_SAVE_LINE:
 	PUSH	BC
-	; Calculate source line address: LINE_STORAGE + (C * 128)
-	LD	L,C
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE
+	; Read line from Far RAM into LOAD_LINE_TEMP
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
 
+	LD	HL,LOAD_LINE_TEMP
 SAVE_CHAR_LOOP:
 	LD	A,(HL)
 	OR	A
@@ -2200,7 +2845,7 @@ WRITE_LF_ONLY:
 	CALL	WRITE_BYTE_TO_DMA
 
 	POP	BC
-	INC	C
+	INC	BC
 	JR	SAVE_LINE_LOOP
 
 SAVE_FLUSH_REMAINDER:
@@ -2252,6 +2897,48 @@ WRITE_BYTE_TO_DMA:
 WRITE_BYTE_DONE:
 	POP	BC
 	POP	HL
+	RET
+
+;------------------------------------------------------------------------------
+; Print 16-bit Word in Decimal (HL)
+;------------------------------------------------------------------------------
+PRINT_DEC_WORD:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	DE,DEC_WORD_BUF+5
+	LD	A,'$'
+	LD	(DE),A			; '$' terminator for PRINT_STR
+DEC_WORD_LOOP:
+	CALL	DIV_HL_10		; HL = HL / 10, A = HL % 10
+	ADD	A,'0'
+	DEC	DE
+	LD	(DE),A
+	LD	A,H
+	OR	L
+	JR	NZ,DEC_WORD_LOOP
+	CALL	PRINT_STR
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
+DIV_HL_10:
+	PUSH	BC
+	LD	B,16
+	XOR	A
+DIV_HL_10_LOOP:
+	ADD	HL,HL
+	RLA
+	CP	10
+	JR	C,DIV_HL_10_NEXT
+	SUB	10
+	INC	L
+DIV_HL_10_NEXT:
+	DJNZ	DIV_HL_10_LOOP
+	POP	BC
 	RET
 
 ;------------------------------------------------------------------------------
@@ -2315,7 +3002,10 @@ STR_SPLASH_TAIL:
 	.DB	"$"
 
 STR_TEST_TITLE:
-	.DB	"=== SE.COM 512KB Extended Memory Diagnostic ===",13,10,13,10,"$"
+	.DB	27,"[H",27,"[2J"
+	.DB	"============================================================",13,10
+	.DB	"        SE.COM 512KB EXTENDED MEMORY DIAGNOSTIC SUITE       ",13,10
+	.DB	"============================================================",13,10,13,10,"$"
 
 STR_TEST_HBIOS_OK:
 	.DB	"[+] RomWBW HBIOS API (RST 08H): DETECTED",13,10,"$"
@@ -2324,25 +3014,66 @@ STR_TEST_NO_HBIOS:
 	.DB	"[-] RomWBW HBIOS API NOT DETECTED.",13,10,"$"
 
 STR_TEST_RAM_BANKS:
-	.DB	"[*] Installed RAM Banks: $"
+	.DB	"[*] Installed System RAM Banks: $"
 
 STR_TEST_RAM_BANKS_END:
 	.DB	" x 32KB (512KB Total RAM)",13,10,"$"
 
 STR_TEST_CUR_BANK:
-	.DB	"[*] Active CP/M User Bank ID: 0x$"
+	.DB	"[*] Active CP/M User Bank ID:   0x$"
 
-STR_TEST_TARGET_BANK:
-	.DB	"[*] Target Extended RAM Bank ID: 0x$"
+STR_TEST_DISCOVERED:
+	.DB	"[*] Discovered Far RAM Banks (", "$"
 
-STR_TEST_BANK_COPY:
-	.DB	"[*] Testing Inter-Bank Far Memory Transfer (DMA Copy)...",13,10,"$"
+STR_TEST_BANKS_LIST:
+	.DB	"): ", "$"
 
-STR_TEST_PASSED:
-	.DB	"[+] 512KB Far Memory Banking Test: PASSED! (Pattern 0xAA55 Verified)",13,10,13,10,"$"
+STR_TEST_CAPACITY:
+	.DB	"[*] Far Document Storage:       3,584 Lines (448 KB Extended RAM)",13,10,13,10,"$"
+
+STR_TEST_NO_BANKS:
+	.DB	"[-] No Far RAM Banks available for extended storage.",13,10,13,10,"$"
+
+STR_TEST1_TITLE:
+	.DB	"[*] Test 1: Direct Inter-Bank DMA Copy (SYSBNKCPY 0xF5)...",13,10,"$"
+
+STR_TEST1_PASS:
+	.DB	"    --> [PASS] 2-byte DMA pattern (0xAA55) verified.",13,10,13,10,"$"
+
+STR_TEST2_TITLE:
+	.DB	"[*] Test 2: Multi-Bank Far Line Engine (WRITE/READ FAR LINE)...",13,10,"$"
+
+STR_TEST2_PASS_PRE:
+	.DB	"    --> [PASS] Verified across all $"
+
+STR_TEST2_PASS_POST:
+	.DB	" Far RAM Banks (128-byte line I/O).",13,10,13,10,"$"
+
+STR_TEST3_TITLE:
+	.DB	"[*] Test 3: Bank Boundary & 32KB Stride (Offsets 0x0000 & 0x7F80)...",13,10,"$"
+
+STR_TEST3_PASS:
+	.DB	"    --> [PASS] Offsets 0x0000 (top) & 0x7F80 (bottom) verified without overlap.",13,10,13,10,"$"
+
+STR_TEST4_TITLE:
+	.DB	"[*] Test 4: Sliding Window Cache (16KB / 128 Lines) & Dirty Flush...",13,10,"$"
+
+STR_TEST4_PASS:
+	.DB	"    --> [PASS] Transparent window sliding and Far RAM sync verified.",13,10,13,10,"$"
+
+STR_TEST4_FAIL_L0_MSG:
+	.DB	"    [-] Test 4 Line 0 Reload Mismatch! Expected 'C' (0x43), Got: 0x$"
+
+STR_TEST4_FAIL_L300_MSG:
+	.DB	"    [-] Test 4 Line 300 Reload Mismatch! Expected 'C' (0x43), Got: 0x$"
+
+STR_TEST_ALL_PASSED:
+	.DB	"============================================================",13,10
+	.DB	"[+] ALL 512KB EXTENDED MEMORY TESTS PASSED SUCCESSFULLY!",13,10
+	.DB	"============================================================",13,10,13,10,"$"
 
 STR_TEST_FAILED:
-	.DB	"[-] Far Memory Banking Test: FAILED (Data Mismatch)",13,10,13,10,"$"
+	.DB	13,10,"[-] EXTENDED MEMORY TEST FAILED (Data verification mismatch)",13,10,13,10,"$"
 
 STR_TEST_PROMPT:
 	.DB	"Press any key to return to Splash Screen...$"
@@ -2402,17 +3133,30 @@ SCREEN_MODE:	.DB	MODE_120X40	; Default to 120x40
 ACTIVE_ROWS:	.DB	40		; Default 40 rows
 ACTIVE_COLS:	.DB	120		; Default 120 cols
 
-CUR_ROW:	.DB	0
-CUR_COL:	.DB	0
-TARGET_COL:	.DB	0		; Sticky column for vertical (Up/Down) movement
-TOP_LINE:	.DB	0		; Top visible buffer line index on screen
-CUR_RENDER_ROW:	.DB	0
-TOTAL_LINES:	.DB	0
+CUR_DOC_ROW:	.DW	0		; 16-bit document cursor row (0..3583)
+CUR_COL:	.DB	0		; 8-bit character byte index in line (0..126)
+TARGET_COL:	.DB	0		; Sticky visual column (0..119)
+TOP_DOC_ROW:	.DW	0		; 16-bit top visible document line on screen
+DOC_TOTAL_LINES:.DW	4		; 16-bit total document lines count
 HAS_FILE_ARG:	.DB	0
 SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
 CHAR_INSERT_TEMP:.DB	0
 
-CUR_LINE_START:	.DW	0
+CACHE_START_ROW:.DW	0		; 16-bit doc row index at LINE_STORAGE[0]
+CACHE_DIRTY:	.DB	0		; 1 if local cache has unsaved modifications
+EXT_BANK_COUNT:	.DB	0		; Number of available far RAM banks (up to 14)
+EXT_BANK_TABLE:	.DS	14		; Table of far RAM bank IDs
+
+FAR_DEST_BANK:	.DB	0
+FAR_SRC_BANK:	.DB	0
+FAR_DEST_ADDR:	.DW	0
+FAR_SRC_ADDR:	.DW	0
+FAR_LOCAL_ADDR:	.DW	0
+SLOT_TEMP:	.DB	0
+DEC_WORD_BUF:	.DS	6		; Buffer for PRINT_DEC_WORD (5 digits + null)
+
+LOAD_LINE_TEMP:	.DS	128		; 128-byte scratch line for I/O and Far RAM transfers
+SPLIT_LINE_TEMP:.DS	128		; 128-byte scratch line for line splits
 CUR_DMA_PTR:	.DW	0
 DMA_BYTES_LEFT:	.DB	0
 
@@ -2424,7 +3168,7 @@ WORK_FCB:	.DS	36
 		.DS	512
 LOCAL_STACK:
 
-; 200 lines x 128 bytes stride line storage buffer in local TPA (25,600 bytes)
-LINE_STORAGE:	.DS	25600
+; 128 lines x 128 bytes stride local working cache in TPA (16,384 bytes)
+LINE_STORAGE:	.DS	16384
 
 	.END
