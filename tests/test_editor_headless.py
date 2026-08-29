@@ -125,8 +125,8 @@ def test_se_execution():
         read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
         time.sleep(0.3)
         os.write(master, b"e")
-        out_edit = read_until(master, b"SE v0.3.1", timeout=6.0)
-        if b"SE v0.3.1" not in out_edit:
+        out_edit = read_until(master, b"SE v0.3.2", timeout=6.0)
+        if b"SE v0.3.2" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
         print("[+] Successfully entered full-screen editing mode.", flush=True)

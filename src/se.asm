@@ -201,8 +201,12 @@ CHECK_ESC_SEQ:
 CHECK_PRINTABLE_CHAR:
 	; Check if Tab key is pressed (expand to 8-character tab stops)
 	CP	KEY_TAB			; 9
-	JR	Z,DO_HANDLE_TAB
+	JR	NZ,CHECK_PRINTABLE_REGULAR
+	CALL	DO_TAB_INSERT
+	CALL	RENDER_CURRENT_LINE
+	JR	MAIN_LOOP
 
+CHECK_PRINTABLE_REGULAR:
 	CP	' '
 	JR	C,MAIN_LOOP
 	CP	127
@@ -213,176 +217,25 @@ DO_INSERT_CHAR:
 	CALL	RENDER_CURRENT_LINE
 	JR	MAIN_LOOP
 
-DO_HANDLE_TAB:
-	; Ensure TOTAL_LINES >= CUR_ROW + 1
-	LD	A,(TOTAL_LINES)
-	LD	B,A
-	LD	A,(CUR_ROW)
-	CP	B
-	JR	C,TAB_ROW_IN_BOUNDS
-	INC	A
-	LD	(TOTAL_LINES),A
-
-TAB_ROW_IN_BOUNDS:
-	; 1. Calculate pointer to current line: HL = LINE_STORAGE + (CUR_ROW * 128)
-	LD	A,(CUR_ROW)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL
-	ADD	HL,HL			; *128
-	LD	DE,LINE_STORAGE
-	ADD	HL,DE			; HL = line start
-
-	; 2. Scan current line length (first 0 or '$')
-	PUSH	HL			; Save line start
-	LD	B,0
-TAB_SCAN_LEN:
-	LD	A,(HL)
-	OR	A
-	JR	Z,TAB_SCAN_DONE
-	CP	'$'
-	JR	Z,TAB_SCAN_DONE
-	INC	HL
-	INC	B
-	LD	A,B
-	CP	MAX_LINE_STRIDE-2
-	JR	NC,TAB_SCAN_DONE
-	JR	TAB_SCAN_LEN
-
-TAB_SCAN_DONE:
-	POP	HL			; HL = line start
-	; B = current line length
-
-	; 3. Check screen width limit: if B >= ACTIVE_COLS, line is full
-	LD	A,(ACTIVE_COLS)
-	CP	B
-	JR	Z,TAB_DONE_RET
-	JR	C,TAB_DONE_RET
-
-	; 4. Calculate spaces to insert: K = 8 - (CUR_COL & 7)
+;------------------------------------------------------------------------------
+; Tab Key Insertion at (CUR_ROW, CUR_COL) - Expands to 8-column tab stops
+;------------------------------------------------------------------------------
+DO_TAB_INSERT:
+	; Calculate K = 8 - (CUR_COL & 7)
 	LD	A,(CUR_COL)
 	AND	7
 	LD	C,A
 	LD	A,8
-	SUB	C			; A = K (1..8)
-	LD	C,A			; C = K
+	SUB	C			; A = K (1..8 spaces to insert)
+	LD	B,A			; B = loop counter
 
-	; Clamp K if B + K > ACTIVE_COLS: K = ACTIVE_COLS - B
-	LD	A,(ACTIVE_COLS)
-	SUB	B			; A = remaining capacity
-	CP	C
-	JR	NC,TAB_K_OK
-	LD	C,A			; C = clamped K
-	OR	A
-	JR	Z,TAB_DONE_RET
-
-TAB_K_OK:
-	; Save K in CHAR_INSERT_TEMP
-	LD	A,C
-	LD	(CHAR_INSERT_TEMP),A
-
-	; 5. Compare CUR_COL with line length (B)
-	LD	A,(CUR_COL)
-	CP	B
-	JR	NC,TAB_PAD_AND_APPEND
-
-	; 6. CUR_COL < B: Shift text from CUR_COL to end right by K using LDDR
-	; Source end: HL = line_start + B
-	PUSH	HL			; Save line_start for space filling
-	LD	E,B
-	LD	D,0
-	ADD	HL,DE			; HL = line_start + B (source end)
-
-	; Dest end: DE = source_end + K
-	PUSH	HL			; Save source_end
-	LD	A,(CHAR_INSERT_TEMP)	; A = K
-	LD	E,A
-	LD	D,0
-	ADD	HL,DE			; HL = source_end + K (dest end)
-	EX	DE,HL			; DE = dest_end
-	POP	HL			; HL = source_end
-
-	; Count = B - CUR_COL + 1 (including null terminator)
-	LD	A,(CUR_COL)
-	LD	C,A
-	LD	A,B
-	SUB	C
-	INC	A
-	LD	C,A
-	LD	B,0			; BC = Count
-
-	LDDR				; Shift text and null terminator right by K bytes!
-
-	; 7. Fill K spaces at line_start + CUR_COL
-	POP	HL			; HL = line_start
-	LD	A,(CUR_COL)
-	LD	E,A
-	LD	D,0
-	ADD	HL,DE			; HL = line_start + CUR_COL
-	LD	A,(CHAR_INSERT_TEMP)
-	LD	B,A			; B = K
-TAB_FILL_SPACES:
-	LD	(HL),' '
-	INC	HL
-	DJNZ	TAB_FILL_SPACES
-	JR	TAB_ADVANCE_CURSOR
-
-TAB_PAD_AND_APPEND:
-	; Pad from line_start + B up to line_start + CUR_COL + K - 1 with spaces
-	PUSH	HL
-	LD	E,B
-	LD	D,0
-	ADD	HL,DE			; HL = line_start + B
-
-	; Fill spaces from B up to CUR_COL + K
-	LD	A,(CUR_COL)
-	LD	C,A
-	LD	A,(CHAR_INSERT_TEMP)
-	ADD	A,C			; A = CUR_COL + K (new length)
-	LD	C,A			; C = target length
-TAB_APPEND_LOOP:
-	LD	A,C
-	CP	B
-	JR	Z,TAB_APPEND_DONE
-	LD	(HL),' '
-	INC	HL
-	INC	B
-	JR	TAB_APPEND_LOOP
-
-TAB_APPEND_DONE:
-	XOR	A
-	LD	(HL),A			; Null terminate new end of line
-	POP	HL
-
-TAB_ADVANCE_CURSOR:
-	; Advance CUR_COL by K, clamped to ACTIVE_COLS - 1
-	LD	A,(CUR_COL)
-	LD	C,A
-	LD	A,(CHAR_INSERT_TEMP)
-	ADD	A,C
-	LD	C,A
-	LD	A,(ACTIVE_COLS)
-	DEC	A
-	CP	C
-	JR	C,TAB_CLAMP_COL
-	LD	A,C
-	JR	TAB_SET_COL
-
-TAB_CLAMP_COL:
-	; A is already ACTIVE_COLS - 1
-
-TAB_SET_COL:
-	LD	(CUR_COL),A
-	CALL	RENDER_CURRENT_LINE
-	JR	MAIN_LOOP
-
-TAB_DONE_RET:
-	JR	MAIN_LOOP
+TAB_INSERT_SPACE_LOOP:
+	PUSH	BC
+	LD	A,' '			; Insert a single space using proven DO_CHAR_INSERT
+	CALL	DO_CHAR_INSERT
+	POP	BC
+	DJNZ	TAB_INSERT_SPACE_LOOP
+	RET
 
 EXIT_PROGRAM:
 	CALL	LOCATE_STATUS_ROW
@@ -2014,7 +1867,7 @@ STR_SPLASH_BODY:
 	.DB	13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~             SE - Screen Editor              ",13,10
-	.DB	"                  ~                version 0.3.1                ",13,10
+	.DB	"                  ~                version 0.3.2                ",13,10
 	.DB	"                  ~              by Dean Jenkins                ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       SE is open source and freely usable   ",13,10
@@ -2076,7 +1929,7 @@ STR_TEST_PROMPT:
 	.DB	"Press any key to return to Splash Screen...$"
 
 STR_STATUS_PREFIX:
-	.DB	" SE v0.3.1 | [","$"
+	.DB	" SE v0.3.2 | [","$"
 
 STR_STATUS_120X40:
 	.DB	"120x40","$"
