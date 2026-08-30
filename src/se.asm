@@ -111,6 +111,12 @@ SPLASH_LOOP:
 	CP	'T'
 	JR	Z,DO_MEM_TEST
 
+	; Option: 'F' or 'f' -> Run Multi-Sector File I/O Test
+	CP	'f'
+	JR	Z,DO_FILE_TEST
+	CP	'F'
+	JR	Z,DO_FILE_TEST
+
 	; Option: '1' -> Modern Screen Mode (120x40)
 	CP	'1'
 	JR	Z,DO_SET_120X40
@@ -141,6 +147,11 @@ DO_SET_80X24:
 
 DO_MEM_TEST:
 	CALL	RUN_MEM_TEST
+	CALL	GET_KEY
+	JR	SPLASH_START
+
+DO_FILE_TEST:
+	CALL	RUN_FILE_TEST
 	CALL	GET_KEY
 	JR	SPLASH_START
 
@@ -865,6 +876,322 @@ TEST_FAIL:
 TEST_END:
 	LD	DE,STR_TEST_PROMPT
 	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Multi-Sector File I/O & Raw Data Validation Suite (30.TXT)
+;------------------------------------------------------------------------------
+RUN_FILE_TEST:
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+
+	LD	DE,STR_FILE_TEST_TITLE
+	CALL	PRINT_STR
+
+	; 1. Prepare FCB for 30.TXT
+	LD	HL,RAW_TEST_FCB
+	LD	(HL),0			; Drive 0 (Default / C:)
+	INC	HL
+	LD	(HL),'3'
+	INC	HL
+	LD	(HL),'0'
+	INC	HL
+	LD	B,6
+PAD_FT_NAME:
+	LD	(HL),' '
+	INC	HL
+	DJNZ	PAD_FT_NAME
+	LD	(HL),'T'
+	INC	HL
+	LD	(HL),'X'
+	INC	HL
+	LD	(HL),'T'
+	INC	HL
+	LD	B,24
+CLR_FT_REM:
+	LD	(HL),0
+	INC	HL
+	DJNZ	CLR_FT_REM
+
+	; 2. Set DMA Buffer
+	LD	DE,RAW_SECTOR_BUF
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; 3. Open 30.TXT
+	LD	DE,RAW_TEST_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JP	Z,FILE_TEST_NOT_FOUND
+
+	LD	DE,STR_FILE_TEST_OPEN_OK
+	CALL	PRINT_STR
+
+	; 4. Initialize counters and pointers
+	XOR	A
+	LD	(RAW_TEST_FCB+32),A	; Clear Current Record (CR)
+	LD	(RAW_SEEN_CR),A
+	LD	(RAW_FORMAT_TYPE),A	; FMT_CPM = 0
+	LD	HL,0
+	LD	(RAW_SECTORS_READ),HL
+	LD	(RAW_BYTES_COUNT),HL
+	LD	(RAW_LINES_COUNT),HL
+
+	LD	HL,RAW_DATA_BUFFER
+	LD	(RAW_DATA_PTR),HL
+	LD	(HL),0
+
+	; 5. Multi-Sector Sequential Read Loop
+READ_RAW_SECTOR_LOOP:
+	LD	DE,RAW_TEST_FCB
+	LD	C,20			; BDOS Read Next Record
+	CALL	BDOS_ENTRY
+	OR	A
+	JP	NZ,RAW_READ_EOF
+
+	; Increment sector counter
+	LD	HL,(RAW_SECTORS_READ)
+	INC	HL
+	LD	(RAW_SECTORS_READ),HL
+
+	; Process 128 bytes in RAW_SECTOR_BUF
+	LD	HL,RAW_SECTOR_BUF
+	LD	C,128
+
+RAW_BYTE_PARSE_LOOP:
+	LD	A,(HL)
+	CP	26			; CP/M EOF (^Z)
+	JP	Z,RAW_READ_EOF
+	OR	A			; NULL padding after text
+	JP	Z,RAW_READ_EOF
+
+	; Count valid data byte
+	PUSH	HL
+	LD	HL,(RAW_BYTES_COUNT)
+	INC	HL
+	LD	(RAW_BYTES_COUNT),HL
+	POP	HL
+
+	; Copy byte to RAW_DATA_BUFFER if within buffer size (2040 bytes)
+	PUSH	HL
+	PUSH	BC
+	LD	HL,(RAW_DATA_PTR)
+	LD	DE,RAW_DATA_BUFFER+2040
+	LD	A,H
+	CP	D
+	JR	C,STORE_RAW_BYTE
+	JR	NZ,SKIP_STORE_RAW
+	LD	A,L
+	CP	E
+	JR	NC,SKIP_STORE_RAW
+
+STORE_RAW_BYTE:
+	POP	BC
+	POP	HL
+	LD	A,(HL)
+	PUSH	HL
+	LD	HL,(RAW_DATA_PTR)
+	LD	(HL),A
+	INC	HL
+	LD	(HL),0			; Keep null-terminated
+	LD	(RAW_DATA_PTR),HL
+	POP	HL
+	JR	CHECK_RAW_CRLF
+
+SKIP_STORE_RAW:
+	POP	BC
+	POP	HL
+
+CHECK_RAW_CRLF:
+	LD	A,(HL)
+	CP	13			; CR
+	JR	NZ,CHECK_RAW_LF
+	LD	A,1
+	LD	(RAW_SEEN_CR),A
+	JR	RAW_NEXT_BYTE
+
+CHECK_RAW_LF:
+	CP	10			; LF
+	JR	NZ,CHECK_RAW_NORMAL
+
+	; LF detected -> increment line counter
+	PUSH	HL
+	LD	HL,(RAW_LINES_COUNT)
+	INC	HL
+	LD	(RAW_LINES_COUNT),HL
+	POP	HL
+
+	LD	A,(RAW_SEEN_CR)
+	OR	A
+	JR	NZ,RAW_LF_AFTER_CR
+	LD	A,FMT_LINUX
+	LD	(RAW_FORMAT_TYPE),A
+RAW_LF_AFTER_CR:
+	XOR	A
+	LD	(RAW_SEEN_CR),A
+	JR	RAW_NEXT_BYTE
+
+CHECK_RAW_NORMAL:
+	XOR	A
+	LD	(RAW_SEEN_CR),A
+
+RAW_NEXT_BYTE:
+	INC	HL
+	DEC	C
+	JP	NZ,RAW_BYTE_PARSE_LOOP
+	JP	READ_RAW_SECTOR_LOOP
+
+RAW_READ_EOF:
+	; Restore DMA buffer to DEFAULT_DMA
+	LD	DE,DEFAULT_DMA
+	LD	C,26
+	CALL	BDOS_ENTRY
+
+	; If bytes ended without trailing newline, count final line
+	LD	HL,(RAW_BYTES_COUNT)
+	LD	A,H
+	OR	L
+	JR	Z,SHOW_RAW_METRICS
+
+	; Check if last byte was newline or if lines count is 0
+	LD	HL,(RAW_LINES_COUNT)
+	LD	A,H
+	OR	L
+	JR	NZ,SHOW_RAW_METRICS
+	INC	HL
+	LD	(RAW_LINES_COUNT),HL
+
+SHOW_RAW_METRICS:
+	; Print Sectors Read
+	LD	DE,STR_RAW_SECTORS_LBL
+	CALL	PRINT_STR
+	LD	HL,(RAW_SECTORS_READ)
+	CALL	PRINT_DEC_WORD
+	LD	DE,STR_RAW_SECTORS_TAIL
+	CALL	PRINT_STR
+
+	; Print Bytes Count
+	LD	DE,STR_RAW_BYTES_LBL
+	CALL	PRINT_STR
+	LD	HL,(RAW_BYTES_COUNT)
+	CALL	PRINT_DEC_WORD
+	LD	DE,STR_RAW_BYTES_TAIL
+	CALL	PRINT_STR
+
+	; Print Lines Count
+	LD	DE,STR_RAW_LINES_LBL
+	CALL	PRINT_STR
+	LD	HL,(RAW_LINES_COUNT)
+	CALL	PRINT_DEC_WORD
+	LD	DE,STR_RAW_LINES_TAIL
+	CALL	PRINT_STR
+
+	; Print Format Detected
+	LD	DE,STR_RAW_FMT_LBL
+	CALL	PRINT_STR
+	LD	A,(RAW_FORMAT_TYPE)
+	CP	FMT_CPM
+	JR	NZ,SHOW_RAW_FMT_LINUX
+	LD	DE,STR_RAW_FMT_CPM
+	CALL	PRINT_STR
+	JR	SHOW_LINE_PREVIEWS
+
+SHOW_RAW_FMT_LINUX:
+	LD	DE,STR_RAW_FMT_LINUX
+	CALL	PRINT_STR
+
+SHOW_LINE_PREVIEWS:
+	; First line preview
+	LD	DE,STR_RAW_FIRST_LINE_LBL
+	CALL	PRINT_STR
+	LD	HL,RAW_DATA_BUFFER
+	CALL	PRINT_RAW_LINE_PREVIEW
+	LD	DE,STR_QUOTE_CRLF
+	CALL	PRINT_STR
+
+	; Last line preview
+	LD	DE,STR_RAW_LAST_LINE_LBL
+	CALL	PRINT_STR
+	CALL	FIND_LAST_RAW_LINE	; Returns HL = pointer to start of last line
+	CALL	PRINT_RAW_LINE_PREVIEW
+	LD	DE,STR_QUOTE_CRLF
+	CALL	PRINT_STR
+
+	; Validation Assertions:
+	; Sectors > 1 AND Lines == 30
+	LD	HL,(RAW_SECTORS_READ)
+	LD	A,H
+	OR	A
+	JR	NZ,CHECK_LINES_COUNT
+	LD	A,L
+	CP	2
+	JP	C,FILE_TEST_FAIL
+
+CHECK_LINES_COUNT:
+	LD	HL,(RAW_LINES_COUNT)
+	LD	A,H
+	OR	A
+	JP	NZ,FILE_TEST_FAIL
+	LD	A,L
+	CP	30
+	JP	NZ,FILE_TEST_FAIL
+
+	LD	DE,STR_FILE_TEST_PASSED
+	CALL	PRINT_STR
+	JR	FILE_TEST_DONE
+
+FILE_TEST_NOT_FOUND:
+	LD	DE,STR_FILE_TEST_NOT_FOUND
+	CALL	PRINT_STR
+	JR	FILE_TEST_DONE
+
+FILE_TEST_FAIL:
+	LD	DE,STR_FILE_TEST_FAILED
+	CALL	PRINT_STR
+
+FILE_TEST_DONE:
+	LD	DE,STR_TEST_PROMPT
+	CALL	PRINT_STR
+	RET
+
+PRINT_RAW_LINE_PREVIEW:
+	LD	B,50			; Max 50 characters preview
+PRLP_LOOP:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	CP	13			; CR
+	RET	Z
+	CP	10			; LF
+	RET	Z
+	CALL	PUTC
+	INC	HL
+	DJNZ	PRLP_LOOP
+	RET
+
+FIND_LAST_RAW_LINE:
+	LD	HL,RAW_DATA_BUFFER
+	LD	DE,RAW_DATA_BUFFER
+FLRL_SCAN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,FLRL_DONE
+	CP	10			; LF
+	JR	NZ,FLRL_NEXT
+	; Next char after LF is new line start
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	JR	Z,FLRL_DONE
+	LD	D,H
+	LD	E,L
+	JR	FLRL_SCAN
+FLRL_NEXT:
+	INC	HL
+	JR	FLRL_SCAN
+FLRL_DONE:
+	EX	DE,HL
 	RET
 
 ;------------------------------------------------------------------------------
@@ -2571,7 +2898,7 @@ LOAD_FILE:
 	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
 	CP	0FFH
-	JR	Z,LOAD_FILE_NOT_FOUND
+	JP	Z,LOAD_FILE_NOT_FOUND
 
 	XOR	A
 	LD	(WORK_FCB+32),A		; Clear current record (CR)
@@ -2594,15 +2921,18 @@ READ_SECTOR_LOOP:
 	CALL	BDOS_ENTRY
 	POP	BC			; Restore line character count B
 	OR	A
-	JR	NZ,FILE_LOAD_DONE
+	JP	NZ,FILE_LOAD_DONE
 
 	LD	HL,DEFAULT_DMA
 	LD	C,128			; 128 bytes per sector
 
 PARSE_BYTE_LOOP:
 	LD	A,(HL)
+	OR	A			; NULL padding at EOF
+	JP	Z,FILE_LOAD_DONE
+
 	CP	26			; CP/M EOF (^Z)
-	JR	Z,FILE_LOAD_DONE
+	JP	Z,FILE_LOAD_DONE
 
 	CP	13			; CR
 	JR	Z,HANDLE_CR
@@ -2682,19 +3012,19 @@ LF_AFTER_CR:
 	LD	A,H
 	CP	00EH
 	POP	HL
-	JR	NC,FILE_LOAD_DONE
+	JP	NC,FILE_LOAD_DONE
 
 NEXT_BYTE_IN_SECTOR:
 	INC	HL
 	DEC	C
-	JR	NZ,PARSE_BYTE_LOOP
-	JR	READ_SECTOR_LOOP
+	JP	NZ,PARSE_BYTE_LOOP
+	JP	READ_SECTOR_LOOP
 
 FILE_LOAD_DONE:
 	; If remaining characters in buffer, flush final line
 	LD	A,B
 	OR	A
-	JR	Z,LOAD_FINISH
+	JP	Z,LOAD_FINISH
 
 	LD	HL,LOAD_LINE_TEMP
 	LD	E,B
@@ -2715,7 +3045,7 @@ LOAD_FINISH:
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	A,H
 	OR	L
-	JR	NZ,LOAD_INIT_CACHE
+	JP	NZ,LOAD_INIT_CACHE
 	INC	HL
 	LD	(DOC_TOTAL_LINES),HL
 	; Write empty line to line 0 in Far RAM
@@ -2790,7 +3120,7 @@ SAVE_FILE:
 
 	LD	A,(WORK_FCB+1)
 	CP	' '
-	JR	NZ,DO_SAVE_EXISTING
+	JP	NZ,DO_SAVE_EXISTING
 
 	; Zero entire WORK_FCB (36 bytes)
 	LD	HL,WORK_FCB
@@ -2837,12 +3167,12 @@ SAVE_LINE_LOOP:
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	A,H
 	CP	B
-	JR	C,SAVE_FLUSH_REMAINDER
-	JR	NZ,DO_SAVE_LINE
+	JP	C,SAVE_FLUSH_REMAINDER
+	JP	NZ,DO_SAVE_LINE
 	LD	A,L
 	CP	C
-	JR	Z,SAVE_FLUSH_REMAINDER
-	JR	C,SAVE_FLUSH_REMAINDER
+	JP	Z,SAVE_FLUSH_REMAINDER
+	JP	C,SAVE_FLUSH_REMAINDER
 
 DO_SAVE_LINE:
 	PUSH	BC
@@ -2874,17 +3204,17 @@ WRITE_LF_ONLY:
 
 	POP	BC
 	INC	BC
-	JR	SAVE_LINE_LOOP
+	JP	SAVE_LINE_LOOP
 
 SAVE_FLUSH_REMAINDER:
 	; Pad remaining bytes in sector with ^Z (0x1A)
 PAD_SECTOR_LOOP:
 	LD	A,(DMA_BYTES_LEFT)
 	CP	128
-	JR	Z,CLOSE_OUTPUT_FILE
+	JP	Z,CLOSE_OUTPUT_FILE
 	LD	A,26
 	CALL	WRITE_BYTE_TO_DMA
-	JR	PAD_SECTOR_LOOP
+	JP	PAD_SECTOR_LOOP
 
 CLOSE_OUTPUT_FILE:
 	LD	DE,WORK_FCB
@@ -3008,6 +3338,7 @@ STR_SPLASH_BODY:
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
 	.DB	"                  ~       type   :t                for mem test ",13,10
+	.DB	"                  ~       type   :f                for file test",13,10
 	.DB	"                  ~       type   :1                set 120x40   ",13,10
 	.DB	"                  ~       type   :2                set 80x24    ",13,10
 	.DB	"                  ~       type   :q  or  ^Q        to exit      ",13,10
@@ -3048,19 +3379,19 @@ STR_TEST_RAM_BANKS_END:
 	.DB	" x 32KB (512KB Total RAM)",13,10,"$"
 
 STR_TEST_CUR_BANK:
-	.DB	"[*] Active CP/M User Bank ID:   0x$"
+	.DB	"[*] Active CP/M User RAM Bank:  0x$"
 
 STR_TEST_DISCOVERED:
-	.DB	"[*] Discovered Far RAM Banks (", "$"
+	.DB	"[*] Usable Far RAM Banks (32K): $"
 
 STR_TEST_BANKS_LIST:
-	.DB	"): ", "$"
+	.DB	"): ","$"
 
 STR_TEST_CAPACITY:
 	.DB	"[*] Far Document Storage:       3,584 Lines (448 KB Extended RAM)",13,10,13,10,"$"
 
 STR_TEST_NO_BANKS:
-	.DB	"[-] No Far RAM Banks available for extended storage.",13,10,13,10,"$"
+	.DB	"[-] No Far RAM banks available for extended storage.",13,10,13,10,"$"
 
 STR_TEST1_TITLE:
 	.DB	"[*] Test 1: Direct Inter-Bank DMA Copy (SYSBNKCPY 0xF5)...",13,10,"$"
@@ -3105,6 +3436,56 @@ STR_TEST_FAILED:
 
 STR_TEST_PROMPT:
 	.DB	"Press any key to return to Splash Screen...$"
+
+STR_FILE_TEST_TITLE:
+	.DB	27,"[H",27,"[2J"
+	.DB	"============================================================",13,10
+	.DB	"        SE.COM MULTI-SECTOR FILE I/O VALIDATION TEST        ",13,10
+	.DB	"============================================================",13,10,13,10,"$"
+
+STR_FILE_TEST_OPEN_OK:
+	.DB	"[+] BDOS Open File ('30.TXT'): SUCCESS",13,10,"$"
+
+STR_RAW_SECTORS_LBL:
+	.DB	"[*] Total Sectors Read:       $"
+STR_RAW_SECTORS_TAIL:
+	.DB	" sectors (128 bytes/sector)",13,10,"$"
+
+STR_RAW_BYTES_LBL:
+	.DB	"[*] Total Data Bytes:         $"
+STR_RAW_BYTES_TAIL:
+	.DB	" bytes",13,10,"$"
+
+STR_RAW_LINES_LBL:
+	.DB	"[*] Total Text Lines Parsed:  $"
+STR_RAW_LINES_TAIL:
+	.DB	" lines",13,10,"$"
+
+STR_RAW_FMT_LBL:
+	.DB	"[*] Line Ending Format:       $"
+STR_RAW_FMT_CPM:
+	.DB	"CP/M [CRLF]",13,10,"$"
+STR_RAW_FMT_LINUX:
+	.DB	"Linux [LF]",13,10,"$"
+
+STR_RAW_FIRST_LINE_LBL:
+	.DB	"[*] First Line Content:       \"",$"
+STR_RAW_LAST_LINE_LBL:
+	.DB	"[*] Last Line Content:        \"",$"
+STR_QUOTE_CRLF:
+	.DB	"\"",13,10,"$"
+
+STR_FILE_TEST_PASSED:
+	.DB	13,10
+	.DB	"============================================================",13,10
+	.DB	"[+] MULTI-SECTOR FILE VALIDATION: ALL TESTS PASSED!",13,10
+	.DB	"============================================================",13,10,"$"
+
+STR_FILE_TEST_NOT_FOUND:
+	.DB	"[-] Error: Test file '30.TXT' not found on CP/M drive!",13,10,"$"
+
+STR_FILE_TEST_FAILED:
+	.DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
 
 STR_STATUS_PREFIX:
 	.DB	" SE v0.5.0 | ","$"
@@ -3184,6 +3565,16 @@ TEST_PATTERN:	.DB	0,0
 TEST_READBACK:	.DB	0,0
 
 WORK_FCB:	.DS	36
+
+RAW_TEST_FCB:		.DS	36
+RAW_SECTOR_BUF:		.DS	128
+RAW_SECTORS_READ:	.DW	0
+RAW_BYTES_COUNT:	.DW	0
+RAW_LINES_COUNT:	.DW	0
+RAW_SEEN_CR:		.DB	0
+RAW_FORMAT_TYPE:	.DB	0
+RAW_DATA_PTR:		.DW	0
+RAW_DATA_BUFFER:	.DS	2048
 
 		.DS	512
 LOCAL_STACK:

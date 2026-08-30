@@ -109,7 +109,22 @@ def test_se_execution():
             return False
         print("[+] SE.COM splash screen successfully displayed.", flush=True)
 
-        # 5. Trigger Memory Diagnostic ('t')
+        # 5. Trigger Multi-Sector File I/O Validation Suite ('f')
+        time.sleep(0.5)
+        os.write(master, b"f")
+        out_file_test = read_until(master, b"MULTI-SECTOR FILE VALIDATION: ALL TESTS PASSED", timeout=8.0)
+        if b"MULTI-SECTOR FILE VALIDATION: ALL TESTS PASSED" not in out_file_test:
+            print("[-] Multi-sector file I/O validation test FAILED. Buffer captured:\n", out_file_test.decode("latin1", errors="replace"), flush=True)
+            return False
+        print("[+] Multi-Sector File I/O Diagnostic Suite ('30.TXT' 8 sectors, 30 lines) ALL PASSED!", flush=True)
+
+        # Return to Splash Screen
+        read_until(master, b"Press any key to return", timeout=5.0)
+        time.sleep(0.3)
+        os.write(master, b"\r")
+        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+
+        # 6. Trigger Memory Diagnostic ('t')
         time.sleep(0.5)
         os.write(master, b"t")
         out_mem = read_until(master, b"ALL 512KB EXTENDED MEMORY TESTS PASSED", timeout=8.0)
@@ -118,7 +133,7 @@ def test_se_execution():
             return False
         print("[+] 512KB Extended Memory Diagnostic Suite (Tests 1, 2, 3, 4) ALL PASSED!", flush=True)
 
-        # 6. Return to Splash and enter editor ('e')
+        # 7. Return to Splash and enter editor ('e')
         read_until(master, b"Press any key to return", timeout=5.0)
         time.sleep(0.3)
         os.write(master, b"\r")
@@ -131,7 +146,7 @@ def test_se_execution():
             return False
         print("[+] Successfully entered full-screen editing mode.", flush=True)
 
-        # 7. Test interactive character typing in empty buffer
+        # 8. Test interactive character typing in empty buffer
         time.sleep(0.5)
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
@@ -331,6 +346,28 @@ def test_se_execution():
         print("[+] Successfully verified multi-line file loading (se 2.TXT) and Far RAM streaming!", flush=True)
 
         # Exit editor again
+        time.sleep(0.5)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Exit from SE.COM completed.", flush=True)
+
+        # 20. Test Multi-Sector File Loading into Editor: 'se 30.TXT' (8 sectors, 30 lines)
+        time.sleep(0.5)
+        os.write(master, b"se 30.TXT\r")
+        out_load_30 = read_until(master, b"SE v0.5.0", timeout=6.0)
+        if b"SE v0.5.0" not in out_load_30:
+            print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
+            return False
+        # Verify lines from 30.TXT are rendered on screen
+        if b"Line 01 of test file content" not in out_load_30:
+            print(f"[-] 30.TXT Line 01 missing on editor screen. Buffer: {repr(out_load_30)}", flush=True)
+            return False
+        if b"Line 20 of test file content" not in out_load_30:
+            print(f"[-] 30.TXT Line 20 missing on editor screen. Buffer: {repr(out_load_30)}", flush=True)
+            return False
+        print("[+] Successfully verified 30-line multi-sector file loading (se 30.TXT) into editor Far RAM buffer!", flush=True)
+
+        # Final exit from editor
         time.sleep(0.5)
         os.write(master, b"\x11")
         read_until(master, b"C>", timeout=4.0)
