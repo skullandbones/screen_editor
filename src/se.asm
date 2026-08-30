@@ -195,6 +195,14 @@ CHECK_PAGE_KEYS:
 	CP	5			; Ctrl+E
 	JR	Z,DO_END_KEY
 
+	; Command: Ctrl+T -> Jump to Top of File
+	CP	20			; Ctrl+T
+	JR	Z,DO_JUMP_TOP
+
+	; Command: Ctrl+G -> Jump to Bottom of File
+	CP	7			; Ctrl+G
+	JR	Z,DO_JUMP_BOTTOM
+
 	; Command: Ctrl+U or Ctrl+B -> Page Up
 	CP	21			; Ctrl+U
 	JR	Z,DO_PAGE_UP
@@ -214,6 +222,16 @@ DO_HOME_KEY:
 
 DO_END_KEY:
 	CALL	CURSOR_END
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+DO_JUMP_TOP:
+	CALL	JUMP_FILE_TOP
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+DO_JUMP_BOTTOM:
+	CALL	JUMP_FILE_BOTTOM
 	CALL	RENDER_STATUS_BAR
 	JP	MAIN_LOOP
 
@@ -2109,8 +2127,28 @@ GOT_ESC_BYTE:
 	JR	Z,HANDLE_CSI
 	CP	'O'
 	JR	Z,HANDLE_SS3
+	CP	'<'
+	JR	Z,DO_ESC_TOP
+	CP	't'
+	JR	Z,DO_ESC_TOP
+	CP	'T'
+	JR	Z,DO_ESC_TOP
+	CP	'>'
+	JR	Z,DO_ESC_BOTTOM
+	CP	'b'
+	JR	Z,DO_ESC_BOTTOM
+	CP	'B'
+	JR	Z,DO_ESC_BOTTOM
 	CP	KEY_ESC
 	JR	Z,HANDLE_VT100_ESC
+	RET
+
+DO_ESC_TOP:
+	CALL	JUMP_FILE_TOP
+	RET
+
+DO_ESC_BOTTOM:
+	CALL	JUMP_FILE_BOTTOM
 	RET
 
 HANDLE_SS3:
@@ -2130,6 +2168,8 @@ HANDLE_SS3:
 	RET
 
 HANDLE_CSI:
+	XOR	A
+	LD	(CSI_DIGIT_PREFIX),A
 	CALL	GET_KEY
 	CP	'A'			; Up Arrow
 	JP	Z,CURSOR_UP
@@ -2145,12 +2185,12 @@ HANDLE_CSI:
 	JP	Z,CURSOR_END
 	CP	'1'			; Home (ESC [ 1 ~) or modifier prefix (ESC [ 1 ; ...)
 	JP	Z,HANDLE_CSI_1
-	CP	'4'			; End (ESC [ 4 ~)
-	JP	Z,HANDLE_CSI_END
-	CP	'7'			; Home (ESC [ 7 ~)
-	JP	Z,HANDLE_CSI_HOME
-	CP	'8'			; End (ESC [ 8 ~)
-	JP	Z,HANDLE_CSI_END
+	CP	'4'			; End (ESC [ 4 ~) or modifier prefix (ESC [ 4 ; ...)
+	JP	Z,HANDLE_CSI_4
+	CP	'7'			; Home (ESC [ 7 ~) / Ctrl+Home (ESC [ 7 ^)
+	JP	Z,HANDLE_CSI_7
+	CP	'8'			; End (ESC [ 8 ~) / Ctrl+End (ESC [ 8 ^)
+	JP	Z,HANDLE_CSI_8
 	CP	'3'			; Delete Key (ESC [ 3 ~)
 	JP	Z,HANDLE_CSI_DEL
 	CP	'5'			; Page Up (ESC [ 5 ~)
@@ -2170,21 +2210,35 @@ HANDLE_CSI:
 	RET
 
 HANDLE_CSI_1:
+	LD	A,'1'
+	LD	(CSI_DIGIT_PREFIX),A
 	CALL	GET_KEY
 	CP	'~'
 	JP	Z,CURSOR_HOME
 	CP	';'
-	JP	Z,HANDLE_CSI_LOOP
+	JR	Z,HANDLE_CSI_LOOP
 	RET
 
-HANDLE_CSI_HOME:
-	; Consume trailing '~'
+HANDLE_CSI_4:
+	LD	A,'4'
+	LD	(CSI_DIGIT_PREFIX),A
 	CALL	GET_KEY
+	CP	'~'
+	JP	Z,CURSOR_END
+	CP	';'
+	JR	Z,HANDLE_CSI_LOOP
+	RET
+
+HANDLE_CSI_7:
+	CALL	GET_KEY
+	CP	'^'
+	JP	Z,JUMP_FILE_TOP		; rxvt Ctrl+Home (ESC [ 7 ^)
 	JP	CURSOR_HOME
 
-HANDLE_CSI_END:
-	; Consume trailing '~'
+HANDLE_CSI_8:
 	CALL	GET_KEY
+	CP	'^'
+	JP	Z,JUMP_FILE_BOTTOM	; rxvt Ctrl+End (ESC [ 8 ^)
 	JP	CURSOR_END
 
 HANDLE_CSI_DEL:
@@ -2208,7 +2262,7 @@ HANDLE_CSI_PGDN:
 HANDLE_CSI_LOOP:
 	CALL	GET_KEY
 	CP	'~'
-	RET	Z
+	JR	Z,HANDLE_CSI_TILDE
 	CP	'A'
 	JP	Z,CURSOR_UP
 	CP	'B'
@@ -2218,9 +2272,9 @@ HANDLE_CSI_LOOP:
 	CP	'D'
 	JP	Z,CURSOR_LEFT
 	CP	'H'
-	JP	Z,CURSOR_HOME
+	JP	Z,JUMP_FILE_TOP		; Modified CSI: ESC [ 1 ; 5 H -> Ctrl+Home!
 	CP	'F'
-	JP	Z,CURSOR_END
+	JP	Z,JUMP_FILE_BOTTOM	; Modified CSI: ESC [ 1 ; 5 F -> Ctrl+End!
 	CP	'I'
 	JP	Z,PAGE_UP
 	CP	'G'
@@ -2232,6 +2286,14 @@ HANDLE_CSI_LOOP:
 	CP	'9'+1
 	JR	C,HANDLE_CSI_LOOP
 CSI_DONE:
+	RET
+
+HANDLE_CSI_TILDE:
+	LD	A,(CSI_DIGIT_PREFIX)
+	CP	'1'
+	JP	Z,JUMP_FILE_TOP		; ESC [ 1 ; 5 ~ -> Ctrl+Home!
+	CP	'4'
+	JP	Z,JUMP_FILE_BOTTOM	; ESC [ 4 ; 5 ~ -> Ctrl+End!
 	RET
 
 CURSOR_HOME:
@@ -2669,6 +2731,71 @@ GET_PAGE_STEP:
 	DEC	A
 	LD	E,A
 	LD	D,0
+	RET
+
+;------------------------------------------------------------------------------
+; Jump to Top of Document (Line 1, Col 0)
+;------------------------------------------------------------------------------
+JUMP_FILE_TOP:
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+	LD	(TOP_DOC_ROW),HL
+	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+	CALL	RENDER_SCREEN
+	RET
+
+;------------------------------------------------------------------------------
+; Jump to End/Bottom of Document (Last Line, Col 0)
+;------------------------------------------------------------------------------
+JUMP_FILE_BOTTOM:
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	OR	L
+	JR	NZ,JUMP_BOT_HAS_LINES
+	LD	HL,0
+	JR	JUMP_BOT_SET_CUR
+
+JUMP_BOT_HAS_LINES:
+	DEC	HL			; HL = max_valid_row (DOC_TOTAL_LINES - 1)
+JUMP_BOT_SET_CUR:
+	LD	(CUR_DOC_ROW),HL
+	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+
+	; Calculate TOP_DOC_ROW so the bottom line is visible at bottom of screen
+	; Viewport height: E = ACTIVE_ROWS - 1
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	LD	E,A
+	LD	D,0
+
+	; Compare DOC_TOTAL_LINES (HL) with viewport height (DE)
+	LD	A,H
+	OR	A
+	JR	NZ,JUMP_BOT_SCROLL_TOP
+	LD	A,L
+	CP	E
+	JR	C,JUMP_BOT_TOP_ZERO
+	JR	Z,JUMP_BOT_TOP_ZERO
+
+JUMP_BOT_SCROLL_TOP:
+	; TOP_DOC_ROW = DOC_TOTAL_LINES - (ACTIVE_ROWS - 1)
+	LD	HL,(DOC_TOTAL_LINES)
+	AND	A
+	SBC	HL,DE
+	LD	(TOP_DOC_ROW),HL
+	JR	JUMP_BOT_FINISH
+
+JUMP_BOT_TOP_ZERO:
+	LD	HL,0
+	LD	(TOP_DOC_ROW),HL
+
+JUMP_BOT_FINISH:
+	CALL	RENDER_SCREEN
 	RET
 
 ;------------------------------------------------------------------------------
@@ -3795,6 +3922,7 @@ HAS_FILE_ARG:	.DB	0
 SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
 SEEN_CR:	.DB	0		; Line format auto-detection state
 CHAR_INSERT_TEMP:.DB	0
+CSI_DIGIT_PREFIX:.DB	0
 
 CACHE_START_ROW:.DW	0		; 16-bit doc row index at LINE_STORAGE[0]
 CACHE_DIRTY:	.DB	0		; 1 if local cache has unsaved modifications

@@ -473,6 +473,81 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts.", flush=True)
 
+        # 24. Test Jump to Top / Bottom (Ctrl+Home / Ctrl+End, Ctrl+T / Ctrl+G, ESC < / ESC >, ESC t / ESC b)
+        # Test Ctrl+G (Jump to Bottom)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x07")  # Ctrl+G -> Jump to Bottom
+        out_g = read_until(master, b"Row 30", timeout=4.0)
+        if b"Row 30" not in out_g:
+            print(f"[-] Ctrl+G failed to jump to bottom of file. Buffer: {repr(out_g)}", flush=True)
+            return False
+
+        # Test Ctrl+T (Jump to Top)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x14")  # Ctrl+T -> Jump to Top
+        out_t = read_until(master, b"Row 1", timeout=4.0)
+        if b"Row 1" not in out_t:
+            print(f"[-] Ctrl+T failed to jump to top of file. Buffer: {repr(out_t)}", flush=True)
+            return False
+
+        # Test Ctrl+End (ESC [ 1 ; 5 F)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b[1;5F")
+        out_cend = read_until(master, b"Row 30", timeout=4.0)
+        if b"Row 30" not in out_cend:
+            print(f"[-] Ctrl+End (ESC [ 1 ; 5 F) failed to jump to bottom. Buffer: {repr(out_cend)}", flush=True)
+            return False
+
+        # Test Ctrl+Home (ESC [ 1 ; 5 H)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b[1;5H")
+        out_chome = read_until(master, b"Row 1", timeout=4.0)
+        if b"Row 1" not in out_chome:
+            print(f"[-] Ctrl+Home (ESC [ 1 ; 5 H) failed to jump to top. Buffer: {repr(out_chome)}", flush=True)
+            return False
+
+        # Test ESC > (Jump to Bottom)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b>")
+        out_esc_gt = read_until(master, b"Row 30", timeout=4.0)
+        if b"Row 30" not in out_esc_gt:
+            print(f"[-] ESC > failed to jump to bottom. Buffer: {repr(out_esc_gt)}", flush=True)
+            return False
+
+        # Test ESC < (Jump to Top)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b<")
+        out_esc_lt = read_until(master, b"Row 1", timeout=4.0)
+        if b"Row 1" not in out_esc_lt:
+            print(f"[-] ESC < failed to jump to top. Buffer: {repr(out_esc_lt)}", flush=True)
+            return False
+
+        # Test ESC b (Jump to Bottom)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1bb")
+        out_esc_b = read_until(master, b"Row 30", timeout=4.0)
+        if b"Row 30" not in out_esc_b:
+            print(f"[-] ESC b failed to jump to bottom. Buffer: {repr(out_esc_b)}", flush=True)
+            return False
+
+        # Test ESC t (Jump to Top)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1bt")
+        out_esc_t = read_until(master, b"Row 1", timeout=4.0)
+        if b"Row 1" not in out_esc_t:
+            print(f"[-] ESC t failed to jump to top. Buffer: {repr(out_esc_t)}", flush=True)
+            return False
+
+        print("[+] Successfully verified Jump to Top (Ctrl+T, Ctrl+Home, ESC <, ESC t) and Jump to Bottom (Ctrl+G, Ctrl+End, ESC >, ESC b)!", flush=True)
+
         # Final exit from editor
         time.sleep(0.5)
         os.write(master, b"\x11")
