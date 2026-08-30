@@ -187,6 +187,14 @@ CHECK_CTRL_D:
 	JP	MAIN_LOOP
 
 CHECK_PAGE_KEYS:
+	; Command: Ctrl+A -> Home (start of line)
+	CP	1			; Ctrl+A
+	JR	Z,DO_HOME_KEY
+
+	; Command: Ctrl+E -> End (end of line)
+	CP	5			; Ctrl+E
+	JR	Z,DO_END_KEY
+
 	; Command: Ctrl+U or Ctrl+B -> Page Up
 	CP	21			; Ctrl+U
 	JR	Z,DO_PAGE_UP
@@ -198,6 +206,16 @@ CHECK_PAGE_KEYS:
 	JR	Z,DO_PAGE_DOWN
 
 	JR	CHECK_ENTER
+
+DO_HOME_KEY:
+	CALL	CURSOR_HOME
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+DO_END_KEY:
+	CALL	CURSOR_END
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
 
 DO_PAGE_UP:
 	CALL	PAGE_UP
@@ -2090,12 +2108,12 @@ GOT_ESC_BYTE:
 	CP	'['
 	JR	Z,HANDLE_CSI
 	CP	'O'
-	JR	Z,HANDLE_CSI
+	JR	Z,HANDLE_SS3
 	CP	KEY_ESC
 	JR	Z,HANDLE_VT100_ESC
 	RET
 
-HANDLE_CSI:
+HANDLE_SS3:
 	CALL	GET_KEY
 	CP	'A'			; Up Arrow
 	JP	Z,CURSOR_UP
@@ -2109,6 +2127,30 @@ HANDLE_CSI:
 	JP	Z,CURSOR_HOME
 	CP	'F'			; End
 	JP	Z,CURSOR_END
+	RET
+
+HANDLE_CSI:
+	CALL	GET_KEY
+	CP	'A'			; Up Arrow
+	JP	Z,CURSOR_UP
+	CP	'B'			; Down Arrow
+	JP	Z,CURSOR_DOWN
+	CP	'C'			; Right Arrow
+	JP	Z,CURSOR_RIGHT
+	CP	'D'			; Left Arrow
+	JP	Z,CURSOR_LEFT
+	CP	'H'			; Home (ESC [ H)
+	JP	Z,CURSOR_HOME
+	CP	'F'			; End (ESC [ F)
+	JP	Z,CURSOR_END
+	CP	'1'			; Home (ESC [ 1 ~) or modifier prefix (ESC [ 1 ; ...)
+	JP	Z,HANDLE_CSI_1
+	CP	'4'			; End (ESC [ 4 ~)
+	JP	Z,HANDLE_CSI_END
+	CP	'7'			; Home (ESC [ 7 ~)
+	JP	Z,HANDLE_CSI_HOME
+	CP	'8'			; End (ESC [ 8 ~)
+	JP	Z,HANDLE_CSI_END
 	CP	'3'			; Delete Key (ESC [ 3 ~)
 	JP	Z,HANDLE_CSI_DEL
 	CP	'5'			; Page Up (ESC [ 5 ~)
@@ -2126,6 +2168,24 @@ HANDLE_CSI:
 	CP	'9'+1
 	JR	C,HANDLE_CSI_LOOP
 	RET
+
+HANDLE_CSI_1:
+	CALL	GET_KEY
+	CP	'~'
+	JP	Z,CURSOR_HOME
+	CP	';'
+	JP	Z,HANDLE_CSI_LOOP
+	RET
+
+HANDLE_CSI_HOME:
+	; Consume trailing '~'
+	CALL	GET_KEY
+	JP	CURSOR_HOME
+
+HANDLE_CSI_END:
+	; Consume trailing '~'
+	CALL	GET_KEY
+	JP	CURSOR_END
 
 HANDLE_CSI_DEL:
 	; Consume trailing '~'

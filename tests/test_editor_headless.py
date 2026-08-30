@@ -160,7 +160,81 @@ def test_se_execution():
             return False
         print("[+] Successfully typed and rendered 'HELLO WORLD' (Row 1, Col 11).")
 
-        # 8. Create multi-line text by pressing Enter
+        # 8a. Test Home Key (\x1b[1~, \x1b[H, \x1bOH, Ctrl+A) and End Key (\x1b[4~, \x1b[F, \x1bOF, Ctrl+E)
+        # Test Standard PC Home key: ESC [ 1 ~
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b[1~")
+        out_home1 = read_until(master, b"Col 0 ", timeout=3.0)
+        if b"Col 0 " not in out_home1:
+            print(f"[-] PC Home key (ESC [ 1 ~) failed to move to Col 0. Buffer: {repr(out_home1)}", flush=True)
+            return False
+
+        # Test Standard PC End key: ESC [ 4 ~
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b[4~")
+        out_end1 = read_until(master, b"Col 11", timeout=3.0)
+        if b"Col 11" not in out_end1:
+            print(f"[-] PC End key (ESC [ 4 ~) failed to move to Col 11. Buffer: {repr(out_end1)}", flush=True)
+            return False
+
+        # Test VT100 Home key: ESC [ H
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b[H")
+        out_home_vt = read_until(master, b"Col 0 ", timeout=3.0)
+        if b"Col 0 " not in out_home_vt:
+            print(f"[-] VT100 Home key (ESC [ H) failed to move to Col 0. Buffer: {repr(out_home_vt)}", flush=True)
+            return False
+
+        # Test VT100 End key: ESC [ F
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b[F")
+        out_end_vt = read_until(master, b"Col 11", timeout=3.0)
+        if b"Col 11" not in out_end_vt:
+            print(f"[-] VT100 End key (ESC [ F) failed to move to Col 11. Buffer: {repr(out_end_vt)}", flush=True)
+            return False
+
+        # Test SS3 Home key: ESC O H
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1bOH")
+        out_home_ss3 = read_until(master, b"Col 0 ", timeout=3.0)
+        if b"Col 0 " not in out_home_ss3:
+            print(f"[-] SS3 Home key (ESC O H) failed to move to Col 0. Buffer: {repr(out_home_ss3)}", flush=True)
+            return False
+
+        # Test SS3 End key: ESC O F
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1bOF")
+        out_end_ss3 = read_until(master, b"Col 11", timeout=3.0)
+        if b"Col 11" not in out_end_ss3:
+            print(f"[-] SS3 End key (ESC O F) failed to move to Col 11. Buffer: {repr(out_end_ss3)}", flush=True)
+            return False
+
+        # Test Ctrl+A (Home) and Ctrl+E (End)
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x01")  # Ctrl+A -> Home
+        out_home_ctrl = read_until(master, b"Col 0 ", timeout=3.0)
+        if b"Col 0 " not in out_home_ctrl:
+            print(f"[-] Ctrl+A (Home) failed to move to Col 0. Buffer: {repr(out_home_ctrl)}", flush=True)
+            return False
+
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x05")  # Ctrl+E -> End
+        out_end_ctrl = read_until(master, b"Col 11", timeout=3.0)
+        if b"Col 11" not in out_end_ctrl:
+            print(f"[-] Ctrl+E (End) failed to move to Col 11. Buffer: {repr(out_end_ctrl)}", flush=True)
+            return False
+
+        print("[+] Successfully verified Home (ESC [ 1 ~, ESC [ H, ESC O H, ^A) and End (ESC [ 4 ~, ESC [ F, ESC O F, ^E) navigation!", flush=True)
+
+        # 8b. Create multi-line text by pressing Enter
         for line in [b"\r", b"Line Two of Document", b"\r", b"Line Three with Tabs", b"\r", b"Line Four Final"]:
             os.write(master, line)
             time.sleep(0.1)
