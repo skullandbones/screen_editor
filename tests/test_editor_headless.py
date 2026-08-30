@@ -571,6 +571,47 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Enter key resumes editor mode with document intact.", flush=True)
 
+        # 26. Test Load File option (:l) on splash screen with Directory Listing
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b")  # Standalone ESC key to go to splash screen
+        read_until(master, b"SE - Screen Editor", timeout=4.0)
+        drain_all(master)
+        time.sleep(0.2)
+
+        # Press 'l' on splash screen
+        os.write(master, b"l")
+        out_dir = read_until(master, b"Enter filename to load", timeout=6.0)
+        if b"Enter filename to load" not in out_dir:
+            print(f"[-] Load prompt not displayed. Buffer: {repr(out_dir)}", flush=True)
+            return False
+        print("[+] Successfully verified Load File screen with sorted directory listing.", flush=True)
+
+        # Test ESC to cancel from Load File prompt
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b")  # ESC to cancel
+        out_cancel = read_until(master, b"SE - Screen Editor", timeout=4.0)
+        if b"SE - Screen Editor" not in out_cancel:
+            print(f"[-] ESC key did not cancel load prompt back to splash screen. Buffer: {repr(out_cancel)}", flush=True)
+            return False
+        print("[+] Successfully verified ESC cancels Load File prompt back to splash screen.", flush=True)
+
+        # Re-enter Load File screen and load 2.TXT
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"l")
+        read_until(master, b"Enter filename to load", timeout=4.0)
+        drain_all(master)
+        time.sleep(0.1)
+        # Type filename 2.TXT + Enter
+        os.write(master, b"2.TXT\r")
+        out_loaded = read_until(master, b"SE v0.6.0", timeout=4.0)
+        if b"SE v0.6.0" not in out_loaded:
+            print(f"[-] Failed to load 2.TXT from Load File prompt. Buffer: {repr(out_loaded)}", flush=True)
+            return False
+        print("[+] Successfully verified typing/pasting filename and loading from directory prompt.", flush=True)
+
         # Final exit from editor
         time.sleep(0.5)
         os.write(master, b"\x11")

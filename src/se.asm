@@ -131,6 +131,12 @@ SPLASH_LOOP:
 	CP	'F'
 	JR	Z,DO_FILE_TEST
 
+	; Option: 'L' or 'l' -> Load File Screen
+	CP	'l'
+	JR	Z,DO_SPLASH_LOAD
+	CP	'L'
+	JR	Z,DO_SPLASH_LOAD
+
 	; Option: '1' -> Modern Screen Mode (120x40)
 	CP	'1'
 	JR	Z,DO_SET_120X40
@@ -169,6 +175,10 @@ DO_MEM_TEST:
 DO_FILE_TEST:
 	CALL	RUN_FILE_TEST
 	CALL	GET_KEY
+	JR	SHOW_SPLASH_SCREEN
+
+DO_SPLASH_LOAD:
+	CALL	DO_LOAD_FILE_UI
 	JR	SHOW_SPLASH_SCREEN
 
 MAIN_LOOP:
@@ -3610,6 +3620,580 @@ INIT_EMPTY_DOCUMENT:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	RET
 
+;------------------------------------------------------------------------------
+; Load File Screen with Sorted Directory Listing
+;------------------------------------------------------------------------------
+DO_LOAD_FILE_UI:
+	CALL	TERM_INIT
+	LD	DE,STR_DIR_TITLE
+	CALL	PRINT_STR
+
+	; 1. Collect Directory Entries from CP/M Default Drive
+	CALL	COLLECT_DIR_ENTRIES
+
+	; 2. Sort Directory Entries Alphabetically
+	CALL	SORT_DIR_ENTRIES
+
+	; 3. Display Sorted Directory Entries in Columns
+	CALL	DISPLAY_DIR_ENTRIES
+
+	; 4. Prompt for Filename and Read Input
+	LD	DE,STR_LOAD_PROMPT
+	CALL	PRINT_STR
+
+	CALL	READ_FILENAME_INPUT
+	JR	C,LOAD_UI_CANCELLED
+
+	; User entered a filename in INPUT_FILENAME_BUF: parse into WORK_FCB
+	LD	DE,INPUT_FILENAME_BUF
+	CALL	PARSE_FILENAME_TO_FCB
+
+	; Load the file into Far RAM
+	CALL	LOAD_FILE
+
+	; Reset stack and enter editor mode
+	LD	SP,LOCAL_STACK
+	LD	A,1
+	LD	(HAS_FILE_ARG),A
+	LD	(IN_EDITOR_MODE),A
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+	LD	(TOP_DOC_ROW),HL
+	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+LOAD_UI_CANCELLED:
+	RET
+
+;------------------------------------------------------------------------------
+; Collect Directory Entries from CP/M Default Drive into DIR_NAMES_BUF
+;------------------------------------------------------------------------------
+COLLECT_DIR_ENTRIES:
+	XOR	A
+	LD	(DIR_FILE_COUNT),A
+
+	; Set DMA address to RAW_SECTOR_BUF (128 bytes)
+	LD	DE,RAW_SECTOR_BUF
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; Prepare DIR_SEARCH_FCB: Drive = 0 (current default), 11 '?' wildcards, rest 0
+	LD	HL,DIR_SEARCH_FCB
+	LD	(HL),0			; Drive 0 (current)
+	INC	HL
+	LD	B,11
+SET_SEARCH_QM:
+	LD	(HL),'?'
+	INC	HL
+	DJNZ	SET_SEARCH_QM
+	LD	B,24
+SET_SEARCH_ZEROS:
+	LD	(HL),0
+	INC	HL
+	DJNZ	SET_SEARCH_ZEROS
+
+	; Search First (BDOS 17)
+	LD	DE,DIR_SEARCH_FCB
+	LD	C,17
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	RET	Z			; No files on drive
+
+DIR_COLLECT_LOOP:
+	; A = directory entry index (0..3) in RAW_SECTOR_BUF
+	; Calculate entry address: RAW_SECTOR_BUF + (A * 32)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	LD	DE,RAW_SECTOR_BUF
+	ADD	HL,DE			; HL = pointer to 32-byte directory entry
+
+	; Check user number (byte 0): must be 0x00 (or < 0x20)
+	LD	A,(HL)
+	CP	020H
+	JR	NC,DIR_NEXT_ENTRY	; Deleted or non-user entry
+
+	; Check extent byte (byte 12): must be 0 (extent 0 only)
+	PUSH	HL
+	LD	DE,12
+	ADD	HL,DE
+	LD	A,(HL)
+	POP	HL
+	OR	A
+	JR	NZ,DIR_NEXT_ENTRY	; Skip higher extents of multi-extent files
+
+	; Check that filename is not blank (first char != space and != 0)
+	INC	HL			; HL = pointer to filename (bytes 1..8)
+	LD	A,(HL)
+	CP	' '
+	JR	Z,DIR_NEXT_ENTRY
+	OR	A
+	JR	Z,DIR_NEXT_ENTRY
+	DEC	HL			; Restore HL = pointer to entry start
+
+	; Destination: DIR_NAMES_BUF + (DIR_FILE_COUNT * 13)
+	PUSH	HL			; Save entry pointer
+	LD	A,(DIR_FILE_COUNT)
+	LD	L,A
+	LD	H,0
+	; HL = A * 13 = (A * 8) + (A * 4) + A
+	LD	D,H
+	LD	E,L			; DE = A
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,DE			; *5
+	ADD	HL,HL			; *10
+	ADD	HL,DE			; *11
+	ADD	HL,DE			; *12
+	ADD	HL,DE			; *13
+	LD	DE,DIR_NAMES_BUF
+	ADD	HL,DE
+	EX	DE,HL			; DE = Destination buffer in DIR_NAMES_BUF
+	POP	HL			; HL = Source entry pointer
+
+	INC	HL			; Skip byte 0 (user number), point to filename (1..8)
+	LD	BC,8
+	LDIR
+	LD	A,'.'
+	LD	(DE),A
+	INC	DE
+	LD	BC,3
+	LDIR
+	XOR	A
+	LD	(DE),A			; Null terminator
+
+	; Increment DIR_FILE_COUNT
+	LD	A,(DIR_FILE_COUNT)
+	INC	A
+	LD	(DIR_FILE_COUNT),A
+	CP	128			; Max 128 entries
+	RET	NC
+
+DIR_NEXT_ENTRY:
+	; Search Next (BDOS 18)
+	LD	DE,DIR_SEARCH_FCB
+	LD	C,18
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	RET	Z
+	JR	DIR_COLLECT_LOOP
+
+;------------------------------------------------------------------------------
+; Sort Directory Entries Alphabetically (Bubble Sort)
+;------------------------------------------------------------------------------
+SORT_DIR_ENTRIES:
+	LD	A,(DIR_FILE_COUNT)
+	CP	2
+	RET	C			; 0 or 1 files: already sorted
+
+	LD	B,A
+	DEC	B			; B = outer loop count (N-1)
+
+SORT_OUTER_LOOP:
+	PUSH	BC
+	LD	HL,DIR_NAMES_BUF	; HL = entry j
+	LD	C,B			; C = inner loop count
+
+SORT_INNER_LOOP:
+	PUSH	BC
+	PUSH	HL			; Save entry j pointer
+	LD	DE,13
+	ADD	HL,DE
+	EX	DE,HL			; DE = entry j+1 pointer
+	POP	HL			; HL = entry j pointer
+	PUSH	HL			; Save entry j pointer again
+
+	; Compare entry j (HL) and entry j+1 (DE) (12 bytes)
+	LD	B,12
+COMPARE_ENTRY_LOOP:
+	LD	A,(DE)
+	CP	(HL)
+	JR	NZ,COMPARE_FOUND_DIFF
+	INC	HL
+	INC	DE
+	DJNZ	COMPARE_ENTRY_LOOP
+	JR	NO_SWAP_NEEDED		; Exactly identical
+
+COMPARE_FOUND_DIFF:
+	JR	NC,NO_SWAP_NEEDED	; (DE) >= (HL): already in alphabetical order!
+
+	; Swap entry j and entry j+1 (13 bytes)
+	POP	HL			; HL = entry j pointer
+	PUSH	HL
+	LD	DE,13
+	ADD	HL,DE
+	EX	DE,HL			; DE = entry j+1 pointer
+	POP	HL			; HL = entry j pointer
+	PUSH	HL
+
+	; Copy entry j into DIR_TEMP_ENTRY
+	PUSH	DE
+	PUSH	HL
+	LD	DE,DIR_TEMP_ENTRY
+	LD	BC,13
+	LDIR
+	POP	HL
+	POP	DE
+
+	; Copy entry j+1 (DE) into entry j (HL)
+	PUSH	DE
+	PUSH	HL
+	EX	DE,HL
+	LD	BC,13
+	LDIR
+	POP	HL
+	POP	DE
+
+	; Copy DIR_TEMP_ENTRY into entry j+1 (DE)
+	PUSH	HL
+	LD	HL,DIR_TEMP_ENTRY
+	LD	BC,13
+	LDIR
+	POP	HL
+
+NO_SWAP_NEEDED:
+	POP	HL			; HL = entry j pointer
+	LD	DE,13
+	ADD	HL,DE			; Advance HL to entry j+1
+	POP	BC			; Restore inner loop count C
+	DEC	C
+	JR	NZ,SORT_INNER_LOOP
+
+	POP	BC			; Restore outer loop count B
+	DJNZ	SORT_OUTER_LOOP
+	RET
+
+;------------------------------------------------------------------------------
+; Display Sorted Directory Entries in Columns
+;------------------------------------------------------------------------------
+DISPLAY_DIR_ENTRIES:
+	LD	A,(DIR_FILE_COUNT)
+	OR	A
+	JR	NZ,DO_SHOW_FILES
+	LD	DE,STR_NO_FILES_FOUND
+	CALL	PRINT_STR
+	RET
+
+DO_SHOW_FILES:
+	XOR	A
+	LD	(DIR_COL_COUNT),A
+
+	LD	A,(DIR_FILE_COUNT)
+	LD	B,A
+	LD	HL,DIR_NAMES_BUF
+
+DISPLAY_FILE_LOOP:
+	PUSH	BC
+	PUSH	HL			; Save entry pointer
+
+	; Format entry into a clean 16-char padded column:
+	; e.g. "30      .TXT" -> "30.TXT          "
+	LD	DE,LOAD_LINE_TEMP
+	LD	B,8
+COPY_DISP_NAME:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,SKIP_NAME_SPACE
+	LD	(DE),A
+	INC	DE
+SKIP_NAME_SPACE:
+	INC	HL
+	DJNZ	COPY_DISP_NAME
+
+	; Check extension (3 chars) at HL+1
+	INC	HL			; Skip '.'
+	LD	A,(HL)
+	CP	' '
+	JR	Z,NO_DISP_EXT
+	; Has extension: append '.' and extension chars (trimmed)
+	DEC	HL			; Point back to '.'
+	LD	A,'.'
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	LD	B,3
+COPY_DISP_EXT:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,SKIP_EXT_SPACE
+	LD	(DE),A
+	INC	DE
+SKIP_EXT_SPACE:
+	INC	HL
+	DJNZ	COPY_DISP_EXT
+	JR	PAD_COLUMN
+
+NO_DISP_EXT:
+	INC	HL
+	INC	HL
+	INC	HL
+
+PAD_COLUMN:
+	; Calculate printed length in LOAD_LINE_TEMP
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,E
+	SUB	L			; A = character count in line
+	; Pad with spaces up to 16 characters
+	LD	C,A
+	LD	A,16
+	SUB	C			; A = 16 - char_count
+	JR	Z,DISP_COL_TERMINATE
+	JR	C,DISP_COL_TERMINATE
+	LD	B,A
+PAD_COL_SPACES:
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
+	DJNZ	PAD_COL_SPACES
+
+DISP_COL_TERMINATE:
+	XOR	A
+	LD	(DE),A			; Null-terminate LOAD_LINE_TEMP
+
+	; Print the 16-character column
+	LD	DE,LOAD_LINE_TEMP
+	CALL	PRINT_STR
+
+	; Increment column counter
+	LD	A,(DIR_COL_COUNT)
+	INC	A
+	LD	(DIR_COL_COUNT),A
+
+	; Check screen mode for columns per row: 4 cols on 80x24, 6 cols on 120x40
+	LD	C,4			; Default 4 cols (80x24)
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	NZ,CHECK_COL_WRAP
+	LD	C,6			; 6 cols (120x40)
+
+CHECK_COL_WRAP:
+	LD	A,(DIR_COL_COUNT)
+	CP	C
+	JR	NZ,NO_ROW_WRAP
+	XOR	A
+	LD	(DIR_COL_COUNT),A
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+
+NO_ROW_WRAP:
+	POP	HL			; Restore entry pointer
+	LD	DE,13
+	ADD	HL,DE			; Next entry
+	POP	BC
+	DEC	B
+	JP	NZ,DISPLAY_FILE_LOOP
+
+	; If row didn't end on a newline, print CRLF
+	LD	A,(DIR_COL_COUNT)
+	OR	A
+	JR	Z,DISP_DIR_DONE
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+
+DISP_DIR_DONE:
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Read Filename String with Interactive Line Editing (Backspace, ESC, Enter)
+;------------------------------------------------------------------------------
+READ_FILENAME_INPUT:
+	XOR	A
+	LD	(INPUT_BUF_LEN),A
+	LD	HL,INPUT_FILENAME_BUF
+	LD	(HL),0
+
+INPUT_CHAR_LOOP:
+	CALL	GET_KEY
+
+	; ESC -> Cancel
+	CP	KEY_ESC
+	JR	Z,INPUT_CANCEL
+
+	; Enter -> Finish input
+	CP	KEY_ENTER
+	JR	Z,INPUT_ENTER
+
+	; Backspace / Delete
+	CP	KEY_BACKSPACE
+	JR	Z,INPUT_BS
+	CP	KEY_DEL
+	JR	Z,INPUT_BS
+
+	; Printable character (0x20..0x7E)
+	CP	' '
+	JR	C,INPUT_CHAR_LOOP
+	CP	07FH
+	JR	NC,INPUT_CHAR_LOOP
+
+	; Check buffer capacity (max 20 chars)
+	LD	B,A			; Save char in B
+	LD	A,(INPUT_BUF_LEN)
+	CP	20
+	JR	NC,INPUT_CHAR_LOOP
+
+	; Store character
+	LD	HL,INPUT_FILENAME_BUF
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),B
+	INC	HL
+	LD	(HL),0			; Null-terminate
+
+	LD	A,(INPUT_BUF_LEN)
+	INC	A
+	LD	(INPUT_BUF_LEN),A
+
+	; Echo character
+	LD	A,B
+	CALL	PUTC
+	JR	INPUT_CHAR_LOOP
+
+INPUT_BS:
+	LD	A,(INPUT_BUF_LEN)
+	OR	A
+	JR	Z,INPUT_CHAR_LOOP	; Nothing to backspace
+
+	DEC	A
+	LD	(INPUT_BUF_LEN),A
+	LD	HL,INPUT_FILENAME_BUF
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),0			; Null-terminate at new end
+
+	; Visual backspace: \x08 \x08
+	LD	A,008H
+	CALL	PUTC
+	LD	A,' '
+	CALL	PUTC
+	LD	A,008H
+	CALL	PUTC
+	JR	INPUT_CHAR_LOOP
+
+INPUT_CANCEL:
+	SCF				; Carry = 1 (cancelled)
+	RET
+
+INPUT_ENTER:
+	LD	A,(INPUT_BUF_LEN)
+	OR	A
+	JR	Z,INPUT_CANCEL		; Empty string -> cancelled
+	OR	A			; Carry = 0 (success)
+	RET
+
+;------------------------------------------------------------------------------
+; Parse Filename String (e.g. "30.TXT" or "A:TEST.DAT") into WORK_FCB
+;------------------------------------------------------------------------------
+PARSE_FILENAME_TO_FCB:
+	; Clear WORK_FCB (36 bytes of 0)
+	LD	HL,WORK_FCB
+	LD	(HL),0
+	LD	DE,WORK_FCB+1
+	LD	BC,35
+	LDIR
+
+	; Fill filename (bytes 1..8) and ext (bytes 9..11) with spaces
+	LD	HL,WORK_FCB+1
+	LD	B,11
+FILL_FCB_SPACES:
+	LD	(HL),' '
+	INC	HL
+	DJNZ	FILL_FCB_SPACES
+
+	LD	HL,INPUT_FILENAME_BUF
+
+	; Skip leading spaces
+PARSE_SKIP_SPACES:
+	LD	A,(HL)
+	CP	' '
+	JR	NZ,PARSE_CHECK_DRIVE
+	INC	HL
+	JR	PARSE_SKIP_SPACES
+
+PARSE_CHECK_DRIVE:
+	; Check if byte 1 is ':' (e.g. "A:FILE.TXT")
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	CP	':'
+	JR	NZ,PARSE_DEFAULT_DRIVE
+
+	; Drive letter in (HL)
+	LD	A,(HL)
+	CALL	TO_UPPER
+	SUB	'A'-1			; 'A' -> 1, 'B' -> 2
+	LD	(WORK_FCB),A
+	INC	HL			; Skip drive letter
+	INC	HL			; Skip ':'
+
+PARSE_DEFAULT_DRIVE:
+	; Read up to 8 characters of filename into WORK_FCB+1 .. WORK_FCB+8
+	LD	DE,WORK_FCB+1
+	LD	B,8
+PARSE_NAME_LOOP:
+	LD	A,(HL)
+	OR	A
+	RET	Z			; End of string
+	CP	' '
+	RET	Z
+	CP	'.'
+	JR	Z,PARSE_EXT_START
+	CALL	TO_UPPER
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	PARSE_NAME_LOOP
+
+	; If more than 8 chars before '.', skip to '.'
+PARSE_SKIP_TO_DOT:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	CP	' '
+	RET	Z
+	CP	'.'
+	JR	Z,PARSE_EXT_START
+	INC	HL
+	JR	PARSE_SKIP_TO_DOT
+
+PARSE_EXT_START:
+	INC	HL			; Skip '.'
+	LD	DE,WORK_FCB+9
+	LD	B,3
+PARSE_EXT_LOOP:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	CP	' '
+	RET	Z
+	CALL	TO_UPPER
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	PARSE_EXT_LOOP
+	RET
+
+TO_UPPER:
+	CP	'a'
+	RET	C
+	CP	'z'+1
+	RET	NC
+	SUB	020H
+	RET
+
 CLEAR_LOAD_TEMP:
 	PUSH	BC
 	PUSH	DE
@@ -3860,6 +4444,7 @@ STR_SPLASH_BODY:
 	.DB	"                  ~       SE is open source and freely usable   ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
+	.DB	"                  ~       type   :l                to load file ",13,10
 	.DB	"                  ~       type   :t                for mem test ",13,10
 	.DB	"                  ~       type   :f                for file test",13,10
 	.DB	"                  ~       type   :1                set 120x40   ",13,10
@@ -4037,6 +4622,19 @@ STR_STATUS_COL:
 MSG_EXIT:
 	.DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
+STR_DIR_TITLE:
+	.DB	27,"[H",27,"[2J"
+	.DB	"================================================================================",13,10
+	.DB	"                  SE.COM - LOAD FILE (DIRECTORY LISTING)                        ",13,10
+	.DB	"================================================================================",13,10,13,10,"$"
+
+STR_LOAD_PROMPT:
+	.DB	"--------------------------------------------------------------------------------",13,10
+	.DB	"Enter filename to load (or <Enter>/<ESC> to cancel): ","$"
+
+STR_NO_FILES_FOUND:
+	.DB	"  [No files found on current drive]",13,10,13,10,"$"
+
 DEFAULT_FCB_NAME:
 	.DB	0,"OUTPUT  TXT",0,0,0,0
 
@@ -4092,6 +4690,14 @@ TEST_PATTERN:	.DB	0,0
 TEST_READBACK:	.DB	0,0
 
 WORK_FCB:	.DS	36
+
+DIR_SEARCH_FCB:		.DS	36
+DIR_FILE_COUNT:		.DB	0
+DIR_COL_COUNT:		.DB	0
+DIR_TEMP_ENTRY:		.DS	16
+INPUT_BUF_LEN:		.DB	0
+INPUT_FILENAME_BUF:	.DS	32
+DIR_NAMES_BUF:		.DS	1664	; 128 entries * 13 bytes
 
 RAW_TEST_FCB:		.DS	36
 RAW_SECTOR_BUF:		.DS	128
