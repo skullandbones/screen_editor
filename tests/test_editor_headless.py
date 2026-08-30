@@ -552,6 +552,25 @@ def test_se_execution():
 
         print("[+] Successfully verified Jump to Top (Ctrl+T, Ctrl+Home, ESC <, ESC t) and Jump to Bottom (Ctrl+G, Ctrl+End, ESC >, ESC b)!", flush=True)
 
+        # 25. Test ESC key showing splash screen and Enter resuming editor mode
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b"\x1b")  # Standalone ESC key
+        out_splash = read_until(master, b"SE - Screen Editor", timeout=4.0)
+        if b"SE - Screen Editor" not in out_splash:
+            print(f"[-] ESC key failed to show splash screen. Buffer: {repr(out_splash)}", flush=True)
+            return False
+        print("[+] Successfully verified ESC key in editor displays splash screen.", flush=True)
+
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\r")  # Press Enter to return to editor
+        out_resume = read_until(master, b"Line 01 of test file content", timeout=4.0)
+        if b"Line 01 of test file content" not in out_resume:
+            print(f"[-] Enter key on splash failed to return to editor. Buffer: {repr(out_resume)}", flush=True)
+            return False
+        print("[+] Successfully verified Enter key resumes editor mode with document intact.", flush=True)
+
         # Final exit from editor
         time.sleep(0.5)
         os.write(master, b"\x11")
