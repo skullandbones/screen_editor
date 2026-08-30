@@ -270,8 +270,9 @@ DO_HANDLE_BS:
 	JP	MAIN_LOOP
 
 DO_HANDLE_BS_COL0:
-	; Backspace at column 0: delete line if blank
+	; Backspace at column 0: delete line if blank / join lines
 	CALL	DO_DELETE_BLANK_LINE
+	CALL	RENDER_STATUS_BAR
 	JP	MAIN_LOOP
 
 CHECK_ESC_SEQ:
@@ -2989,7 +2990,7 @@ DO_DELETE_FORWARD:
 
 	LD	A,(HL)
 	OR	A
-	RET	Z			; At end of line, nothing to delete forward
+	JR	Z,DO_DEL_FWD_JOIN_NEXT	; At end of line: join NEXT line into current line!
 
 	LD	A,1
 	LD	(CACHE_DIRTY),A		; Mark cache dirty
@@ -3009,128 +3010,253 @@ DEL_FWD_DONE:
 	CALL	RENDER_CURRENT_LINE
 	RET
 
+DO_DEL_FWD_JOIN_NEXT:
+	; Check if CUR_DOC_ROW + 1 < DOC_TOTAL_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,(CUR_DOC_ROW)
+	INC	DE
+	LD	A,D
+	CP	H
+	JR	C,DO_DEL_JOIN_OK
+	JR	NZ,DO_DEL_JOIN_FAIL
+	LD	A,E
+	CP	L
+	JR	NC,DO_DEL_JOIN_FAIL
+
+DO_DEL_JOIN_OK:
+	; Join CUR_DOC_ROW and CUR_DOC_ROW + 1
+	LD	BC,(CUR_DOC_ROW)	; BC = upper line (CUR_DOC_ROW)
+	CALL	JOIN_TWO_LINES
+	JR	C,DO_DEL_JOIN_FAIL	; If combined length > 120, reject
+
+	; Join succeeded: cursor remains at CUR_DOC_ROW, CUR_COL
+	CALL	RENDER_SCREEN
+	RET
+
+DO_DEL_JOIN_FAIL:
+	RET
+
 ;------------------------------------------------------------------------------
-; Delete Blank Line at (CUR_DOC_ROW, 0) - Backspace at Column 0 Handling
+; Backspace at Column 0 Handling: Joins current line with previous line
 ;------------------------------------------------------------------------------
 DO_DELETE_BLANK_LINE:
-	; Check if DOC_TOTAL_LINES <= 1
+	LD	HL,(CUR_DOC_ROW)
+	LD	A,H
+	OR	L
+	JR	NZ,DO_BS_JOIN_PREV
+
+	; At Row 0, Col 0: check if line 0 is empty and DOC_TOTAL_LINES > 1
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	A,H
 	OR	A
-	JR	NZ,DO_DEL_BLANK_MULTI
+	JR	NZ,DO_BS_ROW0_CHECK
 	LD	A,L
 	CP	2
-	JR	C,DEL_BLANK_SINGLE_LINE
+	JR	C,DO_BS_ROW0_DONE	; Only 1 line total, nothing to delete
 
-DO_DEL_BLANK_MULTI:
-	LD	BC,(CUR_DOC_ROW)
-	CALL	ENSURE_CACHE_WINDOW	; HL = current line start in LINE_STORAGE
-
-	; Check if current line is blank (only spaces or null)
-	PUSH	HL
-	LD	B,0
-CHECK_BLANK_SCAN:
+DO_BS_ROW0_CHECK:
+	; Check if Line 0 is empty
+	LD	BC,0
+	CALL	ENSURE_CACHE_WINDOW
 	LD	A,(HL)
 	OR	A
-	JR	Z,LINE_CONFIRMED_BLANK
-	CP	' '
-	JR	NZ,LINE_HAS_TEXT
-	INC	HL
-	INC	B
-	LD	A,B
-	CP	MAX_LINE_STRIDE-2
-	JR	NC,LINE_CONFIRMED_BLANK
-	JR	CHECK_BLANK_SCAN
+	JR	NZ,DO_BS_ROW0_DONE	; Line 0 has text, do not delete
 
-LINE_HAS_TEXT:
-	POP	HL
-	RET				; Non-blank line: do not delete!
-
-LINE_CONFIRMED_BLANK:
-	POP	HL			; Discard line pointer
-	CALL	FLUSH_DIRTY_CACHE	; Sync cache to far RAM before shifting
-
-	; Decrement DOC_TOTAL_LINES
+	; Delete empty Line 0
+	CALL	FLUSH_DIRTY_CACHE
 	LD	HL,(DOC_TOTAL_LINES)
 	DEC	HL
 	LD	(DOC_TOTAL_LINES),HL
-
-	; Shift lines in Far RAM from CUR_DOC_ROW + 1 upwards to DOC_TOTAL_LINES
-	LD	BC,(CUR_DOC_ROW)
-DEL_SHIFT_FAR_LOOP:
+	LD	BC,0
+DEL_ROW0_SHIFT_LOOP:
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	A,H
 	CP	B
-	JR	C,DEL_SHIFT_FAR_DONE
-	JR	NZ,DO_SHIFT_FAR_LINE
+	JR	C,DEL_ROW0_DONE
+	JR	NZ,DO_ROW0_SHIFT_LINE
 	LD	A,L
 	CP	C
-	JR	Z,DEL_SHIFT_FAR_DONE
-	JR	C,DEL_SHIFT_FAR_DONE
-
-DO_SHIFT_FAR_LINE:
+	JR	Z,DEL_ROW0_DONE
+	JR	C,DEL_ROW0_DONE
+DO_ROW0_SHIFT_LINE:
 	PUSH	BC
-	; Read line at (BC + 1)
 	INC	BC
 	LD	DE,LOAD_LINE_TEMP
 	CALL	READ_FAR_LINE
-	; Write to line at (BC - 1)
 	DEC	BC
 	LD	HL,LOAD_LINE_TEMP
 	CALL	WRITE_FAR_LINE
 	POP	BC
 	INC	BC
-	JR	DEL_SHIFT_FAR_LOOP
-
-DEL_SHIFT_FAR_DONE:
+	JR	DEL_ROW0_SHIFT_LOOP
+DEL_ROW0_DONE:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
+	CALL	RENDER_SCREEN
+DO_BS_ROW0_DONE:
+	RET
 
-	; If CUR_DOC_ROW > 0, move cursor up to previous line
+DO_BS_JOIN_PREV:
+	; Join CUR_DOC_ROW with previous line (CUR_DOC_ROW - 1)
 	LD	HL,(CUR_DOC_ROW)
-	LD	A,H
-	OR	L
-	JR	Z,DEL_BLANK_AT_ROW0
 	DEC	HL
-	LD	(CUR_DOC_ROW),HL
+	LD	B,H
+	LD	C,L			; BC = upper line index (CUR_DOC_ROW - 1)
+	CALL	JOIN_TWO_LINES
+	RET	C			; If Carry set (combined length > 120), do nothing
+
+	; Join succeeded: B = join column offset (original len of previous line)
+	LD	HL,(CUR_DOC_ROW)
+	DEC	HL
+	LD	(CUR_DOC_ROW),HL	; Move cursor to upper line
+	LD	A,B
+	LD	(CUR_COL),A		; Move cursor to join point
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A
 
 	; Check if CUR_DOC_ROW < TOP_DOC_ROW
 	LD	DE,(TOP_DOC_ROW)
 	LD	A,H
 	CP	D
-	JR	C,DEL_SCROLL_UP
-	JR	NZ,DEL_NO_SCROLL
+	JR	C,DO_BS_JOIN_SCROLL_UP
+	JR	NZ,DO_BS_JOIN_RENDER
 	LD	A,L
 	CP	E
-	JR	NC,DEL_NO_SCROLL
-
-DEL_SCROLL_UP:
+	JR	NC,DO_BS_JOIN_RENDER
+DO_BS_JOIN_SCROLL_UP:
 	LD	(TOP_DOC_ROW),HL
 
-DEL_NO_SCROLL:
-	CALL	GET_CUR_ROW_LEN		; B = prev line length
-	LD	A,B
-	LD	(CUR_COL),A
-	CALL	CALC_VISUAL_COL
-	LD	(TARGET_COL),A
-
-DEL_BLANK_AT_ROW0:
+DO_BS_JOIN_RENDER:
 	CALL	RENDER_SCREEN
 	RET
 
-DEL_BLANK_SINGLE_LINE:
-	LD	BC,0
-	CALL	ENSURE_CACHE_WINDOW	; HL = line 0
-	LD	(HL),0
-	LD	HL,0
-	LD	(CUR_DOC_ROW),HL
-	LD	(TOP_DOC_ROW),HL
-	XOR	A
-	LD	(CUR_COL),A
-	LD	(TARGET_COL),A
-	LD	(CACHE_DIRTY),A
-	LD	HL,1
+;------------------------------------------------------------------------------
+; Join Two Lines: Line BC (upper) and Line BC+1 (lower)
+; Returns: Carry=0 on success, B = join column (len of upper line); Carry=1 on failure
+;------------------------------------------------------------------------------
+JOIN_TWO_LINES:
+	LD	(JOIN_DOC_LINE),BC	; Save upper document line index
+
+	; Check if DOC_TOTAL_LINES >= 2
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	OR	A
+	JR	NZ,JOIN_DOC_LEN_OK
+	LD	A,L
+	CP	2
+	JR	NC,JOIN_DOC_LEN_OK
+	SCF
+	RET
+
+JOIN_DOC_LEN_OK:
+	CALL	FLUSH_DIRTY_CACHE
+
+	; 1. Read upper line at (JOIN_DOC_LINE) into LOAD_LINE_TEMP
+	LD	BC,(JOIN_DOC_LINE)
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	; Measure upper line length -> B = len_1
+	LD	HL,LOAD_LINE_TEMP
+	LD	B,0
+JOIN_MEASURE_L1:
+	LD	A,(HL)
+	OR	A
+	JR	Z,JOIN_MEASURE_L1_DONE
+	INC	HL
+	INC	B
+	JR	JOIN_MEASURE_L1
+
+JOIN_MEASURE_L1_DONE:
+	LD	A,B
+	LD	(JOIN_COL_SAVED),A	; Save len_1
+
+	; 2. Read lower line at (JOIN_DOC_LINE + 1) into SPLIT_LINE_TEMP
+	LD	BC,(JOIN_DOC_LINE)
+	INC	BC
+	LD	DE,SPLIT_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	; Measure lower line length -> C = len_2
+	LD	HL,SPLIT_LINE_TEMP
+	LD	C,0
+JOIN_MEASURE_L2:
+	LD	A,(HL)
+	OR	A
+	JR	Z,JOIN_MEASURE_L2_DONE
+	INC	HL
+	INC	C
+	JR	JOIN_MEASURE_L2
+
+JOIN_MEASURE_L2_DONE:
+	; Check if len_1 + len_2 <= 120 chars
+	LD	A,(JOIN_COL_SAVED)
+	ADD	A,C
+	CP	MAX_LINE_STRIDE-7	; 128 - 7 = 121 (max length 120 chars)
+	JR	C,JOIN_CAPACITY_OK
+
+	; Too long to join!
+	SCF
+	RET
+
+JOIN_CAPACITY_OK:
+	; 3. Append lower line (SPLIT_LINE_TEMP) to upper line (LOAD_LINE_TEMP + len_1)
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,(JOIN_COL_SAVED)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = pointer to null in LOAD_LINE_TEMP
+	LD	DE,SPLIT_LINE_TEMP
+JOIN_APPEND_LOOP:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	OR	A
+	JR	NZ,JOIN_APPEND_LOOP
+
+	; 4. Write merged line back to Far RAM at (JOIN_DOC_LINE)
+	LD	BC,(JOIN_DOC_LINE)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; 5. Decrement DOC_TOTAL_LINES first
+	LD	HL,(DOC_TOTAL_LINES)
+	DEC	HL
 	LD	(DOC_TOTAL_LINES),HL
-	CALL	RENDER_SCREEN
+
+	; 6. Shift all subsequent lines from JOIN_DOC_LINE + 2 up to old DOC_TOTAL_LINES - 1 upwards by 1
+	LD	BC,(JOIN_DOC_LINE)
+	INC	BC			; BC = line index to overwrite (lower line)
+JOIN_SHIFT_FAR_LOOP:
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	CP	B
+	JR	C,JOIN_SHIFT_FAR_DONE
+	JR	NZ,DO_JOIN_SHIFT_LINE
+	LD	A,L
+	CP	C
+	JR	Z,JOIN_SHIFT_FAR_DONE
+	JR	C,JOIN_SHIFT_FAR_DONE
+
+DO_JOIN_SHIFT_LINE:
+	PUSH	BC
+	INC	BC			; BC = source line
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+	DEC	BC			; BC = destination line
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+	POP	BC
+	INC	BC
+	JR	JOIN_SHIFT_FAR_LOOP
+
+JOIN_SHIFT_FAR_DONE:
+	; 7. Force reload local cache window
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+
+	LD	A,(JOIN_COL_SAVED)
+	LD	B,A			; B = join column offset
+	OR	A			; Clear Carry = success!
 	RET
 
 ;------------------------------------------------------------------------------
@@ -3923,6 +4049,8 @@ SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
 SEEN_CR:	.DB	0		; Line format auto-detection state
 CHAR_INSERT_TEMP:.DB	0
 CSI_DIGIT_PREFIX:.DB	0
+JOIN_COL_SAVED:	.DB	0
+JOIN_DOC_LINE:	.DW	0
 
 CACHE_START_ROW:.DW	0		; 16-bit doc row index at LINE_STORAGE[0]
 CACHE_DIRTY:	.DB	0		; 1 if local cache has unsaved modifications

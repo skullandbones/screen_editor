@@ -285,40 +285,44 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified 120-char line capacity limit during mid-line insertion.")
 
-        # 12. Test blank line deletion with Backspace at column 0
-        # Move up to row 1, col 0
-        for _ in range(5):
-            os.write(master, b"\x1b[A")
-            time.sleep(0.05)
-        os.write(master, b"\x1b[H")
+        # 12. Test Line Joining with Backspace at column 0
+        # Ensure cursor at top of document
+        os.write(master, b"\x14")  # Ctrl+T -> Top of file
+        time.sleep(0.2)
+        # Move to Row 2, Col 0
+        os.write(master, b"\x1b[B")
         time.sleep(0.1)
+        os.write(master, b"\x01")
+        time.sleep(0.2)
         drain_all(master)
-        # Press Enter to split and create blank line 1
-        os.write(master, b"\r")
-        time.sleep(0.3)
-        # Move up to blank line 1
-        os.write(master, b"\x1b[A")
-        time.sleep(0.3)
-        # Press Backspace on blank line 1 at col 0
+        # Press Backspace at column 0 to join Row 2 into Row 1 -> cursor lands at Row 1, Col 11
         os.write(master, b"\x08")
+        out_join_bs = read_until(master, b"Row 1, Col 11", timeout=4.0)
+        if b"Row 1, Col 11" not in out_join_bs:
+            print(f"[-] Line join via Backspace at Col 0 failed. Buffer: {repr(out_join_bs)}", flush=True)
+            return False
         drain_all(master)
-        print("[+] Successfully verified blank line deletion with Backspace at column 0.")
+        print("[+] Successfully verified Line Joining with Backspace at column 0.")
 
-        # 13. Test Delete Key (\x1b[3~) and Ctrl+D (Forward Delete)
-        # Ensure cursor is at (1,0)
-        os.write(master, b"\x1b[H")
-        time.sleep(0.1)
-        # Send Delete key (\x1b[3~)
-        os.write(master, b"\x1b[3~")
+        # 13. Test Line Joining with Delete Key (\x1b[3~) at End of Line
+        # Move cursor to end of Row 1 (length 31)
+        os.write(master, b"\x05")  # Ctrl+E -> End of line
         time.sleep(0.2)
-        # Send Ctrl+D (forward delete)
-        os.write(master, b"\x04")
-        time.sleep(0.2)
-        os.write(master, b"\x1b[H")
         drain_all(master)
-        print("[+] Successfully verified Delete key (ESC [ 3 ~) and Ctrl+D forward deletion.")
+        # Press Delete key (\x1b[3~) at EOL to join next line into Row 1 -> cursor stays at Row 1, Col 31
+        os.write(master, b"\x1b[3~")
+        out_join_del = read_until(master, b"Row 1, Col 31", timeout=4.0)
+        if b"Row 1, Col 31" not in out_join_del:
+            print(f"[-] Line join via Delete key at EOL failed. Buffer: {repr(out_join_del)}", flush=True)
+            return False
+        drain_all(master)
+        print("[+] Successfully verified Line Joining with Delete key (ESC [ 3 ~) at End of Line.")
 
         # 14. Test Real Tab character insertion & Tab-jumping navigation
+        # Move cursor to (1,0)
+        os.write(master, b"\x01")  # Ctrl+A -> Home
+        read_until(master, b"Row 1, Col 0", timeout=3.0)
+        drain_all(master)
         # Press Tab at (1,0) -> advances visual cursor to (1,8) -> displayed as Col 8 (0-indexed)
         os.write(master, b"\t")
         out_tab1 = read_until(master, b"Row 1, Col 8", timeout=4.0)
