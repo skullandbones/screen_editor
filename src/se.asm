@@ -3584,7 +3584,7 @@ STR_SPLASH_BODY:
 	.DB	13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~             SE - Screen Editor              ",13,10
-	.DB	"                  ~                version 0.5.0                ",13,10
+	.DB	"                  ~                version 0.6.0                ",13,10
 	.DB	"                  ~              by Dean Jenkins                ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       SE is open source and freely usable   ",13,10
@@ -3741,7 +3741,7 @@ STR_FILE_TEST_FAILED:
 	.DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
 
 STR_STATUS_PREFIX:
-	.DB	" SE v0.5.0 | ","$"
+	.DB	" SE v0.6.0 | ","$"
 
 STR_STATUS_120X40:
 	.DB	"120x40 | ","$"
