@@ -177,14 +177,37 @@ CHECK_TOGGLE_FMT:
 	XOR	1			; Toggle between 0 (CP/M) and 1 (Linux)
 	LD	(SAVE_FORMAT),A
 	CALL	RENDER_STATUS_BAR
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
 
 CHECK_CTRL_D:
 	; Command: Ctrl+D -> Delete character under cursor (Forward Delete)
 	CP	4
-	JR	NZ,CHECK_ENTER
+	JR	NZ,CHECK_PAGE_KEYS
 	CALL	DO_DELETE_FORWARD
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
+
+CHECK_PAGE_KEYS:
+	; Command: Ctrl+U or Ctrl+B -> Page Up
+	CP	21			; Ctrl+U
+	JR	Z,DO_PAGE_UP
+	CP	2			; Ctrl+B
+	JR	Z,DO_PAGE_UP
+
+	; Command: Ctrl+V -> Page Down
+	CP	22			; Ctrl+V
+	JR	Z,DO_PAGE_DOWN
+
+	JR	CHECK_ENTER
+
+DO_PAGE_UP:
+	CALL	PAGE_UP
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+DO_PAGE_DOWN:
+	CALL	PAGE_DOWN
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
 
 CHECK_ENTER:
 	; Enter -> Insert new line at CUR_ROW+1
@@ -192,7 +215,7 @@ CHECK_ENTER:
 	JR	NZ,CHECK_BACKSPACE
 	CALL	DO_INSERT_LINE
 	CALL	RENDER_SCREEN
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
 
 CHECK_BACKSPACE:
 	CP	KEY_BACKSPACE
@@ -208,12 +231,12 @@ DO_HANDLE_BS:
 	; Normal character deletion on current line (CUR_COL > 0)
 	CALL	DO_DELETE_CHAR
 	CALL	RENDER_CURRENT_LINE
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
 
 DO_HANDLE_BS_COL0:
 	; Backspace at column 0: delete line if blank
 	CALL	DO_DELETE_BLANK_LINE
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
 
 CHECK_ESC_SEQ:
 	; Check for VT100 Escape sequences (Arrow keys)
@@ -221,7 +244,7 @@ CHECK_ESC_SEQ:
 	JR	NZ,CHECK_PRINTABLE_CHAR
 	CALL	HANDLE_VT100_ESC
 	CALL	RENDER_STATUS_BAR
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
 
 CHECK_PRINTABLE_CHAR:
 	; Check if Tab key is pressed (expand to 8-character tab stops)
@@ -229,18 +252,18 @@ CHECK_PRINTABLE_CHAR:
 	JR	NZ,CHECK_PRINTABLE_REGULAR
 	CALL	DO_TAB_INSERT
 	CALL	RENDER_CURRENT_LINE
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
 
 CHECK_PRINTABLE_REGULAR:
 	CP	' '
-	JR	C,MAIN_LOOP
+	JP	C,MAIN_LOOP
 	CP	127
-	JR	NC,MAIN_LOOP
+	JP	NC,MAIN_LOOP
 
 DO_INSERT_CHAR:
 	CALL	DO_CHAR_INSERT
 	CALL	RENDER_CURRENT_LINE
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
 
 ;------------------------------------------------------------------------------
 ; Tab Key Insertion at (CUR_ROW, CUR_COL) - Inserts real ASCII 0x09 TAB byte
@@ -492,7 +515,7 @@ TEST_HBIOS_OK:
 	; Print Bank IDs
 	LD	A,(EXT_BANK_COUNT)
 	OR	A
-	JR	Z,TEST_NO_FAR_BANKS
+	JP	Z,TEST_NO_FAR_BANKS
 	LD	B,A
 	LD	HL,EXT_BANK_TABLE
 PRINT_FAR_BANKS_LOOP:
@@ -2088,6 +2111,14 @@ HANDLE_CSI:
 	JP	Z,CURSOR_END
 	CP	'3'			; Delete Key (ESC [ 3 ~)
 	JP	Z,HANDLE_CSI_DEL
+	CP	'5'			; Page Up (ESC [ 5 ~)
+	JP	Z,HANDLE_CSI_PGUP
+	CP	'6'			; Page Down (ESC [ 6 ~)
+	JP	Z,HANDLE_CSI_PGDN
+	CP	'I'			; Page Up (VT alternative)
+	JP	Z,PAGE_UP
+	CP	'G'			; Page Down (VT alternative)
+	JP	Z,PAGE_DOWN
 
 	; Check if parameter/modifier digits present (e.g. 1;2A, 1~, 4~)
 	CP	'0'
@@ -2100,6 +2131,18 @@ HANDLE_CSI_DEL:
 	; Consume trailing '~'
 	CALL	GET_KEY
 	CALL	DO_DELETE_FORWARD
+	RET
+
+HANDLE_CSI_PGUP:
+	; Consume trailing '~'
+	CALL	GET_KEY
+	CALL	PAGE_UP
+	RET
+
+HANDLE_CSI_PGDN:
+	; Consume trailing '~'
+	CALL	GET_KEY
+	CALL	PAGE_DOWN
 	RET
 
 HANDLE_CSI_LOOP:
@@ -2118,6 +2161,10 @@ HANDLE_CSI_LOOP:
 	JP	Z,CURSOR_HOME
 	CP	'F'
 	JP	Z,CURSOR_END
+	CP	'I'
+	JP	Z,PAGE_UP
+	CP	'G'
+	JP	Z,PAGE_DOWN
 	CP	';'
 	JR	Z,HANDLE_CSI_LOOP
 	CP	'0'
@@ -2416,6 +2463,152 @@ CR_WRAP_OK:
 	RET
 
 CR_WRAP_FAIL:
+	RET
+
+;------------------------------------------------------------------------------
+; Page Up Navigation: Scroll viewport and cursor up by one page
+;------------------------------------------------------------------------------
+PAGE_UP:
+	LD	HL,(CUR_DOC_ROW)
+	LD	A,H
+	OR	L
+	JR	NZ,PGUP_CAN_MOVE
+	LD	HL,(TOP_DOC_ROW)
+	LD	A,H
+	OR	L
+	RET	Z			; Already at line 0, nothing to move
+
+PGUP_CAN_MOVE:
+	CALL	GET_PAGE_STEP		; DE = PAGE_STEP (ACTIVE_ROWS - 2)
+	LD	HL,(CUR_DOC_ROW)
+	AND	A
+	SBC	HL,DE
+	JR	NC,PGUP_CUR_OK
+	LD	HL,0			; Clamped to doc row 0
+PGUP_CUR_OK:
+	LD	(CUR_DOC_ROW),HL
+
+	CALL	GET_PAGE_STEP		; DE = PAGE_STEP
+	LD	HL,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE
+	JR	NC,PGUP_TOP_OK
+	LD	HL,0			; Clamped to top row 0
+PGUP_TOP_OK:
+	; Ensure TOP_DOC_ROW <= CUR_DOC_ROW
+	LD	DE,(CUR_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,PGUP_TOP_SAVED
+	JR	NZ,PGUP_TOP_ADJUST
+	LD	A,L
+	CP	E
+	JR	C,PGUP_TOP_SAVED
+PGUP_TOP_ADJUST:
+	EX	DE,HL			; HL = CUR_DOC_ROW
+PGUP_TOP_SAVED:
+	LD	(TOP_DOC_ROW),HL
+
+	CALL	ADJUST_COL_TO_TARGET
+	CALL	RENDER_SCREEN
+	RET
+
+;------------------------------------------------------------------------------
+; Page Down Navigation: Scroll viewport and cursor down by one page
+;------------------------------------------------------------------------------
+PAGE_DOWN:
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	OR	L
+	RET	Z			; 0 lines
+
+	DEC	HL			; HL = max_valid_row (DOC_TOTAL_LINES - 1)
+	LD	DE,(CUR_DOC_ROW)
+	; Compare CUR_DOC_ROW (DE) with max_valid_row (HL)
+	LD	A,D
+	CP	H
+	JR	C,PGDN_CAN_MOVE
+	JR	NZ,PGDN_NO_MOVE
+	LD	A,E
+	CP	L
+	JR	NC,PGDN_NO_MOVE		; Already at or past last line
+
+PGDN_CAN_MOVE:
+	PUSH	HL			; Save max_valid_row
+	CALL	GET_PAGE_STEP		; DE = PAGE_STEP
+	LD	HL,(CUR_DOC_ROW)
+	ADD	HL,DE			; HL = target CUR_DOC_ROW
+	POP	DE			; DE = max_valid_row
+
+	; Clamp target CUR_DOC_ROW (HL) to max_valid_row (DE)
+	LD	A,H
+	CP	D
+	JR	C,PGDN_CUR_OK
+	JR	NZ,PGDN_CUR_CLAMP
+	LD	A,L
+	CP	E
+	JR	C,PGDN_CUR_OK
+PGDN_CUR_CLAMP:
+	EX	DE,HL			; HL = max_valid_row
+PGDN_CUR_OK:
+	LD	(CUR_DOC_ROW),HL	; Save clamped CUR_DOC_ROW
+
+	; Check if all lines fit on screen (DOC_TOTAL_LINES <= ACTIVE_ROWS - 1)
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; Viewport height (e.g. 23 or 39)
+	LD	E,A
+	LD	D,0
+	LD	A,H
+	OR	A
+	JR	NZ,PGDN_CALC_TOP
+	LD	A,L
+	CP	E
+	JR	C,PGDN_KEEP_TOP_ZERO
+	JR	Z,PGDN_KEEP_TOP_ZERO
+
+PGDN_CALC_TOP:
+	; Advance TOP_DOC_ROW by PAGE_STEP
+	CALL	GET_PAGE_STEP		; DE = PAGE_STEP
+	LD	HL,(TOP_DOC_ROW)
+	ADD	HL,DE			; HL = target TOP_DOC_ROW
+
+	; Ensure TOP_DOC_ROW <= CUR_DOC_ROW
+	LD	DE,(CUR_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,PGDN_TOP_OK
+	JR	NZ,PGDN_TOP_CLAMP
+	LD	A,L
+	CP	E
+	JR	C,PGDN_TOP_OK
+PGDN_TOP_CLAMP:
+	EX	DE,HL			; HL = CUR_DOC_ROW
+PGDN_TOP_OK:
+	LD	(TOP_DOC_ROW),HL
+	JR	PGDN_FINISH
+
+PGDN_KEEP_TOP_ZERO:
+	LD	HL,0
+	LD	(TOP_DOC_ROW),HL
+
+PGDN_FINISH:
+	CALL	ADJUST_COL_TO_TARGET
+	CALL	RENDER_SCREEN
+	RET
+
+PGDN_NO_MOVE:
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate Page Step Size: DE = ACTIVE_ROWS - 2 (e.g. 38 for 40 rows, 22 for 24 rows)
+;------------------------------------------------------------------------------
+GET_PAGE_STEP:
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A
+	LD	E,A
+	LD	D,0
 	RET
 
 ;------------------------------------------------------------------------------

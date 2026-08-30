@@ -147,21 +147,18 @@ def test_se_execution():
         print("[+] Successfully entered full-screen editing mode.", flush=True)
 
         # 8. Test interactive character typing in empty buffer
-        time.sleep(0.5)
-        r, _, _ = select.select([master], [], [], 0.3)
-        if r:
-            os.read(master, 4096)
-
-        out_type = b""
+        time.sleep(0.3)
+        drain_all(master)
         for ch in b"HELLO WORLD":
             os.write(master, bytes([ch]))
             time.sleep(0.05)
-            out_type += read_until(master, bytes([ch]), timeout=1.0)
 
-        if b"HELLO WORLD" not in out_type:
-            print("[-] Interactive typing failed to render on screen. Buffer captured:", out_type)
+        out_type = read_until(master, b"Col 11", timeout=4.0)
+        # Verify status bar reflects Row 1, Col 11
+        if b"Col 11" not in out_type:
+            print("[-] Interactive typing failed to reach Col 11. Buffer captured:", out_type)
             return False
-        print("[+] Successfully typed and rendered 'HELLO WORLD'.")
+        print("[+] Successfully typed and rendered 'HELLO WORLD' (Row 1, Col 11).")
 
         # 8. Create multi-line text by pressing Enter
         for line in [b"\r", b"Line Two of Document", b"\r", b"Line Three with Tabs", b"\r", b"Line Four Final"]:
@@ -351,7 +348,7 @@ def test_se_execution():
         read_until(master, b"C>", timeout=4.0)
         print("[+] Exit from SE.COM completed.", flush=True)
 
-        # 20. Test Multi-Sector File Loading into Editor: 'se 30.TXT' (8 sectors, 30 lines)
+        # 20. Test Multi-Sector File Loading and Page-Up / Page-Down Navigation: 'se 30.TXT'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
         out_load_30 = read_until(master, b"SE v0.5.0", timeout=6.0)
@@ -366,6 +363,41 @@ def test_se_execution():
             print(f"[-] 30.TXT Line 20 missing on editor screen. Buffer: {repr(out_load_30)}", flush=True)
             return False
         print("[+] Successfully verified 30-line multi-sector file loading (se 30.TXT) into editor Far RAM buffer!", flush=True)
+
+        # 21. Test Page-Down key (\x1b[6~)
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[6~")
+        out_pgdn = read_until(master, b"Row 30", timeout=4.0)
+        if b"Row 30" not in out_pgdn:
+            print(f"[-] Page Down key failed to navigate to bottom of document. Buffer: {repr(out_pgdn)}", flush=True)
+            return False
+        print("[+] Successfully verified Page-Down key (ESC [ 6 ~) navigation to Row 30.", flush=True)
+
+        # 22. Test Page-Up key (\x1b[5~)
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[5~")
+        out_pgup = read_until(master, b"Row 1", timeout=4.0)
+        if b"Row 1" not in out_pgup:
+            print(f"[-] Page Up key failed to navigate back to top of document. Buffer: {repr(out_pgup)}", flush=True)
+            return False
+        print("[+] Successfully verified Page-Up key (ESC [ 5 ~) navigation to Row 1.", flush=True)
+
+        # 23. Test Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x16")  # Ctrl+V -> Page Down
+        out_ctrl_v = read_until(master, b"Row 30", timeout=4.0)
+        if b"Row 30" not in out_ctrl_v:
+            print(f"[-] Ctrl+V (Page Down) failed. Buffer: {repr(out_ctrl_v)}", flush=True)
+            return False
+        os.write(master, b"\x15")  # Ctrl+U -> Page Up
+        out_ctrl_u = read_until(master, b"Row 1", timeout=4.0)
+        if b"Row 1" not in out_ctrl_u:
+            print(f"[-] Ctrl+U (Page Up) failed. Buffer: {repr(out_ctrl_u)}", flush=True)
+            return False
+        print("[+] Successfully verified Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts.", flush=True)
 
         # Final exit from editor
         time.sleep(0.5)
