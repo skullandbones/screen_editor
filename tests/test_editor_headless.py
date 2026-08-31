@@ -140,8 +140,8 @@ def test_se_execution():
         read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
         time.sleep(0.3)
         os.write(master, b"e")
-        out_edit = read_until(master, b"SE v0.6.0", timeout=6.0)
-        if b"SE v0.6.0" not in out_edit:
+        out_edit = read_until(master, b"SE v0.6.1", timeout=6.0)
+        if b"SE v0.6.1" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
         print("[+] Successfully entered full-screen editing mode.", flush=True)
@@ -410,8 +410,8 @@ def test_se_execution():
         # 19. Test File Loading: Open 2-line file 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_load = read_until(master, b"SE v0.6.0", timeout=6.0)
-        if b"SE v0.6.0" not in out_load:
+        out_load = read_until(master, b"SE v0.6.1", timeout=6.0)
+        if b"SE v0.6.1" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
         # Verify BOTH Line 1 and Line 2 from 2.TXT loaded and rendered on screen
@@ -429,8 +429,8 @@ def test_se_execution():
         # 20. Test Multi-Sector File Loading and Page-Up / Page-Down Navigation: 'se 30.TXT'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_load_30 = read_until(master, b"SE v0.6.0", timeout=6.0)
-        if b"SE v0.6.0" not in out_load_30:
+        out_load_30 = read_until(master, b"SE v0.6.1", timeout=6.0)
+        if b"SE v0.6.1" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
             return False
         # Verify lines from 30.TXT are rendered on screen
@@ -616,8 +616,8 @@ def test_se_execution():
         time.sleep(0.1)
         # Type filename 2.TXT + Enter
         os.write(master, b"2.TXT\r")
-        out_loaded = read_until(master, b"SE v0.6.0", timeout=4.0)
-        if b"SE v0.6.0" not in out_loaded:
+        out_loaded = read_until(master, b"SE v0.6.1", timeout=4.0)
+        if b"SE v0.6.1" not in out_loaded:
             print(f"[-] Failed to load 2.TXT from Load File prompt. Buffer: {repr(out_loaded)}", flush=True)
             return False
         print("[+] Successfully verified typing/pasting filename and loading from directory prompt.", flush=True)
