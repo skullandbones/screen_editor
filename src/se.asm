@@ -3624,7 +3624,13 @@ INIT_EMPTY_DOCUMENT:
 ; Load File Screen with Sorted Directory Listing & Pagination
 ;------------------------------------------------------------------------------
 DO_LOAD_FILE_UI:
-	; 1. Collect Directory Entries from CP/M Default Drive (with Bit-7 strip & Extent mask)
+	; Query current drive letter (BDOS 25) and update title
+	LD	C,25
+	CALL	BDOS_ENTRY
+	ADD	A,'A'
+	LD	(STR_DIR_DRIVE_CHAR),A
+
+	; 1. Collect Directory Entries from CP/M Default Drive (with Bit-7 strip & dup filter)
 	CALL	COLLECT_DIR_ENTRIES
 
 	; 2. Sort Directory Entries Alphabetically
@@ -3713,8 +3719,9 @@ SET_NEXT_PAGE:
 
 ;------------------------------------------------------------------------------
 ; Collect Directory Entries from CP/M Default Drive into DIR_NAMES_BUF
-; Option 1: Bit 7 Stripping (AND 07FH) on all characters
-; Option 2: Extent Masking (AND 01FH) on byte 12 (EX)
+; - Strips Bit 7 (AND 07FH) on all characters
+; - Works across standard CP/M, host/Linux drives, and FAT filesystems
+; - Filters duplicate multi-extent entries via CHECK_DIR_DUPLICATE
 ;------------------------------------------------------------------------------
 COLLECT_DIR_ENTRIES:
 	XOR	A
@@ -3760,19 +3767,12 @@ DIR_COLLECT_LOOP:
 	LD	DE,RAW_SECTOR_BUF
 	ADD	HL,DE			; HL = pointer to 32-byte directory entry
 
-	; Check user number (byte 0): must be 0x00 (or < 0x20)
+	; Check user number / deleted status (byte 0):
 	LD	A,(HL)
+	CP	0E5H
+	JR	Z,DIR_NEXT_ENTRY	; Deleted entry
 	CP	020H
-	JR	NC,DIR_NEXT_ENTRY	; Deleted or non-user entry
-
-	; Option 2: Check extent byte (byte 12): low 5 bits must be 0 (extent 0 only)
-	PUSH	HL
-	LD	DE,12
-	ADD	HL,DE
-	LD	A,(HL)
-	AND	01FH			; Mask off high/extent-mask bits
-	POP	HL
-	JR	NZ,DIR_NEXT_ENTRY	; Skip higher extents of multi-extent files
+	JR	NC,DIR_NEXT_ENTRY	; Non-user entry (> 31)
 
 	; Check that filename is not blank (first char != space and != 0, with bit 7 stripped)
 	INC	HL			; HL = pointer to filename (bytes 1..8)
@@ -3782,10 +3782,39 @@ DIR_COLLECT_LOOP:
 	JR	Z,DIR_NEXT_ENTRY
 	OR	A
 	JR	Z,DIR_NEXT_ENTRY
-	DEC	HL			; Restore HL = pointer to entry start
 
-	; Destination: DIR_NAMES_BUF + (DIR_FILE_COUNT * 13)
-	PUSH	HL			; Save entry pointer
+	; Format entry into DIR_TEMP_ENTRY (13 bytes: 8 name + '.' + 3 ext + 0)
+	LD	DE,DIR_TEMP_ENTRY
+	LD	B,8
+COPY_NAME_TEMP:
+	LD	A,(HL)
+	AND	07FH
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	COPY_NAME_TEMP
+
+	LD	A,'.'
+	LD	(DE),A
+	INC	DE
+
+	LD	B,3
+COPY_EXT_TEMP:
+	LD	A,(HL)
+	AND	07FH
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	COPY_EXT_TEMP
+
+	XOR	A
+	LD	(DE),A
+
+	; Check if this filename is already in DIR_NAMES_BUF (duplicate extent filter)
+	CALL	CHECK_DIR_DUPLICATE
+	JR	C,DIR_NEXT_ENTRY	; Already collected -> skip duplicate
+
+	; Not a duplicate: append DIR_TEMP_ENTRY into DIR_NAMES_BUF
 	LD	A,(DIR_FILE_COUNT)
 	LD	L,A
 	LD	H,0
@@ -3801,39 +3830,11 @@ DIR_COLLECT_LOOP:
 	ADD	HL,DE			; *13
 	LD	DE,DIR_NAMES_BUF
 	ADD	HL,DE
-	EX	DE,HL			; DE = Destination buffer in DIR_NAMES_BUF
-	POP	HL			; HL = Source entry pointer
+	EX	DE,HL			; DE = Destination in DIR_NAMES_BUF
 
-	INC	HL			; Skip byte 0 (user number), point to filename (1..8)
-
-	; Option 1: Copy 8 chars of filename with Bit 7 stripped (AND 07FH)
-	LD	B,8
-COPY_NAME_MASK:
-	LD	A,(HL)
-	AND	07FH
-	LD	(DE),A
-	INC	HL
-	INC	DE
-	DJNZ	COPY_NAME_MASK
-
-	; Add '.'
-	LD	A,'.'
-	LD	(DE),A
-	INC	DE
-
-	; Option 1: Copy 3 chars of extension with Bit 7 stripped (AND 07FH)
-	LD	B,3
-COPY_EXT_MASK:
-	LD	A,(HL)
-	AND	07FH
-	LD	(DE),A
-	INC	HL
-	INC	DE
-	DJNZ	COPY_EXT_MASK
-
-	; Add null terminator
-	XOR	A
-	LD	(DE),A
+	LD	HL,DIR_TEMP_ENTRY
+	LD	BC,13
+	LDIR
 
 	; Increment DIR_FILE_COUNT
 	LD	A,(DIR_FILE_COUNT)
@@ -3850,6 +3851,49 @@ DIR_NEXT_ENTRY:
 	CP	0FFH
 	RET	Z
 	JR	DIR_COLLECT_LOOP
+
+;------------------------------------------------------------------------------
+; Check if DIR_TEMP_ENTRY matches any already collected entry in DIR_NAMES_BUF
+; Returns: Carry = 1 if duplicate found, Carry = 0 if unique
+;------------------------------------------------------------------------------
+CHECK_DIR_DUPLICATE:
+	LD	A,(DIR_FILE_COUNT)
+	OR	A
+	RET	Z			; 0 entries -> cannot be duplicate (NC)
+
+	LD	B,A			; B = number of entries to check
+	LD	HL,DIR_NAMES_BUF
+
+CHECK_DUP_ENTRY_LOOP:
+	PUSH	BC
+	PUSH	HL			; Save entry pointer in DIR_NAMES_BUF
+	LD	DE,DIR_TEMP_ENTRY
+	LD	C,12			; Compare 12 bytes (8 name + '.' + 3 ext)
+
+CHECK_DUP_BYTE_LOOP:
+	LD	A,(DE)
+	CP	(HL)
+	JR	NZ,CHECK_DUP_NO_MATCH
+	INC	HL
+	INC	DE
+	DEC	C
+	JR	NZ,CHECK_DUP_BYTE_LOOP
+
+	; Found identical 12-byte filename match!
+	POP	HL
+	POP	BC
+	SCF				; Carry = 1 (duplicate)
+	RET
+
+CHECK_DUP_NO_MATCH:
+	POP	HL			; Restore entry pointer
+	LD	DE,13
+	ADD	HL,DE			; Advance to next entry
+	POP	BC
+	DJNZ	CHECK_DUP_ENTRY_LOOP
+
+	OR	A			; Carry = 0 (not duplicate)
+	RET
 
 ;------------------------------------------------------------------------------
 ; Sort Directory Entries Alphabetically (Bubble Sort)
@@ -4786,7 +4830,9 @@ MSG_EXIT:
 STR_DIR_TITLE:
 	.DB	27,"[H",27,"[2J"
 	.DB	"============================================================",13,10
-	.DB	"           SE.COM - LOAD FILE (DIRECTORY LISTING)           ",13,10
+	.DB	"           SE.COM - LOAD FILE (DIRECTORY - DRIVE "
+STR_DIR_DRIVE_CHAR:
+	.DB	"A:)        ",13,10
 	.DB	"============================================================",13,10,13,10,"$"
 
 STR_LOAD_PROMPT:
