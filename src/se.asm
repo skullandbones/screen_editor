@@ -3621,28 +3621,54 @@ INIT_EMPTY_DOCUMENT:
 	RET
 
 ;------------------------------------------------------------------------------
-; Load File Screen with Sorted Directory Listing
+; Load File Screen with Sorted Directory Listing & Pagination
 ;------------------------------------------------------------------------------
 DO_LOAD_FILE_UI:
-	CALL	TERM_INIT
-	LD	DE,STR_DIR_TITLE
-	CALL	PRINT_STR
-
-	; 1. Collect Directory Entries from CP/M Default Drive
+	; 1. Collect Directory Entries from CP/M Default Drive (with Bit-7 strip & Extent mask)
 	CALL	COLLECT_DIR_ENTRIES
 
 	; 2. Sort Directory Entries Alphabetically
 	CALL	SORT_DIR_ENTRIES
 
-	; 3. Display Sorted Directory Entries in Columns
-	CALL	DISPLAY_DIR_ENTRIES
+	; 3. Calculate Total Pages (48 files per page: 12 rows x 4 cols)
+	XOR	A
+	LD	(DIR_PAGE_INDEX),A
 
-	; 4. Prompt for Filename and Read Input
-	LD	DE,STR_LOAD_PROMPT
+	LD	A,(DIR_FILE_COUNT)
+	OR	A
+	JR	NZ,CALC_PAGES
+	LD	A,1
+	LD	(DIR_PAGE_COUNT),A
+	JR	RENDER_LOAD_PAGE
+
+CALC_PAGES:
+	DEC	A			; A = N - 1
+	LD	B,0			; B = quotient
+DIV_48_LOOP:
+	CP	48
+	JR	C,DIV_48_DONE
+	SUB	48
+	INC	B
+	JR	DIV_48_LOOP
+DIV_48_DONE:
+	INC	B			; Total pages = quotient + 1
+	LD	A,B
+	LD	(DIR_PAGE_COUNT),A
+
+RENDER_LOAD_PAGE:
+	CALL	TERM_INIT
+	LD	DE,STR_DIR_TITLE
 	CALL	PRINT_STR
 
+	; Display Directory Entries for Current Page
+	CALL	DISPLAY_DIR_PAGE
+
+	; Display Load Prompt & Page Indicator
+	CALL	DISPLAY_LOAD_PROMPT
+
+	; Read Filename Input (handles typing, Backspace, Space/Enter for page, ESC)
 	CALL	READ_FILENAME_INPUT
-	JR	C,LOAD_UI_CANCELLED
+	JR	C,CHECK_PAGING_OR_CANCEL
 
 	; User entered a filename in INPUT_FILENAME_BUF: parse into WORK_FCB
 	LD	DE,INPUT_FILENAME_BUF
@@ -3668,11 +3694,27 @@ DO_LOAD_FILE_UI:
 	CALL	RENDER_STATUS_BAR
 	JP	MAIN_LOOP
 
-LOAD_UI_CANCELLED:
-	RET
+CHECK_PAGING_OR_CANCEL:
+	; A = return code: 0 = Cancel (ESC), 1 = Next Page (Space/Enter)
+	CP	1
+	JR	Z,DO_NEXT_PAGE
+	RET				; Cancelled -> return to splash
+
+DO_NEXT_PAGE:
+	LD	A,(DIR_PAGE_INDEX)
+	INC	A
+	LD	HL,DIR_PAGE_COUNT
+	CP	(HL)
+	JR	C,SET_NEXT_PAGE
+	XOR	A			; Wrap around to page 0
+SET_NEXT_PAGE:
+	LD	(DIR_PAGE_INDEX),A
+	JR	RENDER_LOAD_PAGE
 
 ;------------------------------------------------------------------------------
 ; Collect Directory Entries from CP/M Default Drive into DIR_NAMES_BUF
+; Option 1: Bit 7 Stripping (AND 07FH) on all characters
+; Option 2: Extent Masking (AND 01FH) on byte 12 (EX)
 ;------------------------------------------------------------------------------
 COLLECT_DIR_ENTRIES:
 	XOR	A
@@ -3723,18 +3765,19 @@ DIR_COLLECT_LOOP:
 	CP	020H
 	JR	NC,DIR_NEXT_ENTRY	; Deleted or non-user entry
 
-	; Check extent byte (byte 12): must be 0 (extent 0 only)
+	; Option 2: Check extent byte (byte 12): low 5 bits must be 0 (extent 0 only)
 	PUSH	HL
 	LD	DE,12
 	ADD	HL,DE
 	LD	A,(HL)
+	AND	01FH			; Mask off high/extent-mask bits
 	POP	HL
-	OR	A
 	JR	NZ,DIR_NEXT_ENTRY	; Skip higher extents of multi-extent files
 
-	; Check that filename is not blank (first char != space and != 0)
+	; Check that filename is not blank (first char != space and != 0, with bit 7 stripped)
 	INC	HL			; HL = pointer to filename (bytes 1..8)
 	LD	A,(HL)
+	AND	07FH
 	CP	' '
 	JR	Z,DIR_NEXT_ENTRY
 	OR	A
@@ -3746,7 +3789,7 @@ DIR_COLLECT_LOOP:
 	LD	A,(DIR_FILE_COUNT)
 	LD	L,A
 	LD	H,0
-	; HL = A * 13 = (A * 8) + (A * 4) + A
+	; HL = A * 13
 	LD	D,H
 	LD	E,L			; DE = A
 	ADD	HL,HL			; *2
@@ -3762,21 +3805,41 @@ DIR_COLLECT_LOOP:
 	POP	HL			; HL = Source entry pointer
 
 	INC	HL			; Skip byte 0 (user number), point to filename (1..8)
-	LD	BC,8
-	LDIR
+
+	; Option 1: Copy 8 chars of filename with Bit 7 stripped (AND 07FH)
+	LD	B,8
+COPY_NAME_MASK:
+	LD	A,(HL)
+	AND	07FH
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	COPY_NAME_MASK
+
+	; Add '.'
 	LD	A,'.'
 	LD	(DE),A
 	INC	DE
-	LD	BC,3
-	LDIR
+
+	; Option 1: Copy 3 chars of extension with Bit 7 stripped (AND 07FH)
+	LD	B,3
+COPY_EXT_MASK:
+	LD	A,(HL)
+	AND	07FH
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	COPY_EXT_MASK
+
+	; Add null terminator
 	XOR	A
-	LD	(DE),A			; Null terminator
+	LD	(DE),A
 
 	; Increment DIR_FILE_COUNT
 	LD	A,(DIR_FILE_COUNT)
 	INC	A
 	LD	(DIR_FILE_COUNT),A
-	CP	128			; Max 128 entries
+	CP	255			; Max 255 entries
 	RET	NC
 
 DIR_NEXT_ENTRY:
@@ -3874,30 +3937,68 @@ NO_SWAP_NEEDED:
 	RET
 
 ;------------------------------------------------------------------------------
-; Display Sorted Directory Entries in Columns
+; Display Directory Entries for Current Page (48 entries: 12 rows x 4 cols)
 ;------------------------------------------------------------------------------
-DISPLAY_DIR_ENTRIES:
+DISPLAY_DIR_PAGE:
 	LD	A,(DIR_FILE_COUNT)
 	OR	A
-	JR	NZ,DO_SHOW_FILES
+	JR	NZ,DO_SHOW_PAGE
 	LD	DE,STR_NO_FILES_FOUND
 	CALL	PRINT_STR
 	RET
 
-DO_SHOW_FILES:
+DO_SHOW_PAGE:
+	; Calculate start file index: DIR_START_FILE = DIR_PAGE_INDEX * 48
+	LD	A,(DIR_PAGE_INDEX)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	LD	D,H
+	LD	E,L			; DE = A * 16
+	ADD	HL,HL			; *32
+	ADD	HL,DE			; HL = A * 48
+	LD	A,L
+	LD	(DIR_START_FILE),A
+
+	; Calculate number of files on this page:
+	; Count = min(48, DIR_FILE_COUNT - DIR_START_FILE)
+	LD	A,(DIR_FILE_COUNT)
+	LD	HL,DIR_START_FILE
+	SUB	(HL)
+	CP	48
+	JR	C,HAVE_PAGE_COUNT
+	LD	A,48
+HAVE_PAGE_COUNT:
+	LD	B,A			; B = number of files to display on this page
+
+	; Calculate pointer in DIR_NAMES_BUF: DIR_NAMES_BUF + (DIR_START_FILE * 13)
+	LD	A,(DIR_START_FILE)
+	LD	L,A
+	LD	H,0
+	LD	D,H
+	LD	E,L
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,DE			; *5
+	ADD	HL,HL			; *10
+	ADD	HL,DE			; *11
+	ADD	HL,DE			; *12
+	ADD	HL,DE			; *13
+	LD	DE,DIR_NAMES_BUF
+	ADD	HL,DE			; HL = pointer to start entry on this page
+
 	XOR	A
 	LD	(DIR_COL_COUNT),A
 
-	LD	A,(DIR_FILE_COUNT)
-	LD	B,A
-	LD	HL,DIR_NAMES_BUF
-
-DISPLAY_FILE_LOOP:
+DISPLAY_PAGE_LOOP:
 	PUSH	BC
 	PUSH	HL			; Save entry pointer
 
 	; Format entry into a clean 16-char padded column:
-	; e.g. "30      .TXT" -> "30.TXT          "
+	; e.g. "DIGIT5  .ASM" -> "DIGIT5.ASM      "
 	LD	DE,LOAD_LINE_TEMP
 	LD	B,8
 COPY_DISP_NAME:
@@ -3968,17 +4069,7 @@ DISP_COL_TERMINATE:
 	LD	A,(DIR_COL_COUNT)
 	INC	A
 	LD	(DIR_COL_COUNT),A
-
-	; Check screen mode for columns per row: 4 cols on 80x24, 6 cols on 120x40
-	LD	C,4			; Default 4 cols (80x24)
-	LD	A,(SCREEN_MODE)
-	CP	MODE_120X40
-	JR	NZ,CHECK_COL_WRAP
-	LD	C,6			; 6 cols (120x40)
-
-CHECK_COL_WRAP:
-	LD	A,(DIR_COL_COUNT)
-	CP	C
+	CP	4			; Wrap at 4 columns (64 chars <= 80 cols)
 	JR	NZ,NO_ROW_WRAP
 	XOR	A
 	LD	(DIR_COL_COUNT),A
@@ -3991,22 +4082,61 @@ NO_ROW_WRAP:
 	ADD	HL,DE			; Next entry
 	POP	BC
 	DEC	B
-	JP	NZ,DISPLAY_FILE_LOOP
+	JP	NZ,DISPLAY_PAGE_LOOP
 
 	; If row didn't end on a newline, print CRLF
 	LD	A,(DIR_COL_COUNT)
 	OR	A
-	JR	Z,DISP_DIR_DONE
+	JR	Z,DISP_PAGE_DONE
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
-DISP_DIR_DONE:
+DISP_PAGE_DONE:
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 	RET
 
 ;------------------------------------------------------------------------------
-; Read Filename String with Interactive Line Editing (Backspace, ESC, Enter)
+; Display Load Prompt & Page Indicator
+;------------------------------------------------------------------------------
+DISPLAY_LOAD_PROMPT:
+	LD	A,(DIR_PAGE_COUNT)
+	CP	2
+	JR	C,DISP_SINGLE_PROMPT
+
+	; Multi-page prompt: "[Page X/Y]  <Space>=Next Page, <ESC>=Cancel\r\nEnter filename to load: "
+	LD	DE,STR_PAGE_PREFIX
+	CALL	PRINT_STR
+
+	LD	A,(DIR_PAGE_INDEX)
+	INC	A
+	LD	L,A
+	LD	H,0
+	CALL	PRINT_DEC_WORD
+
+	LD	DE,STR_PAGE_MID
+	CALL	PRINT_STR
+
+	LD	A,(DIR_PAGE_COUNT)
+	LD	L,A
+	LD	H,0
+	CALL	PRINT_DEC_WORD
+
+	LD	DE,STR_PAGE_SUFFIX
+	CALL	PRINT_STR
+	RET
+
+DISP_SINGLE_PROMPT:
+	LD	DE,STR_LOAD_PROMPT
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Read Filename String with Interactive Line Editing & Paging
+; Returns:
+;   Carry = 0 -> Valid filename entered in INPUT_FILENAME_BUF
+;   Carry = 1, A = 0 -> Cancelled (ESC or empty Enter on single page)
+;   Carry = 1, A = 1 -> Next Page (Space or empty Enter on multi-page)
 ;------------------------------------------------------------------------------
 READ_FILENAME_INPUT:
 	XOR	A
@@ -4021,7 +4151,26 @@ INPUT_CHAR_LOOP:
 	CP	KEY_ESC
 	JR	Z,INPUT_CANCEL
 
-	; Enter -> Finish input
+	; Space -> If empty input and multi-page, advance to next page
+	CP	' '
+	JR	NZ,CHECK_ENTER_KEY
+	LD	A,(INPUT_BUF_LEN)
+	OR	A
+	JR	NZ,ALLOW_SPACE_CHAR	; If typing in progress, treat as space character
+
+	; Empty input on Space
+	LD	A,(DIR_PAGE_COUNT)
+	CP	2
+	JR	C,ALLOW_SPACE_CHAR	; Single page: allow typing space
+	LD	A,1			; A = 1 (next page)
+	SCF				; Carry = 1 (special action)
+	RET
+
+ALLOW_SPACE_CHAR:
+	LD	A,' '
+
+CHECK_ENTER_KEY:
+	; Enter -> Finish input or advance page if empty
 	CP	KEY_ENTER
 	JR	Z,INPUT_ENTER
 
@@ -4084,14 +4233,26 @@ INPUT_BS:
 	JR	INPUT_CHAR_LOOP
 
 INPUT_CANCEL:
-	SCF				; Carry = 1 (cancelled)
+	XOR	A			; A = 0 (cancel)
+	SCF				; Carry = 1
 	RET
 
 INPUT_ENTER:
 	LD	A,(INPUT_BUF_LEN)
 	OR	A
-	JR	Z,INPUT_CANCEL		; Empty string -> cancelled
+	JR	Z,INPUT_ENTER_EMPTY	; Empty string on Enter
+
+	; Non-empty string: success
 	OR	A			; Carry = 0 (success)
+	RET
+
+INPUT_ENTER_EMPTY:
+	; If multi-page, empty Enter advances page
+	LD	A,(DIR_PAGE_COUNT)
+	CP	2
+	JR	C,INPUT_CANCEL
+	LD	A,1			; A = 1 (next page)
+	SCF				; Carry = 1
 	RET
 
 ;------------------------------------------------------------------------------
@@ -4624,13 +4785,24 @@ MSG_EXIT:
 
 STR_DIR_TITLE:
 	.DB	27,"[H",27,"[2J"
-	.DB	"================================================================================",13,10
-	.DB	"                  SE.COM - LOAD FILE (DIRECTORY LISTING)                        ",13,10
-	.DB	"================================================================================",13,10,13,10,"$"
+	.DB	"============================================================",13,10
+	.DB	"           SE.COM - LOAD FILE (DIRECTORY LISTING)           ",13,10
+	.DB	"============================================================",13,10,13,10,"$"
 
 STR_LOAD_PROMPT:
-	.DB	"--------------------------------------------------------------------------------",13,10
+	.DB	"------------------------------------------------------------",13,10
 	.DB	"Enter filename to load (or <Enter>/<ESC> to cancel): ","$"
+
+STR_PAGE_PREFIX:
+	.DB	"------------------------------------------------------------",13,10
+	.DB	"[Page ","$"
+
+STR_PAGE_MID:
+	.DB	"/","$"
+
+STR_PAGE_SUFFIX:
+	.DB	"]  <Space>=Next Page, <ESC>=Cancel",13,10
+	.DB	"Enter filename to load: ","$"
 
 STR_NO_FILES_FOUND:
 	.DB	"  [No files found on current drive]",13,10,13,10,"$"
@@ -4693,11 +4865,14 @@ WORK_FCB:	.DS	36
 
 DIR_SEARCH_FCB:		.DS	36
 DIR_FILE_COUNT:		.DB	0
+DIR_PAGE_INDEX:		.DB	0
+DIR_PAGE_COUNT:		.DB	0
+DIR_START_FILE:		.DB	0
 DIR_COL_COUNT:		.DB	0
 DIR_TEMP_ENTRY:		.DS	16
 INPUT_BUF_LEN:		.DB	0
 INPUT_FILENAME_BUF:	.DS	32
-DIR_NAMES_BUF:		.DS	1664	; 128 entries * 13 bytes
+DIR_NAMES_BUF:		.DS	3328	; 256 entries * 13 bytes
 
 RAW_TEST_FCB:		.DS	36
 RAW_SECTOR_BUF:		.DS	128

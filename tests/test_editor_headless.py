@@ -587,6 +587,16 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Load File screen with sorted directory listing.", flush=True)
 
+        # Test Space key to advance to Page 2
+        drain_all(master)
+        time.sleep(0.1)
+        os.write(master, b" ")
+        out_page2 = read_until(master, b"[Page 2/", timeout=4.0)
+        if b"[Page 2/" not in out_page2:
+            print(f"[-] Space key failed to advance to Page 2. Buffer: {repr(out_page2)}", flush=True)
+            return False
+        print("[+] Successfully verified Space key pagination ([Page 2/X]).", flush=True)
+
         # Test ESC to cancel from Load File prompt
         drain_all(master)
         time.sleep(0.1)
