@@ -137,6 +137,12 @@ SPLASH_LOOP:
 	CP	'L'
 	JR	Z,DO_SPLASH_LOAD
 
+	; Option: 'S' or 's' -> Save File Screen
+	CP	's'
+	JR	Z,DO_SPLASH_SAVE
+	CP	'S'
+	JR	Z,DO_SPLASH_SAVE
+
 	; Option: '1' -> Modern Screen Mode (120x40)
 	CP	'1'
 	JR	Z,DO_SET_120X40
@@ -181,6 +187,10 @@ DO_SPLASH_LOAD:
 	CALL	DO_LOAD_FILE_UI
 	JR	SHOW_SPLASH_SCREEN
 
+DO_SPLASH_SAVE:
+	CALL	DO_SAVE_FILE_UI
+	JR	SHOW_SPLASH_SCREEN
+
 MAIN_LOOP:
 	CALL	GET_KEY
 
@@ -188,12 +198,14 @@ MAIN_LOOP:
 	CP	KEY_CTRL_Q
 	JP	Z,EXIT_PROGRAM
 
-	; Command: Ctrl+S -> Save File
+	; Command: Ctrl+S -> Save File Screen
 	CP	KEY_CTRL_S
 	JR	NZ,CHECK_TOGGLE_FMT
-	CALL	SAVE_FILE
+	CALL	DO_SAVE_FILE_UI
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
-	JR	MAIN_LOOP
+	JP	MAIN_LOOP
 
 CHECK_TOGGLE_FMT:
 	; Command: Ctrl+F -> Toggle Line Ending Format (CP/M <-> Linux)
@@ -3718,6 +3730,308 @@ SET_NEXT_PAGE:
 	JR	RENDER_LOAD_PAGE
 
 ;------------------------------------------------------------------------------
+; Save File Screen with Sorted Directory Listing, Pre-filling & Overwrite Check
+;------------------------------------------------------------------------------
+DO_SAVE_FILE_UI:
+	; Query current drive letter (BDOS 25) and update save title
+	LD	C,25
+	CALL	BDOS_ENTRY
+	ADD	A,'A'
+	LD	(STR_SAVE_DRIVE_CHAR),A
+
+	; 1. Collect Directory Entries from CP/M Default Drive
+	CALL	COLLECT_DIR_ENTRIES
+
+	; 2. Sort Directory Entries Alphabetically
+	CALL	SORT_DIR_ENTRIES
+
+	; 3. Pre-fill filename if known (HAS_FILE_ARG == 1)
+	CALL	FCB_TO_FILENAME_STR
+
+	; 4. Calculate Total Pages (48 files per page: 12 rows x 4 cols)
+	XOR	A
+	LD	(DIR_PAGE_INDEX),A
+
+	LD	A,(DIR_FILE_COUNT)
+	OR	A
+	JR	NZ,CALC_SAVE_PAGES
+	LD	A,1
+	LD	(DIR_PAGE_COUNT),A
+	JR	RENDER_SAVE_PAGE
+
+CALC_SAVE_PAGES:
+	DEC	A			; A = N - 1
+	LD	B,0
+DIV_48_SAVE_LOOP:
+	CP	48
+	JR	C,DIV_48_SAVE_DONE
+	SUB	48
+	INC	B
+	JR	DIV_48_SAVE_LOOP
+DIV_48_SAVE_DONE:
+	INC	B
+	LD	A,B
+	LD	(DIR_PAGE_COUNT),A
+
+RENDER_SAVE_PAGE:
+	CALL	TERM_INIT
+	LD	DE,STR_SAVE_TITLE
+	CALL	PRINT_STR
+
+	; Display Directory Entries for Current Page
+	CALL	DISPLAY_DIR_PAGE
+
+	; Display Save Prompt & Page Indicator
+	CALL	DISPLAY_SAVE_PROMPT
+
+	; Read Filename Input (with prefilled string echoed)
+	CALL	READ_FILENAME_INPUT_PREFILLED
+	JR	C,CHECK_SAVE_PAGING_OR_CANCEL
+
+	; User entered/confirmed a filename in INPUT_FILENAME_BUF:
+	; Save current WORK_FCB to DIR_TEMP_FCB (36 bytes)
+	LD	HL,WORK_FCB
+	LD	DE,DIR_TEMP_FCB
+	LD	BC,36
+	LDIR
+
+	; Parse entered filename into WORK_FCB
+	CALL	PARSE_FILENAME_TO_FCB
+
+	; Check if file already exists on disk
+	CALL	CHECK_FILE_EXISTS
+	JR	NC,DO_ACTUAL_SAVE	; Does not exist -> save directly
+
+	; File already exists! Prompt warning
+	LD	DE,STR_OVERWRITE_WARN
+	CALL	PRINT_STR
+
+OVERWRITE_KEY_LOOP:
+	CALL	GET_KEY
+	CP	'y'
+	JR	Z,DO_OVERWRITE_CONFIRMED
+	CP	'Y'
+	JR	Z,DO_OVERWRITE_CONFIRMED
+
+	; Any other key cancels overwrite: restore original WORK_FCB
+	CALL	PUTC			; Echo typed char
+	LD	HL,DIR_TEMP_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
+
+	LD	DE,STR_SAVE_CANCELLED
+	CALL	PRINT_STR
+	CALL	DELAY_BRIEF
+	RET
+
+DO_OVERWRITE_CONFIRMED:
+	CALL	PUTC			; Echo 'y'
+
+DO_ACTUAL_SAVE:
+	; Save the file from Far RAM to disk
+	CALL	SAVE_FILE
+
+	; Mark filename as known and saved
+	LD	A,1
+	LD	(HAS_FILE_ARG),A
+	RET
+
+CHECK_SAVE_PAGING_OR_CANCEL:
+	; A = return code: 0 = Cancel (ESC), 1 = Next Page (Space/Enter)
+	CP	1
+	JR	Z,DO_SAVE_NEXT_PAGE
+	RET				; Cancelled -> return
+
+DO_SAVE_NEXT_PAGE:
+	LD	A,(DIR_PAGE_INDEX)
+	INC	A
+	LD	HL,DIR_PAGE_COUNT
+	CP	(HL)
+	JR	C,SET_SAVE_NEXT_PAGE
+	XOR	A			; Wrap around to page 0
+SET_SAVE_NEXT_PAGE:
+	LD	(DIR_PAGE_INDEX),A
+	JR	RENDER_SAVE_PAGE
+
+;------------------------------------------------------------------------------
+; Check if file in WORK_FCB already exists on disk
+; Returns: Carry = 1 if file exists, Carry = 0 if file does not exist
+;------------------------------------------------------------------------------
+CHECK_FILE_EXISTS:
+	; Set DMA address to RAW_SECTOR_BUF
+	LD	DE,RAW_SECTOR_BUF
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; Copy WORK_FCB to RAW_TEST_FCB
+	LD	HL,WORK_FCB
+	LD	DE,RAW_TEST_FCB
+	LD	BC,36
+	LDIR
+
+	; Clear extent and record bytes (bytes 12..35) in RAW_TEST_FCB
+	LD	HL,RAW_TEST_FCB+12
+	LD	(HL),0
+	LD	DE,RAW_TEST_FCB+13
+	LD	BC,23
+	LDIR
+
+	; Try to open file (BDOS 15)
+	LD	DE,RAW_TEST_FCB
+	LD	C,15
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,FILE_NOT_EXISTS
+
+	; File exists! Close it (BDOS 16)
+	LD	DE,RAW_TEST_FCB
+	LD	C,16
+	CALL	BDOS_ENTRY
+	SCF				; Carry = 1 (file exists)
+	RET
+
+FILE_NOT_EXISTS:
+	OR	A			; Carry = 0 (file does not exist)
+	RET
+
+;------------------------------------------------------------------------------
+; Convert WORK_FCB to null-terminated ASCII string in INPUT_FILENAME_BUF
+; Sets INPUT_BUF_LEN accordingly.
+; If HAS_FILE_ARG == 0, clears buffer (length 0).
+;------------------------------------------------------------------------------
+FCB_TO_FILENAME_STR:
+	LD	A,(HAS_FILE_ARG)
+	OR	A
+	JR	NZ,DO_CONVERT_FCB
+
+	; No file argument -> empty buffer
+	XOR	A
+	LD	(INPUT_BUF_LEN),A
+	LD	HL,INPUT_FILENAME_BUF
+	LD	(HL),0
+	RET
+
+DO_CONVERT_FCB:
+	LD	DE,INPUT_FILENAME_BUF
+	LD	C,0			; C = length counter
+
+	; Check drive (WORK_FCB+0)
+	LD	A,(WORK_FCB)
+	OR	A
+	JR	Z,FCB_NO_DRIVE
+	; Explicit drive 1..16
+	ADD	A,'A'-1
+	LD	(DE),A
+	INC	DE
+	INC	C
+	LD	A,':'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+FCB_NO_DRIVE:
+	; Copy up to 8 characters of filename (WORK_FCB+1..8)
+	LD	HL,WORK_FCB+1
+	LD	B,8
+FCB_NAME_LOOP:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,FCB_NAME_DONE
+	OR	A
+	JR	Z,FCB_NAME_DONE
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	C
+	DJNZ	FCB_NAME_LOOP
+
+FCB_NAME_DONE:
+	; Check extension (WORK_FCB+9..11)
+	LD	HL,WORK_FCB+9
+	LD	A,(HL)
+	CP	' '
+	JR	Z,FCB_CONV_DONE
+	OR	A
+	JR	Z,FCB_CONV_DONE
+
+	; Has extension: add '.'
+	LD	A,'.'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+	LD	B,3
+FCB_EXT_LOOP:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,FCB_CONV_DONE
+	OR	A
+	JR	Z,FCB_CONV_DONE
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	C
+	DJNZ	FCB_EXT_LOOP
+
+FCB_CONV_DONE:
+	XOR	A
+	LD	(DE),A			; Null-terminate
+	LD	A,C
+	LD	(INPUT_BUF_LEN),A
+	RET
+
+;------------------------------------------------------------------------------
+; Display Save Prompt & Page Indicator
+;------------------------------------------------------------------------------
+DISPLAY_SAVE_PROMPT:
+	LD	A,(DIR_PAGE_COUNT)
+	CP	2
+	JR	C,DISP_SINGLE_SAVE_PROMPT
+
+	; Multi-page prompt
+	LD	DE,STR_SAVE_PAGE_PREFIX
+	CALL	PRINT_STR
+
+	LD	A,(DIR_PAGE_INDEX)
+	INC	A
+	LD	L,A
+	LD	H,0
+	CALL	PRINT_DEC_WORD
+
+	LD	DE,STR_PAGE_MID
+	CALL	PRINT_STR
+
+	LD	A,(DIR_PAGE_COUNT)
+	LD	L,A
+	LD	H,0
+	CALL	PRINT_DEC_WORD
+
+	LD	DE,STR_SAVE_PAGE_SUFFIX
+	CALL	PRINT_STR
+	RET
+
+DISP_SINGLE_SAVE_PROMPT:
+	LD	DE,STR_SAVE_PROMPT
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Brief delay (~0.5s) for reading status messages
+;------------------------------------------------------------------------------
+DELAY_BRIEF:
+	PUSH	BC
+	LD	B,0
+DELAY_OUTER:
+	LD	C,0
+DELAY_INNER:
+	DEC	C
+	JR	NZ,DELAY_INNER
+	DJNZ	DELAY_OUTER
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
 ; Collect Directory Entries from CP/M Default Drive into DIR_NAMES_BUF
 ; - Strips Bit 7 (AND 07FH) on all characters
 ; - Works across standard CP/M, host/Linux drives, and FAT filesystems
@@ -4187,6 +4501,15 @@ READ_FILENAME_INPUT:
 	LD	(INPUT_BUF_LEN),A
 	LD	HL,INPUT_FILENAME_BUF
 	LD	(HL),0
+	JR	INPUT_CHAR_LOOP
+
+READ_FILENAME_INPUT_PREFILLED:
+	; Echo prefilled string if non-empty
+	LD	A,(INPUT_BUF_LEN)
+	OR	A
+	JR	Z,INPUT_CHAR_LOOP
+	LD	DE,INPUT_FILENAME_BUF
+	CALL	PRINT_STR
 
 INPUT_CHAR_LOOP:
 	CALL	GET_KEY
@@ -4650,6 +4973,7 @@ STR_SPLASH_BODY:
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
 	.DB	"                  ~       type   :l                to load file ",13,10
+	.DB	"                  ~       type   :s                to save file ",13,10
 	.DB	"                  ~       type   :t                for mem test ",13,10
 	.DB	"                  ~       type   :f                for file test",13,10
 	.DB	"                  ~       type   :1                set 120x40   ",13,10
@@ -4856,6 +5180,32 @@ STR_NO_FILES_FOUND:
 DEFAULT_FCB_NAME:
 	.DB	0,"OUTPUT  TXT",0,0,0,0
 
+STR_SAVE_TITLE:
+	.DB	27,"[H",27,"[2J"
+	.DB	"============================================================",13,10
+	.DB	"           SE.COM - SAVE FILE (DIRECTORY - DRIVE "
+STR_SAVE_DRIVE_CHAR:
+	.DB	"A:)        ",13,10
+	.DB	"============================================================",13,10,13,10,"$"
+
+STR_SAVE_PROMPT:
+	.DB	"------------------------------------------------------------",13,10
+	.DB	"Enter filename to save (or <Enter>/<ESC> to cancel): ","$"
+
+STR_SAVE_PAGE_PREFIX:
+	.DB	"------------------------------------------------------------",13,10
+	.DB	"[Page ","$"
+
+STR_SAVE_PAGE_SUFFIX:
+	.DB	"]  <Space>=Next Page, <ESC>=Cancel",13,10
+	.DB	"Enter filename to save: ","$"
+
+STR_OVERWRITE_WARN:
+	.DB	13,10,"File already exists. Overwrite? (y/n): ","$"
+
+STR_SAVE_CANCELLED:
+	.DB	13,10,"Save cancelled.",13,10,"$"
+
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
 ;------------------------------------------------------------------------------
@@ -4908,6 +5258,7 @@ TEST_PATTERN:	.DB	0,0
 TEST_READBACK:	.DB	0,0
 
 WORK_FCB:	.DS	36
+DIR_TEMP_FCB:	.DS	36
 
 DIR_SEARCH_FCB:		.DS	36
 DIR_FILE_COUNT:		.DB	0

@@ -391,10 +391,18 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully exercised ^F format toggle.", flush=True)
 
-        # 17. Save file with Ctrl+S (saves to OUTPUT.TXT)
+        # 17. Save file with Ctrl+S (opens Save Screen and saves to OUTPUT.TXT)
         time.sleep(0.3)
         os.write(master, b"\x13")
-        time.sleep(0.5)
+        read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=5.0)
+        read_until(master, b"Enter filename to save", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"OUTPUT.TXT\r")
+        time.sleep(0.2)
+        resp = read_until(master, b"Overwrite? (y/n): ", timeout=2.0)
+        if b"Overwrite? (y/n): " in resp:
+            os.write(master, b"y")
+        read_until(master, b"SE v0.6.1", timeout=5.0)
         drain_all(master)
         print("[+] Successfully saved file with Ctrl+S.", flush=True)
 
@@ -622,9 +630,86 @@ def test_se_execution():
             return False
         print("[+] Successfully verified typing/pasting filename and loading from directory prompt.", flush=True)
 
-        # Final exit from editor
+        # 27. Test Save Screen: Pre-filling, Overwrite check, and Splash :s
         time.sleep(0.5)
-        os.write(master, b"\x11")
+        # We are currently editing '2.TXT'. Trigger Save Screen via Ctrl+S (\x13)
+        os.write(master, b"\x13")
+        out_save = read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=5.0)
+        if b"SAVE FILE (DIRECTORY - DRIVE C:)" not in out_save:
+            print(f"[-] Save screen title not found. Buffer: {repr(out_save)}", flush=True)
+            return False
+        # Verify pre-filled filename '2.TXT' is echoed in prompt
+        out_prefill = read_until(master, b"2.TXT", timeout=3.0)
+        if b"2.TXT" not in out_prefill:
+            print(f"[-] Pre-filled filename '2.TXT' not found in save prompt. Buffer: {repr(out_prefill)}", flush=True)
+            return False
+        print("[+] Successfully verified Save Screen with pre-filled filename '2.TXT'.", flush=True)
+
+        # Press Enter (\r) to save with existing filename: should trigger overwrite warning
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\r")
+        out_warn = read_until(master, b"File already exists. Overwrite? (y/n): ", timeout=4.0)
+        if b"Overwrite? (y/n): " not in out_warn:
+            print(f"[-] Overwrite warning prompt missing. Buffer: {repr(out_warn)}", flush=True)
+            return False
+        print("[+] Successfully verified overwrite warning prompt on existing file.", flush=True)
+
+        # Test canceling overwrite with 'n'
+        time.sleep(0.2)
+        os.write(master, b"n")
+        out_cancel = read_until(master, b"Save cancelled.", timeout=3.0)
+        if b"Save cancelled." not in out_cancel:
+            print(f"[-] 'Save cancelled.' message missing. Buffer: {repr(out_cancel)}", flush=True)
+            return False
+        out_back = read_until(master, b"SE v0.6.1", timeout=4.0)
+        if b"SE v0.6.1" not in out_back:
+            print(f"[-] Editor mode not restored after cancelling save. Buffer: {repr(out_back)}", flush=True)
+            return False
+        print("[+] Successfully verified cancelling overwrite returns cleanly to editor.", flush=True)
+
+        # Re-open Save Screen with Ctrl+S and confirm overwrite with 'y'
+        time.sleep(0.3)
+        os.write(master, b"\x13")
+        read_until(master, b"Enter filename to save", timeout=4.0)
+        read_until(master, b"2.TXT", timeout=3.0)
+        time.sleep(0.2)
+        os.write(master, b"\r")
+        read_until(master, b"Overwrite? (y/n): ", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"y")
+        out_saved = read_until(master, b"SE v0.6.1", timeout=5.0)
+        if b"SE v0.6.1" not in out_saved:
+            print(f"[-] Editor mode not restored after confirming save. Buffer: {repr(out_saved)}", flush=True)
+            return False
+        print("[+] Successfully verified confirming overwrite ('y') saves file and resumes editor.", flush=True)
+
+        # Return to splash screen (ESC) and test ':s' option
+        drain_all(master)
+        time.sleep(0.3)
+        os.write(master, b"\x1b")
+        out_splash = read_until(master, b":s                to save file", timeout=5.0)
+        if b":s                to save file" not in out_splash:
+            print(f"[-] Splash screen ':s to save file' not found. Buffer: {repr(out_splash)}", flush=True)
+            return False
+        print("[+] Successfully verified splash screen displays ':s to save file'.", flush=True)
+
+        # Launch Save Screen from Splash screen ('s')
+        time.sleep(0.2)
+        os.write(master, b"s")
+        out_splash_save = read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
+        if b"SAVE FILE (DIRECTORY - DRIVE C:)" not in out_splash_save:
+            print(f"[-] Save screen not reached from splash screen. Buffer: {repr(out_splash_save)}", flush=True)
+            return False
+        # Cancel back to splash (ESC)
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
+        print("[+] Successfully verified splash ':s' enters Save Screen and ESC returns to splash.", flush=True)
+
+        # Final exit from splash to CP/M
+        time.sleep(0.3)
+        os.write(master, b"q")
         read_until(master, b"C>", timeout=4.0)
         print("[+] Final exit from SE.COM completed.", flush=True)
 
