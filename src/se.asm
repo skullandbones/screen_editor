@@ -22,6 +22,7 @@ MAX_DOC_LINES	.EQU	3584		; 14 banks * 256 lines = 3584 total lines
 KEY_CTRL_C	.EQU	3
 KEY_CTRL_Q	.EQU	17
 KEY_CTRL_S	.EQU	19
+KEY_CTRL_K	.EQU	11		; Show Editor Mode Keys Screen
 KEY_CTRL_F	.EQU	6		; Toggle CP/M <-> Linux line endings
 KEY_BACKSPACE	.EQU	8
 KEY_TAB		.EQU	9
@@ -200,8 +201,18 @@ MAIN_LOOP:
 
 	; Command: Ctrl+S -> Save File Screen
 	CP	KEY_CTRL_S
-	JR	NZ,CHECK_TOGGLE_FMT
+	JR	NZ,CHECK_CTRL_K
 	CALL	DO_SAVE_FILE_UI
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+CHECK_CTRL_K:
+	; Command: Ctrl+K -> Editor Mode Keys Screen
+	CP	KEY_CTRL_K
+	JR	NZ,CHECK_TOGGLE_FMT
+	CALL	SHOW_HELP_KEYS_UI
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
@@ -1604,15 +1615,7 @@ SHOW_LINUX_FMT:
 	CALL	PRINT_STR
 
 SHOW_STATUS_REST:
-	LD	A,(SCREEN_MODE)
-	CP	MODE_120X40
-	JR	NZ,SHOW_SUFFIX_80X24
-	LD	DE,STR_STATUS_SUFFIX_120
-	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
-
-SHOW_SUFFIX_80X24:
-	LD	DE,STR_STATUS_SUFFIX_80
+	LD	DE,STR_STATUS_KEYS
 	CALL	PRINT_STR
 
 SHOW_STATUS_ROWCOL:
@@ -3851,6 +3854,16 @@ SET_NEXT_PAGE:
 	JR	RENDER_LOAD_PAGE
 
 ;------------------------------------------------------------------------------
+; Show Editor Mode Keys Screen (Ctrl+K)
+; Displays summary of all SE editor keys and waits for any key to return.
+;------------------------------------------------------------------------------
+SHOW_HELP_KEYS_UI:
+	LD	DE,STR_HELP_SCREEN
+	CALL	PRINT_STR
+	CALL	GET_KEY
+	RET
+
+;------------------------------------------------------------------------------
 ; Save File Screen with Sorted Directory Listing, Pre-filling & Overwrite Check
 ;------------------------------------------------------------------------------
 DO_SAVE_FILE_UI:
@@ -5260,11 +5273,29 @@ STR_FMT_CPM:
 STR_FMT_LINUX:
 	.DB	"Linux | ","$"
 
-STR_STATUS_SUFFIX_120:
-	.DB	"^F:Fmt ^S:Save ^Q:Quit | ","$"
+STR_STATUS_KEYS:
+	.DB	"^K: Editor keys | ","$"
 
-STR_STATUS_SUFFIX_80:
-	.DB	"^S:Save ^Q:Quit | ","$"
+STR_HELP_SCREEN:
+	.DB	27,"[H",27,"[2J"
+	.DB	"================================================================================",13,10
+	.DB	"                          SE.COM - EDITOR MODE KEYS                             ",13,10
+	.DB	"================================================================================",13,10
+	.DB	"  FILE & SYSTEM:",13,10
+	.DB	"    Ctrl+S           Save file screen        Ctrl+F          Toggle format",13,10
+	.DB	"    Ctrl+Q           Quit to CP/M            ESC             Splash screen",13,10
+	.DB	"    Ctrl+K           Show editor keys help",13,10,13,10
+	.DB	"  NAVIGATION:",13,10
+	.DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
+	.DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
+	.DB	"    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
+	.DB	"                                             Ctrl+G / ^End   Bottom of file",13,10,13,10
+	.DB	"  EDITING:",13,10
+	.DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
+	.DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
+	.DB	"    Tab              Tab (8-column stop)",13,10,13,10
+	.DB	"================================================================================",13,10
+	.DB	"                      Press any key to return to editor...",13,10,"$"
 
 STR_STATUS_SEP:
 	.DB	" | ","$"

@@ -147,7 +147,10 @@ def test_se_execution():
         if b"[No Name]" not in out_edit:
             print(f"[-] Missing '[No Name]' in status bar for unnamed buffer. Buffer: {repr(out_edit)}", flush=True)
             return False
-        print("[+] Successfully entered full-screen editing mode with '[No Name]' status field.", flush=True)
+        if b"^K: Editor keys" not in out_edit:
+            print(f"[-] Missing '^K: Editor keys' in status bar. Buffer: {repr(out_edit)}", flush=True)
+            return False
+        print("[+] Successfully entered full-screen editing mode with '[No Name]' and '^K: Editor keys'.", flush=True)
 
         # 8. Test interactive character typing in empty buffer
         time.sleep(0.3)
@@ -717,6 +720,31 @@ def test_se_execution():
         os.write(master, b"\x1b")
         read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
         print("[+] Successfully verified splash ':s' enters Save Screen and ESC returns to splash.", flush=True)
+
+        # 28. Test Editor Mode Keys screen (^K)
+        time.sleep(0.2)
+        os.write(master, b"e")  # Return to editor from splash
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"\x0b")  # Ctrl+K
+        out_keys = read_until(master, b"SE.COM - EDITOR MODE KEYS", timeout=4.0)
+        if b"SE.COM - EDITOR MODE KEYS" not in out_keys:
+            print(f"[-] Help screen not reached via Ctrl+K. Buffer: {repr(out_keys)}", flush=True)
+            return False
+        read_until(master, b"Press any key to return to editor...", timeout=3.0)
+        # Press Space to return to editor
+        time.sleep(0.2)
+        os.write(master, b" ")
+        out_keys_back = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"^K: Editor keys" not in out_keys_back:
+            print(f"[-] Failed to return to editor from keys screen. Buffer: {repr(out_keys_back)}", flush=True)
+            return False
+        print("[+] Successfully verified Ctrl+K Editor Mode Keys screen and return to editor.", flush=True)
+
+        # Return to splash (ESC)
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
 
         # Final exit from splash to CP/M
         time.sleep(0.3)
