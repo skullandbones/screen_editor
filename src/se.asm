@@ -1576,6 +1576,9 @@ RENDER_STATUS_BAR:
 	LD	DE,STR_STATUS_PREFIX
 	CALL	PRINT_STR
 
+	; Print filename if known (HAS_FILE_ARG != 0)
+	CALL	PRINT_STATUS_FILENAME
+
 	; Print active geometry
 	LD	A,(SCREEN_MODE)
 	CP	MODE_120X40
@@ -1601,15 +1604,28 @@ SHOW_LINUX_FMT:
 	CALL	PRINT_STR
 
 SHOW_STATUS_REST:
-	LD	DE,STR_STATUS_SUFFIX
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	NZ,SHOW_SUFFIX_80X24
+	LD	DE,STR_STATUS_SUFFIX_120
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
+SHOW_SUFFIX_80X24:
+	LD	DE,STR_STATUS_SUFFIX_80
 	CALL	PRINT_STR
 
-	; Print dynamic cursor position: Row, Col
+SHOW_STATUS_ROWCOL:
+	; Print dynamic cursor position: Row <cur>/<total>, Col <col>
 	LD	DE,STR_STATUS_POS
 	CALL	PRINT_STR
 	LD	HL,(CUR_DOC_ROW)
 	INC	HL			; 1-indexed document row
-	CALL	PRINT_DEC_WORD		; Print 16-bit row number
+	CALL	PRINT_DEC_WORD		; Print 16-bit current row number
+	LD	A,'/'
+	CALL	PUTC
+	LD	HL,(DOC_TOTAL_LINES)
+	CALL	PRINT_DEC_WORD		; Print 16-bit total rows of file
 	LD	DE,STR_STATUS_COL
 	CALL	PRINT_STR
 	CALL	CALC_VISUAL_COL		; A = Visual column (0-indexed, 0..ACTIVE_COLS-1)
@@ -1624,6 +1640,65 @@ SHOW_STATUS_REST:
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
 	CALL	LOCATE_CURSOR
+	RET
+
+;------------------------------------------------------------------------------
+; Print Filename in Status Bar if HAS_FILE_ARG != 0
+;------------------------------------------------------------------------------
+PRINT_STATUS_FILENAME:
+	LD	A,(HAS_FILE_ARG)
+	OR	A
+	RET	Z			; No known filename -> skip
+
+	; Check explicit drive byte in WORK_FCB+0
+	LD	A,(WORK_FCB)
+	OR	A
+	JR	Z,PSF_NO_DRIVE
+	ADD	A,'A'-1
+	CALL	PUTC
+	LD	A,':'
+	CALL	PUTC
+
+PSF_NO_DRIVE:
+	; Print up to 8 characters of filename (WORK_FCB+1..8)
+	LD	HL,WORK_FCB+1
+	LD	B,8
+PSF_NAME_LOOP:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,PSF_NAME_DONE
+	OR	A
+	JR	Z,PSF_NAME_DONE
+	CALL	PUTC
+	INC	HL
+	DJNZ	PSF_NAME_LOOP
+
+PSF_NAME_DONE:
+	; Print extension if present (WORK_FCB+9..11)
+	LD	HL,WORK_FCB+9
+	LD	A,(HL)
+	CP	' '
+	JR	Z,PSF_EXT_DONE
+	OR	A
+	JR	Z,PSF_EXT_DONE
+
+	LD	A,'.'
+	CALL	PUTC
+
+	LD	B,3
+PSF_EXT_LOOP:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,PSF_EXT_DONE
+	OR	A
+	JR	Z,PSF_EXT_DONE
+	CALL	PUTC
+	INC	HL
+	DJNZ	PSF_EXT_LOOP
+
+PSF_EXT_DONE:
+	LD	DE,STR_STATUS_SEP
+	CALL	PRINT_STR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -5139,8 +5214,14 @@ STR_FMT_CPM:
 STR_FMT_LINUX:
 	.DB	"Linux | ","$"
 
-STR_STATUS_SUFFIX:
+STR_STATUS_SUFFIX_120:
 	.DB	"^F:Fmt ^S:Save ^Q:Quit | ","$"
+
+STR_STATUS_SUFFIX_80:
+	.DB	"^S:Save ^Q:Quit | ","$"
+
+STR_STATUS_SEP:
+	.DB	" | ","$"
 
 STR_STATUS_POS:
 	.DB	"Row ","$"

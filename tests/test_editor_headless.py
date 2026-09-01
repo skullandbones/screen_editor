@@ -264,8 +264,8 @@ def test_se_execution():
         for _ in range(15):
             os.write(master, b"\x1b[B")
             time.sleep(0.01)
-        out_row_clamp = read_until(master, b"Row 4,", timeout=3.0)
-        if b"Row 4," not in out_row_clamp:
+        out_row_clamp = read_until(master, b"Row 4/4,", timeout=3.0)
+        if b"Row 4/4," not in out_row_clamp:
             print("[-] Cursor down clamping at EOF failed. Buffer captured:", out_row_clamp)
             return False
         print("[+] Successfully verified cursor cannot move past the last line of text (line 4).")
@@ -297,8 +297,8 @@ def test_se_execution():
         drain_all(master)
         # Press Backspace at column 0 to join Row 2 into Row 1 -> cursor lands at Row 1, Col 11
         os.write(master, b"\x08")
-        out_join_bs = read_until(master, b"Row 1, Col 11", timeout=4.0)
-        if b"Row 1, Col 11" not in out_join_bs:
+        out_join_bs = read_until(master, b"Row 1/3, Col 11", timeout=4.0)
+        if b"Row 1/3, Col 11" not in out_join_bs:
             print(f"[-] Line join via Backspace at Col 0 failed. Buffer: {repr(out_join_bs)}", flush=True)
             return False
         drain_all(master)
@@ -311,8 +311,8 @@ def test_se_execution():
         drain_all(master)
         # Press Delete key (\x1b[3~) at EOL to join next line into Row 1 -> cursor stays at Row 1, Col 31
         os.write(master, b"\x1b[3~")
-        out_join_del = read_until(master, b"Row 1, Col 31", timeout=4.0)
-        if b"Row 1, Col 31" not in out_join_del:
+        out_join_del = read_until(master, b"Row 1/2, Col 31", timeout=4.0)
+        if b"Row 1/2, Col 31" not in out_join_del:
             print(f"[-] Line join via Delete key at EOL failed. Buffer: {repr(out_join_del)}", flush=True)
             return False
         drain_all(master)
@@ -321,36 +321,36 @@ def test_se_execution():
         # 14. Test Real Tab character insertion & Tab-jumping navigation
         # Move cursor to (1,0)
         os.write(master, b"\x01")  # Ctrl+A -> Home
-        read_until(master, b"Row 1, Col 0", timeout=3.0)
+        read_until(master, b"Row 1/2, Col 0", timeout=3.0)
         drain_all(master)
         # Press Tab at (1,0) -> advances visual cursor to (1,8) -> displayed as Col 8 (0-indexed)
         os.write(master, b"\t")
-        out_tab1 = read_until(master, b"Row 1, Col 8", timeout=4.0)
-        if b"Row 1, Col 8" not in out_tab1:
+        out_tab1 = read_until(master, b"Row 1/2, Col 8", timeout=4.0)
+        if b"Row 1/2, Col 8" not in out_tab1:
             print(f"[-] Tab key from col 0 failed to reach col 8. Buffer captured: {repr(out_tab1)}", flush=True)
             return False
         drain_all(master)
 
         # Test Cursor Left jumping across the Tab in a single keystroke
         os.write(master, b"\x1b[D")
-        out_tab_left = read_until(master, b"Row 1, Col 0", timeout=4.0)
-        if b"Row 1, Col 0" not in out_tab_left:
+        out_tab_left = read_until(master, b"Row 1/2, Col 0", timeout=4.0)
+        if b"Row 1/2, Col 0" not in out_tab_left:
             print(f"[-] Left arrow over Tab failed to jump back to col 0. Buffer captured: {repr(out_tab_left)}", flush=True)
             return False
         drain_all(master)
 
         # Test Cursor Right jumping across the Tab in a single keystroke
         os.write(master, b"\x1b[C")
-        out_tab_right = read_until(master, b"Row 1, Col 8", timeout=4.0)
-        if b"Row 1, Col 8" not in out_tab_right:
+        out_tab_right = read_until(master, b"Row 1/2, Col 8", timeout=4.0)
+        if b"Row 1/2, Col 8" not in out_tab_right:
             print(f"[-] Right arrow over Tab failed to jump forward to col 8. Buffer captured: {repr(out_tab_right)}", flush=True)
             return False
         drain_all(master)
 
         # Test Backspace deleting the entire Tab in a single keystroke
         os.write(master, b"\x08")
-        out_tab_bs = read_until(master, b"Row 1, Col 0", timeout=4.0)
-        if b"Row 1, Col 0" not in out_tab_bs:
+        out_tab_bs = read_until(master, b"Row 1/2, Col 0", timeout=4.0)
+        if b"Row 1/2, Col 0" not in out_tab_bs:
             print(f"[-] Backspace over Tab failed to return to col 0. Buffer captured: {repr(out_tab_bs)}", flush=True)
             return False
         drain_all(master)
@@ -418,13 +418,17 @@ def test_se_execution():
         # 19. Test File Loading: Open 2-line file 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_load = read_until(master, b"SE v0.6.1", timeout=6.0)
+        out_load = read_until(master, b"Row 1/2,", timeout=6.0)
         if b"SE v0.6.1" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
         # Verify BOTH Line 1 and Line 2 from 2.TXT loaded and rendered on screen
         if b"First line of two" not in out_load or b"Second line of two" not in out_load:
             print(f"[-] Multi-line file contents missing in SE.COM. Buffer: {repr(out_load)}", flush=True)
+            return False
+        # Verify status bar shows filename '2.TXT'
+        if b"2.TXT" not in out_load:
+            print(f"[-] Status bar missing filename '2.TXT'. Buffer: {repr(out_load)}", flush=True)
             return False
         print("[+] Successfully verified multi-line file loading (se 2.TXT) and Far RAM streaming!", flush=True)
 
@@ -437,7 +441,7 @@ def test_se_execution():
         # 20. Test Multi-Sector File Loading and Page-Up / Page-Down Navigation: 'se 30.TXT'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_load_30 = read_until(master, b"SE v0.6.1", timeout=6.0)
+        out_load_30 = read_until(master, b"Row 1/30,", timeout=6.0)
         if b"SE v0.6.1" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
             return False
@@ -447,6 +451,10 @@ def test_se_execution():
             return False
         if b"Line 20 of test file content" not in out_load_30:
             print(f"[-] 30.TXT Line 20 missing on editor screen. Buffer: {repr(out_load_30)}", flush=True)
+            return False
+        # Verify status bar shows filename '30.TXT'
+        if b"30.TXT" not in out_load_30:
+            print(f"[-] Status bar missing filename '30.TXT'. Buffer: {repr(out_load_30)}", flush=True)
             return False
         print("[+] Successfully verified 30-line multi-sector file loading (se 30.TXT) into editor Far RAM buffer!", flush=True)
 
