@@ -7,7 +7,7 @@
 #include "terminal.h"
 #include "hbios.h"
 
-#define EDITOR_VERSION     "0.3.0"
+#define EDITOR_VERSION     "0.6.2"
 #define MAX_PATH_LEN       16
 
 typedef struct {
