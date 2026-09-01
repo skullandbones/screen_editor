@@ -140,11 +140,14 @@ def test_se_execution():
         read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
         time.sleep(0.3)
         os.write(master, b"e")
-        out_edit = read_until(master, b"SE v0.6.1", timeout=6.0)
+        out_edit = read_until(master, b"Row 1/1,", timeout=6.0)
         if b"SE v0.6.1" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
-        print("[+] Successfully entered full-screen editing mode.", flush=True)
+        if b"[No Name]" not in out_edit:
+            print(f"[-] Missing '[No Name]' in status bar for unnamed buffer. Buffer: {repr(out_edit)}", flush=True)
+            return False
+        print("[+] Successfully entered full-screen editing mode with '[No Name]' status field.", flush=True)
 
         # 8. Test interactive character typing in empty buffer
         time.sleep(0.3)

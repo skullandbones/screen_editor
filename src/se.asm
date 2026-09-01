@@ -1642,22 +1642,43 @@ SHOW_STATUS_ROWCOL:
 	CALL	LOCATE_CURSOR
 	RET
 
+FILENAME_FIELD_WIDTH	.EQU	12
+
 ;------------------------------------------------------------------------------
-; Print Filename in Status Bar if HAS_FILE_ARG != 0
+; Print Filename in Status Bar (Fixed Width: FILENAME_FIELD_WIDTH characters)
+; If filename is unknown (HAS_FILE_ARG == 0), prints "[No Name]" padded.
+; If filename is known, prints filename (from WORK_FCB) padded with spaces.
+; Always outputs exactly FILENAME_FIELD_WIDTH characters, followed by " | ".
 ;------------------------------------------------------------------------------
 PRINT_STATUS_FILENAME:
+	LD	C,0			; C = characters printed so far
+
 	LD	A,(HAS_FILE_ARG)
 	OR	A
-	RET	Z			; No known filename -> skip
+	JR	NZ,PSF_HAVE_FILE
 
+	; Unknown filename: print "[No Name]"
+	LD	DE,STR_NO_NAME
+PSF_NO_NAME_LOOP:
+	LD	A,(DE)
+	OR	A
+	JR	Z,PSF_PAD_SPACES
+	CALL	PUTC
+	INC	DE
+	INC	C
+	JR	PSF_NO_NAME_LOOP
+
+PSF_HAVE_FILE:
 	; Check explicit drive byte in WORK_FCB+0
 	LD	A,(WORK_FCB)
 	OR	A
 	JR	Z,PSF_NO_DRIVE
 	ADD	A,'A'-1
 	CALL	PUTC
+	INC	C
 	LD	A,':'
 	CALL	PUTC
+	INC	C
 
 PSF_NO_DRIVE:
 	; Print up to 8 characters of filename (WORK_FCB+1..8)
@@ -1666,37 +1687,62 @@ PSF_NO_DRIVE:
 PSF_NAME_LOOP:
 	LD	A,(HL)
 	CP	' '
-	JR	Z,PSF_NAME_DONE
+	JR	Z,PSF_CHECK_EXT
 	OR	A
-	JR	Z,PSF_NAME_DONE
+	JR	Z,PSF_CHECK_EXT
+	LD	A,C
+	CP	FILENAME_FIELD_WIDTH
+	JR	NC,PSF_CHECK_EXT
+	LD	A,(HL)
 	CALL	PUTC
+	INC	C
 	INC	HL
 	DJNZ	PSF_NAME_LOOP
 
-PSF_NAME_DONE:
+PSF_CHECK_EXT:
 	; Print extension if present (WORK_FCB+9..11)
 	LD	HL,WORK_FCB+9
 	LD	A,(HL)
 	CP	' '
-	JR	Z,PSF_EXT_DONE
+	JR	Z,PSF_PAD_SPACES
 	OR	A
-	JR	Z,PSF_EXT_DONE
+	JR	Z,PSF_PAD_SPACES
+
+	LD	A,C
+	CP	FILENAME_FIELD_WIDTH
+	JR	NC,PSF_PAD_SPACES
 
 	LD	A,'.'
 	CALL	PUTC
+	INC	C
 
 	LD	B,3
 PSF_EXT_LOOP:
 	LD	A,(HL)
 	CP	' '
-	JR	Z,PSF_EXT_DONE
+	JR	Z,PSF_PAD_SPACES
 	OR	A
-	JR	Z,PSF_EXT_DONE
+	JR	Z,PSF_PAD_SPACES
+	LD	A,C
+	CP	FILENAME_FIELD_WIDTH
+	JR	NC,PSF_PAD_SPACES
+	LD	A,(HL)
 	CALL	PUTC
+	INC	C
 	INC	HL
 	DJNZ	PSF_EXT_LOOP
 
-PSF_EXT_DONE:
+PSF_PAD_SPACES:
+	; Pad remaining characters with spaces up to FILENAME_FIELD_WIDTH
+	LD	A,C
+	CP	FILENAME_FIELD_WIDTH
+	JR	NC,PSF_DONE
+	LD	A,' '
+	CALL	PUTC
+	INC	C
+	JR	PSF_PAD_SPACES
+
+PSF_DONE:
 	LD	DE,STR_STATUS_SEP
 	CALL	PRINT_STR
 	RET
@@ -5222,6 +5268,9 @@ STR_STATUS_SUFFIX_80:
 
 STR_STATUS_SEP:
 	.DB	" | ","$"
+
+STR_NO_NAME:
+	.DB	"[No Name]",0
 
 STR_STATUS_POS:
 	.DB	"Row ","$"
