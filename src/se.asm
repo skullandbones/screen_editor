@@ -72,6 +72,7 @@ START:
 
 DO_AUTO_LOAD:
 	CALL	LOAD_FILE
+	JR	C,AUTO_LOAD_NOT_FOUND
 	LD	A,1
 	LD	(IN_EDITOR_MODE),A
 	LD	HL,0
@@ -84,6 +85,12 @@ DO_AUTO_LOAD:
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
 	JP	MAIN_LOOP
+
+AUTO_LOAD_NOT_FOUND:
+	LD	DE,STR_FILE_NOT_FOUND
+	CALL	PRINT_STR
+	LD	SP,(SAVED_SP)
+	RET
 
 ENTER_EDITOR:
 	LD	A,(IN_EDITOR_MODE)
@@ -3549,6 +3556,13 @@ LOAD_FILE:
 	LD	BC,23
 	LDIR
 
+	; Check if filename is empty / spaces
+	LD	A,(WORK_FCB+1)
+	CP	' '
+	JP	Z,LOAD_FILE_NOT_FOUND
+	OR	A
+	JP	Z,LOAD_FILE_NOT_FOUND
+
 	LD	DE,WORK_FCB
 	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
@@ -3711,10 +3725,11 @@ LOAD_FINISH:
 
 LOAD_INIT_CACHE:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
+	OR	A			; Carry = 0 (success)
 	RET
 
 LOAD_FILE_NOT_FOUND:
-	CALL	INIT_EMPTY_DOCUMENT
+	SCF				; Carry = 1 (error: file not found)
 	RET
 
 ;------------------------------------------------------------------------------
@@ -3798,12 +3813,20 @@ RENDER_OPEN_PAGE:
 	CALL	READ_FILENAME_INPUT
 	JR	C,CHECK_PAGING_OR_CANCEL
 
+DO_PARSE_AND_LOAD:
+	; Backup current WORK_FCB to DIR_TEMP_FCB in case open fails
+	LD	HL,WORK_FCB
+	LD	DE,DIR_TEMP_FCB
+	LD	BC,36
+	LDIR
+
 	; User entered a filename in INPUT_FILENAME_BUF: parse into WORK_FCB
 	LD	DE,INPUT_FILENAME_BUF
 	CALL	PARSE_FILENAME_TO_FCB
 
 	; Load the file into Far RAM
 	CALL	LOAD_FILE
+	JR	C,OPEN_FILE_NOT_FOUND
 
 	; Reset stack and enter editor mode
 	LD	SP,LOCAL_STACK
@@ -3822,6 +3845,26 @@ RENDER_OPEN_PAGE:
 	CALL	RENDER_STATUS_BAR
 	JP	MAIN_LOOP
 
+OPEN_FILE_NOT_FOUND:
+	; Restore previous WORK_FCB from DIR_TEMP_FCB
+	LD	HL,DIR_TEMP_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
+
+	; Display inline "  File not found" right after bad filename
+	LD	DE,STR_FNF_INLINE
+	CALL	PRINT_STR
+
+	; Set flag that "  File not found" is currently visible
+	LD	A,1
+	LD	(SHOWING_FNF_MSG),A
+
+	; Resume input loop without blanking filename in text box
+	CALL	RESUME_FILENAME_INPUT
+	JR	C,CHECK_PAGING_OR_CANCEL
+	JP	DO_PARSE_AND_LOAD
+
 CHECK_PAGING_OR_CANCEL:
 	; A = return code: 0 = Cancel (ESC), 1 = Next Page (Space/Enter)
 	CP	1
@@ -3837,7 +3880,7 @@ DO_NEXT_PAGE:
 	XOR	A			; Wrap around to page 0
 SET_NEXT_PAGE:
 	LD	(DIR_PAGE_INDEX),A
-	JR	RENDER_OPEN_PAGE
+	JP	RENDER_OPEN_PAGE
 
 ;------------------------------------------------------------------------------
 ; Show Editor Mode Keys Screen (Ctrl+K)
@@ -4652,11 +4695,17 @@ DISP_SINGLE_PROMPT:
 READ_FILENAME_INPUT:
 	XOR	A
 	LD	(INPUT_BUF_LEN),A
+	LD	(SHOWING_FNF_MSG),A
 	LD	HL,INPUT_FILENAME_BUF
 	LD	(HL),0
 	JR	INPUT_CHAR_LOOP
 
+RESUME_FILENAME_INPUT:
+	JR	INPUT_CHAR_LOOP
+
 READ_FILENAME_INPUT_PREFILLED:
+	XOR	A
+	LD	(SHOWING_FNF_MSG),A
 	; Echo prefilled string if non-empty
 	LD	A,(INPUT_BUF_LEN)
 	OR	A
@@ -4666,6 +4715,7 @@ READ_FILENAME_INPUT_PREFILLED:
 
 INPUT_CHAR_LOOP:
 	CALL	GET_KEY
+	CALL	CHECK_CLEAR_FNF
 
 	; Ctrl-F -> Toggle Save Format (Save Screen only)
 	CP	KEY_CTRL_F
@@ -4683,7 +4733,7 @@ INPUT_CHAR_LOOP:
 CHECK_ESC_KEY:
 	; ESC -> Cancel
 	CP	KEY_ESC
-	JR	Z,INPUT_CANCEL
+	JP	Z,INPUT_CANCEL
 
 	; Space -> If empty input and multi-page, advance to next page
 	CP	' '
@@ -4706,13 +4756,13 @@ ALLOW_SPACE_CHAR:
 CHECK_ENTER_KEY:
 	; Enter -> Finish input or advance page if empty
 	CP	KEY_ENTER
-	JR	Z,INPUT_ENTER
+	JP	Z,INPUT_ENTER
 
 	; Backspace / Delete
 	CP	KEY_BACKSPACE
-	JR	Z,INPUT_BS
+	JP	Z,INPUT_BS
 	CP	KEY_DEL
-	JR	Z,INPUT_BS
+	JP	Z,INPUT_BS
 
 	; Printable character (0x20..0x7E)
 	CP	' '
@@ -4766,8 +4816,47 @@ INPUT_BS:
 	CALL	PUTC
 	JP	INPUT_CHAR_LOOP
 
+;------------------------------------------------------------------------------
+; Clear "  File not found" inline message if currently visible
+; Preserves AF and BC
+;------------------------------------------------------------------------------
+CHECK_CLEAR_FNF:
+	PUSH	AF
+	PUSH	BC
+	LD	A,(SHOWING_FNF_MSG)
+	OR	A
+	JR	Z,CLEAR_FNF_DONE
+
+	XOR	A
+	LD	(SHOWING_FNF_MSG),A
+
+	; Erase 16 chars of "  File not found": 16 backspaces, 16 spaces, 16 backspaces
+	LD	B,16
+ERASE_FNF_BS1:
+	LD	A,008H
+	CALL	PUTC
+	DJNZ	ERASE_FNF_BS1
+
+	LD	B,16
+ERASE_FNF_SP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	ERASE_FNF_SP
+
+	LD	B,16
+ERASE_FNF_BS2:
+	LD	A,008H
+	CALL	PUTC
+	DJNZ	ERASE_FNF_BS2
+
+CLEAR_FNF_DONE:
+	POP	BC
+	POP	AF
+	RET
+
 INPUT_CANCEL:
 	XOR	A			; A = 0 (cancel)
+	LD	(SHOWING_FNF_MSG),A
 	SCF				; Carry = 1
 	RET
 
@@ -5133,7 +5222,7 @@ STR_SPLASH_BODY:
 	.DB	13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~             SE - Screen Editor              ",13,10
-	.DB	"                  ~                version 0.6.3                ",13,10
+	.DB	"                  ~                version 0.6.4                ",13,10
 	.DB	"                  ~              by Dean Jenkins                ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       SE is open source and freely usable   ",13,10
@@ -5292,7 +5381,7 @@ STR_FILE_TEST_FAILED:
 	.DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
 
 STR_STATUS_PREFIX:
-	.DB	" SE v0.6.3 | ","$"
+	.DB	" SE v0.6.4 | ","$"
 
 STR_STATUS_120X40:
 	.DB	"120x40 | ","$"
@@ -5354,7 +5443,7 @@ STR_DIR_DRIVE_CHAR:
 
 STR_OPEN_PROMPT:
 	.DB	"------------------------------------------------------------",13,10
-	.DB	"Enter filename to open (or <Enter>/<ESC> to cancel): ","$"
+	.DB	"Enter filename to open (<ESC>=Cancel): ","$"
 
 STR_PAGE_PREFIX:
 	.DB	"------------------------------------------------------------",13,10
@@ -5415,10 +5504,17 @@ STR_OVERWRITE_WARN:
 STR_SAVE_CANCELLED:
 	.DB	13,10,"Save cancelled.",13,10,"$"
 
+STR_FILE_NOT_FOUND:
+	.DB	13,10,"File not found.",13,10,"$"
+
+STR_FNF_INLINE:
+	.DB	"  File not found","$"
+
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
 ;------------------------------------------------------------------------------
 SAVED_SP:	.DW	0
+SHOWING_FNF_MSG:.DB	0		; 1 if "  File not found" inline message is visible
 BIOS_CONST_VEC:	.DW	0
 BIOS_CONIN_VEC:	.DW	0
 BIOS_CONOUT_VEC:.DW	0

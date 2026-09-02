@@ -147,7 +147,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Row 1/" in check_buf or b"SE v0.6.3" in check_buf or b"[No Name]" in check_buf:
+            if b"Row 1/" in check_buf or b"SE v0.6.4" in check_buf or b"[No Name]" in check_buf:
                 print(f"[-] Space key on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
@@ -158,7 +158,7 @@ def test_se_execution():
             r, _, _ = select.select([master], [], [], 0.2)
             if r:
                 check_buf = os.read(master, 2048)
-                if b"Row 1/" in check_buf or b"SE v0.6.3" in check_buf or b"[No Name]" in check_buf:
+                if b"Row 1/" in check_buf or b"SE v0.6.4" in check_buf or b"[No Name]" in check_buf:
                     print(f"[-] Cursor {arrow_name} key ({repr(arrow_seq)}) on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                     return False
 
@@ -167,7 +167,7 @@ def test_se_execution():
         # Enter editor mode with 'e'
         os.write(master, b"e")
         out_edit = read_until(master, b"Row 1/1,", timeout=6.0)
-        if b"SE v0.6.3" not in out_edit:
+        if b"SE v0.6.4" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
         if b"[No Name]" not in out_edit:
@@ -451,7 +451,7 @@ def test_se_execution():
         resp = read_until(master, b"Overwrite? (y/n): ", timeout=2.0)
         if b"Overwrite? (y/n): " in resp:
             os.write(master, b"y")
-        read_until(master, b"SE v0.6.3", timeout=5.0)
+        read_until(master, b"SE v0.6.4", timeout=5.0)
         drain_all(master)
         print("[+] Successfully saved file with Ctrl+S.", flush=True)
 
@@ -468,7 +468,7 @@ def test_se_execution():
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
         out_load = read_until(master, b"Row 1/2,", timeout=6.0)
-        if b"SE v0.6.3" not in out_load:
+        if b"SE v0.6.4" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
         # Verify BOTH Line 1 and Line 2 from 2.TXT loaded and rendered on screen
@@ -491,7 +491,7 @@ def test_se_execution():
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
         out_load_30 = read_until(master, b"Row 1/30,", timeout=6.0)
-        if b"SE v0.6.3" not in out_load_30:
+        if b"SE v0.6.4" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
             return False
         # Verify lines from 30.TXT are rendered on screen
@@ -679,33 +679,47 @@ def test_se_execution():
         read_until(master, b"Enter filename to open", timeout=4.0)
         drain_all(master)
         time.sleep(0.1)
-        # Test amending filename with Backspace: type '2.BAK', backspace 3 times, then type 'TXT\r'
-        os.write(master, b"2.BAK")
-        time.sleep(0.2)
 
-        # Send 3 Backspaces to erase 'BAK'
+        # Type bad filename '2.BAK' and press Enter: verify 'File not found'
+        os.write(master, b"2.BAK\r")
+        out_nofile = read_until(master, b"File not found", timeout=4.0)
+        if b"File not found" not in out_nofile:
+            print(f"[-] 'File not found' message missing for non-existent file. Buffer: {repr(out_nofile)}", flush=True)
+            return False
+
+        # Verify it did NOT enter editor mode
+        r, _, _ = select.select([master], [], [], 0.3)
+        if r:
+            check_buf = os.read(master, 2048)
+            if b"SE v0.6.4" in check_buf or b"Row 1/" in check_buf:
+                print(f"[-] Non-existent file erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
+                return False
+        print("[+] Successfully verified bad filename shows 'File not found' without entering editor mode.", flush=True)
+
+        # Now edit bad filename in-place: send 3 Backspaces to erase 'BAK' (first BS clears 'File not found' & 'K')
+        time.sleep(0.1)
         for _ in range(3):
             os.write(master, b"\x08")
             time.sleep(0.1)
 
-        # Verify backspace did NOT prematurely enter editor mode
+        # Verify backspace did NOT enter editor mode
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"SE v0.6.3" in check_buf or b"Row 1/" in check_buf:
+            if b"SE v0.6.4" in check_buf or b"Row 1/" in check_buf:
                 print(f"[-] Backspace in open prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
         # Type correct extension 'TXT' and press Enter
         os.write(master, b"TXT\r")
         out_loaded = read_until(master, b"Row 1/2,", timeout=4.0)
-        if b"SE v0.6.3" not in out_loaded or b"2.TXT" not in out_loaded:
+        if b"SE v0.6.4" not in out_loaded or b"2.TXT" not in out_loaded:
             print(f"[-] Failed to open 2.TXT from Open File prompt after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
         if b"First line of two" not in out_loaded:
             print(f"[-] Document contents not loaded after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
-        print("[+] Successfully verified typing filename, backspace amendment, and opening from prompt.", flush=True)
+        print("[+] Successfully verified bad filename kept in text box, amended via backspace, and loaded.", flush=True)
 
         # 27. Test Save Screen: Pre-filling, Overwrite check, and Splash :s
         time.sleep(0.5)
@@ -751,8 +765,8 @@ def test_se_execution():
         if b"Save cancelled." not in out_cancel:
             print(f"[-] 'Save cancelled.' message missing. Buffer: {repr(out_cancel)}", flush=True)
             return False
-        out_back = read_until(master, b"SE v0.6.3", timeout=4.0)
-        if b"SE v0.6.3" not in out_back:
+        out_back = read_until(master, b"SE v0.6.4", timeout=4.0)
+        if b"SE v0.6.4" not in out_back:
             print(f"[-] Editor mode not restored after cancelling save. Buffer: {repr(out_back)}", flush=True)
             return False
         print("[+] Successfully verified cancelling overwrite returns cleanly to editor.", flush=True)
@@ -767,8 +781,8 @@ def test_se_execution():
         read_until(master, b"Overwrite? (y/n): ", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"y")
-        out_saved = read_until(master, b"SE v0.6.3", timeout=5.0)
-        if b"SE v0.6.3" not in out_saved:
+        out_saved = read_until(master, b"SE v0.6.4", timeout=5.0)
+        if b"SE v0.6.4" not in out_saved:
             print(f"[-] Editor mode not restored after confirming save. Buffer: {repr(out_saved)}", flush=True)
             return False
         print("[+] Successfully verified confirming overwrite ('y') saves file and resumes editor.", flush=True)
