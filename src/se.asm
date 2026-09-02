@@ -2358,7 +2358,7 @@ HANDLE_CSI:
 
 	; Check if parameter/modifier digits present (e.g. 1;2A, 1~, 4~)
 	CP	'0'
-	JR	C,CSI_DONE
+	JP	C,CSI_DONE
 	CP	'9'+1
 	JR	C,HANDLE_CSI_LOOP
 	RET
@@ -4746,12 +4746,12 @@ CHECK_ENTER_KEY:
 	; Echo character
 	LD	A,B
 	CALL	PUTC
-	JR	INPUT_CHAR_LOOP
+	JP	INPUT_CHAR_LOOP
 
 INPUT_BS:
 	LD	A,(INPUT_BUF_LEN)
 	OR	A
-	JR	Z,INPUT_CHAR_LOOP	; Nothing to backspace
+	JP	Z,INPUT_CHAR_LOOP	; Nothing to backspace
 
 	DEC	A
 	LD	(INPUT_BUF_LEN),A
@@ -4768,7 +4768,7 @@ INPUT_BS:
 	CALL	PUTC
 	LD	A,008H
 	CALL	PUTC
-	JR	INPUT_CHAR_LOOP
+	JP	INPUT_CHAR_LOOP
 
 INPUT_CANCEL:
 	XOR	A			; A = 0 (cancel)

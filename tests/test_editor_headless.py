@@ -653,13 +653,33 @@ def test_se_execution():
         read_until(master, b"Enter filename to load", timeout=4.0)
         drain_all(master)
         time.sleep(0.1)
-        # Type filename 2.TXT + Enter
-        os.write(master, b"2.TXT\r")
-        out_loaded = read_until(master, b"SE v0.6.3", timeout=4.0)
-        if b"SE v0.6.3" not in out_loaded:
-            print(f"[-] Failed to load 2.TXT from Load File prompt. Buffer: {repr(out_loaded)}", flush=True)
+        # Test amending filename with Backspace: type '2.BAK', backspace 3 times, then type 'TXT\r'
+        os.write(master, b"2.BAK")
+        time.sleep(0.2)
+
+        # Send 3 Backspaces to erase 'BAK'
+        for _ in range(3):
+            os.write(master, b"\x08")
+            time.sleep(0.1)
+
+        # Verify backspace did NOT prematurely enter editor mode
+        r, _, _ = select.select([master], [], [], 0.3)
+        if r:
+            check_buf = os.read(master, 2048)
+            if b"SE v0.6.3" in check_buf or b"Row 1/" in check_buf:
+                print(f"[-] Backspace in load prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
+                return False
+
+        # Type correct extension 'TXT' and press Enter
+        os.write(master, b"TXT\r")
+        out_loaded = read_until(master, b"Row 1/2,", timeout=4.0)
+        if b"SE v0.6.3" not in out_loaded or b"2.TXT" not in out_loaded:
+            print(f"[-] Failed to load 2.TXT from Load File prompt after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
-        print("[+] Successfully verified typing/pasting filename and loading from directory prompt.", flush=True)
+        if b"First line of two" not in out_loaded:
+            print(f"[-] Document contents not loaded after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
+            return False
+        print("[+] Successfully verified typing filename, backspace amendment, and loading from prompt.", flush=True)
 
         # 27. Test Save Screen: Pre-filling, Overwrite check, and Splash :s
         time.sleep(0.5)
