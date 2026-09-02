@@ -152,16 +152,12 @@ SPLASH_LOOP:
 	CP	'2'
 	JR	Z,DO_SET_80X24
 
-	; Option: 'E' or 'e' or Enter or Space or ESC -> Enter/Resume Editor
+	; Option: 'E' or 'e' or Enter -> Enter/Resume Editor
 	CP	'e'
 	JR	Z,ENTER_EDITOR
 	CP	'E'
 	JR	Z,ENTER_EDITOR
 	CP	KEY_ENTER
-	JR	Z,ENTER_EDITOR
-	CP	' '
-	JR	Z,ENTER_EDITOR
-	CP	KEY_ESC
 	JR	Z,ENTER_EDITOR
 
 	JR	SPLASH_LOOP

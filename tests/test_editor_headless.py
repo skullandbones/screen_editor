@@ -133,12 +133,38 @@ def test_se_execution():
             return False
         print("[+] 512KB Extended Memory Diagnostic Suite (Tests 1, 2, 3, 4) ALL PASSED!", flush=True)
 
-        # 7. Return to Splash and enter editor ('e')
+        # 7. Return to Splash, verify only 'e'/Enter enter editor mode, and enter editor ('e')
         read_until(master, b"Press any key to return", timeout=5.0)
         time.sleep(0.3)
         os.write(master, b"\r")
         read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        drain_all(master)
         time.sleep(0.3)
+
+        # Verify Space key does NOT enter editor mode from splash screen
+        os.write(master, b" ")
+        time.sleep(0.3)
+        r, _, _ = select.select([master], [], [], 0.3)
+        if r:
+            check_buf = os.read(master, 2048)
+            if b"Row 1/" in check_buf or b"SE v0.6.3" in check_buf or b"[No Name]" in check_buf:
+                print(f"[-] Space key on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
+                return False
+
+        # Verify cursor arrow keys do NOT enter editor mode from splash screen
+        for arrow_name, arrow_seq in [("Up", b"\x1b[A"), ("Down", b"\x1b[B"), ("Right", b"\x1b[C"), ("Left", b"\x1b[D")]:
+            os.write(master, arrow_seq)
+            time.sleep(0.2)
+            r, _, _ = select.select([master], [], [], 0.2)
+            if r:
+                check_buf = os.read(master, 2048)
+                if b"Row 1/" in check_buf or b"SE v0.6.3" in check_buf or b"[No Name]" in check_buf:
+                    print(f"[-] Cursor {arrow_name} key ({repr(arrow_seq)}) on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
+                    return False
+
+        print("[+] Successfully verified Space and Cursor keys do not enter editor mode from splash screen.", flush=True)
+
+        # Enter editor mode with 'e'
         os.write(master, b"e")
         out_edit = read_until(master, b"Row 1/1,", timeout=6.0)
         if b"SE v0.6.3" not in out_edit:
