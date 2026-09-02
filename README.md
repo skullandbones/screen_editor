@@ -1,6 +1,6 @@
 # SE: CP/M Full-Screen Text Editor for RomWBW / RC2014
 
-**SE** (`SE.COM`) is an ANSI C, full-screen text editor specifically designed for CP/M 2.2 / 3.0 systems running the **RomWBW** firmware (e.g. RC2014, SC126, Zeta 2, SBC) communicating over **Minicom** or any standard VT100/ANSI terminal emulator.
+**SE** (`SE.COM`) is a high-performance, full-screen text editor written in 100% Z80 assembly, specifically designed for CP/M 2.2 / 3.0 systems running the **RomWBW** firmware (e.g. RC2014, SC126, Zeta 2, SBC) communicating over **Minicom** or any standard VT100/ANSI terminal emulator.
 
 ---
 
@@ -12,100 +12,87 @@
   by utilizing RomWBW HBIOS bank switching (`RST 08H`) to allocate and edit
   large files (such as multi-thousand line Z80 assembly source files) in upper
   RAM banks.
+* **Interactive File Load & Save Screens**: Sorted multi-column directory
+  browser with automatic pagination, filename pre-filling, and overwrite
+  confirmation warnings.
+* **Format Detection & Toggling**: Seamlessly loads and saves both classic CP/M
+  (`CRLF`) and Linux/Unix (`LF`) text files with live toggle in the save screen.
 * **ANSI / VT100 Terminal Interface**: Full-screen editing with cursor
   navigation, scrolling, inverse video status bar, and dialog popups tailored
   for Minicom.
 * **Z80 ASM Tab Handling**: Configurable tab stops (default 8 columns or 4
   columns) with visual alignment for assembly labels, opcodes, operands, and
   comments.
-* **Modern ANSI C Codebase**: Built using standard C89/C99 with isolated Z80
-  assembly primitives for bare-metal HBIOS inter-bank transfers.
+* **Pure Z80 Assembly Implementation**: Self-contained, zero-dependency
+  assembly codebase (`src/se.asm`) assembled directly into `SE.COM` via `uz80as`.
 
 ---
 
-## Toolchain & Build Environment Setup
+## Toolchain & Build Environment
 
-The build system utilizes **`z88dk`** (the modern ANSI C cross-compiler targeting Z80 CP/M).
+`SE.COM` is assembled using **`uz80as`** (the micro Z80 assembler included with RomWBW tools or available as a standalone utility). No C cross-compiler or external runtime libraries are required.
 
-### 1. Ubuntu / Debian (x86_64 Host)
-
-#### Option A: Binary Release Archive (Recommended & Fastest)
-1. Install prerequisites:
-   ```bash
-   sudo apt update
-   sudo apt install -y build-essential curl libxml2 libboost-all-dev git
-   ```
-2. Download and unpack the latest z88dk release:
-   ```bash
-   mkdir -p ~/tools/z88dk
-   cd ~/tools/z88dk
-   curl -L https://github.com/z88dk/z88dk/releases/download/v2.3/z88dk-linux-x86_64-2.3.tgz -o z88dk.tgz
-   tar -xzf z88dk.tgz
-   ```
-3. Set your environment variables in `~/.bashrc`:
-   ```bash
-   export Z88DK_PATH="$HOME/tools/z88dk"
-   export PATH="$Z88DK_PATH/bin:$PATH"
-   export ZCCCFG="$Z88DK_PATH/lib/config"
-   ```
-4. Reload shell:
-   ```bash
-   source ~/.bashrc
-   ```
-
----
-
-### 2. Raspberry Pi 5 (Raspberry Pi OS / Debian Trixie aarch64 Host)
-
-On a Raspberry Pi 5 running **Debian Trixie (testing / 64-bit arm64)** or Raspberry Pi OS based on Trixie:
-
-#### Option A: Quick Build from Source with System SDCC
-1. Install required packages from Debian Trixie repositories:
-   ```bash
-   sudo apt update
-   sudo apt install -y build-essential git bison flex libxml2-dev libboost-all-dev sdcc
-   ```
-2. Clone and build z88dk:
-   ```bash
-   git clone --recursive https://github.com/z88dk/z88dk.git ~/z88dk
-   cd ~/z88dk
-   ./build.sh
-   ```
-3. Add to `~/.bashrc`:
-   ```bash
-   export PATH="$HOME/z88dk/bin:$PATH"
-   export ZCCCFG="$HOME/z88dk/lib/config"
-   ```
-
-#### Option B: Nightly Binary Tarball (ARM64)
-Alternatively, fetch the pre-built nightly for Linux aarch64 from the z88dk daily repository:
-```bash
-mkdir -p ~/tools/z88dk && cd ~/tools/z88dk
-curl -L http://nightly.z88dk.org/z88dk-linux-arm64-latest.tgz -o z88dk.tgz
-tar -xzf z88dk.tgz
-export ZCCCFG="$HOME/tools/z88dk/lib/config"
-export PATH="$HOME/tools/z88dk/bin:$PATH"
+The `uz80as` binary for Linux host systems is located in the repository under:
+```
+tools/romwbw_src/Tools/Linux/uz80as
 ```
 
 ---
 
 ## Building `SE.COM`
 
-Once `zcc` is in your `PATH`, compile the editor from the repository root:
+You can build `SE.COM` either using `make` or manually invoking `uz80as` directly.
+
+### Option 1: Using `make` (from `src/screen_editor/`)
+
+Navigate to `src/screen_editor` and run `make`:
 
 ```bash
 cd src/screen_editor
+
+# Assemble SE.COM:
 make
-```
 
-This will produce the binary:
-```
-SE.COM
-```
+# Assemble SE.COM and inject it into the RomWBW disk image (hd1k_combo.img):
+make image
 
-To clean build artifacts:
-```bash
+# Run automated headless integration tests:
+make test
+
+# Clean build artifacts:
 make clean
+```
+
+### Option 2: Manual Assembly using `uz80as` directly (without `make`)
+
+You can assemble `SE.COM` directly from the command line without invoking `make`.
+
+* **From inside `src/screen_editor/`**:
+  ```bash
+  cd src/screen_editor
+  ../../tools/romwbw_src/Tools/Linux/uz80as -q src/se.asm SE.COM
+  ```
+
+* **From the workspace root**:
+  ```bash
+  tools/romwbw_src/Tools/Linux/uz80as -q src/screen_editor/src/se.asm src/screen_editor/SE.COM
+  ```
+
+#### Command Options & Disassembly Listings
+* **`-q` (Quiet)**: Suppresses generating the `.lst` listing file for faster assembly.
+* **Generating a Listing File**: Omit `-q` or provide a 3rd argument to produce an assembly listing with symbol addresses and opcodes:
+  ```bash
+  ../../tools/romwbw_src/Tools/Linux/uz80as src/se.asm SE.COM SE.lst
+  ```
+
+### Option 3: Using `make` (from workspace root)
+
+From the project root directory, the top-level Makefile provides convenient targets:
+
+```bash
+make editor   # Assembles SE.COM
+make image    # Assembles SE.COM and injects it into hd1k_combo.img
+make run      # Assembles, injects, and boots the RC2014 hardware emulator
 ```
 
 ---
@@ -134,13 +121,16 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ```text
                   ~                                             
                   ~             SE - Screen Editor              
-                  ~                version 0.3.0                
+                  ~                version 0.6.2                
                   ~              by Dean Jenkins                
                   ~                                             
                   ~       SE is open source and freely usable   
                   ~                                             
                   ~       type   :e  or  <Enter>   to edit      
+                  ~       type   :l                to load file 
+                  ~       type   :s                to save file 
                   ~       type   :t                for mem test 
+                  ~       type   :f                for file test
                   ~       type   :1                set 120x40   
                   ~       type   :2                set 80x24    
                   ~       type   :q  or  ^Q        to exit      
@@ -152,9 +142,12 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ```
 
 * Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter full-screen editing mode.
+* Press **`l`** or **`L`** to open the interactive **Load File** directory browser.
+* Press **`s`** or **`S`** to open the interactive **Save File** screen.
+* Press **`t`** or **`T`** to run the live **512KB Extended Memory Diagnostic**.
+* Press **`f`** or **`F`** to run the **Multi-Sector File I/O Diagnostic**.
 * Press **`1`** to set modern **120 columns x 40 rows** mode (Default).
 * Press **`2`** to set classic **80 columns x 24 rows** terminal mode.
-* Press **`t`** or **`T`** to run the live **512KB Extended Memory Diagnostic**.
 * Press **`q`**, **`Q`**, or <kbd>Ctrl+Q</kbd> to return cleanly to CP/M.
 
 ### 2. Screen Size Configurations
@@ -231,22 +224,13 @@ make run
 
 ```
 src/screen_editor/
-├── Makefile                # Cross-compilation & test targets
-├── README.md               # Toolchain setup and documentation
-├── CODING_GUIDELINES.md    # ANSI C and Z80 assembly coding standards
+├── Makefile                # Build targets (SE.COM, image, test, clean)
+├── README.md               # Toolchain setup, build guide & documentation
+├── CODING_GUIDELINES.md    # Z80 assembly coding standards
 ├── requirements.txt        # Python dependencies for tests & tools
-├── include/
-│   ├── editor.h            # Main editor state and configuration
-│   ├── terminal.h          # VT100 / ANSI escape routines & key input
-│   ├── buffer.h            # 512K Far memory buffer and line indexing
-│   └── hbios.h             # RomWBW HBIOS API (RST 08H) bindings
+├── SE.COM                  # Assembled CP/M binary
 ├── src/
-│   ├── main.c              # Application entry & main event loop
-│   ├── terminal.c          # Screen renderer and ANSI key decoder
-│   ├── buffer.c            # Gap buffer and line management
-│   ├── fileio.c            # CP/M BDOS file load/save
-│   ├── se.asm              # Standalone assembly editor implementation
-│   └── hbios_far.asm       # Z80 assembly for RomWBW inter-bank transfers
+│   └── se.asm              # 100% Z80 assembly editor implementation
 └── tests/
     ├── README.md           # Test suite documentation
     ├── test_editor_headless.py # Automated PTY integration test runner

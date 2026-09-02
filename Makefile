@@ -1,27 +1,32 @@
 # Makefile for CP/M Full-Screen Editor (SE.COM)
-# Compiler: z88dk (zcc targeting CP/M +cpm)
+# Assembler: uz80as (micro Z80 assembler from RomWBW)
 
-CC = zcc
-CFLAGS = +cpm -O3 -Iinclude --list
+WORKSPACE_ROOT ?= ../..
+TOOLS_DIR ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Tools/Linux
+UZ80AS ?= $(TOOLS_DIR)/uz80as
+IMAGE ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Binary/hd1k_combo.img
+CPMCP ?= $(TOOLS_DIR)/cpmcp
+CPMRM ?= $(TOOLS_DIR)/cpmrm
 
 TARGET = SE.COM
+ASM_SRC = src/se.asm
 
-C_SRCS = src/main.c src/terminal.c src/buffer.c src/fileio.c
-ASM_SRCS = src/hbios_far.asm
-
-OBJS = $(C_SRCS:.c=.o)
-
-.PHONY: all test clean
+.PHONY: all image test clean
 
 all: $(TARGET)
 
-$(TARGET): $(C_SRCS) $(ASM_SRCS)
-	@echo "==> Compiling and Linking $(TARGET) with z88dk..."
-	$(CC) $(CFLAGS) -o $(TARGET) $(C_SRCS) $(ASM_SRCS)
+$(TARGET): $(ASM_SRC)
+	@echo "==> Assembling $(TARGET) with uz80as..."
+	$(UZ80AS) -q $(ASM_SRC) $(TARGET)
 
-test: $(TARGET)
+image: $(TARGET)
+	@echo "==> Injecting $(TARGET) into modern hd1k combo image (Slice 0)..."
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM
+
+test: image
 	@echo "==> Running automated SE.COM integration tests..."
 	python3 tests/test_editor_headless.py
 
 clean:
-	rm -f $(TARGET) src/*.o src/*.lst src/*.sym *.lis *.def
+	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def
