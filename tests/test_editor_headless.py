@@ -388,20 +388,37 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified cursor and line cannot exceed visual screen width (Col 119).", flush=True)
 
-        # 16. Test format toggle (^F)
-        os.write(master, b"\x06")
-        out_fmt = read_until(master, b"Linux", timeout=4.0)
-        if b"Linux" not in out_fmt:
-            print(f"[-] Format toggle failed. Buffer captured: {repr(out_fmt)}", flush=True)
-            return False
+        # 16. Verify Ctrl+F in editor mode is ignored (format remains unchanged)
+        time.sleep(0.2)
         drain_all(master)
-        print("[+] Successfully exercised ^F format toggle.", flush=True)
+        os.write(master, b"\x06")
+        time.sleep(0.2)
+        drain_all(master)
+        print("[+] Successfully verified ^F in editor mode is ignored.", flush=True)
 
-        # 17. Save file with Ctrl+S (opens Save Screen and saves to OUTPUT.TXT)
+        # 17. Save file with Ctrl+S (opens Save Screen, tests Save Screen Ctrl+F toggle, and saves to OUTPUT.TXT)
         time.sleep(0.3)
         os.write(master, b"\x13")
         read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=5.0)
-        read_until(master, b"Enter filename to save", timeout=4.0)
+        out_save_prompt = read_until(master, b"Enter filename to save", timeout=4.0)
+        if b"Format: [CP/M]" not in out_save_prompt:
+            print(f"[-] Initial Save Screen missing 'Format: [CP/M]'. Buffer: {repr(out_save_prompt)}", flush=True)
+            return False
+        # Toggle format with Ctrl+F in Save Screen
+        time.sleep(0.2)
+        os.write(master, b"\x06")
+        out_toggle_linux = read_until(master, b"Format: [Linux]", timeout=4.0)
+        if b"Format: [Linux]" not in out_toggle_linux:
+            print(f"[-] Save Screen Ctrl+F toggle to Linux failed. Buffer: {repr(out_toggle_linux)}", flush=True)
+            return False
+        # Toggle format back to CP/M with Ctrl+F
+        time.sleep(0.2)
+        os.write(master, b"\x06")
+        out_toggle_cpm = read_until(master, b"Format: [CP/M]", timeout=4.0)
+        if b"Format: [CP/M]" not in out_toggle_cpm:
+            print(f"[-] Save Screen Ctrl+F toggle back to CP/M failed. Buffer: {repr(out_toggle_cpm)}", flush=True)
+            return False
+        print("[+] Successfully verified Save Screen ^F format toggle (CP/M <-> Linux).", flush=True)
         time.sleep(0.2)
         os.write(master, b"OUTPUT.TXT\r")
         time.sleep(0.2)
@@ -657,7 +674,19 @@ def test_se_execution():
         if b"2.TXT" not in out_prefill:
             print(f"[-] Pre-filled filename '2.TXT' not found in save prompt. Buffer: {repr(out_prefill)}", flush=True)
             return False
-        print("[+] Successfully verified Save Screen with pre-filled filename '2.TXT'.", flush=True)
+        # Verify original loaded format (CP/M) is defaulted on Save Screen
+        read_until(master, b"Format: [CP/M]", timeout=3.0)
+        # Toggle format with Ctrl+F in Save Screen and verify pre-filled name is preserved
+        time.sleep(0.2)
+        os.write(master, b"\x06")
+        out_tog2_linux = read_until(master, b"Format: [Linux]", timeout=3.0)
+        read_until(master, b"2.TXT", timeout=3.0)
+        # Toggle format back to CP/M
+        time.sleep(0.2)
+        os.write(master, b"\x06")
+        read_until(master, b"Format: [CP/M]", timeout=3.0)
+        read_until(master, b"2.TXT", timeout=3.0)
+        print("[+] Successfully verified Save Screen with pre-filled filename '2.TXT' and ^F toggle.", flush=True)
 
         # Press Enter (\r) to save with existing filename: should trigger overwrite warning
         drain_all(master)

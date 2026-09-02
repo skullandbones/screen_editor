@@ -211,20 +211,10 @@ MAIN_LOOP:
 CHECK_CTRL_K:
 	; Command: Ctrl+K -> Editor Mode Keys Screen
 	CP	KEY_CTRL_K
-	JR	NZ,CHECK_TOGGLE_FMT
+	JR	NZ,CHECK_CTRL_D
 	CALL	SHOW_HELP_KEYS_UI
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
-	CALL	RENDER_STATUS_BAR
-	JP	MAIN_LOOP
-
-CHECK_TOGGLE_FMT:
-	; Command: Ctrl+F -> Toggle Line Ending Format (CP/M <-> Linux)
-	CP	KEY_CTRL_F
-	JR	NZ,CHECK_CTRL_D
-	LD	A,(SAVE_FORMAT)
-	XOR	1			; Toggle between 0 (CP/M) and 1 (Linux)
-	LD	(SAVE_FORMAT),A
 	CALL	RENDER_STATUS_BAR
 	JP	MAIN_LOOP
 
@@ -3867,6 +3857,14 @@ SHOW_HELP_KEYS_UI:
 ; Save File Screen with Sorted Directory Listing, Pre-filling & Overwrite Check
 ;------------------------------------------------------------------------------
 DO_SAVE_FILE_UI:
+	LD	A,1
+	LD	(IS_SAVE_UI),A
+	CALL	DO_SAVE_FILE_UI_IMPL
+	XOR	A
+	LD	(IS_SAVE_UI),A
+	RET
+
+DO_SAVE_FILE_UI_IMPL:
 	; Query current drive letter (BDOS 25) and update save title
 	LD	C,25
 	CALL	BDOS_ENTRY
@@ -3972,7 +3970,9 @@ DO_ACTUAL_SAVE:
 	RET
 
 CHECK_SAVE_PAGING_OR_CANCEL:
-	; A = return code: 0 = Cancel (ESC), 1 = Next Page (Space/Enter)
+	; A = return code: 0 = Cancel (ESC), 1 = Next Page (Space/Enter), 2 = Format Toggled (Ctrl-F)
+	CP	2
+	JR	Z,RENDER_SAVE_PAGE	; Redraw save page with new format and prefilled input
 	CP	1
 	JR	Z,DO_SAVE_NEXT_PAGE
 	RET				; Cancelled -> return
@@ -4116,7 +4116,7 @@ FCB_CONV_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Display Save Prompt & Page Indicator
+; Display Save Prompt & Page Indicator with Format Info
 ;------------------------------------------------------------------------------
 DISPLAY_SAVE_PROMPT:
 	LD	A,(DIR_PAGE_COUNT)
@@ -4143,10 +4143,33 @@ DISPLAY_SAVE_PROMPT:
 
 	LD	DE,STR_SAVE_PAGE_SUFFIX
 	CALL	PRINT_STR
+	CALL	PRINT_SAVE_FMT_INFO
+	LD	DE,STR_SAVE_PAGE_PROMPT
+	CALL	PRINT_STR
 	RET
 
 DISP_SINGLE_SAVE_PROMPT:
-	LD	DE,STR_SAVE_PROMPT
+	LD	DE,STR_SAVE_SEP_LINE
+	CALL	PRINT_STR
+	CALL	PRINT_SAVE_FMT_INFO
+	LD	DE,STR_SAVE_ENTER_PROMPT
+	CALL	PRINT_STR
+	RET
+
+PRINT_SAVE_FMT_INFO:
+	LD	DE,STR_SAVE_FMT_PREFIX
+	CALL	PRINT_STR
+	LD	A,(SAVE_FORMAT)
+	CP	FMT_CPM
+	JR	NZ,PRINT_SAVE_FMT_LINUX
+	LD	DE,STR_SAVE_FMT_CPM
+	CALL	PRINT_STR
+	JR	PRINT_SAVE_FMT_END
+PRINT_SAVE_FMT_LINUX:
+	LD	DE,STR_SAVE_FMT_LINUX
+	CALL	PRINT_STR
+PRINT_SAVE_FMT_END:
+	LD	DE,STR_SAVE_FMT_SUFFIX
 	CALL	PRINT_STR
 	RET
 
@@ -4648,6 +4671,20 @@ READ_FILENAME_INPUT_PREFILLED:
 INPUT_CHAR_LOOP:
 	CALL	GET_KEY
 
+	; Ctrl-F -> Toggle Save Format (Save Screen only)
+	CP	KEY_CTRL_F
+	JR	NZ,CHECK_ESC_KEY
+	LD	A,(IS_SAVE_UI)
+	OR	A
+	JR	Z,INPUT_CHAR_LOOP	; Ignore Ctrl-F in Load Screen
+	LD	A,(SAVE_FORMAT)
+	XOR	1			; Toggle between FMT_CPM (0) and FMT_LINUX (1)
+	LD	(SAVE_FORMAT),A
+	LD	A,2			; A = 2 (Format toggled)
+	SCF				; Carry = 1 (special action)
+	RET
+
+CHECK_ESC_KEY:
 	; ESC -> Cancel
 	CP	KEY_ESC
 	JR	Z,INPUT_CANCEL
@@ -5282,9 +5319,8 @@ STR_HELP_SCREEN:
 	.DB	"                          SE.COM - EDITOR MODE KEYS                             ",13,10
 	.DB	"================================================================================",13,10
 	.DB	"  FILE & SYSTEM:",13,10
-	.DB	"    Ctrl+S           Save file screen        Ctrl+F          Toggle format",13,10
-	.DB	"    Ctrl+Q           Quit to CP/M            ESC             Splash screen",13,10
-	.DB	"    Ctrl+K           Show editor keys help",13,10,13,10
+	.DB	"    Ctrl+S           Save file screen        ESC             Splash screen",13,10
+	.DB	"    Ctrl+Q           Quit to CP/M            Ctrl+K          Show this help",13,10,13,10
 	.DB	"  NAVIGATION:",13,10
 	.DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
 	.DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
@@ -5349,8 +5385,22 @@ STR_SAVE_DRIVE_CHAR:
 	.DB	"A:)        ",13,10
 	.DB	"============================================================",13,10,13,10,"$"
 
-STR_SAVE_PROMPT:
-	.DB	"------------------------------------------------------------",13,10
+STR_SAVE_FMT_PREFIX:
+	.DB	"Format: [","$"
+
+STR_SAVE_FMT_CPM:
+	.DB	"CP/M","$"
+
+STR_SAVE_FMT_LINUX:
+	.DB	"Linux","$"
+
+STR_SAVE_FMT_SUFFIX:
+	.DB	"]  (^F: toggle format)",13,10,"$"
+
+STR_SAVE_SEP_LINE:
+	.DB	"------------------------------------------------------------",13,10,"$"
+
+STR_SAVE_ENTER_PROMPT:
 	.DB	"Enter filename to save (or <Enter>/<ESC> to cancel): ","$"
 
 STR_SAVE_PAGE_PREFIX:
@@ -5358,7 +5408,9 @@ STR_SAVE_PAGE_PREFIX:
 	.DB	"[Page ","$"
 
 STR_SAVE_PAGE_SUFFIX:
-	.DB	"]  <Space>=Next Page, <ESC>=Cancel",13,10
+	.DB	"]  <Space>=Next Page, <ESC>=Cancel",13,10,"$"
+
+STR_SAVE_PAGE_PROMPT:
 	.DB	"Enter filename to save: ","$"
 
 STR_OVERWRITE_WARN:
@@ -5391,6 +5443,7 @@ DOC_TOTAL_LINES:.DW	1		; 16-bit total document lines count (default 1 empty line
 HAS_FILE_ARG:	.DB	0
 IN_EDITOR_MODE:	.DB	0
 SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
+IS_SAVE_UI:	.DB	0		; 1 if currently in Save File Screen
 SEEN_CR:	.DB	0		; Line format auto-detection state
 CHAR_INSERT_TEMP:.DB	0
 CSI_DIGIT_PREFIX:.DB	0
