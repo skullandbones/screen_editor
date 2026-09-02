@@ -475,9 +475,9 @@ def test_se_execution():
         if b"First line of two" not in out_load or b"Second line of two" not in out_load:
             print(f"[-] Multi-line file contents missing in SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
-        # Verify status bar shows filename '2.TXT'
-        if b"2.TXT" not in out_load:
-            print(f"[-] Status bar missing filename '2.TXT'. Buffer: {repr(out_load)}", flush=True)
+        # Verify status bar shows full filename 'C:2.TXT'
+        if b"C:2.TXT" not in out_load:
+            print(f"[-] Status bar missing full filename 'C:2.TXT'. Buffer: {repr(out_load)}", flush=True)
             return False
         print("[+] Successfully verified multi-line file loading (se 2.TXT) and Far RAM streaming!", flush=True)
 
@@ -501,9 +501,9 @@ def test_se_execution():
         if b"Line 20 of test file content" not in out_load_30:
             print(f"[-] 30.TXT Line 20 missing on editor screen. Buffer: {repr(out_load_30)}", flush=True)
             return False
-        # Verify status bar shows filename '30.TXT'
-        if b"30.TXT" not in out_load_30:
-            print(f"[-] Status bar missing filename '30.TXT'. Buffer: {repr(out_load_30)}", flush=True)
+        # Verify status bar shows full filename 'C:30.TXT'
+        if b"C:30.TXT" not in out_load_30:
+            print(f"[-] Status bar missing full filename 'C:30.TXT'. Buffer: {repr(out_load_30)}", flush=True)
             return False
         print("[+] Successfully verified 30-line multi-sector file loading (se 30.TXT) into editor Far RAM buffer!", flush=True)
 
@@ -713,7 +713,7 @@ def test_se_execution():
         # Type correct extension 'TXT' and press Enter
         os.write(master, b"TXT\r")
         out_loaded = read_until(master, b"Row 1/2,", timeout=4.0)
-        if b"SE v0.6.4" not in out_loaded or b"2.TXT" not in out_loaded:
+        if b"SE v0.6.4" not in out_loaded or b"C:2.TXT" not in out_loaded:
             print(f"[-] Failed to open 2.TXT from Open File prompt after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
         if b"First line of two" not in out_loaded:

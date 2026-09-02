@@ -1638,12 +1638,13 @@ SHOW_STATUS_ROWCOL:
 	CALL	LOCATE_CURSOR
 	RET
 
-FILENAME_FIELD_WIDTH	.EQU	12
+FILENAME_FIELD_WIDTH	.EQU	14
 
 ;------------------------------------------------------------------------------
 ; Print Filename in Status Bar (Fixed Width: FILENAME_FIELD_WIDTH characters)
 ; If filename is unknown (HAS_FILE_ARG == 0), prints "[No Name]" padded.
-; If filename is known, prints filename (from WORK_FCB) padded with spaces.
+; If filename is known, prints full filename "Drive letter: filename" padded.
+; Takes care not to duplicate drive letter if filename already contains it.
 ; Always outputs exactly FILENAME_FIELD_WIDTH characters, followed by " | ".
 ;------------------------------------------------------------------------------
 PRINT_STATUS_FILENAME:
@@ -1665,18 +1666,35 @@ PSF_NO_NAME_LOOP:
 	JR	PSF_NO_NAME_LOOP
 
 PSF_HAVE_FILE:
-	; Check explicit drive byte in WORK_FCB+0
+	; Check if WORK_FCB+1..8 already contains a drive letter (e.g. "C:")
+	LD	A,(WORK_FCB+2)
+	CP	':'
+	JR	Z,PSF_NO_DRIVE_PREFIX
+
+	; Determine drive letter
 	LD	A,(WORK_FCB)
 	OR	A
-	JR	Z,PSF_NO_DRIVE
-	ADD	A,'A'-1
+	JR	NZ,PSF_USE_FCB_DRIVE
+
+	; WORK_FCB has 0 -> Query current default drive via BDOS 25
+	PUSH	BC
+	LD	C,25
+	CALL	BDOS_ENTRY
+	POP	BC
+	ADD	A,'A'
+	JR	PSF_EMIT_DRIVE
+
+PSF_USE_FCB_DRIVE:
+	ADD	A,'A'-1			; 1 -> 'A', 2 -> 'B', etc.
+
+PSF_EMIT_DRIVE:
 	CALL	PUTC
 	INC	C
 	LD	A,':'
 	CALL	PUTC
 	INC	C
 
-PSF_NO_DRIVE:
+PSF_NO_DRIVE_PREFIX:
 	; Print up to 8 characters of filename (WORK_FCB+1..8)
 	LD	HL,WORK_FCB+1
 	LD	B,8
