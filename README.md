@@ -12,7 +12,7 @@
   by utilizing RomWBW HBIOS bank switching (`RST 08H`) to allocate and edit
   large files (such as multi-thousand line Z80 assembly source files) in upper
   RAM banks.
-* **Interactive File Load & Save Screens**: Sorted multi-column directory
+* **Interactive File Open & Save Screens**: Sorted multi-column directory
   browser with automatic pagination, filename pre-filling, and overwrite
   confirmation warnings.
 * **Format Detection & Toggling**: Seamlessly loads and saves both classic CP/M
@@ -127,7 +127,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
                   ~       SE is open source and freely usable   
                   ~                                             
                   ~       type   :e  or  <Enter>   to edit      
-                  ~       type   :l                to load file 
+                  ~       type   :o                to open file 
                   ~       type   :s                to save file 
                   ~       type   :t                for mem test 
                   ~       type   :f                for file test
@@ -142,7 +142,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ```
 
 * Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter full-screen editing mode.
-* Press **`l`** or **`L`** to open the interactive **Load File** directory browser.
+* Press **`o`** or **`O`** to open the interactive **Open File** directory browser.
 * Press **`s`** or **`S`** to open the interactive **Save File** screen.
 * Press **`t`** or **`T`** to run the live **512KB Extended Memory Diagnostic**.
 * Press **`f`** or **`F`** to run the **Multi-Sector File I/O Diagnostic**.

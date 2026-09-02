@@ -132,11 +132,11 @@ SPLASH_LOOP:
 	CP	'F'
 	JR	Z,DO_FILE_TEST
 
-	; Option: 'L' or 'l' -> Load File Screen
-	CP	'l'
-	JR	Z,DO_SPLASH_LOAD
-	CP	'L'
-	JR	Z,DO_SPLASH_LOAD
+	; Option: 'O' or 'o' -> Open File Screen
+	CP	'o'
+	JR	Z,DO_SPLASH_OPEN
+	CP	'O'
+	JR	Z,DO_SPLASH_OPEN
 
 	; Option: 'S' or 's' -> Save File Screen
 	CP	's'
@@ -180,8 +180,8 @@ DO_FILE_TEST:
 	CALL	GET_KEY
 	JR	SHOW_SPLASH_SCREEN
 
-DO_SPLASH_LOAD:
-	CALL	DO_LOAD_FILE_UI
+DO_SPLASH_OPEN:
+	CALL	DO_OPEN_FILE_UI
 	JR	SHOW_SPLASH_SCREEN
 
 DO_SPLASH_SAVE:
@@ -3743,9 +3743,9 @@ INIT_EMPTY_DOCUMENT:
 	RET
 
 ;------------------------------------------------------------------------------
-; Load File Screen with Sorted Directory Listing & Pagination
+; Open File Screen with Sorted Directory Listing & Pagination
 ;------------------------------------------------------------------------------
-DO_LOAD_FILE_UI:
+DO_OPEN_FILE_UI:
 	; Query current drive letter (BDOS 25) and update title
 	LD	C,25
 	CALL	BDOS_ENTRY
@@ -3767,7 +3767,7 @@ DO_LOAD_FILE_UI:
 	JR	NZ,CALC_PAGES
 	LD	A,1
 	LD	(DIR_PAGE_COUNT),A
-	JR	RENDER_LOAD_PAGE
+	JR	RENDER_OPEN_PAGE
 
 CALC_PAGES:
 	DEC	A			; A = N - 1
@@ -3783,7 +3783,7 @@ DIV_48_DONE:
 	LD	A,B
 	LD	(DIR_PAGE_COUNT),A
 
-RENDER_LOAD_PAGE:
+RENDER_OPEN_PAGE:
 	CALL	TERM_INIT
 	LD	DE,STR_DIR_TITLE
 	CALL	PRINT_STR
@@ -3791,8 +3791,8 @@ RENDER_LOAD_PAGE:
 	; Display Directory Entries for Current Page
 	CALL	DISPLAY_DIR_PAGE
 
-	; Display Load Prompt & Page Indicator
-	CALL	DISPLAY_LOAD_PROMPT
+	; Display Open Prompt & Page Indicator
+	CALL	DISPLAY_OPEN_PROMPT
 
 	; Read Filename Input (handles typing, Backspace, Space/Enter for page, ESC)
 	CALL	READ_FILENAME_INPUT
@@ -3837,7 +3837,7 @@ DO_NEXT_PAGE:
 	XOR	A			; Wrap around to page 0
 SET_NEXT_PAGE:
 	LD	(DIR_PAGE_INDEX),A
-	JR	RENDER_LOAD_PAGE
+	JR	RENDER_OPEN_PAGE
 
 ;------------------------------------------------------------------------------
 ; Show Editor Mode Keys Screen (Ctrl+K)
@@ -4608,14 +4608,14 @@ DISP_PAGE_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Display Load Prompt & Page Indicator
+; Display Open Prompt & Page Indicator
 ;------------------------------------------------------------------------------
-DISPLAY_LOAD_PROMPT:
+DISPLAY_OPEN_PROMPT:
 	LD	A,(DIR_PAGE_COUNT)
 	CP	2
 	JR	C,DISP_SINGLE_PROMPT
 
-	; Multi-page prompt: "[Page X/Y]  <Space>=Next Page, <ESC>=Cancel\r\nEnter filename to load: "
+	; Multi-page prompt: "[Page X/Y]  <Space>=Next Page, <ESC>=Cancel\r\nEnter filename to open: "
 	LD	DE,STR_PAGE_PREFIX
 	CALL	PRINT_STR
 
@@ -4638,7 +4638,7 @@ DISPLAY_LOAD_PROMPT:
 	RET
 
 DISP_SINGLE_PROMPT:
-	LD	DE,STR_LOAD_PROMPT
+	LD	DE,STR_OPEN_PROMPT
 	CALL	PRINT_STR
 	RET
 
@@ -4672,7 +4672,7 @@ INPUT_CHAR_LOOP:
 	JR	NZ,CHECK_ESC_KEY
 	LD	A,(IS_SAVE_UI)
 	OR	A
-	JR	Z,INPUT_CHAR_LOOP	; Ignore Ctrl-F in Load Screen
+	JR	Z,INPUT_CHAR_LOOP	; Ignore Ctrl-F in Open Screen
 	LD	A,(SAVE_FORMAT)
 	XOR	1			; Toggle between FMT_CPM (0) and FMT_LINUX (1)
 	LD	(SAVE_FORMAT),A
@@ -5139,7 +5139,7 @@ STR_SPLASH_BODY:
 	.DB	"                  ~       SE is open source and freely usable   ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
-	.DB	"                  ~       type   :l                to load file ",13,10
+	.DB	"                  ~       type   :o                to open file ",13,10
 	.DB	"                  ~       type   :s                to save file ",13,10
 	.DB	"                  ~       type   :t                for mem test ",13,10
 	.DB	"                  ~       type   :f                for file test",13,10
@@ -5347,14 +5347,14 @@ MSG_EXIT:
 STR_DIR_TITLE:
 	.DB	27,"[H",27,"[2J"
 	.DB	"============================================================",13,10
-	.DB	"           SE.COM - LOAD FILE (DIRECTORY - DRIVE "
+	.DB	"           SE.COM - OPEN FILE (DIRECTORY - DRIVE "
 STR_DIR_DRIVE_CHAR:
 	.DB	"A:)        ",13,10
 	.DB	"============================================================",13,10,13,10,"$"
 
-STR_LOAD_PROMPT:
+STR_OPEN_PROMPT:
 	.DB	"------------------------------------------------------------",13,10
-	.DB	"Enter filename to load (or <Enter>/<ESC> to cancel): ","$"
+	.DB	"Enter filename to open (or <Enter>/<ESC> to cancel): ","$"
 
 STR_PAGE_PREFIX:
 	.DB	"------------------------------------------------------------",13,10
@@ -5365,7 +5365,7 @@ STR_PAGE_MID:
 
 STR_PAGE_SUFFIX:
 	.DB	"]  <Space>=Next Page, <ESC>=Cancel",13,10
-	.DB	"Enter filename to load: ","$"
+	.DB	"Enter filename to open: ","$"
 
 STR_NO_FILES_FOUND:
 	.DB	"  [No files found on current drive]",13,10,13,10,"$"

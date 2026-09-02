@@ -636,7 +636,7 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Enter key resumes editor mode with document intact.", flush=True)
 
-        # 26. Test Load File option (:l) on splash screen with Directory Listing
+        # 26. Test Open File option (:o) on splash screen with Directory Listing
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b")  # Standalone ESC key to go to splash screen
@@ -644,13 +644,13 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
 
-        # Press 'l' on splash screen
-        os.write(master, b"l")
-        out_dir = read_until(master, b"Enter filename to load", timeout=6.0)
-        if b"Enter filename to load" not in out_dir:
-            print(f"[-] Load prompt not displayed. Buffer: {repr(out_dir)}", flush=True)
+        # Press 'o' on splash screen
+        os.write(master, b"o")
+        out_dir = read_until(master, b"Enter filename to open", timeout=6.0)
+        if b"Enter filename to open" not in out_dir:
+            print(f"[-] Open prompt not displayed. Buffer: {repr(out_dir)}", flush=True)
             return False
-        print("[+] Successfully verified Load File screen with sorted directory listing.", flush=True)
+        print("[+] Successfully verified Open File screen with sorted directory listing.", flush=True)
 
         # Test Space key to advance to Page 2
         drain_all(master)
@@ -662,21 +662,21 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Space key pagination ([Page 2/X]).", flush=True)
 
-        # Test ESC to cancel from Load File prompt
+        # Test ESC to cancel from Open File prompt
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b")  # ESC to cancel
         out_cancel = read_until(master, b"SE - Screen Editor", timeout=4.0)
         if b"SE - Screen Editor" not in out_cancel:
-            print(f"[-] ESC key did not cancel load prompt back to splash screen. Buffer: {repr(out_cancel)}", flush=True)
+            print(f"[-] ESC key did not cancel open prompt back to splash screen. Buffer: {repr(out_cancel)}", flush=True)
             return False
-        print("[+] Successfully verified ESC cancels Load File prompt back to splash screen.", flush=True)
+        print("[+] Successfully verified ESC cancels Open File prompt back to splash screen.", flush=True)
 
-        # Re-enter Load File screen and load 2.TXT
+        # Re-enter Open File screen and open 2.TXT
         drain_all(master)
         time.sleep(0.2)
-        os.write(master, b"l")
-        read_until(master, b"Enter filename to load", timeout=4.0)
+        os.write(master, b"o")
+        read_until(master, b"Enter filename to open", timeout=4.0)
         drain_all(master)
         time.sleep(0.1)
         # Test amending filename with Backspace: type '2.BAK', backspace 3 times, then type 'TXT\r'
@@ -693,19 +693,19 @@ def test_se_execution():
         if r:
             check_buf = os.read(master, 2048)
             if b"SE v0.6.3" in check_buf or b"Row 1/" in check_buf:
-                print(f"[-] Backspace in load prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
+                print(f"[-] Backspace in open prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
         # Type correct extension 'TXT' and press Enter
         os.write(master, b"TXT\r")
         out_loaded = read_until(master, b"Row 1/2,", timeout=4.0)
         if b"SE v0.6.3" not in out_loaded or b"2.TXT" not in out_loaded:
-            print(f"[-] Failed to load 2.TXT from Load File prompt after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
+            print(f"[-] Failed to open 2.TXT from Open File prompt after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
         if b"First line of two" not in out_loaded:
             print(f"[-] Document contents not loaded after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
-        print("[+] Successfully verified typing filename, backspace amendment, and loading from prompt.", flush=True)
+        print("[+] Successfully verified typing filename, backspace amendment, and opening from prompt.", flush=True)
 
         # 27. Test Save Screen: Pre-filling, Overwrite check, and Splash :s
         time.sleep(0.5)
