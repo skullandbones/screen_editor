@@ -861,6 +861,79 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Ctrl+O in editor mode opens file into editor.", flush=True)
 
+        # 30. Test Drive Switching in Open Screen ("B:" and "C:")
+        time.sleep(0.2)
+        os.write(master, b"\x0f")  # Ctrl+O
+        read_until(master, b"Enter filename to open (<ESC>=Cancel): ", timeout=4.0)
+        time.sleep(0.2)
+        # Type 'B:' and hit Return to switch to Drive B:
+        os.write(master, b"B:\r")
+        out_drive_b = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE B:)", timeout=4.0)
+        if b"OPEN FILE (DIRECTORY - DRIVE B:)" not in out_drive_b:
+            print(f"[-] Failed to switch to Drive B: in Open Screen. Buffer: {repr(out_drive_b)}", flush=True)
+            return False
+        # Verify prompt retains 'B:' (Drive B: has 2 pages, so multi-page prompt format is used)
+        out_retained_b = read_until(master, b"Enter filename to open: B:", timeout=3.0)
+        if b"Enter filename to open: B:" not in out_retained_b:
+            print(f"[-] Prompt did not retain 'B:'. Buffer: {repr(out_retained_b)}", flush=True)
+            return False
+        print("[+] Successfully verified switching to Drive B: in Open Screen with 'B:' retained in text box.", flush=True)
+
+        # Type backspaces to clear 'B:' and switch back to Drive C:
+        time.sleep(0.2)
+        os.write(master, b"\x08\x08C:\r")
+        out_drive_c = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
+        if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_drive_c:
+            print(f"[-] Failed to switch back to Drive C: in Open Screen. Buffer: {repr(out_drive_c)}", flush=True)
+            return False
+        out_retained_c = read_until(master, b"Enter filename to open: C:", timeout=3.0)
+        if b"Enter filename to open: C:" not in out_retained_c:
+            print(f"[-] Prompt did not retain 'C:'. Buffer: {repr(out_retained_c)}", flush=True)
+            return False
+        # Press ESC to cancel back to editor mode
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        out_esc_back = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"C:30.TXT" not in out_esc_back:
+            print(f"[-] ESC from drive-switched open screen failed to restore editor. Buffer: {repr(out_esc_back)}", flush=True)
+            return False
+        print("[+] Successfully verified switching back to Drive C: and returning to editor on ESC.", flush=True)
+
+        # 31. Test Drive Switching in Save Screen ("B:" and "C:")
+        time.sleep(0.2)
+        os.write(master, b"\x13")  # Ctrl+S
+        read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
+        read_until(master, b"Enter filename to save: ", timeout=3.0)
+        # Clear pre-filled name and enter 'B:' followed by Return
+        time.sleep(0.2)
+        os.write(master, b"\x08" * 20 + b"B:\r")
+        out_save_b = read_until(master, b"SAVE FILE (DIRECTORY - DRIVE B:)", timeout=4.0)
+        if b"SAVE FILE (DIRECTORY - DRIVE B:)" not in out_save_b:
+            print(f"[-] Failed to switch to Drive B: in Save Screen. Buffer: {repr(out_save_b)}", flush=True)
+            return False
+        out_save_retained_b = read_until(master, b"Enter filename to save: B:", timeout=3.0)
+        if b"Enter filename to save: B:" not in out_save_retained_b:
+            print(f"[-] Save prompt did not retain 'B:'. Buffer: {repr(out_save_retained_b)}", flush=True)
+            return False
+        print("[+] Successfully verified switching to Drive B: in Save Screen with 'B:' retained in text box.", flush=True)
+
+        # Switch back to Drive C: in Save Screen
+        time.sleep(0.2)
+        os.write(master, b"\x08\x08C:\r")
+        out_save_c = read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
+        if b"SAVE FILE (DIRECTORY - DRIVE C:)" not in out_save_c:
+            print(f"[-] Failed to switch back to Drive C: in Save Screen. Buffer: {repr(out_save_c)}", flush=True)
+            return False
+        out_save_retained_c = read_until(master, b"Enter filename to save: C:", timeout=3.0)
+        if b"Enter filename to save: C:" not in out_save_retained_c:
+            print(f"[-] Save prompt did not retain 'C:'. Buffer: {repr(out_save_retained_c)}", flush=True)
+            return False
+        # Cancel Save screen on ESC
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+        print("[+] Successfully verified switching back to Drive C: in Save Screen and ESC returns cleanly.", flush=True)
+
         # Return to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")

@@ -61,6 +61,9 @@ START:
 	; Check if filename was provided in FCB1
 	CALL	CHECK_COMMAND_LINE
 
+	; Initialize directory drive from default disk or FCB
+	CALL	INIT_DIR_DRIVE
+
 	; If file argument was given, load file and go straight to editor
 	LD	A,(HAS_FILE_ARG)
 	OR	A
@@ -3790,13 +3793,16 @@ INIT_EMPTY_DOCUMENT:
 ; Open File Screen with Sorted Directory Listing & Pagination
 ;------------------------------------------------------------------------------
 DO_OPEN_FILE_UI:
-	; Query current drive letter (BDOS 25) and update title
-	LD	C,25
-	CALL	BDOS_ENTRY
-	ADD	A,'A'
-	LD	(STR_DIR_DRIVE_CHAR),A
+	; Initialize active directory drive from default disk or WORK_FCB
+	CALL	INIT_DIR_DRIVE
 
-	; 1. Collect Directory Entries from CP/M Default Drive (with Bit-7 strip & dup filter)
+	; Clear INPUT_FILENAME_BUF for initial prompt
+	XOR	A
+	LD	(INPUT_BUF_LEN),A
+	LD	(INPUT_FILENAME_BUF),A
+
+REFRESH_OPEN_DIR:
+	; 1. Collect Directory Entries from CURRENT_DIR_DRIVE (with Bit-7 strip & dup filter)
 	CALL	COLLECT_DIR_ENTRIES
 
 	; 2. Sort Directory Entries Alphabetically
@@ -3838,9 +3844,13 @@ RENDER_OPEN_PAGE:
 	; Display Open Prompt & Page Indicator
 	CALL	DISPLAY_OPEN_PROMPT
 
-	; Read Filename Input (handles typing, Backspace, Space/Enter for page, ESC)
-	CALL	READ_FILENAME_INPUT
+	; Read Filename Input (echoes prefilled string if non-empty, e.g. "A:")
+	CALL	READ_FILENAME_INPUT_PREFILLED
 	JR	C,CHECK_PAGING_OR_CANCEL
+
+	; Check if user typed a drive specification (e.g. "A:")
+	CALL	CHECK_DRIVE_SWITCH
+	JR	C,HANDLE_OPEN_DRIVE_SWITCH
 
 DO_PARSE_AND_LOAD:
 	; Backup current WORK_FCB to DIR_TEMP_FCB in case open fails
@@ -3874,6 +3884,13 @@ DO_PARSE_AND_LOAD:
 	CALL	RENDER_STATUS_BAR
 	JP	MAIN_LOOP
 
+HANDLE_OPEN_DRIVE_SWITCH:
+	; A = new drive (1..16)
+	LD	(CURRENT_DIR_DRIVE),A
+	ADD	A,'A'-1
+	LD	(STR_DIR_DRIVE_CHAR),A
+	JP	REFRESH_OPEN_DIR
+
 OPEN_FILE_NOT_FOUND:
 	; Restore previous WORK_FCB from DIR_TEMP_FCB
 	LD	HL,DIR_TEMP_FCB
@@ -3892,6 +3909,11 @@ OPEN_FILE_NOT_FOUND:
 	; Resume input loop without blanking filename in text box
 	CALL	RESUME_FILENAME_INPUT
 	JR	C,CHECK_PAGING_OR_CANCEL
+
+	; Check if user edited input to a drive specification (e.g. "B:")
+	CALL	CHECK_DRIVE_SWITCH
+	JR	C,HANDLE_OPEN_DRIVE_SWITCH
+
 	JP	DO_PARSE_AND_LOAD
 
 CHECK_PAGING_OR_CANCEL:
@@ -3933,22 +3955,20 @@ DO_SAVE_FILE_UI:
 	RET
 
 DO_SAVE_FILE_UI_IMPL:
-	; Query current drive letter (BDOS 25) and update save title
-	LD	C,25
-	CALL	BDOS_ENTRY
-	ADD	A,'A'
-	LD	(STR_SAVE_DRIVE_CHAR),A
+	; Initialize active directory drive from default disk or WORK_FCB
+	CALL	INIT_DIR_DRIVE
 
-	; 1. Collect Directory Entries from CP/M Default Drive
+	; Pre-fill filename if known (HAS_FILE_ARG == 1)
+	CALL	FCB_TO_FILENAME_STR
+
+REFRESH_SAVE_DIR:
+	; 1. Collect Directory Entries from CURRENT_DIR_DRIVE
 	CALL	COLLECT_DIR_ENTRIES
 
 	; 2. Sort Directory Entries Alphabetically
 	CALL	SORT_DIR_ENTRIES
 
-	; 3. Pre-fill filename if known (HAS_FILE_ARG == 1)
-	CALL	FCB_TO_FILENAME_STR
-
-	; 4. Calculate Total Pages (48 files per page: 12 rows x 4 cols)
+	; 3. Calculate Total Pages (48 files per page: 12 rows x 4 cols)
 	XOR	A
 	LD	(DIR_PAGE_INDEX),A
 
@@ -3987,6 +4007,10 @@ RENDER_SAVE_PAGE:
 	; Read Filename Input (with prefilled string echoed)
 	CALL	READ_FILENAME_INPUT_PREFILLED
 	JR	C,CHECK_SAVE_PAGING_OR_CANCEL
+
+	; Check if user typed a drive specification (e.g. "A:")
+	CALL	CHECK_DRIVE_SWITCH
+	JR	C,HANDLE_SAVE_DRIVE_SWITCH
 
 	; User entered/confirmed a filename in INPUT_FILENAME_BUF:
 	; Save current WORK_FCB to DIR_TEMP_FCB (36 bytes)
@@ -4037,10 +4061,17 @@ DO_ACTUAL_SAVE:
 	LD	(HAS_FILE_ARG),A
 	RET
 
+HANDLE_SAVE_DRIVE_SWITCH:
+	; A = new drive (1..16)
+	LD	(CURRENT_DIR_DRIVE),A
+	ADD	A,'A'-1
+	LD	(STR_SAVE_DRIVE_CHAR),A
+	JP	REFRESH_SAVE_DIR
+
 CHECK_SAVE_PAGING_OR_CANCEL:
 	; A = return code: 0 = Cancel (ESC), 1 = Next Page (Space/Enter), 2 = Format Toggled (Ctrl-F)
 	CP	2
-	JR	Z,RENDER_SAVE_PAGE	; Redraw save page with new format and prefilled input
+	JP	Z,RENDER_SAVE_PAGE	; Redraw save page with new format and prefilled input
 	CP	1
 	JR	Z,DO_SAVE_NEXT_PAGE
 	RET				; Cancelled -> return
@@ -4054,7 +4085,7 @@ DO_SAVE_NEXT_PAGE:
 	XOR	A			; Wrap around to page 0
 SET_SAVE_NEXT_PAGE:
 	LD	(DIR_PAGE_INDEX),A
-	JR	RENDER_SAVE_PAGE
+	JP	RENDER_SAVE_PAGE
 
 ;------------------------------------------------------------------------------
 ; Check if file in WORK_FCB already exists on disk
@@ -4095,6 +4126,56 @@ CHECK_FILE_EXISTS:
 
 FILE_NOT_EXISTS:
 	OR	A			; Carry = 0 (file does not exist)
+	RET
+
+;------------------------------------------------------------------------------
+; Initialize CURRENT_DIR_DRIVE and title strings
+; If WORK_FCB has an explicit drive, uses it; otherwise queries BDOS 25.
+;------------------------------------------------------------------------------
+INIT_DIR_DRIVE:
+	LD	A,(WORK_FCB)
+	OR	A
+	JR	NZ,IDD_USE_FCB
+	LD	C,25			; BDOS Return Current Disk
+	CALL	BDOS_ENTRY
+	INC	A			; 0..15 -> 1..16
+IDD_USE_FCB:
+	LD	(CURRENT_DIR_DRIVE),A
+	ADD	A,'A'-1
+	LD	(STR_DIR_DRIVE_CHAR),A
+	LD	(STR_SAVE_DRIVE_CHAR),A
+	RET
+
+;------------------------------------------------------------------------------
+; Check if INPUT_FILENAME_BUF contains a drive specification (e.g. "A:")
+; Returns:
+;   Carry = 1 -> Drive switch requested; A = drive code 1..16 (1=A, 2=B, etc.)
+;   Carry = 0 -> Not a drive switch
+;------------------------------------------------------------------------------
+CHECK_DRIVE_SWITCH:
+	LD	A,(INPUT_BUF_LEN)
+	CP	2
+	RET	NZ			; Not length 2 -> Carry = 0
+
+	LD	A,(INPUT_FILENAME_BUF+1)
+	CP	':'
+	JR	NZ,CDS_NO		; Second character not ':' -> Carry = 0
+
+	LD	A,(INPUT_FILENAME_BUF)
+	CALL	TO_UPPER
+	CP	'A'
+	JR	C,CDS_NO
+	CP	'P'+1
+	JR	NC,CDS_NO
+
+	; Valid drive letter 'A'..'P'
+	LD	(INPUT_FILENAME_BUF),A	; Normalize buffer to uppercase letter
+	SUB	'A'-1			; 'A' -> 1, 'B' -> 2, etc.
+	SCF				; Carry = 1
+	RET
+
+CDS_NO:
+	OR	A			; Carry = 0
 	RET
 
 ;------------------------------------------------------------------------------
@@ -4271,9 +4352,10 @@ COLLECT_DIR_ENTRIES:
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
 
-	; Prepare DIR_SEARCH_FCB: Drive = 0 (current default), 11 '?' wildcards, rest 0
+	; Prepare DIR_SEARCH_FCB: Drive = CURRENT_DIR_DRIVE, 11 '?' wildcards, rest 0
 	LD	HL,DIR_SEARCH_FCB
-	LD	(HL),0			; Drive 0 (current)
+	LD	A,(CURRENT_DIR_DRIVE)
+	LD	(HL),A			; Active directory drive (1=A, 2=B, etc.)
 	INC	HL
 	LD	B,11
 SET_SEARCH_QM:
@@ -4951,8 +5033,16 @@ PARSE_CHECK_DRIVE:
 	LD	(WORK_FCB),A
 	INC	HL			; Skip drive letter
 	INC	HL			; Skip ':'
+	JR	PARSE_NAME_START
 
 PARSE_DEFAULT_DRIVE:
+	; If no explicit drive, default to CURRENT_DIR_DRIVE (if non-zero)
+	LD	A,(CURRENT_DIR_DRIVE)
+	OR	A
+	JR	Z,PARSE_NAME_START
+	LD	(WORK_FCB),A
+
+PARSE_NAME_START:
 	; Read up to 8 characters of filename into WORK_FCB+1 .. WORK_FCB+8
 	LD	DE,WORK_FCB+1
 	LD	B,8
@@ -5596,6 +5686,7 @@ TEST_READBACK:	.DB	0,0
 WORK_FCB:	.DS	36
 DIR_TEMP_FCB:	.DS	36
 
+CURRENT_DIR_DRIVE:	.DB	0		; Active directory drive (1=A:, 2=B:, 3=C:, etc.)
 DIR_SEARCH_FCB:		.DS	36
 DIR_FILE_COUNT:		.DB	0
 DIR_PAGE_INDEX:		.DB	0
