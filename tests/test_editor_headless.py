@@ -816,11 +816,13 @@ def test_se_execution():
         read_until(master, b"^K: Editor keys", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"\x0b")  # Ctrl+K
-        out_keys = read_until(master, b"SE.COM - EDITOR MODE KEYS", timeout=4.0)
+        out_keys = read_until(master, b"Press any key to return to editor...", timeout=4.0)
         if b"SE.COM - EDITOR MODE KEYS" not in out_keys:
             print(f"[-] Help screen not reached via Ctrl+K. Buffer: {repr(out_keys)}", flush=True)
             return False
-        read_until(master, b"Press any key to return to editor...", timeout=3.0)
+        if b"Ctrl+O           Open file screen" not in out_keys:
+            print(f"[-] Ctrl+O missing from Editor Mode Keys screen. Buffer: {repr(out_keys)}", flush=True)
+            return False
         # Press Space to return to editor
         time.sleep(0.2)
         os.write(master, b" ")
@@ -829,6 +831,35 @@ def test_se_execution():
             print(f"[-] Failed to return to editor from keys screen. Buffer: {repr(out_keys_back)}", flush=True)
             return False
         print("[+] Successfully verified Ctrl+K Editor Mode Keys screen and return to editor.", flush=True)
+
+        # 29. Test Ctrl+O in Editor Mode (Open File Screen and ESC cancel)
+        time.sleep(0.2)
+        os.write(master, b"\x0f")  # Ctrl+O
+        out_open_ui = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
+        if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_open_ui:
+            print(f"[-] Failed to reach Open File screen via Ctrl+O. Buffer: {repr(out_open_ui)}", flush=True)
+            return False
+        read_until(master, b"Enter filename to open (<ESC>=Cancel): ", timeout=3.0)
+        # Press ESC to cancel back to editor mode without opening a file
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        out_cancelled = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"C:2.TXT" not in out_cancelled or b"First line of two" not in out_cancelled:
+            print(f"[-] ESC did not cleanly restore editor mode with document intact. Buffer: {repr(out_cancelled)}", flush=True)
+            return False
+        print("[+] Successfully verified Ctrl+O opens directory browser and ESC returns to editor without opening file.", flush=True)
+
+        # Test Ctrl+O successfully opening a new file from editor mode
+        time.sleep(0.2)
+        os.write(master, b"\x0f")  # Ctrl+O
+        read_until(master, b"Enter filename to open (<ESC>=Cancel): ", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"30.TXT\r")
+        out_open_30 = read_until(master, b"Row 1/30,", timeout=4.0)
+        if b"C:30.TXT" not in out_open_30 or b"Line 01 of test file content" not in out_open_30:
+            print(f"[-] Failed to open 30.TXT via Ctrl+O in editor mode. Buffer: {repr(out_open_30)}", flush=True)
+            return False
+        print("[+] Successfully verified Ctrl+O in editor mode opens file into editor.", flush=True)
 
         # Return to splash (ESC)
         time.sleep(0.2)

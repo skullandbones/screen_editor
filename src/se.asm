@@ -22,6 +22,7 @@ MAX_DOC_LINES	.EQU	3584		; 14 banks * 256 lines = 3584 total lines
 KEY_CTRL_C	.EQU	3
 KEY_CTRL_Q	.EQU	17
 KEY_CTRL_S	.EQU	19
+KEY_CTRL_O	.EQU	15		; Open File Screen
 KEY_CTRL_K	.EQU	11		; Show Editor Mode Keys Screen
 KEY_CTRL_F	.EQU	6		; Toggle CP/M <-> Linux line endings
 KEY_BACKSPACE	.EQU	8
@@ -204,8 +205,18 @@ MAIN_LOOP:
 
 	; Command: Ctrl+S -> Save File Screen
 	CP	KEY_CTRL_S
-	JR	NZ,CHECK_CTRL_K
+	JR	NZ,CHECK_CTRL_O
 	CALL	DO_SAVE_FILE_UI
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+CHECK_CTRL_O:
+	; Command: Ctrl+O -> Open File Screen (ESC returns without opening)
+	CP	KEY_CTRL_O
+	JR	NZ,CHECK_CTRL_K
+	CALL	DO_OPEN_FILE_UI
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
@@ -5422,8 +5433,9 @@ STR_HELP_SCREEN:
 	.DB	"                          SE.COM - EDITOR MODE KEYS                             ",13,10
 	.DB	"================================================================================",13,10
 	.DB	"  FILE & SYSTEM:",13,10
-	.DB	"    Ctrl+S           Save file screen        ESC             Splash screen",13,10
-	.DB	"    Ctrl+Q           Quit to CP/M            Ctrl+K          Show this help",13,10,13,10
+	.DB	"    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
+	.DB	"    Ctrl+Q           Quit to CP/M            ESC             Splash screen",13,10
+	.DB	"    Ctrl+K           Show this help",13,10,13,10
 	.DB	"  NAVIGATION:",13,10
 	.DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
 	.DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
