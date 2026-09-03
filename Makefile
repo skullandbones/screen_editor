@@ -11,7 +11,7 @@ CPMRM ?= $(TOOLS_DIR)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all image test clean
+.PHONY: all image test test-sanity test-conformity test-full clean
 
 all: $(TARGET)
 
@@ -24,9 +24,17 @@ image: $(TARGET)
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM
 
-test: image
-	@echo "==> Running automated SE.COM integration tests..."
+test: test-sanity
+
+test-sanity: image
+	@echo "==> Running fast SE.COM sanity test suite..."
+	python3 tests/test_sanity.py
+
+test-conformity: image
+	@echo "==> Running full SE.COM conformity regression test suite..."
 	python3 tests/test_editor_headless.py
+
+test-full: test-conformity
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def
