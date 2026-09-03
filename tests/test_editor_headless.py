@@ -44,6 +44,7 @@ def read_until(master_fd, match_bytes, timeout=8.0):
 
 def drain_all(master_fd, quiet_time=0.2):
     time.sleep(0.05)
+    buf = b""
     while True:
         r, _, _ = select.select([master_fd], [], [], quiet_time)
         if not r:
@@ -52,8 +53,10 @@ def drain_all(master_fd, quiet_time=0.2):
             data = os.read(master_fd, 4096)
             if not data:
                 break
+            buf += data
         except (BlockingIOError, OSError):
             break
+    return buf
 
 def test_se_execution():
     emu_bin, rom_file, img_file, se_bin = find_paths()
@@ -1082,9 +1085,67 @@ def test_se_execution():
         out_toggle_off = read_until(master, b"^K: Editor keys", timeout=4.0)
         if b"^K: Editor keys" not in out_toggle_off:
             print(f"[-] Ctrl+B cancel of solidified block failed. Buffer: {repr(out_toggle_off)}", flush=True)
+        # Step 35: Verify tab block highlighting on the last line of block
+        print("[*] Step 35: Testing dynamic tab block highlighting on the last line...", flush=True)
+        # Move to top of document (Ctrl+T)
+        os.write(master, b"\x14")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Clear document: delete current lines or open new file, or enter text
+        # Insert a new line 1 and line 2 with a tab: "L1\rA\tB"
+        os.write(master, b"L1\rA\tB")
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Jump to top: Ctrl+T (Line 1 Col 0)
+        os.write(master, b"\x14")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Start block at Line 1 Col 0 (Ctrl+B)
+        os.write(master, b"\x02")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Move down to Line 2 (Down Arrow) -> cursor at Col 0 ('A')
+        os.write(master, b"\x1b[B")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Move right onto TAB (Right Arrow) -> cursor at Col 1 (the TAB)
+        os.write(master, b"\x1b[C")
+        time.sleep(0.1)
+        out_tab_on = drain_all(master)
+        # Verify that TAB is NOT prematurely highlighted across its expanded spaces
+        # Line 2 should have 'A' highlighted, but NOT the tab spaces
+        if b"\x1b[7mA\x1b[0m       B" not in out_tab_on:
+            print(f"[-] Tab prematurely highlighted on last line. Buffer: {repr(out_tab_on)}", flush=True)
             return False
 
-        print("[+] Successfully verified hybrid character & line block highlighting and Ctrl+K solidification!", flush=True)
+        # Move right past TAB onto 'B' (Right Arrow) -> cursor at Col 8 ('B')
+        os.write(master, b"\x1b[C")
+        time.sleep(0.1)
+        out_tab_past = drain_all(master)
+        # Verify that TAB IS now highlighted
+        if b"\x1b[7mA       B\x1b[0m" not in out_tab_past:
+            print(f"[-] Tab failed to highlight after cursor moved past it. Buffer: {repr(out_tab_past)}", flush=True)
+            return False
+
+        # Move left back onto TAB (Left Arrow) -> cursor at Col 1 (the TAB)
+        os.write(master, b"\x1b[D")
+        time.sleep(0.1)
+        out_tab_back = drain_all(master)
+        # Verify that TAB dynamically un-highlights
+        if b"\x1b[7mA\x1b[0m       B" not in out_tab_back:
+            print(f"[-] Tab failed to dynamically un-highlight when cursoring back. Buffer: {repr(out_tab_back)}", flush=True)
+            return False
+
+        # Cancel block mode (Ctrl+B)
+        os.write(master, b"\x02")
+        time.sleep(0.1)
+        drain_all(master)
+        print("[+] Successfully verified dynamic tab block highlighting on last line!", flush=True)
 
         # Return to splash (ESC)
         time.sleep(0.2)

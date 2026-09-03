@@ -1678,6 +1678,10 @@ GLBR_IN_RANGE:
 	LD	D,A
 	LD	A,(BLOCK_END_COL)
 	LD	E,A
+	CP	D
+	JR	Z,GLBR_OK
+	CALL	GLBR_CHECK_TAB_END
+	JR	C,GLBR_NONE
 	JR	GLBR_OK
 
 GLBR_START_ONLY:
@@ -1701,6 +1705,8 @@ GLBR_NOT_START_ROW:
 	LD	D,0
 	LD	A,(BLOCK_END_COL)
 	LD	E,A
+	CALL	GLBR_CHECK_TAB_END
+	JR	C,GLBR_NONE
 	JR	GLBR_OK
 
 GLBR_MIDDLE_ROW:
@@ -1718,6 +1724,45 @@ GLBR_NONE:
 	POP	HL
 	POP	BC
 	SCF				; Carry = 1: no block on this line
+	RET
+
+;------------------------------------------------------------------------------
+; GLBR_CHECK_TAB_END: If character at EndCol (E) is a TAB, exclude it from highlight
+; Inputs: BC = doc row, D = StartCol, E = EndCol
+; Returns: Carry = 0: E adjusted (or unchanged)
+;          Carry = 1: line has no highlight left (EndCol decremented below StartCol)
+; Preserves: BC, D
+;------------------------------------------------------------------------------
+GLBR_CHECK_TAB_END:
+	PUSH	BC
+	PUSH	DE
+	CALL	ENSURE_CACHE_WINDOW	; HL = pointer to line start in LINE_STORAGE
+	POP	DE
+	POP	BC
+
+	PUSH	HL
+	PUSH	DE
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + EndCol
+	LD	A,(HL)
+	POP	DE
+	POP	HL
+
+	CP	KEY_TAB			; Is character at EndCol a TAB?
+	JR	Z,GCTE_IS_TAB
+	OR	A			; Carry = 0
+	RET
+
+GCTE_IS_TAB:
+	LD	A,E
+	CP	D
+	JR	Z,GCTE_NO_CHARS
+	DEC	E
+	OR	A			; Carry = 0
+	RET
+
+GCTE_NO_CHARS:
+	SCF				; Carry = 1: no highlight on this line
 	RET
 
 ;------------------------------------------------------------------------------
