@@ -25,6 +25,8 @@ KEY_CTRL_S	.EQU	19
 KEY_CTRL_O	.EQU	15		; Open File Screen
 KEY_CTRL_K	.EQU	11		; Show Editor Mode Keys Screen
 KEY_CTRL_F	.EQU	6		; Toggle CP/M <-> Linux line endings
+KEY_CTRL_U	.EQU	21		; Page Up
+KEY_CTRL_V	.EQU	22		; Page Down
 KEY_BACKSPACE	.EQU	8
 KEY_TAB		.EQU	9
 KEY_ENTER	.EQU	13
@@ -3917,10 +3919,23 @@ OPEN_FILE_NOT_FOUND:
 	JP	DO_PARSE_AND_LOAD
 
 CHECK_PAGING_OR_CANCEL:
-	; A = return code: 0 = Cancel (ESC), 1 = Next Page (Space/Enter)
+	; A = return code: 0 = Cancel (ESC), 1 = Next Page (PgDn), 3 = Prev Page (PgUp)
 	CP	1
 	JR	Z,DO_NEXT_PAGE
+	CP	3
+	JR	Z,DO_PREV_PAGE
 	RET				; Cancelled -> return to splash
+
+DO_PREV_PAGE:
+	LD	A,(DIR_PAGE_INDEX)
+	OR	A
+	JR	Z,DO_PREV_PAGE_WRAP
+	DEC	A
+	JR	SET_NEXT_PAGE
+DO_PREV_PAGE_WRAP:
+	LD	A,(DIR_PAGE_COUNT)
+	DEC	A
+	JR	SET_NEXT_PAGE
 
 DO_NEXT_PAGE:
 	LD	A,(DIR_PAGE_INDEX)
@@ -4069,12 +4084,25 @@ HANDLE_SAVE_DRIVE_SWITCH:
 	JP	REFRESH_SAVE_DIR
 
 CHECK_SAVE_PAGING_OR_CANCEL:
-	; A = return code: 0 = Cancel (ESC), 1 = Next Page (Space/Enter), 2 = Format Toggled (Ctrl-F)
+	; A = return code: 0 = Cancel (ESC), 1 = Next Page (PgDn), 2 = Format Toggled (Ctrl-F), 3 = Prev Page (PgUp)
 	CP	2
 	JP	Z,RENDER_SAVE_PAGE	; Redraw save page with new format and prefilled input
 	CP	1
 	JR	Z,DO_SAVE_NEXT_PAGE
+	CP	3
+	JR	Z,DO_SAVE_PREV_PAGE
 	RET				; Cancelled -> return
+
+DO_SAVE_PREV_PAGE:
+	LD	A,(DIR_PAGE_INDEX)
+	OR	A
+	JR	Z,DO_SAVE_PREV_WRAP
+	DEC	A
+	JR	SET_SAVE_NEXT_PAGE
+DO_SAVE_PREV_WRAP:
+	LD	A,(DIR_PAGE_COUNT)
+	DEC	A
+	JR	SET_SAVE_NEXT_PAGE
 
 DO_SAVE_NEXT_PAGE:
 	LD	A,(DIR_PAGE_INDEX)
@@ -4842,27 +4870,76 @@ INPUT_CHAR_LOOP:
 	RET
 
 CHECK_ESC_KEY:
-	; ESC -> Cancel
 	CP	KEY_ESC
-	JP	Z,INPUT_CANCEL
+	JR	NZ,INPUT_CHECK_PAGE_KEYS
 
-	; Space -> If empty input and multi-page, advance to next page
-	CP	' '
-	JR	NZ,CHECK_ENTER_KEY
-	LD	A,(INPUT_BUF_LEN)
-	OR	A
-	JR	NZ,ALLOW_SPACE_CHAR	; If typing in progress, treat as space character
+	; Check if character follows ESC within a short timeout
+	LD	BC,1000
+INPUT_WAIT_ESC:
+	CALL	CHECK_KEY_READY
+	JR	NZ,INPUT_GOT_ESC_BYTE
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,INPUT_WAIT_ESC
 
-	; Empty input on Space
-	LD	A,(DIR_PAGE_COUNT)
-	CP	2
-	JR	C,ALLOW_SPACE_CHAR	; Single page: allow typing space
-	LD	A,1			; A = 1 (next page)
-	SCF				; Carry = 1 (special action)
+	; Standalone ESC key -> Cancel
+	JP	INPUT_CANCEL
+
+INPUT_GOT_ESC_BYTE:
+	CALL	GET_KEY
+	CP	'['
+	JR	Z,INPUT_HANDLE_CSI
+	CP	'O'
+	JR	Z,INPUT_HANDLE_SS3
+	JP	INPUT_CHAR_LOOP
+
+INPUT_HANDLE_CSI:
+	CALL	GET_KEY
+	CP	'5'			; Page Up (ESC [ 5 ~)
+	JR	Z,INPUT_CSI_PGUP
+	CP	'6'			; Page Down (ESC [ 6 ~)
+	JR	Z,INPUT_CSI_PGDN
+	CP	'I'			; Page Up (VT alt)
+	JR	Z,INPUT_DO_PGUP
+	CP	'G'			; Page Down (VT alt)
+	JR	Z,INPUT_DO_PGDN
+	CP	'3'			; Delete key (ESC [ 3 ~)
+	JR	Z,INPUT_CSI_DEL
+	JP	INPUT_CHAR_LOOP
+
+INPUT_CSI_PGUP:
+	CALL	GET_KEY			; Consume trailing '~'
+INPUT_DO_PGUP:
+	LD	A,3			; A = 3 (Previous Page / PgUp)
+	SCF				; Carry = 1
 	RET
 
-ALLOW_SPACE_CHAR:
-	LD	A,' '
+INPUT_CSI_PGDN:
+	CALL	GET_KEY			; Consume trailing '~'
+INPUT_DO_PGDN:
+	LD	A,1			; A = 1 (Next Page / PgDn)
+	SCF				; Carry = 1
+	RET
+
+INPUT_CSI_DEL:
+	CALL	GET_KEY			; Consume trailing '~'
+	JP	INPUT_BS		; Treat Delete as Backspace
+
+INPUT_HANDLE_SS3:
+	CALL	GET_KEY			; Consume char
+	JP	INPUT_CHAR_LOOP
+
+INPUT_CHECK_PAGE_KEYS:
+	; Ctrl+U or Ctrl+B -> Page Up
+	CP	KEY_CTRL_U
+	JR	Z,INPUT_DO_PGUP
+	CP	2			; Ctrl+B
+	JR	Z,INPUT_DO_PGUP
+
+	; Ctrl+V -> Page Down
+	CP	KEY_CTRL_V
+	JR	Z,INPUT_DO_PGDN
 
 CHECK_ENTER_KEY:
 	; Enter -> Finish input or advance page if empty
@@ -4877,15 +4954,15 @@ CHECK_ENTER_KEY:
 
 	; Printable character (0x20..0x7E)
 	CP	' '
-	JR	C,INPUT_CHAR_LOOP
+	JP	C,INPUT_CHAR_LOOP
 	CP	07FH
-	JR	NC,INPUT_CHAR_LOOP
+	JP	NC,INPUT_CHAR_LOOP
 
 	; Check buffer capacity (max 20 chars)
 	LD	B,A			; Save char in B
 	LD	A,(INPUT_BUF_LEN)
 	CP	20
-	JR	NC,INPUT_CHAR_LOOP
+	JP	NC,INPUT_CHAR_LOOP
 
 	; Store character
 	LD	HL,INPUT_FILENAME_BUF
@@ -4981,13 +5058,7 @@ INPUT_ENTER:
 	RET
 
 INPUT_ENTER_EMPTY:
-	; If multi-page, empty Enter advances page
-	LD	A,(DIR_PAGE_COUNT)
-	CP	2
-	JR	C,INPUT_CANCEL
-	LD	A,1			; A = 1 (next page)
-	SCF				; Carry = 1
-	RET
+	JP	INPUT_CANCEL
 
 ;------------------------------------------------------------------------------
 ; Parse Filename String (e.g. "30.TXT" or "A:TEST.DAT") into WORK_FCB
@@ -5341,7 +5412,7 @@ STR_SPLASH_BODY:
 	.DB	13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~             SE - Screen Editor              ",13,10
-	.DB	"                  ~                version 0.6.4                ",13,10
+	.DB	"                  ~                version 0.6.5                ",13,10
 	.DB	"                  ~              by Dean Jenkins                ",13,10
 	.DB	"                  ~                                             ",13,10
 	.DB	"                  ~       SE is open source and freely usable   ",13,10
@@ -5500,7 +5571,7 @@ STR_FILE_TEST_FAILED:
 	.DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
 
 STR_STATUS_PREFIX:
-	.DB	" SE v0.6.4 | ","$"
+	.DB	" SE v0.6.5 | ","$"
 
 STR_STATUS_120X40:
 	.DB	"120x40 | ","$"
@@ -5573,7 +5644,7 @@ STR_PAGE_MID:
 	.DB	"/","$"
 
 STR_PAGE_SUFFIX:
-	.DB	"]  <Space>=Next Page, <ESC>=Cancel",13,10
+	.DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10
 	.DB	"Enter filename to open: ","$"
 
 STR_NO_FILES_FOUND:
@@ -5613,7 +5684,7 @@ STR_SAVE_PAGE_PREFIX:
 	.DB	"[Page ","$"
 
 STR_SAVE_PAGE_SUFFIX:
-	.DB	"]  <Space>=Next Page, <ESC>=Cancel",13,10,"$"
+	.DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10,"$"
 
 STR_SAVE_PAGE_PROMPT:
 	.DB	"Enter filename to save: ","$"
