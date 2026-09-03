@@ -963,6 +963,21 @@ def test_se_execution():
         read_until(master, b"^K: Editor keys", timeout=4.0)
         print("[+] Successfully verified switching back to Drive C: in Save Screen and ESC returns cleanly.", flush=True)
 
+        # 32. Test High-Speed Burst Paste (Clipboard Simulation)
+        time.sleep(0.2)
+        drain_all(master)
+        os.write(master, b"\x05")  # Ctrl+E -> End of Line
+        time.sleep(0.1)
+        # Simulate minicom clipboard paste: send rapid burst of characters in a single write with no delay
+        paste_text = b" [BURST-PASTED TEXT VIA CLIPBOARD]"
+        os.write(master, paste_text)
+        # Verify that deferred rendering flushed and the pasted text is visible on screen
+        out_paste = read_until(master, b"[BURST-PASTED TEXT VIA CLIPBOARD]", timeout=4.0)
+        if b"[BURST-PASTED TEXT VIA CLIPBOARD]" not in out_paste:
+            print(f"[-] Fast burst paste text missing on screen. Buffer: {repr(out_paste)}", flush=True)
+            return False
+        print("[+] Successfully verified high-speed clipboard burst paste deferred redraw!", flush=True)
+
         # Return to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")
