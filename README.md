@@ -23,6 +23,9 @@
 * **Z80 ASM Tab Handling**: Configurable tab stops (default 8 columns or 4
   columns) with visual alignment for assembly labels, opcodes, operands, and
   comments.
+* **Multi-Line Block Highlighting**: Live visual block selection (toggle with
+  `Ctrl+B`) supporting dynamic expansion/contraction across lines in reverse
+  video, with status bar line-count reporting.
 * **Pure Z80 Assembly Implementation**: Self-contained, zero-dependency
   assembly codebase (`src/se.asm`) assembled directly into `SE.COM` via `uz80as`.
 
@@ -150,7 +153,16 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 * Press **`2`** to set classic **80 columns x 24 rows** terminal mode.
 * Press **`q`**, **`Q`**, or <kbd>Ctrl+Q</kbd> to return cleanly to CP/M.
 
-### 2. Screen Size Configurations
+### 2. Editor Mode Keybindings & Hybrid Block Highlighting
+* <kbd>Ctrl+B</kbd>: Start / toggle block selection mode (anchors at cursor row & character column).
+* <kbd>Ctrl+K</kbd>: Solidify (lock/freeze) active block selection, or show Editor Keys Reference Screen if no block active.
+* <kbd>ESC</kbd>: Dismiss active or solidified block highlight (or return to splash screen if no block active).
+* <kbd>Arrow Keys</kbd> / <kbd>Home</kbd> / <kbd>End</kbd> / <kbd>PgUp</kbd> / <kbd>PgDn</kbd>: Move cursor and dynamically expand or contract block highlight (partial lines, single lines, or multi-lines).
+* <kbd>Ctrl+O</kbd>: Open interactive file browser.
+* <kbd>Ctrl+S</kbd>: Open save file screen.
+* <kbd>Ctrl+Q</kbd>: Clean exit to CP/M.
+
+### 3. Screen Size Configurations
 `SE.COM` supports both modern widescreen and retro terminal geometries:
 * **Modern Mode (120x40 - Default)**: Uses 120 columns by 40 rows, ideal for
   modern terminal emulators (e.g. Minicom, GNOME Terminal, Windows Terminal,
@@ -158,7 +170,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 * **Classic Mode (80x24)**: Uses 80 columns by 24 rows, ideal for classic VT100
   hardware terminals or 80x24 serial windows.
 
-### 3. 512KB Extended Memory Diagnostic
+### 4. 512KB Extended Memory Diagnostic
 Pressing `t` on the splash screen queries the RomWBW HBIOS API (`RST 08H`), reports
 hardware memory capacity, and runs an inter-bank DMA transfer (`SYSSETCPY` / `SYSBNKCPY`)
 between CP/M User RAM and upper 32KB RAM banks:

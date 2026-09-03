@@ -19,6 +19,7 @@ MAX_FAR_BANKS	.EQU	14		; Up to 14 extended 32KB RAM banks (448 KB)
 CACHE_SIZE_LINES .EQU	48		; 48 lines in local working cache (6 KB)
 MAX_DOC_LINES	.EQU	3584		; 14 banks * 256 lines = 3584 total lines
 
+KEY_CTRL_B	.EQU	2		; Toggle Block Highlighting
 KEY_CTRL_C	.EQU	3
 KEY_CTRL_Q	.EQU	17
 KEY_CTRL_S	.EQU	19
@@ -119,6 +120,8 @@ RESUME_EDITOR:
 	RET
 
 SHOW_SPLASH_SCREEN:
+	XOR	A
+	LD	(BLOCK_ACTIVE),A
 SPLASH_START:
 	CALL	RENDER_SPLASH
 
@@ -245,9 +248,18 @@ CHECK_CTRL_O:
 	JP	MAIN_LOOP
 
 CHECK_CTRL_K:
-	; Command: Ctrl+K -> Editor Mode Keys Screen
 	CP	KEY_CTRL_K
 	JR	NZ,CHECK_CTRL_D
+
+	LD	A,(BLOCK_ACTIVE)
+	CP	1			; Is dynamic block selection active?
+	JR	NZ,DO_HELP_SCREEN	; If not in selection mode, show help screen!
+
+	; Solidify active block
+	CALL	SOLIDIFY_BLOCK
+	JP	MAIN_LOOP
+
+DO_HELP_SCREEN:
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	SHOW_HELP_KEYS_UI
 	CALL	TERM_INIT
@@ -283,10 +295,12 @@ CHECK_PAGE_KEYS:
 	CP	7			; Ctrl+G
 	JR	Z,DO_JUMP_BOTTOM
 
-	; Command: Ctrl+U or Ctrl+B -> Page Up
-	CP	21			; Ctrl+U
-	JR	Z,DO_PAGE_UP
-	CP	2			; Ctrl+B
+	; Command: Ctrl+B -> Toggle Block Highlighting
+	CP	KEY_CTRL_B		; Ctrl+B
+	JR	Z,DO_TOGGLE_BLOCK
+
+	; Command: Ctrl+U -> Page Up
+	CP	KEY_CTRL_U		; Ctrl+U
 	JR	Z,DO_PAGE_UP
 
 	; Command: Ctrl+V -> Page Down
@@ -313,6 +327,10 @@ DO_JUMP_TOP:
 
 DO_JUMP_BOTTOM:
 	CALL	JUMP_FILE_BOTTOM
+	JP	MAIN_LOOP
+
+DO_TOGGLE_BLOCK:
+	CALL	TOGGLE_BLOCK_MODE
 	JP	MAIN_LOOP
 
 DO_PAGE_UP:
@@ -1447,6 +1465,262 @@ PRINT_DIGIT:
 
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
+; Block Selection & Highlighting Engine (Hybrid Character & Line Blocking)
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; TOGGLE_BLOCK_MODE: Toggle block selection on/off at (CUR_DOC_ROW, CUR_COL)
+;------------------------------------------------------------------------------
+TOGGLE_BLOCK_MODE:
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	JR	NZ,TBM_DEACTIVATE
+
+	; Block activated: anchor at current document row & column
+	LD	A,1
+	LD	(BLOCK_ACTIVE),A
+	LD	HL,(CUR_DOC_ROW)
+	LD	(BLOCK_ANCHOR_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(BLOCK_ANCHOR_COL),A
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+TBM_DEACTIVATE:
+	; Block deactivated: clear highlight
+	XOR	A
+	LD	(BLOCK_ACTIVE),A
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+;------------------------------------------------------------------------------
+; SOLIDIFY_BLOCK: Lock/freeze active block selection coordinates with Ctrl+K
+;------------------------------------------------------------------------------
+SOLIDIFY_BLOCK:
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	RET	NZ			; Only dynamic selection can be solidified
+	CALL	NORMALIZE_BLOCK_BOUNDS
+	LD	A,2
+	LD	(BLOCK_ACTIVE),A	; State 2 = Solidified / Locked
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+;------------------------------------------------------------------------------
+; NORMALIZE_BLOCK_BOUNDS: Normalize (anchor, cursor) into (START, END) bounds
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+NORMALIZE_BLOCK_BOUNDS:
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	RET	Z			; No block active
+	CP	2
+	RET	Z			; Already solidified, bounds locked
+
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	HL,(BLOCK_ANCHOR_ROW)
+	LD	DE,(CUR_DOC_ROW)
+	LD	A,(BLOCK_ANCHOR_COL)
+	LD	B,A
+	LD	A,(CUR_COL)
+	LD	C,A
+
+	; Compare HL and DE
+	LD	A,H
+	CP	D
+	JR	C,NBB_ANCHOR_FIRST
+	JR	NZ,NBB_CUR_FIRST
+	LD	A,L
+	CP	E
+	JR	C,NBB_ANCHOR_FIRST
+	JR	NZ,NBB_CUR_FIRST
+
+	; Same row: compare B and C
+	LD	(BLOCK_START_ROW),HL
+	LD	(BLOCK_END_ROW),HL
+	LD	A,B
+	CP	C
+	JR	C,NBB_COL_BC
+	JR	Z,NBB_COL_BC
+	; B > C
+	LD	A,C
+	LD	(BLOCK_START_COL),A
+	LD	A,B
+	LD	(BLOCK_END_COL),A
+	JR	NBB_DONE
+
+NBB_COL_BC:
+	LD	A,B
+	LD	(BLOCK_START_COL),A
+	LD	A,C
+	LD	(BLOCK_END_COL),A
+	JR	NBB_DONE
+
+NBB_ANCHOR_FIRST:
+	LD	(BLOCK_START_ROW),HL
+	LD	A,B
+	LD	(BLOCK_START_COL),A
+	LD	(BLOCK_END_ROW),DE
+	LD	A,C
+	LD	(BLOCK_END_COL),A
+	JR	NBB_DONE
+
+NBB_CUR_FIRST:
+	LD	(BLOCK_START_ROW),DE
+	LD	A,C
+	LD	(BLOCK_START_COL),A
+	LD	(BLOCK_END_ROW),HL
+	LD	A,B
+	LD	(BLOCK_END_COL),A
+
+NBB_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; GET_BLOCK_BOUNDS: Return normalized bounds and line count of active block
+; Returns: Carry=0, HL = start doc line, DE = end doc line, BC = line count
+;          Carry=1 if no block active
+; Preserves: None
+;------------------------------------------------------------------------------
+GET_BLOCK_BOUNDS:
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	SCF
+	RET	Z
+
+	CALL	NORMALIZE_BLOCK_BOUNDS
+
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	PUSH	DE
+	EX	DE,HL			; DE = start, HL = end
+	AND	A
+	SBC	HL,DE			; HL = end - start
+	INC	HL			; HL = line count
+	LD	B,H
+	LD	C,L			; BC = line count
+	POP	DE			; DE = end
+	EX	DE,HL			; HL = start, DE = end
+	OR	A			; Carry = 0 (success)
+	RET
+
+;------------------------------------------------------------------------------
+; GET_LINE_BLOCK_RANGE: Compute character highlight range for document row BC
+; Inputs: BC = 16-bit Document Line Index (0..3583)
+; Returns: Carry=0: D = start character col, E = end character col (254=to EOL)
+;          Carry=1: no highlight on this line
+; Preserves: BC, HL
+;------------------------------------------------------------------------------
+GET_LINE_BLOCK_RANGE:
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	SCF
+	RET	Z			; Carry = 1: no block active
+
+	PUSH	BC
+	PUSH	HL
+
+	CALL	NORMALIZE_BLOCK_BOUNDS
+
+	; Check if BC < BLOCK_START_ROW
+	LD	HL,(BLOCK_START_ROW)
+	LD	A,B
+	CP	H
+	JR	C,GLBR_NONE
+	JR	NZ,GLBR_CHECK_MAX
+	LD	A,C
+	CP	L
+	JR	C,GLBR_NONE
+
+GLBR_CHECK_MAX:
+	; Check if BC > BLOCK_END_ROW
+	LD	HL,(BLOCK_END_ROW)
+	LD	A,H
+	CP	B
+	JR	C,GLBR_NONE
+	JR	NZ,GLBR_IN_RANGE
+	LD	A,L
+	CP	C
+	JR	C,GLBR_NONE
+
+GLBR_IN_RANGE:
+	; BC is within [BLOCK_START_ROW, BLOCK_END_ROW]
+	; Check if BC == BLOCK_START_ROW
+	LD	HL,(BLOCK_START_ROW)
+	LD	A,B
+	CP	H
+	JR	NZ,GLBR_NOT_START_ROW
+	LD	A,C
+	CP	L
+	JR	NZ,GLBR_NOT_START_ROW
+
+	; BC == BLOCK_START_ROW!
+	; Check if it is also BLOCK_END_ROW (single line block)
+	LD	HL,(BLOCK_END_ROW)
+	LD	A,B
+	CP	H
+	JR	NZ,GLBR_START_ONLY
+	LD	A,C
+	CP	L
+	JR	NZ,GLBR_START_ONLY
+
+	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL
+	LD	A,(BLOCK_START_COL)
+	LD	D,A
+	LD	A,(BLOCK_END_COL)
+	LD	E,A
+	JR	GLBR_OK
+
+GLBR_START_ONLY:
+	; First line of multi-line block: StartCol = BLOCK_START_COL, EndCol = 254
+	LD	A,(BLOCK_START_COL)
+	LD	D,A
+	LD	E,254
+	JR	GLBR_OK
+
+GLBR_NOT_START_ROW:
+	; BC > BLOCK_START_ROW. Check if BC == BLOCK_END_ROW
+	LD	HL,(BLOCK_END_ROW)
+	LD	A,B
+	CP	H
+	JR	NZ,GLBR_MIDDLE_ROW
+	LD	A,C
+	CP	L
+	JR	NZ,GLBR_MIDDLE_ROW
+
+	; Last line of multi-line block: StartCol = 0, EndCol = BLOCK_END_COL
+	LD	D,0
+	LD	A,(BLOCK_END_COL)
+	LD	E,A
+	JR	GLBR_OK
+
+GLBR_MIDDLE_ROW:
+	; Middle full line: StartCol = 0, EndCol = 254
+	LD	D,0
+	LD	E,254
+
+GLBR_OK:
+	POP	HL
+	POP	BC
+	OR	A			; Carry = 0: line has block range [D, E]
+	RET
+
+GLBR_NONE:
+	POP	HL
+	POP	BC
+	SCF				; Carry = 1: no block on this line
+	RET
+
+;------------------------------------------------------------------------------
 ; Editor Screen Renderer
 ;------------------------------------------------------------------------------
 RENDER_SCREEN:
@@ -1528,25 +1802,79 @@ RENDER_CURRENT_LINE:
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
 
-	; Get pointer to current line in cache
+	LD	BC,(CUR_DOC_ROW)
+	CALL	GET_LINE_BLOCK_RANGE
+	JR	C,RCL_NO_BLOCK_LINE
+
+	LD	A,1
+	LD	(LINE_BLK_ACTIVE),A
+	LD	A,D
+	LD	(LINE_BLK_START),A
+	LD	A,E
+	LD	(LINE_BLK_END),A
+	XOR	A
+	LD	(LINE_IN_INVERSE),A
+	JR	RCL_LOAD_LINE
+
+RCL_NO_BLOCK_LINE:
+	XOR	A
+	LD	(LINE_BLK_ACTIVE),A
+	LD	(LINE_IN_INVERSE),A
+
+RCL_LOAD_LINE:
 	LD	BC,(CUR_DOC_ROW)
 	CALL	ENSURE_CACHE_WINDOW	; HL = pointer to line start in LINE_STORAGE
 
-PRINT_CUR_LINE_CHARS:
+	LD	A,(HL)
+	OR	A
+	JR	NZ,RCL_START_CHARS
+
+	; Empty line
+	LD	A,(LINE_BLK_ACTIVE)
+	OR	A
+	JP	Z,PRINT_CUR_LINE_DONE
+	LD	A,(LINE_BLK_START)
+	OR	A
+	JP	NZ,PRINT_CUR_LINE_DONE
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	A,' '
+	CALL	PUTC
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	JP	PRINT_CUR_LINE_DONE
+
+RCL_START_CHARS:
 	LD	B,0			; B = visual column accumulator
+	LD	D,0			; D = character index in line
+
 PRINT_CUR_LINE_LOOP:
 	LD	A,(HL)
 	OR	A
 	JR	Z,PRINT_CUR_LINE_DONE
+
+	LD	A,(LINE_BLK_ACTIVE)
+	OR	A
+	JR	Z,PCL_PRINT_CHAR
+
+	LD	A,(LINE_BLK_START)
+	CP	D
+	JR	NZ,PCL_PRINT_CHAR
+	PUSH	DE
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	POP	DE
+	LD	A,1
+	LD	(LINE_IN_INVERSE),A
+
+PCL_PRINT_CHAR:
+	LD	A,(HL)
 	CP	KEY_TAB
 	JR	Z,PRINT_CUR_TAB
 	CALL	PUTC
 	INC	HL
 	INC	B
-	LD	A,(ACTIVE_COLS)
-	CP	B
-	JR	Z,PRINT_CUR_LINE_DONE
-	JR	PRINT_CUR_LINE_LOOP
+	JR	PCL_AFTER_CHAR
 
 PRINT_CUR_TAB:
 	INC	HL
@@ -1565,9 +1893,41 @@ PRINT_CUR_TAB_SPACES:
 	INC	B
 	DEC	C
 	JR	NZ,PRINT_CUR_TAB_SPACES
+
+PCL_AFTER_CHAR:
+	LD	A,(LINE_BLK_ACTIVE)
+	OR	A
+	JR	Z,PCL_NEXT_CHAR
+	LD	A,(LINE_IN_INVERSE)
+	OR	A
+	JR	Z,PCL_NEXT_CHAR
+	LD	A,(LINE_BLK_END)
+	CP	D
+	JR	NZ,PCL_NEXT_CHAR
+	PUSH	DE
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	POP	DE
+	XOR	A
+	LD	(LINE_IN_INVERSE),A
+
+PCL_NEXT_CHAR:
+	INC	D
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,PRINT_CUR_LINE_DONE
 	JR	PRINT_CUR_LINE_LOOP
 
 PRINT_CUR_LINE_DONE:
+	LD	A,(LINE_IN_INVERSE)
+	OR	A
+	JR	Z,RCL_DONE_RESTORE
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	XOR	A
+	LD	(LINE_IN_INVERSE),A
+
+RCL_DONE_RESTORE:
 	CALL	RENDER_STATUS_BAR
 	RET
 
@@ -1616,23 +1976,83 @@ RENDER_BUFFER_LINE:
 	CALL	PRINT_STR
 
 	; BC has target doc_line
+	CALL	GET_LINE_BLOCK_RANGE
+	JR	C,RBL_NO_BLOCK_LINE
+
+	; Line is in block
+	LD	A,1
+	LD	(LINE_BLK_ACTIVE),A
+	LD	A,D
+	LD	(LINE_BLK_START),A
+	LD	A,E
+	LD	(LINE_BLK_END),A
+	XOR	A
+	LD	(LINE_IN_INVERSE),A
+	JR	RBL_LOAD_LINE
+
+RBL_NO_BLOCK_LINE:
+	XOR	A
+	LD	(LINE_BLK_ACTIVE),A
+	LD	(LINE_IN_INVERSE),A
+
+RBL_LOAD_LINE:
 	CALL	ENSURE_CACHE_WINDOW	; HL = pointer to line start in LINE_STORAGE
 
-	; Print characters directly
+	; Check if line is empty (HL == 0)
+	LD	A,(HL)
+	OR	A
+	JR	NZ,RBL_START_CHARS
+
+	; Line is empty
+	LD	A,(LINE_BLK_ACTIVE)
+	OR	A
+	JP	Z,PRINT_LINE_END
+	; Empty line in block: if start_col == 0, print an inverted space indicator
+	LD	A,(LINE_BLK_START)
+	OR	A
+	JP	NZ,PRINT_LINE_END
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	A,' '
+	CALL	PUTC
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	JP	PRINT_LINE_END
+
+RBL_START_CHARS:
 	LD	B,0			; B = visual column accumulator
+	LD	D,0			; D = character index in line
+
 PRINT_LINE_CHARS:
 	LD	A,(HL)
 	OR	A
 	JR	Z,PRINT_LINE_END
+
+	; Check block highlight attribute transitions
+	LD	A,(LINE_BLK_ACTIVE)
+	OR	A
+	JR	Z,PLC_PRINT_CHAR
+
+	; Check if D == LINE_BLK_START
+	LD	A,(LINE_BLK_START)
+	CP	D
+	JR	NZ,PLC_PRINT_CHAR
+	; Start highlight
+	PUSH	DE
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	POP	DE
+	LD	A,1
+	LD	(LINE_IN_INVERSE),A
+
+PLC_PRINT_CHAR:
+	LD	A,(HL)
 	CP	KEY_TAB
 	JR	Z,PRINT_LINE_TAB
 	CALL	PUTC
 	INC	HL
 	INC	B
-	LD	A,(ACTIVE_COLS)
-	CP	B
-	JR	Z,PRINT_LINE_END
-	JR	PRINT_LINE_CHARS
+	JR	PLC_AFTER_CHAR
 
 PRINT_LINE_TAB:
 	INC	HL
@@ -1651,9 +2071,44 @@ PRINT_LINE_TAB_SPACES:
 	INC	B
 	DEC	C
 	JR	NZ,PRINT_LINE_TAB_SPACES
+
+PLC_AFTER_CHAR:
+	; Check if D == LINE_BLK_END (turn off inverse after this char)
+	LD	A,(LINE_BLK_ACTIVE)
+	OR	A
+	JR	Z,PLC_NEXT_CHAR
+	LD	A,(LINE_IN_INVERSE)
+	OR	A
+	JR	Z,PLC_NEXT_CHAR
+	LD	A,(LINE_BLK_END)
+	CP	D
+	JR	NZ,PLC_NEXT_CHAR
+	; Turn off inverse video
+	PUSH	DE
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	POP	DE
+	XOR	A
+	LD	(LINE_IN_INVERSE),A
+
+PLC_NEXT_CHAR:
+	INC	D			; Next character index
+	LD	A,(ACTIVE_COLS)
+	CP	B
+	JR	Z,PRINT_LINE_END
 	JR	PRINT_LINE_CHARS
 
 PRINT_LINE_END:
+	; If inverse video was left on (e.g. EndCol = 254), turn it off
+	LD	A,(LINE_IN_INVERSE)
+	OR	A
+	JR	Z,RBL_DONE_CRLF
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	XOR	A
+	LD	(LINE_IN_INVERSE),A
+
+RBL_DONE_CRLF:
 	LD	A,13
 	CALL	PUTC
 	LD	A,10
@@ -1713,6 +2168,83 @@ SHOW_LINUX_FMT:
 	CALL	PRINT_STR
 
 SHOW_STATUS_REST:
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	JR	Z,SHOW_STATUS_NORMAL_KEYS
+
+	CALL	NORMALIZE_BLOCK_BOUNDS
+
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	Z,STATUS_SOLIDIFIED
+
+	; Dynamic selection active: "[SEL: "
+	LD	DE,STR_SEL_PREFIX
+	CALL	PRINT_STR
+
+	; Check if single-line or multi-line
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,STATUS_SEL_MULTILINE
+	LD	A,L
+	CP	E
+	JR	NZ,STATUS_SEL_MULTILINE
+
+	; Single-line selection: chars count
+	LD	A,(BLOCK_END_COL)
+	LD	HL,BLOCK_START_COL
+	SUB	(HL)
+	INC	A			; A = char count
+	CALL	PRINT_DEC_BYTE
+	LD	DE,STR_CHAR_SUFFIX	; "c] | "
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
+STATUS_SEL_MULTILINE:
+	CALL	GET_BLOCK_BOUNDS	; BC = line count
+	LD	L,C
+	LD	H,B
+	CALL	PRINT_DEC_WORD
+	LD	DE,STR_LINE_SUFFIX	; "L] | "
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
+STATUS_SOLIDIFIED:
+	; Solidified block: "[BLK: "
+	LD	DE,STR_BLK_PREFIX
+	CALL	PRINT_STR
+
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,STATUS_SOLID_MULTILINE
+	LD	A,L
+	CP	E
+	JR	NZ,STATUS_SOLID_MULTILINE
+
+	; Single-line solidified: chars count
+	LD	A,(BLOCK_END_COL)
+	LD	HL,BLOCK_START_COL
+	SUB	(HL)
+	INC	A			; A = char count
+	CALL	PRINT_DEC_BYTE
+	LD	DE,STR_CHAR_LOCK_SUFFIX	; "c LOCK] | "
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
+STATUS_SOLID_MULTILINE:
+	CALL	GET_BLOCK_BOUNDS	; BC = line count
+	LD	L,C
+	LD	H,B
+	CALL	PRINT_DEC_WORD
+	LD	DE,STR_LINE_LOCK_SUFFIX	; "L LOCK] | "
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
+SHOW_STATUS_NORMAL_KEYS:
 	LD	DE,STR_STATUS_KEYS
 	CALL	PRINT_STR
 
@@ -2571,7 +3103,18 @@ WAIT_ESC_BYTE:
 	LD	A,B
 	OR	C
 	JR	NZ,WAIT_ESC_BYTE
-	; Timeout: Standalone ESC key pressed -> Show Splash Screen
+	; Timeout: Standalone ESC key pressed
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	JR	Z,ESC_TO_SPLASH
+	; Block selection active: cancel block highlight instead of exiting to splash
+	XOR	A
+	LD	(BLOCK_ACTIVE),A
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+ESC_TO_SPLASH:
 	CALL	SHOW_SPLASH_SCREEN
 	RET
 
@@ -2754,6 +3297,11 @@ CURSOR_HOME:
 	XOR	A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	RET	NZ
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
 	RET
 
 CURSOR_END:
@@ -2761,6 +3309,11 @@ CURSOR_END:
 	LD	A,B
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	RET	NZ
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
 	RET
 
 ;;------------------------------------------------------------------------------
@@ -2885,6 +3438,11 @@ C_UP_SCROLL:
 
 CUR_UP_NO_SCROLL:
 	CALL	ADJUST_COL_TO_TARGET
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	RET	Z
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
 	RET
 
 CURSOR_DOWN:
@@ -2930,6 +3488,11 @@ C_DOWN_MOVE:
 
 CUR_DOWN_NO_SCROLL:
 	CALL	ADJUST_COL_TO_TARGET
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	RET	Z
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
 	RET
 
 CUR_DOWN_NO_MOVE:
@@ -2943,6 +3506,11 @@ CURSOR_LEFT:
 	LD	(CUR_COL),A
 	CALL	CALC_VISUAL_COL
 	LD	(TARGET_COL),A		; Horizontal movement updates sticky target visual column
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	RET	NZ
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
 	RET
 
 CURSOR_LEFT_PREV_LINE:
@@ -2981,6 +3549,11 @@ CL_NO_SCROLL:
 	LD	(CUR_COL),A
 	CALL	CALC_VISUAL_COL
 	LD	(TARGET_COL),A
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	RET	Z
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
 	RET
 
 CURSOR_RIGHT:
@@ -3003,6 +3576,11 @@ CURSOR_RIGHT:
 	LD	(CUR_COL),A
 	CALL	CALC_VISUAL_COL
 	LD	(TARGET_COL),A		; Horizontal movement updates sticky target visual column
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	RET	NZ
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
 	RET
 
 CURSOR_RIGHT_NEXT_LINE:
@@ -3033,11 +3611,19 @@ CR_WRAP_OK:
 	DEC	A
 	DEC	A
 	CP	L
-	RET	NC
+	JR	NC,CR_NO_SCROLL_BLOCK_CHECK
 
 	LD	HL,(TOP_DOC_ROW)
 	INC	HL
 	LD	(TOP_DOC_ROW),HL
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+CR_NO_SCROLL_BLOCK_CHECK:
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	RET	Z
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
 	RET
@@ -4073,6 +4659,8 @@ LOAD_FINISH:
 	CALL	WRITE_FAR_SLOT
 
 LOAD_INIT_CACHE:
+	XOR	A
+	LD	(BLOCK_ACTIVE),A
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	OR	A			; Carry = 0 (success)
 	RET
@@ -4099,6 +4687,7 @@ INIT_EMPTY_DOCUMENT:
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
 	LD	(CACHE_DIRTY),A
+	LD	(BLOCK_ACTIVE),A
 
 	; Write empty line to line 0 in Far RAM
 	CALL	CLEAR_LOAD_TEMP
@@ -5907,6 +6496,24 @@ STR_FMT_LINUX:
 STR_STATUS_KEYS:
 	.DB	"^K: Editor keys | ","$"
 
+STR_SEL_PREFIX:
+	.DB	"[SEL: ","$"
+
+STR_BLK_PREFIX:
+	.DB	"[BLK: ","$"
+
+STR_CHAR_SUFFIX:
+	.DB	"c] | ","$"
+
+STR_LINE_SUFFIX:
+	.DB	"L] | ","$"
+
+STR_CHAR_LOCK_SUFFIX:
+	.DB	"c LOCK] | ","$"
+
+STR_LINE_LOCK_SUFFIX:
+	.DB	"L LOCK] | ","$"
+
 STR_HELP_SCREEN:
 	.DB	27,"[H",27,"[2J"
 	.DB	"================================================================================",13,10
@@ -5914,17 +6521,18 @@ STR_HELP_SCREEN:
 	.DB	"================================================================================",13,10
 	.DB	"  FILE & SYSTEM:",13,10
 	.DB	"    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
-	.DB	"    Ctrl+Q           Quit to CP/M            ESC             Splash screen",13,10
-	.DB	"    Ctrl+K           Show this help",13,10,13,10
+	.DB	"    Ctrl+Q           Quit to CP/M            ESC             Splash / Clear block",13,10
+	.DB	"    Ctrl+K           Help / Solidify block",13,10,13,10
 	.DB	"  NAVIGATION:",13,10
 	.DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
 	.DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
 	.DB	"    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
 	.DB	"                                             Ctrl+G / ^End   Bottom of file",13,10,13,10
-	.DB	"  EDITING:",13,10
+	.DB	"  EDITING & BLOCK:",13,10
 	.DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
 	.DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
-	.DB	"    Tab              Tab (8-column stop)",13,10,13,10
+	.DB	"    Ctrl+B           Start/Toggle block      Ctrl+K          Solidify block",13,10
+	.DB	"    Tab              Tab (8-column stop)     ESC             Clear block",13,10
 	.DB	"================================================================================",13,10
 	.DB	"                      Press any key to return to editor...",13,10,"$"
 
@@ -6051,6 +6659,18 @@ CHAR_INSERT_TEMP:.DB	0
 CSI_DIGIT_PREFIX:.DB	0
 JOIN_COL_SAVED:	.DB	0
 JOIN_DOC_LINE:	.DW	0
+BLOCK_ACTIVE:	.DB	0		; 0 = inactive, 1 = selecting, 2 = solidified
+BLOCK_ANCHOR_ROW:.DW	0		; 16-bit document row where block started
+BLOCK_ANCHOR_COL:.DB	0		; 8-bit character column where block started
+BLOCK_START_ROW:.DW	0		; Normalized start row
+BLOCK_START_COL:.DB	0		; Normalized start col
+BLOCK_END_ROW:	.DW	0		; Normalized end row
+BLOCK_END_COL:	.DB	0		; Normalized end col
+
+LINE_BLK_ACTIVE:.DB	0		; 1 if rendered line is in block
+LINE_BLK_START:	.DB	0		; Start character column of highlight on line
+LINE_BLK_END:	.DB	0		; End character column of highlight on line
+LINE_IN_INVERSE:.DB	0		; 1 if terminal currently has inverse video ON
 
 NEED_SCREEN_RENDER:	.DB	0	; 1 if full screen redraw pending
 NEED_LINE_RENDER:	.DB	0	; 1 if current line redraw pending

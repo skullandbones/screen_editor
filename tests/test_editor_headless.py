@@ -998,6 +998,94 @@ def test_se_execution():
             return False
         print("[+] Successfully verified slot allocation, deallocation, and recycling from Extended RAM!", flush=True)
 
+        # 34. Test Hybrid Block Highlighting & Ctrl+K Solidification
+        time.sleep(0.2)
+        drain_all(master)
+        # Move to top of document (Ctrl+T) and column 0 (Ctrl+A)
+        os.write(master, b"\x14\x01")
+        read_until(master, b"Row 1/", timeout=4.0)
+
+        # Press Ctrl+B (\x02) to activate block mode at Row 1, Col 0
+        os.write(master, b"\x02")
+        out_blk1c = read_until(master, b"[SEL: 1c]", timeout=4.0)
+        if b"[SEL: 1c]" not in out_blk1c:
+            print(f"[-] Hybrid block activation failed (expected [SEL: 1c]). Buffer: {repr(out_blk1c)}", flush=True)
+            return False
+        # Verify screen did not corrupt (subsequent lines must remain distinct and not repeat line 1)
+        if b"Line 02 of " not in out_blk1c or b"Line 03 of " not in out_blk1c:
+            print(f"[-] Screen corruption detected after Ctrl+B! Distinct lines missing. Buffer: {repr(out_blk1c)}", flush=True)
+            return False
+
+        # Move cursor right 5 columns to expand partial line selection to 6 characters
+        os.write(master, b"\x1b[C" * 5)
+        out_blk6c = read_until(master, b"[SEL: 6c]", timeout=4.0)
+        if b"[SEL: 6c]" not in out_blk6c:
+            print(f"[-] Partial single-line expansion failed (expected [SEL: 6c]). Buffer: {repr(out_blk6c)}", flush=True)
+            return False
+        # Verify inverse video sequence \x1b[7m is emitted in buffer
+        if b"\x1b[7m" not in out_blk6c:
+            print(f"[-] Inverse video escape sequence missing during block highlight. Buffer: {repr(out_blk6c)}", flush=True)
+            return False
+
+        # Move cursor down 2 rows to expand block to 3 lines
+        os.write(master, b"\x1b[B\x1b[B")
+        out_blk3l = read_until(master, b"[SEL: 3L]", timeout=4.0)
+        if b"[SEL: 3L]" not in out_blk3l:
+            print(f"[-] Multi-line block expansion failed (expected [SEL: 3L]). Buffer: {repr(out_blk3l)}", flush=True)
+            return False
+
+        # Move cursor up 1 row to contract block to 2 lines
+        os.write(master, b"\x1b[A")
+        out_blk2l = read_until(master, b"[SEL: 2L]", timeout=4.0)
+        if b"[SEL: 2L]" not in out_blk2l:
+            print(f"[-] Multi-line block contraction failed (expected [SEL: 2L]). Buffer: {repr(out_blk2l)}", flush=True)
+            return False
+
+        # Solidify block with Ctrl+K (\x0b)
+        os.write(master, b"\x0b")
+        out_solid = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
+        if b"[BLK: 2L LOCK]" not in out_solid:
+            print(f"[-] Ctrl+K block solidification failed (expected [BLK: 2L LOCK]). Buffer: {repr(out_solid)}", flush=True)
+            return False
+
+        # Move cursor down after solidification; verify block remains locked
+        os.write(master, b"\x1b[B")
+        time.sleep(0.1)
+        drain_all(master)
+        # Redraw status / verify locked state
+        os.write(master, b"\x1b[A")
+        out_still_locked = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
+        if b"[BLK: 2L LOCK]" not in out_still_locked:
+            print(f"[-] Block did not remain locked after cursor movement. Buffer: {repr(out_still_locked)}", flush=True)
+            return False
+
+        # Press ESC to cancel solidified block mode (should clear [BLK: ... LOCK] and stay in editor)
+        os.write(master, b"\x1b")
+        out_esc_blk = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"^K: Editor keys" not in out_esc_blk:
+            print(f"[-] ESC failed to cancel solidified block. Buffer: {repr(out_esc_blk)}", flush=True)
+            return False
+
+        # Verify single-line partial block with Ctrl+K solidification
+        os.write(master, b"\x02")
+        read_until(master, b"[SEL: 1c]", timeout=4.0)
+        os.write(master, b"\x1b[C" * 3)
+        read_until(master, b"[SEL: 4c]", timeout=4.0)
+        os.write(master, b"\x0b")
+        out_solid_c = read_until(master, b"[BLK: 4c LOCK]", timeout=4.0)
+        if b"[BLK: 4c LOCK]" not in out_solid_c:
+            print(f"[-] Single-line Ctrl+K solidification failed. Buffer: {repr(out_solid_c)}", flush=True)
+            return False
+
+        # Cancel with Ctrl+B
+        os.write(master, b"\x02")
+        out_toggle_off = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"^K: Editor keys" not in out_toggle_off:
+            print(f"[-] Ctrl+B cancel of solidified block failed. Buffer: {repr(out_toggle_off)}", flush=True)
+            return False
+
+        print("[+] Successfully verified hybrid character & line block highlighting and Ctrl+K solidification!", flush=True)
+
         # Return to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")
