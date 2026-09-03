@@ -978,6 +978,26 @@ def test_se_execution():
             return False
         print("[+] Successfully verified high-speed clipboard burst paste deferred redraw!", flush=True)
 
+        # 33. Test Line Slot Indirection & Slot Recycling from Extended RAM
+        time.sleep(0.2)
+        drain_all(master)
+        # Split line with Enter to allocate a slot
+        os.write(master, b"\rSLOT_RECYCLE_TEST_LINE\rANOTHER_LINE")
+        out_split = read_until(master, b"ANOTHER_LINE", timeout=4.0)
+        if b"ANOTHER_LINE" not in out_split:
+            print(f"[-] Line split/slot alloc failed. Buffer: {repr(out_split)}", flush=True)
+            return False
+        # Move to column 0 of ANOTHER_LINE and press Backspace to join lines and free the slot to Extended RAM
+        os.write(master, b"\x01\x08")  # Ctrl+A (col 0), Backspace (join)
+        time.sleep(0.2)
+        # Press Enter again to re-allocate from the Extended RAM free list
+        os.write(master, b"\rRECYCLED_SLOT_LINE")
+        out_recycled = read_until(master, b"RECYCLED_SLOT_LINE", timeout=4.0)
+        if b"RECYCLED_SLOT_LINE" not in out_recycled:
+            print(f"[-] Slot recycling failed. Buffer: {repr(out_recycled)}", flush=True)
+            return False
+        print("[+] Successfully verified slot allocation, deallocation, and recycling from Extended RAM!", flush=True)
+
         # Return to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")
