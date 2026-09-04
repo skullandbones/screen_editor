@@ -275,7 +275,14 @@ CHECK_CTRL_D:
 	; Command: Ctrl+D -> Delete character under cursor (Forward Delete)
 	CP	4
 	JR	NZ,CHECK_PAGE_KEYS
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	Z,DO_CTRL_D_BLOCK
 	CALL	DO_DELETE_FORWARD
+	JP	MAIN_LOOP
+
+DO_CTRL_D_BLOCK:
+	CALL	DO_DELETE_BLOCK
 	JP	MAIN_LOOP
 
 CHECK_PAGE_KEYS:
@@ -357,6 +364,10 @@ CHECK_BACKSPACE:
 	JR	NZ,CHECK_ESC_SEQ
 
 DO_HANDLE_BS:
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	Z,DO_BS_BLOCK
+
 	LD	A,(CUR_COL)
 	OR	A
 	JR	Z,DO_HANDLE_BS_COL0
@@ -365,6 +376,10 @@ DO_HANDLE_BS:
 	CALL	DO_DELETE_CHAR
 	LD	A,1
 	LD	(NEED_LINE_RENDER),A
+	JP	MAIN_LOOP
+
+DO_BS_BLOCK:
+	CALL	DO_DELETE_BLOCK
 	JP	MAIN_LOOP
 
 DO_HANDLE_BS_COL0:
@@ -1763,6 +1778,283 @@ GCTE_IS_TAB:
 
 GCTE_NO_CHARS:
 	SCF				; Carry = 1: no highlight on this line
+	RET
+
+;------------------------------------------------------------------------------
+; DO_DELETE_BLOCK: Delete solidified block selection
+;------------------------------------------------------------------------------
+DO_DELETE_BLOCK:
+	LD	A,(BLOCK_ACTIVE)
+	CP	2			; Only solidified blocks can be deleted
+	RET	NZ
+
+	CALL	FLUSH_DIRTY_CACHE
+	CALL	NORMALIZE_BLOCK_BOUNDS
+
+	; Check if single-line or multi-line block
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,DO_DEL_BLK_MULTILINE
+	LD	A,L
+	CP	E
+	JR	NZ,DO_DEL_BLK_MULTILINE
+
+	;--------------------------------------------------------------------------
+	; CASE 1: Single-Line Block Deletion
+	;--------------------------------------------------------------------------
+DO_DEL_BLK_SINGLE:
+	LD	BC,(BLOCK_START_ROW)
+	CALL	GET_LINE_BLOCK_RANGE	; Carry=0: D = StartCol, E = EndCol
+	JP	C,DO_DEL_BLK_FINISH	; If Carry=1, no characters in block range
+
+	PUSH	DE			; D = StartCol, E = EndCol
+
+	; Read the line into LOAD_LINE_TEMP
+	LD	BC,(BLOCK_START_ROW)
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	POP	BC			; B = StartCol, C = EndCol
+
+	; Source pointer: HL = LOAD_LINE_TEMP + EndCol + 1
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,C
+	INC	A
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = LOAD_LINE_TEMP + EndCol + 1 (source)
+
+	; Destination pointer: DE = LOAD_LINE_TEMP + StartCol
+	LD	DE,LOAD_LINE_TEMP
+	LD	A,B
+	LD	C,A
+	LD	B,0
+	EX	DE,HL
+	ADD	HL,BC
+	EX	DE,HL			; DE = destination
+
+	; Shift characters left from HL into DE until null terminator
+DEL_BLK_SINGLE_SHIFT:
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,DEL_BLK_SINGLE_SHIFT
+
+	; Write updated line back to Far RAM
+	LD	BC,(BLOCK_START_ROW)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; Update cursor position to (BLOCK_START_ROW, BLOCK_START_COL)
+	LD	HL,(BLOCK_START_ROW)
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(BLOCK_START_COL)
+	LD	(CUR_COL),A
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A
+
+	JP	DO_DEL_BLK_FINISH
+
+	;--------------------------------------------------------------------------
+	; CASE 2: Multi-Line Block Deletion
+	;--------------------------------------------------------------------------
+DO_DEL_BLK_MULTILINE:
+	; Step 1: Process head of first line (BLOCK_START_ROW)
+	; Read first line into LOAD_LINE_TEMP
+	LD	BC,(BLOCK_START_ROW)
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	; Truncate at StartCol by writing null terminator
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,(BLOCK_START_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),0			; Truncate head
+
+	; Step 2: Process tail of last line (BLOCK_END_ROW)
+	LD	BC,(BLOCK_END_ROW)
+	CALL	GET_LINE_BLOCK_RANGE	; Carry=0: D=0, E=EndCol. Carry=1: no highlight
+	JR	C,DEL_BLK_TAIL_WHOLE
+
+	; Save E (EndCol)
+	LD	A,E
+	PUSH	AF
+
+	; Read last line into SPLIT_LINE_TEMP
+	LD	BC,(BLOCK_END_ROW)
+	LD	DE,SPLIT_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	POP	AF			; A = EndCol
+	INC	A
+	LD	E,A
+	LD	D,0
+	LD	HL,SPLIT_LINE_TEMP
+	ADD	HL,DE			; HL = pointer to tail in SPLIT_LINE_TEMP
+	JR	DEL_BLK_CONCAT_TAIL
+
+DEL_BLK_TAIL_WHOLE:
+	; Whole last line is kept (tail starts at offset 0)
+	LD	BC,(BLOCK_END_ROW)
+	LD	DE,SPLIT_LINE_TEMP
+	CALL	READ_FAR_LINE
+	LD	HL,SPLIT_LINE_TEMP	; HL = pointer to tail (offset 0)
+
+DEL_BLK_CONCAT_TAIL:
+	; HL = tail in SPLIT_LINE_TEMP.
+	; Append tail to LOAD_LINE_TEMP starting at BLOCK_START_COL
+	PUSH	HL			; Save tail pointer
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,(BLOCK_START_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = destination in LOAD_LINE_TEMP
+	POP	DE			; DE = source tail pointer
+
+	LD	A,(BLOCK_START_COL)
+	LD	C,A			; C = current length
+DEL_BLK_APPEND_LOOP:
+	LD	A,(DE)
+	OR	A
+	JR	Z,DEL_BLK_APPEND_DONE
+	LD	A,C
+	CP	MAX_LINE_STRIDE-7	; 121 (max 120 chars)
+	JR	NC,DEL_BLK_APPEND_DONE	; Stop if capacity reached
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	INC	C
+	JR	DEL_BLK_APPEND_LOOP
+
+DEL_BLK_APPEND_DONE:
+	LD	(HL),0			; Null-terminate merged line
+
+	; Write merged line back to BLOCK_START_ROW
+	LD	BC,(BLOCK_START_ROW)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; Step 3: Free slots for lines (BLOCK_START_ROW + 1) through (BLOCK_END_ROW)
+	LD	HL,(BLOCK_START_ROW)
+	INC	HL
+	LD	(DEL_BLK_CUR_LINE),HL
+
+DEL_BLK_FREE_LOOP:
+	; Compare DEL_BLK_CUR_LINE with BLOCK_END_ROW
+	LD	HL,(BLOCK_END_ROW)
+	LD	DE,(DEL_BLK_CUR_LINE)
+	; If DE > HL, done freeing
+	LD	A,H
+	CP	D
+	JR	C,DEL_BLK_FREE_DONE
+	JR	NZ,DO_FREE_CUR_SLOT
+	LD	A,L
+	CP	E
+	JR	C,DEL_BLK_FREE_DONE
+
+DO_FREE_CUR_SLOT:
+	; Slot address in DOC_LINE_SLOTS = DOC_LINE_SLOTS + DEL_BLK_CUR_LINE * 2
+	LD	HL,(DEL_BLK_CUR_LINE)
+	ADD	HL,HL
+	LD	DE,DOC_LINE_SLOTS
+	ADD	HL,DE
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)			; DE = slot ID
+	EX	DE,HL			; HL = slot ID
+	CALL	FREE_SLOT
+
+	LD	HL,(DEL_BLK_CUR_LINE)
+	INC	HL
+	LD	(DEL_BLK_CUR_LINE),HL
+	JR	DEL_BLK_FREE_LOOP
+
+DEL_BLK_FREE_DONE:
+	; Step 4: Shift DOC_LINE_SLOTS entries above BLOCK_END_ROW downwards
+	; Lines removed: K = BLOCK_END_ROW - BLOCK_START_ROW
+	; Number of entries to shift: W = DOC_TOTAL_LINES - (BLOCK_END_ROW + 1)
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,(BLOCK_END_ROW)
+	INC	DE			; DE = BLOCK_END_ROW + 1
+	AND	A
+	SBC	HL,DE			; HL = W = DOC_TOTAL_LINES - (BLOCK_END_ROW + 1)
+	JR	Z,DEL_BLK_NO_SHIFT
+	JR	C,DEL_BLK_NO_SHIFT
+
+	; W > 0: shift entries down using LDIR
+	PUSH	HL			; Save W (word count)
+
+	; Destination: DE = DOC_LINE_SLOTS + (BLOCK_START_ROW + 1) * 2
+	LD	HL,(BLOCK_START_ROW)
+	INC	HL
+	ADD	HL,HL
+	LD	DE,DOC_LINE_SLOTS
+	ADD	HL,DE
+	EX	DE,HL			; DE = destination
+
+	; Source: HL = DOC_LINE_SLOTS + (BLOCK_END_ROW + 1) * 2
+	LD	HL,(BLOCK_END_ROW)
+	INC	HL
+	ADD	HL,HL
+	LD	BC,DOC_LINE_SLOTS
+	ADD	HL,BC			; HL = source
+
+	POP	BC			; BC = W
+	SLA	C
+	RL	B			; BC = W * 2 (byte count)
+	LDIR
+
+DEL_BLK_NO_SHIFT:
+	; Update DOC_TOTAL_LINES = DOC_TOTAL_LINES - (BLOCK_END_ROW - BLOCK_START_ROW)
+	LD	HL,(BLOCK_END_ROW)
+	LD	DE,(BLOCK_START_ROW)
+	AND	A
+	SBC	HL,DE			; HL = K
+	EX	DE,HL			; DE = K
+	LD	HL,(DOC_TOTAL_LINES)
+	AND	A
+	SBC	HL,DE			; HL = DOC_TOTAL_LINES - K
+	LD	A,H
+	OR	L
+	JR	NZ,DEL_BLK_TOTAL_SET
+	INC	HL			; Minimum 1 line!
+DEL_BLK_TOTAL_SET:
+	LD	(DOC_TOTAL_LINES),HL
+
+	; Step 5: Update cursor position to (BLOCK_START_ROW, BLOCK_START_COL)
+	LD	HL,(BLOCK_START_ROW)
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(BLOCK_START_COL)
+	LD	(CUR_COL),A
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A
+
+	; Step 6: Ensure TOP_DOC_ROW does not scroll past EOF
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,DEL_BLK_ADJ_TOP
+	JR	NZ,DO_DEL_BLK_FINISH
+	LD	A,L
+	CP	E
+	JR	NC,DO_DEL_BLK_FINISH
+DEL_BLK_ADJ_TOP:
+	LD	(TOP_DOC_ROW),HL
+
+DO_DEL_BLK_FINISH:
+	XOR	A
+	LD	(BLOCK_ACTIVE),A	; Deactivate block mode!
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -3286,7 +3578,14 @@ HANDLE_CSI_8:
 HANDLE_CSI_DEL:
 	; Consume trailing '~'
 	CALL	GET_KEY
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	Z,DO_CSI_DEL_BLOCK
 	CALL	DO_DELETE_FORWARD
+	RET
+
+DO_CSI_DEL_BLOCK:
+	CALL	DO_DELETE_BLOCK
 	RET
 
 HANDLE_CSI_PGUP:
@@ -6580,7 +6879,7 @@ STR_HELP_SCREEN:
 	.DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
 	.DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
 	.DB	"    Ctrl+B           Start/Toggle block      Ctrl+K          Solidify block",13,10
-	.DB	"    Tab              Tab (8-column stop)     ESC             Clear block",13,10
+	.DB	"    Delete / BS      Delete solidified block ESC             Clear block",13,10
 	.DB	"================================================================================",13,10
 	.DB	"                      Press any key to return to editor...",13,10,"$"
 
@@ -6707,6 +7006,7 @@ CHAR_INSERT_TEMP:.DB	0
 CSI_DIGIT_PREFIX:.DB	0
 JOIN_COL_SAVED:	.DB	0
 JOIN_DOC_LINE:	.DW	0
+DEL_BLK_CUR_LINE:.DW	0
 BLOCK_ACTIVE:	.DB	0		; 0 = inactive, 1 = selecting, 2 = solidified
 BLOCK_ANCHOR_ROW:.DW	0		; 16-bit document row where block started
 BLOCK_ANCHOR_COL:.DB	0		; 8-bit character column where block started
