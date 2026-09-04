@@ -6,7 +6,7 @@ Verifies the core lifecycle of SE.COM in ~4 seconds:
   2. Verify Splash Screen rendering
   3. Enter Editor Mode and verify Status Bar
   4. Type text and verify character buffer rendering
-  5. Toggle Block Selection (Ctrl+B) and verify [SEL: 1c]
+  5. Toggle Block Selection (Ctrl+B) and verify [SEL: 0c]
   6. Cancel Block Selection (Ctrl+B)
   7. Open Editor Mode Keys Help (Ctrl+K) and return to editor
   8. Clean exit (Ctrl+Q) back to CP/M prompt (C>)
@@ -133,10 +133,10 @@ def run_sanity_test():
             return False
         print("[+] Text insertion and cursor tracking verified.", flush=True)
 
-        # 6. Test Block Mode toggle: Ctrl+B to start, verify [SEL: 1c], Ctrl+B to toggle off
+        # 6. Test Block Mode toggle: Ctrl+B to start, verify [SEL: 0c], Ctrl+B to toggle off
         os.write(master, b"\x02")
-        out_blk = read_until(master, b"[SEL: 1c]", timeout=3.0)
-        if b"[SEL: 1c]" not in out_blk:
+        out_blk = read_until(master, b"[SEL: 0c]", timeout=3.0)
+        if b"[SEL: 0c]" not in out_blk:
             print(f"[-] Block mode activation failed. Buffer: {repr(out_blk)}", flush=True)
             return False
         os.write(master, b"\x02")

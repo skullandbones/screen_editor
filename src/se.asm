@@ -1752,15 +1752,15 @@ GLBR_IN_RANGE:
 	CP	L
 	JR	NZ,GLBR_START_ONLY
 
-	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL
+	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL - 1
 	LD	A,(BLOCK_START_COL)
 	LD	D,A
 	LD	A,(BLOCK_END_COL)
-	LD	E,A
 	CP	D
-	JR	Z,GLBR_OK
-	CALL	GLBR_CHECK_TAB_END
+	JR	Z,GLBR_NONE		; Empty block (StartCol == EndCol) -> no highlight
 	JR	C,GLBR_NONE
+	DEC	A			; Inclusive EndCol = BLOCK_END_COL - 1
+	LD	E,A
 	JR	GLBR_OK
 
 GLBR_START_ONLY:
@@ -1780,16 +1780,15 @@ GLBR_NOT_START_ROW:
 	CP	L
 	JR	NZ,GLBR_MIDDLE_ROW
 
-	; Last line of multi-line block: StartCol = 0, EndCol = BLOCK_END_COL
+	; Last line of multi-line block: StartCol = 0, EndCol = BLOCK_END_COL - 1
 	; If BLOCK_END_COL == 0, no characters on this line are selected!
 	LD	A,(BLOCK_END_COL)
 	OR	A
 	JR	Z,GLBR_NONE
 
+	DEC	A			; Inclusive EndCol = BLOCK_END_COL - 1
 	LD	D,0
 	LD	E,A
-	CALL	GLBR_CHECK_TAB_END
-	JR	C,GLBR_NONE
 	JR	GLBR_OK
 
 GLBR_MIDDLE_ROW:
@@ -2171,18 +2170,20 @@ CCIB_CHECK_COLS:
 	CP	E
 	JR	NZ,CCIB_CHECK_MULTI
 
-	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL
+	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL (exclusive)
 	LD	A,(CUR_COL)
 	LD	B,A
 	LD	A,(BLOCK_START_COL)
 	CP	B
 	JR	Z,CCIB_SINGLE_IN_START
-	JR	NC,CCIB_OUTSIDE		; BLOCK_START_COL > CUR_COL -> outside!
+	JR	NC,CCIB_OUTSIDE		; CUR_COL < BLOCK_START_COL -> outside!
 CCIB_SINGLE_IN_START:
-	LD	A,(BLOCK_END_COL)
-	CP	B
-	JR	C,CCIB_OUTSIDE		; BLOCK_END_COL < CUR_COL -> outside!
-	JR	CCIB_INSIDE
+	; Inside only if CUR_COL < BLOCK_END_COL
+	LD	A,B			; A = CUR_COL
+	LD	HL,BLOCK_END_COL
+	CP	(HL)
+	JR	C,CCIB_INSIDE		; CUR_COL < BLOCK_END_COL -> inside!
+	JR	CCIB_OUTSIDE
 
 CCIB_CHECK_MULTI:
 	; Multi-line block:
@@ -2216,17 +2217,10 @@ CCIB_CHECK_MULTI_END:
 	CP	E
 	JR	NZ,CCIB_INSIDE
 
-	; On BLOCK_END_ROW:
-	; If BLOCK_END_COL == 0, cursor on BLOCK_END_ROW is outside block!
-	LD	A,(BLOCK_END_COL)
-	OR	A
-	JR	Z,CCIB_OUTSIDE
-
-	; Inside if CUR_COL <= BLOCK_END_COL
-	LD	B,A
+	; On BLOCK_END_ROW: inside only if CUR_COL < BLOCK_END_COL (exclusive)
 	LD	A,(CUR_COL)
-	CP	B
-	JR	Z,CCIB_INSIDE
+	LD	HL,BLOCK_END_COL
+	CP	(HL)
 	JR	C,CCIB_INSIDE
 	JR	CCIB_OUTSIDE
 
@@ -2286,10 +2280,10 @@ DO_COPY_BLK_SINGLE:
 	LD	D,0
 	ADD	HL,DE
 
-	; Length: C = BLOCK_END_COL - BLOCK_START_COL + 1
+	; Length: C = BLOCK_END_COL - BLOCK_START_COL
 	LD	A,(BLOCK_END_COL)
 	SUB	E
-	INC	A
+	RET	Z			; If length == 0, nothing to copy!
 	LD	C,A			; C = length to copy
 
 	; Copy into COPY_BLK_BUF up to null terminator or C chars
@@ -2479,12 +2473,11 @@ COPY_ML_CAP_OK:
 	LD	DE,COPY_TAIL_BUF
 	CALL	READ_FAR_LINE
 
-	; Truncate COPY_TAIL_BUF at BLOCK_END_COL + 1
+	; Truncate COPY_TAIL_BUF at BLOCK_END_COL
 	LD	HL,COPY_TAIL_BUF
 	LD	C,0			; C = char count
 	LD	A,(BLOCK_END_COL)
-	LD	B,A
-	INC	B			; B = chars count (BLOCK_END_COL + 1)
+	LD	B,A			; B = chars count (BLOCK_END_COL)
 COPY_ML_TAIL_COUNT:
 	LD	A,(HL)
 	OR	A
@@ -3285,8 +3278,7 @@ SHOW_STATUS_REST:
 	; Single-line selection: chars count
 	LD	A,(BLOCK_END_COL)
 	LD	HL,BLOCK_START_COL
-	SUB	(HL)
-	INC	A			; A = char count
+	SUB	(HL)			; A = char count (BLOCK_END_COL - BLOCK_START_COL)
 	CALL	PRINT_DEC_BYTE
 	LD	DE,STR_CHAR_SUFFIX	; "c] | "
 	CALL	PRINT_STR
@@ -3318,8 +3310,7 @@ STATUS_SOLIDIFIED:
 	; Single-line solidified: chars count
 	LD	A,(BLOCK_END_COL)
 	LD	HL,BLOCK_START_COL
-	SUB	(HL)
-	INC	A			; A = char count
+	SUB	(HL)			; A = char count (BLOCK_END_COL - BLOCK_START_COL)
 	CALL	PRINT_DEC_BYTE
 	LD	DE,STR_CHAR_LOCK_SUFFIX	; "c LOCK] | "
 	CALL	PRINT_STR

@@ -1008,26 +1008,26 @@ def test_se_execution():
         os.write(master, b"\x14\x01")
         read_until(master, b"Row 1/", timeout=4.0)
 
-        # Press Ctrl+B (\x02) to activate block mode at Row 1, Col 0
+        # Press Ctrl+B (\x02) to activate block mode at Row 1, Col 0: 0 chars selected
         os.write(master, b"\x02")
-        out_blk1c = read_until(master, b"[SEL: 1c]", timeout=4.0)
-        if b"[SEL: 1c]" not in out_blk1c:
-            print(f"[-] Hybrid block activation failed (expected [SEL: 1c]). Buffer: {repr(out_blk1c)}", flush=True)
+        out_blk0c = read_until(master, b"[SEL: 0c]", timeout=4.0)
+        if b"[SEL: 0c]" not in out_blk0c:
+            print(f"[-] Hybrid block activation failed (expected [SEL: 0c]). Buffer: {repr(out_blk0c)}", flush=True)
             return False
         # Verify screen did not corrupt (subsequent lines must remain distinct and not repeat line 1)
-        if b"Line 02 of " not in out_blk1c or b"Line 03 of " not in out_blk1c:
-            print(f"[-] Screen corruption detected after Ctrl+B! Distinct lines missing. Buffer: {repr(out_blk1c)}", flush=True)
+        if b"Line 02 of " not in out_blk0c or b"Line 03 of " not in out_blk0c:
+            print(f"[-] Screen corruption detected after Ctrl+B! Distinct lines missing. Buffer: {repr(out_blk0c)}", flush=True)
             return False
 
-        # Move cursor right 5 columns to expand partial line selection to 6 characters
+        # Move cursor right 5 columns to expand partial line selection to 5 characters
         os.write(master, b"\x1b[C" * 5)
-        out_blk6c = read_until(master, b"[SEL: 6c]", timeout=4.0)
-        if b"[SEL: 6c]" not in out_blk6c:
-            print(f"[-] Partial single-line expansion failed (expected [SEL: 6c]). Buffer: {repr(out_blk6c)}", flush=True)
+        out_blk5c = read_until(master, b"[SEL: 5c]", timeout=4.0)
+        if b"[SEL: 5c]" not in out_blk5c:
+            print(f"[-] Partial single-line expansion failed (expected [SEL: 5c]). Buffer: {repr(out_blk5c)}", flush=True)
             return False
         # Verify inverse video sequence \x1b[7m is emitted in buffer
-        if b"\x1b[7m" not in out_blk6c:
-            print(f"[-] Inverse video escape sequence missing during block highlight. Buffer: {repr(out_blk6c)}", flush=True)
+        if b"\x1b[7m" not in out_blk5c:
+            print(f"[-] Inverse video escape sequence missing during block highlight. Buffer: {repr(out_blk5c)}", flush=True)
             return False
 
         # Move cursor down 2 rows to expand block to 3 lines
@@ -1071,12 +1071,12 @@ def test_se_execution():
 
         # Verify single-line partial block with Ctrl+K solidification
         os.write(master, b"\x02")
-        read_until(master, b"[SEL: 1c]", timeout=4.0)
+        read_until(master, b"[SEL: 0c]", timeout=4.0)
         os.write(master, b"\x1b[C" * 3)
-        read_until(master, b"[SEL: 4c]", timeout=4.0)
+        read_until(master, b"[SEL: 3c]", timeout=4.0)
         os.write(master, b"\x0b")
-        out_solid_c = read_until(master, b"[BLK: 4c LOCK]", timeout=4.0)
-        if b"[BLK: 4c LOCK]" not in out_solid_c:
+        out_solid_c = read_until(master, b"[BLK: 3c LOCK]", timeout=4.0)
+        if b"[BLK: 3c LOCK]" not in out_solid_c:
             print(f"[-] Single-line Ctrl+K solidification failed. Buffer: {repr(out_solid_c)}", flush=True)
             return False
 
@@ -1127,8 +1127,8 @@ def test_se_execution():
         os.write(master, b"\x1b[C")
         time.sleep(0.1)
         out_tab_past = drain_all(master)
-        # Verify that TAB IS now highlighted
-        if b"\x1b[7mA       B\x1b[0m" not in out_tab_past:
+        # Verify that TAB IS now highlighted (while 'B' under cursor remains un-highlighted)
+        if b"\x1b[7mA       \x1b[0mB" not in out_tab_past:
             print(f"[-] Tab failed to highlight after cursor moved past it. Buffer: {repr(out_tab_past)}", flush=True)
             return False
 
@@ -1157,8 +1157,8 @@ def test_se_execution():
         # Start block at Row 1, Col 0: Ctrl+B
         os.write(master, b"\x02")
         time.sleep(0.1)
-        # Select 2 characters: Right Arrow
-        os.write(master, b"\x1b[C")
+        # Select 2 characters: Right Arrow twice (Col 0 -> Col 2)
+        os.write(master, b"\x1b[C\x1b[C")
         time.sleep(0.1)
         # Solidify block with Ctrl+K
         os.write(master, b"\x0b")
@@ -1169,7 +1169,10 @@ def test_se_execution():
         time.sleep(0.1)
         drain_all(master)
 
-        # Test 1: Press Ctrl+C while cursor is inside block (Col 1): must be ignored!
+        # Test 1: Move cursor inside block (Left Arrow to Col 1) and press Ctrl+C: must be ignored!
+        os.write(master, b"\x1b[D")
+        time.sleep(0.1)
+        drain_all(master)
         os.write(master, b"\x03")
         time.sleep(0.2)
         out_in_blk = drain_all(master)
@@ -1177,7 +1180,7 @@ def test_se_execution():
             print(f"[-] Ctrl+C inside block was not ignored. Buffer: {repr(out_in_blk)}", flush=True)
             return False
 
-        # Move cursor to end of line: Ctrl+E (Col 2)
+        # Move cursor to end of line: Ctrl+E (Col 2 or higher, outside block)
         os.write(master, b"\x05")
         time.sleep(0.1)
         drain_all(master)
@@ -1269,6 +1272,66 @@ def test_se_execution():
             return False
 
         print("[+] Successfully verified solidified block copy (Ctrl+C) feature!", flush=True)
+
+        # Step 37: Test Half-Open Caret Selection [Start, End) Semantics
+        print("[*] Step 37: Testing half-open caret selection [Start, End) semantics...", flush=True)
+        # Move to top of document (Ctrl+T) and column 0 (Ctrl+A)
+        os.write(master, b"\x14\x01")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # 1. Start in Column 0, press Ctrl+B:
+        # Must show [SEL: 0c], zero chars in block, no inverse video on character 0
+        os.write(master, b"\x02")
+        out_s37_0c = read_until(master, b"[SEL: 0c]", timeout=4.0)
+        if b"[SEL: 0c]" not in out_s37_0c:
+            print(f"[-] Step 37 failed: Ctrl+B at Col 0 did not show [SEL: 0c]. Buffer: {repr(out_s37_0c)}", flush=True)
+            return False
+
+        # 2. Cursor right 1 char (Right Arrow to Col 1):
+        # Old cursor location (Col 0) becomes highlighted, cursor cell at Col 1 is normal video
+        os.write(master, b"\x1b[C")
+        out_s37_1c = read_until(master, b"[SEL: 1c]", timeout=4.0)
+        if b"[SEL: 1c]" not in out_s37_1c:
+            print(f"[-] Step 37 failed: Right arrow did not show [SEL: 1c]. Buffer: {repr(out_s37_1c)}", flush=True)
+            return False
+
+        # 3. Press Ctrl+K to solidify: shows [BLK: 1c LOCK]
+        os.write(master, b"\x0b")
+        out_s37_solid = read_until(master, b"[BLK: 1c LOCK]", timeout=4.0)
+        if b"[BLK: 1c LOCK]" not in out_s37_solid:
+            print(f"[-] Step 37 failed: Ctrl+K did not show [BLK: 1c LOCK]. Buffer: {repr(out_s37_solid)}", flush=True)
+            return False
+
+        # 4. Press Ctrl+C at Col 1: must NOT be ignored (Col 1 is outside [0, 1)!)
+        drain_all(master)
+        os.write(master, b"\x03")
+        time.sleep(0.3)
+        out_s37_cpy1 = drain_all(master)
+        if b"[BLK: 1c LOCK]" not in out_s37_cpy1:
+            print(f"[-] Step 37 failed: Ctrl+C at Col 1 was ignored or corrupted! Buffer: {repr(out_s37_cpy1)}", flush=True)
+            return False
+
+        # 5. Cursor right 1 char (Right Arrow to Col 2):
+        # Verifies only the 1 original character is highlighted
+        os.write(master, b"\x1b[C")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # 6. Press Ctrl+C at Col 2: duplicates exactly 1 character
+        os.write(master, b"\x03")
+        time.sleep(0.3)
+        out_s37_cpy2 = drain_all(master)
+        if b"[BLK: 1c LOCK]" not in out_s37_cpy2:
+            print(f"[-] Step 37 failed: Second Ctrl+C failed or corrupted! Buffer: {repr(out_s37_cpy2)}", flush=True)
+            return False
+
+        # 7. Cancel block with ESC
+        os.write(master, b"\x1b")
+        time.sleep(0.1)
+        drain_all(master)
+
+        print("[+] Successfully verified half-open caret selection [Start, End) semantics (Step 37)!", flush=True)
 
         # Return to splash (ESC)
         time.sleep(0.2)
