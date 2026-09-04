@@ -1446,6 +1446,136 @@ def test_se_execution():
 
         print("[+] Successfully verified backwards block selection semantics (Step 38)!", flush=True)
 
+        # Step 39: Verify Block Selection Workflow Simplifications
+        print("[*] Step 39: Testing block selection workflow simplifications...", flush=True)
+
+        # 1. Test Ctrl-B re-anchoring
+        os.write(master, b"\x14\x01") # Ctrl+T, Ctrl+A to top and col 0
+        time.sleep(0.1)
+        drain_all(master)
+
+        os.write(master, b"\x02") # Ctrl-B
+        out_b0 = read_until(master, b"[SEL: 0c]", timeout=4.0)
+        if b"[SEL: 0c]" not in out_b0:
+            print(f"[-] Step 39 Ctrl-B activation failed: {repr(out_b0)}", flush=True)
+            return False
+
+        os.write(master, b"\x1b[C" * 5) # Right 5 cols
+        out_b5 = read_until(master, b"[SEL: 5c]", timeout=4.0)
+        if b"[SEL: 5c]" not in out_b5:
+            print(f"[-] Step 39 Ctrl-B move right failed: {repr(out_b5)}", flush=True)
+            return False
+
+        os.write(master, b"\x02") # Ctrl-B: cursor moved, so re-anchors to 0c at current col!
+        out_b_re = read_until(master, b"[SEL: 0c]", timeout=4.0)
+        if b"[SEL: 0c]" not in out_b_re:
+            print(f"[-] Step 39 Ctrl-B re-anchor failed: {repr(out_b_re)}", flush=True)
+            return False
+
+        os.write(master, b"\x1b[C" * 2) # Right 2 cols
+        out_b2 = read_until(master, b"[SEL: 2c]", timeout=4.0)
+        if b"[SEL: 2c]" not in out_b2:
+            print(f"[-] Step 39 expansion after re-anchor failed: {repr(out_b2)}", flush=True)
+            return False
+
+        os.write(master, b"\x02") # Ctrl-B at Col 7: re-anchors at Col 7
+        read_until(master, b"[SEL: 0c]", timeout=4.0)
+        os.write(master, b"\x02") # Ctrl-B without moving: cancels block!
+        out_b_canc = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"^K: Editor keys" not in out_b_canc:
+            print(f"[-] Step 39 Ctrl-B cancel without moving failed: {repr(out_b_canc)}", flush=True)
+            return False
+
+        # 2. Test Shift + Arrow keys
+        os.write(master, b"\x14\x01") # Ctrl+T, Ctrl+A
+        time.sleep(0.1)
+        drain_all(master)
+
+        os.write(master, b"\x1b[1;2C") # Shift+Right
+        out_s_r = read_until(master, b"[SEL: 1c]", timeout=4.0)
+        if b"[SEL: 1c]" not in out_s_r:
+            print(f"[-] Step 39 Shift+Right failed: {repr(out_s_r)}", flush=True)
+            return False
+
+        os.write(master, b"\x1b[C") # Unshifted Right Arrow -> extends block
+        out_s_ext = read_until(master, b"[SEL: 2c]", timeout=4.0)
+        if b"[SEL: 2c]" not in out_s_ext:
+            print(f"[-] Step 39 unshifted Right extension failed: {repr(out_s_ext)}", flush=True)
+            return False
+
+        os.write(master, b"\x1b[1;2B") # Shift+Down -> cancels active block, starts new, moves down
+        out_s_d = read_until(master, b"[SEL: 2L]", timeout=4.0)
+        if b"[SEL: 2L]" not in out_s_d:
+            print(f"[-] Step 39 Shift+Down failed: {repr(out_s_d)}", flush=True)
+            return False
+
+        os.write(master, b"\x1b") # Cancel with ESC
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+
+        # 3. Test Ctrl-D implied Ctrl-K + Delete
+        os.write(master, b"\x14\x01") # Ctrl+T, Ctrl+A
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Type a test marker line
+        os.write(master, b"DELTEST12345\r")
+        time.sleep(0.1)
+        os.write(master, b"\x14\x01") # Back to top, col 0
+        read_until(master, b"DELTEST12345", timeout=4.0)
+
+        os.write(master, b"\x02" + b"\x1b[C" * 7) # Select "DELTEST"
+        out_d_sel = read_until(master, b"[SEL: 7c]", timeout=4.0)
+        if b"[SEL: 7c]" not in out_d_sel:
+            print(f"[-] Step 39 select DELTEST failed: {repr(out_d_sel)}", flush=True)
+            return False
+
+        os.write(master, b"\x04") # Ctrl-D -> implied Ctrl-K + delete
+        out_d_del = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"^K: Editor keys" not in out_d_del:
+            print(f"[-] Step 39 Ctrl-D block delete failed: {repr(out_d_del)}", flush=True)
+            return False
+
+        os.write(master, b"\x14")
+        out_d_scr = read_until(master, b"12345", timeout=4.0)
+        if b"12345" not in out_d_scr or b"DELTEST" in out_d_scr:
+            print(f"[-] Step 39 deletion content check failed: {repr(out_d_scr)}", flush=True)
+            return False
+
+        # 4. Test Ctrl-C implied Ctrl-K + Navigation + Copy
+        os.write(master, b"\x14\x01") # Top, Col 0 (cursor at "12345")
+        time.sleep(0.1)
+        drain_all(master)
+
+        os.write(master, b"\x02" + b"\x1b[C" * 3) # Select "123"
+        out_c_sel = read_until(master, b"[SEL: 3c]", timeout=4.0)
+        if b"[SEL: 3c]" not in out_c_sel:
+            print(f"[-] Step 39 select 123 failed: {repr(out_c_sel)}", flush=True)
+            return False
+
+        os.write(master, b"\x03") # Ctrl-C -> implied Ctrl-K (solidifies)
+        out_c_lock = read_until(master, b"[BLK: 3c LOCK]", timeout=4.0)
+        if b"[BLK: 3c LOCK]" not in out_c_lock:
+            print(f"[-] Step 39 Ctrl-C solidify failed: {repr(out_c_lock)}", flush=True)
+            return False
+
+        os.write(master, b"\x05") # Ctrl-E -> End of line
+        time.sleep(0.1)
+        drain_all(master)
+
+        os.write(master, b"\x03") # Ctrl-C -> Copy solidified block to end of line!
+        time.sleep(0.2)
+        drain_all(master)
+
+        os.write(master, b"\x14")
+        out_c_res = read_until(master, b"45123", timeout=4.0)
+        if b"45123" not in out_c_res:
+            print(f"[-] Step 39 Ctrl-C copy failed: {repr(out_c_res)}", flush=True)
+            return False
+
+        os.write(master, b"\x1b") # Cancel block
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+        print("[+] Successfully verified block selection workflow simplifications (Step 39)!", flush=True)
+
         # Return to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")
