@@ -3353,6 +3353,7 @@ CURSOR_END:
 	CALL	GET_CUR_ROW_LEN
 	LD	A,B
 	LD	(CUR_COL),A
+	LD	A,C
 	LD	(TARGET_COL),A
 	LD	A,(BLOCK_ACTIVE)
 	CP	1
@@ -3839,7 +3840,7 @@ JUMP_FILE_TOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Jump to End/Bottom of Document (Last Line, Col 0)
+; Jump to End/Bottom of Document (Last Line, End of Line)
 ;------------------------------------------------------------------------------
 JUMP_FILE_BOTTOM:
 	LD	HL,(DOC_TOTAL_LINES)
@@ -3853,8 +3854,10 @@ JUMP_BOT_HAS_LINES:
 	DEC	HL			; HL = max_valid_row (DOC_TOTAL_LINES - 1)
 JUMP_BOT_SET_CUR:
 	LD	(CUR_DOC_ROW),HL
-	XOR	A
+	CALL	GET_CUR_ROW_LEN		; B = byte length, C = visual length
+	LD	A,B
 	LD	(CUR_COL),A
+	LD	A,C
 	LD	(TARGET_COL),A
 
 	; Calculate TOP_DOC_ROW so the bottom line is visible at bottom of screen
