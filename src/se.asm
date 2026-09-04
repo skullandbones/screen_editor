@@ -278,11 +278,17 @@ CHECK_CTRL_D:
 	LD	A,(BLOCK_ACTIVE)
 	CP	2
 	JR	Z,DO_CTRL_D_BLOCK
+	CP	1
+	JR	Z,DO_CTRL_D_CANCEL_SETUP
 	CALL	DO_DELETE_FORWARD
 	JP	MAIN_LOOP
 
 DO_CTRL_D_BLOCK:
 	CALL	DO_DELETE_BLOCK
+	JP	MAIN_LOOP
+
+DO_CTRL_D_CANCEL_SETUP:
+	CALL	CANCEL_BLOCK
 	JP	MAIN_LOOP
 
 CHECK_PAGE_KEYS:
@@ -352,9 +358,17 @@ CHECK_ENTER:
 	; Enter -> Insert new line at CUR_ROW+1
 	CP	KEY_ENTER
 	JR	NZ,CHECK_BACKSPACE
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	JR	Z,DO_ENTER_CANCEL_SETUP
+	CALL	CANCEL_BLOCK
 	CALL	DO_INSERT_LINE
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
+	JP	MAIN_LOOP
+
+DO_ENTER_CANCEL_SETUP:
+	CALL	CANCEL_BLOCK
 	JP	MAIN_LOOP
 
 CHECK_BACKSPACE:
@@ -365,8 +379,9 @@ CHECK_BACKSPACE:
 
 DO_HANDLE_BS:
 	LD	A,(BLOCK_ACTIVE)
-	CP	2
-	JR	Z,DO_BS_BLOCK
+	CP	1
+	JR	Z,DO_BS_CANCEL_SETUP
+	CALL	CANCEL_BLOCK
 
 	LD	A,(CUR_COL)
 	OR	A
@@ -378,8 +393,8 @@ DO_HANDLE_BS:
 	LD	(NEED_LINE_RENDER),A
 	JP	MAIN_LOOP
 
-DO_BS_BLOCK:
-	CALL	DO_DELETE_BLOCK
+DO_BS_CANCEL_SETUP:
+	CALL	CANCEL_BLOCK
 	JP	MAIN_LOOP
 
 DO_HANDLE_BS_COL0:
@@ -400,9 +415,17 @@ CHECK_PRINTABLE_CHAR:
 	; Check if Tab key is pressed (expand to 8-character tab stops)
 	CP	KEY_TAB			; 9
 	JR	NZ,CHECK_PRINTABLE_REGULAR
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	JR	Z,DO_TAB_CANCEL_SETUP
+	CALL	CANCEL_BLOCK
 	CALL	DO_TAB_INSERT
 	LD	A,1
 	LD	(NEED_LINE_RENDER),A
+	JP	MAIN_LOOP
+
+DO_TAB_CANCEL_SETUP:
+	CALL	CANCEL_BLOCK
 	JP	MAIN_LOOP
 
 CHECK_PRINTABLE_REGULAR:
@@ -412,9 +435,19 @@ CHECK_PRINTABLE_REGULAR:
 	JP	NC,MAIN_LOOP
 
 DO_INSERT_CHAR:
+	LD	B,A
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	JR	Z,DO_CHAR_CANCEL_SETUP
+	CALL	CANCEL_BLOCK
+	LD	A,B
 	CALL	DO_CHAR_INSERT
 	LD	A,1
 	LD	(NEED_LINE_RENDER),A
+	JP	MAIN_LOOP
+
+DO_CHAR_CANCEL_SETUP:
+	CALL	CANCEL_BLOCK
 	JP	MAIN_LOOP
 
 ;------------------------------------------------------------------------------
@@ -1504,6 +1537,16 @@ TOGGLE_BLOCK_MODE:
 
 TBM_DEACTIVATE:
 	; Block deactivated: clear highlight
+	JR	CANCEL_BLOCK
+
+;------------------------------------------------------------------------------
+; CANCEL_BLOCK: Cancel active block selection (state 1 or 2), refresh screen
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+CANCEL_BLOCK:
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	RET	Z
 	XOR	A
 	LD	(BLOCK_ACTIVE),A
 	LD	A,1
@@ -3445,10 +3488,7 @@ WAIT_ESC_BYTE:
 	OR	A
 	JR	Z,ESC_TO_SPLASH
 	; Block selection active: cancel block highlight instead of exiting to splash
-	XOR	A
-	LD	(BLOCK_ACTIVE),A
-	LD	A,1
-	LD	(NEED_SCREEN_RENDER),A
+	CALL	CANCEL_BLOCK
 	RET
 
 ESC_TO_SPLASH:
@@ -3581,11 +3621,17 @@ HANDLE_CSI_DEL:
 	LD	A,(BLOCK_ACTIVE)
 	CP	2
 	JR	Z,DO_CSI_DEL_BLOCK
+	CP	1
+	JR	Z,DO_CSI_DEL_CANCEL_SETUP
 	CALL	DO_DELETE_FORWARD
 	RET
 
 DO_CSI_DEL_BLOCK:
 	CALL	DO_DELETE_BLOCK
+	RET
+
+DO_CSI_DEL_CANCEL_SETUP:
+	CALL	CANCEL_BLOCK
 	RET
 
 HANDLE_CSI_PGUP:
@@ -6879,7 +6925,7 @@ STR_HELP_SCREEN:
 	.DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
 	.DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
 	.DB	"    Ctrl+B           Start/Toggle block      Ctrl+K          Solidify block",13,10
-	.DB	"    Delete / BS      Delete solidified block ESC             Clear block",13,10
+	.DB	"    Delete / Ctrl+D  Delete solidified block ESC             Clear block",13,10
 	.DB	"================================================================================",13,10
 	.DB	"                      Press any key to return to editor...",13,10,"$"
 
