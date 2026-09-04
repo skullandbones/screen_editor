@@ -1333,6 +1333,101 @@ def test_se_execution():
 
         print("[+] Successfully verified half-open caret selection [Start, End) semantics (Step 37)!", flush=True)
 
+        # Step 38: Test Backwards Block Selection Normalization Semantics
+        print("[*] Step 38: Testing backwards block selection semantics...", flush=True)
+
+        # Part 1: Multi-line backwards selection (Row 10 Col 0 up to Row 9 Col 0)
+        # Move to top of document (Ctrl+T) and Col 0 (Ctrl+A), then move down to Row 10
+        os.write(master, b"\x14\x01")
+        read_until(master, b"Row 1/", timeout=4.0)
+        os.write(master, b"\x1b[B" * 9)
+        out_s38_r10 = read_until(master, b"Row 10/", timeout=4.0)
+        if b"Row 10/" not in out_s38_r10:
+            print(f"[-] Step 38 failed: Could not navigate to Row 10. Buffer: {repr(out_s38_r10)}", flush=True)
+            return False
+
+        # Press Ctrl+B to start block at Row 10 Col 0
+        os.write(master, b"\x02")
+        out_s38_b10 = read_until(master, b"[SEL: 0c]", timeout=4.0)
+        if b"[SEL: 0c]" not in out_s38_b10:
+            print(f"[-] Step 38 failed: Ctrl+B at Row 10 Col 0 did not show [SEL: 0c]. Buffer: {repr(out_s38_b10)}", flush=True)
+            return False
+
+        # Press Up Arrow to move to Row 9 Col 0: expands 1 line backwards
+        os.write(master, b"\x1b[A")
+        out_s38_up = read_until(master, b"[SEL: 1L]", timeout=4.0)
+        if b"[SEL: 1L]" not in out_s38_up:
+            print(f"[-] Step 38 failed: Up arrow did not show [SEL: 1L]. Buffer: {repr(out_s38_up)}", flush=True)
+            return False
+
+        # Press Ctrl+K to solidify: shows [BLK: 1L LOCK]
+        os.write(master, b"\x0b")
+        out_s38_solid_ml = read_until(master, b"[BLK: 1L LOCK]", timeout=4.0)
+        if b"[BLK: 1L LOCK]" not in out_s38_solid_ml:
+            print(f"[-] Step 38 failed: Ctrl+K did not show [BLK: 1L LOCK]. Buffer: {repr(out_s38_solid_ml)}", flush=True)
+            return False
+
+        # Press Ctrl+C at Row 9 Col 0: must NOT be ignored (cursor at Row 9 is outside block Row 10!)
+        drain_all(master)
+        os.write(master, b"\x03")
+        time.sleep(0.3)
+        out_s38_cpy_ml = drain_all(master)
+        if b"[BLK: 1L LOCK]" not in out_s38_cpy_ml:
+            print(f"[-] Step 38 failed: Ctrl+C at Row 9 Col 0 was ignored or failed! Buffer: {repr(out_s38_cpy_ml)}", flush=True)
+            return False
+
+        # Cancel block with ESC
+        os.write(master, b"\x1b")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Part 2: Single-line backwards selection (Col 5 left to Col 4)
+        # Move to top of document (Ctrl+T) and Col 0 (Ctrl+A), then move right 5 columns
+        os.write(master, b"\x14\x01")
+        read_until(master, b"Row 1/", timeout=4.0)
+        os.write(master, b"\x1b[C" * 5)
+        out_s38_c5 = read_until(master, b", Col 5", timeout=4.0)
+        if b", Col 5" not in out_s38_c5:
+            print(f"[-] Step 38 failed: Could not navigate to Col 5. Buffer: {repr(out_s38_c5)}", flush=True)
+            return False
+
+        # Press Ctrl+B to start block at Col 5
+        os.write(master, b"\x02")
+        out_s38_b5 = read_until(master, b"[SEL: 0c]", timeout=4.0)
+        if b"[SEL: 0c]" not in out_s38_b5:
+            print(f"[-] Step 38 failed: Ctrl+B at Col 5 did not show [SEL: 0c]. Buffer: {repr(out_s38_b5)}", flush=True)
+            return False
+
+        # Press Left Arrow to Col 4: expands 1 character backwards
+        os.write(master, b"\x1b[D")
+        out_s38_left = read_until(master, b"[SEL: 1c]", timeout=4.0)
+        if b"[SEL: 1c]" not in out_s38_left:
+            print(f"[-] Step 38 failed: Left arrow did not show [SEL: 1c]. Buffer: {repr(out_s38_left)}", flush=True)
+            return False
+
+        # Press Ctrl+K to solidify: shows [BLK: 1c LOCK]
+        os.write(master, b"\x0b")
+        out_s38_solid_sl = read_until(master, b"[BLK: 1c LOCK]", timeout=4.0)
+        if b"[BLK: 1c LOCK]" not in out_s38_solid_sl:
+            print(f"[-] Step 38 failed: Ctrl+K did not show [BLK: 1c LOCK]. Buffer: {repr(out_s38_solid_sl)}", flush=True)
+            return False
+
+        # Press Ctrl+C at Col 4: must NOT be ignored (Col 4 is outside [5, 6)!)
+        drain_all(master)
+        os.write(master, b"\x03")
+        time.sleep(0.3)
+        out_s38_cpy_sl = drain_all(master)
+        if b"[BLK: 1c LOCK]" not in out_s38_cpy_sl:
+            print(f"[-] Step 38 failed: Ctrl+C at Col 4 was ignored or failed! Buffer: {repr(out_s38_cpy_sl)}", flush=True)
+            return False
+
+        # Cancel block with ESC
+        os.write(master, b"\x1b")
+        time.sleep(0.1)
+        drain_all(master)
+
+        print("[+] Successfully verified backwards block selection semantics (Step 38)!", flush=True)
+
         # Return to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")

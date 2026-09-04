@@ -1616,14 +1616,19 @@ NORMALIZE_BLOCK_BOUNDS:
 	CP	C
 	JR	C,NBB_COL_BC
 	JR	Z,NBB_COL_BC
-	; B > C
+	; B > C: Cursor is to the left of Anchor (backwards on same row)
+	; Cursor at C is excluded -> BLOCK_START_COL = C + 1
+	; Anchor at B is included -> BLOCK_END_COL = B + 1
 	LD	A,C
+	INC	A
 	LD	(BLOCK_START_COL),A
 	LD	A,B
+	INC	A
 	LD	(BLOCK_END_COL),A
 	JR	NBB_DONE
 
 NBB_COL_BC:
+	; B <= C: Forward (or empty) selection on same row
 	LD	A,B
 	LD	(BLOCK_START_COL),A
 	LD	A,C
@@ -1640,11 +1645,42 @@ NBB_ANCHOR_FIRST:
 	JR	NBB_DONE
 
 NBB_CUR_FIRST:
+	; DE (Cursor Row) < HL (Anchor Row): Backwards multi-row selection
+	; For Cursor (DE, C) (exclusive):
+	LD	A,C
+	OR	A
+	JR	NZ,NBB_CF_C_POS
+	; C == 0: Cursor row DE is completely excluded -> START_ROW = DE + 1, START_COL = 0
+	INC	DE
+	LD	(BLOCK_START_ROW),DE
+	XOR	A
+	LD	(BLOCK_START_COL),A
+	JR	NBB_CF_END_CHECK
+
+NBB_CF_C_POS:
+	; C > 0: START_ROW = DE, START_COL = C + 1
 	LD	(BLOCK_START_ROW),DE
 	LD	A,C
+	INC	A
 	LD	(BLOCK_START_COL),A
+
+NBB_CF_END_CHECK:
+	; For Anchor (HL, B) (inclusive):
+	LD	A,B
+	OR	A
+	JR	NZ,NBB_CF_B_POS
+	; B == 0: Entire anchor row HL is included -> END_ROW = HL + 1, END_COL = 0
+	INC	HL
+	LD	(BLOCK_END_ROW),HL
+	XOR	A
+	LD	(BLOCK_END_COL),A
+	JR	NBB_DONE
+
+NBB_CF_B_POS:
+	; B > 0: END_ROW = HL, END_COL = B + 1
 	LD	(BLOCK_END_ROW),HL
 	LD	A,B
+	INC	A
 	LD	(BLOCK_END_COL),A
 
 NBB_DONE:
