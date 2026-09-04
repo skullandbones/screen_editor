@@ -1147,6 +1147,100 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified dynamic tab block highlighting on last line!", flush=True)
 
+        # Step 36: Test Solidified Block Copy (Ctrl+C)
+        print("[*] Step 36: Testing solidified block copy (Ctrl+C)...", flush=True)
+        # Move to top of document (Ctrl+T) and column 0 (Ctrl+A)
+        os.write(master, b"\x14\x01")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Start block at Row 1, Col 0: Ctrl+B
+        os.write(master, b"\x02")
+        time.sleep(0.1)
+        # Select 2 characters: Right Arrow
+        os.write(master, b"\x1b[C")
+        time.sleep(0.1)
+        # Solidify block with Ctrl+K
+        os.write(master, b"\x0b")
+        out_solid_cpy = read_until(master, b"[BLK: 2c LOCK]", timeout=4.0)
+        if b"[BLK: 2c LOCK]" not in out_solid_cpy:
+            print(f"[-] Block solidification failed for Ctrl+C test. Buffer: {repr(out_solid_cpy)}", flush=True)
+            return False
+
+        # Test 1: Press Ctrl+C while cursor is inside block (Col 1): must be ignored!
+        os.write(master, b"\x03")
+        time.sleep(0.2)
+        out_in_blk = drain_all(master)
+        if out_in_blk != b"":
+            print(f"[-] Ctrl+C inside block was not ignored. Buffer: {repr(out_in_blk)}", flush=True)
+            return False
+
+        # Move cursor to end of line: Ctrl+E (Col 2)
+        os.write(master, b"\x05")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Test 2: Press Ctrl+C outside block: copies block
+        os.write(master, b"\x03")
+        time.sleep(0.3)
+        out_cpy1 = drain_all(master)
+        if b"[BLK: 2c LOCK]" not in out_cpy1 or b"L1L1" not in out_cpy1:
+            print(f"[-] Ctrl+C copy failed or lost block lock. Buffer: {repr(out_cpy1)}", flush=True)
+            return False
+
+        # Test 3: Press Ctrl+C again consecutively: duplicate copy
+        os.write(master, b"\x03")
+        time.sleep(0.3)
+        out_cpy2 = drain_all(master)
+        if b"[BLK: 2c LOCK]" not in out_cpy2 or b"L1L1L1" not in out_cpy2:
+            print(f"[-] Consecutive Ctrl+C failed or lost block lock. Buffer: {repr(out_cpy2)}", flush=True)
+            return False
+
+        # Test 4: Multi-line block copy
+        # Cancel block with ESC
+        os.write(master, b"\x1b")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
+        os.write(master, b"\x14\x01")
+        time.sleep(0.1)
+        # Start block (Ctrl+B), expand down 1 row (Down Arrow)
+        os.write(master, b"\x02\x1b[B")
+        time.sleep(0.1)
+        # Solidify with Ctrl+K
+        os.write(master, b"\x0b")
+        out_ml_solid = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
+        if b"[BLK: 2L LOCK]" not in out_ml_solid:
+            print(f"[-] Multi-line solidification failed. Buffer: {repr(out_ml_solid)}", flush=True)
+            return False
+
+        # Jump to bottom of file (Ctrl+G), then end of line (Ctrl+E)
+        os.write(master, b"\x07\x05")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Copy multi-line block with Ctrl+C
+        os.write(master, b"\x03")
+        time.sleep(0.3)
+        out_ml_cpy = drain_all(master)
+        if b"[BLK: 2L LOCK]" not in out_ml_cpy:
+            print(f"[-] Multi-line block copy failed. Buffer: {repr(out_ml_cpy)}", flush=True)
+            return False
+
+        # Test 5: Cancellation terminates Ctrl+C
+        os.write(master, b"\x1b")
+        time.sleep(0.1)
+        drain_all(master)
+        os.write(master, b"\x03")
+        time.sleep(0.2)
+        out_cancelled = drain_all(master)
+        if out_cancelled != b"":
+            print(f"[-] Ctrl+C operated after block was cancelled! Buffer: {repr(out_cancelled)}", flush=True)
+            return False
+
+        print("[+] Successfully verified solidified block copy (Ctrl+C) feature!", flush=True)
+
         # Return to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")

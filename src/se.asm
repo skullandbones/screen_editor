@@ -235,7 +235,7 @@ MAIN_LOOP_GET_KEY:
 CHECK_CTRL_O:
 	; Command: Ctrl+O -> Open File Screen (ESC returns without opening)
 	CP	KEY_CTRL_O
-	JR	NZ,CHECK_CTRL_K
+	JR	NZ,CHECK_CTRL_C
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	DO_OPEN_FILE_UI
 	CALL	TERM_INIT
@@ -245,6 +245,16 @@ CHECK_CTRL_O:
 	LD	(NEED_SCREEN_RENDER),A
 	LD	(NEED_LINE_RENDER),A
 	LD	(NEED_STATUS_RENDER),A
+	JP	MAIN_LOOP
+
+CHECK_CTRL_C:
+	; Command: Ctrl+C -> Copy solidified block to cursor
+	CP	KEY_CTRL_C
+	JR	NZ,CHECK_CTRL_K
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JP	NZ,MAIN_LOOP		; Ignore if block not solidified
+	CALL	DO_COPY_BLOCK
 	JP	MAIN_LOOP
 
 CHECK_CTRL_K:
@@ -2095,6 +2105,673 @@ DEL_BLK_ADJ_TOP:
 DO_DEL_BLK_FINISH:
 	XOR	A
 	LD	(BLOCK_ACTIVE),A	; Deactivate block mode!
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+;------------------------------------------------------------------------------
+; CHECK_CURSOR_IN_BLOCK: Check if (CUR_DOC_ROW, CUR_COL) is inside solidified block
+; Returns: Carry = 1 if cursor is inside block (or on boundary)
+;          Carry = 0 if cursor is outside block
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+CHECK_CURSOR_IN_BLOCK:
+	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+
+	; Check if CUR_DOC_ROW < BLOCK_START_ROW
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(BLOCK_START_ROW)
+	LD	A,H
+	CP	D
+	JR	C,CCIB_OUTSIDE
+	JR	NZ,CCIB_CHECK_MAX_ROW
+	LD	A,L
+	CP	E
+	JR	C,CCIB_OUTSIDE
+
+CCIB_CHECK_MAX_ROW:
+	; Check if CUR_DOC_ROW > BLOCK_END_ROW
+	LD	HL,(BLOCK_END_ROW)
+	LD	DE,(CUR_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,CCIB_OUTSIDE
+	JR	NZ,CCIB_CHECK_COLS
+	LD	A,L
+	CP	E
+	JR	C,CCIB_OUTSIDE
+
+CCIB_CHECK_COLS:
+	; CUR_DOC_ROW is within [BLOCK_START_ROW, BLOCK_END_ROW]
+	; Check if single-line block
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,CCIB_CHECK_MULTI
+	LD	A,L
+	CP	E
+	JR	NZ,CCIB_CHECK_MULTI
+
+	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL
+	LD	A,(CUR_COL)
+	LD	B,A
+	LD	A,(BLOCK_START_COL)
+	CP	B
+	JR	Z,CCIB_SINGLE_IN_START
+	JR	NC,CCIB_OUTSIDE		; BLOCK_START_COL > CUR_COL -> outside!
+CCIB_SINGLE_IN_START:
+	LD	A,(BLOCK_END_COL)
+	CP	B
+	JR	C,CCIB_OUTSIDE		; BLOCK_END_COL < CUR_COL -> outside!
+	JR	CCIB_INSIDE
+
+CCIB_CHECK_MULTI:
+	; Multi-line block:
+	; Is CUR_DOC_ROW == BLOCK_START_ROW?
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(BLOCK_START_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,CCIB_CHECK_MULTI_END
+	LD	A,L
+	CP	E
+	JR	NZ,CCIB_CHECK_MULTI_END
+
+	; On BLOCK_START_ROW: inside if CUR_COL >= BLOCK_START_COL
+	LD	A,(CUR_COL)
+	LD	B,A
+	LD	A,(BLOCK_START_COL)
+	CP	B
+	JR	Z,CCIB_INSIDE
+	JR	C,CCIB_INSIDE
+	JR	CCIB_OUTSIDE
+
+CCIB_CHECK_MULTI_END:
+	; Is CUR_DOC_ROW == BLOCK_END_ROW?
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,CCIB_INSIDE		; Middle row of multi-line block is always inside!
+	LD	A,L
+	CP	E
+	JR	NZ,CCIB_INSIDE
+
+	; On BLOCK_END_ROW: inside if CUR_COL <= BLOCK_END_COL
+	LD	A,(BLOCK_END_COL)
+	LD	B,A
+	LD	A,(CUR_COL)
+	CP	B
+	JR	Z,CCIB_INSIDE
+	JR	C,CCIB_INSIDE
+	JR	CCIB_OUTSIDE
+
+CCIB_INSIDE:
+	POP	BC
+	POP	DE
+	POP	HL
+	SCF				; Carry = 1: inside block
+	RET
+
+CCIB_OUTSIDE:
+	POP	BC
+	POP	DE
+	POP	HL
+	OR	A			; Carry = 0: outside block
+	RET
+
+;------------------------------------------------------------------------------
+; DO_COPY_BLOCK: Copy solidified block (Ctrl+C) to (CUR_DOC_ROW, CUR_COL)
+;------------------------------------------------------------------------------
+DO_COPY_BLOCK:
+	LD	A,(BLOCK_ACTIVE)
+	CP	2			; Only solidified blocks can be copied
+	RET	NZ
+
+	CALL	NORMALIZE_BLOCK_BOUNDS
+
+	; Check if cursor is inside the block; if so, ignore Ctrl+C!
+	CALL	CHECK_CURSOR_IN_BLOCK
+	RET	C
+
+	CALL	FLUSH_DIRTY_CACHE
+
+	; Check if single-line or multi-line block
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JP	NZ,DO_COPY_BLK_MULTILINE
+	LD	A,L
+	CP	E
+	JP	NZ,DO_COPY_BLK_MULTILINE
+
+	;--------------------------------------------------------------------------
+	; CASE 1: Single-Line Block Copy
+	;--------------------------------------------------------------------------
+DO_COPY_BLK_SINGLE:
+	; Read source line BLOCK_START_ROW into SPLIT_LINE_TEMP
+	LD	BC,(BLOCK_START_ROW)
+	LD	DE,SPLIT_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	; Pointer in SPLIT_LINE_TEMP: HL = SPLIT_LINE_TEMP + BLOCK_START_COL
+	LD	HL,SPLIT_LINE_TEMP
+	LD	A,(BLOCK_START_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+
+	; Length: C = BLOCK_END_COL - BLOCK_START_COL + 1
+	LD	A,(BLOCK_END_COL)
+	SUB	E
+	INC	A
+	LD	C,A			; C = length to copy
+
+	; Copy into COPY_BLK_BUF up to null terminator or C chars
+	LD	DE,COPY_BLK_BUF
+	LD	B,0			; B counts actual characters copied
+COPY_SGL_EXTRACT:
+	LD	A,(HL)
+	OR	A
+	JR	Z,COPY_SGL_EXTRACT_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	INC	B
+	DEC	C
+	JR	NZ,COPY_SGL_EXTRACT
+COPY_SGL_EXTRACT_DONE:
+	XOR	A
+	LD	(DE),A			; Null-terminate COPY_BLK_BUF
+	LD	A,B
+	OR	A
+	RET	Z			; Nothing copied!
+	LD	(COPY_BLK_LEN),A	; Save copied length
+
+	; Read destination line CUR_DOC_ROW into LOAD_LINE_TEMP
+	LD	BC,(CUR_DOC_ROW)
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	; Find length of destination line: count until null in LOAD_LINE_TEMP
+	LD	HL,LOAD_LINE_TEMP
+	LD	B,0			; B = current line length
+COPY_SGL_DEST_LEN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,COPY_SGL_DEST_LEN_DONE
+	INC	HL
+	INC	B
+	JR	COPY_SGL_DEST_LEN
+COPY_SGL_DEST_LEN_DONE:
+	; Clamp CUR_COL <= B
+	LD	A,(CUR_COL)
+	CP	B
+	JR	C,COPY_SGL_COL_OK
+	JR	Z,COPY_SGL_COL_OK
+	LD	A,B
+	LD	(CUR_COL),A
+COPY_SGL_COL_OK:
+	; Check line capacity: max 120 chars. Space = 120 - B
+	LD	A,120
+	SUB	B
+	RET	C			; Already >= 120 chars
+	RET	Z
+
+	; If COPY_BLK_LEN > Space, clamp COPY_BLK_LEN = Space
+	LD	C,A			; C = available space
+	LD	A,(COPY_BLK_LEN)
+	CP	C
+	JR	C,COPY_SGL_SPACE_OK
+	LD	A,C
+	LD	(COPY_BLK_LEN),A
+COPY_SGL_SPACE_OK:
+	LD	A,(COPY_BLK_LEN)
+	OR	A
+	RET	Z
+
+	LD	A,B
+	LD	(DEST_LINE_LEN),A	; Save orig length B
+
+	; Shift suffix in LOAD_LINE_TEMP right by COPY_BLK_LEN bytes
+	; Number of bytes to shift: (DEST_LINE_LEN - CUR_COL + 1)
+	LD	A,(DEST_LINE_LEN)
+	LD	HL,CUR_COL
+	SUB	(HL)
+	INC	A
+	LD	C,A
+	LD	B,0			; BC = bytes to shift
+
+	; HL = LOAD_LINE_TEMP + DEST_LINE_LEN (source last byte)
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,(DEST_LINE_LEN)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = source last byte
+
+	; DE = destination last byte = HL + COPY_BLK_LEN
+	PUSH	HL
+	LD	A,(COPY_BLK_LEN)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	EX	DE,HL			; DE = destination last byte
+	POP	HL			; HL = source last byte
+	LDDR				; Shift suffix right
+
+	; Copy COPY_BLK_LEN bytes from COPY_BLK_BUF into LOAD_LINE_TEMP + CUR_COL
+	LD	HL,COPY_BLK_BUF
+	LD	DE,LOAD_LINE_TEMP
+	LD	A,(CUR_COL)
+	LD	C,A
+	LD	B,0
+	EX	DE,HL
+	ADD	HL,BC
+	EX	DE,HL			; DE = LOAD_LINE_TEMP + CUR_COL
+	LD	A,(COPY_BLK_LEN)
+	LD	C,A
+	LD	B,0
+	LDIR
+
+	; Write updated line back to CUR_DOC_ROW
+	LD	BC,(CUR_DOC_ROW)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; If CUR_DOC_ROW == BLOCK_START_ROW and CUR_COL <= BLOCK_START_COL:
+	; The block on this line shifted right by COPY_BLK_LEN!
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(BLOCK_START_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,COPY_SGL_ADVANCE
+	LD	A,L
+	CP	E
+	JR	NZ,COPY_SGL_ADVANCE
+
+	LD	A,(CUR_COL)
+	LD	B,A
+	LD	A,(BLOCK_START_COL)
+	CP	B
+	JR	C,COPY_SGL_ADVANCE	; CUR_COL > BLOCK_START_COL (after block)
+	; CUR_COL <= BLOCK_START_COL: shift block bounds right
+	LD	A,(COPY_BLK_LEN)
+	LD	B,A
+	LD	A,(BLOCK_START_COL)
+	ADD	A,B
+	LD	(BLOCK_START_COL),A
+	LD	A,(BLOCK_END_COL)
+	ADD	A,B
+	LD	(BLOCK_END_COL),A
+
+COPY_SGL_ADVANCE:
+	; Advance cursor: CUR_COL += COPY_BLK_LEN
+	LD	A,(CUR_COL)
+	LD	B,A
+	LD	A,(COPY_BLK_LEN)
+	ADD	A,B
+	LD	(CUR_COL),A
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A
+
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+	;--------------------------------------------------------------------------
+	; CASE 2: Multi-Line Block Copy
+	;--------------------------------------------------------------------------
+DO_COPY_BLK_MULTILINE:
+	LD	HL,(BLOCK_END_ROW)
+	LD	DE,(BLOCK_START_ROW)
+	AND	A
+	SBC	HL,DE
+	LD	(COPY_K_LINES),HL	; K = new lines count
+
+	; Check capacity: DOC_TOTAL_LINES + K <= MAX_DOC_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,(COPY_K_LINES)
+	ADD	HL,DE
+	LD	DE,MAX_DOC_LINES	; 3584
+	LD	A,H
+	CP	D
+	RET	NC
+	JR	NZ,COPY_ML_CAP_OK
+	LD	A,L
+	CP	E
+	RET	NC
+COPY_ML_CAP_OK:
+
+	; Pre-extract BLOCK_END_ROW prefix [0 .. BLOCK_END_COL] into COPY_TAIL_BUF
+	; (Doing this early prevents corruption if CUR_DOC_ROW == BLOCK_END_ROW)
+	LD	BC,(BLOCK_END_ROW)
+	LD	DE,COPY_TAIL_BUF
+	CALL	READ_FAR_LINE
+
+	; Truncate COPY_TAIL_BUF at BLOCK_END_COL + 1
+	LD	HL,COPY_TAIL_BUF
+	LD	C,0			; C = char count
+	LD	A,(BLOCK_END_COL)
+	LD	B,A
+	INC	B			; B = chars count (BLOCK_END_COL + 1)
+COPY_ML_TAIL_COUNT:
+	LD	A,(HL)
+	OR	A
+	JR	Z,COPY_ML_TAIL_COUNT_DONE
+	INC	HL
+	INC	C
+	DJNZ	COPY_ML_TAIL_COUNT
+COPY_ML_TAIL_COUNT_DONE:
+	LD	(HL),0			; Null-terminate COPY_TAIL_BUF
+	LD	A,C
+	LD	(COPY_TAIL_LEN),A	; Length of tail prefix
+
+	; Allocate K slots in COPY_SLOTS_BUF
+	LD	BC,(COPY_K_LINES)
+	LD	IX,COPY_SLOTS_BUF
+COPY_ML_ALLOC_LOOP:
+	PUSH	BC
+	CALL	ALLOC_SLOT
+	JR	C,COPY_ML_ALLOC_FAIL
+	LD	(IX+0),L
+	LD	(IX+1),H
+	INC	IX
+	INC	IX
+	POP	BC
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,COPY_ML_ALLOC_LOOP
+	JR	COPY_ML_ALLOC_DONE
+
+COPY_ML_ALLOC_FAIL:
+	POP	BC
+	LD	HL,(COPY_K_LINES)
+	AND	A
+	SBC	HL,BC			; HL = allocated count
+	LD	B,H
+	LD	C,L
+	LD	A,B
+	OR	C
+	RET	Z
+	LD	IX,COPY_SLOTS_BUF
+COPY_ML_ROLLBACK:
+	LD	L,(IX+0)
+	LD	H,(IX+1)
+	PUSH	BC
+	CALL	FREE_SLOT
+	POP	BC
+	INC	IX
+	INC	IX
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,COPY_ML_ROLLBACK
+	RET
+
+COPY_ML_ALLOC_DONE:
+	; Step 1: Destination line at CUR_DOC_ROW
+	; Read CUR_DOC_ROW into LOAD_LINE_TEMP
+	LD	BC,(CUR_DOC_ROW)
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	; Split LOAD_LINE_TEMP at CUR_COL:
+	; Prefix stays in LOAD_LINE_TEMP[0 .. CUR_COL - 1]
+	; Suffix copied into SPLIT_LINE_TEMP
+	LD	HL,SPLIT_LINE_TEMP
+	LD	DE,SPLIT_LINE_TEMP+1
+	LD	BC,127
+	LD	(HL),0
+	LDIR
+
+	LD	HL,LOAD_LINE_TEMP
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = split point in LOAD_LINE_TEMP
+
+	LD	DE,SPLIT_LINE_TEMP
+COPY_ML_SAVE_SUFFIX:
+	LD	A,(HL)
+	OR	A
+	JR	Z,COPY_ML_SUFFIX_SAVED
+	LD	(DE),A
+	LD	(HL),0			; Truncate LOAD_LINE_TEMP at CUR_COL
+	INC	HL
+	INC	DE
+	JR	COPY_ML_SAVE_SUFFIX
+COPY_ML_SUFFIX_SAVED:
+
+	; Read BLOCK_START_ROW into COPY_BLK_BUF
+	LD	BC,(BLOCK_START_ROW)
+	LD	DE,COPY_BLK_BUF
+	CALL	READ_FAR_LINE
+
+	; Append COPY_BLK_BUF[BLOCK_START_COL .. EOL] to LOAD_LINE_TEMP at CUR_COL
+	LD	HL,COPY_BLK_BUF
+	LD	A,(BLOCK_START_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = source in COPY_BLK_BUF
+
+	LD	DE,LOAD_LINE_TEMP
+	LD	A,(CUR_COL)
+	LD	C,A			; C = current length
+	PUSH	HL
+	LD	HL,LOAD_LINE_TEMP
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	EX	DE,HL			; DE = destination in LOAD_LINE_TEMP
+	POP	HL
+
+COPY_ML_APPEND_HEAD:
+	LD	A,(HL)
+	OR	A
+	JR	Z,COPY_ML_HEAD_DONE
+	LD	A,C
+	CP	MAX_LINE_STRIDE-7	; 121 (max 120 chars)
+	JR	NC,COPY_ML_HEAD_DONE
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	INC	C
+	JR	COPY_ML_APPEND_HEAD
+COPY_ML_HEAD_DONE:
+	XOR	A
+	LD	(DE),A
+
+	; Write updated head line back to CUR_DOC_ROW
+	LD	BC,(CUR_DOC_ROW)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+
+	; Step 2: Intermediate lines (if K > 1)
+	LD	IX,COPY_SLOTS_BUF	; Pointer in COPY_SLOTS_BUF
+	LD	HL,(COPY_K_LINES)
+	DEC	HL			; HL = K - 1
+	LD	A,H
+	OR	L
+	JR	Z,COPY_ML_PROCESS_LAST	; If K == 1, jump directly to last line
+
+	LD	(COPY_SRC_ROW),HL	; Loop counter = K - 1
+	LD	HL,(BLOCK_START_ROW)
+	INC	HL
+	LD	(DEL_BLK_CUR_LINE),HL	; Current source row = BLOCK_START_ROW + 1
+
+COPY_ML_MID_LOOP:
+	LD	BC,(DEL_BLK_CUR_LINE)
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+
+	LD	C,(IX+0)
+	LD	B,(IX+1)		; BC = slot ID
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_SLOT
+
+	INC	IX
+	INC	IX
+	LD	HL,(DEL_BLK_CUR_LINE)
+	INC	HL
+	LD	(DEL_BLK_CUR_LINE),HL
+
+	LD	HL,(COPY_SRC_ROW)
+	DEC	HL
+	LD	(COPY_SRC_ROW),HL
+	LD	A,H
+	OR	L
+	JR	NZ,COPY_ML_MID_LOOP
+
+COPY_ML_PROCESS_LAST:
+	; IX points to the slot for the last line
+	; Build last line: COPY_TAIL_BUF + SPLIT_LINE_TEMP into LOAD_LINE_TEMP
+	LD	HL,COPY_TAIL_BUF
+	LD	DE,LOAD_LINE_TEMP
+	LD	A,(COPY_TAIL_LEN)
+	LD	C,A			; C = char count
+	OR	A
+	JR	Z,COPY_ML_LAST_COPY_SUFFIX
+	LD	B,0
+	LDIR
+
+COPY_ML_LAST_COPY_SUFFIX:
+	; Append Suffix from SPLIT_LINE_TEMP
+	LD	HL,SPLIT_LINE_TEMP
+COPY_ML_APPEND_SUFFIX:
+	LD	A,(HL)
+	OR	A
+	JR	Z,COPY_ML_SUFFIX_DONE
+	LD	A,C
+	CP	MAX_LINE_STRIDE-7	; 121 (max 120 chars)
+	JR	NC,COPY_ML_SUFFIX_DONE
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	INC	C
+	JR	COPY_ML_APPEND_SUFFIX
+COPY_ML_SUFFIX_DONE:
+	XOR	A
+	LD	(DE),A
+
+	; Write last line to slot (IX+0, IX+1)
+	LD	C,(IX+0)
+	LD	B,(IX+1)
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_SLOT
+
+	; Step 3: Shift DOC_LINE_SLOTS downward from CUR_DOC_ROW + 1 by K words
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,(CUR_DOC_ROW)
+	INC	DE			; DE = CUR_DOC_ROW + 1
+	AND	A
+	SBC	HL,DE			; HL = W
+	JR	Z,COPY_ML_PLUG_SLOTS
+	JR	C,COPY_ML_PLUG_SLOTS
+
+	; Shift W words down by K words using LDDR
+	ADD	HL,HL
+	LD	B,H
+	LD	C,L			; BC = W * 2
+
+	; Source last byte: HL = DOC_LINE_SLOTS + DOC_TOTAL_LINES * 2 - 1
+	LD	HL,(DOC_TOTAL_LINES)
+	ADD	HL,HL
+	DEC	HL
+	LD	DE,DOC_LINE_SLOTS
+	ADD	HL,DE			; HL = source last byte
+
+	; Dest last byte: DE = HL + K * 2
+	PUSH	HL
+	LD	DE,(COPY_K_LINES)
+	EX	DE,HL
+	ADD	HL,HL			; HL = K * 2
+	POP	DE			; DE = source last byte
+	ADD	HL,DE
+	EX	DE,HL			; DE = dest last byte, HL = source last byte
+	LDDR
+
+COPY_ML_PLUG_SLOTS:
+	; Plug K new slot IDs into DOC_LINE_SLOTS + (CUR_DOC_ROW + 1) * 2
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL
+	ADD	HL,HL
+	LD	DE,DOC_LINE_SLOTS
+	ADD	HL,DE
+	EX	DE,HL			; DE = destination in DOC_LINE_SLOTS
+
+	LD	HL,COPY_SLOTS_BUF	; Source: COPY_SLOTS_BUF
+	LD	BC,(COPY_K_LINES)
+	SLA	C
+	RL	B			; BC = K * 2
+	LDIR
+
+	; Step 4: Update DOC_TOTAL_LINES += K
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,(COPY_K_LINES)
+	ADD	HL,DE
+	LD	(DOC_TOTAL_LINES),HL
+
+	; Step 5: If CUR_DOC_ROW < BLOCK_START_ROW, shift block rows down by K
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(BLOCK_START_ROW)
+	LD	A,H
+	CP	D
+	JR	C,COPY_ML_SHIFT_BLOCK
+	JR	NZ,COPY_ML_DONE_BLOCK_SHIFT
+	LD	A,L
+	CP	E
+	JR	NC,COPY_ML_DONE_BLOCK_SHIFT
+
+COPY_ML_SHIFT_BLOCK:
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(COPY_K_LINES)
+	ADD	HL,DE
+	LD	(BLOCK_START_ROW),HL
+
+	LD	HL,(BLOCK_END_ROW)
+	ADD	HL,DE
+	LD	(BLOCK_END_ROW),HL
+
+COPY_ML_DONE_BLOCK_SHIFT:
+	; Step 6: Advance cursor to CUR_DOC_ROW + K, Col = COPY_TAIL_LEN
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(COPY_K_LINES)
+	ADD	HL,DE
+	LD	(CUR_DOC_ROW),HL
+
+	LD	A,(COPY_TAIL_LEN)
+	LD	(CUR_COL),A
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A
+
+	; Adjust TOP_DOC_ROW if scrolled past screen
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A
+	CP	L
+	JR	NC,COPY_ML_FINISH
+	; Scroll viewport so CUR_DOC_ROW is on screen
+	LD	HL,(CUR_DOC_ROW)
+	LD	E,A
+	LD	D,0
+	AND	A
+	SBC	HL,DE
+	LD	(TOP_DOC_ROW),HL
+
+COPY_ML_FINISH:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
@@ -6925,7 +7602,8 @@ STR_HELP_SCREEN:
 	.DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
 	.DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
 	.DB	"    Ctrl+B           Start/Toggle block      Ctrl+K          Solidify block",13,10
-	.DB	"    Delete / Ctrl+D  Delete solidified block ESC             Clear block",13,10
+	.DB	"    Ctrl+C           Copy solidified block   Delete / Ctrl+D Delete block",13,10
+	.DB	"    ESC              Clear block",13,10
 	.DB	"================================================================================",13,10
 	.DB	"                      Press any key to return to editor...",13,10,"$"
 
@@ -7053,6 +7731,14 @@ CSI_DIGIT_PREFIX:.DB	0
 JOIN_COL_SAVED:	.DB	0
 JOIN_DOC_LINE:	.DW	0
 DEL_BLK_CUR_LINE:.DW	0
+COPY_K_LINES:	.DW	0
+COPY_SRC_ROW:	.DW	0
+COPY_BLK_LEN:	.DB	0
+COPY_TAIL_LEN:	.DB	0
+DEST_LINE_LEN:	.DB	0
+COPY_BLK_BUF:	.DS	128
+COPY_TAIL_BUF:	.DS	128
+COPY_SLOTS_BUF:	.DS	256
 BLOCK_ACTIVE:	.DB	0		; 0 = inactive, 1 = selecting, 2 = solidified
 BLOCK_ANCHOR_ROW:.DW	0		; 16-bit document row where block started
 BLOCK_ANCHOR_COL:.DB	0		; 8-bit character column where block started
