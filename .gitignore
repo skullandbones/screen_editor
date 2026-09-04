@@ -3,6 +3,7 @@
 *.obj
 *.rel
 *.sym
+*.map
 *.lst
 *.tmp
 *.bak

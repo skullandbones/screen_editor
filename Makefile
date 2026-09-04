@@ -1,9 +1,9 @@
 # Makefile for CP/M Full-Screen Editor (SE.COM)
-# Assembler: uz80as (micro Z80 assembler from RomWBW)
+# Assembler: z88dk-z80asm (Z80 Macro Assembler from z88dk)
 
 WORKSPACE_ROOT ?= ../..
 TOOLS_DIR ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Tools/Linux
-UZ80AS ?= $(TOOLS_DIR)/uz80as
+Z80ASM ?= $(WORKSPACE_ROOT)/tools/z88dk/bin/z88dk-z80asm
 IMAGE ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Binary/hd1k_combo.img
 CPMCP ?= $(TOOLS_DIR)/cpmcp
 CPMRM ?= $(TOOLS_DIR)/cpmrm
@@ -16,8 +16,8 @@ ASM_SRC = src/se.asm
 all: $(TARGET)
 
 $(TARGET): $(ASM_SRC)
-	@echo "==> Assembling $(TARGET) with uz80as..."
-	$(UZ80AS) -q $(ASM_SRC) $(TARGET)
+	@echo "==> Assembling $(TARGET) with z88dk-z80asm..."
+	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
 
 image: $(TARGET)
 	@echo "==> Injecting $(TARGET) into modern hd1k combo image (Slice 0)..."
@@ -37,4 +37,4 @@ test-conformity: image
 test-full: test-conformity
 
 clean:
-	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def
+	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def *.map *.sym src/*.o src/*.map src/*.sym

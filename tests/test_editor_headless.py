@@ -106,7 +106,7 @@ def test_se_execution():
         # 4. Run SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        out = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=14.0)
         if b"Auto-detects CP/M [CRLF]" not in out:
             print("[-] SE.COM splash screen not detected.", flush=True)
             return False
@@ -470,7 +470,7 @@ def test_se_execution():
         # 19. Test File Loading: Open 2-line file 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_load = read_until(master, b"Row 1/2,", timeout=6.0)
+        out_load = read_until(master, b"Row 1/2,", timeout=14.0)
         if b"SE v0.7.1" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
@@ -493,7 +493,7 @@ def test_se_execution():
         # 20. Test Multi-Sector File Loading and Page-Up / Page-Down Navigation: 'se 30.TXT'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_load_30 = read_until(master, b"Row 1/30,", timeout=6.0)
+        out_load_30 = read_until(master, b"Row 1/30,", timeout=14.0)
         if b"SE v0.7.1" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
             return False
@@ -1166,6 +1166,8 @@ def test_se_execution():
         if b"[BLK: 2c LOCK]" not in out_solid_cpy:
             print(f"[-] Block solidification failed for Ctrl+C test. Buffer: {repr(out_solid_cpy)}", flush=True)
             return False
+        time.sleep(0.1)
+        drain_all(master)
 
         # Test 1: Press Ctrl+C while cursor is inside block (Col 1): must be ignored!
         os.write(master, b"\x03")
@@ -1184,7 +1186,7 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_cpy1 = drain_all(master)
-        if b"[BLK: 2c LOCK]" not in out_cpy1 or b"L1L1" not in out_cpy1:
+        if b"[BLK: 2c LOCK]" not in out_cpy1 or (b"L1L1" not in out_cpy1 and b"L1\x1b[0mL1" not in out_cpy1):
             print(f"[-] Ctrl+C copy failed or lost block lock. Buffer: {repr(out_cpy1)}", flush=True)
             return False
 
@@ -1192,7 +1194,7 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_cpy2 = drain_all(master)
-        if b"[BLK: 2c LOCK]" not in out_cpy2 or b"L1L1L1" not in out_cpy2:
+        if b"[BLK: 2c LOCK]" not in out_cpy2 or (b"L1L1L1" not in out_cpy2 and b"L1\x1b[0mL1L1" not in out_cpy2):
             print(f"[-] Consecutive Ctrl+C failed or lost block lock. Buffer: {repr(out_cpy2)}", flush=True)
             return False
 

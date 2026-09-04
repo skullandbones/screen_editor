@@ -3,44 +3,44 @@
 ; Target: Z80 CPU, CP/M 2.2+, RomWBW HBIOS 512K Extended RAM, Minicom/VT100
 ;==============================================================================
 
-	.ORG	$0100
+	ORG	$0100
 
 ;------------------------------------------------------------------------------
 ; Constants & BDOS Vectors
 ;------------------------------------------------------------------------------
-BDOS_ENTRY	.EQU	$0005
-DEFAULT_FCB	.EQU	$005C
-DEFAULT_DMA	.EQU	$0080
-CMD_LEN		.EQU	$0080
-CMD_TAIL	.EQU	$0081
+BDOS_ENTRY	EQU	$0005
+DEFAULT_FCB	EQU	$005C
+DEFAULT_DMA	EQU	$0080
+CMD_LEN		EQU	$0080
+CMD_TAIL	EQU	$0081
 
-MAX_LINE_STRIDE	.EQU	128		; 128 bytes stride per line buffer
-MAX_FAR_BANKS	.EQU	14		; Up to 14 extended 32KB RAM banks (448 KB)
-CACHE_SIZE_LINES .EQU	48		; 48 lines in local working cache (6 KB)
-MAX_DOC_LINES	.EQU	3584		; 14 banks * 256 lines = 3584 total lines
+MAX_LINE_STRIDE	EQU	128		; 128 bytes stride per line buffer
+MAX_FAR_BANKS	EQU	14		; Up to 14 extended 32KB RAM banks (448 KB)
+CACHE_SIZE_LINES EQU	48		; 48 lines in local working cache (6 KB)
+MAX_DOC_LINES	EQU	3584		; 14 banks * 256 lines = 3584 total lines
 
-KEY_CTRL_B	.EQU	2		; Toggle Block Highlighting
-KEY_CTRL_C	.EQU	3
-KEY_CTRL_Q	.EQU	17
-KEY_CTRL_S	.EQU	19
-KEY_CTRL_O	.EQU	15		; Open File Screen
-KEY_CTRL_K	.EQU	11		; Show Editor Mode Keys Screen
-KEY_CTRL_F	.EQU	6		; Toggle CP/M <-> Linux line endings
-KEY_CTRL_U	.EQU	21		; Page Up
-KEY_CTRL_V	.EQU	22		; Page Down
-KEY_BACKSPACE	.EQU	8
-KEY_TAB		.EQU	9
-KEY_ENTER	.EQU	13
-KEY_ESC		.EQU	27
-KEY_DEL		.EQU	127
+KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
+KEY_CTRL_C	EQU	3
+KEY_CTRL_Q	EQU	17
+KEY_CTRL_S	EQU	19
+KEY_CTRL_O	EQU	15		; Open File Screen
+KEY_CTRL_K	EQU	11		; Show Editor Mode Keys Screen
+KEY_CTRL_F	EQU	6		; Toggle CP/M <-> Linux line endings
+KEY_CTRL_U	EQU	21		; Page Up
+KEY_CTRL_V	EQU	22		; Page Down
+KEY_BACKSPACE	EQU	8
+KEY_TAB		EQU	9
+KEY_ENTER	EQU	13
+KEY_ESC		EQU	27
+KEY_DEL		EQU	127
 
 ; Line ending modes
-FMT_CPM		.EQU	0		; CR/LF (0x0D, 0x0A)
-FMT_LINUX	.EQU	1		; LF only (0x0A)
+FMT_CPM		EQU	0		; CR/LF (0x0D, 0x0A)
+FMT_LINUX	EQU	1		; LF only (0x0A)
 
 ; Screen Size Modes
-MODE_120X40	.EQU	0		; Modern 120 cols x 40 rows (Default)
-MODE_80X24	.EQU	1		; Classic 80 cols x 24 rows
+MODE_120X40	EQU	0		; Modern 120 cols x 40 rows (Default)
+MODE_80X24	EQU	1		; Classic 80 cols x 24 rows
 
 ;------------------------------------------------------------------------------
 ; Main Entry Point
@@ -3332,7 +3332,7 @@ SHOW_STATUS_ROWCOL:
 	CALL	LOCATE_CURSOR
 	RET
 
-FILENAME_FIELD_WIDTH	.EQU	14
+FILENAME_FIELD_WIDTH	EQU	14
 
 ;------------------------------------------------------------------------------
 ; Print Filename in Status Bar (Fixed Width: FILENAME_FIELD_WIDTH characters)
@@ -7361,457 +7361,359 @@ DIV_HL_10_NEXT:
 ;------------------------------------------------------------------------------
 ; String Constants & Data
 ;------------------------------------------------------------------------------
-STR_CLEAR_SCREEN:
-	.DB	27,"[2J",27,"[H","$"
+STR_CLEAR_SCREEN:	DB	27,"[2J",27,"[H","$"
 
-STR_HOME:
-	.DB	27,"[H","$"
+STR_HOME:	DB	27,"[H","$"
 
-STR_GOTO_ROW_24:
-	.DB	27,"[24;1H","$"
+STR_GOTO_ROW_24:	DB	27,"[24;1H","$"
 
-STR_GOTO_ROW_40:
-	.DB	27,"[40;1H","$"
+STR_GOTO_ROW_40:	DB	27,"[40;1H","$"
 
-STR_CLEAR_EOL:
-	.DB	27,"[K","$"
+STR_CLEAR_EOL:	DB	27,"[K","$"
 
-STR_INVERSE_ON:
-	.DB	27,"[7m","$"
+STR_INVERSE_ON:	DB	27,"[7m","$"
 
-STR_INVERSE_OFF:
-	.DB	27,"[0m","$"
+STR_INVERSE_OFF:	DB	27,"[0m","$"
 
-STR_CRLF:
-	.DB	13,10,"$"
+STR_CRLF:	DB	13,10,"$"
 
-STR_SPLASH_BODY:
-	.DB	27,"[H"
-	.DB	13,10
-	.DB	"                  ~                                             ",13,10
-	.DB	"                  ~             SE - Screen Editor              ",13,10
-	.DB	"                  ~                version 0.7.1                ",13,10
-	.DB	"                  ~              by Dean Jenkins                ",13,10
-	.DB	"                  ~                                             ",13,10
-	.DB	"                  ~       SE is open source and freely usable   ",13,10
-	.DB	"                  ~                                             ",13,10
-	.DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
-	.DB	"                  ~       type   :o                to open file ",13,10
-	.DB	"                  ~       type   :s                to save file ",13,10
-	.DB	"                  ~       type   :t                for mem test ",13,10
-	.DB	"                  ~       type   :f                for file test",13,10
-	.DB	"                  ~       type   :1                set 120x40   ",13,10
-	.DB	"                  ~       type   :2                set 80x24    ",13,10
-	.DB	"                  ~       type   :q  or  ^Q        to exit      ",13,10
-	.DB	"                  ~                                             ",13,10
-	.DB	"$"
+STR_SPLASH_BODY:	DB	27,"[H"
+	DB	13,10
+	DB	"                  ~                                             ",13,10
+	DB	"                  ~             SE - Screen Editor              ",13,10
+	DB	"                  ~                version 0.7.1                ",13,10
+	DB	"                  ~              by Dean Jenkins                ",13,10
+	DB	"                  ~                                             ",13,10
+	DB	"                  ~       SE is open source and freely usable   ",13,10
+	DB	"                  ~                                             ",13,10
+	DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
+	DB	"                  ~       type   :o                to open file ",13,10
+	DB	"                  ~       type   :s                to save file ",13,10
+	DB	"                  ~       type   :t                for mem test ",13,10
+	DB	"                  ~       type   :f                for file test",13,10
+	DB	"                  ~       type   :1                set 120x40   ",13,10
+	DB	"                  ~       type   :2                set 80x24    ",13,10
+	DB	"                  ~       type   :q  or  ^Q        to exit      ",13,10
+	DB	"                  ~                                             ",13,10
+	DB	"$"
 
-STR_SPLASH_CUR_MODE:
-	.DB	"                  ~   Active Screen: [$"
+STR_SPLASH_CUR_MODE:	DB	"                  ~   Active Screen: [$"
 
-STR_MODE_120X40_LBL:
-	.DB	"120x40 (Modern Default)]           ",13,10,"$"
+STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
-STR_MODE_80X24_LBL:
-	.DB	"80x24 (Classic Terminal)]          ",13,10,"$"
+STR_MODE_80X24_LBL:	DB	"80x24 (Classic Terminal)]          ",13,10,"$"
 
-STR_SPLASH_TAIL:
-	.DB	"                  ~      Z80 CP/M with 512K Extended Storage    ",13,10
-	.DB	"                  ~      Auto-detects CP/M [CRLF] & Linux [LF]  ",13,10
-	.DB	"                  ~                                             ",13,10
-	.DB	"$"
+STR_SPLASH_TAIL:	DB	"                  ~      Z80 CP/M with 512K Extended Storage    ",13,10
+	DB	"                  ~      Auto-detects CP/M [CRLF] & Linux [LF]  ",13,10
+	DB	"                  ~                                             ",13,10
+	DB	"$"
 
-STR_TEST_TITLE:
-	.DB	27,"[H",27,"[2J"
-	.DB	"============================================================",13,10
-	.DB	"        SE.COM 512KB EXTENDED MEMORY DIAGNOSTIC SUITE       ",13,10
-	.DB	"============================================================",13,10,13,10,"$"
+STR_TEST_TITLE:	DB	27,"[H",27,"[2J"
+	DB	"============================================================",13,10
+	DB	"        SE.COM 512KB EXTENDED MEMORY DIAGNOSTIC SUITE       ",13,10
+	DB	"============================================================",13,10,13,10,"$"
 
-STR_TEST_HBIOS_OK:
-	.DB	"[+] RomWBW HBIOS API (RST 08H): DETECTED",13,10,"$"
+STR_TEST_HBIOS_OK:	DB	"[+] RomWBW HBIOS API (RST 08H): DETECTED",13,10,"$"
 
-STR_TEST_NO_HBIOS:
-	.DB	"[-] RomWBW HBIOS API NOT DETECTED.",13,10,"$"
+STR_TEST_NO_HBIOS:	DB	"[-] RomWBW HBIOS API NOT DETECTED.",13,10,"$"
 
-STR_TEST_RAM_BANKS:
-	.DB	"[*] Installed System RAM Banks: $"
-
-STR_TEST_RAM_BANKS_END:
-	.DB	" x 32KB (512KB Total RAM)",13,10,"$"
-
-STR_TEST_CUR_BANK:
-	.DB	"[*] Active CP/M User RAM Bank:  0x$"
-
-STR_TEST_DISCOVERED:
-	.DB	"[*] Usable Far RAM Banks (32K): $"
-
-STR_TEST_BANKS_LIST:
-	.DB	"): ","$"
-
-STR_TEST_CAPACITY:
-	.DB	"[*] Far Document Storage:       3,584 Lines (448 KB Extended RAM)",13,10,13,10,"$"
-
-STR_TEST_NO_BANKS:
-	.DB	"[-] No Far RAM banks available for extended storage.",13,10,13,10,"$"
+STR_TEST_RAM_BANKS:	DB	"[*] Installed System RAM Banks: $"
 
-STR_TEST1_TITLE:
-	.DB	"[*] Test 1: Direct Inter-Bank DMA Copy (SYSBNKCPY 0xF5)...",13,10,"$"
+STR_TEST_RAM_BANKS_END:	DB	" x 32KB (512KB Total RAM)",13,10,"$"
 
-STR_TEST1_PASS:
-	.DB	"    --> [PASS] 2-byte DMA pattern (0xAA55) verified.",13,10,13,10,"$"
+STR_TEST_CUR_BANK:	DB	"[*] Active CP/M User RAM Bank:  0x$"
 
-STR_TEST2_TITLE:
-	.DB	"[*] Test 2: Multi-Bank Far Line Engine (WRITE/READ FAR LINE)...",13,10,"$"
+STR_TEST_DISCOVERED:	DB	"[*] Usable Far RAM Banks (32K): $"
 
-STR_TEST2_PASS_PRE:
-	.DB	"    --> [PASS] Verified across all $"
+STR_TEST_BANKS_LIST:	DB	"): ","$"
 
-STR_TEST2_PASS_POST:
-	.DB	" Far RAM Banks (128-byte line I/O).",13,10,13,10,"$"
+STR_TEST_CAPACITY:	DB	"[*] Far Document Storage:       3,584 Lines (448 KB Extended RAM)",13,10,13,10,"$"
 
-STR_TEST3_TITLE:
-	.DB	"[*] Test 3: Bank Boundary & 32KB Stride (Offsets 0x0000 & 0x7F80)...",13,10,"$"
+STR_TEST_NO_BANKS:	DB	"[-] No Far RAM banks available for extended storage.",13,10,13,10,"$"
 
-STR_TEST3_PASS:
-	.DB	"    --> [PASS] Offsets 0x0000 (top) & 0x7F80 (bottom) verified without overlap.",13,10,13,10,"$"
+STR_TEST1_TITLE:	DB	"[*] Test 1: Direct Inter-Bank DMA Copy (SYSBNKCPY 0xF5)...",13,10,"$"
 
-STR_TEST4_TITLE:
-	.DB	"[*] Test 4: Sliding Window Cache (16KB / 128 Lines) & Dirty Flush...",13,10,"$"
+STR_TEST1_PASS:	DB	"    --> [PASS] 2-byte DMA pattern (0xAA55) verified.",13,10,13,10,"$"
 
-STR_TEST4_PASS:
-	.DB	"    --> [PASS] Transparent window sliding and Far RAM sync verified.",13,10,13,10,"$"
+STR_TEST2_TITLE:	DB	"[*] Test 2: Multi-Bank Far Line Engine (WRITE/READ FAR LINE)...",13,10,"$"
 
-STR_TEST4_FAIL_L0_MSG:
-	.DB	"    [-] Test 4 Line 0 Reload Mismatch! Expected 'C' (0x43), Got: 0x$"
+STR_TEST2_PASS_PRE:	DB	"    --> [PASS] Verified across all $"
 
-STR_TEST4_FAIL_L300_MSG:
-	.DB	"    [-] Test 4 Line 300 Reload Mismatch! Expected 'C' (0x43), Got: 0x$"
+STR_TEST2_PASS_POST:	DB	" Far RAM Banks (128-byte line I/O).",13,10,13,10,"$"
 
-STR_TEST_ALL_PASSED:
-	.DB	"============================================================",13,10
-	.DB	"[+] ALL 512KB EXTENDED MEMORY TESTS PASSED SUCCESSFULLY!",13,10
-	.DB	"============================================================",13,10,13,10,"$"
+STR_TEST3_TITLE:	DB	"[*] Test 3: Bank Boundary & 32KB Stride (Offsets 0x0000 & 0x7F80)...",13,10,"$"
 
-STR_TEST_FAILED:
-	.DB	13,10,"[-] EXTENDED MEMORY TEST FAILED (Data verification mismatch)",13,10,13,10,"$"
+STR_TEST3_PASS:	DB	"    --> [PASS] Offsets 0x0000 (top) & 0x7F80 (bottom) verified without overlap.",13,10,13,10,"$"
 
-STR_TEST_PROMPT:
-	.DB	"Press any key to return to Splash Screen...$"
+STR_TEST4_TITLE:	DB	"[*] Test 4: Sliding Window Cache (16KB / 128 Lines) & Dirty Flush...",13,10,"$"
 
-STR_FILE_TEST_TITLE:
-	.DB	27,"[H",27,"[2J"
-	.DB	"============================================================",13,10
-	.DB	"        SE.COM MULTI-SECTOR FILE I/O VALIDATION TEST        ",13,10
-	.DB	"============================================================",13,10,13,10,"$"
-
-STR_FILE_TEST_OPEN_OK:
-	.DB	"[+] BDOS Open File ('30.TXT'): SUCCESS",13,10,"$"
-
-STR_RAW_SECTORS_LBL:
-	.DB	"[*] Total Sectors Read:       $"
-STR_RAW_SECTORS_TAIL:
-	.DB	" sectors (128 bytes/sector)",13,10,"$"
-
-STR_RAW_BYTES_LBL:
-	.DB	"[*] Total Data Bytes:         $"
-STR_RAW_BYTES_TAIL:
-	.DB	" bytes",13,10,"$"
-
-STR_RAW_LINES_LBL:
-	.DB	"[*] Total Text Lines Parsed:  $"
-STR_RAW_LINES_TAIL:
-	.DB	" lines",13,10,"$"
-
-STR_RAW_FMT_LBL:
-	.DB	"[*] Line Ending Format:       $"
-STR_RAW_FMT_CPM:
-	.DB	"CP/M [CRLF]",13,10,"$"
-STR_RAW_FMT_LINUX:
-	.DB	"Linux [LF]",13,10,"$"
-
-STR_RAW_FIRST_LINE_LBL:
-	.DB	"[*] First Line Content:       \"",$"
-STR_RAW_LAST_LINE_LBL:
-	.DB	"[*] Last Line Content:        \"",$"
-STR_QUOTE_CRLF:
-	.DB	"\"",13,10,"$"
-
-STR_FILE_TEST_PASSED:
-	.DB	13,10
-	.DB	"============================================================",13,10
-	.DB	"[+] MULTI-SECTOR FILE VALIDATION: ALL TESTS PASSED!",13,10
-	.DB	"============================================================",13,10,"$"
-
-STR_FILE_TEST_NOT_FOUND:
-	.DB	"[-] Error: Test file '30.TXT' not found on CP/M drive!",13,10,"$"
-
-STR_FILE_TEST_FAILED:
-	.DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
-
-STR_STATUS_PREFIX:
-	.DB	" SE v0.7.1 | ","$"
-
-STR_STATUS_120X40:
-	.DB	"120x40 | ","$"
-
-STR_STATUS_80X24:
-	.DB	"80x24 | ","$"
-
-STR_FMT_CPM:
-	.DB	"CP/M | ","$"
-
-STR_FMT_LINUX:
-	.DB	"Linux | ","$"
-
-STR_STATUS_KEYS:
-	.DB	"^K: Editor keys | ","$"
-
-STR_SEL_PREFIX:
-	.DB	"[SEL: ","$"
-
-STR_BLK_PREFIX:
-	.DB	"[BLK: ","$"
-
-STR_CHAR_SUFFIX:
-	.DB	"c] | ","$"
-
-STR_LINE_SUFFIX:
-	.DB	"L] | ","$"
+STR_TEST4_PASS:	DB	"    --> [PASS] Transparent window sliding and Far RAM sync verified.",13,10,13,10,"$"
 
-STR_CHAR_LOCK_SUFFIX:
-	.DB	"c LOCK] | ","$"
-
-STR_LINE_LOCK_SUFFIX:
-	.DB	"L LOCK] | ","$"
-
-STR_HELP_SCREEN:
-	.DB	27,"[H",27,"[2J"
-	.DB	"================================================================================",13,10
-	.DB	"                          SE.COM - EDITOR MODE KEYS                             ",13,10
-	.DB	"================================================================================",13,10
-	.DB	"  FILE & SYSTEM:",13,10
-	.DB	"    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
-	.DB	"    Ctrl+Q           Quit to CP/M            ESC             Splash / Clear block",13,10
-	.DB	"    Ctrl+K           Help / Solidify block",13,10,13,10
-	.DB	"  NAVIGATION:",13,10
-	.DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
-	.DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
-	.DB	"    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
-	.DB	"                                             Ctrl+G / ^End   Bottom of file",13,10,13,10
-	.DB	"  EDITING & BLOCK:",13,10
-	.DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
-	.DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
-	.DB	"    Ctrl+B           Start/Toggle block      Ctrl+K          Solidify block",13,10
-	.DB	"    Ctrl+C           Copy solidified block   Delete / Ctrl+D Delete block",13,10
-	.DB	"    ESC              Clear block",13,10
-	.DB	"================================================================================",13,10
-	.DB	"                      Press any key to return to editor...",13,10,"$"
+STR_TEST4_FAIL_L0_MSG:	DB	"    [-] Test 4 Line 0 Reload Mismatch! Expected 'C' (0x43), Got: 0x$"
 
-STR_STATUS_SEP:
-	.DB	" | ","$"
+STR_TEST4_FAIL_L300_MSG:	DB	"    [-] Test 4 Line 300 Reload Mismatch! Expected 'C' (0x43), Got: 0x$"
 
-STR_NO_NAME:
-	.DB	"[No Name]",0
+STR_TEST_ALL_PASSED:	DB	"============================================================",13,10
+	DB	"[+] ALL 512KB EXTENDED MEMORY TESTS PASSED SUCCESSFULLY!",13,10
+	DB	"============================================================",13,10,13,10,"$"
 
-STR_STATUS_POS:
-	.DB	"Row ","$"
+STR_TEST_FAILED:	DB	13,10,"[-] EXTENDED MEMORY TEST FAILED (Data verification mismatch)",13,10,13,10,"$"
 
-STR_STATUS_COL:
-	.DB	", Col ","$"
+STR_TEST_PROMPT:	DB	"Press any key to return to Splash Screen...$"
 
-MSG_EXIT:
-	.DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
+STR_FILE_TEST_TITLE:	DB	27,"[H",27,"[2J"
+	DB	"============================================================",13,10
+	DB	"        SE.COM MULTI-SECTOR FILE I/O VALIDATION TEST        ",13,10
+	DB	"============================================================",13,10,13,10,"$"
 
-STR_DIR_TITLE:
-	.DB	27,"[H",27,"[2J"
-	.DB	"============================================================",13,10
-	.DB	"           SE.COM - OPEN FILE (DIRECTORY - DRIVE "
-STR_DIR_DRIVE_CHAR:
-	.DB	"A:)        ",13,10
-	.DB	"============================================================",13,10,13,10,"$"
+STR_FILE_TEST_OPEN_OK:	DB	"[+] BDOS Open File ('30.TXT'): SUCCESS",13,10,"$"
 
-STR_OPEN_PROMPT:
-	.DB	"------------------------------------------------------------",13,10
-	.DB	"Enter filename to open (<ESC>=Cancel): ","$"
+STR_RAW_SECTORS_LBL:	DB	"[*] Total Sectors Read:       $"
+STR_RAW_SECTORS_TAIL:	DB	" sectors (128 bytes/sector)",13,10,"$"
 
-STR_PAGE_PREFIX:
-	.DB	"------------------------------------------------------------",13,10
-	.DB	"[Page ","$"
+STR_RAW_BYTES_LBL:	DB	"[*] Total Data Bytes:         $"
+STR_RAW_BYTES_TAIL:	DB	" bytes",13,10,"$"
 
-STR_PAGE_MID:
-	.DB	"/","$"
+STR_RAW_LINES_LBL:	DB	"[*] Total Text Lines Parsed:  $"
+STR_RAW_LINES_TAIL:	DB	" lines",13,10,"$"
 
-STR_PAGE_SUFFIX:
-	.DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10
-	.DB	"Enter filename to open: ","$"
+STR_RAW_FMT_LBL:	DB	"[*] Line Ending Format:       $"
+STR_RAW_FMT_CPM:	DB	"CP/M [CRLF]",13,10,"$"
+STR_RAW_FMT_LINUX:	DB	"Linux [LF]",13,10,"$"
 
-STR_NO_FILES_FOUND:
-	.DB	"  [No files found on current drive]",13,10,13,10,"$"
+STR_RAW_FIRST_LINE_LBL:	DB	"[*] First Line Content:       ", 34, "$"
+STR_RAW_LAST_LINE_LBL:	DB	"[*] Last Line Content:        ", 34, "$"
+STR_QUOTE_CRLF:	DB	34, 13, 10, "$"
 
-DEFAULT_FCB_NAME:
-	.DB	0,"OUTPUT  TXT",0,0,0,0
+STR_FILE_TEST_PASSED:	DB	13,10
+	DB	"============================================================",13,10
+	DB	"[+] MULTI-SECTOR FILE VALIDATION: ALL TESTS PASSED!",13,10
+	DB	"============================================================",13,10,"$"
 
-STR_SAVE_TITLE:
-	.DB	27,"[H",27,"[2J"
-	.DB	"============================================================",13,10
-	.DB	"           SE.COM - SAVE FILE (DIRECTORY - DRIVE "
-STR_SAVE_DRIVE_CHAR:
-	.DB	"A:)        ",13,10
-	.DB	"============================================================",13,10,13,10,"$"
+STR_FILE_TEST_NOT_FOUND:	DB	"[-] Error: Test file '30.TXT' not found on CP/M drive!",13,10,"$"
 
-STR_SAVE_FMT_PREFIX:
-	.DB	"Format: [","$"
+STR_FILE_TEST_FAILED:	DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
 
-STR_SAVE_FMT_CPM:
-	.DB	"CP/M","$"
+STR_STATUS_PREFIX:	DB	" SE v0.7.1 | ","$"
 
-STR_SAVE_FMT_LINUX:
-	.DB	"Linux","$"
+STR_STATUS_120X40:	DB	"120x40 | ","$"
 
-STR_SAVE_FMT_SUFFIX:
-	.DB	"]  (^F: toggle format)",13,10,"$"
+STR_STATUS_80X24:	DB	"80x24 | ","$"
 
-STR_SAVE_SEP_LINE:
-	.DB	"------------------------------------------------------------",13,10,"$"
+STR_FMT_CPM:	DB	"CP/M | ","$"
 
-STR_SAVE_ENTER_PROMPT:
-	.DB	"Enter filename to save (or <Enter>/<ESC> to cancel): ","$"
+STR_FMT_LINUX:	DB	"Linux | ","$"
 
-STR_SAVE_PAGE_PREFIX:
-	.DB	"------------------------------------------------------------",13,10
-	.DB	"[Page ","$"
+STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 
-STR_SAVE_PAGE_SUFFIX:
-	.DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10,"$"
+STR_SEL_PREFIX:	DB	"[SEL: ","$"
 
-STR_SAVE_PAGE_PROMPT:
-	.DB	"Enter filename to save: ","$"
+STR_BLK_PREFIX:	DB	"[BLK: ","$"
 
-STR_OVERWRITE_WARN:
-	.DB	13,10,"File already exists. Overwrite? (y/n): ","$"
+STR_CHAR_SUFFIX:	DB	"c] | ","$"
 
-STR_SAVE_CANCELLED:
-	.DB	13,10,"Save cancelled.",13,10,"$"
+STR_LINE_SUFFIX:	DB	"L] | ","$"
 
-STR_FILE_NOT_FOUND:
-	.DB	13,10,"File not found.",13,10,"$"
+STR_CHAR_LOCK_SUFFIX:	DB	"c LOCK] | ","$"
 
-STR_FNF_INLINE:
-	.DB	"  File not found","$"
+STR_LINE_LOCK_SUFFIX:	DB	"L LOCK] | ","$"
+
+STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
+	DB	"================================================================================",13,10
+	DB	"                          SE.COM - EDITOR MODE KEYS                             ",13,10
+	DB	"================================================================================",13,10
+	DB	"  FILE & SYSTEM:",13,10
+	DB	"    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
+	DB	"    Ctrl+Q           Quit to CP/M            ESC             Splash / Clear block",13,10
+	DB	"    Ctrl+K           Help / Solidify block",13,10,13,10
+	DB	"  NAVIGATION:",13,10
+	DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
+	DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
+	DB	"    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
+	DB	"                                             Ctrl+G / ^End   Bottom of file",13,10,13,10
+	DB	"  EDITING & BLOCK:",13,10
+	DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
+	DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
+	DB	"    Ctrl+B           Start/Toggle block      Ctrl+K          Solidify block",13,10
+	DB	"    Ctrl+C           Copy solidified block   Delete / Ctrl+D Delete block",13,10
+	DB	"    ESC              Clear block",13,10
+	DB	"================================================================================",13,10
+	DB	"                      Press any key to return to editor...",13,10,"$"
+
+STR_STATUS_SEP:	DB	" | ","$"
+
+STR_NO_NAME:	DB	"[No Name]",0
+
+STR_STATUS_POS:	DB	"Row ","$"
+
+STR_STATUS_COL:	DB	", Col ","$"
+
+MSG_EXIT:	DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
+
+STR_DIR_TITLE:	DB	27,"[H",27,"[2J"
+	DB	"============================================================",13,10
+	DB	"           SE.COM - OPEN FILE (DIRECTORY - DRIVE "
+STR_DIR_DRIVE_CHAR:	DB	"A:)        ",13,10
+	DB	"============================================================",13,10,13,10,"$"
+
+STR_OPEN_PROMPT:	DB	"------------------------------------------------------------",13,10
+	DB	"Enter filename to open (<ESC>=Cancel): ","$"
+
+STR_PAGE_PREFIX:	DB	"------------------------------------------------------------",13,10
+	DB	"[Page ","$"
+
+STR_PAGE_MID:	DB	"/","$"
+
+STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10
+	DB	"Enter filename to open: ","$"
+
+STR_NO_FILES_FOUND:	DB	"  [No files found on current drive]",13,10,13,10,"$"
+
+DEFAULT_FCB_NAME:	DB	0,"OUTPUT  TXT",0,0,0,0
+
+STR_SAVE_TITLE:	DB	27,"[H",27,"[2J"
+	DB	"============================================================",13,10
+	DB	"           SE.COM - SAVE FILE (DIRECTORY - DRIVE "
+STR_SAVE_DRIVE_CHAR:	DB	"A:)        ",13,10
+	DB	"============================================================",13,10,13,10,"$"
+
+STR_SAVE_FMT_PREFIX:	DB	"Format: [","$"
+
+STR_SAVE_FMT_CPM:	DB	"CP/M","$"
+
+STR_SAVE_FMT_LINUX:	DB	"Linux","$"
+
+STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
+
+STR_SAVE_SEP_LINE:	DB	"------------------------------------------------------------",13,10,"$"
+
+STR_SAVE_ENTER_PROMPT:	DB	"Enter filename to save (or <Enter>/<ESC> to cancel): ","$"
+
+STR_SAVE_PAGE_PREFIX:	DB	"------------------------------------------------------------",13,10
+	DB	"[Page ","$"
+
+STR_SAVE_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10,"$"
+
+STR_SAVE_PAGE_PROMPT:	DB	"Enter filename to save: ","$"
+
+STR_OVERWRITE_WARN:	DB	13,10,"File already exists. Overwrite? (y/n): ","$"
+
+STR_SAVE_CANCELLED:	DB	13,10,"Save cancelled.",13,10,"$"
+
+STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
+
+STR_FNF_INLINE:	DB	"  File not found","$"
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
 ;------------------------------------------------------------------------------
-SAVED_SP:	.DW	0
-SHOWING_FNF_MSG:.DB	0		; 1 if "  File not found" inline message is visible
-BIOS_CONST_VEC:	.DW	0
-BIOS_CONIN_VEC:	.DW	0
-BIOS_CONOUT_VEC:.DW	0
-CPM_USER_BANK:	.DB	0
-TARGET_RAM_BANK:.DB	0
-RAM_BANK_COUNT:	.DB	0
-ROM_BANK_COUNT:	.DB	0
+SAVED_SP:	DW	0
+SHOWING_FNF_MSG:	DB	0		; 1 if "  File not found" inline message is visible
+BIOS_CONST_VEC:	DW	0
+BIOS_CONIN_VEC:	DW	0
+BIOS_CONOUT_VEC:	DW	0
+CPM_USER_BANK:	DB	0
+TARGET_RAM_BANK:	DB	0
+RAM_BANK_COUNT:	DB	0
+ROM_BANK_COUNT:	DB	0
 
-SCREEN_MODE:	.DB	MODE_120X40	; Default to 120x40
-ACTIVE_ROWS:	.DB	40		; Default 40 rows
-ACTIVE_COLS:	.DB	120		; Default 120 cols
+SCREEN_MODE:	DB	MODE_120X40	; Default to 120x40
+ACTIVE_ROWS:	DB	40		; Default 40 rows
+ACTIVE_COLS:	DB	120		; Default 120 cols
 
-CUR_DOC_ROW:	.DW	0		; 16-bit document cursor row (0..3583)
-CUR_COL:	.DB	0		; 8-bit character byte index in line (0..126)
-TARGET_COL:	.DB	0		; Sticky visual column (0..119)
-TOP_DOC_ROW:	.DW	0		; 16-bit top visible document line on screen
-DOC_TOTAL_LINES:.DW	1		; 16-bit total document lines count (default 1 empty line)
-HAS_FILE_ARG:	.DB	0
-IN_EDITOR_MODE:	.DB	0
-SAVE_FORMAT:	.DB	FMT_CPM		; Default format is CP/M (CR/LF)
-IS_SAVE_UI:	.DB	0		; 1 if currently in Save File Screen
-SEEN_CR:	.DB	0		; Line format auto-detection state
-CHAR_INSERT_TEMP:.DB	0
-CSI_DIGIT_PREFIX:.DB	0
-JOIN_COL_SAVED:	.DB	0
-JOIN_DOC_LINE:	.DW	0
-DEL_BLK_CUR_LINE:.DW	0
-COPY_K_LINES:	.DW	0
-COPY_SRC_ROW:	.DW	0
-COPY_BLK_LEN:	.DB	0
-COPY_TAIL_LEN:	.DB	0
-DEST_LINE_LEN:	.DB	0
-COPY_BLK_BUF:	.DS	128
-COPY_TAIL_BUF:	.DS	128
-COPY_SLOTS_BUF:	.DS	256
-BLOCK_ACTIVE:	.DB	0		; 0 = inactive, 1 = selecting, 2 = solidified
-BLOCK_ANCHOR_ROW:.DW	0		; 16-bit document row where block started
-BLOCK_ANCHOR_COL:.DB	0		; 8-bit character column where block started
-BLOCK_START_ROW:.DW	0		; Normalized start row
-BLOCK_START_COL:.DB	0		; Normalized start col
-BLOCK_END_ROW:	.DW	0		; Normalized end row
-BLOCK_END_COL:	.DB	0		; Normalized end col
+CUR_DOC_ROW:	DW	0		; 16-bit document cursor row (0..3583)
+CUR_COL:	DB	0		; 8-bit character byte index in line (0..126)
+TARGET_COL:	DB	0		; Sticky visual column (0..119)
+TOP_DOC_ROW:	DW	0		; 16-bit top visible document line on screen
+DOC_TOTAL_LINES:	DW	1		; 16-bit total document lines count (default 1 empty line)
+HAS_FILE_ARG:	DB	0
+IN_EDITOR_MODE:	DB	0
+SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
+IS_SAVE_UI:	DB	0		; 1 if currently in Save File Screen
+SEEN_CR:	DB	0		; Line format auto-detection state
+CHAR_INSERT_TEMP:	DB	0
+CSI_DIGIT_PREFIX:	DB	0
+JOIN_COL_SAVED:	DB	0
+JOIN_DOC_LINE:	DW	0
+DEL_BLK_CUR_LINE:	DW	0
+COPY_K_LINES:	DW	0
+COPY_SRC_ROW:	DW	0
+COPY_BLK_LEN:	DB	0
+COPY_TAIL_LEN:	DB	0
+DEST_LINE_LEN:	DB	0
+COPY_BLK_BUF:	DS	128
+COPY_TAIL_BUF:	DS	128
+COPY_SLOTS_BUF:	DS	256
+BLOCK_ACTIVE:	DB	0		; 0 = inactive, 1 = selecting, 2 = solidified
+BLOCK_ANCHOR_ROW:	DW	0		; 16-bit document row where block started
+BLOCK_ANCHOR_COL:	DB	0		; 8-bit character column where block started
+BLOCK_START_ROW:	DW	0		; Normalized start row
+BLOCK_START_COL:	DB	0		; Normalized start col
+BLOCK_END_ROW:	DW	0		; Normalized end row
+BLOCK_END_COL:	DB	0		; Normalized end col
 
-LINE_BLK_ACTIVE:.DB	0		; 1 if rendered line is in block
-LINE_BLK_START:	.DB	0		; Start character column of highlight on line
-LINE_BLK_END:	.DB	0		; End character column of highlight on line
-LINE_IN_INVERSE:.DB	0		; 1 if terminal currently has inverse video ON
+LINE_BLK_ACTIVE:	DB	0		; 1 if rendered line is in block
+LINE_BLK_START:	DB	0		; Start character column of highlight on line
+LINE_BLK_END:	DB	0		; End character column of highlight on line
+LINE_IN_INVERSE:	DB	0		; 1 if terminal currently has inverse video ON
 
-NEED_SCREEN_RENDER:	.DB	0	; 1 if full screen redraw pending
-NEED_LINE_RENDER:	.DB	0	; 1 if current line redraw pending
-NEED_STATUS_RENDER:	.DB	0	; 1 if status bar redraw / cursor restore pending
+NEED_SCREEN_RENDER:	DB	0	; 1 if full screen redraw pending
+NEED_LINE_RENDER:	DB	0	; 1 if current line redraw pending
+NEED_STATUS_RENDER:	DB	0	; 1 if status bar redraw / cursor restore pending
 
-CACHE_START_ROW:.DW	0		; 16-bit doc row index at LINE_STORAGE[0]
-CACHE_DIRTY:	.DB	0		; 1 if local cache has unsaved modifications
-EXT_BANK_COUNT:	.DB	0		; Number of available far RAM banks (up to 14)
-EXT_BANK_TABLE:	.DS	14		; Table of far RAM bank IDs
+CACHE_START_ROW:	DW	0		; 16-bit doc row index at LINE_STORAGE[0]
+CACHE_DIRTY:	DB	0		; 1 if local cache has unsaved modifications
+EXT_BANK_COUNT:	DB	0		; Number of available far RAM banks (up to 14)
+EXT_BANK_TABLE:	DS	14		; Table of far RAM bank IDs
 
-FAR_DEST_BANK:	.DB	0
-FAR_SRC_BANK:	.DB	0
-FAR_DEST_ADDR:	.DW	0
-FAR_SRC_ADDR:	.DW	0
-FAR_LOCAL_ADDR:	.DW	0
-SLOT_TEMP:	.DB	0
-DEC_WORD_BUF:	.DS	6		; Buffer for PRINT_DEC_WORD (5 digits + null)
+FAR_DEST_BANK:	DB	0
+FAR_SRC_BANK:	DB	0
+FAR_DEST_ADDR:	DW	0
+FAR_SRC_ADDR:	DW	0
+FAR_LOCAL_ADDR:	DW	0
+SLOT_TEMP:	DB	0
+NEXT_FRESH_SLOT:	DW	0
+FIRST_FREE_SLOT:	DW	0FFFFH
+DEC_WORD_BUF:	DS	6		; Buffer for PRINT_DEC_WORD (5 digits + null)
 
-LOAD_LINE_TEMP:	.DS	128		; 128-byte scratch line for I/O and Far RAM transfers
-SPLIT_LINE_TEMP:.DS	128		; 128-byte scratch line for line splits
-CUR_DMA_PTR:	.DW	0
-DMA_BYTES_LEFT:	.DB	0
+LOAD_LINE_TEMP:	DS	128		; 128-byte scratch line for I/O and Far RAM transfers
+SPLIT_LINE_TEMP:	DS	128		; 128-byte scratch line for line splits
+CUR_DMA_PTR:	DW	0
+DMA_BYTES_LEFT:	DB	0
 
-TEST_PATTERN:	.DB	0,0
-TEST_READBACK:	.DB	0,0
+TEST_PATTERN:	DB	0,0
+TEST_READBACK:	DB	0,0
 
-WORK_FCB:	.DS	36
-DIR_TEMP_FCB:	.DS	36
+WORK_FCB:	DS	36
+DIR_TEMP_FCB:	DS	36
 
-CURRENT_DIR_DRIVE:	.DB	0		; Active directory drive (1=A:, 2=B:, 3=C:, etc.)
-DIR_SEARCH_FCB:		.DS	36
-DIR_FILE_COUNT:		.DB	0
-DIR_PAGE_INDEX:		.DB	0
-DIR_PAGE_COUNT:		.DB	0
-DIR_START_FILE:		.DB	0
-DIR_COL_COUNT:		.DB	0
-DIR_TEMP_ENTRY:		.DS	16
-INPUT_BUF_LEN:		.DB	0
-INPUT_FILENAME_BUF:	.DS	32
-DIR_NAMES_BUF:		.DS	3328	; 256 entries * 13 bytes
+CURRENT_DIR_DRIVE:	DB	0		; Active directory drive (1=A:, 2=B:, 3=C:, etc.)
+DIR_SEARCH_FCB:	DS	36
+DIR_FILE_COUNT:	DB	0
+DIR_PAGE_INDEX:	DB	0
+DIR_PAGE_COUNT:	DB	0
+DIR_START_FILE:	DB	0
+DIR_COL_COUNT:	DB	0
+DIR_TEMP_ENTRY:	DS	16
+INPUT_BUF_LEN:	DB	0
+INPUT_FILENAME_BUF:	DS	32
+DIR_NAMES_BUF:	DS	3328	; 256 entries * 13 bytes
 
-RAW_TEST_FCB:		.DS	36
-RAW_SECTOR_BUF:		.DS	128
-RAW_SECTORS_READ:	.DW	0
-RAW_BYTES_COUNT:	.DW	0
-RAW_LINES_COUNT:	.DW	0
-RAW_SEEN_CR:		.DB	0
-RAW_FORMAT_TYPE:	.DB	0
-RAW_DATA_PTR:		.DW	0
-RAW_DATA_BUFFER:	.DS	2048
+RAW_TEST_FCB:	DS	36
+RAW_SECTOR_BUF:	DS	128
+RAW_SECTORS_READ:	DW	0
+RAW_BYTES_COUNT:	DW	0
+RAW_LINES_COUNT:	DW	0
+RAW_SEEN_CR:	DB	0
+RAW_FORMAT_TYPE:	DB	0
+RAW_DATA_PTR:	DW	0
+RAW_DATA_BUFFER:	DS	2048
 
-		.DS	512
+		DS	512
 LOCAL_STACK:
 
 ; 48 lines x 128 bytes stride local working cache in TPA (6,144 bytes)
-LINE_STORAGE:	.DS	6144
+LINE_STORAGE:	DS	6144
 
 ; Line Slot Indirection Table (3,584 lines * 2 bytes = 7,168 bytes)
-DOC_LINE_SLOTS:	.DS	7168
-
-NEXT_FRESH_SLOT:	.DW	0
-FIRST_FREE_SLOT:	.DW	0FFFFH
-
-	.END
+DOC_LINE_SLOTS:	DS	7168
