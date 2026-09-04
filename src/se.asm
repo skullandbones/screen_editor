@@ -1673,7 +1673,18 @@ GET_BLOCK_BOUNDS:
 	EX	DE,HL			; DE = start, HL = end
 	AND	A
 	SBC	HL,DE			; HL = end - start
-	INC	HL			; HL = line count
+	; If BLOCK_END_COL > 0, end row contributes characters, so INC HL.
+	; If BLOCK_END_COL == 0 and end > start, end row is exclusive.
+	; If HL == 0 (single line), minimum is 1 line.
+	LD	A,(BLOCK_END_COL)
+	OR	A
+	JR	NZ,GBB_INC_LINE
+	LD	A,H
+	OR	L
+	JR	NZ,GBB_DONE_LINE
+GBB_INC_LINE:
+	INC	HL
+GBB_DONE_LINE:
 	LD	B,H
 	LD	C,L			; BC = line count
 	POP	DE			; DE = end
@@ -1770,8 +1781,12 @@ GLBR_NOT_START_ROW:
 	JR	NZ,GLBR_MIDDLE_ROW
 
 	; Last line of multi-line block: StartCol = 0, EndCol = BLOCK_END_COL
-	LD	D,0
+	; If BLOCK_END_COL == 0, no characters on this line are selected!
 	LD	A,(BLOCK_END_COL)
+	OR	A
+	JR	Z,GLBR_NONE
+
+	LD	D,0
 	LD	E,A
 	CALL	GLBR_CHECK_TAB_END
 	JR	C,GLBR_NONE
@@ -2201,8 +2216,13 @@ CCIB_CHECK_MULTI_END:
 	CP	E
 	JR	NZ,CCIB_INSIDE
 
-	; On BLOCK_END_ROW: inside if CUR_COL <= BLOCK_END_COL
+	; On BLOCK_END_ROW:
+	; If BLOCK_END_COL == 0, cursor on BLOCK_END_ROW is outside block!
 	LD	A,(BLOCK_END_COL)
+	OR	A
+	JR	Z,CCIB_OUTSIDE
+
+	; Inside if CUR_COL <= BLOCK_END_COL
 	LD	B,A
 	LD	A,(CUR_COL)
 	CP	B
@@ -2450,6 +2470,11 @@ COPY_ML_CAP_OK:
 
 	; Pre-extract BLOCK_END_ROW prefix [0 .. BLOCK_END_COL] into COPY_TAIL_BUF
 	; (Doing this early prevents corruption if CUR_DOC_ROW == BLOCK_END_ROW)
+	; If BLOCK_END_COL == 0, tail prefix is empty
+	LD	A,(BLOCK_END_COL)
+	OR	A
+	JR	Z,COPY_ML_TAIL_EMPTY
+
 	LD	BC,(BLOCK_END_ROW)
 	LD	DE,COPY_TAIL_BUF
 	CALL	READ_FAR_LINE
@@ -2471,6 +2496,14 @@ COPY_ML_TAIL_COUNT_DONE:
 	LD	(HL),0			; Null-terminate COPY_TAIL_BUF
 	LD	A,C
 	LD	(COPY_TAIL_LEN),A	; Length of tail prefix
+	JR	COPY_ML_TAIL_DONE
+
+COPY_ML_TAIL_EMPTY:
+	XOR	A
+	LD	(COPY_TAIL_BUF),A
+	LD	(COPY_TAIL_LEN),A
+
+COPY_ML_TAIL_DONE:
 
 	; Allocate K slots in COPY_SLOTS_BUF
 	LD	BC,(COPY_K_LINES)

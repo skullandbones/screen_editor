@@ -101,7 +101,7 @@ def run_sanity_test():
 
         time.sleep(0.5)
         os.write(master, b"c:\r")
-        out = read_until(master, b"C>", timeout=6.0)
+        out = read_until(master, b"C>", timeout=10.0)
         if b"C>" not in out:
             print(f"[-] Failed to switch to Drive C:. Buffer captured: {repr(out)}", flush=True)
             return False

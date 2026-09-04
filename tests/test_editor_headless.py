@@ -1198,8 +1198,8 @@ def test_se_execution():
             print(f"[-] Consecutive Ctrl+C failed or lost block lock. Buffer: {repr(out_cpy2)}", flush=True)
             return False
 
-        # Test 4: Multi-line block copy
-        # Cancel block with ESC
+        # Test 4: Multi-line block copy (1L boundary at Row 2 Col 0, and 2L full block)
+        # Cancel previous block with ESC
         os.write(master, b"\x1b")
         time.sleep(0.1)
         drain_all(master)
@@ -1207,10 +1207,37 @@ def test_se_execution():
         # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
         os.write(master, b"\x14\x01")
         time.sleep(0.1)
-        # Start block (Ctrl+B), expand down 1 row (Down Arrow)
+        # Start block (Ctrl+B), expand down 1 row (Down Arrow to Row 2 Col 0)
         os.write(master, b"\x02\x1b[B")
         time.sleep(0.1)
-        # Solidify with Ctrl+K
+        # Solidify with Ctrl+K -> must be [BLK: 1L LOCK]
+        os.write(master, b"\x0b")
+        out_1l_solid = read_until(master, b"[BLK: 1L LOCK]", timeout=4.0)
+        if b"[BLK: 1L LOCK]" not in out_1l_solid:
+            print(f"[-] 1L block solidification failed. Buffer: {repr(out_1l_solid)}", flush=True)
+            return False
+
+        # Test Ctrl+C directly at Row 2 Col 0: must not be ignored
+        drain_all(master)
+        os.write(master, b"\x03")
+        time.sleep(0.3)
+        out_1l_cpy = drain_all(master)
+        if b"[BLK: 1L LOCK]" not in out_1l_cpy:
+            print(f"[-] Ctrl+C at Row 2 Col 0 failed. Buffer: {repr(out_1l_cpy)}", flush=True)
+            return False
+
+        # Cancel block
+        os.write(master, b"\x1b")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
+        os.write(master, b"\x14\x01")
+        time.sleep(0.1)
+        # Start block (Ctrl+B), expand down 2 rows (Down Arrow twice) for 2 lines
+        os.write(master, b"\x02\x1b[B\x1b[B")
+        time.sleep(0.1)
+        # Solidify with Ctrl+K -> must be [BLK: 2L LOCK]
         os.write(master, b"\x0b")
         out_ml_solid = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
         if b"[BLK: 2L LOCK]" not in out_ml_solid:
