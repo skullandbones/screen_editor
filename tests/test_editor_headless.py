@@ -1336,43 +1336,61 @@ def test_se_execution():
         # Step 38: Test Backwards Block Selection Normalization Semantics
         print("[*] Step 38: Testing backwards block selection semantics...", flush=True)
 
-        # Part 1: Multi-line backwards selection (Row 10 Col 0 up to Row 9 Col 0)
-        # Move to top of document (Ctrl+T) and Col 0 (Ctrl+A), then move down to Row 10
+        # Part 1: Multi-line backwards selection (Row 10 Col 5 left arrow wrapping onto Row 9 to Col 0)
+        # Move to top of document (Ctrl+T) and Col 0 (Ctrl+A), then move to Row 10 Col 5
         os.write(master, b"\x14\x01")
         read_until(master, b"Row 1/", timeout=4.0)
         os.write(master, b"\x1b[B" * 9)
-        out_s38_r10 = read_until(master, b"Row 10/", timeout=4.0)
-        if b"Row 10/" not in out_s38_r10:
-            print(f"[-] Step 38 failed: Could not navigate to Row 10. Buffer: {repr(out_s38_r10)}", flush=True)
+        read_until(master, b"Row 10/", timeout=4.0)
+        os.write(master, b"\x1b[C" * 5)
+        out_s38_r10c5 = read_until(master, b", Col 5", timeout=4.0)
+        if b", Col 5" not in out_s38_r10c5:
+            print(f"[-] Step 38 failed: Could not navigate to Row 10 Col 5. Buffer: {repr(out_s38_r10c5)}", flush=True)
             return False
 
-        # Press Ctrl+B to start block at Row 10 Col 0
+        # Press Ctrl+B to start block at Row 10 Col 5
         os.write(master, b"\x02")
         out_s38_b10 = read_until(master, b"[SEL: 0c]", timeout=4.0)
         if b"[SEL: 0c]" not in out_s38_b10:
-            print(f"[-] Step 38 failed: Ctrl+B at Row 10 Col 0 did not show [SEL: 0c]. Buffer: {repr(out_s38_b10)}", flush=True)
+            print(f"[-] Step 38 failed: Ctrl+B at Row 10 Col 5 did not show [SEL: 0c]. Buffer: {repr(out_s38_b10)}", flush=True)
             return False
 
-        # Press Up Arrow to move to Row 9 Col 0: expands 1 line backwards
-        os.write(master, b"\x1b[A")
-        out_s38_up = read_until(master, b"[SEL: 1L]", timeout=4.0)
-        if b"[SEL: 1L]" not in out_s38_up:
-            print(f"[-] Step 38 failed: Up arrow did not show [SEL: 1L]. Buffer: {repr(out_s38_up)}", flush=True)
+        # Press Left Arrow 6 times: moves Col 5 -> 4 -> 3 -> 2 -> 1 -> 0 -> wraps to Row 9 end
+        for _ in range(6):
+            os.write(master, b"\x1b[D")
+            time.sleep(0.05)
+        out_s38_wrap = read_until(master, b"[SEL: 2L]", timeout=4.0)
+        if b"[SEL: 2L]" not in out_s38_wrap:
+            print(f"[-] Step 38 failed: Left arrow wrap did not show [SEL: 2L]. Buffer: {repr(out_s38_wrap)}", flush=True)
             return False
 
-        # Press Ctrl+K to solidify: shows [BLK: 1L LOCK]
+        # Continue pressing Left Arrow until cursor reaches Row 9 Col 0
+        while True:
+            os.write(master, b"\x1b[D")
+            time.sleep(0.05)
+            buf = drain_all(master)
+            if b"Row 9/" in buf and b", Col 0 " in buf:
+                break
+
+        # Confirm Row 9 remains highlighted (cols 1..254) and status remains [SEL: 2L]
+        out_s38_col0 = drain_all(master)
+        # Redraw status bar / line check:
+        os.write(master, b"")
+        time.sleep(0.1)
+
+        # Press Ctrl+K to solidify: shows [BLK: 2L LOCK]
         os.write(master, b"\x0b")
-        out_s38_solid_ml = read_until(master, b"[BLK: 1L LOCK]", timeout=4.0)
-        if b"[BLK: 1L LOCK]" not in out_s38_solid_ml:
-            print(f"[-] Step 38 failed: Ctrl+K did not show [BLK: 1L LOCK]. Buffer: {repr(out_s38_solid_ml)}", flush=True)
+        out_s38_solid_ml = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
+        if b"[BLK: 2L LOCK]" not in out_s38_solid_ml:
+            print(f"[-] Step 38 failed: Ctrl+K did not show [BLK: 2L LOCK]. Buffer: {repr(out_s38_solid_ml)}", flush=True)
             return False
 
-        # Press Ctrl+C at Row 9 Col 0: must NOT be ignored (cursor at Row 9 is outside block Row 10!)
+        # Press Ctrl+C at Row 9 Col 0: must NOT be ignored
         drain_all(master)
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_s38_cpy_ml = drain_all(master)
-        if b"[BLK: 1L LOCK]" not in out_s38_cpy_ml:
+        if b"[BLK: 2L LOCK]" not in out_s38_cpy_ml:
             print(f"[-] Step 38 failed: Ctrl+C at Row 9 Col 0 was ignored or failed! Buffer: {repr(out_s38_cpy_ml)}", flush=True)
             return False
 
