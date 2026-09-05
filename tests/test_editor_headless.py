@@ -1576,6 +1576,83 @@ def test_se_execution():
         read_until(master, b"^K: Editor keys", timeout=4.0)
         print("[+] Successfully verified block selection workflow simplifications (Step 39)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 40: Verify Block Move using Ctrl+X
+        # ---------------------------------------------------------------------
+        print("[*] Step 40: Verifying Block Move (Ctrl+X)...", flush=True)
+
+        # 1. Ctrl-X when block is inactive is a safe no-op
+        os.write(master, b"\x18") # Ctrl-X
+        time.sleep(0.1)
+        drain_all(master)
+        os.write(master, b"\x14") # Ctrl-T
+        out_s40_noop = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"^K: Editor keys" not in out_s40_noop:
+            print(f"[-] Step 40 Ctrl-X inactive no-op failed: {repr(out_s40_noop)}", flush=True)
+            return False
+
+        # Current line is "12345123". Move to Col 0, select first "123"
+        os.write(master, b"\x01") # Ctrl-A
+        time.sleep(0.1)
+        drain_all(master)
+
+        os.write(master, b"\x02" + b"\x1b[C" * 3) # Ctrl-B, Right * 3 -> [SEL: 3c]
+        out_s40_sel = read_until(master, b"[SEL: 3c]", timeout=4.0)
+        if b"[SEL: 3c]" not in out_s40_sel:
+            print(f"[-] Step 40 select 3c failed: {repr(out_s40_sel)}", flush=True)
+            return False
+
+        # Solidify with Ctrl-K
+        os.write(master, b"\x0b")
+        out_s40_lock = read_until(master, b"[BLK: 3c LOCK]", timeout=4.0)
+        if b"[BLK: 3c LOCK]" not in out_s40_lock:
+            print(f"[-] Step 40 Ctrl-K solidify failed: {repr(out_s40_lock)}", flush=True)
+            return False
+
+        # Move to end of line: Ctrl-E (Col 8)
+        os.write(master, b"\x05")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Move block to end of line with Ctrl-X (\x18)!
+        os.write(master, b"\x18")
+        out_s40_move1 = read_until(master, b"Col 5", timeout=4.0)
+        if b"[BLK: 3c LOCK]" not in out_s40_move1 or b"Col 5" not in out_s40_move1:
+            print(f"[-] Step 40 forward move failed: {repr(out_s40_move1)}", flush=True)
+            return False
+
+        # 2. Backward move on same line: move block from Col 5 back to Col 0
+        os.write(master, b"\x01") # Ctrl-A to Col 0
+        time.sleep(0.1)
+        drain_all(master)
+
+        os.write(master, b"\x18") # Ctrl-X
+        out_s40_move2 = read_until(master, b"Col 0", timeout=4.0)
+        if b"[BLK: 3c LOCK]" not in out_s40_move2 or b"Col 0" not in out_s40_move2:
+            print(f"[-] Step 40 backward move failed: {repr(out_s40_move2)}", flush=True)
+            return False
+
+        # 3. Test implied Ctrl-K on Ctrl-X during dynamic selection
+        os.write(master, b"\x1b") # ESC to cancel block
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+
+        os.write(master, b"\x02" + b"\x1b[C" * 2) # Select "12" -> [SEL: 2c]
+        out_s40_dyn = read_until(master, b"[SEL: 2c]", timeout=4.0)
+        if b"[SEL: 2c]" not in out_s40_dyn:
+            print(f"[-] Step 40 dynamic select failed: {repr(out_s40_dyn)}", flush=True)
+            return False
+
+        os.write(master, b"\x18") # Ctrl-X during selection -> implied Ctrl-K
+        out_s40_impl = read_until(master, b"[BLK: 2c LOCK]", timeout=4.0)
+        if b"[BLK: 2c LOCK]" not in out_s40_impl:
+            print(f"[-] Step 40 implied Ctrl-K on Ctrl-X failed: {repr(out_s40_impl)}", flush=True)
+            return False
+
+        os.write(master, b"\x1b") # ESC to cancel block
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+
+        print("[+] Successfully verified Block Move using Ctrl+X (Step 40)!", flush=True)
+
         # Return to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")

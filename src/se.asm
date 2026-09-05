@@ -21,6 +21,7 @@ MAX_DOC_LINES	EQU	3584		; 14 banks * 256 lines = 3584 total lines
 
 KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
 KEY_CTRL_C	EQU	3
+KEY_CTRL_X	EQU	24		; Move solidified block to cursor
 KEY_CTRL_Q	EQU	17
 KEY_CTRL_S	EQU	19
 KEY_CTRL_O	EQU	15		; Open File Screen
@@ -293,7 +294,7 @@ DO_HELP_SCREEN:
 CHECK_CTRL_D:
 	; Command: Ctrl+D -> Delete character under cursor (Forward Delete)
 	CP	4
-	JR	NZ,CHECK_PAGE_KEYS
+	JR	NZ,CHECK_CTRL_X
 	LD	A,(BLOCK_ACTIVE)
 	CP	2
 	JR	Z,DO_CTRL_D_BLOCK
@@ -306,6 +307,25 @@ DO_CTRL_D_IMPLIED_K_DELETE:
 	CALL	SOLIDIFY_BLOCK
 DO_CTRL_D_BLOCK:
 	CALL	DO_DELETE_BLOCK
+	JP	MAIN_LOOP
+
+CHECK_CTRL_X:
+	; Command: Ctrl+X -> Move solidified block / solidify dynamic block
+	CP	KEY_CTRL_X
+	JR	NZ,CHECK_PAGE_KEYS
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	Z,DO_CTRL_X_MOVE
+	CP	1
+	JR	Z,DO_CTRL_X_SOLIDIFY
+	JP	MAIN_LOOP		; Ignore if block not active
+
+DO_CTRL_X_SOLIDIFY:
+	CALL	SOLIDIFY_BLOCK
+	JP	MAIN_LOOP
+
+DO_CTRL_X_MOVE:
+	CALL	DO_MOVE_BLOCK
 	JP	MAIN_LOOP
 
 CHECK_PAGE_KEYS:
@@ -2833,6 +2853,226 @@ COPY_ML_DONE_BLOCK_SHIFT:
 	LD	(TOP_DOC_ROW),HL
 
 COPY_ML_FINISH:
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+;------------------------------------------------------------------------------
+; DO_MOVE_BLOCK: Move solidified block (Ctrl+X) to (CUR_DOC_ROW, CUR_COL)
+;------------------------------------------------------------------------------
+DO_MOVE_BLOCK:
+	LD	A,(BLOCK_ACTIVE)
+	CP	2			; Only solidified blocks can be moved
+	RET	NZ
+
+	CALL	NORMALIZE_BLOCK_BOUNDS
+
+	; Check if cursor is inside the block; if so, cannot move block into itself!
+	CALL	CHECK_CURSOR_IN_BLOCK
+	RET	C
+
+	; Save destination coordinates
+	LD	HL,(CUR_DOC_ROW)
+	LD	(MOVE_DEST_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(MOVE_DEST_COL),A
+
+	; Save original block coordinates & dimensions
+	LD	HL,(BLOCK_START_ROW)
+	LD	(MOVE_SRC_START_ROW),HL
+	LD	A,(BLOCK_START_COL)
+	LD	(MOVE_SRC_START_COL),A
+
+	LD	HL,(BLOCK_END_ROW)
+	LD	(MOVE_SRC_END_ROW),HL
+	LD	A,(BLOCK_END_COL)
+	LD	(MOVE_SRC_END_COL),A
+
+	; Determine if DEST is BEFORE or AFTER SRC:
+	; DEST < SRC_START: MOVE_DEST_IS_BEFORE = 1
+	; DEST >= SRC_START: MOVE_DEST_IS_BEFORE = 0
+	XOR	A
+	LD	(MOVE_DEST_IS_BEFORE),A
+
+	LD	HL,(MOVE_DEST_ROW)
+	LD	DE,(MOVE_SRC_START_ROW)
+	LD	A,H
+	CP	D
+	JR	C,MOVE_MARK_BEFORE
+	JR	NZ,MOVE_EXEC_COPY
+	LD	A,L
+	CP	E
+	JR	C,MOVE_MARK_BEFORE
+	JR	NZ,MOVE_EXEC_COPY
+
+	; Same row: compare columns
+	LD	A,(MOVE_DEST_COL)
+	LD	HL,MOVE_SRC_START_COL
+	CP	(HL)
+	JR	NC,MOVE_EXEC_COPY
+
+MOVE_MARK_BEFORE:
+	LD	A,1
+	LD	(MOVE_DEST_IS_BEFORE),A
+
+MOVE_EXEC_COPY:
+	; Step 1: Copy block to destination
+	CALL	DO_COPY_BLOCK
+
+	; Step 2: Delete original block
+	CALL	DO_DELETE_BLOCK
+
+	; Step 3: Compute new coordinates of the moved block and cursor:
+	LD	A,(MOVE_DEST_IS_BEFORE)
+	OR	A
+	JR	NZ,MOVE_CALC_BEFORE
+
+	; DEST was AFTER original block:
+	; Check if single-line:
+	LD	HL,(MOVE_SRC_START_ROW)
+	LD	DE,(MOVE_SRC_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,MOVE_AFTER_MULTI
+	LD	A,L
+	CP	E
+	JR	NZ,MOVE_AFTER_MULTI
+
+	; Single-line block:
+	; Was DEST on the same row as SRC?
+	LD	HL,(MOVE_DEST_ROW)
+	LD	DE,(MOVE_SRC_START_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,MOVE_AFTER_DIFF_ROW
+	LD	A,L
+	CP	E
+	JR	NZ,MOVE_AFTER_DIFF_ROW
+
+	; Same row after: DEST_COL shifted left by L = SRC_END_COL - SRC_START_COL
+	LD	A,(MOVE_SRC_END_COL)
+	LD	HL,MOVE_SRC_START_COL
+	SUB	(HL)			; A = L
+	LD	B,A
+	LD	A,(MOVE_DEST_COL)
+	SUB	B			; A = DEST_COL - L
+	LD	(CUR_COL),A
+	LD	HL,(MOVE_DEST_ROW)
+	LD	(CUR_DOC_ROW),HL
+	JR	MOVE_SET_BLOCK
+
+MOVE_AFTER_DIFF_ROW:
+	; Single-line block, but DEST is on a different row (after SRC_START_ROW):
+	; Row did not shift, col did not shift!
+	LD	HL,(MOVE_DEST_ROW)
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(MOVE_DEST_COL)
+	LD	(CUR_COL),A
+	JR	MOVE_SET_BLOCK
+
+MOVE_AFTER_MULTI:
+	; Multi-line block:
+	; K = MOVE_SRC_END_ROW - MOVE_SRC_START_ROW lines were deleted before DEST!
+	; New DEST_ROW = MOVE_DEST_ROW - K
+	LD	HL,(MOVE_SRC_END_ROW)
+	LD	DE,(MOVE_SRC_START_ROW)
+	AND	A
+	SBC	HL,DE			; HL = K
+	EX	DE,HL			; DE = K
+	LD	HL,(MOVE_DEST_ROW)
+	AND	A
+	SBC	HL,DE			; HL = DEST_ROW - K
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(MOVE_DEST_COL)
+	LD	(CUR_COL),A
+	JR	MOVE_SET_BLOCK
+
+MOVE_CALC_BEFORE:
+	; DEST was BEFORE original block: coordinates did not shift!
+	LD	HL,(MOVE_DEST_ROW)
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(MOVE_DEST_COL)
+	LD	(CUR_COL),A
+
+MOVE_SET_BLOCK:
+	; Set new block coordinates around the moved block!
+	LD	HL,(CUR_DOC_ROW)
+	LD	(BLOCK_START_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(BLOCK_START_COL),A
+
+	; Check if single-line or multi-line block:
+	LD	HL,(MOVE_SRC_START_ROW)
+	LD	DE,(MOVE_SRC_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,MOVE_SET_BLK_MULTI
+	LD	A,L
+	CP	E
+	JR	NZ,MOVE_SET_BLK_MULTI
+
+	; Single-line end coordinates:
+	LD	HL,(CUR_DOC_ROW)
+	LD	(BLOCK_END_ROW),HL
+	LD	A,(MOVE_SRC_END_COL)
+	LD	HL,MOVE_SRC_START_COL
+	SUB	(HL)			; A = L
+	LD	HL,CUR_COL
+	ADD	A,(HL)			; A = CUR_COL + L
+	LD	(BLOCK_END_COL),A
+	JR	MOVE_ADJUST_VIEW
+
+MOVE_SET_BLK_MULTI:
+	; Multi-line end coordinates:
+	LD	HL,(MOVE_SRC_END_ROW)
+	LD	DE,(MOVE_SRC_START_ROW)
+	AND	A
+	SBC	HL,DE			; HL = K
+	LD	DE,(CUR_DOC_ROW)
+	ADD	HL,DE			; HL = CUR_DOC_ROW + K
+	LD	(BLOCK_END_ROW),HL
+	LD	A,(MOVE_SRC_END_COL)
+	LD	(BLOCK_END_COL),A
+
+MOVE_ADJUST_VIEW:
+	; Ensure cursor position is visible on screen
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	LD	A,H
+	CP	D
+	JR	C,MOVE_ADJ_TOP
+	JR	NZ,MOVE_CHECK_BOTTOM
+	LD	A,L
+	CP	E
+	JR	NC,MOVE_CHECK_BOTTOM
+MOVE_ADJ_TOP:
+	LD	(TOP_DOC_ROW),HL
+	JR	MOVE_FINISH
+
+MOVE_CHECK_BOTTOM:
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A
+	CP	L
+	JR	NC,MOVE_FINISH
+	; Scroll down so CUR_DOC_ROW is on screen
+	LD	HL,(CUR_DOC_ROW)
+	LD	E,A
+	LD	D,0
+	AND	A
+	SBC	HL,DE
+	LD	(TOP_DOC_ROW),HL
+
+MOVE_FINISH:
+	LD	A,2
+	LD	(BLOCK_ACTIVE),A	; Solidify block at new location!
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
@@ -7664,8 +7904,8 @@ STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 	DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
 	DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
 	DB	"    Ctrl+B           Start/Toggle block      Ctrl+K          Solidify block",13,10
-	DB	"    Ctrl+C           Copy solidified block   Delete / Ctrl+D Delete block",13,10
-	DB	"    ESC              Clear block",13,10
+	DB	"    Ctrl+C           Copy solidified block   Ctrl+X          Move block",13,10
+	DB	"    Delete / Ctrl+D  Delete block            ESC             Clear block",13,10
 	DB	"================================================================================",13,10
 	DB	"                      Press any key to return to editor...",13,10,"$"
 
@@ -7774,6 +8014,13 @@ DEST_LINE_LEN:	DB	0
 COPY_BLK_BUF:	DS	128
 COPY_TAIL_BUF:	DS	128
 COPY_SLOTS_BUF:	DS	256
+MOVE_DEST_ROW:		DW	0
+MOVE_DEST_COL:		DB	0
+MOVE_SRC_START_ROW:	DW	0
+MOVE_SRC_START_COL:	DB	0
+MOVE_SRC_END_ROW:	DW	0
+MOVE_SRC_END_COL:	DB	0
+MOVE_DEST_IS_BEFORE:	DB	0
 BLOCK_ACTIVE:	DB	0		; 0 = inactive, 1 = selecting, 2 = solidified
 BLOCK_ANCHOR_ROW:	DW	0		; 16-bit document row where block started
 BLOCK_ANCHOR_COL:	DB	0		; 8-bit character column where block started

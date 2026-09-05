@@ -156,6 +156,9 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ### 2. Editor Mode Keybindings & Hybrid Block Highlighting
 * <kbd>Ctrl+B</kbd>: Start / toggle block selection mode (anchors at cursor row & character column).
 * <kbd>Ctrl+K</kbd>: Solidify (lock/freeze) active block selection, or show Editor Keys Reference Screen if no block active.
+* <kbd>Ctrl+C</kbd>: Copy solidified block to current cursor position (or solidify dynamic block).
+* <kbd>Ctrl+X</kbd>: Move solidified block to current cursor position (or solidify dynamic block).
+* <kbd>Ctrl+D</kbd> / <kbd>Delete</kbd>: Forward delete character under cursor (or delete selected/solidified block).
 * <kbd>ESC</kbd>: Dismiss active or solidified block highlight (or return to splash screen if no block active).
 * <kbd>Arrow Keys</kbd> / <kbd>Home</kbd> / <kbd>End</kbd> / <kbd>PgUp</kbd> / <kbd>PgDn</kbd>: Move cursor and dynamically expand or contract block highlight (partial lines, single lines, or multi-lines).
 * <kbd>Ctrl+O</kbd>: Open interactive file browser.
