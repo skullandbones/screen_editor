@@ -1105,6 +1105,122 @@ TEST4_SLOT_INIT:
 	CALL	PRINT_STR
 
 	; -------------------------------------------------------------------------
+	; TEST 5: Block Copy Out-Of-Memory & Capacity Protection
+	; -------------------------------------------------------------------------
+	LD	DE,STR_TEST5_TITLE
+	CALL	PRINT_STR
+
+	; Subtest 5A: Verify ALLOC_SLOT returns Carry on OOM
+	CALL	INIT_SLOT_SYSTEM
+	LD	HL,MAX_DOC_LINES	; 3584
+	LD	(NEXT_FRESH_SLOT),HL	; All fresh slots exhausted
+	CALL	ALLOC_SLOT
+	JP	NC,TEST5_FAIL_OOM
+
+	; Subtest 5B: Multi-line block copy when DOC_TOTAL_LINES + K > MAX_DOC_LINES
+	LD	HL,3580
+	LD	(DOC_TOTAL_LINES),HL
+	LD	HL,1
+	LD	(BLOCK_START_ROW),HL
+	LD	HL,11
+	LD	(BLOCK_END_ROW),HL
+	XOR	A
+	LD	(BLOCK_START_COL),A
+	LD	(BLOCK_END_COL),A
+	LD	A,2
+	LD	(BLOCK_ACTIVE),A
+	LD	HL,50
+	LD	(CUR_DOC_ROW),HL
+	XOR	A
+	LD	(CUR_COL),A
+	CALL	DO_COPY_BLOCK
+	; Verify DOC_TOTAL_LINES is still 3580
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,3580
+	LD	A,H
+	CP	D
+	JP	NZ,TEST5_FAIL_ML
+	LD	A,L
+	CP	E
+	JP	NZ,TEST5_FAIL_ML
+
+	; Subtest 5C: Multi-line copy when slot allocator fails mid-copy
+	LD	HL,10
+	LD	(DOC_TOTAL_LINES),HL
+	LD	HL,1
+	LD	(BLOCK_START_ROW),HL
+	LD	HL,6
+	LD	(BLOCK_END_ROW),HL
+	LD	HL,MAX_DOC_LINES
+	LD	(NEXT_FRESH_SLOT),HL
+	LD	HL,0FFFFH
+	LD	(FIRST_FREE_SLOT),HL
+	LD	HL,8
+	LD	(CUR_DOC_ROW),HL
+	XOR	A
+	LD	(CUR_COL),A
+	CALL	DO_COPY_BLOCK
+	; Verify DOC_TOTAL_LINES is still 10
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,10
+	LD	A,H
+	CP	D
+	JP	NZ,TEST5_FAIL_ML
+	LD	A,L
+	CP	E
+	JP	NZ,TEST5_FAIL_ML
+
+	; Subtest 5D: Single-line copy when line capacity (120 chars) is full
+	CALL	INIT_EMPTY_DOCUMENT
+	LD	HL,LOAD_LINE_TEMP
+	LD	B,120
+TEST5_FILL_120:
+	LD	(HL),'X'
+	INC	HL
+	DJNZ	TEST5_FILL_120
+	LD	(HL),0
+	LD	BC,0
+	LD	HL,LOAD_LINE_TEMP
+	CALL	WRITE_FAR_LINE
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+
+	LD	HL,0
+	LD	(BLOCK_START_ROW),HL
+	LD	(BLOCK_END_ROW),HL
+	LD	A,10
+	LD	(BLOCK_START_COL),A
+	LD	A,20
+	LD	(BLOCK_END_COL),A
+	LD	A,2
+	LD	(BLOCK_ACTIVE),A
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+	LD	A,5
+	LD	(CUR_COL),A
+	CALL	DO_COPY_BLOCK
+
+	; Read back Line 0 and verify length is still 120
+	LD	BC,0
+	LD	DE,LOAD_LINE_TEMP
+	CALL	READ_FAR_LINE
+	LD	HL,LOAD_LINE_TEMP
+	LD	B,0
+TEST5_CHECK_LEN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,TEST5_CHECK_LEN_DONE
+	INC	HL
+	INC	B
+	JR	TEST5_CHECK_LEN
+TEST5_CHECK_LEN_DONE:
+	LD	A,B
+	CP	120
+	JP	NZ,TEST5_FAIL_SL
+
+	LD	DE,STR_TEST5_PASS
+	CALL	PRINT_STR
+
+	; -------------------------------------------------------------------------
 	; Restore Empty Document State & Display Final Success
 	; -------------------------------------------------------------------------
 	CALL	INIT_EMPTY_DOCUMENT
@@ -1129,7 +1245,20 @@ TEST4_FAIL_L300:
 	CALL	PRINT_STR
 	POP	AF
 	CALL	PRINT_HEX_BYTE
-	LD	DE,STR_CRLF
+	JP	TEST_FAIL
+
+TEST5_FAIL_OOM:
+	LD	DE,STR_TEST5_FAIL_OOM
+	CALL	PRINT_STR
+	JP	TEST_FAIL
+
+TEST5_FAIL_ML:
+	LD	DE,STR_TEST5_FAIL_ML
+	CALL	PRINT_STR
+	JP	TEST_FAIL
+
+TEST5_FAIL_SL:
+	LD	DE,STR_TEST5_FAIL_SL
 	CALL	PRINT_STR
 	JP	TEST_FAIL
 
@@ -7821,6 +7950,16 @@ STR_TEST4_PASS:	DB	"    --> [PASS] Transparent window sliding and Far RAM sync v
 STR_TEST4_FAIL_L0_MSG:	DB	"    [-] Test 4 Line 0 Reload Mismatch! Expected 'C' (0x43), Got: 0x$"
 
 STR_TEST4_FAIL_L300_MSG:	DB	"    [-] Test 4 Line 300 Reload Mismatch! Expected 'C' (0x43), Got: 0x$"
+
+STR_TEST5_TITLE:	DB	"[*] Test 5: Block Copy Out-Of-Memory & Capacity Protection...",13,10,"$"
+
+STR_TEST5_PASS:		DB	"    --> [PASS] Far RAM OOM and single-line capacity limits verified.",13,10,13,10,"$"
+
+STR_TEST5_FAIL_OOM:	DB	"    [-] Test 5 FAILED: ALLOC_SLOT did not report Carry on OOM!",13,10,"$"
+
+STR_TEST5_FAIL_ML:	DB	"    [-] Test 5 FAILED: Multi-line copy did not reject OOM capacity!",13,10,"$"
+
+STR_TEST5_FAIL_SL:	DB	"    [-] Test 5 FAILED: Single-line copy exceeded line capacity!",13,10,"$"
 
 STR_TEST_ALL_PASSED:	DB	"============================================================",13,10
 	DB	"[+] ALL 512KB EXTENDED MEMORY TESTS PASSED SUCCESSFULLY!",13,10

@@ -134,7 +134,10 @@ def test_se_execution():
         if b"ALL 512KB EXTENDED MEMORY TESTS PASSED" not in out_mem:
             print("[-] 512KB extended memory banking diagnostic FAILED. Buffer captured:\n", out_mem.decode("latin1", errors="replace"), flush=True)
             return False
-        print("[+] 512KB Extended Memory Diagnostic Suite (Tests 1, 2, 3, 4) ALL PASSED!", flush=True)
+        if b"Test 5:" not in out_mem or b"[PASS] Far RAM OOM" not in out_mem:
+            print(f"[-] Test 5 not found in memory diagnostic! Buffer: {repr(out_mem)}", flush=True)
+            return False
+        print("[+] 512KB Extended Memory Diagnostic Suite (Tests 1, 2, 3, 4, 5) ALL PASSED!", flush=True)
 
         # 7. Return to Splash, verify only 'e'/Enter enter editor mode, and enter editor ('e')
         read_until(master, b"Press any key to return", timeout=5.0)
@@ -1652,6 +1655,75 @@ def test_se_execution():
         read_until(master, b"^K: Editor keys", timeout=4.0)
 
         print("[+] Successfully verified Block Move using Ctrl+X (Step 40)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 41: Verify Block Copy capacity limits (Single-line buffer overflow protection)
+        # ---------------------------------------------------------------------
+        print("[*] Step 41: Verifying Block Copy buffer capacity limits...", flush=True)
+
+        # 1. Fill line to 120 characters (maximum visual / buffer capacity)
+        # Current line is "12345123" (8 chars). Move to end of line: Ctrl-E
+        os.write(master, b"\x05")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # Type 112 'Z's so total line length is exactly 120 chars
+        os.write(master, b"Z" * 112)
+        time.sleep(0.3)
+        drain_all(master)
+
+        # Verify cursor is at Col 119 (maximum capacity)
+        os.write(master, b"\x05")
+        out_s41_full = read_until(master, b"Col 119", timeout=4.0)
+        if b"Col 119" not in out_s41_full:
+            print(f"[-] Step 41 full line check failed: {repr(out_s41_full)}", flush=True)
+            return False
+
+        # 2. Select a 5-character block on this line: Ctrl-A, Right 10, Ctrl-B, Right 5, Ctrl-K
+        os.write(master, b"\x01" + b"\x1b[C" * 10)
+        time.sleep(0.1)
+        drain_all(master)
+
+        os.write(master, b"\x02" + b"\x1b[C" * 5) # Select 5 chars
+        out_s41_sel = read_until(master, b"[SEL: 5c]", timeout=4.0)
+        if b"[SEL: 5c]" not in out_s41_sel:
+            print(f"[-] Step 41 select 5c failed: {repr(out_s41_sel)}", flush=True)
+            return False
+
+        os.write(master, b"\x0b") # Solidify -> [BLK: 5c LOCK]
+        out_s41_lock = read_until(master, b"[BLK: 5c LOCK]", timeout=4.0)
+        if b"[BLK: 5c LOCK]" not in out_s41_lock:
+            print(f"[-] Step 41 solidify failed: {repr(out_s41_lock)}", flush=True)
+            return False
+
+        # Move cursor to Col 0: Ctrl-A (outside block, line is at 120 capacity)
+        os.write(master, b"\x01")
+        time.sleep(0.1)
+        drain_all(master)
+
+        # 3. Try to copy 5 characters into a line that already has 120 characters (Space = 0)
+        # Block copy MUST safely abort without overflowing the 120-char line limit or crashing!
+        os.write(master, b"\x03") # Ctrl-C
+        time.sleep(0.3)
+        drain_all(master)
+
+        # Move to end of line: Ctrl-E, verify length is still exactly 119 (120 chars)
+        os.write(master, b"\x05")
+        out_s41_check = read_until(master, b"Col 119", timeout=4.0)
+        if b"Col 119" not in out_s41_check:
+            print(f"[-] Step 41 capacity overflow check failed: {repr(out_s41_check)}", flush=True)
+            return False
+
+        # Block should remain intact
+        if b"[BLK: 5c LOCK]" not in out_s41_check:
+            print(f"[-] Step 41 block lock state lost: {repr(out_s41_check)}", flush=True)
+            return False
+
+        # Cancel block with ESC
+        os.write(master, b"\x1b")
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+
+        print("[+] Successfully verified Block Copy capacity limits (Step 41)!", flush=True)
 
         # Return to splash (ESC)
         time.sleep(0.2)
