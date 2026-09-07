@@ -1758,6 +1758,35 @@ def test_se_execution():
             print(f"[-] Step 42 failed: ESC did not restore {repr(lbl_1)}. Buffer: {repr(out_s42_esc)}", flush=True)
             return False
 
+        # 2b. Abort with Down Arrow (\x1b[B): verify prompt aborts, cursor moves to Line 2, no debris!
+        lbl_2 = b"Line 2/" + total_str
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"\x1b[B")
+        out_s42_down = read_until(master, lbl_2, timeout=4.0)
+        if lbl_2 not in out_s42_down:
+            print(f"[-] Step 42 failed: Down Arrow did not move to Line 2. Buffer: {repr(out_s42_down)}", flush=True)
+            return False
+
+        # Abort with Up Arrow (\x1b[A): verify prompt aborts, cursor moves back to Line 1, no debris!
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"\x1b[A")
+        out_s42_up = read_until(master, lbl_1, timeout=4.0)
+        if lbl_1 not in out_s42_up:
+            print(f"[-] Step 42 failed: Up Arrow did not move back to Line 1. Buffer: {repr(out_s42_up)}", flush=True)
+            return False
+
+        # Verify no control debris ('[B', '[A') was inserted into the text at cursor (lines 1 and 2)
+        drain_all(master)
+        os.write(master, b"\x14\x01")
+        time.sleep(0.1)
+        out_debris_check = drain_all(master)
+        lines_1_and_2 = out_debris_check.split(b"\r\n")[:2]
+        if any(b"[B" in l or b"[A" in l for l in lines_1_and_2):
+            print(f"[-] Step 42 failed: Control debris found in text! Lines: {repr(lines_1_and_2)}", flush=True)
+            return False
+
         # 3. Jump to line 10: Ctrl+L, '10', Enter
         os.write(master, b"\x0c")
         read_until(master, b"Goto line: ", timeout=4.0)

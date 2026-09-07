@@ -5588,8 +5588,12 @@ DO_GOTO_LINE_UI:
 GOTO_UI_LOOP:
 	CALL	GET_KEY
 
-	; ESC -> cancel without moving cursor
+	; ESC or escape sequence (e.g. cursor keys)
 	CP	KEY_ESC
+	JR	Z,GOTO_UI_CHECK_ESC
+
+	; Ctrl+C -> cancel without moving cursor
+	CP	KEY_CTRL_C
 	JR	Z,GOTO_UI_CANCEL
 
 	; Enter -> confirm goto line
@@ -5649,6 +5653,29 @@ GOTO_UI_BS:
 	LD	A,008H
 	CALL	PUTC
 	JR	GOTO_UI_LOOP
+
+GOTO_UI_CHECK_ESC:
+	; Check if a character follows ESC within a short timeout
+	LD	BC,1000
+GOTO_WAIT_ESC:
+	CALL	CHECK_KEY_READY
+	JR	NZ,GOTO_GOT_ESC_SEQ
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,GOTO_WAIT_ESC
+
+	; Standalone ESC key: cancel prompt without moving cursor
+	JR	GOTO_UI_CANCEL
+
+GOTO_GOT_ESC_SEQ:
+	; User pressed an escape sequence (e.g. cursor arrow keys)
+	; 1. Consume escape sequence and execute cursor navigation
+	CALL	GOT_ESC_BYTE
+	; 2. Refresh screen if scrolled, or redraw status bar and locate cursor
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_STATUS_BAR
+	RET
 
 GOTO_UI_ENTER:
 	; If empty (user just pressed enter with no digits), treat as cancel
