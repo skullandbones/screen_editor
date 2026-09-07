@@ -119,7 +119,7 @@ def run_sanity_test():
         # 4. Enter Editor Mode ('e')
         time.sleep(0.1)
         os.write(master, b"e")
-        out_edit = read_until(master, b"Row 1/1,", timeout=4.0)
+        out_edit = read_until(master, b"Line 1/1,", timeout=4.0)
         if b"SE v0.7.3" not in out_edit or b"[No Name]" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer: {repr(out_edit)}", flush=True)
             return False
@@ -153,7 +153,7 @@ def run_sanity_test():
             print(f"[-] Help screen failed. Buffer: {repr(out_help)}", flush=True)
             return False
         os.write(master, b"\r")
-        out_back = read_until(master, b"Row 1/1,", timeout=3.0)
+        out_back = read_until(master, b"Line 1/1,", timeout=3.0)
         if b"SANITY CHECK OK" not in out_back:
             print(f"[-] Return from help screen failed. Buffer: {repr(out_back)}", flush=True)
             return False

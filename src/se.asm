@@ -3734,12 +3734,12 @@ SHOW_STATUS_NORMAL_KEYS:
 	CALL	PRINT_STR
 
 SHOW_STATUS_ROWCOL:
-	; Print dynamic cursor position: Row <cur>/<total>, Col <col>
+	; Print dynamic cursor position: Line <cur>/<total>, Col <col>
 	LD	DE,STR_STATUS_POS
 	CALL	PRINT_STR
 	LD	HL,(CUR_DOC_ROW)
-	INC	HL			; 1-indexed document row
-	CALL	PRINT_DEC_WORD		; Print 16-bit current row number
+	INC	HL			; 1-indexed document line
+	CALL	PRINT_DEC_WORD		; Print 16-bit current line number
 	LD	A,'/'
 	CALL	PUTC
 	LD	HL,(DOC_TOTAL_LINES)
@@ -8052,7 +8052,7 @@ STR_STATUS_SEP:	DB	" | ","$"
 
 STR_NO_NAME:	DB	"[No Name]",0
 
-STR_STATUS_POS:	DB	"Row ","$"
+STR_STATUS_POS:	DB	"Line ","$"
 
 STR_STATUS_COL:	DB	", Col ","$"
 
@@ -8129,7 +8129,11 @@ SCREEN_MODE:	DB	MODE_120X40	; Default to 120x40
 ACTIVE_ROWS:	DB	40		; Default 40 rows
 ACTIVE_COLS:	DB	120		; Default 120 cols
 
-CUR_DOC_ROW:	DW	0		; 16-bit document cursor row (0..3583)
+; Screen cursor coordinates use "row" (0..ACTIVE_ROWS-2) internally for terminal
+; positioning (LOCATE_CURSOR: Screen Row = CUR_DOC_ROW - TOP_DOC_ROW + 1).
+; Document line indices in buffer/file use "line" (0..DOC_TOTAL_LINES-1) and are
+; rendered on the status line as "Line <cur>/<total>".
+CUR_DOC_ROW:	DW	0		; 16-bit document line index (0..3583)
 CUR_COL:	DB	0		; 8-bit character byte index in line (0..126)
 TARGET_COL:	DB	0		; Sticky visual column (0..119)
 TOP_DOC_ROW:	DW	0		; 16-bit top visible document line on screen
