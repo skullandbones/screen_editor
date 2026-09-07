@@ -153,7 +153,18 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 * Press **`2`** to set classic **80 columns x 24 rows** terminal mode.
 * Press **`q`**, **`Q`**, or <kbd>Ctrl+Q</kbd> to return cleanly to CP/M.
 
-### 2. Editor Mode Keybindings & Hybrid Block Highlighting
+### 2. Command-Line Launch & Goto Line
+`SE.COM` can be launched directly from the CP/M command line with an optional target filename and line number:
+```text
+C>SE <filename>[:<line>]
+```
+Examples:
+* `C>SE 30.TXT` — Opens `30.TXT` directly in the editor at Line 1.
+* `C>SE 30.TXT:15` — Opens `30.TXT` with the viewport centered on Line 15.
+* `C>SE B:MYFILE.ASM:42` — Opens file on Drive B: centered on Line 42 (matching compiler error output).
+
+### 3. Editor Mode Keybindings & Hybrid Block Highlighting
+* <kbd>Ctrl+L</kbd>: Goto line number (prompts on status line; centers viewport on target line).
 * <kbd>Ctrl+B</kbd>: Start / toggle block selection mode (anchors at cursor row & character column).
 * <kbd>Ctrl+K</kbd>: Solidify (lock/freeze) active block selection, or show Editor Keys Reference Screen if no block active.
 * <kbd>Ctrl+C</kbd>: Copy solidified block to current cursor position (or solidify dynamic block).
@@ -165,7 +176,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 * <kbd>Ctrl+S</kbd>: Open save file screen.
 * <kbd>Ctrl+Q</kbd>: Clean exit to CP/M.
 
-### 3. Screen Size Configurations
+### 4. Screen Size Configurations
 `SE.COM` supports both modern widescreen and retro terminal geometries:
 * **Modern Mode (120x40 - Default)**: Uses 120 columns by 40 rows, ideal for
   modern terminal emulators (e.g. Minicom, GNOME Terminal, Windows Terminal,

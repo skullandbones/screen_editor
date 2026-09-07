@@ -1899,6 +1899,41 @@ def test_se_execution():
         read_until(master, b"C>", timeout=4.0)
         print("[+] Final exit from SE.COM completed.", flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 44: Command-Line Goto Line ('se 30.TXT:15' and 'se 30.TXT:999')
+        # ---------------------------------------------------------------------
+        print("[*] Step 44: Verifying command-line Goto Line facility ('se 30.TXT:15')...", flush=True)
+
+        # Launch SE directly with line number: 'se 30.TXT:15'
+        time.sleep(0.5)
+        os.write(master, b"se 30.TXT:15\r")
+        out_s44_l15 = read_until(master, lbl_15, timeout=14.0)
+        if lbl_15 not in out_s44_l15 or b"Line 15 of test file content" not in out_s44_l15:
+            print(f"[-] Step 44 failed: 'se 30.TXT:15' did not position at Line 15. Buffer: {repr(out_s44_l15)}", flush=True)
+            return False
+        if b"C:30.TXT" not in out_s44_l15:
+            print(f"[-] Step 44 failed: 'se 30.TXT:15' filename missing on status bar. Buffer: {repr(out_s44_l15)}", flush=True)
+            return False
+
+        # Exit with Ctrl+Q back to CP/M
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=4.0)
+
+        # Launch SE with line number beyond EOF: 'se 30.TXT:999' (should clamp to max line)
+        time.sleep(0.5)
+        os.write(master, b"se 30.TXT:999\r")
+        out_s44_l30 = read_until(master, lbl_max, timeout=14.0)
+        if lbl_max not in out_s44_l30 or b"Line 30 of test file content" not in out_s44_l30:
+            print(f"[-] Step 44 failed: 'se 30.TXT:999' did not clamp to Line 30. Buffer: {repr(out_s44_l30)}", flush=True)
+            return False
+
+        # Final exit from editor with Ctrl+Q back to CP/M
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Successfully verified command-line Goto Line facility (Step 44)!", flush=True)
+
         return True
 
     finally:

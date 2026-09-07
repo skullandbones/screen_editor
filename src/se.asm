@@ -84,12 +84,24 @@ DO_AUTO_LOAD:
 	JR	C,AUTO_LOAD_NOT_FOUND
 	LD	A,1
 	LD	(IN_EDITOR_MODE),A
+
+	; Check if command-line specified a target goto line (> 0)
+	LD	HL,(CMDLINE_GOTO_LINE)
+	LD	A,H
+	OR	L
+	JR	Z,AUTO_LOAD_LINE_DEFAULT
+	CALL	GOTO_LINE_HL
+	JR	AUTO_LOAD_RENDER
+
+AUTO_LOAD_LINE_DEFAULT:
 	LD	HL,0
 	LD	(CUR_DOC_ROW),HL
 	LD	(TOP_DOC_ROW),HL
 	XOR	A
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
+
+AUTO_LOAD_RENDER:
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
@@ -629,6 +641,9 @@ CALL_HL:
 ; Command Line & FCB Initialization
 ;------------------------------------------------------------------------------
 CHECK_COMMAND_LINE:
+	LD	HL,0
+	LD	(CMDLINE_GOTO_LINE),HL
+
 	LD	A,(DEFAULT_FCB+1)
 	CP	' '
 	JR	Z,NO_FILE_ARG
@@ -650,6 +665,9 @@ CHECK_COMMAND_LINE:
 	LD	DE,WORK_FCB+13
 	LD	BC,23
 	LDIR
+
+	; Parse optional line number from DEFAULT_DMA (0080H)
+	CALL	PARSE_CMDLINE_LINE_NUM
 	RET
 
 NO_FILE_ARG:
@@ -668,6 +686,109 @@ NO_FILE_ARG:
 	LD	DE,WORK_FCB
 	LD	BC,12
 	LDIR
+	RET
+
+;------------------------------------------------------------------------------
+; Parse optional :<line> suffix from command line buffer (DEFAULT_DMA = $0080)
+; If found, stores 16-bit line number in (CMDLINE_GOTO_LINE).
+; Format: [drive:]filename[:line]
+;------------------------------------------------------------------------------
+PARSE_CMDLINE_LINE_NUM:
+	LD	A,(DEFAULT_DMA)		; A = length of command line tail
+	OR	A
+	RET	Z			; Empty command line
+
+	; HL = pointer to end of command line: DEFAULT_DMA + length
+	LD	E,A
+	LD	D,0
+	LD	HL,DEFAULT_DMA
+	ADD	HL,DE			; HL points to last char of tail
+
+	; Trim trailing spaces
+TRIM_TRAIL_SPACES:
+	LD	A,(HL)
+	CP	' '
+	JR	NZ,CHECK_TRAIL_DIGITS
+	DEC	HL
+	DEC	E
+	JR	NZ,TRIM_TRAIL_SPACES
+	RET				; Only spaces found
+
+CHECK_TRAIL_DIGITS:
+	; Last non-space character must be a digit '0'..'9'
+	LD	A,(HL)
+	CP	'0'
+	RET	C
+	CP	'9'+1
+	RET	NC
+
+	; Scan backwards past all digits to find preceding ':'
+SCAN_DIGITS_BACK:
+	DEC	HL
+	DEC	E
+	RET	Z			; Hit start of buffer without ':'
+	LD	A,(HL)
+	CP	':'
+	JR	Z,FOUND_COLON
+	CP	'0'
+	JR	C,NOT_LINE_NUM
+	CP	'9'+1
+	JR	C,SCAN_DIGITS_BACK
+NOT_LINE_NUM:
+	RET
+
+FOUND_COLON:
+	; Check if this colon is actually a drive colon (e.g. C:15)
+	; A drive colon has:
+	;   - Char at (HL-1) is a letter 'A'..'Z' or 'a'..'z'
+	;   - Char at (HL-2) is space or HL-1 was the first char (E == 1)
+	LD	A,E			; E = 1-based index of colon within DEFAULT_DMA
+	CP	2
+	JR	C,IS_LINE_COLON		; Colon at pos 1 cannot be drive colon (need letter before it)
+	DEC	HL
+	LD	A,(HL)			; A = char before colon
+	INC	HL
+	CALL	IS_ALPHA_CHAR
+	JR	NC,IS_LINE_COLON	; Preceding char not a letter -> must be line colon!
+
+	; Char before colon is a letter. Check char before that (HL-2).
+	LD	A,E
+	CP	2
+	JR	Z,IS_DRIVE_COLON	; Letter at pos 1, colon at pos 2 -> drive colon (e.g. "C:...")
+	DEC	HL
+	DEC	HL
+	LD	A,(HL)			; A = char at HL-2
+	INC	HL
+	INC	HL
+	CP	' '
+	JR	Z,IS_DRIVE_COLON	; Preceded by space -> drive colon (e.g. " C:...")
+
+IS_LINE_COLON:
+	; Colon is followed by digits. HL points to ':'
+	; HL+1 points to first digit
+	INC	HL
+	CALL	PARSE_DEC_WORD		; DE = 16-bit parsed value
+	LD	(CMDLINE_GOTO_LINE),DE
+	RET
+
+IS_DRIVE_COLON:
+	RET
+
+; Helper: Return Carry=1 if A is 'A'..'Z' or 'a'..'z'
+IS_ALPHA_CHAR:
+	CP	'A'
+	JR	C,NOT_ALPHA
+	CP	'Z'+1
+	JR	C,IS_ALPHA
+	CP	'a'
+	JR	C,NOT_ALPHA
+	CP	'z'+1
+	JR	NC,NOT_ALPHA
+IS_ALPHA:
+	SCF
+	RET
+NOT_ALPHA:
+	OR	A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -8461,6 +8582,7 @@ TARGET_COL:	DB	0		; Sticky visual column (0..119)
 TOP_DOC_ROW:	DW	0		; 16-bit top visible document line on screen
 DOC_TOTAL_LINES:	DW	1		; 16-bit total document lines count (default 1 empty line)
 HAS_FILE_ARG:	DB	0
+CMDLINE_GOTO_LINE:	DW	0		; 16-bit line number from command line (0 = start)
 GOTO_LINE_BUF:	DS	8
 IN_EDITOR_MODE:	DB	0
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
