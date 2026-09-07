@@ -1787,13 +1787,51 @@ def test_se_execution():
             print(f"[-] Step 42 failed: Control debris found in text! Lines: {repr(lines_1_and_2)}", flush=True)
             return False
 
-        # 3. Jump to line 10: Ctrl+L, '10', Enter
+        # 2c. Abort with PageDown (\x1b[6~): verify prompt aborts, screen scrolls, NO highlight mode!
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"\x1b[6~")
+        out_s42_pgdn = read_until(master, b"Line ", timeout=4.0)
+        if b"\x1b[7m\x1b[H" in out_s42_pgdn or b"\x1b[7m\x1b[K" in out_s42_pgdn:
+            print(f"[-] Step 42 failed: Highlight mode active during PageDown redraw! Buffer: {repr(out_s42_pgdn)}", flush=True)
+            return False
+
+        # 2d. Abort with PageUp (\x1b[5~): verify prompt aborts, screen scrolls back to Line 1, NO highlight mode!
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"\x1b[5~")
+        out_s42_pgup = read_until(master, lbl_1, timeout=4.0)
+        if lbl_1 not in out_s42_pgup:
+            print(f"[-] Step 42 failed: PageUp did not restore Line 1. Buffer: {repr(out_s42_pgup)}", flush=True)
+            return False
+        if b"\x1b[7m\x1b[H" in out_s42_pgup or b"\x1b[7m\x1b[K" in out_s42_pgup:
+            print(f"[-] Step 42 failed: Highlight mode active during PageUp redraw! Buffer: {repr(out_s42_pgup)}", flush=True)
+            return False
+
+        # 2e. Abort with Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"\x16")
+        read_until(master, b"Line ", timeout=4.0)
+
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"\x15")
+        out_s42_ctrl_u = read_until(master, lbl_1, timeout=4.0)
+        if lbl_1 not in out_s42_ctrl_u:
+            print(f"[-] Step 42 failed: Ctrl+U did not restore Line 1. Buffer: {repr(out_s42_ctrl_u)}", flush=True)
+            return False
+
+        # 3. Jump to line 10: Ctrl+L, '10', Enter -> verify no \x1b[7m\x1b[2J clear screen flash!
         os.write(master, b"\x0c")
         read_until(master, b"Goto line: ", timeout=4.0)
         os.write(master, b"10\r")
         out_s42_l10 = read_until(master, lbl_10, timeout=4.0)
         if lbl_10 not in out_s42_l10 or b"Line 10 of test file content" not in out_s42_l10:
             print(f"[-] Step 42 failed: Goto line 10 failed. Buffer: {repr(out_s42_l10)}", flush=True)
+            return False
+        if b"\x1b[7m\x1b[2J" in out_s42_l10:
+            print(f"[-] Step 42 failed: Clear screen executed while in inverse video! Buffer: {repr(out_s42_l10)}", flush=True)
             return False
 
         # 4. Jump to line 25: Ctrl+L, '25', Enter

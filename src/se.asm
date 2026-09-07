@@ -553,6 +553,8 @@ SET_MODE_80X24:
 ; Terminal / VT100 I/O Routines
 ;------------------------------------------------------------------------------
 TERM_INIT:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
 	RET
@@ -3234,6 +3236,8 @@ MOVE_FINISH:
 ; Editor Screen Renderer
 ;------------------------------------------------------------------------------
 RENDER_SCREEN:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
 
@@ -5588,17 +5592,25 @@ DO_GOTO_LINE_UI:
 GOTO_UI_LOOP:
 	CALL	GET_KEY
 
-	; ESC or escape sequence (e.g. cursor keys)
+	; ESC or escape sequence (e.g. cursor keys, PgUp, PgDn)
 	CP	KEY_ESC
 	JR	Z,GOTO_UI_CHECK_ESC
 
 	; Ctrl+C -> cancel without moving cursor
 	CP	KEY_CTRL_C
-	JR	Z,GOTO_UI_CANCEL
+	JP	Z,GOTO_UI_CANCEL
+
+	; Ctrl+U -> cancel and Page Up
+	CP	KEY_CTRL_U
+	JR	Z,GOTO_UI_PGUP
+
+	; Ctrl+V -> cancel and Page Down
+	CP	KEY_CTRL_V
+	JR	Z,GOTO_UI_PGDN
 
 	; Enter -> confirm goto line
 	CP	KEY_ENTER
-	JR	Z,GOTO_UI_ENTER
+	JP	Z,GOTO_UI_ENTER
 
 	; Backspace / Delete
 	CP	KEY_BACKSPACE
@@ -5654,6 +5666,22 @@ GOTO_UI_BS:
 	CALL	PUTC
 	JR	GOTO_UI_LOOP
 
+GOTO_UI_PGUP:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	CALL	PAGE_UP
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_STATUS_BAR
+	RET
+
+GOTO_UI_PGDN:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	CALL	PAGE_DOWN
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_STATUS_BAR
+	RET
+
 GOTO_UI_CHECK_ESC:
 	; Check if a character follows ESC within a short timeout
 	LD	BC,1000
@@ -5669,10 +5697,13 @@ GOTO_WAIT_ESC:
 	JR	GOTO_UI_CANCEL
 
 GOTO_GOT_ESC_SEQ:
-	; User pressed an escape sequence (e.g. cursor arrow keys)
-	; 1. Consume escape sequence and execute cursor navigation
+	; User pressed an escape sequence (e.g. cursor arrow keys, PgUp, PgDn)
+	; 1. Cancel inverse video before executing navigation and rendering
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	; 2. Consume escape sequence and execute cursor navigation
 	CALL	GOT_ESC_BYTE
-	; 2. Refresh screen if scrolled, or redraw status bar and locate cursor
+	; 3. Refresh screen if scrolled, or redraw status bar and locate cursor
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	RENDER_STATUS_BAR
 	RET
@@ -5683,19 +5714,23 @@ GOTO_UI_ENTER:
 	OR	A
 	JR	Z,GOTO_UI_CANCEL
 
+	; Cancel inverse video before parsing and redrawing
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+
 	; Parse decimal number from GOTO_LINE_BUF into DE
 	LD	HL,GOTO_LINE_BUF
 	CALL	PARSE_DEC_WORD		; DE = line number
 	EX	DE,HL			; HL = line number
 	CALL	GOTO_LINE_HL
 
-	; Redraw editor and status bar
-	CALL	TERM_INIT
+	; Redraw editor and status bar smoothly without full screen clear flash
 	CALL	RENDER_SCREEN
-	CALL	RENDER_STATUS_BAR
 	RET
 
 GOTO_UI_CANCEL:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
 	CALL	RENDER_STATUS_BAR
 	RET
 
