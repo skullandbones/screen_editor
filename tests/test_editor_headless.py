@@ -2071,21 +2071,183 @@ def test_se_execution():
 
         # Enter replacement string: "BetaLine 01"
         os.write(master, b"BetaLine 01\r")
-        out_s47_confirm = read_until(master, b"Replace (y/n/a/q)? ", timeout=4.0)
-        if b"Replace (y/n/a/q)? " not in out_s47_confirm:
+        out_s47_confirm = read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
+        if b"Replace (y/n/a/q/r)? " not in out_s47_confirm:
             print(f"[-] Step 47 failed: Confirmation prompt missing. Buffer: {repr(out_s47_confirm)}", flush=True)
             return False
 
         # Confirm replacement with 'y'
         os.write(master, b"y")
-        read_until(master, b"Replace done:", timeout=4.0)
-        read_until(master, b"BetaLine 01", timeout=4.0)
+        read_until(master, b"Replace done: 1 replacement(s).", timeout=4.0)
+        time.sleep(0.3)
+        drain_all(master)
+        print("[+] Successfully verified Search and Replace (Ctrl+R) (Step 47)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 48: Solidified Block Highlighting on Found Search Match
+        # ---------------------------------------------------------------------
+        print("[*] Step 48: Verifying Solidified Block Highlighting on Match...", flush=True)
+        time.sleep(0.3)
+        drain_all(master)
+        # Search for "BetaLine" with Ctrl+F
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        os.write(master, b"BetaLine\r")
+        out_s48 = read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
+        if b"[BLK: 8c LOCK]" not in out_s48:
+            print(f"[-] Step 48 failed: [BLK: 8c LOCK] missing from status bar. Buffer: {repr(out_s48)}", flush=True)
+            return False
+
+        # Press ESC to dismiss block highlight
+        time.sleep(0.3)
+        os.write(master, b"\x1b")
+        time.sleep(0.3)
+        drain_all(master)
+        # Re-search: Ctrl+F then Enter to repeat previous search
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        os.write(master, b"\r")
+        out_s48_re = read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
+        if b"[BLK: 8c LOCK]" not in out_s48_re:
+            print(f"[-] Step 48 failed: Solidified block re-match missing. Buffer: {repr(out_s48_re)}", flush=True)
+            return False
+        print("[+] Successfully verified Solidified Block Highlighting on Match (Step 48)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 49: Start Search / Replace from Active Highlighted Block
+        # ---------------------------------------------------------------------
+        print("[*] Step 49: Verifying Start Search from Highlighted Block...", flush=True)
+        # Dismiss existing block with ESC
+        time.sleep(0.3)
+        os.write(master, b"\x1b")
+        time.sleep(0.3)
+        drain_all(master)
+        # Move to top of document: Ctrl+T, Ctrl+A (Line 1 Col 0)
+        os.write(master, b"\x14\x01")
+        read_until(master, b"Line 1/30,", timeout=4.0)
+        # Move down to Line 2: Down Arrow (\x1b[B)
+        os.write(master, b"\x1b[B")
+        read_until(master, b"Line 2/30,", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+        # Start dynamic selection with Ctrl+B
+        os.write(master, b"\x02")
+        # Move right 4 times to select "Line"
+        os.write(master, b"\x1b[C\x1b[C\x1b[C\x1b[C")
+        read_until(master, b"[SEL: 4c]", timeout=4.0)
+
+        # Press Ctrl+F: should imply Ctrl+K and pre-fill "Line"
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        out_s49_prompt = read_until(master, b"Line", timeout=4.0)
+        if b"Line" not in out_s49_prompt:
+            print(f"[-] Step 49 failed: Prompt not pre-filled with block text. Buffer: {repr(out_s49_prompt)}", flush=True)
+            return False
+
+        # Confirm search with Enter
+        os.write(master, b"\r")
+        out_s49_match = read_until(master, b"[BLK: 4c LOCK]", timeout=4.0)
+        if b"[BLK: 4c LOCK]" not in out_s49_match:
+            print(f"[-] Step 49 failed: Pre-filled match not solidified. Buffer: {repr(out_s49_match)}", flush=True)
+            return False
+        print("[+] Successfully verified Start Search from Highlighted Block (Step 49)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 50: "Search completed." vs "Pattern not found." Messaging
+        # ---------------------------------------------------------------------
+        print("[*] Step 50: Verifying Search Completed vs Not Found Messaging...", flush=True)
+        time.sleep(0.3)
+        drain_all(master)
+        # Search for a pattern that does not exist anywhere:
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        # Erase prefilled "Line" (4 backspaces) and type ZZZ999
+        os.write(master, b"\x08\x08\x08\x08ZZZ999\r")
+        out_s50_notfound = read_until(master, b"Pattern not found.", timeout=4.0)
+        if b"Pattern not found." not in out_s50_notfound:
+            print(f"[-] Step 50 failed: Pattern not found missing. Buffer: {repr(out_s50_notfound)}", flush=True)
+            return False
+
+        # Now search for "BetaLine" which exists once in the file
+        time.sleep(0.3)
+        drain_all(master)
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        os.write(master, b"BetaLine\r")
+        read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
+
+        # Now trigger Find Next (Ctrl+N): wraps whole file and finds no more matches!
+        time.sleep(0.3)
+        drain_all(master)
+        os.write(master, b"\x0e")
+        out_s50_completed = read_until(master, b"Search completed.", timeout=4.0)
+        if b"Search completed." not in out_s50_completed:
+            print(f"[-] Step 50 failed: 'Search completed.' missing. Buffer: {repr(out_s50_completed)}", flush=True)
+            return False
+        print("[+] Successfully verified 'Search completed.' vs 'Pattern not found.' (Step 50)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 51: Dynamic Reversal of Search Direction (Ctrl+P and Replace 'r')
+        # ---------------------------------------------------------------------
+        print("[*] Step 51: Verifying Dynamic Reversal of Search Direction...", flush=True)
+        time.sleep(0.3)
+        drain_all(master)
+        # Search for "content" with Ctrl+F
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        # Erase prefilled "BetaLine" (8 backspaces) and type "content\r"
+        os.write(master, b"\x08\x08\x08\x08\x08\x08\x08\x08content\r")
+        read_until(master, b"Line 1/30,", timeout=4.0)
+
+        # Forward search: Ctrl+N -> moves to line 2
+        time.sleep(0.2)
+        os.write(master, b"\x0e")
+        read_until(master, b"Line 2/30,", timeout=4.0)
+
+        # Forward search: Ctrl+N -> moves to line 3
+        time.sleep(0.2)
+        os.write(master, b"\x0e")
+        read_until(master, b"Line 3/30,", timeout=4.0)
+
+        # Dynamic reverse: Ctrl+P -> moves back to line 2!
+        time.sleep(0.2)
+        os.write(master, b"\x10")
+        read_until(master, b"Line 2/30,", timeout=4.0)
+
+        # Dynamic reverse: Ctrl+P -> moves back to line 1!
+        time.sleep(0.2)
+        os.write(master, b"\x10")
+        read_until(master, b"Line 1/30,", timeout=4.0)
+
+        # Verify 'r' in interactive Replace prompt:
+        time.sleep(0.3)
+        drain_all(master)
+        os.write(master, b"\x12") # Ctrl+R
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"content", timeout=4.0)
+        os.write(master, b"\r")
+        read_until(master, b"Replace with : ", timeout=4.0)
+        os.write(master, b"Item\r")
+        read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
+        # We are on line 1. Skip with 'n' -> moves forward to line 2:
+        os.write(master, b"n")
+        read_until(master, b"Line 2/30,", timeout=4.0)
+        read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
+
+        # Press 'r' to dynamically reverse direction -> moves back to line 1!
+        os.write(master, b"r")
+        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
+
+        # Quit replace with 'q'
+        os.write(master, b"q")
+        read_until(master, b"Replace done: 0 replacement(s).", timeout=4.0)
+        print("[+] Successfully verified Dynamic Reversal of Search Direction (Step 51)!", flush=True)
 
         # Final exit from editor with Ctrl+Q back to CP/M
         time.sleep(0.5)
         os.write(master, b"\x11")
         read_until(master, b"C>", timeout=4.0)
-        print("[+] Successfully verified Search and Replace (Ctrl+R) (Step 47)!", flush=True)
 
         return True
 

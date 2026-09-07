@@ -29,6 +29,7 @@ KEY_CTRL_K	EQU	11		; Show Editor Mode Keys Screen
 KEY_CTRL_F	EQU	6		; Find in editor / Toggle endings in save
 KEY_CTRL_R	EQU	18		; Search & Replace
 KEY_CTRL_N	EQU	14		; Find Next
+KEY_CTRL_P	EQU	16		; Find Previous (Reverse search)
 KEY_CTRL_I	EQU	9		; Tab / Toggle case sensitivity in prompt
 KEY_CTRL_U	EQU	21		; Page Up
 KEY_CTRL_V	EQU	22		; Page Down
@@ -276,9 +277,17 @@ CHECK_CTRL_R:
 CHECK_CTRL_N:
 	; Command: Ctrl+N -> Find Next
 	CP	KEY_CTRL_N
-	JR	NZ,CHECK_CTRL_S
+	JR	NZ,CHECK_CTRL_P
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	DO_FIND_NEXT
+	JP	MAIN_LOOP
+
+CHECK_CTRL_P:
+	; Command: Ctrl+P -> Find Previous (Reverse search)
+	CP	KEY_CTRL_P
+	JR	NZ,CHECK_CTRL_S
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	DO_FIND_PREV
 	JP	MAIN_LOOP
 
 CHECK_CTRL_S:
@@ -5900,15 +5909,20 @@ GOTO_UI_CANCEL:
 ; Returns: Carry=0 on match found, Carry=1 on cancel or not found
 ;------------------------------------------------------------------------------
 DO_FIND_UI:
-	CALL	CANCEL_BLOCK
+	; Check if starting from an active block
+	CALL	CHECK_START_FROM_BLOCK
+	; B = character count in SEARCH_INPUT_BUF (0..64)
+	; If B > 0, SEARCH_INPUT_BUF has block text, and (CUR_DOC_ROW, CUR_COL) set to block start
 
 	; Setup prompt
 	CALL	DRAW_FIND_PROMPT_HEADER
 
-	; Clear input buffer
-	LD	HL,SEARCH_INPUT_BUF
-	LD	(HL),0
-	LD	B,0			; B = character count (0..SEARCH_BUF_MAX)
+	; If B > 0, echo pre-filled block text
+	LD	A,B
+	OR	A
+	JR	Z,FIND_UI_KEY_LOOP
+	LD	DE,SEARCH_INPUT_BUF
+	CALL	PRINT_STR
 
 FIND_UI_KEY_LOOP:
 	CALL	GET_KEY
@@ -6058,6 +6072,10 @@ FIND_UI_ENTER:
 	LD	B,0
 	INC	BC			; Include null terminator
 	LDIR
+
+	; Reset SEARCH_EVER_FOUND for new search pattern
+	XOR	A
+	LD	(SEARCH_EVER_FOUND),A
 	JR	FIND_EXEC_SEARCH
 
 FIND_CHECK_PREV:
@@ -6071,6 +6089,142 @@ FIND_EXEC_SEARCH:
 	RET
 
 ;------------------------------------------------------------------------------
+; CHECK_START_FROM_BLOCK: Check if block selection active; if so, populate
+; SEARCH_INPUT_BUF with block text and set cursor to block start.
+; Implies Ctrl+K if BLOCK_ACTIVE == 1.
+; Output: B = count of characters pre-filled in SEARCH_INPUT_BUF (0..64)
+;         SEARCH_INPUT_BUF is null-terminated
+;------------------------------------------------------------------------------
+CHECK_START_FROM_BLOCK:
+	LD	HL,SEARCH_INPUT_BUF
+	LD	(HL),0
+	LD	B,0
+
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	RET	Z			; No block active, return with B=0
+
+	CP	1
+	JR	NZ,CSFB_CHECK_SOLID
+	; BLOCK_ACTIVE == 1: User is actively in selection mode!
+	; Implied Ctrl-K: solidify dynamic selection
+	CALL	SOLIDIFY_BLOCK
+	JR	CSFB_EXTRACT
+
+CSFB_CHECK_SOLID:
+	; BLOCK_ACTIVE == 2: Check if cursor is at or in the block!
+	; If cursor has navigated away from the block, cancel block and do normal find!
+	CALL	NORMALIZE_BLOCK_BOUNDS
+
+	; Check if CUR_DOC_ROW is within [BLOCK_START_ROW, BLOCK_END_ROW]
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(BLOCK_START_ROW)
+	OR	A
+	SBC	HL,DE
+	JR	C,CSFB_CANCEL_OLD_BLOCK	; CUR_DOC_ROW < BLOCK_START_ROW -> moved away!
+
+	LD	HL,(BLOCK_END_ROW)
+	LD	DE,(CUR_DOC_ROW)
+	OR	A
+	SBC	HL,DE
+	JR	C,CSFB_CANCEL_OLD_BLOCK	; CUR_DOC_ROW > BLOCK_END_ROW -> moved away!
+
+	; On row: for single-line block, check if CUR_COL is within [BLOCK_START_COL, BLOCK_END_COL]
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	OR	A
+	SBC	HL,DE
+	JR	NZ,CSFB_EXTRACT		; Multi-line row within range: ok
+
+	; Single-line block:
+	LD	A,(CUR_COL)
+	LD	HL,BLOCK_START_COL
+	CP	(HL)
+	JR	C,CSFB_CANCEL_OLD_BLOCK	; CUR_COL < BLOCK_START_COL -> moved away!
+	LD	HL,BLOCK_END_COL
+	CP	(HL)
+	JR	Z,CSFB_EXTRACT		; CUR_COL == BLOCK_END_COL (at end of block): ok!
+	JR	C,CSFB_EXTRACT		; CUR_COL < BLOCK_END_COL: ok!
+	; CUR_COL > BLOCK_END_COL: moved away!
+
+CSFB_CANCEL_OLD_BLOCK:
+	CALL	CANCEL_BLOCK
+	RET				; Return with B=0 (empty prompt)
+
+CSFB_EXTRACT:
+
+	; Set cursor to (BLOCK_START_ROW, BLOCK_START_COL)
+	LD	HL,(BLOCK_START_ROW)
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(BLOCK_START_COL)
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+
+	; Read block text from BLOCK_START_ROW
+	LD	BC,(BLOCK_START_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = LINE_STORAGE line start
+
+	; Advance HL to BLOCK_START_COL
+	LD	A,(BLOCK_START_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = start of block text in line
+
+	; Calculate block length on this row
+	; Check if BLOCK_START_ROW == BLOCK_END_ROW
+	LD	DE,(BLOCK_END_ROW)
+	LD	BC,(BLOCK_START_ROW)
+	LD	A,B
+	CP	D
+	JR	NZ,CSFB_DIFF_ROW
+	LD	A,C
+	CP	E
+	JR	NZ,CSFB_DIFF_ROW
+
+	; Same row: length = BLOCK_END_COL - BLOCK_START_COL
+	LD	A,(BLOCK_START_COL)
+	LD	C,A
+	LD	A,(BLOCK_END_COL)
+	SUB	C			; A = BLOCK_END_COL - BLOCK_START_COL
+	JR	CSFB_GOT_LEN
+
+CSFB_DIFF_ROW:
+	; Spans multiple lines: take up to 64 chars from start line
+	LD	A,SEARCH_BUF_MAX
+
+CSFB_GOT_LEN:
+	; A = max chars to copy from block. Limit to SEARCH_BUF_MAX (64)
+	CP	SEARCH_BUF_MAX+1
+	JR	C,CSFB_LEN_OK
+	LD	A,SEARCH_BUF_MAX
+CSFB_LEN_OK:
+	LD	C,A			; C = max chars
+	OR	A
+	RET	Z			; 0 chars? Return B=0
+
+	LD	DE,SEARCH_INPUT_BUF
+	LD	B,0			; B counts copied chars
+CSFB_COPY_LOOP:
+	LD	A,(HL)
+	CP	' '
+	JR	C,CSFB_COPY_DONE	; Stop at null (0) or control chars
+	CP	127
+	JR	NC,CSFB_COPY_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	INC	B
+	LD	A,B
+	CP	C
+	JR	NC,CSFB_COPY_DONE
+	JR	CSFB_COPY_LOOP
+
+CSFB_COPY_DONE:
+	XOR	A
+	LD	(DE),A			; Null terminate SEARCH_INPUT_BUF
+	RET
+
+;------------------------------------------------------------------------------
 ; DO_FIND_NEXT: Repeat search for SEARCH_BUF forward from (CUR_COL + 1)
 ;------------------------------------------------------------------------------
 DO_FIND_NEXT:
@@ -6078,19 +6232,120 @@ DO_FIND_NEXT:
 	OR	A
 	JP	Z,DO_FIND_UI		; If no search pattern set, open Find UI
 
-	; Advance column by 1
+	; Save current position in case search fails
+	LD	HL,(CUR_DOC_ROW)
+	LD	(PREV_START_ROW_TEMP),HL
+	LD	(SEARCH_START_ROW),HL
 	LD	A,(CUR_COL)
+	LD	(PREV_START_COL_TEMP),A
+	LD	(SEARCH_START_COL),A
+
+	; Advance column by 1
 	INC	A
 	LD	(CUR_COL),A
 
-	CALL	FIND_STRING_FORWARD
+	XOR	A
+	LD	(SEARCH_WRAPPED),A
+	CALL	FIND_STRING_FORWARD_CONT
+	RET	NC			; Match found
+
+	; Failed / completed: restore original position
+	LD	HL,(PREV_START_ROW_TEMP)
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(PREV_START_COL_TEMP)
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+	CALL	LOCATE_CURSOR
+	RET
+
+;------------------------------------------------------------------------------
+; DO_FIND_PREV: Repeat search for SEARCH_BUF backward from (CUR_COL - 1)
+;------------------------------------------------------------------------------
+DO_FIND_PREV:
+	LD	A,(SEARCH_LEN)
+	OR	A
+	JP	Z,DO_FIND_UI		; If no search pattern set, open Find UI
+
+	; Save current position in case search fails
+	LD	HL,(CUR_DOC_ROW)
+	LD	(PREV_START_ROW_TEMP),HL
+	LD	(SEARCH_START_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(PREV_START_COL_TEMP),A
+	LD	(SEARCH_START_COL),A
+
+	CALL	STEP_BACK_ONE_CHAR
+	XOR	A
+	LD	(SEARCH_WRAPPED),A
+	CALL	FIND_STRING_BACKWARD_CONT
+	RET	NC			; Match found
+
+	; Failed / completed: restore original position
+	LD	HL,(PREV_START_ROW_TEMP)
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(PREV_START_COL_TEMP)
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+	CALL	LOCATE_CURSOR
+	RET
+
+;------------------------------------------------------------------------------
+; STEP_BACK_ONE_CHAR: Move cursor position back 1 character or wrap to prev line
+;------------------------------------------------------------------------------
+STEP_BACK_ONE_CHAR:
+	LD	A,(CUR_COL)
+	OR	A
+	JR	Z,SBOC_PREV_LINE
+	DEC	A
+	LD	(CUR_COL),A
+	RET
+SBOC_PREV_LINE:
+	LD	HL,(CUR_DOC_ROW)
+	LD	A,H
+	OR	L
+	JR	Z,SBOC_WRAP_EOF
+	DEC	HL
+	LD	(CUR_DOC_ROW),HL
+	JR	SBOC_SET_END
+SBOC_WRAP_EOF:
+	LD	HL,(DOC_TOTAL_LINES)
+	DEC	HL
+	LD	(CUR_DOC_ROW),HL
+SBOC_SET_END:
+	LD	A,255
+	LD	(CUR_COL),A
+	RET
+
+;------------------------------------------------------------------------------
+; HIGHLIGHT_FOUND_BLOCK: Solidify block highlighting on found match
+; Inputs: (CUR_DOC_ROW, CUR_COL) = match start, SEARCH_LEN = match byte length
+; Sets BLOCK_START_ROW/COL, BLOCK_END_ROW/COL, BLOCK_ANCHOR_ROW/COL, BLOCK_ACTIVE=2
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+HIGHLIGHT_FOUND_BLOCK:
+	PUSH	HL
+	PUSH	AF
+	LD	HL,(CUR_DOC_ROW)
+	LD	(BLOCK_START_ROW),HL
+	LD	(BLOCK_END_ROW),HL
+	LD	(BLOCK_ANCHOR_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(BLOCK_START_COL),A
+	LD	(BLOCK_ANCHOR_COL),A
+	LD	HL,SEARCH_LEN
+	ADD	A,(HL)
+	LD	(BLOCK_END_COL),A
+	LD	A,2			; State 2 = Solidified / Locked
+	LD	(BLOCK_ACTIVE),A
+	POP	AF
+	POP	HL
 	RET
 
 ;------------------------------------------------------------------------------
 ; FIND_STRING_FORWARD: Search forward from (CUR_DOC_ROW, CUR_COL) for SEARCH_BUF
 ; Wraps around EOF to Line 0 up to original position.
-; Returns: Carry=0 on match (CUR_DOC_ROW, CUR_COL updated, screen centered)
-;          Carry=1 if pattern not found (cursor restored, "Pattern not found" shown)
+; Returns: Carry=0 on match (CUR_DOC_ROW, CUR_COL updated, screen centered, solidified block set)
+;          Carry=1 if pattern not found ("Search completed" or "Pattern not found" shown)
 ;------------------------------------------------------------------------------
 FIND_STRING_FORWARD:
 	LD	A,(SEARCH_LEN)
@@ -6105,6 +6360,8 @@ FIND_STRING_FORWARD:
 	LD	(SEARCH_START_COL),A
 	XOR	A
 	LD	(SEARCH_WRAPPED),A
+
+FIND_STRING_FORWARD_CONT:
 	LD	A,1
 	LD	(SEARCH_FIRST_LINE),A
 
@@ -6164,15 +6421,32 @@ SCAN_COL_LOOP:
 	LD	A,(SEARCH_WRAPPED)
 	OR	A
 	JR	Z,CHECK_COL_MATCH
+	PUSH	HL
 	LD	HL,(CUR_DOC_ROW)
 	LD	DE,(SEARCH_START_ROW)
 	OR	A
 	SBC	HL,DE
+	POP	HL
 	JR	NZ,CHECK_COL_MATCH
 	; On SEARCH_START_ROW wrapped:
+	LD	A,(SEARCH_EVER_FOUND)
+	OR	A
+	JR	NZ,SCL_WRAP_EXCLUSIVE
+
+	; Inclusive (initial find): B > SEARCH_START_COL -> not found
 	LD	A,(SEARCH_START_COL)
 	CP	B
-	JP	C,SEARCH_NOT_FOUND	; If B > SEARCH_START_COL, passed origin!
+	JP	C,SEARCH_NOT_FOUND
+	JR	CHECK_COL_MATCH
+
+SCL_WRAP_EXCLUSIVE:
+	; Exclusive (repeat find / replace): B >= SEARCH_START_COL -> search completed
+	LD	A,(SEARCH_START_COL)
+	LD	E,A
+	LD	A,B
+	CP	E
+	JP	NC,SEARCH_NOT_FOUND
+	JR	CHECK_COL_MATCH
 
 CHECK_COL_MATCH:
 	; Check match at column B:
@@ -6224,6 +6498,13 @@ DO_SEARCH_RECENTER:
 	LD	(TARGET_COL),A
 
 SEARCH_POS_OK:
+	; Mark that at least one match was found
+	LD	A,1
+	LD	(SEARCH_EVER_FOUND),A
+
+	; Solidify block highlight on match
+	CALL	HIGHLIGHT_FOUND_BLOCK
+
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
 	LD	(NEED_STATUS_RENDER),A
@@ -6264,6 +6545,179 @@ CHECK_WRAP_LIMIT:
 	JP	Z,SEARCH_LINE_LOOP	; CUR_DOC_ROW == SEARCH_START_ROW: do wrapped pass
 	JP	SEARCH_NOT_FOUND	; CUR_DOC_ROW > SEARCH_START_ROW: done
 
+;------------------------------------------------------------------------------
+; FIND_STRING_BACKWARD: Search backward from (CUR_DOC_ROW, CUR_COL) for SEARCH_BUF
+; Wraps around line 0 to EOF up to original position.
+; Returns: Carry=0 on match (CUR_DOC_ROW, CUR_COL updated, screen centered, solidified block set)
+;          Carry=1 if pattern not found ("Search completed" or "Pattern not found" shown)
+;------------------------------------------------------------------------------
+FIND_STRING_BACKWARD:
+	LD	A,(SEARCH_LEN)
+	OR	A
+	SCF
+	RET	Z			; Cannot search empty string
+
+	; Record starting position for wrap limit detection
+	LD	HL,(CUR_DOC_ROW)
+	LD	(SEARCH_START_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(SEARCH_START_COL),A
+	XOR	A
+	LD	(SEARCH_WRAPPED),A
+
+FIND_STRING_BACKWARD_CONT:
+	LD	A,1
+	LD	(SEARCH_FIRST_LINE),A
+
+SEARCH_BW_LINE_LOOP:
+	; Fetch line from cache/Far RAM
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = pointer to line in LINE_STORAGE
+
+	; Calculate line length in bytes (null terminated)
+	PUSH	HL
+	LD	C,0			; C = byte length
+SCAN_BW_LINE_LEN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SCAN_BW_LINE_LEN_DONE
+	INC	HL
+	INC	C
+	LD	A,C
+	CP	MAX_LINE_STRIDE-2
+	JR	C,SCAN_BW_LINE_LEN
+SCAN_BW_LINE_LEN_DONE:
+	POP	HL			; HL = line start
+	; Line length is in C (0..120)
+
+	; Check if line length >= SEARCH_LEN
+	LD	A,(SEARCH_LEN)
+	CP	C
+	JR	Z,BW_CAN_MATCH_LEN
+	JP	NC,RETREAT_PREV_LINE	; If SEARCH_LEN > C, cannot match
+
+BW_CAN_MATCH_LEN:
+	; max_col = C - SEARCH_LEN
+	LD	A,(SEARCH_LEN)
+	LD	E,A
+	LD	A,C
+	SUB	E
+	LD	E,A			; E = max_col (0..119)
+
+	; Determine candidate start column in B
+	LD	A,(SEARCH_FIRST_LINE)
+	OR	A
+	JR	Z,BW_START_COL_MAX
+
+	; On first line: clamp start col to max_col
+	LD	A,(CUR_COL)
+	CP	E
+	JR	C,BW_GOT_FIRST_COL	; If CUR_COL < max_col, ok
+	LD	A,E			; Else clamp to max_col
+BW_GOT_FIRST_COL:
+	LD	(SEARCH_START_COL),A	; Store clamped start col for wrap limit
+	JR	BW_GOT_START_COL
+
+BW_START_COL_MAX:
+	LD	A,E			; Start at max_col
+
+BW_GOT_START_COL:
+	LD	B,A			; B = candidate column (cand_col)
+
+SCAN_BW_COL_LOOP:
+	; If wrapped and on SEARCH_START_ROW, do not search before SEARCH_START_COL
+	LD	A,(SEARCH_WRAPPED)
+	OR	A
+	JR	Z,BW_CHECK_COL_MATCH
+	PUSH	HL
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(SEARCH_START_ROW)
+	OR	A
+	SBC	HL,DE
+	POP	HL
+	JR	NZ,BW_CHECK_COL_MATCH
+
+	; On SEARCH_START_ROW wrapped:
+	LD	A,(SEARCH_EVER_FOUND)
+	OR	A
+	JR	NZ,BW_WRAP_EXCLUSIVE
+
+	; Inclusive (initial find): B < SEARCH_START_COL -> not found
+	LD	A,(SEARCH_START_COL)
+	LD	E,A
+	LD	A,B
+	CP	E
+	JP	C,SEARCH_NOT_FOUND
+	JR	BW_CHECK_COL_MATCH
+
+BW_WRAP_EXCLUSIVE:
+	; Exclusive (repeat find / replace): B <= SEARCH_START_COL -> search completed
+	LD	A,(SEARCH_START_COL)
+	LD	E,A
+	LD	A,B
+	CP	E
+	JP	Z,SEARCH_NOT_FOUND
+	JP	C,SEARCH_NOT_FOUND
+	JR	BW_CHECK_COL_MATCH
+
+BW_CHECK_COL_MATCH:
+	; Check match at column B:
+	PUSH	BC
+	PUSH	HL
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + cand_col
+	CALL	MATCH_SUBSTRING
+	POP	HL
+	POP	BC
+	JP	Z,MATCH_FOUND_AT_B
+
+	; Not matched: step B backward
+	LD	A,B
+	OR	A
+	JR	Z,RETREAT_PREV_LINE	; Reached col 0: retreat to previous line
+	DEC	B
+	JR	SCAN_BW_COL_LOOP
+
+RETREAT_PREV_LINE:
+	XOR	A
+	LD	(SEARCH_FIRST_LINE),A
+
+	; Check if CUR_DOC_ROW == 0
+	LD	HL,(CUR_DOC_ROW)
+	LD	A,H
+	OR	L
+	JR	Z,BW_WRAP_EOF
+
+	; Previous line: CUR_DOC_ROW - 1
+	DEC	HL
+	LD	(CUR_DOC_ROW),HL
+	JR	CHECK_BW_WRAP_LIMIT
+
+BW_WRAP_EOF:
+	; Wrapped around to end of file
+	LD	A,(SEARCH_WRAPPED)
+	OR	A
+	JP	NZ,SEARCH_NOT_FOUND	; Already wrapped once!
+	LD	A,1
+	LD	(SEARCH_WRAPPED),A
+	LD	HL,(DOC_TOTAL_LINES)
+	DEC	HL
+	LD	(CUR_DOC_ROW),HL
+
+CHECK_BW_WRAP_LIMIT:
+	LD	A,(SEARCH_WRAPPED)
+	OR	A
+	JP	Z,SEARCH_BW_LINE_LOOP
+
+	; If wrapped, compare CUR_DOC_ROW with SEARCH_START_ROW
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(SEARCH_START_ROW)
+	OR	A
+	SBC	HL,DE
+	JP	NC,SEARCH_BW_LINE_LOOP	; CUR_DOC_ROW >= SEARCH_START_ROW: valid
+	JP	SEARCH_NOT_FOUND		; CUR_DOC_ROW < SEARCH_START_ROW: passed origin!
+
 SEARCH_NOT_FOUND:
 	; Restore initial cursor position
 	LD	HL,(SEARCH_START_ROW)
@@ -6272,11 +6726,26 @@ SEARCH_NOT_FOUND:
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
 
-	; Display " Pattern not found. " on status row
+	; Check if pattern was ever found during this search session
+	LD	A,(SEARCH_EVER_FOUND)
+	OR	A
+	JR	NZ,S_SHOW_COMPLETED
+
+	; Never found: cancel block and display " Pattern not found. "
+	CALL	CANCEL_BLOCK
+	LD	DE,STR_PATTERN_NOT_FOUND
+	JR	S_PRINT_MSG
+
+S_SHOW_COMPLETED:
+	; Previously found: keep current match highlighted, display " Search completed. "
+	LD	DE,STR_SEARCH_COMPLETED
+
+S_PRINT_MSG:
+	PUSH	DE
 	CALL	LOCATE_STATUS_ROW
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
-	LD	DE,STR_PATTERN_NOT_FOUND
+	POP	DE
 	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
@@ -6284,7 +6753,7 @@ SEARCH_NOT_FOUND:
 	CALL	PRINT_STR
 
 	XOR	A
-	LD	(NEED_STATUS_RENDER),A	; Keep pattern not found message
+	LD	(NEED_STATUS_RENDER),A	; Keep message visible
 	CALL	LOCATE_CURSOR
 	SCF				; Set carry (failure)
 	RET
@@ -6453,17 +6922,38 @@ REPLACE_INPUT_CONFIRM:
 	; 3. Initialize replace execution
 	XOR	A
 	LD	(REPLACE_ALL_MODE),A
+	LD	(SEARCH_DIRECTION),A	; 0 = Forward
 	LD	HL,0
 	LD	(REPLACE_COUNT),HL
 
 	; We already found the first match during DO_FIND_UI!
+	; Lock search wrap origin for this replace session:
+	LD	HL,(CUR_DOC_ROW)
+	LD	(SEARCH_START_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(SEARCH_START_COL),A
+	XOR	A
+	LD	(SEARCH_WRAPPED),A
+
 	; Enter the replace loop directly for the current match:
 	JR	REPLACE_PROCESS_MATCH
 
 REPLACE_SEARCH_NEXT:
-	; Advance search position past current match/replacement
-	CALL	FIND_STRING_FORWARD
-	JR	C,REPLACE_SUMMARY	; No more matches
+	; Check current search direction
+	LD	A,(SEARCH_DIRECTION)
+	OR	A
+	JR	NZ,REPLACE_SEARCH_BW
+
+	; Advance search position forward
+	CALL	FIND_STRING_FORWARD_CONT
+	JP	C,REPLACE_SUMMARY	; No more matches
+	JR	REPLACE_PROCESS_MATCH
+
+REPLACE_SEARCH_BW:
+	; Advance search position backward
+	CALL	FIND_STRING_BACKWARD_CONT
+	JP	C,REPLACE_SUMMARY	; No more matches
+	JR	REPLACE_PROCESS_MATCH
 
 REPLACE_PROCESS_MATCH:
 	; Render screen to show match to user
@@ -6475,9 +6965,9 @@ REPLACE_PROCESS_MATCH:
 	; If Replace All mode is active, do substitution directly
 	LD	A,(REPLACE_ALL_MODE)
 	OR	A
-	JR	NZ,REPLACE_EXECUTE_SUBST
+	JP	NZ,REPLACE_EXECUTE_SUBST
 
-	; Prompt user for confirmation: " Replace (y/n/a/q)? "
+	; Prompt user for confirmation: " Replace (y/n/a/q/r)? "
 	CALL	LOCATE_STATUS_ROW
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
@@ -6491,13 +6981,22 @@ REPLACE_PROCESS_MATCH:
 REPLACE_CONFIRM_KEY:
 	CALL	GET_KEY
 	CP	'q'
-	JR	Z,REPLACE_SUMMARY
+	JP	Z,REPLACE_SUMMARY
 	CP	'Q'
-	JR	Z,REPLACE_SUMMARY
+	JP	Z,REPLACE_SUMMARY
 	CP	KEY_ESC
-	JR	Z,REPLACE_SUMMARY
+	JP	Z,REPLACE_SUMMARY
 	CP	KEY_CTRL_C
-	JR	Z,REPLACE_SUMMARY
+	JP	Z,REPLACE_SUMMARY
+
+	CP	'r'
+	JR	Z,REPLACE_REVERSE_DIR
+	CP	'R'
+	JR	Z,REPLACE_REVERSE_DIR
+	CP	'p'
+	JR	Z,REPLACE_REVERSE_DIR
+	CP	'P'
+	JR	Z,REPLACE_REVERSE_DIR
 
 	CP	'n'
 	JR	Z,REPLACE_SKIP
@@ -6510,31 +7009,80 @@ REPLACE_CONFIRM_KEY:
 	JR	Z,REPLACE_ACTIVATE_ALL
 
 	CP	'y'
-	JR	Z,REPLACE_EXECUTE_SUBST
+	JP	Z,REPLACE_EXECUTE_SUBST
 	CP	'Y'
-	JR	Z,REPLACE_EXECUTE_SUBST
+	JP	Z,REPLACE_EXECUTE_SUBST
 	CP	KEY_ENTER
-	JR	Z,REPLACE_EXECUTE_SUBST
+	JP	Z,REPLACE_EXECUTE_SUBST
 
 	JR	REPLACE_CONFIRM_KEY
 
-REPLACE_ACTIVATE_ALL:
-	LD	A,1
-	LD	(REPLACE_ALL_MODE),A
-	JR	REPLACE_EXECUTE_SUBST
+REPLACE_REVERSE_DIR:
+	; Toggle SEARCH_DIRECTION
+	LD	A,(SEARCH_DIRECTION)
+	XOR	1
+	LD	(SEARCH_DIRECTION),A
 
-REPLACE_SKIP:
-	; Skip this match: advance column by 1
+	; Step in the new direction
+	OR	A
+	JR	NZ,REPLACE_REV_TO_BW
+
+	; Reversing to Forward: advance col by 1
 	LD	A,(CUR_COL)
 	INC	A
 	LD	(CUR_COL),A
-	JR	REPLACE_SEARCH_NEXT
+	JP	REPLACE_SEARCH_NEXT
+
+REPLACE_REV_TO_BW:
+	; Reversing to Backward: step back 1 char
+	CALL	STEP_BACK_ONE_CHAR
+	JP	REPLACE_SEARCH_NEXT
+
+REPLACE_ACTIVATE_ALL:
+	XOR	A
+	LD	(SEARCH_DIRECTION),A	; Ensure forward direction for Replace All
+	LD	A,1
+	LD	(REPLACE_ALL_MODE),A
+	JP	REPLACE_EXECUTE_SUBST
+
+REPLACE_SKIP:
+	; Skip this match: advance in current direction
+	LD	A,(SEARCH_DIRECTION)
+	OR	A
+	JR	NZ,REPLACE_SKIP_BW
+
+	; Forward skip: advance col by 1
+	LD	A,(CUR_COL)
+	INC	A
+	LD	(CUR_COL),A
+	JP	REPLACE_SEARCH_NEXT
+
+REPLACE_SKIP_BW:
+	; Backward skip: step back 1 char
+	CALL	STEP_BACK_ONE_CHAR
+	JP	REPLACE_SEARCH_NEXT
 
 REPLACE_EXECUTE_SUBST:
+	; Save match start col
+	LD	A,(CUR_COL)
+	LD	(REPLACE_MATCH_COL),A
+
 	CALL	APPLY_LINE_REPLACE
-	JR	REPLACE_SEARCH_NEXT
+
+	LD	A,(SEARCH_DIRECTION)
+	OR	A
+	JP	Z,REPLACE_SEARCH_NEXT
+
+	; Backward: restore to match col, then step back 1 char
+	LD	A,(REPLACE_MATCH_COL)
+	LD	(CUR_COL),A
+	CALL	STEP_BACK_ONE_CHAR
+	JP	REPLACE_SEARCH_NEXT
 
 REPLACE_SUMMARY:
+	; Cancel any active block highlight
+	CALL	CANCEL_BLOCK
+
 	; Display " Replace done: N replacement(s). "
 	CALL	LOCATE_STATUS_ROW
 	LD	DE,STR_INVERSE_ON
@@ -6677,7 +7225,8 @@ ALR_LENGTH_OK:
 	LDDR
 
 	; Now copy R bytes from REPLACE_BUF to PTR
-	JR	ALR_COPY_REPLACE_STR
+	CALL	ALR_COPY_REPLACE_STR
+	JR	ALR_SUBST_DONE
 
 ALR_SHRINK_LEN:
 	; Case R < S (line shrinks):
@@ -9371,7 +9920,7 @@ STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 	DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
 	DB	"    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
 	DB	"    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10
-	DB	"    Ctrl+F           Find text               Ctrl+N          Find next",13,10
+	DB	"    Ctrl+F           Find text               Ctrl+N / Ctrl+P Find next / prev",13,10
 	DB	"    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle case in find",13,10,13,10
 	DB	"  EDITING & BLOCK:",13,10
 	DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
@@ -9449,8 +9998,9 @@ STR_GOTO_LINE_PROMPT:	DB	" Goto line: ","$"
 STR_FIND_EXACT:		DB	" Find [Exact] : ","$"
 STR_FIND_INSENS:	DB	" Find [Insens]: ","$"
 STR_REPLACE_PROMPT:	DB	" Replace with : ","$"
-STR_REPLACE_CONFIRM:	DB	" Replace (y/n/a/q)? ","$"
+STR_REPLACE_CONFIRM:	DB	" Replace (y/n/a/q/r)? ","$"
 STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
+STR_SEARCH_COMPLETED:	DB	" Search completed. ","$"
 STR_REPLACE_DONE_PFX:	DB	" Replace done: ","$"
 STR_REPLACE_DONE_SFX:	DB	" replacement(s). ","$"
 STR_LINE_TOO_LONG:	DB	" Line > 120 chars - skipped. ","$"
@@ -9487,6 +10037,11 @@ GOTO_LINE_BUF:	DS	8
 SEARCH_BUF:		DS	65
 SEARCH_LEN:		DB	0
 SEARCH_CASE_SENSITIVE:	DB	1		; Default 1 = Exact (case-sensitive)
+SEARCH_EVER_FOUND:	DB	0		; 1 if pattern was ever found during session
+SEARCH_DIRECTION:	DB	0		; 0 = Forward, 1 = Backward
+REPLACE_MATCH_COL:	DB	0		; Saved column during interactive replace
+PREV_START_ROW_TEMP:	DW	0		; Saved row before Find Next/Prev
+PREV_START_COL_TEMP:	DB	0		; Saved col before Find Next/Prev
 REPLACE_BUF:		DS	65
 REPLACE_LEN:		DB	0
 REPLACE_ALL_MODE:	DB	0
