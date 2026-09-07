@@ -164,6 +164,10 @@ Examples:
 * `C>SE B:MYFILE.ASM:42` — Opens file on Drive B: centered on Line 42 (matching compiler error output).
 
 ### 3. Editor Mode Keybindings & Hybrid Block Highlighting
+* <kbd>Ctrl+F</kbd>: Find text (forward search with document wrap; displays `Find [Exact] : ` on status bar).
+* <kbd>Ctrl+N</kbd>: Find Next (repeats search for the active pattern forward without re-prompting).
+* <kbd>Ctrl+R</kbd>: Search and Replace (prompts for find & replacement strings; interactive confirmation `y`=yes, `n`=no, `a`=all, `q`=quit; guards 120-character line length limit).
+* <kbd>Ctrl+I</kbd> / <kbd>Tab</kbd>: Toggle case sensitivity in Find/Replace prompt between `[Exact]` (session default) and `[Insens]`.
 * <kbd>Ctrl+L</kbd>: Goto line number (prompts on status line; centers viewport on target line).
 * <kbd>Ctrl+B</kbd>: Start / toggle block selection mode (anchors at cursor row & character column).
 * <kbd>Ctrl+K</kbd>: Solidify (lock/freeze) active block selection, or show Editor Keys Reference Screen if no block active.

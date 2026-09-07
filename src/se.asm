@@ -26,7 +26,10 @@ KEY_CTRL_Q	EQU	17
 KEY_CTRL_S	EQU	19
 KEY_CTRL_O	EQU	15		; Open File Screen
 KEY_CTRL_K	EQU	11		; Show Editor Mode Keys Screen
-KEY_CTRL_F	EQU	6		; Toggle CP/M <-> Linux line endings
+KEY_CTRL_F	EQU	6		; Find in editor / Toggle endings in save
+KEY_CTRL_R	EQU	18		; Search & Replace
+KEY_CTRL_N	EQU	14		; Find Next
+KEY_CTRL_I	EQU	9		; Tab / Toggle case sensitivity in prompt
 KEY_CTRL_U	EQU	21		; Page Up
 KEY_CTRL_V	EQU	22		; Page Down
 KEY_CTRL_L	EQU	12		; Goto Line Number
@@ -35,6 +38,8 @@ KEY_TAB		EQU	9
 KEY_ENTER	EQU	13
 KEY_ESC		EQU	27
 KEY_DEL		EQU	127
+
+SEARCH_BUF_MAX	EQU	64
 
 ; Line ending modes
 FMT_CPM		EQU	0		; CR/LF (0x0D, 0x0A)
@@ -62,6 +67,13 @@ START:
 
 	; Query RomWBW User Bank and Initialize Far RAM Banks
 	CALL	BUFFER_INIT
+
+	; Initialize search state to defaults (Case-sensitive = 1)
+	LD	A,1
+	LD	(SEARCH_CASE_SENSITIVE),A
+	XOR	A
+	LD	(SEARCH_LEN),A
+	LD	(REPLACE_LEN),A
 
 	; Check if filename was provided in FCB1
 	CALL	CHECK_COMMAND_LINE
@@ -246,6 +258,30 @@ MAIN_LOOP_GET_KEY:
 	CP	KEY_CTRL_Q
 	JP	Z,EXIT_PROGRAM
 
+	; Command: Ctrl+F -> Find
+	CP	KEY_CTRL_F
+	JR	NZ,CHECK_CTRL_R
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	DO_FIND_UI
+	JP	MAIN_LOOP
+
+CHECK_CTRL_R:
+	; Command: Ctrl+R -> Search & Replace
+	CP	KEY_CTRL_R
+	JR	NZ,CHECK_CTRL_N
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	DO_REPLACE_UI
+	JP	MAIN_LOOP
+
+CHECK_CTRL_N:
+	; Command: Ctrl+N -> Find Next
+	CP	KEY_CTRL_N
+	JR	NZ,CHECK_CTRL_S
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	DO_FIND_NEXT
+	JP	MAIN_LOOP
+
+CHECK_CTRL_S:
 	; Command: Ctrl+S -> Save File Screen
 	CP	KEY_CTRL_S
 	JR	NZ,CHECK_CTRL_O
@@ -5856,6 +5892,860 @@ GOTO_UI_CANCEL:
 	RET
 
 ;------------------------------------------------------------------------------
+; SEARCH AND REPLACE ENGINE
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; DO_FIND_UI: Display status bar prompt for Find, read pattern, execute search
+; Returns: Carry=0 on match found, Carry=1 on cancel or not found
+;------------------------------------------------------------------------------
+DO_FIND_UI:
+	CALL	CANCEL_BLOCK
+
+	; Setup prompt
+	CALL	DRAW_FIND_PROMPT_HEADER
+
+	; Clear input buffer
+	LD	HL,SEARCH_INPUT_BUF
+	LD	(HL),0
+	LD	B,0			; B = character count (0..SEARCH_BUF_MAX)
+
+FIND_UI_KEY_LOOP:
+	CALL	GET_KEY
+
+	; Check ESC / escape sequence
+	CP	KEY_ESC
+	JP	Z,FIND_UI_CHECK_ESC
+
+	; Check Ctrl+C -> Cancel
+	CP	KEY_CTRL_C
+	JP	Z,FIND_UI_CANCEL
+
+	; Check Enter -> Confirm
+	CP	KEY_ENTER
+	JP	Z,FIND_UI_ENTER
+
+	; Check Backspace / Delete
+	CP	KEY_BACKSPACE
+	JR	Z,FIND_UI_BS
+	CP	KEY_DEL
+	JR	Z,FIND_UI_BS
+
+	; Check Ctrl+I (Tab) -> Toggle case sensitivity
+	CP	KEY_CTRL_I
+	JR	Z,FIND_UI_TOGGLE_CASE
+
+	; Check printable character (ASCII 32..126)
+	CP	' '
+	JR	C,FIND_UI_KEY_LOOP
+	CP	127
+	JR	NC,FIND_UI_KEY_LOOP
+
+	; Check buffer capacity (SEARCH_BUF_MAX = 64)
+	LD	C,A			; Save character
+	LD	A,B
+	CP	SEARCH_BUF_MAX
+	JR	NC,FIND_UI_KEY_LOOP
+
+	; Append to SEARCH_INPUT_BUF
+	LD	HL,SEARCH_INPUT_BUF
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),C
+	INC	HL
+	LD	(HL),0			; Null terminate
+	INC	B
+
+	; Echo character
+	LD	A,C
+	CALL	PUTC
+	JR	FIND_UI_KEY_LOOP
+
+FIND_UI_BS:
+	LD	A,B
+	OR	A
+	JR	Z,FIND_UI_KEY_LOOP	; Nothing to backspace
+
+	DEC	B
+	LD	HL,SEARCH_INPUT_BUF
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),0			; Null terminate at new length
+
+	; Visual backspace: \x08 \x20 \x08
+	LD	A,008H
+	CALL	PUTC
+	LD	A,' '
+	CALL	PUTC
+	LD	A,008H
+	CALL	PUTC
+	JR	FIND_UI_KEY_LOOP
+
+FIND_UI_TOGGLE_CASE:
+	; Toggle SEARCH_CASE_SENSITIVE (0 <-> 1)
+	LD	A,(SEARCH_CASE_SENSITIVE)
+	XOR	1
+	LD	(SEARCH_CASE_SENSITIVE),A
+
+	; Redraw prompt header and current input text
+	CALL	DRAW_FIND_PROMPT_HEADER
+	LD	DE,SEARCH_INPUT_BUF
+	CALL	PRINT_STR
+	JR	FIND_UI_KEY_LOOP
+
+DRAW_FIND_PROMPT_HEADER:
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	A,(SEARCH_CASE_SENSITIVE)
+	OR	A
+	JR	Z,DRAW_FIND_INSENS
+	LD	DE,STR_FIND_EXACT	; " Find [Exact] : " (16 chars)
+	CALL	PRINT_STR
+	JR	DRAW_FIND_PROMPT_TAIL
+DRAW_FIND_INSENS:
+	LD	DE,STR_FIND_INSENS	; " Find [Insens]: " (16 chars)
+	CALL	PRINT_STR
+DRAW_FIND_PROMPT_TAIL:
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+	RET
+
+FIND_UI_CHECK_ESC:
+	; Check if escape sequence
+	LD	BC,1000
+FIND_WAIT_ESC:
+	CALL	CHECK_KEY_READY
+	JR	NZ,FIND_GOT_ESC_SEQ
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,FIND_WAIT_ESC
+	JR	FIND_UI_CANCEL
+
+FIND_GOT_ESC_SEQ:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	CALL	GOT_ESC_BYTE
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_STATUS_BAR
+	SCF
+	RET
+
+FIND_UI_CANCEL:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	CALL	RENDER_STATUS_BAR
+	SCF
+	RET
+
+FIND_UI_ENTER:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+
+	; If B > 0, copy SEARCH_INPUT_BUF into SEARCH_BUF
+	LD	A,B
+	OR	A
+	JR	Z,FIND_CHECK_PREV
+
+	; Copy B bytes + null
+	LD	(SEARCH_LEN),A
+	LD	HL,SEARCH_INPUT_BUF
+	LD	DE,SEARCH_BUF
+	LD	C,A
+	LD	B,0
+	INC	BC			; Include null terminator
+	LDIR
+	JR	FIND_EXEC_SEARCH
+
+FIND_CHECK_PREV:
+	; B == 0: check if existing SEARCH_LEN > 0
+	LD	A,(SEARCH_LEN)
+	OR	A
+	JR	Z,FIND_UI_CANCEL	; No previous pattern, cancel
+
+FIND_EXEC_SEARCH:
+	CALL	FIND_STRING_FORWARD
+	RET
+
+;------------------------------------------------------------------------------
+; DO_FIND_NEXT: Repeat search for SEARCH_BUF forward from (CUR_COL + 1)
+;------------------------------------------------------------------------------
+DO_FIND_NEXT:
+	LD	A,(SEARCH_LEN)
+	OR	A
+	JP	Z,DO_FIND_UI		; If no search pattern set, open Find UI
+
+	; Advance column by 1
+	LD	A,(CUR_COL)
+	INC	A
+	LD	(CUR_COL),A
+
+	CALL	FIND_STRING_FORWARD
+	RET
+
+;------------------------------------------------------------------------------
+; FIND_STRING_FORWARD: Search forward from (CUR_DOC_ROW, CUR_COL) for SEARCH_BUF
+; Wraps around EOF to Line 0 up to original position.
+; Returns: Carry=0 on match (CUR_DOC_ROW, CUR_COL updated, screen centered)
+;          Carry=1 if pattern not found (cursor restored, "Pattern not found" shown)
+;------------------------------------------------------------------------------
+FIND_STRING_FORWARD:
+	LD	A,(SEARCH_LEN)
+	OR	A
+	SCF
+	RET	Z			; Cannot search empty string
+
+	; Record starting position for wrap limit detection
+	LD	HL,(CUR_DOC_ROW)
+	LD	(SEARCH_START_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(SEARCH_START_COL),A
+	XOR	A
+	LD	(SEARCH_WRAPPED),A
+	LD	A,1
+	LD	(SEARCH_FIRST_LINE),A
+
+SEARCH_LINE_LOOP:
+	; Fetch line from cache/Far RAM
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = pointer to line in LINE_STORAGE
+
+	; Calculate line length in bytes (null terminated)
+	PUSH	HL
+	LD	C,0			; C = byte length
+SCAN_LINE_LEN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SCAN_LINE_LEN_DONE
+	INC	HL
+	INC	C
+	LD	A,C
+	CP	MAX_LINE_STRIDE-2
+	JR	C,SCAN_LINE_LEN
+SCAN_LINE_LEN_DONE:
+	POP	HL			; HL = line start
+	; Line length is in C (0..120)
+
+	; Check if line length >= SEARCH_LEN
+	LD	A,(SEARCH_LEN)
+	CP	C
+	JR	Z,CAN_MATCH_LEN
+	JP	NC,ADVANCE_NEXT_LINE	; If SEARCH_LEN > C, cannot match
+
+CAN_MATCH_LEN:
+	; max_col = C - SEARCH_LEN
+	LD	A,(SEARCH_LEN)
+	LD	E,A
+	LD	A,C
+	SUB	E
+	LD	C,A			; C = max_col (0..119)
+
+	; Determine candidate start column
+	LD	A,(SEARCH_FIRST_LINE)
+	OR	A
+	JR	Z,START_COL_ZERO
+	LD	A,(CUR_COL)
+	JR	GOT_START_COL
+START_COL_ZERO:
+	XOR	A
+GOT_START_COL:
+	LD	B,A			; B = candidate column (cand_col)
+
+	; If cand_col > max_col, no match on this line
+	LD	A,C
+	CP	B
+	JP	C,ADVANCE_NEXT_LINE
+
+SCAN_COL_LOOP:
+	; If wrapped and on SEARCH_START_ROW, do not search beyond SEARCH_START_COL
+	LD	A,(SEARCH_WRAPPED)
+	OR	A
+	JR	Z,CHECK_COL_MATCH
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(SEARCH_START_ROW)
+	OR	A
+	SBC	HL,DE
+	JR	NZ,CHECK_COL_MATCH
+	; On SEARCH_START_ROW wrapped:
+	LD	A,(SEARCH_START_COL)
+	CP	B
+	JP	C,SEARCH_NOT_FOUND	; If B > SEARCH_START_COL, passed origin!
+
+CHECK_COL_MATCH:
+	; Check match at column B:
+	PUSH	BC
+	PUSH	HL
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE			; HL = line_start + cand_col
+	CALL	MATCH_SUBSTRING
+	POP	HL
+	POP	BC
+	JR	Z,MATCH_FOUND_AT_B
+
+	; Not matched, advance cand_col
+	INC	B
+	LD	A,C			; C = max_col
+	CP	B
+	JR	NC,SCAN_COL_LOOP
+	JP	ADVANCE_NEXT_LINE
+
+MATCH_FOUND_AT_B:
+	LD	A,B
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+
+	; Check if CUR_DOC_ROW is currently on visible screen
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	OR	A
+	SBC	HL,DE			; HL = CUR_DOC_ROW - TOP_DOC_ROW
+	JR	C,DO_SEARCH_RECENTER
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	LD	E,A
+	LD	D,0
+	OR	A
+	SBC	HL,DE
+	JR	NC,DO_SEARCH_RECENTER
+	JR	SEARCH_POS_OK
+
+DO_SEARCH_RECENTER:
+	PUSH	BC
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL			; 1-indexed for GOTO_LINE_HL
+	CALL	GOTO_LINE_HL
+	POP	BC
+	LD	A,B
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+
+SEARCH_POS_OK:
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+	OR	A			; Clear carry (success)
+	RET
+
+ADVANCE_NEXT_LINE:
+	XOR	A
+	LD	(SEARCH_FIRST_LINE),A
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL
+	LD	(CUR_DOC_ROW),HL
+	LD	DE,(DOC_TOTAL_LINES)
+	OR	A
+	SBC	HL,DE
+	JR	C,CHECK_WRAP_LIMIT
+
+	; Reached EOF: wrap around to line 0
+	LD	A,(SEARCH_WRAPPED)
+	OR	A
+	JP	NZ,SEARCH_NOT_FOUND	; Already wrapped once!
+	LD	A,1
+	LD	(SEARCH_WRAPPED),A
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+
+CHECK_WRAP_LIMIT:
+	LD	A,(SEARCH_WRAPPED)
+	OR	A
+	JP	Z,SEARCH_LINE_LOOP	; If not wrapped, continue
+
+	; If wrapped, compare CUR_DOC_ROW with SEARCH_START_ROW
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(SEARCH_START_ROW)
+	OR	A
+	SBC	HL,DE
+	JP	C,SEARCH_LINE_LOOP	; CUR_DOC_ROW < SEARCH_START_ROW: continue
+	JP	Z,SEARCH_LINE_LOOP	; CUR_DOC_ROW == SEARCH_START_ROW: do wrapped pass
+	JP	SEARCH_NOT_FOUND	; CUR_DOC_ROW > SEARCH_START_ROW: done
+
+SEARCH_NOT_FOUND:
+	; Restore initial cursor position
+	LD	HL,(SEARCH_START_ROW)
+	LD	(CUR_DOC_ROW),HL
+	LD	A,(SEARCH_START_COL)
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+
+	; Display " Pattern not found. " on status row
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_PATTERN_NOT_FOUND
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+
+	XOR	A
+	LD	(NEED_STATUS_RENDER),A	; Keep pattern not found message
+	CALL	LOCATE_CURSOR
+	SCF				; Set carry (failure)
+	RET
+
+;------------------------------------------------------------------------------
+; MATCH_SUBSTRING: Compare string at HL with SEARCH_BUF (SEARCH_LEN bytes)
+; Respects SEARCH_CASE_SENSITIVE (1 = exact, 0 = case-insensitive)
+; Returns: Z set if full match, NZ if mismatch
+; Preserves: DE, HL
+;------------------------------------------------------------------------------
+MATCH_SUBSTRING:
+	PUSH	DE
+	PUSH	HL
+	LD	DE,SEARCH_BUF
+	LD	A,(SEARCH_LEN)
+	LD	B,A
+MATCH_SUB_LOOP:
+	LD	A,(DE)			; A = pattern char
+	LD	C,(HL)			; C = line char
+	LD	A,(SEARCH_CASE_SENSITIVE)
+	OR	A
+	JR	NZ,MATCH_SUB_EXACT
+
+	; Case insensitive: fold both to uppercase
+	LD	A,(DE)
+	CALL	TO_UPPER_CHAR
+	PUSH	AF
+	LD	A,C
+	CALL	TO_UPPER_CHAR
+	LD	C,A
+	POP	AF
+	CP	C
+	JR	NZ,MATCH_SUB_FAIL
+	JR	MATCH_SUB_NEXT
+
+MATCH_SUB_EXACT:
+	LD	A,(DE)
+	CP	C
+	JR	NZ,MATCH_SUB_FAIL
+
+MATCH_SUB_NEXT:
+	INC	DE
+	INC	HL
+	DJNZ	MATCH_SUB_LOOP
+
+	; Full match!
+	POP	HL
+	POP	DE
+	XOR	A			; Set Z flag
+	RET
+
+MATCH_SUB_FAIL:
+	POP	HL
+	POP	DE
+	OR	1			; Clear Z flag (NZ)
+	RET
+
+TO_UPPER_CHAR:
+	CP	'a'
+	RET	C
+	CP	'z'+1
+	RET	NC
+	SUB	20H
+	RET
+
+;------------------------------------------------------------------------------
+; DO_REPLACE_UI: Prompt for Find and Replace strings, then execute replace loop
+;------------------------------------------------------------------------------
+DO_REPLACE_UI:
+	; 1. First get search pattern via DO_FIND_UI
+	CALL	DO_FIND_UI
+	RET	C			; Cancelled or pattern not found
+
+	; Note: DO_FIND_UI already executed first search and positioned at first match!
+
+	; 2. Prompt for replacement string
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_REPLACE_PROMPT	; " Replace with : " (16 chars)
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+
+	; Clear replace buffer
+	LD	HL,REPLACE_BUF
+	LD	(HL),0
+	LD	B,0			; B = character count (0..SEARCH_BUF_MAX)
+
+REPLACE_INPUT_LOOP:
+	CALL	GET_KEY
+
+	; ESC / Ctrl+C -> Cancel replace
+	CP	KEY_ESC
+	JR	Z,REPLACE_INPUT_CANCEL
+	CP	KEY_CTRL_C
+	JR	Z,REPLACE_INPUT_CANCEL
+
+	; Enter -> Confirm replacement string
+	CP	KEY_ENTER
+	JR	Z,REPLACE_INPUT_CONFIRM
+
+	; Backspace / Delete
+	CP	KEY_BACKSPACE
+	JR	Z,REPLACE_INPUT_BS
+	CP	KEY_DEL
+	JR	Z,REPLACE_INPUT_BS
+
+	; Printable character (ASCII 32..126)
+	CP	' '
+	JR	C,REPLACE_INPUT_LOOP
+	CP	127
+	JR	NC,REPLACE_INPUT_LOOP
+
+	; Check max length
+	LD	C,A
+	LD	A,B
+	CP	SEARCH_BUF_MAX
+	JR	NC,REPLACE_INPUT_LOOP
+
+	LD	HL,REPLACE_BUF
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),C
+	INC	HL
+	LD	(HL),0
+	INC	B
+
+	LD	A,C
+	CALL	PUTC
+	JR	REPLACE_INPUT_LOOP
+
+REPLACE_INPUT_BS:
+	LD	A,B
+	OR	A
+	JR	Z,REPLACE_INPUT_LOOP
+
+	DEC	B
+	LD	HL,REPLACE_BUF
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),0
+
+	LD	A,008H
+	CALL	PUTC
+	LD	A,' '
+	CALL	PUTC
+	LD	A,008H
+	CALL	PUTC
+	JR	REPLACE_INPUT_LOOP
+
+REPLACE_INPUT_CANCEL:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	CALL	RENDER_STATUS_BAR
+	RET
+
+REPLACE_INPUT_CONFIRM:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	LD	A,B
+	LD	(REPLACE_LEN),A
+
+	; 3. Initialize replace execution
+	XOR	A
+	LD	(REPLACE_ALL_MODE),A
+	LD	HL,0
+	LD	(REPLACE_COUNT),HL
+
+	; We already found the first match during DO_FIND_UI!
+	; Enter the replace loop directly for the current match:
+	JR	REPLACE_PROCESS_MATCH
+
+REPLACE_SEARCH_NEXT:
+	; Advance search position past current match/replacement
+	CALL	FIND_STRING_FORWARD
+	JR	C,REPLACE_SUMMARY	; No more matches
+
+REPLACE_PROCESS_MATCH:
+	; Render screen to show match to user
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
+
+	; If Replace All mode is active, do substitution directly
+	LD	A,(REPLACE_ALL_MODE)
+	OR	A
+	JR	NZ,REPLACE_EXECUTE_SUBST
+
+	; Prompt user for confirmation: " Replace (y/n/a/q)? "
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_REPLACE_CONFIRM
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+
+REPLACE_CONFIRM_KEY:
+	CALL	GET_KEY
+	CP	'q'
+	JR	Z,REPLACE_SUMMARY
+	CP	'Q'
+	JR	Z,REPLACE_SUMMARY
+	CP	KEY_ESC
+	JR	Z,REPLACE_SUMMARY
+	CP	KEY_CTRL_C
+	JR	Z,REPLACE_SUMMARY
+
+	CP	'n'
+	JR	Z,REPLACE_SKIP
+	CP	'N'
+	JR	Z,REPLACE_SKIP
+
+	CP	'a'
+	JR	Z,REPLACE_ACTIVATE_ALL
+	CP	'A'
+	JR	Z,REPLACE_ACTIVATE_ALL
+
+	CP	'y'
+	JR	Z,REPLACE_EXECUTE_SUBST
+	CP	'Y'
+	JR	Z,REPLACE_EXECUTE_SUBST
+	CP	KEY_ENTER
+	JR	Z,REPLACE_EXECUTE_SUBST
+
+	JR	REPLACE_CONFIRM_KEY
+
+REPLACE_ACTIVATE_ALL:
+	LD	A,1
+	LD	(REPLACE_ALL_MODE),A
+	JR	REPLACE_EXECUTE_SUBST
+
+REPLACE_SKIP:
+	; Skip this match: advance column by 1
+	LD	A,(CUR_COL)
+	INC	A
+	LD	(CUR_COL),A
+	JR	REPLACE_SEARCH_NEXT
+
+REPLACE_EXECUTE_SUBST:
+	CALL	APPLY_LINE_REPLACE
+	JR	REPLACE_SEARCH_NEXT
+
+REPLACE_SUMMARY:
+	; Display " Replace done: N replacement(s). "
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_REPLACE_DONE_PFX
+	CALL	PRINT_STR
+	LD	HL,(REPLACE_COUNT)
+	CALL	PRINT_DEC_WORD
+	LD	DE,STR_REPLACE_DONE_SFX
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	XOR	A
+	LD	(NEED_STATUS_RENDER),A	; Keep replace done message visible
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_SCREEN
+	CALL	LOCATE_CURSOR
+	RET
+
+;------------------------------------------------------------------------------
+; APPLY_LINE_REPLACE: Substitute SEARCH_BUF with REPLACE_BUF at (CUR_DOC_ROW, CUR_COL)
+; Enforces 120-character line length limit.
+;------------------------------------------------------------------------------
+APPLY_LINE_REPLACE:
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = line_start in LINE_STORAGE
+
+	; 1. Calculate line length L
+	PUSH	HL
+	LD	C,0
+ALR_CALC_LEN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,ALR_CALC_LEN_DONE
+	INC	HL
+	INC	C
+	LD	A,C
+	CP	MAX_LINE_STRIDE-2
+	JR	C,ALR_CALC_LEN
+ALR_CALC_LEN_DONE:
+	POP	HL			; HL = line_start
+	; C = L (current line length in bytes)
+
+	; 2. Check resulting line length: L' = L - S + R
+	; S = SEARCH_LEN, R = REPLACE_LEN
+	LD	A,(SEARCH_LEN)
+	LD	B,A			; B = S
+	LD	A,(REPLACE_LEN)
+	LD	E,A			; E = R
+
+	; L' = C - B + E
+	LD	A,C
+	SUB	B
+	ADD	A,E			; A = L'
+	CP	MAX_LINE_STRIDE-7	; 121 (max 120 chars)
+	JR	C,ALR_LENGTH_OK
+
+	; Line would exceed 120 chars: display warning and skip
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_LINE_TOO_LONG	; " Line > 120 chars - skipped. "
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+
+	; Advance past match start
+	LD	A,(CUR_COL)
+	INC	A
+	LD	(CUR_COL),A
+	RET
+
+ALR_LENGTH_OK:
+	; 3. Perform substitution
+	; PTR = line_start + CUR_COL
+	PUSH	HL			; Save line_start
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	LD	(REPLACE_PTR_TEMP),HL	; Pointer to match start in line
+	POP	HL			; Restore line_start
+
+	; Calculate TAIL_LEN in C:
+	; L is in C. TAIL_LEN = L - (CUR_COL + S)
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	A,(SEARCH_LEN)
+	ADD	A,E			; A = CUR_COL + S
+	LD	E,A			; E = CUR_COL + S
+	LD	A,C			; A = L
+	SUB	E			; A = TAIL_LEN
+	LD	C,A			; C = TAIL_LEN
+
+	; Number of bytes to move = TAIL_LEN + 1 (includes null terminator)
+	INC	C			; C = BYTES_TO_MOVE (tail + null)
+	LD	B,0			; BC = count of tail bytes including null
+
+	; Compare S and R:
+	LD	A,(SEARCH_LEN)
+	LD	D,A			; D = S
+	LD	A,(REPLACE_LEN)
+	LD	E,A			; E = R
+	CP	D
+	JR	Z,ALR_EQUAL_LEN
+	JR	C,ALR_SHRINK_LEN
+
+	; Case R > S (line expands):
+	; Delta = R - S
+	SUB	D
+	LD	(REPLACE_DELTA_TEMP),A	; Delta
+
+	; Move tail rightwards by Delta bytes:
+	; Source last byte = PTR + S + TAIL_LEN (which is PTR + S + BC - 1)
+	; Destination last byte = Source + Delta
+	PUSH	BC			; Save tail count
+	LD	HL,(REPLACE_PTR_TEMP)
+	LD	A,D			; A = S
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = PTR + S
+	ADD	HL,BC
+	DEC	HL			; HL = Source last byte
+
+	LD	A,(REPLACE_DELTA_TEMP)
+	LD	E,A
+	LD	D,0
+	PUSH	HL
+	ADD	HL,DE			; HL = HL + Delta (Destination last byte)
+	EX	DE,HL			; DE = Destination last byte
+	POP	HL			; HL = Source last byte
+	POP	BC			; BC = tail count
+	LDDR
+
+	; Now copy R bytes from REPLACE_BUF to PTR
+	JR	ALR_COPY_REPLACE_STR
+
+ALR_SHRINK_LEN:
+	; Case R < S (line shrinks):
+	; Delta = S - R
+	LD	A,D
+	SUB	E
+	LD	(REPLACE_DELTA_TEMP),A
+
+	; Copy R bytes from REPLACE_BUF to PTR first
+	PUSH	BC
+	CALL	ALR_COPY_REPLACE_STR
+	POP	BC			; BC = tail count
+
+	; Move tail leftwards by Delta bytes:
+	; Source = PTR + S
+	; Destination = PTR + R
+	LD	HL,(REPLACE_PTR_TEMP)
+	LD	A,(SEARCH_LEN)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = Source (PTR + S)
+
+	LD	DE,(REPLACE_PTR_TEMP)
+	LD	A,(REPLACE_LEN)
+	PUSH	HL
+	LD	L,A
+	LD	H,0
+	ADD	HL,DE
+	EX	DE,HL			; DE = Destination (PTR + R)
+	POP	HL			; HL = Source (PTR + S)
+
+	LDIR
+	JR	ALR_SUBST_DONE
+
+ALR_EQUAL_LEN:
+	; Case R == S: simple overwrite of R bytes
+	CALL	ALR_COPY_REPLACE_STR
+	JR	ALR_SUBST_DONE
+
+ALR_COPY_REPLACE_STR:
+	LD	A,(REPLACE_LEN)
+	OR	A
+	RET	Z			; 0 bytes to copy
+	LD	C,A
+	LD	B,0
+	LD	HL,REPLACE_BUF
+	LD	DE,(REPLACE_PTR_TEMP)
+	LDIR
+	RET
+
+ALR_SUBST_DONE:
+	; Mark cache dirty
+	LD	A,1
+	LD	(CACHE_DIRTY),A
+
+	; Increment REPLACE_COUNT
+	LD	HL,(REPLACE_COUNT)
+	INC	HL
+	LD	(REPLACE_COUNT),HL
+
+	; Update CUR_COL = CUR_COL + R
+	LD	A,(CUR_COL)
+	LD	HL,REPLACE_LEN
+	ADD	A,(HL)
+	LD	(CUR_COL),A
+	RET
+
+;------------------------------------------------------------------------------
 ; Character Insertion at (CUR_DOC_ROW, CUR_COL)
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
@@ -8474,13 +9364,15 @@ STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 	DB	"================================================================================",13,10
 	DB	"  FILE & SYSTEM:",13,10
 	DB	"    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
-	DB	"    Ctrl+Q           Quit to CP/M            ESC             Splash / Clear block",13,10
-	DB	"    Ctrl+K           Help / Solidify block",13,10,13,10
-	DB	"  NAVIGATION:",13,10
+	DB	"    Ctrl+Q           Quit to CP/M            Ctrl+K          Help / Solidify block",13,10
+	DB	"    ESC              Splash / Clear block",13,10,13,10
+	DB	"  NAVIGATION & SEARCH:",13,10
 	DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
 	DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
 	DB	"    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
-	DB	"    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10,13,10
+	DB	"    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10
+	DB	"    Ctrl+F           Find text               Ctrl+N          Find next",13,10
+	DB	"    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle case in find",13,10,13,10
 	DB	"  EDITING & BLOCK:",13,10
 	DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
 	DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
@@ -8554,6 +9446,14 @@ STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
 
 STR_FNF_INLINE:	DB	"  File not found","$"
 STR_GOTO_LINE_PROMPT:	DB	" Goto line: ","$"
+STR_FIND_EXACT:		DB	" Find [Exact] : ","$"
+STR_FIND_INSENS:	DB	" Find [Insens]: ","$"
+STR_REPLACE_PROMPT:	DB	" Replace with : ","$"
+STR_REPLACE_CONFIRM:	DB	" Replace (y/n/a/q)? ","$"
+STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
+STR_REPLACE_DONE_PFX:	DB	" Replace done: ","$"
+STR_REPLACE_DONE_SFX:	DB	" replacement(s). ","$"
+STR_LINE_TOO_LONG:	DB	" Line > 120 chars - skipped. ","$"
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
@@ -8584,6 +9484,20 @@ DOC_TOTAL_LINES:	DW	1		; 16-bit total document lines count (default 1 empty line
 HAS_FILE_ARG:	DB	0
 CMDLINE_GOTO_LINE:	DW	0		; 16-bit line number from command line (0 = start)
 GOTO_LINE_BUF:	DS	8
+SEARCH_BUF:		DS	65
+SEARCH_LEN:		DB	0
+SEARCH_CASE_SENSITIVE:	DB	1		; Default 1 = Exact (case-sensitive)
+REPLACE_BUF:		DS	65
+REPLACE_LEN:		DB	0
+REPLACE_ALL_MODE:	DB	0
+REPLACE_COUNT:		DW	0
+SEARCH_START_ROW:	DW	0
+SEARCH_START_COL:	DB	0
+SEARCH_WRAPPED:		DB	0
+SEARCH_FIRST_LINE:	DB	0
+SEARCH_INPUT_BUF:	DS	65
+REPLACE_PTR_TEMP:	DW	0
+REPLACE_DELTA_TEMP:	DB	0
 IN_EDITOR_MODE:	DB	0
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
 IS_SAVE_UI:	DB	0		; 1 if currently in Save File Screen

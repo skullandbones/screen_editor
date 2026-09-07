@@ -420,13 +420,19 @@ def test_se_execution():
         drain_all(master)
         print("[+] Successfully verified cursor and line cannot exceed visual screen width (Col 119).", flush=True)
 
-        # 16. Verify Ctrl+F in editor mode is ignored (format remains unchanged)
+        # 16. Verify Ctrl+F in editor mode opens Find prompt and ESC cancels cleanly
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x06")
-        time.sleep(0.2)
+        out_find_prompt = read_until(master, b"Find [Exact] : ", timeout=4.0)
+        if b"Find [Exact] : " not in out_find_prompt:
+            print(f"[-] Ctrl+F failed to open Find prompt. Buffer: {repr(out_find_prompt)}", flush=True)
+            return False
+        # Cancel with ESC
+        os.write(master, b"\x1b")
+        read_until(master, b"Line 4/4,", timeout=4.0)
         drain_all(master)
-        print("[+] Successfully verified ^F in editor mode is ignored.", flush=True)
+        print("[+] Successfully verified ^F in editor mode opens Find prompt and ESC cancels cleanly.", flush=True)
 
         # 17. Save file with Ctrl+S (opens Save Screen, tests Save Screen Ctrl+F toggle, and saves to OUTPUT.TXT)
         time.sleep(0.3)
@@ -1933,6 +1939,153 @@ def test_se_execution():
         os.write(master, b"\x11")
         read_until(master, b"C>", timeout=4.0)
         print("[+] Successfully verified command-line Goto Line facility (Step 44)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 45: Search (Ctrl+F) and Find Next (Ctrl+N) with Exact Matching
+        # ---------------------------------------------------------------------
+        print("[*] Step 45: Verifying Search (Ctrl+F) & Find Next (Ctrl+N) with Case Sensitivity...", flush=True)
+
+        # Launch SE on 30.TXT
+        time.sleep(0.5)
+        os.write(master, b"se 30.TXT\r")
+        out_s45_init = read_until(master, b"Line 1/30,", timeout=14.0)
+        if b"Line 1/30," not in out_s45_init:
+            print(f"[-] Step 45 failed: 30.TXT did not load. Buffer: {repr(out_s45_init)}", flush=True)
+            return False
+
+        # 1. Press Ctrl+F -> verify default [Exact] prompt
+        time.sleep(0.2)
+        os.write(master, b"\x06")
+        out_s45_f1 = read_until(master, b"Find [Exact] : ", timeout=4.0)
+        if b"Find [Exact] : " not in out_s45_f1:
+            print(f"[-] Step 45 failed: Ctrl+F prompt missing. Buffer: {repr(out_s45_f1)}", flush=True)
+            return False
+
+        # 2. Search for exact "Line 15"
+        os.write(master, b"Line 15\r")
+        out_s45_l15 = read_until(master, b"Line 15/30,", timeout=4.0)
+        if b"Line 15/30," not in out_s45_l15:
+            print(f"[-] Step 45 failed: Search 'Line 15' did not position at line 15. Buffer: {repr(out_s45_l15)}", flush=True)
+            return False
+
+        # 3. Test case sensitivity: search for lowercase "line 15" from Line 1 (should fail)
+        time.sleep(0.2)
+        os.write(master, b"\x14\x01")  # Ctrl+T, Ctrl+A to line 1
+        read_until(master, b"Line 1/30,", timeout=4.0)
+
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        os.write(master, b"line 15\r")
+        out_s45_nf = read_until(master, b"Pattern not found.", timeout=4.0)
+        if b"Pattern not found." not in out_s45_nf:
+            print(f"[-] Step 45 failed: 'line 15' did not fail in Exact mode. Buffer: {repr(out_s45_nf)}", flush=True)
+            return False
+
+        # 4. Search for common word "content" on Line 1, then repeat with Ctrl+N
+        time.sleep(0.5)
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        os.write(master, b"content\r")
+        read_until(master, b"Line 1/30,", timeout=4.0)
+
+        # Press Ctrl+N to find next occurrence on Line 2
+        time.sleep(0.2)
+        os.write(master, b"\x0e")
+        out_s45_n1 = read_until(master, b"Line 2/30,", timeout=4.0)
+        if b"Line 2/30," not in out_s45_n1:
+            print(f"[-] Step 45 failed: Ctrl+N did not advance to Line 2. Buffer: {repr(out_s45_n1)}", flush=True)
+            return False
+
+        # Press Ctrl+N to find next occurrence on Line 3
+        time.sleep(0.2)
+        os.write(master, b"\x0e")
+        out_s45_n2 = read_until(master, b"Line 3/30,", timeout=4.0)
+        if b"Line 3/30," not in out_s45_n2:
+            print(f"[-] Step 45 failed: Ctrl+N did not advance to Line 3. Buffer: {repr(out_s45_n2)}", flush=True)
+            return False
+
+        print("[+] Successfully verified Search (Ctrl+F) & Find Next (Ctrl+N) with Case Sensitivity (Step 45)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 46: Case Insensitivity Toggle (Ctrl+I / Tab)
+        # ---------------------------------------------------------------------
+        print("[*] Step 46: Verifying Case Insensitivity Toggle (Ctrl+I)...", flush=True)
+
+        # Move to line 1
+        time.sleep(0.2)
+        os.write(master, b"\x14\x01")
+        read_until(master, b"Line 1/30,", timeout=4.0)
+
+        # Open Find: Ctrl+F
+        os.write(master, b"\x06")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+
+        # Press Tab (Ctrl+I) to toggle to [Insens]
+        os.write(master, b"\t")
+        out_s46_ins = read_until(master, b"Find [Insens]: ", timeout=4.0)
+        if b"Find [Insens]: " not in out_s46_ins:
+            print(f"[-] Step 46 failed: Tab/Ctrl+I did not toggle to [Insens]. Buffer: {repr(out_s46_ins)}", flush=True)
+            return False
+
+        # Search for lowercase "line 20"
+        os.write(master, b"line 20\r")
+        out_s46_l20 = read_until(master, b"Line 20/30,", timeout=4.0)
+        if b"Line 20/30," not in out_s46_l20:
+            print(f"[-] Step 46 failed: Case-insensitive search 'line 20' failed. Buffer: {repr(out_s46_l20)}", flush=True)
+            return False
+
+        # Verify setting persisted: next Ctrl+F starts in [Insens]
+        time.sleep(0.2)
+        os.write(master, b"\x06")
+        out_s46_pers = read_until(master, b"Find [Insens]: ", timeout=4.0)
+        if b"Find [Insens]: " not in out_s46_pers:
+            print(f"[-] Step 46 failed: [Insens] setting did not persist. Buffer: {repr(out_s46_pers)}", flush=True)
+            return False
+
+        # Toggle back to [Exact] and cancel
+        os.write(master, b"\t")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        os.write(master, b"\x1b")
+        read_until(master, b"Line 20/30,", timeout=4.0)
+
+        print("[+] Successfully verified Case Insensitivity Toggle (Ctrl+I) (Step 46)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 47: Search & Replace (Ctrl+R) Interactive & Replace All
+        # ---------------------------------------------------------------------
+        print("[*] Step 47: Verifying Search and Replace (Ctrl+R)...", flush=True)
+
+        # Move to line 1
+        time.sleep(0.2)
+        os.write(master, b"\x14\x01")
+        read_until(master, b"Line 1/30,", timeout=4.0)
+
+        # Trigger Replace: Ctrl+R
+        os.write(master, b"\x12")
+        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        os.write(master, b"Line 01\r")
+        out_s47_rep_prompt = read_until(master, b"Replace with : ", timeout=4.0)
+        if b"Replace with : " not in out_s47_rep_prompt:
+            print(f"[-] Step 47 failed: Replace with prompt missing. Buffer: {repr(out_s47_rep_prompt)}", flush=True)
+            return False
+
+        # Enter replacement string: "BetaLine 01"
+        os.write(master, b"BetaLine 01\r")
+        out_s47_confirm = read_until(master, b"Replace (y/n/a/q)? ", timeout=4.0)
+        if b"Replace (y/n/a/q)? " not in out_s47_confirm:
+            print(f"[-] Step 47 failed: Confirmation prompt missing. Buffer: {repr(out_s47_confirm)}", flush=True)
+            return False
+
+        # Confirm replacement with 'y'
+        os.write(master, b"y")
+        read_until(master, b"Replace done:", timeout=4.0)
+        read_until(master, b"BetaLine 01", timeout=4.0)
+
+        # Final exit from editor with Ctrl+Q back to CP/M
+        time.sleep(0.5)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Successfully verified Search and Replace (Ctrl+R) (Step 47)!", flush=True)
 
         return True
 
