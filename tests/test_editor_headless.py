@@ -1725,14 +1725,110 @@ def test_se_execution():
 
         print("[+] Successfully verified Block Copy capacity limits (Step 41)!", flush=True)
 
-        # Return to splash (ESC)
+        # ---------------------------------------------------------------------
+        # Step 42: Interactive Goto Line Facility (Ctrl+L in Editor Mode)
+        # ---------------------------------------------------------------------
+        print("[*] Step 42: Verifying interactive Goto Line facility (Ctrl+L)...", flush=True)
+
+        # Move to line 1: Ctrl+T, Ctrl+A
+        os.write(master, b"\x14\x01")
+        out_init = read_until(master, b", Col 0", timeout=4.0)
+        idx = out_init.rfind(b"Line 1/")
+        if idx != -1 and b"," in out_init[idx + 7 :]:
+            total_str = out_init[idx + 7 :].split(b",")[0].strip()
+        else:
+            total_str = b"38"
+        lbl_1 = b"Line 1/" + total_str
+        lbl_10 = b"Line 10/" + total_str
+        lbl_25 = b"Line 25/" + total_str
+        lbl_max = b"Line " + total_str + b"/" + total_str
+        lbl_15 = b"Line 15/" + total_str
+
+        # 1. Press Ctrl+L -> verify 'Goto line: ' prompt on status line
+        os.write(master, b"\x0c")
+        out_s42_prompt = read_until(master, b"Goto line: ", timeout=4.0)
+        if b"Goto line: " not in out_s42_prompt:
+            print(f"[-] Step 42 failed: Ctrl+L prompt 'Goto line: ' missing. Buffer: {repr(out_s42_prompt)}", flush=True)
+            return False
+
+        # 2. Cancel with ESC -> verify status line restored without moving cursor
+        os.write(master, b"\x1b")
+        out_s42_esc = read_until(master, lbl_1, timeout=4.0)
+        if lbl_1 not in out_s42_esc:
+            print(f"[-] Step 42 failed: ESC did not restore {repr(lbl_1)}. Buffer: {repr(out_s42_esc)}", flush=True)
+            return False
+
+        # 3. Jump to line 10: Ctrl+L, '10', Enter
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"10\r")
+        out_s42_l10 = read_until(master, lbl_10, timeout=4.0)
+        if lbl_10 not in out_s42_l10 or b"Line 10 of test file content" not in out_s42_l10:
+            print(f"[-] Step 42 failed: Goto line 10 failed. Buffer: {repr(out_s42_l10)}", flush=True)
+            return False
+
+        # 4. Jump to line 25: Ctrl+L, '25', Enter
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"25\r")
+        out_s42_l25 = read_until(master, lbl_25, timeout=4.0)
+        if lbl_25 not in out_s42_l25 or b"Line 25 of test file content" not in out_s42_l25:
+            print(f"[-] Step 42 failed: Goto line 25 failed. Buffer: {repr(out_s42_l25)}", flush=True)
+            return False
+
+        # 5. Jump beyond EOF (clamp to last line): Ctrl+L, '999', Enter
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"999\r")
+        out_s42_l30 = read_until(master, lbl_max, timeout=4.0)
+        if lbl_max not in out_s42_l30:
+            print(f"[-] Step 42 failed: Goto line 999 clamp failed. Buffer: {repr(out_s42_l30)}", flush=True)
+            return False
+
+        # 6. Jump back to line 1: Ctrl+L, '1', Enter
+        os.write(master, b"\x0c")
+        read_until(master, b"Goto line: ", timeout=4.0)
+        os.write(master, b"1\r")
+        out_s42_l1 = read_until(master, lbl_1, timeout=4.0)
+        if lbl_1 not in out_s42_l1 or b"Line 01 of test file content" not in out_s42_l1:
+            print(f"[-] Step 42 failed: Goto line 1 failed. Buffer: {repr(out_s42_l1)}", flush=True)
+            return False
+
+        print("[+] Successfully verified interactive Goto Line facility (Ctrl+L) (Step 42)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 43: Splash Screen Goto Line (':l' / 'l' / '^L')
+        # ---------------------------------------------------------------------
+        print("[*] Step 43: Verifying splash screen Goto Line facility...", flush=True)
+
+        # Return to splash with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
+        out_s43_splash = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
+        if b"type   :l  or  ^L        to goto line" not in out_s43_splash:
+            print(f"[-] Step 43 failed: Splash missing goto line prompt hint. Buffer: {repr(out_s43_splash)}", flush=True)
+            return False
 
-        # Final exit from splash to CP/M
-        time.sleep(0.3)
-        os.write(master, b"q")
+        # Press 'l' on splash screen -> enters editor with Goto line prompt
+        time.sleep(0.2)
+        os.write(master, b"l")
+        out_s43_l_prompt = read_until(master, b"Goto line: ", timeout=4.0)
+        if b"Goto line: " not in out_s43_l_prompt:
+            print(f"[-] Step 43 failed: Splash 'l' did not trigger Goto line prompt. Buffer: {repr(out_s43_l_prompt)}", flush=True)
+            return False
+
+        # Enter line 15
+        os.write(master, b"15\r")
+        out_s43_l15 = read_until(master, lbl_15, timeout=4.0)
+        if lbl_15 not in out_s43_l15 or b"Line 15 of test file content" not in out_s43_l15:
+            print(f"[-] Step 43 failed: Splash goto line 15 jump failed. Buffer: {repr(out_s43_l15)}", flush=True)
+            return False
+
+        print("[+] Successfully verified splash screen Goto Line facility (Step 43)!", flush=True)
+
+        # Final exit from editor with Ctrl+Q back to CP/M
+        time.sleep(0.2)
+        os.write(master, b"\x11")
         read_until(master, b"C>", timeout=4.0)
         print("[+] Final exit from SE.COM completed.", flush=True)
 

@@ -29,6 +29,7 @@ KEY_CTRL_K	EQU	11		; Show Editor Mode Keys Screen
 KEY_CTRL_F	EQU	6		; Toggle CP/M <-> Linux line endings
 KEY_CTRL_U	EQU	21		; Page Up
 KEY_CTRL_V	EQU	22		; Page Down
+KEY_CTRL_L	EQU	12		; Goto Line Number
 KEY_BACKSPACE	EQU	8
 KEY_TAB		EQU	9
 KEY_ENTER	EQU	13
@@ -161,6 +162,14 @@ SPLASH_LOOP:
 	CP	'S'
 	JR	Z,DO_SPLASH_SAVE
 
+	; Option: 'L' or 'l' or Ctrl+L -> Goto Line Screen
+	CP	'l'
+	JR	Z,DO_SPLASH_GOTO_LINE
+	CP	'L'
+	JR	Z,DO_SPLASH_GOTO_LINE
+	CP	KEY_CTRL_L
+	JR	Z,DO_SPLASH_GOTO_LINE
+
 	; Option: '1' -> Modern Screen Mode (120x40)
 	CP	'1'
 	JR	Z,DO_SET_120X40
@@ -204,6 +213,12 @@ DO_SPLASH_OPEN:
 DO_SPLASH_SAVE:
 	CALL	DO_SAVE_FILE_UI
 	JR	SHOW_SPLASH_SCREEN
+
+DO_SPLASH_GOTO_LINE:
+	CALL	ENTER_EDITOR
+	CALL	RENDER_STATUS_BAR
+	CALL	DO_GOTO_LINE_UI
+	JP	MAIN_LOOP
 
 MAIN_LOOP:
 	; If no key is immediately ready in serial buffer, flush deferred render!
@@ -329,6 +344,14 @@ DO_CTRL_X_MOVE:
 	JP	MAIN_LOOP
 
 CHECK_PAGE_KEYS:
+	; Command: Ctrl+L -> Goto line number
+	CP	KEY_CTRL_L
+	JR	NZ,CHECK_NAV_KEYS
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	DO_GOTO_LINE_UI
+	JP	MAIN_LOOP
+
+CHECK_NAV_KEYS:
 	; Command: Ctrl+A -> Home (start of line)
 	CP	1			; Ctrl+A
 	JR	Z,DO_HOME_KEY
@@ -5415,6 +5438,241 @@ JUMP_BOT_FINISH:
 	RET
 
 ;------------------------------------------------------------------------------
+; Position Cursor and Center Viewport at 1-indexed Line in HL
+; Clamps to [1, DOC_TOTAL_LINES].
+;------------------------------------------------------------------------------
+GOTO_LINE_HL:
+	; Clamp lower bound: if HL == 0, set HL = 1
+	LD	A,H
+	OR	L
+	JR	NZ,GOTO_NOT_ZERO
+	LD	HL,1
+GOTO_NOT_ZERO:
+	LD	DE,(DOC_TOTAL_LINES)
+	LD	A,D
+	OR	E
+	JR	NZ,GOTO_HAS_LINES
+	; 0 total lines: clamp to 0
+	LD	HL,0
+	LD	(CUR_DOC_ROW),HL
+	LD	(TOP_DOC_ROW),HL
+	JR	GOTO_SET_COLS
+
+GOTO_HAS_LINES:
+	; Compare HL with DE: carry set if HL < DE, Z set if HL == DE
+	OR	A			; Clear carry
+	SBC	HL,DE			; HL - DE
+	JR	NC,GOTO_CLAMP_EOF	; If HL >= DE, clamp to DE
+	ADD	HL,DE			; HL < DE: restore HL
+	JR	GOTO_CALC_ROW
+
+GOTO_CLAMP_EOF:
+	EX	DE,HL			; HL = DOC_TOTAL_LINES
+
+GOTO_CALC_ROW:
+	DEC	HL			; 0-indexed row = HL - 1
+	LD	(CUR_DOC_ROW),HL
+
+GOTO_SET_COLS:
+	XOR	A
+	LD	(CUR_COL),A
+	LD	(TARGET_COL),A
+
+	; Calculate TOP_DOC_ROW for centering:
+	; Viewport lines: V = ACTIVE_ROWS - 1
+	; Half-height: H = V / 2
+	LD	HL,(CUR_DOC_ROW)
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; V
+	SRL	A			; H = V / 2
+	LD	E,A
+	LD	D,0			; DE = H
+
+	OR	A
+	SBC	HL,DE			; HL = CUR_DOC_ROW - H
+	JR	C,GOTO_SET_TOP_ZERO	; If CUR_DOC_ROW < H, TOP = 0
+	JR	Z,GOTO_SET_TOP_ZERO	; If CUR_DOC_ROW == H, TOP = 0
+
+	; Proposed TOP is in HL (CUR_DOC_ROW - H)
+	; Calculate MAX_TOP = DOC_TOTAL_LINES - V
+	PUSH	HL			; Save proposed TOP
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; V
+	LD	E,A
+	LD	D,0			; DE = V
+	OR	A
+	SBC	HL,DE			; HL = DOC_TOTAL_LINES - V
+	JR	C,GOTO_POP_TOP_ZERO	; If DOC_TOTAL_LINES < V -> TOP = 0
+	JR	Z,GOTO_POP_TOP_ZERO	; If DOC_TOTAL_LINES == V -> TOP = 0
+
+	; HL is MAX_TOP, proposed TOP is on stack
+	EX	DE,HL			; DE = MAX_TOP
+	POP	HL			; HL = proposed TOP
+	OR	A
+	SBC	HL,DE			; proposed - MAX_TOP
+	JR	NC,GOTO_SET_MAX_TOP	; If proposed >= MAX_TOP, use MAX_TOP
+	ADD	HL,DE			; Restore proposed TOP
+	LD	(TOP_DOC_ROW),HL
+	JR	GOTO_FINISH
+
+GOTO_POP_TOP_ZERO:
+	POP	HL			; Discard proposed TOP
+GOTO_SET_TOP_ZERO:
+	LD	HL,0
+	LD	(TOP_DOC_ROW),HL
+	JR	GOTO_FINISH
+
+GOTO_SET_MAX_TOP:
+	LD	(TOP_DOC_ROW),DE
+
+GOTO_FINISH:
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+	RET
+
+;------------------------------------------------------------------------------
+; Parse ASCII Decimal Word
+; Input: HL = pointer to ASCII decimal string
+; Output: DE = 16-bit unsigned value, HL = pointer to first non-digit char
+;------------------------------------------------------------------------------
+PARSE_DEC_WORD:
+	LD	DE,0
+PARSE_DEC_LOOP:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	CP	'0'
+	RET	C
+	CP	'9'+1
+	RET	NC
+	SUB	'0'
+	PUSH	HL
+	LD	H,D
+	LD	L,E
+	ADD	HL,HL		; * 2
+	ADD	HL,HL		; * 4
+	ADD	HL,DE		; * 5
+	ADD	HL,HL		; * 10
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE		; * 10 + digit
+	EX	DE,HL
+	POP	HL
+	INC	HL
+	JR	PARSE_DEC_LOOP
+
+;------------------------------------------------------------------------------
+; Interactive Goto Line UI (Ctrl+L in editor, or 'l'/Ctrl+L from splash)
+; Prompts for line number on status row.
+; Enter -> jumps to line (centered). ESC -> cancels.
+;------------------------------------------------------------------------------
+DO_GOTO_LINE_UI:
+	CALL	CANCEL_BLOCK
+
+	; Display Goto line prompt on status bar in inverse video
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_GOTO_LINE_PROMPT	; " Goto line: "
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+
+	; Clear buffer
+	LD	HL,GOTO_LINE_BUF
+	LD	(HL),0
+	LD	B,0			; B = digit count
+
+GOTO_UI_LOOP:
+	CALL	GET_KEY
+
+	; ESC -> cancel without moving cursor
+	CP	KEY_ESC
+	JR	Z,GOTO_UI_CANCEL
+
+	; Enter -> confirm goto line
+	CP	KEY_ENTER
+	JR	Z,GOTO_UI_ENTER
+
+	; Backspace / Delete
+	CP	KEY_BACKSPACE
+	JR	Z,GOTO_UI_BS
+	CP	KEY_DEL
+	JR	Z,GOTO_UI_BS
+
+	; Check if digit '0'..'9'
+	CP	'0'
+	JR	C,GOTO_UI_LOOP
+	CP	'9'+1
+	JR	NC,GOTO_UI_LOOP
+
+	; Check max digits (up to 5 digits)
+	LD	C,A			; Save digit in C
+	LD	A,B
+	CP	5
+	JR	NC,GOTO_UI_LOOP
+
+	; Append digit to buffer
+	LD	HL,GOTO_LINE_BUF
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),C
+	INC	HL
+	LD	(HL),0			; Null-terminate
+	INC	B
+
+	; Echo digit on screen
+	LD	A,C
+	CALL	PUTC
+	JR	GOTO_UI_LOOP
+
+GOTO_UI_BS:
+	LD	A,B
+	OR	A
+	JR	Z,GOTO_UI_LOOP		; Nothing to backspace
+
+	DEC	B
+	LD	HL,GOTO_LINE_BUF
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	(HL),0			; Null-terminate at new length
+
+	; Visual backspace: \x08 \x20 \x08
+	LD	A,008H
+	CALL	PUTC
+	LD	A,' '
+	CALL	PUTC
+	LD	A,008H
+	CALL	PUTC
+	JR	GOTO_UI_LOOP
+
+GOTO_UI_ENTER:
+	; If empty (user just pressed enter with no digits), treat as cancel
+	LD	A,B
+	OR	A
+	JR	Z,GOTO_UI_CANCEL
+
+	; Parse decimal number from GOTO_LINE_BUF into DE
+	LD	HL,GOTO_LINE_BUF
+	CALL	PARSE_DEC_WORD		; DE = line number
+	EX	DE,HL			; HL = line number
+	CALL	GOTO_LINE_HL
+
+	; Redraw editor and status bar
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	RET
+
+GOTO_UI_CANCEL:
+	CALL	RENDER_STATUS_BAR
+	RET
+
+;------------------------------------------------------------------------------
 ; Character Insertion at (CUR_DOC_ROW, CUR_COL)
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
@@ -7887,6 +8145,7 @@ STR_SPLASH_BODY:	DB	27,"[H"
 	DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
 	DB	"                  ~       type   :o                to open file ",13,10
 	DB	"                  ~       type   :s                to save file ",13,10
+	DB	"                  ~       type   :l  or  ^L        to goto line ",13,10
 	DB	"                  ~       type   :t                for mem test ",13,10
 	DB	"                  ~       type   :f                for file test",13,10
 	DB	"                  ~       type   :1                set 120x40   ",13,10
@@ -8038,7 +8297,7 @@ STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 	DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
 	DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
 	DB	"    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
-	DB	"                                             Ctrl+G / ^End   Bottom of file",13,10,13,10
+	DB	"    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10,13,10
 	DB	"  EDITING & BLOCK:",13,10
 	DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
 	DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
@@ -8111,6 +8370,7 @@ STR_SAVE_CANCELLED:	DB	13,10,"Save cancelled.",13,10,"$"
 STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
 
 STR_FNF_INLINE:	DB	"  File not found","$"
+STR_GOTO_LINE_PROMPT:	DB	" Goto line: ","$"
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
@@ -8139,6 +8399,7 @@ TARGET_COL:	DB	0		; Sticky visual column (0..119)
 TOP_DOC_ROW:	DW	0		; 16-bit top visible document line on screen
 DOC_TOTAL_LINES:	DW	1		; 16-bit total document lines count (default 1 empty line)
 HAS_FILE_ARG:	DB	0
+GOTO_LINE_BUF:	DS	8
 IN_EDITOR_MODE:	DB	0
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
 IS_SAVE_UI:	DB	0		; 1 if currently in Save File Screen
