@@ -2093,9 +2093,12 @@ def test_se_execution():
         os.write(master, b"\x06")
         read_until(master, b"Find [Exact] : ", timeout=4.0)
         os.write(master, b"BetaLine\r")
-        out_s48 = read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
+        out_s48 = read_until(master, b"Col 8", timeout=4.0)
         if b"[BLK: 8c LOCK]" not in out_s48:
             print(f"[-] Step 48 failed: [BLK: 8c LOCK] missing from status bar. Buffer: {repr(out_s48)}", flush=True)
+            return False
+        if b"Col 8" not in out_s48:
+            print(f"[-] Step 48 failed: Cursor not positioned past block at Col 8. Buffer: {repr(out_s48)}", flush=True)
             return False
 
         # Press ESC to dismiss block highlight
@@ -2107,9 +2110,9 @@ def test_se_execution():
         os.write(master, b"\x06")
         read_until(master, b"Find [Exact] : ", timeout=4.0)
         os.write(master, b"\r")
-        out_s48_re = read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
-        if b"[BLK: 8c LOCK]" not in out_s48_re:
-            print(f"[-] Step 48 failed: Solidified block re-match missing. Buffer: {repr(out_s48_re)}", flush=True)
+        out_s48_re = read_until(master, b"Col 8", timeout=4.0)
+        if b"[BLK: 8c LOCK]" not in out_s48_re or b"Col 8" not in out_s48_re:
+            print(f"[-] Step 48 failed: Solidified block re-match missing or not at Col 8. Buffer: {repr(out_s48_re)}", flush=True)
             return False
         print("[+] Successfully verified Solidified Block Highlighting on Match (Step 48)!", flush=True)
 
@@ -2146,9 +2149,9 @@ def test_se_execution():
 
         # Confirm search with Enter
         os.write(master, b"\r")
-        out_s49_match = read_until(master, b"[BLK: 4c LOCK]", timeout=4.0)
-        if b"[BLK: 4c LOCK]" not in out_s49_match:
-            print(f"[-] Step 49 failed: Pre-filled match not solidified. Buffer: {repr(out_s49_match)}", flush=True)
+        out_s49_match = read_until(master, b"Col 4", timeout=4.0)
+        if b"[BLK: 4c LOCK]" not in out_s49_match or b"Col 4" not in out_s49_match:
+            print(f"[-] Step 49 failed: Pre-filled match not solidified or not at Col 4. Buffer: {repr(out_s49_match)}", flush=True)
             return False
         print("[+] Successfully verified Start Search from Highlighted Block (Step 49)!", flush=True)
 

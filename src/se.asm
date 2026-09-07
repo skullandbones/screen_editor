@@ -6226,6 +6226,7 @@ CSFB_COPY_DONE:
 
 ;------------------------------------------------------------------------------
 ; DO_FIND_NEXT: Repeat search for SEARCH_BUF forward from (CUR_COL + 1)
+; If active block is solidified, start forward from BLOCK_START_COL + 1
 ;------------------------------------------------------------------------------
 DO_FIND_NEXT:
 	LD	A,(SEARCH_LEN)
@@ -6235,15 +6236,34 @@ DO_FIND_NEXT:
 	; Save current position in case search fails
 	LD	HL,(CUR_DOC_ROW)
 	LD	(PREV_START_ROW_TEMP),HL
-	LD	(SEARCH_START_ROW),HL
 	LD	A,(CUR_COL)
 	LD	(PREV_START_COL_TEMP),A
+
+	; Check if active block is solidified (state 2)
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	NZ,DFN_NORMAL_START
+
+	; Solidified block match: wrap limit is BLOCK_START_ROW, BLOCK_START_COL
+	LD	HL,(BLOCK_START_ROW)
+	LD	(SEARCH_START_ROW),HL
+	LD	A,(BLOCK_START_COL)
 	LD	(SEARCH_START_COL),A
 
-	; Advance column by 1
+	; Advance from BLOCK_START_COL by 1
+	INC	A
+	LD	(CUR_COL),A
+	JR	DFN_DO_SEARCH
+
+DFN_NORMAL_START:
+	LD	HL,(CUR_DOC_ROW)
+	LD	(SEARCH_START_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(SEARCH_START_COL),A
 	INC	A
 	LD	(CUR_COL),A
 
+DFN_DO_SEARCH:
 	XOR	A
 	LD	(SEARCH_WRAPPED),A
 	CALL	FIND_STRING_FORWARD_CONT
@@ -6260,6 +6280,7 @@ DO_FIND_NEXT:
 
 ;------------------------------------------------------------------------------
 ; DO_FIND_PREV: Repeat search for SEARCH_BUF backward from (CUR_COL - 1)
+; If active block is solidified, step back from BLOCK_START_COL
 ;------------------------------------------------------------------------------
 DO_FIND_PREV:
 	LD	A,(SEARCH_LEN)
@@ -6269,12 +6290,33 @@ DO_FIND_PREV:
 	; Save current position in case search fails
 	LD	HL,(CUR_DOC_ROW)
 	LD	(PREV_START_ROW_TEMP),HL
-	LD	(SEARCH_START_ROW),HL
 	LD	A,(CUR_COL)
 	LD	(PREV_START_COL_TEMP),A
+
+	; Check if active block is solidified (state 2)
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	NZ,DFP_NORMAL_START
+
+	; Solidified block match: wrap limit is BLOCK_START_ROW, BLOCK_START_COL
+	LD	HL,(BLOCK_START_ROW)
+	LD	(SEARCH_START_ROW),HL
+	LD	A,(BLOCK_START_COL)
 	LD	(SEARCH_START_COL),A
 
+	; Step backward from BLOCK_START_COL
+	LD	(CUR_COL),A
 	CALL	STEP_BACK_ONE_CHAR
+	JR	DFP_DO_SEARCH
+
+DFP_NORMAL_START:
+	LD	HL,(CUR_DOC_ROW)
+	LD	(SEARCH_START_ROW),HL
+	LD	A,(CUR_COL)
+	LD	(SEARCH_START_COL),A
+	CALL	STEP_BACK_ONE_CHAR
+
+DFP_DO_SEARCH:
 	XOR	A
 	LD	(SEARCH_WRAPPED),A
 	CALL	FIND_STRING_BACKWARD_CONT
@@ -6504,6 +6546,12 @@ SEARCH_POS_OK:
 
 	; Solidify block highlight on match
 	CALL	HIGHLIGHT_FOUND_BLOCK
+
+	; Position cursor at the next character position past the end of the block
+	LD	A,(BLOCK_END_COL)
+	LD	(CUR_COL),A
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A
 
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
@@ -6928,9 +6976,9 @@ REPLACE_INPUT_CONFIRM:
 
 	; We already found the first match during DO_FIND_UI!
 	; Lock search wrap origin for this replace session:
-	LD	HL,(CUR_DOC_ROW)
+	LD	HL,(BLOCK_START_ROW)
 	LD	(SEARCH_START_ROW),HL
-	LD	A,(CUR_COL)
+	LD	A,(BLOCK_START_COL)
 	LD	(SEARCH_START_COL),A
 	XOR	A
 	LD	(SEARCH_WRAPPED),A
@@ -7027,14 +7075,16 @@ REPLACE_REVERSE_DIR:
 	OR	A
 	JR	NZ,REPLACE_REV_TO_BW
 
-	; Reversing to Forward: advance col by 1
-	LD	A,(CUR_COL)
+	; Reversing to Forward: advance col by 1 from match start
+	LD	A,(BLOCK_START_COL)
 	INC	A
 	LD	(CUR_COL),A
 	JP	REPLACE_SEARCH_NEXT
 
 REPLACE_REV_TO_BW:
-	; Reversing to Backward: step back 1 char
+	; Reversing to Backward: step back 1 char from match start
+	LD	A,(BLOCK_START_COL)
+	LD	(CUR_COL),A
 	CALL	STEP_BACK_ONE_CHAR
 	JP	REPLACE_SEARCH_NEXT
 
@@ -7051,20 +7101,23 @@ REPLACE_SKIP:
 	OR	A
 	JR	NZ,REPLACE_SKIP_BW
 
-	; Forward skip: advance col by 1
-	LD	A,(CUR_COL)
+	; Forward skip: advance col by 1 from match start
+	LD	A,(BLOCK_START_COL)
 	INC	A
 	LD	(CUR_COL),A
 	JP	REPLACE_SEARCH_NEXT
 
 REPLACE_SKIP_BW:
-	; Backward skip: step back 1 char
+	; Backward skip: step back 1 char from match start
+	LD	A,(BLOCK_START_COL)
+	LD	(CUR_COL),A
 	CALL	STEP_BACK_ONE_CHAR
 	JP	REPLACE_SEARCH_NEXT
 
 REPLACE_EXECUTE_SUBST:
-	; Save match start col
-	LD	A,(CUR_COL)
+	; Set CUR_COL to match start col before substitution
+	LD	A,(BLOCK_START_COL)
+	LD	(CUR_COL),A
 	LD	(REPLACE_MATCH_COL),A
 
 	CALL	APPLY_LINE_REPLACE
