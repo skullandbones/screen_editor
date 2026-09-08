@@ -2314,6 +2314,100 @@ def test_se_execution():
         print("[+] Unmodified document cleared screen and exited immediately without prompt.", flush=True)
         print("[+] Successfully verified Unsaved Modifications Check on Exit (Step 52)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 53: New File (:n) and Close File (:w / Ctrl+W)
+        # ---------------------------------------------------------------------
+        print("[*] Step 53: Verifying New File (:n) and Close File (:w / Ctrl+W)...", flush=True)
+
+        # 1. Launch 'se 2.TXT'
+        time.sleep(0.5)
+        os.write(master, b"se 2.TXT\r")
+        read_until(master, b"Line 1/2,", timeout=14.0)
+
+        # 2. Modify buffer and send Ctrl+W (\x17)
+        time.sleep(0.2)
+        os.write(master, b"X")
+        time.sleep(0.2)
+        os.write(master, b"\x17")
+        out_s53_prompt = read_until(master, b"ESC:", timeout=4.0)
+        if b"Save changes?" not in out_s53_prompt:
+            print(f"[-] Step 53 failed: Ctrl+W did not show save changes prompt. Buffer: {repr(out_s53_prompt)}", flush=True)
+            return False
+
+        # 3. Discard changes with 'n' and verify return to splash screen
+        os.write(master, b"n")
+        out_s53_splash1 = read_until(master, b"Active Screen:", timeout=4.0)
+        if b"Active Screen:" not in out_s53_splash1:
+            print(f"[-] Step 53 failed: Ctrl+W did not return to splash screen. Buffer: {repr(out_s53_splash1)}", flush=True)
+            return False
+        print("[+] Ctrl+W in editor prompted and returned to splash screen on discard.", flush=True)
+
+        # 4. On splash screen, test ':n' to start a new blank document
+        time.sleep(0.2)
+        os.write(master, b"n")
+        out_s53_new = read_until(master, b"Line 1/1,", timeout=4.0)
+        if b"[No Name]" not in out_s53_new:
+            print(f"[-] Step 53 failed: Splash ':n' did not enter blank editor [No Name]. Buffer: {repr(out_s53_new)}", flush=True)
+            return False
+        print("[+] Splash ':n' successfully started new blank document [No Name].", flush=True)
+
+        # 5. Type content in blank document, then return to splash (ESC)
+        time.sleep(0.2)
+        os.write(master, b"TESTING BLANK")
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Active Screen:", timeout=4.0)
+
+        # 6. On splash screen with modified document, test ':w'
+        time.sleep(0.2)
+        os.write(master, b"w")
+        out_s53_spw = read_until(master, b"ESC:", timeout=4.0)
+        if b"Save changes?" not in out_s53_spw:
+            print(f"[-] Step 53 failed: Splash ':w' did not prompt for save changes. Buffer: {repr(out_s53_spw)}", flush=True)
+            return False
+        # Cancel with ESC to stay in editor
+        os.write(master, b"\x1b")
+        read_until(master, b"Line 1/1,", timeout=4.0)
+        print("[+] Splash ':w' prompted for unsaved changes and ESC cancelled cleanly.", flush=True)
+
+        # 7. Return to splash screen again, test Ctrl+W and discard with 'n'
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Active Screen:", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"\x17")
+        read_until(master, b"ESC:", timeout=4.0)
+        os.write(master, b"n")
+        out_s53_splash2 = read_until(master, b"Active Screen:", timeout=4.0)
+        if b"Active Screen:" not in out_s53_splash2:
+            print(f"[-] Step 53 failed: Splash Ctrl+W did not return to splash screen. Buffer: {repr(out_s53_splash2)}", flush=True)
+            return False
+        print("[+] Splash Ctrl+W discarded changes and unloaded document.", flush=True)
+
+        # 8. On clean splash screen, press 'e': verify it starts a fresh blank document
+        time.sleep(0.2)
+        os.write(master, b"e")
+        out_s53_fresh = read_until(master, b"Line 1/1,", timeout=4.0)
+        if b"[No Name]" not in out_s53_fresh:
+            print(f"[-] Step 53 failed: Enter/e after close did not start fresh [No Name]. Buffer: {repr(out_s53_fresh)}", flush=True)
+            return False
+
+        # 9. In unmodified editor, test Ctrl+W: closes immediately to splash without prompt
+        time.sleep(0.2)
+        os.write(master, b"\x17")
+        out_s53_unmod = read_until(master, b"Active Screen:", timeout=4.0)
+        if b"Save changes" in out_s53_unmod or b"Active Screen:" not in out_s53_unmod:
+            print(f"[-] Step 53 failed: Unmodified Ctrl+W did not close immediately. Buffer: {repr(out_s53_unmod)}", flush=True)
+            return False
+        print("[+] Unmodified document closed immediately with Ctrl+W to splash screen.", flush=True)
+
+        # 10. Exit from splash screen with Ctrl+Q
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Clean exit from splash screen back to CP/M.", flush=True)
+        print("[+] Successfully verified New File (:n) and Close File (:w / Ctrl+W) (Step 53)!", flush=True)
+
         return True
 
     finally:

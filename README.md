@@ -128,23 +128,26 @@ Launching `SE` without arguments displays the Vim-style splash screen:
                   ~              by Dean Jenkins                
                   ~                                             
                   ~       SE is open source and freely usable   
-                  ~                                             
                   ~       type   :e  or  <Enter>   to edit      
+                  ~       type   :n                to new file  
                   ~       type   :o                to open file 
                   ~       type   :s                to save file 
+                  ~       type   :w  or  ^W        to close file
+                  ~       type   :l  or  ^L        to goto line 
                   ~       type   :t                for mem test 
                   ~       type   :f                for file test
                   ~       type   :1                set 120x40   
                   ~       type   :2                set 80x24    
                   ~       type   :q  or  ^Q        to exit      
-                  ~                                             
                   ~   Active Screen: [120x40 (Modern Default)]  
                   ~      Z80 CP/M with 512K Extended Storage    
                   ~      Auto-detects CP/M [CRLF] & Linux [LF]  
                   ~                                             
 ```
 
-* Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter full-screen editing mode.
+* Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter/resume full-screen editing mode.
+* Press **`n`** or **`N`** to start editing a new blank file (`[No Name]`).
+* Press **`w`**, **`W`**, or <kbd>Ctrl+W</kbd> to close the current file to splash screen.
 * Press **`o`** or **`O`** to open the interactive **Open File** directory browser.
 * Press **`s`** or **`S`** to open the interactive **Save File** screen.
 * Press **`t`** or **`T`** to run the live **512KB Extended Memory Diagnostic**.
@@ -179,7 +182,8 @@ Examples:
 * <kbd>Arrow Keys</kbd> / <kbd>Home</kbd> / <kbd>End</kbd> / <kbd>PgUp</kbd> / <kbd>PgDn</kbd>: Move cursor and dynamically expand or contract block highlight (partial lines, single lines, or multi-lines).
 * <kbd>Ctrl+O</kbd>: Open interactive file browser.
 * <kbd>Ctrl+S</kbd>: Open save file screen.
-* <kbd>Ctrl+Q</kbd>: Clean exit to CP/M.
+* <kbd>Ctrl+W</kbd>: Close file and return to splash screen (prompts to save if modified).
+* <kbd>Ctrl+Q</kbd>: Clean exit to CP/M (prompts to save if modified).
 
 ### 4. Screen Size Configurations
 `SE.COM` supports both modern widescreen and retro terminal geometries:

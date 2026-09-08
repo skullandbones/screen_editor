@@ -23,8 +23,13 @@ KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
 KEY_CTRL_C	EQU	3
 KEY_CTRL_X	EQU	24		; Move solidified block to cursor
 KEY_CTRL_Q	EQU	17
+KEY_CTRL_W	EQU	23		; Close file to splash
 KEY_CTRL_S	EQU	19
 KEY_CTRL_O	EQU	15		; Open File Screen
+
+ACTION_EXIT	EQU	0		; Confirmation action: Exit to CP/M
+ACTION_CLOSE	EQU	1		; Confirmation action: Close document to splash
+ACTION_NEW	EQU	2		; Confirmation action: Start new blank document
 KEY_CTRL_K	EQU	11		; Show Editor Mode Keys Screen
 KEY_CTRL_F	EQU	6		; Find in editor / Toggle endings in save
 KEY_CTRL_R	EQU	18		; Search & Replace
@@ -77,6 +82,7 @@ START:
 	LD	(REPLACE_LEN),A
 	LD	(DOC_MODIFIED),A
 	LD	(IN_EDITOR_MODE),A
+	LD	(CONFIRM_ACTION),A
 
 	; Check if filename was provided in FCB1
 	CALL	CHECK_COMMAND_LINE
@@ -165,6 +171,20 @@ SPLASH_LOOP:
 	CP	KEY_CTRL_Q
 	JP	Z,HANDLE_SPLASH_EXIT
 
+	; Option: 'N' or 'n' -> New File
+	CP	'n'
+	JP	Z,HANDLE_SPLASH_NEW
+	CP	'N'
+	JP	Z,HANDLE_SPLASH_NEW
+
+	; Option: 'W' or 'w' or Ctrl+W -> Close File
+	CP	'w'
+	JP	Z,HANDLE_SPLASH_CLOSE
+	CP	'W'
+	JP	Z,HANDLE_SPLASH_CLOSE
+	CP	KEY_CTRL_W
+	JP	Z,HANDLE_SPLASH_CLOSE
+
 	; Option: 'T' or 't' -> Run Extended Memory Test
 	CP	't'
 	JR	Z,DO_MEM_TEST
@@ -207,39 +227,39 @@ SPLASH_LOOP:
 
 	; Option: 'E' or 'e' or Enter -> Enter/Resume Editor
 	CP	'e'
-	JR	Z,ENTER_EDITOR
+	JP	Z,ENTER_EDITOR
 	CP	'E'
-	JR	Z,ENTER_EDITOR
+	JP	Z,ENTER_EDITOR
 	CP	KEY_ENTER
-	JR	Z,ENTER_EDITOR
+	JP	Z,ENTER_EDITOR
 
 	JR	SPLASH_LOOP
 
 DO_SET_120X40:
 	CALL	SET_MODE_120X40
-	JR	SHOW_SPLASH_SCREEN
+	JP	SHOW_SPLASH_SCREEN
 
 DO_SET_80X24:
 	CALL	SET_MODE_80X24
-	JR	SHOW_SPLASH_SCREEN
+	JP	SHOW_SPLASH_SCREEN
 
 DO_MEM_TEST:
 	CALL	RUN_MEM_TEST
 	CALL	GET_KEY
-	JR	SHOW_SPLASH_SCREEN
+	JP	SHOW_SPLASH_SCREEN
 
 DO_FILE_TEST:
 	CALL	RUN_FILE_TEST
 	CALL	GET_KEY
-	JR	SHOW_SPLASH_SCREEN
+	JP	SHOW_SPLASH_SCREEN
 
 DO_SPLASH_OPEN:
 	CALL	DO_OPEN_FILE_UI
-	JR	SHOW_SPLASH_SCREEN
+	JP	SHOW_SPLASH_SCREEN
 
 DO_SPLASH_SAVE:
 	CALL	DO_SAVE_FILE_UI
-	JR	SHOW_SPLASH_SCREEN
+	JP	SHOW_SPLASH_SCREEN
 
 DO_SPLASH_GOTO_LINE:
 	CALL	ENTER_EDITOR
@@ -260,6 +280,10 @@ MAIN_LOOP_GET_KEY:
 	; Command: Ctrl+Q -> Exit
 	CP	KEY_CTRL_Q
 	JP	Z,HANDLE_CTRL_Q
+
+	; Command: Ctrl+W -> Close File to Splash
+	CP	KEY_CTRL_W
+	JP	Z,HANDLE_CTRL_W
 
 	; Command: Ctrl+F -> Find
 	CP	KEY_CTRL_F
@@ -578,9 +602,11 @@ DO_TAB_INSERT:
 	RET
 
 ;------------------------------------------------------------------------------
-; Exit Handling: Check if document was modified before exiting
+; Exit, Close & New Document Handling with Unsaved Changes Protection
 ;------------------------------------------------------------------------------
 HANDLE_SPLASH_EXIT:
+	LD	A,ACTION_EXIT
+	LD	(CONFIRM_ACTION),A
 	LD	A,(DOC_MODIFIED)
 	OR	A
 	JP	Z,EXIT_PROGRAM
@@ -592,9 +618,44 @@ HANDLE_SPLASH_EXIT:
 	JR	SHOW_EXIT_PROMPT
 
 HANDLE_CTRL_Q:
+	LD	A,ACTION_EXIT
+	LD	(CONFIRM_ACTION),A
 	LD	A,(DOC_MODIFIED)
 	OR	A
 	JP	Z,EXIT_PROGRAM
+	JR	SHOW_EXIT_PROMPT
+
+HANDLE_CTRL_W:
+	LD	A,ACTION_CLOSE
+	LD	(CONFIRM_ACTION),A
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JP	Z,DO_EXEC_CLOSE
+	JR	SHOW_EXIT_PROMPT
+
+HANDLE_SPLASH_CLOSE:
+	; If no editor session is active, ignore close
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JR	Z,SPLASH_CLOSE_NOP
+	LD	A,ACTION_CLOSE
+	LD	(CONFIRM_ACTION),A
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JP	Z,DO_EXEC_CLOSE
+	CALL	RESUME_EDITOR
+	JR	SHOW_EXIT_PROMPT
+SPLASH_CLOSE_NOP:
+	JP	SPLASH_LOOP
+
+HANDLE_SPLASH_NEW:
+	LD	A,ACTION_NEW
+	LD	(CONFIRM_ACTION),A
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JP	Z,DO_EXEC_NEW
+	CALL	RESUME_EDITOR
+	JR	SHOW_EXIT_PROMPT
 
 SHOW_EXIT_PROMPT:
 	; Step 1: Overwrite status row with normal video spaces across active width
@@ -628,9 +689,9 @@ EXIT_PROMPT_KEY:
 	JR	Z,EXIT_SAVE_AND_QUIT
 
 	CP	'n'
-	JP	Z,EXIT_PROGRAM
+	JP	Z,EXEC_CONFIRM_ACTION
 	CP	'N'
-	JP	Z,EXIT_PROGRAM
+	JP	Z,EXEC_CONFIRM_ACTION
 
 	CP	KEY_ESC
 	JR	Z,EXIT_PROMPT_CHECK_ESC
@@ -694,13 +755,13 @@ EXIT_SAVE_AND_QUIT:
 
 	; Known file: save directly to disk
 	CALL	DO_ACTUAL_SAVE
-	JP	EXIT_PROGRAM
+	JP	EXEC_CONFIRM_ACTION
 
 EXIT_SAVE_PROMPT_NAME:
 	CALL	DO_SAVE_FILE_UI
 	LD	A,(DOC_MODIFIED)
 	OR	A
-	JP	Z,EXIT_PROGRAM		; Save succeeded -> exit
+	JP	Z,EXEC_CONFIRM_ACTION	; Save succeeded -> execute action
 
 	; Save was cancelled by user: resume editor
 	CALL	TERM_INIT
@@ -712,6 +773,48 @@ EXIT_SAVE_PROMPT_NAME:
 	LD	(NEED_LINE_RENDER),A
 	LD	(NEED_STATUS_RENDER),A
 	JP	MAIN_LOOP
+
+EXEC_CONFIRM_ACTION:
+	LD	A,(CONFIRM_ACTION)
+	CP	ACTION_CLOSE
+	JR	Z,DO_EXEC_CLOSE
+	CP	ACTION_NEW
+	JR	Z,DO_EXEC_NEW
+	JP	EXIT_PROGRAM
+
+DO_EXEC_CLOSE:
+	CALL	DO_CLOSE_DOCUMENT
+	JP	SHOW_SPLASH_SCREEN
+
+DO_EXEC_NEW:
+	CALL	DO_NEW_DOCUMENT
+	JP	MAIN_LOOP
+
+DO_CLOSE_DOCUMENT:
+	CALL	INIT_EMPTY_DOCUMENT
+	XOR	A
+	LD	(HAS_FILE_ARG),A
+	LD	(IN_EDITOR_MODE),A
+	LD	(DOC_MODIFIED),A
+	LD	(CACHE_DIRTY),A
+	LD	(BLOCK_ACTIVE),A
+	; Clear WORK_FCB (36 bytes)
+	LD	HL,WORK_FCB
+	LD	B,36
+CLOSE_FCB_LOOP:
+	LD	(HL),0
+	INC	HL
+	DJNZ	CLOSE_FCB_LOOP
+	RET
+
+DO_NEW_DOCUMENT:
+	CALL	DO_CLOSE_DOCUMENT
+	LD	A,1
+	LD	(IN_EDITOR_MODE),A
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	RET
 
 EXIT_PROGRAM:
 	CALL	TERM_INIT
@@ -10122,17 +10225,17 @@ STR_SPLASH_BODY:	DB	27,"[H"
 	DB	"                  ~              by Dean Jenkins                ",13,10
 	DB	"                  ~                                             ",13,10
 	DB	"                  ~       SE is open source and freely usable   ",13,10
-	DB	"                  ~                                             ",13,10
 	DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
+	DB	"                  ~       type   :n                to new file  ",13,10
 	DB	"                  ~       type   :o                to open file ",13,10
 	DB	"                  ~       type   :s                to save file ",13,10
+	DB	"                  ~       type   :w  or  ^W        to close file",13,10
 	DB	"                  ~       type   :l  or  ^L        to goto line ",13,10
 	DB	"                  ~       type   :t                for mem test ",13,10
 	DB	"                  ~       type   :f                for file test",13,10
 	DB	"                  ~       type   :1                set 120x40   ",13,10
 	DB	"                  ~       type   :2                set 80x24    ",13,10
 	DB	"                  ~       type   :q  or  ^Q        to exit      ",13,10
-	DB	"                  ~                                             ",13,10
 	DB	"$"
 
 STR_SPLASH_CUR_MODE:	DB	"                  ~   Active Screen: [$"
@@ -10272,8 +10375,8 @@ STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 	DB	"================================================================================",13,10
 	DB	"  FILE & SYSTEM:",13,10
 	DB	"    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
-	DB	"    Ctrl+Q           Quit to CP/M            Ctrl+K          Help / Solidify block",13,10
-	DB	"    ESC              Splash / Clear block",13,10,13,10
+	DB	"    Ctrl+W           Close file to splash    Ctrl+Q          Quit to CP/M",13,10
+	DB	"    Ctrl+K           Help / Solidify block   ESC             Splash / Clear block",13,10,13,10
 	DB	"  NAVIGATION & SEARCH:",13,10
 	DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
 	DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
@@ -10463,6 +10566,7 @@ NEED_STATUS_RENDER:	DB	0	; 1 if status bar redraw / cursor restore pending
 CACHE_START_ROW:	DW	0		; 16-bit doc row index at LINE_STORAGE[0]
 CACHE_DIRTY:	DB	0		; 1 if local cache has unsaved modifications
 DOC_MODIFIED:	DB	0		; 1 if document has unsaved modifications
+CONFIRM_ACTION:	DB	0		; 0=Exit, 1=Close, 2=New
 EXT_BANK_COUNT:	DB	0		; Number of available far RAM banks (up to 14)
 EXT_BANK_TABLE:	DS	14		; Table of far RAM bank IDs
 
