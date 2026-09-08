@@ -1902,7 +1902,7 @@ def test_se_execution():
         # Final exit from editor with Ctrl+Q back to CP/M (answer 'n' to discard test edits)
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"Save changes (y/n/ESC):", timeout=4.0)
+        read_until(master, b"ESC:", timeout=4.0)
         os.write(master, b"n")
         read_until(master, b"C>", timeout=4.0)
         print("[+] Final exit from SE.COM completed.", flush=True)
@@ -2257,8 +2257,8 @@ def test_se_execution():
         # 1. Document was modified in Step 47. Send Ctrl+Q and verify prompt
         time.sleep(0.3)
         os.write(master, b"\x11")
-        out_s52_prompt = read_until(master, b"Save changes (y/n/ESC):", timeout=4.0)
-        if b"Save changes (y/n/ESC):" not in out_s52_prompt:
+        out_s52_prompt = read_until(master, b"ESC:", timeout=4.0)
+        if b"Save changes?" not in out_s52_prompt:
             print(f"[-] Step 52 failed: Save changes prompt missing. Buffer: {repr(out_s52_prompt)}", flush=True)
             return False
 
@@ -2273,7 +2273,7 @@ def test_se_execution():
         # 3. Send Ctrl+Q again and answer 'n' to discard changes and exit to CP/M
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"Save changes (y/n/ESC):", timeout=4.0)
+        read_until(master, b"ESC:", timeout=4.0)
         os.write(master, b"n")
         out_s52_exit = read_until(master, b"C>", timeout=4.0)
         if b"C>" not in out_s52_exit:

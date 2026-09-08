@@ -158,11 +158,11 @@ SPLASH_LOOP:
 
 	; Option: 'Q' or 'q' or Ctrl+Q -> Exit
 	CP	'q'
-	JP	Z,HANDLE_CTRL_Q
+	JP	Z,HANDLE_SPLASH_EXIT
 	CP	'Q'
-	JP	Z,HANDLE_CTRL_Q
+	JP	Z,HANDLE_SPLASH_EXIT
 	CP	KEY_CTRL_Q
-	JP	Z,HANDLE_CTRL_Q
+	JP	Z,HANDLE_SPLASH_EXIT
 
 	; Option: 'T' or 't' -> Run Extended Memory Test
 	CP	't'
@@ -579,30 +579,46 @@ DO_TAB_INSERT:
 ;------------------------------------------------------------------------------
 ; Exit Handling: Check if document was modified before exiting
 ;------------------------------------------------------------------------------
+HANDLE_SPLASH_EXIT:
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JP	Z,EXIT_PROGRAM
+
+	; Document modified: if in editor session, resume editor first
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JP	Z,EXIT_PROGRAM
+
+	CALL	RESUME_EDITOR
+	JR	SHOW_EXIT_PROMPT
+
 HANDLE_CTRL_Q:
 	LD	A,(DOC_MODIFIED)
 	OR	A
 	JP	Z,EXIT_PROGRAM
 
-	; Document has unsaved changes.
-	; If currently on splash screen, resume editor so prompt is in context
-	LD	A,(IN_EDITOR_MODE)
-	OR	A
-	JP	Z,EXIT_PROGRAM		; If never in editor mode, just exit
-
-	CALL	RESUME_EDITOR
-
 SHOW_EXIT_PROMPT:
+	; Step 1: Overwrite status row with normal video spaces across active width
 	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	LD	DE,STR_SAVE_CHANGES_PROMPT	; "Save changes (y/n/ESC):"
-	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
+	LD	A,(ACTIVE_COLS)
+	DEC	A
+	LD	B,A
+CLEAR_STATUS_ROW_LOOP:
 	LD	A,' '
 	CALL	PUTC
-	LD	DE,STR_CLEAR_EOL
+	DJNZ	CLEAR_STATUS_ROW_LOOP
+
+	; Step 2: Return cursor to column 1 of status row
+	CALL	LOCATE_STATUS_ROW
+
+	; Step 3: Print highlighted query ending in ':'
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_SAVE_CHANGES_PROMPT
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
 
 EXIT_PROMPT_KEY:
@@ -10341,7 +10357,7 @@ STR_FIND_INSENS_BOX_PFX:DB	" [","$"
 STR_REPLACE_PROMPT:	DB	"Replace with:","$"
 STR_REPLACE_BOX_PFX:	DB	" [","$"
 STR_REPLACE_CONFIRM:	DB	" Replace (y/n/a/q/r)? ","$"
-STR_SAVE_CHANGES_PROMPT:DB	"Save changes (y/n/ESC):","$"
+STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
 STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
 STR_SEARCH_COMPLETED:	DB	" Search completed. ","$"
 STR_REPLACE_DONE_PFX:	DB	" Replace done: ","$"
