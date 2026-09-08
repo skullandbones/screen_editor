@@ -10360,7 +10360,7 @@ STR_SPLASH_BODY:	DB	27,"[H"
 	DB	13,10
 	DB	"                  ~                                             ",13,10
 	DB	"                  ~             SE - Screen Editor              ",13,10
-	DB	"                  ~                version 0.8.1                ",13,10
+	DB	"                  ~                version 0.8.2                ",13,10
 	DB	"                  ~              by Dean Jenkins                ",13,10
 	DB	"                  ~                                             ",13,10
 	DB	"                  ~       SE is open source and freely usable   ",13,10
@@ -10484,7 +10484,7 @@ STR_FILE_TEST_NOT_FOUND:	DB	"[-] Error: Test file '30.TXT' not found on CP/M dri
 
 STR_FILE_TEST_FAILED:	DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
 
-STR_STATUS_PREFIX:	DB	" SE v0.8.1 | ","$"
+STR_STATUS_PREFIX:	DB	" SE v0.8.2 | ","$"
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 

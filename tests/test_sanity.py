@@ -120,7 +120,7 @@ def run_sanity_test():
         time.sleep(0.1)
         os.write(master, b"e")
         out_edit = read_until(master, b"Line 1/1,", timeout=4.0)
-        if b"SE v0.8.1" not in out_edit or b"[No Name]" not in out_edit:
+        if b"SE v0.8.2" not in out_edit or b"[No Name]" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer: {repr(out_edit)}", flush=True)
             return False
         print("[+] Entered editor mode with status bar verified.", flush=True)
