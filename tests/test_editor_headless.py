@@ -2514,6 +2514,86 @@ def test_se_execution():
         print("[+] Clean exit back to CP/M prompt.", flush=True)
         print("[+] Successfully verified Open File (Ctrl+O & Splash :o) Unsaved Modifications Check (Step 54)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 55: Open File Screen Line Number Specification (e.g. 30.TXT:15)
+        # ---------------------------------------------------------------------
+        print("[*] Step 55: Verifying Open File screen line number specification...", flush=True)
+
+        # 1. Launch 'se 2.TXT'
+        time.sleep(0.5)
+        os.write(master, b"se 2.TXT\r")
+        read_until(master, b"Line 1/2,", timeout=14.0)
+
+        # 2. In editor mode, press Ctrl+O and open '30.TXT:15'
+        time.sleep(0.2)
+        os.write(master, b"\x0f")
+        read_until(master, b"Enter filename to open:", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"30.TXT:15\r")
+        out_s55_l15 = read_until(master, b"Line 15/30,", timeout=4.0)
+        if b"Line 15/30," not in out_s55_l15 or b"C:30.TXT" not in out_s55_l15:
+            print(f"[-] Step 55 failed: '30.TXT:15' did not open at line 15. Buffer: {repr(out_s55_l15)}", flush=True)
+            return False
+        print("[+] '30.TXT:15' opened successfully at line 15.", flush=True)
+
+        # 3. In editor mode, press Ctrl+O and open 'C:30.TXT:25' (drive + file + line)
+        time.sleep(0.2)
+        os.write(master, b"\x0f")
+        read_until(master, b"Enter filename to open:", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"C:30.TXT:25\r")
+        out_s55_l25 = read_until(master, b"Line 25/30,", timeout=4.0)
+        if b"Line 25/30," not in out_s55_l25 or b"C:30.TXT" not in out_s55_l25:
+            print(f"[-] Step 55 failed: 'C:30.TXT:25' did not open at line 25. Buffer: {repr(out_s55_l25)}", flush=True)
+            return False
+        print("[+] 'C:30.TXT:25' opened successfully at line 25 with explicit drive.", flush=True)
+
+        # 4. In editor mode, press Ctrl+O and open '30.TXT:1000' (clamping to EOF)
+        time.sleep(0.2)
+        os.write(master, b"\x0f")
+        read_until(master, b"Enter filename to open:", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"30.TXT:1000\r")
+        out_s55_l1000 = read_until(master, b"Line 30/30,", timeout=4.0)
+        if b"Line 30/30," not in out_s55_l1000:
+            print(f"[-] Step 55 failed: '30.TXT:1000' did not clamp to line 30. Buffer: {repr(out_s55_l1000)}", flush=True)
+            return False
+        print("[+] '30.TXT:1000' clamped cleanly to line 30.", flush=True)
+
+        # 5. Return to splash screen (ESC) and open '30.TXT:10' from splash ':o'
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Active Screen:", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"o")
+        read_until(master, b"Enter filename to open:", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"30.TXT:10\r")
+        out_s55_splash_l10 = read_until(master, b"Line 10/30,", timeout=4.0)
+        if b"Line 10/30," not in out_s55_splash_l10:
+            print(f"[-] Step 55 failed: Splash ':o' '30.TXT:10' did not open at line 10. Buffer: {repr(out_s55_splash_l10)}", flush=True)
+            return False
+        print("[+] Splash screen ':o' with line number '30.TXT:10' opened at line 10.", flush=True)
+
+        # 6. Verify standard open without line number opens at line 1
+        time.sleep(0.2)
+        os.write(master, b"\x0f")
+        read_until(master, b"Enter filename to open:", timeout=4.0)
+        time.sleep(0.2)
+        os.write(master, b"30.TXT\r")
+        out_s55_l1 = read_until(master, b"Line 1/30,", timeout=4.0)
+        if b"Line 1/30," not in out_s55_l1:
+            print(f"[-] Step 55 failed: '30.TXT' without line number did not open at line 1. Buffer: {repr(out_s55_l1)}", flush=True)
+            return False
+        print("[+] '30.TXT' without line number opened at default line 1.", flush=True)
+
+        # 7. Exit cleanly with Ctrl+Q
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Successfully verified Open File Screen Line Number Specification (Step 55)!", flush=True)
+
         return True
 
     finally:

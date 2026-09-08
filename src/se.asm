@@ -8558,6 +8558,8 @@ DO_OPEN_FILE_UI:
 	XOR	A
 	LD	(INPUT_BUF_LEN),A
 	LD	(INPUT_FILENAME_BUF),A
+	LD	HL,0
+	LD	(OPEN_GOTO_LINE),HL
 
 REFRESH_OPEN_DIR:
 	; 1. Collect Directory Entries from CURRENT_DIR_DRIVE (with Bit-7 strip & dup filter)
@@ -8617,6 +8619,9 @@ DO_PARSE_AND_LOAD:
 	LD	BC,36
 	LDIR
 
+	; Parse optional line number from INPUT_FILENAME_BUF
+	CALL	PARSE_OPEN_LINE_NUM
+
 	; User entered a filename in INPUT_FILENAME_BUF: parse into WORK_FCB
 	LD	DE,INPUT_FILENAME_BUF
 	CALL	PARSE_FILENAME_TO_FCB
@@ -8630,6 +8635,16 @@ DO_PARSE_AND_LOAD:
 	LD	A,1
 	LD	(HAS_FILE_ARG),A
 	LD	(IN_EDITOR_MODE),A
+
+	; Check if target goto line was specified (> 0)
+	LD	HL,(OPEN_GOTO_LINE)
+	LD	A,H
+	OR	L
+	JR	Z,OPEN_LINE_DEFAULT
+	CALL	GOTO_LINE_HL
+	JR	OPEN_RENDER
+
+OPEN_LINE_DEFAULT:
 	LD	HL,0
 	LD	(CUR_DOC_ROW),HL
 	LD	(TOP_DOC_ROW),HL
@@ -8637,6 +8652,7 @@ DO_PARSE_AND_LOAD:
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
 
+OPEN_RENDER:
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
@@ -9906,6 +9922,96 @@ INPUT_ENTER_EMPTY:
 	JP	INPUT_CANCEL
 
 ;------------------------------------------------------------------------------
+; Parse optional :<line> suffix from INPUT_FILENAME_BUF
+; If found, stores 16-bit line number in (OPEN_GOTO_LINE).
+; Format: [drive:]filename[:line]
+;------------------------------------------------------------------------------
+PARSE_OPEN_LINE_NUM:
+	LD	HL,0
+	LD	(OPEN_GOTO_LINE),HL
+
+	LD	A,(INPUT_BUF_LEN)
+	OR	A
+	RET	Z			; Empty buffer
+
+	; HL = pointer to end of input buffer: INPUT_FILENAME_BUF + length - 1
+	LD	E,A
+	LD	D,0
+	LD	HL,INPUT_FILENAME_BUF
+	ADD	HL,DE
+	DEC	HL			; HL points to last char of input
+
+	; Trim trailing spaces
+POLN_TRIM_SPACES:
+	LD	A,(HL)
+	CP	' '
+	JR	NZ,POLN_CHECK_DIGITS
+	DEC	HL
+	DEC	E
+	JR	NZ,POLN_TRIM_SPACES
+	RET				; Only spaces found
+
+POLN_CHECK_DIGITS:
+	; Last non-space character must be a digit '0'..'9'
+	LD	A,(HL)
+	CP	'0'
+	RET	C
+	CP	'9'+1
+	RET	NC
+
+	; Scan backwards past all digits to find preceding ':'
+POLN_SCAN_BACK:
+	DEC	HL
+	DEC	E
+	RET	Z			; Hit start of buffer without ':'
+	LD	A,(HL)
+	CP	':'
+	JR	Z,POLN_FOUND_COLON
+	CP	'0'
+	JR	C,POLN_NOT_NUM
+	CP	'9'+1
+	JR	C,POLN_SCAN_BACK
+POLN_NOT_NUM:
+	RET
+
+POLN_FOUND_COLON:
+	; Check if this colon is actually a drive colon (e.g. C:15)
+	; A drive colon has:
+	;   - Char at (HL-1) is a letter 'A'..'Z' or 'a'..'z'
+	;   - Char at (HL-2) is space or HL-1 was the first char (E == 2)
+	LD	A,E			; E = 1-based index of colon within INPUT_FILENAME_BUF
+	CP	2
+	JR	C,POLN_IS_LINE_COLON	; Colon at pos 1 cannot be drive colon
+	DEC	HL
+	LD	A,(HL)			; A = char before colon
+	INC	HL
+	CALL	IS_ALPHA_CHAR
+	JR	NC,POLN_IS_LINE_COLON	; Preceding char not a letter -> line colon!
+
+	; Char before colon is a letter. Check char before that (HL-2).
+	LD	A,E
+	CP	2
+	JR	Z,POLN_IS_DRIVE_COLON	; Letter at pos 1, colon at pos 2 -> drive colon (e.g. "C:...")
+	DEC	HL
+	DEC	HL
+	LD	A,(HL)			; A = char at HL-2
+	INC	HL
+	INC	HL
+	CP	' '
+	JR	Z,POLN_IS_DRIVE_COLON	; Preceded by space -> drive colon (e.g. " C:...")
+
+POLN_IS_LINE_COLON:
+	; Colon is followed by digits. HL points to ':'
+	; HL+1 points to first digit
+	INC	HL
+	CALL	PARSE_DEC_WORD		; DE = 16-bit parsed value
+	LD	(OPEN_GOTO_LINE),DE
+	RET
+
+POLN_IS_DRIVE_COLON:
+	RET
+
+;------------------------------------------------------------------------------
 ; Parse Filename String (e.g. "30.TXT" or "A:TEST.DAT") into WORK_FCB
 ;------------------------------------------------------------------------------
 PARSE_FILENAME_TO_FCB:
@@ -9968,6 +10074,8 @@ PARSE_NAME_LOOP:
 	RET	Z			; End of string
 	CP	' '
 	RET	Z
+	CP	':'
+	RET	Z
 	CP	'.'
 	JR	Z,PARSE_EXT_START
 	CALL	TO_UPPER
@@ -9983,6 +10091,8 @@ PARSE_SKIP_TO_DOT:
 	RET	Z
 	CP	' '
 	RET	Z
+	CP	':'
+	RET	Z
 	CP	'.'
 	JR	Z,PARSE_EXT_START
 	INC	HL
@@ -9997,6 +10107,8 @@ PARSE_EXT_LOOP:
 	OR	A
 	RET	Z
 	CP	' '
+	RET	Z
+	CP	':'
 	RET	Z
 	CALL	TO_UPPER
 	LD	(DE),A
@@ -10528,6 +10640,7 @@ TOP_DOC_ROW:	DW	0		; 16-bit top visible document line on screen
 DOC_TOTAL_LINES:	DW	1		; 16-bit total document lines count (default 1 empty line)
 HAS_FILE_ARG:	DB	0
 CMDLINE_GOTO_LINE:	DW	0		; 16-bit line number from command line (0 = start)
+OPEN_GOTO_LINE:		DW	0		; 16-bit line number from open file UI (0 = start)
 GOTO_LINE_BUF:	DS	8
 SEARCH_BUF:		DS	65
 SEARCH_LEN:		DB	0
