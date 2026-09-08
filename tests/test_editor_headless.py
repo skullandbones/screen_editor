@@ -424,8 +424,8 @@ def test_se_execution():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x06")
-        out_find_prompt = read_until(master, b"Find [Exact] : ", timeout=4.0)
-        if b"Find [Exact] : " not in out_find_prompt:
+        out_find_prompt = read_until(master, b"Find (Exact):", timeout=4.0)
+        if b"Find (Exact):" not in out_find_prompt:
             print(f"[-] Ctrl+F failed to open Find prompt. Buffer: {repr(out_find_prompt)}", flush=True)
             return False
         # Cancel with ESC
@@ -697,7 +697,7 @@ def test_se_execution():
         time.sleep(0.1)
         os.write(master, b"\x1b[6~")  # PageDown with "TESTFILE" typed
         out_p2 = read_until(master, b"[Page 2/", timeout=4.0)
-        out_page2_retained = read_until(master, b"Enter filename to open: TESTFILE", timeout=4.0)
+        out_page2_retained = read_until(master, b"[TESTFILE", timeout=4.0)
         if b"[Page 2/" not in out_p2 or b"TESTFILE" not in out_page2_retained:
             print(f"[-] PageDown did not retain filename 'TESTFILE'. Buffer: {repr(out_page2_retained)}", flush=True)
             return False
@@ -880,7 +880,7 @@ def test_se_execution():
         if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_open_ui:
             print(f"[-] Failed to reach Open File screen via Ctrl+O. Buffer: {repr(out_open_ui)}", flush=True)
             return False
-        read_until(master, b"Enter filename to open (<ESC>=Cancel): ", timeout=3.0)
+        read_until(master, b"Enter filename to open:", timeout=3.0)
         # Press ESC to cancel back to editor mode without opening a file
         time.sleep(0.2)
         os.write(master, b"\x1b")
@@ -893,7 +893,7 @@ def test_se_execution():
         # Test Ctrl+O successfully opening a new file from editor mode
         time.sleep(0.2)
         os.write(master, b"\x0f")  # Ctrl+O
-        read_until(master, b"Enter filename to open (<ESC>=Cancel): ", timeout=4.0)
+        read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT\r")
         out_open_30 = read_until(master, b"Line 1/30,", timeout=4.0)
@@ -905,7 +905,7 @@ def test_se_execution():
         # 30. Test Drive Switching in Open Screen ("B:" and "C:")
         time.sleep(0.2)
         os.write(master, b"\x0f")  # Ctrl+O
-        read_until(master, b"Enter filename to open (<ESC>=Cancel): ", timeout=4.0)
+        read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
         # Type 'B:' and hit Return to switch to Drive B:
         os.write(master, b"B:\r")
@@ -914,8 +914,8 @@ def test_se_execution():
             print(f"[-] Failed to switch to Drive B: in Open Screen. Buffer: {repr(out_drive_b)}", flush=True)
             return False
         # Verify prompt retains 'B:' (Drive B: has 2 pages, so multi-page prompt format is used)
-        out_retained_b = read_until(master, b"Enter filename to open: B:", timeout=3.0)
-        if b"Enter filename to open: B:" not in out_retained_b:
+        out_retained_b = read_until(master, b"[B:", timeout=3.0)
+        if b"[B:" not in out_retained_b:
             print(f"[-] Prompt did not retain 'B:'. Buffer: {repr(out_retained_b)}", flush=True)
             return False
         print("[+] Successfully verified switching to Drive B: in Open Screen with 'B:' retained in text box.", flush=True)
@@ -927,8 +927,8 @@ def test_se_execution():
         if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_drive_c:
             print(f"[-] Failed to switch back to Drive C: in Open Screen. Buffer: {repr(out_drive_c)}", flush=True)
             return False
-        out_retained_c = read_until(master, b"Enter filename to open: C:", timeout=3.0)
-        if b"Enter filename to open: C:" not in out_retained_c:
+        out_retained_c = read_until(master, b"[C:", timeout=3.0)
+        if b"[C:" not in out_retained_c:
             print(f"[-] Prompt did not retain 'C:'. Buffer: {repr(out_retained_c)}", flush=True)
             return False
         # Press ESC to cancel back to editor mode
@@ -944,7 +944,7 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x13")  # Ctrl+S
         read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
-        read_until(master, b"Enter filename to save: ", timeout=3.0)
+        read_until(master, b"Enter filename to save:", timeout=3.0)
         # Clear pre-filled name and enter 'B:' followed by Return
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"B:\r")
@@ -952,8 +952,8 @@ def test_se_execution():
         if b"SAVE FILE (DIRECTORY - DRIVE B:)" not in out_save_b:
             print(f"[-] Failed to switch to Drive B: in Save Screen. Buffer: {repr(out_save_b)}", flush=True)
             return False
-        out_save_retained_b = read_until(master, b"Enter filename to save: B:", timeout=3.0)
-        if b"Enter filename to save: B:" not in out_save_retained_b:
+        out_save_retained_b = read_until(master, b"[B:", timeout=3.0)
+        if b"[B:" not in out_save_retained_b:
             print(f"[-] Save prompt did not retain 'B:'. Buffer: {repr(out_save_retained_b)}", flush=True)
             return False
         print("[+] Successfully verified switching to Drive B: in Save Screen with 'B:' retained in text box.", flush=True)
@@ -965,8 +965,8 @@ def test_se_execution():
         if b"SAVE FILE (DIRECTORY - DRIVE C:)" not in out_save_c:
             print(f"[-] Failed to switch back to Drive C: in Save Screen. Buffer: {repr(out_save_c)}", flush=True)
             return False
-        out_save_retained_c = read_until(master, b"Enter filename to save: C:", timeout=3.0)
-        if b"Enter filename to save: C:" not in out_save_retained_c:
+        out_save_retained_c = read_until(master, b"[C:", timeout=3.0)
+        if b"[C:" not in out_save_retained_c:
             print(f"[-] Save prompt did not retain 'C:'. Buffer: {repr(out_save_retained_c)}", flush=True)
             return False
         # Cancel Save screen on ESC
@@ -1750,11 +1750,11 @@ def test_se_execution():
         lbl_max = b"Line " + total_str + b"/" + total_str
         lbl_15 = b"Line 15/" + total_str
 
-        # 1. Press Ctrl+L -> verify 'Goto line: ' prompt on status line
+        # 1. Press Ctrl+L -> verify 'Goto line:' prompt on status line
         os.write(master, b"\x0c")
-        out_s42_prompt = read_until(master, b"Goto line: ", timeout=4.0)
-        if b"Goto line: " not in out_s42_prompt:
-            print(f"[-] Step 42 failed: Ctrl+L prompt 'Goto line: ' missing. Buffer: {repr(out_s42_prompt)}", flush=True)
+        out_s42_prompt = read_until(master, b"Goto line:", timeout=4.0)
+        if b"Goto line:" not in out_s42_prompt:
+            print(f"[-] Step 42 failed: Ctrl+L prompt 'Goto line:' missing. Buffer: {repr(out_s42_prompt)}", flush=True)
             return False
 
         # 2. Cancel with ESC -> verify status line restored without moving cursor
@@ -1767,7 +1767,7 @@ def test_se_execution():
         # 2b. Abort with Down Arrow (\x1b[B): verify prompt aborts, cursor moves to Line 2, no debris!
         lbl_2 = b"Line 2/" + total_str
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"\x1b[B")
         out_s42_down = read_until(master, lbl_2, timeout=4.0)
         if lbl_2 not in out_s42_down:
@@ -1776,7 +1776,7 @@ def test_se_execution():
 
         # Abort with Up Arrow (\x1b[A): verify prompt aborts, cursor moves back to Line 1, no debris!
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"\x1b[A")
         out_s42_up = read_until(master, lbl_1, timeout=4.0)
         if lbl_1 not in out_s42_up:
@@ -1795,7 +1795,7 @@ def test_se_execution():
 
         # 2c. Abort with PageDown (\x1b[6~): verify prompt aborts, screen scrolls, NO highlight mode!
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"\x1b[6~")
         out_s42_pgdn = read_until(master, b"Line ", timeout=4.0)
         if b"\x1b[7m\x1b[H" in out_s42_pgdn or b"\x1b[7m\x1b[K" in out_s42_pgdn:
@@ -1804,7 +1804,7 @@ def test_se_execution():
 
         # 2d. Abort with PageUp (\x1b[5~): verify prompt aborts, screen scrolls back to Line 1, NO highlight mode!
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"\x1b[5~")
         out_s42_pgup = read_until(master, lbl_1, timeout=4.0)
         if lbl_1 not in out_s42_pgup:
@@ -1816,12 +1816,12 @@ def test_se_execution():
 
         # 2e. Abort with Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"\x16")
         read_until(master, b"Line ", timeout=4.0)
 
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"\x15")
         out_s42_ctrl_u = read_until(master, lbl_1, timeout=4.0)
         if lbl_1 not in out_s42_ctrl_u:
@@ -1830,7 +1830,7 @@ def test_se_execution():
 
         # 3. Jump to line 10: Ctrl+L, '10', Enter -> verify no \x1b[7m\x1b[2J clear screen flash!
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"10\r")
         out_s42_l10 = read_until(master, lbl_10, timeout=4.0)
         if lbl_10 not in out_s42_l10 or b"Line 10 of test file content" not in out_s42_l10:
@@ -1842,7 +1842,7 @@ def test_se_execution():
 
         # 4. Jump to line 25: Ctrl+L, '25', Enter
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"25\r")
         out_s42_l25 = read_until(master, lbl_25, timeout=4.0)
         if lbl_25 not in out_s42_l25 or b"Line 25 of test file content" not in out_s42_l25:
@@ -1851,7 +1851,7 @@ def test_se_execution():
 
         # 5. Jump beyond EOF (clamp to last line): Ctrl+L, '999', Enter
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"999\r")
         out_s42_l30 = read_until(master, lbl_max, timeout=4.0)
         if lbl_max not in out_s42_l30:
@@ -1860,7 +1860,7 @@ def test_se_execution():
 
         # 6. Jump back to line 1: Ctrl+L, '1', Enter
         os.write(master, b"\x0c")
-        read_until(master, b"Goto line: ", timeout=4.0)
+        read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"1\r")
         out_s42_l1 = read_until(master, lbl_1, timeout=4.0)
         if lbl_1 not in out_s42_l1 or b"Line 01 of test file content" not in out_s42_l1:
@@ -1885,8 +1885,8 @@ def test_se_execution():
         # Press 'l' on splash screen -> enters editor with Goto line prompt
         time.sleep(0.2)
         os.write(master, b"l")
-        out_s43_l_prompt = read_until(master, b"Goto line: ", timeout=4.0)
-        if b"Goto line: " not in out_s43_l_prompt:
+        out_s43_l_prompt = read_until(master, b"Goto line:", timeout=4.0)
+        if b"Goto line:" not in out_s43_l_prompt:
             print(f"[-] Step 43 failed: Splash 'l' did not trigger Goto line prompt. Buffer: {repr(out_s43_l_prompt)}", flush=True)
             return False
 
@@ -1956,8 +1956,8 @@ def test_se_execution():
         # 1. Press Ctrl+F -> verify default [Exact] prompt
         time.sleep(0.2)
         os.write(master, b"\x06")
-        out_s45_f1 = read_until(master, b"Find [Exact] : ", timeout=4.0)
-        if b"Find [Exact] : " not in out_s45_f1:
+        out_s45_f1 = read_until(master, b"Find (Exact):", timeout=4.0)
+        if b"Find (Exact):" not in out_s45_f1:
             print(f"[-] Step 45 failed: Ctrl+F prompt missing. Buffer: {repr(out_s45_f1)}", flush=True)
             return False
 
@@ -1974,7 +1974,7 @@ def test_se_execution():
         read_until(master, b"Line 1/30,", timeout=4.0)
 
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"line 15\r")
         out_s45_nf = read_until(master, b"Pattern not found.", timeout=4.0)
         if b"Pattern not found." not in out_s45_nf:
@@ -1984,7 +1984,7 @@ def test_se_execution():
         # 4. Search for common word "content" on Line 1, then repeat with Ctrl+N
         time.sleep(0.5)
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"content\r")
         read_until(master, b"Line 1/30,", timeout=4.0)
 
@@ -2018,12 +2018,12 @@ def test_se_execution():
 
         # Open Find: Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
 
         # Press Tab (Ctrl+I) to toggle to [Insens]
         os.write(master, b"\t")
-        out_s46_ins = read_until(master, b"Find [Insens]: ", timeout=4.0)
-        if b"Find [Insens]: " not in out_s46_ins:
+        out_s46_ins = read_until(master, b"Find (Insens):", timeout=4.0)
+        if b"Find (Insens):" not in out_s46_ins:
             print(f"[-] Step 46 failed: Tab/Ctrl+I did not toggle to [Insens]. Buffer: {repr(out_s46_ins)}", flush=True)
             return False
 
@@ -2037,14 +2037,14 @@ def test_se_execution():
         # Verify setting persisted: next Ctrl+F starts in [Insens]
         time.sleep(0.2)
         os.write(master, b"\x06")
-        out_s46_pers = read_until(master, b"Find [Insens]: ", timeout=4.0)
-        if b"Find [Insens]: " not in out_s46_pers:
+        out_s46_pers = read_until(master, b"Find (Insens):", timeout=4.0)
+        if b"Find (Insens):" not in out_s46_pers:
             print(f"[-] Step 46 failed: [Insens] setting did not persist. Buffer: {repr(out_s46_pers)}", flush=True)
             return False
 
         # Toggle back to [Exact] and cancel
         os.write(master, b"\t")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"\x1b")
         read_until(master, b"Line 20/30,", timeout=4.0)
 
@@ -2062,10 +2062,10 @@ def test_se_execution():
 
         # Trigger Replace: Ctrl+R
         os.write(master, b"\x12")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"Line 01\r")
-        out_s47_rep_prompt = read_until(master, b"Replace with : ", timeout=4.0)
-        if b"Replace with : " not in out_s47_rep_prompt:
+        out_s47_rep_prompt = read_until(master, b"Replace with:", timeout=4.0)
+        if b"Replace with:" not in out_s47_rep_prompt:
             print(f"[-] Step 47 failed: Replace with prompt missing. Buffer: {repr(out_s47_rep_prompt)}", flush=True)
             return False
 
@@ -2091,7 +2091,7 @@ def test_se_execution():
         drain_all(master)
         # Search for "BetaLine" with Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"BetaLine\r")
         out_s48 = read_until(master, b"Col 8", timeout=4.0)
         if b"[BLK: 8c LOCK]" not in out_s48:
@@ -2108,7 +2108,7 @@ def test_se_execution():
         drain_all(master)
         # Re-search: Ctrl+F then Enter to repeat previous search
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"\r")
         out_s48_re = read_until(master, b"Col 8", timeout=4.0)
         if b"[BLK: 8c LOCK]" not in out_s48_re or b"Col 8" not in out_s48_re:
@@ -2141,7 +2141,7 @@ def test_se_execution():
 
         # Press Ctrl+F: should imply Ctrl+K and pre-fill "Line"
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         out_s49_prompt = read_until(master, b"Line", timeout=4.0)
         if b"Line" not in out_s49_prompt:
             print(f"[-] Step 49 failed: Prompt not pre-filled with block text. Buffer: {repr(out_s49_prompt)}", flush=True)
@@ -2163,7 +2163,7 @@ def test_se_execution():
         drain_all(master)
         # Search for a pattern that does not exist anywhere:
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         # Erase prefilled "Line" (4 backspaces) and type ZZZ999
         os.write(master, b"\x08\x08\x08\x08ZZZ999\r")
         out_s50_notfound = read_until(master, b"Pattern not found.", timeout=4.0)
@@ -2175,7 +2175,7 @@ def test_se_execution():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"BetaLine\r")
         read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
 
@@ -2197,7 +2197,7 @@ def test_se_execution():
         drain_all(master)
         # Search for "content" with Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         # Erase prefilled "BetaLine" (8 backspaces) and type "content\r"
         os.write(master, b"\x08\x08\x08\x08\x08\x08\x08\x08content\r")
         read_until(master, b"Line 1/30,", timeout=4.0)
@@ -2226,10 +2226,10 @@ def test_se_execution():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x12") # Ctrl+R
-        read_until(master, b"Find [Exact] : ", timeout=4.0)
+        read_until(master, b"Find (Exact):", timeout=4.0)
         read_until(master, b"content", timeout=4.0)
         os.write(master, b"\r")
-        read_until(master, b"Replace with : ", timeout=4.0)
+        read_until(master, b"Replace with:", timeout=4.0)
         os.write(master, b"Item\r")
         read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
         # We are on line 1. Skip with 'n' -> moves forward to line 2:

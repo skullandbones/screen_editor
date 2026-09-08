@@ -5741,19 +5741,29 @@ PARSE_DEC_LOOP:
 DO_GOTO_LINE_UI:
 	CALL	CANCEL_BLOCK
 
-	; Display Goto line prompt on status bar in inverse video
+	; Display Goto line prompt on status bar: highlighted query ending in ':'
 	CALL	LOCATE_STATUS_ROW
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
-	LD	DE,STR_GOTO_LINE_PROMPT	; " Goto line: "
+	LD	DE,STR_GOTO_LINE_PROMPT	; "Goto line:"
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+
+	; Normal video edit box: " [     ]"
+	LD	DE,STR_GOTO_LINE_BOX	; " [     ]"
 	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+
+	; Position cursor inside box at first space (6 backspaces)
+	LD	DE,STR_BS_6
 	CALL	PRINT_STR
 
 	; Clear buffer
 	LD	HL,GOTO_LINE_BUF
 	LD	(HL),0
-	LD	B,0			; B = digit count
+	LD	B,0			; B = digit count (0..5)
 
 GOTO_UI_LOOP:
 	CALL	GET_KEY
@@ -5914,15 +5924,8 @@ DO_FIND_UI:
 	; B = character count in SEARCH_INPUT_BUF (0..64)
 	; If B > 0, SEARCH_INPUT_BUF has block text, and (CUR_DOC_ROW, CUR_COL) set to block start
 
-	; Setup prompt
-	CALL	DRAW_FIND_PROMPT_HEADER
-
-	; If B > 0, echo pre-filled block text
-	LD	A,B
-	OR	A
-	JR	Z,FIND_UI_KEY_LOOP
-	LD	DE,SEARCH_INPUT_BUF
-	CALL	PRINT_STR
+	; Setup prompt and edit box
+	CALL	DRAW_FIND_UI_FULL
 
 FIND_UI_KEY_LOOP:
 	CALL	GET_KEY
@@ -6003,28 +6006,69 @@ FIND_UI_TOGGLE_CASE:
 	XOR	1
 	LD	(SEARCH_CASE_SENSITIVE),A
 
-	; Redraw prompt header and current input text
-	CALL	DRAW_FIND_PROMPT_HEADER
-	LD	DE,SEARCH_INPUT_BUF
-	CALL	PRINT_STR
+	; Redraw prompt and edit box
+	CALL	DRAW_FIND_UI_FULL
 	JR	FIND_UI_KEY_LOOP
 
-DRAW_FIND_PROMPT_HEADER:
+DRAW_FIND_UI_FULL:
+	; Input: B = length of text in SEARCH_INPUT_BUF (0..64)
 	CALL	LOCATE_STATUS_ROW
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
 	LD	A,(SEARCH_CASE_SENSITIVE)
 	OR	A
-	JR	Z,DRAW_FIND_INSENS
-	LD	DE,STR_FIND_EXACT	; " Find [Exact] : " (16 chars)
+	JR	Z,DRAW_FIND_INSENS_UI
+	LD	DE,STR_FIND_EXACT	; "Find (Exact):" (12 chars)
 	CALL	PRINT_STR
-	JR	DRAW_FIND_PROMPT_TAIL
-DRAW_FIND_INSENS:
-	LD	DE,STR_FIND_INSENS	; " Find [Insens]: " (16 chars)
+	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
-DRAW_FIND_PROMPT_TAIL:
+	LD	DE,STR_FIND_EXACT_BOX_PFX ; "  [" (3 chars)
+	CALL	PRINT_STR
+	JR	DRAW_FIND_BOX_BODY
+
+DRAW_FIND_INSENS_UI:
+	LD	DE,STR_FIND_INSENS	; "Find (Insens):" (13 chars)
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	LD	DE,STR_FIND_INSENS_BOX_PFX ; " [" (2 chars)
+	CALL	PRINT_STR
+
+DRAW_FIND_BOX_BODY:
+	; Echo prefilled / current SEARCH_INPUT_BUF if B > 0
+	LD	A,B
+	OR	A
+	JR	Z,DRAW_FIND_PAD_SPACES
+	LD	DE,SEARCH_INPUT_BUF
+	CALL	PRINT_STR
+
+DRAW_FIND_PAD_SPACES:
+	; Pad (64 - B) spaces
+	LD	A,64
+	SUB	B
+	JR	Z,DRAW_FIND_BOX_CLOSE
+	LD	C,A
+DRAW_FIND_SP_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DEC	C
+	JR	NZ,DRAW_FIND_SP_LOOP
+
+DRAW_FIND_BOX_CLOSE:
+	LD	A,']'
+	CALL	PUTC
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
+
+	; Position cursor at (B + 1): emit (65 - B) backspaces
+	LD	A,65
+	SUB	B
+	LD	C,A
+DRAW_FIND_BS_LOOP:
+	LD	A,008H
+	CALL	PUTC
+	DEC	C
+	JR	NZ,DRAW_FIND_BS_LOOP
 	RET
 
 FIND_UI_CHECK_ESC:
@@ -6881,10 +6925,33 @@ DO_REPLACE_UI:
 	CALL	LOCATE_STATUS_ROW
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
-	LD	DE,STR_REPLACE_PROMPT	; " Replace with : " (16 chars)
+	LD	DE,STR_REPLACE_PROMPT	; "Replace with:" (13 chars)
 	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	LD	DE,STR_REPLACE_BOX_PFX	; " [" (2 chars)
+	CALL	PRINT_STR
+
+	; Draw 64 spaces for empty edit box
+	LD	C,64
+REPLACE_INIT_BOX_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DEC	C
+	JR	NZ,REPLACE_INIT_BOX_LOOP
+
+	LD	A,']'
+	CALL	PUTC
 	LD	DE,STR_CLEAR_EOL
 	CALL	PRINT_STR
+
+	; Move cursor back 65 positions to first space inside box
+	LD	C,65
+REPLACE_INIT_BS_LOOP:
+	LD	A,008H
+	CALL	PUTC
+	DEC	C
+	JR	NZ,REPLACE_INIT_BS_LOOP
 
 	; Clear replace buffer
 	LD	HL,REPLACE_BUF
@@ -8257,7 +8324,7 @@ RENDER_OPEN_PAGE:
 
 	; Read Filename Input (echoes prefilled string if non-empty, e.g. "A:")
 	CALL	READ_FILENAME_INPUT_PREFILLED
-	JR	C,CHECK_PAGING_OR_CANCEL
+	JP	C,CHECK_PAGING_OR_CANCEL
 
 	; Check if user typed a drive specification (e.g. "A:")
 	CALL	CHECK_DRIVE_SWITCH
@@ -8309,7 +8376,20 @@ OPEN_FILE_NOT_FOUND:
 	LD	BC,36
 	LDIR
 
-	; Display inline "  File not found" right after bad filename
+	; Move cursor past ']' box before printing error message
+	LD	A,(INPUT_BUF_LEN)
+	LD	B,A
+	LD	A,21
+	SUB	B
+	LD	B,A			; B = 21 - INPUT_BUF_LEN
+FNF_FWD_LOOP:
+	PUSH	BC
+	LD	DE,STR_CSI_C		; ESC [ C
+	CALL	PRINT_STR
+	POP	BC
+	DJNZ	FNF_FWD_LOOP
+
+	; Display inline "  File not found" right after ']'
 	LD	DE,STR_FNF_INLINE
 	CALL	PRINT_STR
 
@@ -8730,16 +8810,21 @@ DISPLAY_SAVE_PROMPT:
 	LD	DE,STR_SAVE_PAGE_SUFFIX
 	CALL	PRINT_STR
 	CALL	PRINT_SAVE_FMT_INFO
-	LD	DE,STR_SAVE_PAGE_PROMPT
-	CALL	PRINT_STR
-	RET
+	JR	DISP_SAVE_PROMPT_BODY
 
 DISP_SINGLE_SAVE_PROMPT:
 	LD	DE,STR_SAVE_SEP_LINE
 	CALL	PRINT_STR
 	CALL	PRINT_SAVE_FMT_INFO
-	LD	DE,STR_SAVE_ENTER_PROMPT
+
+DISP_SAVE_PROMPT_BODY:
+	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
+	LD	DE,STR_SAVE_PROMPT_TXT	; "Enter filename to save:"
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	CALL	DRAW_FILENAME_BOX
 	RET
 
 PRINT_SAVE_FMT_INFO:
@@ -9206,7 +9291,7 @@ DISPLAY_OPEN_PROMPT:
 	CP	2
 	JR	C,DISP_SINGLE_PROMPT
 
-	; Multi-page prompt: "[Page X/Y]  <Space>=Next Page, <ESC>=Cancel\r\nEnter filename to open: "
+	; Multi-page prompt
 	LD	DE,STR_PAGE_PREFIX
 	CALL	PRINT_STR
 
@@ -9226,11 +9311,65 @@ DISPLAY_OPEN_PROMPT:
 
 	LD	DE,STR_PAGE_SUFFIX
 	CALL	PRINT_STR
-	RET
+	JR	DISP_OPEN_PROMPT_BODY
 
 DISP_SINGLE_PROMPT:
-	LD	DE,STR_OPEN_PROMPT
+	LD	DE,STR_OPEN_SINGLE_HDR
 	CALL	PRINT_STR
+
+DISP_OPEN_PROMPT_BODY:
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_OPEN_PROMPT_TXT	; "Enter filename to open:"
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	CALL	DRAW_FILENAME_BOX
+	RET
+
+;------------------------------------------------------------------------------
+; DRAW_FILENAME_BOX: Draws " [                    ]" with INPUT_FILENAME_BUF
+; prefilled and positions cursor right after prefilled text.
+;------------------------------------------------------------------------------
+DRAW_FILENAME_BOX:
+	LD	A,' '
+	CALL	PUTC
+	LD	A,'['
+	CALL	PUTC
+
+	; Check if any prefilled text in INPUT_FILENAME_BUF
+	LD	A,(INPUT_BUF_LEN)
+	LD	B,A			; B = length of prefilled text (0..20)
+	OR	A
+	JR	Z,DFB_PAD_SPACES
+	LD	DE,INPUT_FILENAME_BUF
+	CALL	PRINT_STR
+
+DFB_PAD_SPACES:
+	; Pad (20 - B) spaces
+	LD	A,20
+	SUB	B
+	JR	Z,DFB_CLOSE_BOX
+	LD	C,A
+DFB_SPACE_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DEC	C
+	JR	NZ,DFB_SPACE_LOOP
+
+DFB_CLOSE_BOX:
+	LD	A,']'
+	CALL	PUTC
+
+	; Move cursor back (21 - B) positions to sit on next space after prefilled text
+	LD	A,21
+	SUB	B
+	LD	C,A
+DFB_BS_LOOP:
+	LD	A,008H
+	CALL	PUTC
+	DEC	C
+	JR	NZ,DFB_BS_LOOP
 	RET
 
 ;------------------------------------------------------------------------------
@@ -9254,12 +9393,7 @@ RESUME_FILENAME_INPUT:
 READ_FILENAME_INPUT_PREFILLED:
 	XOR	A
 	LD	(SHOWING_FNF_MSG),A
-	; Echo prefilled string if non-empty
-	LD	A,(INPUT_BUF_LEN)
-	OR	A
-	JR	Z,INPUT_CHAR_LOOP
-	LD	DE,INPUT_FILENAME_BUF
-	CALL	PRINT_STR
+	JR	INPUT_CHAR_LOOP
 
 INPUT_CHAR_LOOP:
 	CALL	GET_KEY
@@ -9420,6 +9554,8 @@ INPUT_BS:
 CHECK_CLEAR_FNF:
 	PUSH	AF
 	PUSH	BC
+	PUSH	DE
+	PUSH	HL
 	LD	A,(SHOWING_FNF_MSG)
 	OR	A
 	JR	Z,CLEAR_FNF_DONE
@@ -9446,7 +9582,21 @@ ERASE_FNF_BS2:
 	CALL	PUTC
 	DJNZ	ERASE_FNF_BS2
 
+	; Move cursor from after ']' back inside box to INPUT_BUF_LEN position:
+	; Emit (21 - INPUT_BUF_LEN) backspaces
+	LD	A,(INPUT_BUF_LEN)
+	LD	B,A
+	LD	A,21
+	SUB	B
+	LD	B,A
+ERASE_FNF_RET_BOX:
+	LD	A,008H
+	CALL	PUTC
+	DJNZ	ERASE_FNF_RET_BOX
+
 CLEAR_FNF_DONE:
+	POP	HL
+	POP	DE
 	POP	BC
 	POP	AF
 	RET
@@ -10000,16 +10150,15 @@ STR_DIR_TITLE:	DB	27,"[H",27,"[2J"
 STR_DIR_DRIVE_CHAR:	DB	"A:)        ",13,10
 	DB	"============================================================",13,10,13,10,"$"
 
-STR_OPEN_PROMPT:	DB	"------------------------------------------------------------",13,10
-	DB	"Enter filename to open (<ESC>=Cancel): ","$"
+STR_OPEN_SINGLE_HDR:	DB	"------------------------------------------------------------  <ESC>=Cancel",13,10,"$"
+STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
 
 STR_PAGE_PREFIX:	DB	"------------------------------------------------------------",13,10
 	DB	"[Page ","$"
 
 STR_PAGE_MID:	DB	"/","$"
 
-STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10
-	DB	"Enter filename to open: ","$"
+STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10,"$"
 
 STR_NO_FILES_FOUND:	DB	"  [No files found on current drive]",13,10,13,10,"$"
 
@@ -10029,16 +10178,14 @@ STR_SAVE_FMT_LINUX:	DB	"Linux","$"
 
 STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 
-STR_SAVE_SEP_LINE:	DB	"------------------------------------------------------------",13,10,"$"
-
-STR_SAVE_ENTER_PROMPT:	DB	"Enter filename to save (or <Enter>/<ESC> to cancel): ","$"
+STR_SAVE_SEP_LINE:	DB	"------------------------------------------------------------  <ESC>=Cancel",13,10,"$"
 
 STR_SAVE_PAGE_PREFIX:	DB	"------------------------------------------------------------",13,10
 	DB	"[Page ","$"
 
 STR_SAVE_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10,"$"
 
-STR_SAVE_PAGE_PROMPT:	DB	"Enter filename to save: ","$"
+STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
 STR_OVERWRITE_WARN:	DB	13,10,"File already exists. Overwrite? (y/n): ","$"
 
@@ -10046,11 +10193,17 @@ STR_SAVE_CANCELLED:	DB	13,10,"Save cancelled.",13,10,"$"
 
 STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
 
-STR_FNF_INLINE:	DB	"  File not found","$"
-STR_GOTO_LINE_PROMPT:	DB	" Goto line: ","$"
-STR_FIND_EXACT:		DB	" Find [Exact] : ","$"
-STR_FIND_INSENS:	DB	" Find [Insens]: ","$"
-STR_REPLACE_PROMPT:	DB	" Replace with : ","$"
+STR_CSI_C:		DB	27,"[C","$"
+STR_FNF_INLINE:		DB	"  File not found","$"
+STR_GOTO_LINE_PROMPT:	DB	"Goto line:","$"
+STR_GOTO_LINE_BOX:	DB	" [     ]","$"
+STR_BS_6:		DB	8,8,8,8,8,8,"$"
+STR_FIND_EXACT:		DB	"Find (Exact):","$"
+STR_FIND_INSENS:	DB	"Find (Insens):","$"
+STR_FIND_EXACT_BOX_PFX:	DB	"  [","$"
+STR_FIND_INSENS_BOX_PFX:DB	" [","$"
+STR_REPLACE_PROMPT:	DB	"Replace with:","$"
+STR_REPLACE_BOX_PFX:	DB	" [","$"
 STR_REPLACE_CONFIRM:	DB	" Replace (y/n/a/q/r)? ","$"
 STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
 STR_SEARCH_COMPLETED:	DB	" Search completed. ","$"
