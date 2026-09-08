@@ -2262,36 +2262,56 @@ def test_se_execution():
             print(f"[-] Step 52 failed: Save changes prompt missing. Buffer: {repr(out_s52_prompt)}", flush=True)
             return False
 
-        # 2. Press ESC to cancel exit and resume editor
+        # 2. Send cursor keys (escape sequences) and verify they are ignored (prompt remains active)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[A\x1b[B\x1b[C\x1b[D")
+        time.sleep(0.4)
+
+        # 3. Press standalone ESC to cancel exit and resume editor
         os.write(master, b"\x1b")
         out_s52_cancel = read_until(master, b"Line 1/30,", timeout=4.0)
         if b"Line 1/30," not in out_s52_cancel:
             print(f"[-] Step 52 failed: ESC did not restore editor. Buffer: {repr(out_s52_cancel)}", flush=True)
             return False
-        print("[+] ESC cancelled exit and restored editor.", flush=True)
+        print("[+] Cursor keys ignored and standalone ESC cancelled exit, restoring editor.", flush=True)
 
-        # 3. Send Ctrl+Q again and answer 'n' to discard changes and exit to CP/M
+        # 4. From editor, press ESC to switch to splash screen
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        out_splash = read_until(master, b"Active Screen:", timeout=4.0)
+        if b"Active Screen:" not in out_splash:
+            print(f"[-] Step 52 failed: ESC did not display splash screen. Buffer: {repr(out_splash)}", flush=True)
+            return False
+        print("[+] Switched to splash screen with modified document.", flush=True)
+
+        # 5. On splash screen, send Ctrl+Q. Verify it switches to editor and displays Save changes prompt
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"ESC:", timeout=4.0)
+        out_splash_prompt = read_until(master, b"ESC:", timeout=4.0)
+        if b"Save changes?" not in out_splash_prompt:
+            print(f"[-] Step 52 failed: Splash Ctrl+Q did not show save changes prompt. Buffer: {repr(out_splash_prompt)}", flush=True)
+            return False
+        print("[+] Splash screen Ctrl+Q with modified doc switched to editor and prompted.", flush=True)
+
+        # 6. Answer 'n' to discard changes and exit to CP/M with cleared screen
         os.write(master, b"n")
         out_s52_exit = read_until(master, b"C>", timeout=4.0)
-        if b"C>" not in out_s52_exit:
-            print(f"[-] Step 52 failed: 'n' did not exit to CP/M. Buffer: {repr(out_s52_exit)}", flush=True)
+        if b"C>" not in out_s52_exit or b"\x1b[2J" not in out_s52_exit:
+            print(f"[-] Step 52 failed: 'n' did not clear screen or exit to CP/M. Buffer: {repr(out_s52_exit)}", flush=True)
             return False
-        print("[+] 'n' discarded changes and returned cleanly to CP/M.", flush=True)
+        print("[+] 'n' cleared screen, discarded changes and returned cleanly to CP/M.", flush=True)
 
-        # 4. Verify clean exit without prompt when file is unmodified: 'se 2.TXT'
+        # 7. Verify clean exit without prompt when file is unmodified: 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
         read_until(master, b"Line 1/2,", timeout=14.0)
         time.sleep(0.2)
         os.write(master, b"\x11")
         out_s52_clean = read_until(master, b"C>", timeout=4.0)
-        if b"C>" not in out_s52_clean or b"Save changes" in out_s52_clean:
-            print(f"[-] Step 52 failed: clean document prompted on exit. Buffer: {repr(out_s52_clean)}", flush=True)
+        if b"C>" not in out_s52_clean or b"Save changes" in out_s52_clean or b"\x1b[2J" not in out_s52_clean:
+            print(f"[-] Step 52 failed: clean document prompted on exit or did not clear screen. Buffer: {repr(out_s52_clean)}", flush=True)
             return False
-        print("[+] Unmodified document exited immediately without prompt.", flush=True)
+        print("[+] Unmodified document cleared screen and exited immediately without prompt.", flush=True)
         print("[+] Successfully verified Unsaved Modifications Check on Exit (Step 52)!", flush=True)
 
         return True
