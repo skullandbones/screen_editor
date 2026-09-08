@@ -8818,6 +8818,8 @@ DISP_SINGLE_SAVE_PROMPT:
 	CALL	PRINT_SAVE_FMT_INFO
 
 DISP_SAVE_PROMPT_BODY:
+	LD	DE,STR_ESC_CANCEL
+	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
 	LD	DE,STR_SAVE_PROMPT_TXT	; "Enter filename to save:"
@@ -9318,6 +9320,8 @@ DISP_SINGLE_PROMPT:
 	CALL	PRINT_STR
 
 DISP_OPEN_PROMPT_BODY:
+	LD	DE,STR_ESC_CANCEL
+	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
 	LD	DE,STR_OPEN_PROMPT_TXT	; "Enter filename to open:"
@@ -10150,7 +10154,7 @@ STR_DIR_TITLE:	DB	27,"[H",27,"[2J"
 STR_DIR_DRIVE_CHAR:	DB	"A:)        ",13,10
 	DB	"============================================================",13,10,13,10,"$"
 
-STR_OPEN_SINGLE_HDR:	DB	"------------------------------------------------------------  <ESC>=Cancel",13,10,"$"
+STR_OPEN_SINGLE_HDR:	DB	"------------------------------------------------------------",13,10,"$"
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
 
 STR_PAGE_PREFIX:	DB	"------------------------------------------------------------",13,10
@@ -10158,7 +10162,7 @@ STR_PAGE_PREFIX:	DB	"-----------------------------------------------------------
 
 STR_PAGE_MID:	DB	"/","$"
 
-STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10,"$"
+STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
 STR_NO_FILES_FOUND:	DB	"  [No files found on current drive]",13,10,13,10,"$"
 
@@ -10178,14 +10182,16 @@ STR_SAVE_FMT_LINUX:	DB	"Linux","$"
 
 STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 
-STR_SAVE_SEP_LINE:	DB	"------------------------------------------------------------  <ESC>=Cancel",13,10,"$"
+STR_SAVE_SEP_LINE:	DB	"------------------------------------------------------------",13,10,"$"
 
 STR_SAVE_PAGE_PREFIX:	DB	"------------------------------------------------------------",13,10
 	DB	"[Page ","$"
 
-STR_SAVE_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page, <ESC>=Cancel",13,10,"$"
+STR_SAVE_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
+
+STR_ESC_CANCEL:		DB	"<ESC>=Cancel",13,10,"$"
 
 STR_OVERWRITE_WARN:	DB	13,10,"File already exists. Overwrite? (y/n): ","$"
 
