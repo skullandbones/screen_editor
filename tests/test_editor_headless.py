@@ -1899,9 +1899,11 @@ def test_se_execution():
 
         print("[+] Successfully verified splash screen Goto Line facility (Step 43)!", flush=True)
 
-        # Final exit from editor with Ctrl+Q back to CP/M
+        # Final exit from editor with Ctrl+Q back to CP/M (answer 'n' to discard test edits)
         time.sleep(0.2)
         os.write(master, b"\x11")
+        read_until(master, b"Save changes (y/n/ESC):", timeout=4.0)
+        os.write(master, b"n")
         read_until(master, b"C>", timeout=4.0)
         print("[+] Final exit from SE.COM completed.", flush=True)
 
@@ -2247,10 +2249,50 @@ def test_se_execution():
         read_until(master, b"Replace done: 0 replacement(s).", timeout=4.0)
         print("[+] Successfully verified Dynamic Reversal of Search Direction (Step 51)!", flush=True)
 
-        # Final exit from editor with Ctrl+Q back to CP/M
-        time.sleep(0.5)
+        # ---------------------------------------------------------------------
+        # Step 52: Unsaved Modifications Check on Exit (Ctrl+Q)
+        # ---------------------------------------------------------------------
+        print("[*] Step 52: Verifying Unsaved Modifications check on exit (Ctrl+Q)...", flush=True)
+
+        # 1. Document was modified in Step 47. Send Ctrl+Q and verify prompt
+        time.sleep(0.3)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
+        out_s52_prompt = read_until(master, b"Save changes (y/n/ESC):", timeout=4.0)
+        if b"Save changes (y/n/ESC):" not in out_s52_prompt:
+            print(f"[-] Step 52 failed: Save changes prompt missing. Buffer: {repr(out_s52_prompt)}", flush=True)
+            return False
+
+        # 2. Press ESC to cancel exit and resume editor
+        os.write(master, b"\x1b")
+        out_s52_cancel = read_until(master, b"Line 1/30,", timeout=4.0)
+        if b"Line 1/30," not in out_s52_cancel:
+            print(f"[-] Step 52 failed: ESC did not restore editor. Buffer: {repr(out_s52_cancel)}", flush=True)
+            return False
+        print("[+] ESC cancelled exit and restored editor.", flush=True)
+
+        # 3. Send Ctrl+Q again and answer 'n' to discard changes and exit to CP/M
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"Save changes (y/n/ESC):", timeout=4.0)
+        os.write(master, b"n")
+        out_s52_exit = read_until(master, b"C>", timeout=4.0)
+        if b"C>" not in out_s52_exit:
+            print(f"[-] Step 52 failed: 'n' did not exit to CP/M. Buffer: {repr(out_s52_exit)}", flush=True)
+            return False
+        print("[+] 'n' discarded changes and returned cleanly to CP/M.", flush=True)
+
+        # 4. Verify clean exit without prompt when file is unmodified: 'se 2.TXT'
+        time.sleep(0.5)
+        os.write(master, b"se 2.TXT\r")
+        read_until(master, b"Line 1/2,", timeout=14.0)
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        out_s52_clean = read_until(master, b"C>", timeout=4.0)
+        if b"C>" not in out_s52_clean or b"Save changes" in out_s52_clean:
+            print(f"[-] Step 52 failed: clean document prompted on exit. Buffer: {repr(out_s52_clean)}", flush=True)
+            return False
+        print("[+] Unmodified document exited immediately without prompt.", flush=True)
+        print("[+] Successfully verified Unsaved Modifications Check on Exit (Step 52)!", flush=True)
 
         return True
 

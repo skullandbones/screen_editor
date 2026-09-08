@@ -75,6 +75,7 @@ START:
 	XOR	A
 	LD	(SEARCH_LEN),A
 	LD	(REPLACE_LEN),A
+	LD	(DOC_MODIFIED),A
 
 	; Check if filename was provided in FCB1
 	CALL	CHECK_COMMAND_LINE
@@ -157,11 +158,11 @@ SPLASH_LOOP:
 
 	; Option: 'Q' or 'q' or Ctrl+Q -> Exit
 	CP	'q'
-	JP	Z,EXIT_PROGRAM
+	JP	Z,HANDLE_CTRL_Q
 	CP	'Q'
-	JP	Z,EXIT_PROGRAM
+	JP	Z,HANDLE_CTRL_Q
 	CP	KEY_CTRL_Q
-	JP	Z,EXIT_PROGRAM
+	JP	Z,HANDLE_CTRL_Q
 
 	; Option: 'T' or 't' -> Run Extended Memory Test
 	CP	't'
@@ -257,7 +258,7 @@ MAIN_LOOP_GET_KEY:
 
 	; Command: Ctrl+Q -> Exit
 	CP	KEY_CTRL_Q
-	JP	Z,EXIT_PROGRAM
+	JP	Z,HANDLE_CTRL_Q
 
 	; Command: Ctrl+F -> Find
 	CP	KEY_CTRL_F
@@ -574,6 +575,119 @@ DO_TAB_INSERT:
 	LD	A,KEY_TAB		; Insert literal ASCII 0x09 Tab byte
 	CALL	DO_CHAR_INSERT
 	RET
+
+;------------------------------------------------------------------------------
+; Exit Handling: Check if document was modified before exiting
+;------------------------------------------------------------------------------
+HANDLE_CTRL_Q:
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JP	Z,EXIT_PROGRAM
+
+	; Document has unsaved changes.
+	; If currently on splash screen, resume editor so prompt is in context
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JP	Z,EXIT_PROGRAM		; If never in editor mode, just exit
+
+	CALL	RESUME_EDITOR
+
+SHOW_EXIT_PROMPT:
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	LD	DE,STR_SAVE_CHANGES_PROMPT	; "Save changes (y/n/ESC):"
+	CALL	PRINT_STR
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	LD	A,' '
+	CALL	PUTC
+	LD	DE,STR_CLEAR_EOL
+	CALL	PRINT_STR
+
+EXIT_PROMPT_KEY:
+	CALL	GET_KEY
+	CP	'y'
+	JR	Z,EXIT_SAVE_AND_QUIT
+	CP	'Y'
+	JR	Z,EXIT_SAVE_AND_QUIT
+
+	CP	'n'
+	JP	Z,EXIT_PROGRAM
+	CP	'N'
+	JP	Z,EXIT_PROGRAM
+
+	CP	KEY_ESC
+	JR	Z,EXIT_PROMPT_CHECK_ESC
+	CP	KEY_CTRL_C
+	JR	Z,EXIT_CANCEL
+	CP	'c'
+	JR	Z,EXIT_CANCEL
+	CP	'C'
+	JR	Z,EXIT_CANCEL
+
+	JR	EXIT_PROMPT_KEY
+
+EXIT_PROMPT_CHECK_ESC:
+	; Check if a character follows ESC within a short timeout
+	LD	BC,1000
+EXIT_WAIT_ESC:
+	CALL	CHECK_KEY_READY
+	JR	NZ,EXIT_GOT_ESC_SEQ
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,EXIT_WAIT_ESC
+	JR	EXIT_CANCEL
+
+EXIT_GOT_ESC_SEQ:
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	CALL	GOT_ESC_BYTE
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+EXIT_CANCEL:
+	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
+	XOR	A
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_LINE_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+	JP	MAIN_LOOP
+
+EXIT_SAVE_AND_QUIT:
+	; Check if document has a known filename
+	LD	A,(WORK_FCB+1)
+	CP	' '
+	JR	Z,EXIT_SAVE_PROMPT_NAME
+	CP	0
+	JR	Z,EXIT_SAVE_PROMPT_NAME
+	LD	A,(HAS_FILE_ARG)
+	OR	A
+	JR	Z,EXIT_SAVE_PROMPT_NAME
+
+	; Known file: save directly to disk
+	CALL	DO_ACTUAL_SAVE
+	JP	EXIT_PROGRAM
+
+EXIT_SAVE_PROMPT_NAME:
+	CALL	DO_SAVE_FILE_UI
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JP	Z,EXIT_PROGRAM		; Save succeeded -> exit
+
+	; Save was cancelled by user: resume editor
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
+	XOR	A
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_LINE_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+	JP	MAIN_LOOP
 
 EXIT_PROGRAM:
 	CALL	LOCATE_STATUS_ROW
@@ -2497,6 +2611,7 @@ DO_DEL_BLK_FINISH:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
+	LD	(DOC_MODIFIED),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -2811,6 +2926,7 @@ COPY_SGL_ADVANCE:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
+	LD	(DOC_MODIFIED),A
 	RET
 
 	;--------------------------------------------------------------------------
@@ -3176,6 +3292,7 @@ COPY_ML_FINISH:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
+	LD	(DOC_MODIFIED),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -7401,6 +7518,7 @@ ALR_SUBST_DONE:
 	; Mark cache dirty
 	LD	A,1
 	LD	(CACHE_DIRTY),A
+	LD	(DOC_MODIFIED),A
 
 	; Increment REPLACE_COUNT
 	LD	HL,(REPLACE_COUNT)
@@ -7470,6 +7588,7 @@ CHECK_AT_EOL_REPLACE:
 LINE_LEN_OK:
 	LD	A,1
 	LD	(CACHE_DIRTY),A		; Mark local cache dirty
+	LD	(DOC_MODIFIED),A
 
 	; 4. Compare CUR_COL with line length (B)
 	LD	A,(CUR_COL)
@@ -7571,6 +7690,7 @@ DO_DELETE_CHAR:
 
 	LD	A,1
 	LD	(CACHE_DIRTY),A		; Mark cache dirty
+	LD	(DOC_MODIFIED),A
 
 	; Calculate delete target in cache
 	LD	BC,(CUR_DOC_ROW)
@@ -7609,6 +7729,7 @@ DO_DELETE_FORWARD:
 
 	LD	A,1
 	LD	(CACHE_DIRTY),A		; Mark cache dirty
+	LD	(DOC_MODIFIED),A
 
 	; Shift characters left from HL+1 into HL until null
 DEL_FWD_SHIFT_LOOP:
@@ -7681,6 +7802,8 @@ DO_BS_ROW0_CHECK:
 
 	; Delete empty Line 0
 	CALL	FLUSH_DIRTY_CACHE
+	LD	A,1
+	LD	(DOC_MODIFIED),A
 
 	; 1. Free Line 0's slot
 	LD	HL,(DOC_LINE_SLOTS)
@@ -7879,6 +8002,8 @@ JOIN_APPEND_LOOP:
 
 JOIN_SHIFT_DONE:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
+	LD	A,1
+	LD	(DOC_MODIFIED),A
 
 	LD	A,(JOIN_COL_SAVED)
 	LD	B,A			; B = join column offset
@@ -8031,6 +8156,7 @@ SPLIT_NO_SCROLL:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
+	LD	(DOC_MODIFIED),A
 	RET
 
 HBIOS_DETECT:
@@ -8229,6 +8355,7 @@ LOAD_FINISH:
 LOAD_INIT_CACHE:
 	XOR	A
 	LD	(BLOCK_ACTIVE),A
+	LD	(DOC_MODIFIED),A
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	OR	A			; Carry = 0 (success)
 	RET
@@ -8255,6 +8382,7 @@ INIT_EMPTY_DOCUMENT:
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
 	LD	(CACHE_DIRTY),A
+	LD	(DOC_MODIFIED),A
 	LD	(BLOCK_ACTIVE),A
 
 	; Write empty line to line 0 in Far RAM
@@ -8563,6 +8691,8 @@ DO_ACTUAL_SAVE:
 	; Mark filename as known and saved
 	LD	A,1
 	LD	(HAS_FILE_ARG),A
+	XOR	A
+	LD	(DOC_MODIFIED),A
 	RET
 
 HANDLE_SAVE_DRIVE_SWITCH:
@@ -10211,6 +10341,7 @@ STR_FIND_INSENS_BOX_PFX:DB	" [","$"
 STR_REPLACE_PROMPT:	DB	"Replace with:","$"
 STR_REPLACE_BOX_PFX:	DB	" [","$"
 STR_REPLACE_CONFIRM:	DB	" Replace (y/n/a/q/r)? ","$"
+STR_SAVE_CHANGES_PROMPT:DB	"Save changes (y/n/ESC):","$"
 STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
 STR_SEARCH_COMPLETED:	DB	" Search completed. ","$"
 STR_REPLACE_DONE_PFX:	DB	" Replace done: ","$"
@@ -10309,6 +10440,7 @@ NEED_STATUS_RENDER:	DB	0	; 1 if status bar redraw / cursor restore pending
 
 CACHE_START_ROW:	DW	0		; 16-bit doc row index at LINE_STORAGE[0]
 CACHE_DIRTY:	DB	0		; 1 if local cache has unsaved modifications
+DOC_MODIFIED:	DB	0		; 1 if document has unsaved modifications
 EXT_BANK_COUNT:	DB	0		; Number of available far RAM banks (up to 14)
 EXT_BANK_TABLE:	DS	14		; Table of far RAM bank IDs
 

@@ -159,14 +159,20 @@ def run_sanity_test():
             return False
         print("[+] Help screen and return verified.", flush=True)
 
-        # 8. Clean exit to CP/M with Ctrl+Q
+        # 8. Clean exit to CP/M with Ctrl+Q (prompts for unsaved changes since buffer was modified)
         time.sleep(0.1)
         os.write(master, b"\x11")
+        out_prompt = read_until(master, b"Save changes (y/n/ESC):", timeout=3.0)
+        if b"Save changes (y/n/ESC):" not in out_prompt:
+            print(f"[-] Save changes prompt failed. Buffer: {repr(out_prompt)}", flush=True)
+            return False
+        # Answer 'n' to discard changes and return to CP/M
+        os.write(master, b"n")
         out_exit = read_until(master, b"C>", timeout=4.0)
         if b"C>" not in out_exit:
             print(f"[-] Clean exit with Ctrl+Q failed. Buffer: {repr(out_exit)}", flush=True)
             return False
-        print("[+] Clean exit to CP/M prompt verified.", flush=True)
+        print("[+] Clean exit to CP/M prompt with unsaved changes prompt verified.", flush=True)
 
         elapsed = time.time() - t_start
         print(f"[+] All SE.COM sanity tests PASSED in {elapsed:.2f}s!", flush=True)
