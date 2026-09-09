@@ -1105,6 +1105,8 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ;------------------------------------------------------------------------------
+SPLASH_LINES	EQU	22
+
 RENDER_SPLASH:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
@@ -1128,6 +1130,27 @@ SHOW_SPLASH_80X24:
 
 RENDER_SPLASH_CONT:
 	LD	DE,STR_SPLASH_TAIL
+	CALL	PRINT_STR
+
+	; Fill remaining rows down to status row with '~'
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
+	SUB	SPLASH_LINES		; A = remaining rows
+	JR	Z,SPLASH_TILDE_DONE
+	JR	C,SPLASH_TILDE_DONE
+	LD	B,A
+SPLASH_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	SPLASH_TILDE_LOOP
+
+SPLASH_TILDE_DONE:
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_HOME
 	CALL	PRINT_STR
 	RET
 
@@ -10357,35 +10380,35 @@ STR_INVERSE_OFF:	DB	27,"[0m","$"
 STR_CRLF:	DB	13,10,"$"
 
 STR_SPLASH_BODY:	DB	27,"[H"
-	DB	13,10
-	DB	"                  ~                                             ",13,10
-	DB	"                  ~             SE - Screen Editor              ",13,10
-	DB	"                  ~                version 0.8.2                ",13,10
-	DB	"                  ~              by Dean Jenkins                ",13,10
-	DB	"                  ~                                             ",13,10
-	DB	"                  ~       SE is open source and freely usable   ",13,10
-	DB	"                  ~       type   :e  or  <Enter>   to edit      ",13,10
-	DB	"                  ~       type   :n                to new file  ",13,10
-	DB	"                  ~       type   :o                to open file ",13,10
-	DB	"                  ~       type   :s                to save file ",13,10
-	DB	"                  ~       type   :w  or  ^W        to close file",13,10
-	DB	"                  ~       type   :l  or  ^L        to goto line ",13,10
-	DB	"                  ~       type   :t                for mem test ",13,10
-	DB	"                  ~       type   :f                for file test",13,10
-	DB	"                  ~       type   :1                set 120x40   ",13,10
-	DB	"                  ~       type   :2                set 80x24    ",13,10
-	DB	"                  ~       type   :q  or  ^Q        to exit      ",13,10
+	DB	"~",13,10
+	DB	"~",13,10
+	DB	"~                               SE - Screen Editor              ",13,10
+	DB	"~                                  version 0.8.2                ",13,10
+	DB	"~                                by Dean Jenkins                ",13,10
+	DB	"~",13,10
+	DB	"~                         SE is open source and freely usable   ",13,10
+	DB	"~                         type   e  or  <Enter>   to edit       ",13,10
+	DB	"~                         type   n                to new file   ",13,10
+	DB	"~                         type   o                to open file  ",13,10
+	DB	"~                         type   s                to save file  ",13,10
+	DB	"~                         type   w  or  ^W        to close file ",13,10
+	DB	"~                         type   l  or  ^L        to goto line  ",13,10
+	DB	"~                         type   t                for mem test  ",13,10
+	DB	"~                         type   f                for file test ",13,10
+	DB	"~                         type   1                set 120x40    ",13,10
+	DB	"~                         type   2                set 80x24     ",13,10
+	DB	"~                         type   q  or  ^Q        to exit       ",13,10
 	DB	"$"
 
-STR_SPLASH_CUR_MODE:	DB	"                  ~   Active Screen: [$"
+STR_SPLASH_CUR_MODE:	DB	"~                     Active Screen: [$"
 
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
 STR_MODE_80X24_LBL:	DB	"80x24 (Classic Terminal)]          ",13,10,"$"
 
-STR_SPLASH_TAIL:	DB	"                  ~      Z80 CP/M with 512K Extended Storage    ",13,10
-	DB	"                  ~      Auto-detects CP/M [CRLF] & Linux [LF]  ",13,10
-	DB	"                  ~                                             ",13,10
+STR_SPLASH_TAIL:	DB	"~                        Z80 CP/M with 512K Extended Storage    ",13,10
+	DB	"~                        Auto-detects CP/M [CRLF] & Linux [LF]  ",13,10
+	DB	"~",13,10
 	DB	"$"
 
 STR_TEST_TITLE:	DB	27,"[H",27,"[2J"

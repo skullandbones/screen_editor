@@ -832,11 +832,11 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"\x1b")
-        out_splash = read_until(master, b":s                to save file", timeout=5.0)
-        if b":s                to save file" not in out_splash:
-            print(f"[-] Splash screen ':s to save file' not found. Buffer: {repr(out_splash)}", flush=True)
+        out_splash = read_until(master, b"s                to save file", timeout=5.0)
+        if b"s                to save file" not in out_splash:
+            print(f"[-] Splash screen 's to save file' not found. Buffer: {repr(out_splash)}", flush=True)
             return False
-        print("[+] Successfully verified splash screen displays ':s to save file'.", flush=True)
+        print("[+] Successfully verified splash screen displays 's to save file'.", flush=True)
 
         # Launch Save Screen from Splash screen ('s')
         time.sleep(0.2)
@@ -1878,7 +1878,7 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x1b")
         out_s43_splash = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
-        if b"type   :l  or  ^L        to goto line" not in out_s43_splash:
+        if b"type   l  or  ^L        to goto line" not in out_s43_splash:
             print(f"[-] Step 43 failed: Splash missing goto line prompt hint. Buffer: {repr(out_s43_splash)}", flush=True)
             return False
 

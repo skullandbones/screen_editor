@@ -122,27 +122,30 @@ pip install -r requirements.txt
 Launching `SE` without arguments displays the Vim-style splash screen:
 
 ```text
-                  ~                                             
-                  ~             SE - Screen Editor              
-                  ~                version 0.8.2                
-                  ~              by Dean Jenkins                
-                  ~                                             
-                  ~       SE is open source and freely usable   
-                  ~       type   :e  or  <Enter>   to edit      
-                  ~       type   :n                to new file  
-                  ~       type   :o                to open file 
-                  ~       type   :s                to save file 
-                  ~       type   :w  or  ^W        to close file
-                  ~       type   :l  or  ^L        to goto line 
-                  ~       type   :t                for mem test 
-                  ~       type   :f                for file test
-                  ~       type   :1                set 120x40   
-                  ~       type   :2                set 80x24    
-                  ~       type   :q  or  ^Q        to exit      
-                  ~   Active Screen: [120x40 (Modern Default)]  
-                  ~      Z80 CP/M with 512K Extended Storage    
-                  ~      Auto-detects CP/M [CRLF] & Linux [LF]  
-                  ~                                             
+~
+~
+~                               SE - Screen Editor              
+~                                  version 0.8.2                
+~                                by Dean Jenkins                
+~
+~                         SE is open source and freely usable   
+~                         type   e  or  <Enter>   to edit       
+~                         type   n                to new file   
+~                         type   o                to open file  
+~                         type   s                to save file  
+~                         type   w  or  ^W        to close file 
+~                         type   l  or  ^L        to goto line  
+~                         type   t                for mem test  
+~                         type   f                for file test 
+~                         type   1                set 120x40    
+~                         type   2                set 80x24     
+~                         type   q  or  ^Q        to exit       
+~                     Active Screen: [120x40 (Modern Default)]  
+~                        Z80 CP/M with 512K Extended Storage    
+~                        Auto-detects CP/M [CRLF] & Linux [LF]  
+~
+~
+[ SE v0.8.2 | [No Name]      | 120x40 | CP/M | ^K: Editor keys | Line 1/1, Col 0 ]
 ```
 
 * Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter/resume full-screen editing mode.
