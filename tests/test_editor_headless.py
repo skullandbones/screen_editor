@@ -2851,6 +2851,105 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Horizontal Scrolling in 80x24 Mode (Step 58)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 59: Verifying Column 79 Continuation Highlighting and Block Suppression in 80x24 Mode
+        # ---------------------------------------------------------------------
+        print("[*] Step 59: Verifying Column 79 continuation highlighting and block suppression in 80x24 mode...", flush=True)
+        drain_all(master)
+        time.sleep(0.5)
+        os.write(master, b"se\r")
+        out_s59_splash = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=14.0)
+        if b"Auto-detects CP/M [CRLF]" not in out_s59_splash:
+            print(f"[-] Step 59 failed: Splash screen not displayed: {repr(out_s59_splash[-200:])}", flush=True)
+            return False
+
+        # Switch to 80x24 mode with '2'
+        drain_all(master)
+        os.write(master, b"2")
+        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        drain_all(master)
+        time.sleep(0.3)
+
+        # Enter editor mode with 'e'
+        os.write(master, b"e")
+        out_s59_edit = read_until(master, b"Line 1/1, Col 0", timeout=6.0)
+        if b"80x24" not in out_s59_edit or b"Line 1/1, Col 0" not in out_s59_edit:
+            print(f"[-] Step 59 failed: Editor mode not entered in 80x24: {repr(out_s59_edit)}", flush=True)
+            return False
+
+        # Type 85 characters: "0123456789" * 8 + "ABCDE"
+        drain_all(master)
+        test_str_85 = "0123456789" * 8 + "ABCDE"
+        os.write(master, test_str_85.encode("ascii"))
+        out_s59_t85 = read_until(master, b"Col 85", timeout=6.0)
+        if b"Col 85" not in out_s59_t85:
+            print(f"[-] Step 59 failed: Failed typing to Col 85: {repr(out_s59_t85[-200:])}", flush=True)
+            return False
+
+        # Press Ctrl+A (Home) to jump to Col 0 (VIEW_LEFT_COL = 0)
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x01")  # Ctrl+A
+        out_s59_home = read_until(master, b"Col 0", timeout=6.0)
+        time.sleep(0.2)
+        out_s59_home += drain_all(master)
+        expected_cont_seq = b"\x1b[7m9\x1b[0m"
+        if expected_cont_seq not in out_s59_home:
+            print(f"[-] Step 59 failed: Expected continuation highlight {repr(expected_cont_seq)} not found in {repr(out_s59_home)}", flush=True)
+            return False
+
+        # Test block mode suppression: press Ctrl+B
+        drain_all(master)
+        os.write(master, b"\x02")  # Ctrl+B
+        read_until(master, b"[SEL:", timeout=6.0)
+        drain_all(master)
+        # Force screen redraw with Ctrl+L
+        os.write(master, b"\x0c")
+        out_s59_block = read_until(master, b"Col 0", timeout=6.0)
+        time.sleep(0.2)
+        out_s59_block += drain_all(master)
+        if expected_cont_seq in out_s59_block:
+            print(f"[-] Step 59 failed: Continuation highlight not suppressed during block mode: {repr(out_s59_block)}", flush=True)
+            return False
+
+        # Cancel block mode with ESC
+        drain_all(master)
+        os.write(master, b"\x1b")  # ESC
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Test line <= 80 chars (no continuation highlight)
+        # End (Ctrl+E), delete 5 characters, Home (Ctrl+A)
+        os.write(master, b"\x05")  # Ctrl+E
+        read_until(master, b"Col 85", timeout=6.0)
+        drain_all(master)
+        os.write(master, b"\x08\x08\x08\x08\x08")  # 5 Backspaces
+        read_until(master, b"Col 80", timeout=6.0)
+        drain_all(master)
+        os.write(master, b"\x01")  # Ctrl+A
+        read_until(master, b"Col 0", timeout=6.0)
+        time.sleep(0.2)
+        out_s59_80 = drain_all(master)
+        if expected_cont_seq in out_s59_80:
+            print(f"[-] Step 59 failed: 80-char line incorrectly highlighted col 79: {repr(out_s59_80)}", flush=True)
+            return False
+
+        # Clean exit to CP/M with Ctrl+Q -> 'n'
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x11")  # Ctrl+Q
+        out_prompt = read_until(master, b"Save changes?", timeout=6.0)
+        if b"Save changes?" not in out_prompt:
+            print(f"[-] Step 59 failed: Save changes prompt missing: {out_prompt}", flush=True)
+            return False
+        time.sleep(0.2)
+        os.write(master, b"n")
+        out_cpm = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_cpm:
+            print(f"[-] Step 59 failed: Failed exit to CP/M: {out_cpm}", flush=True)
+            return False
+        print("[+] Successfully verified Column 79 Continuation Highlighting and Block Suppression in 80x24 Mode (Step 59)!", flush=True)
+
         return True
 
     finally:

@@ -3793,6 +3793,85 @@ RENDER_ROW_NEXT:
 	CALL	LOCATE_CURSOR
 	RET
 
+;------------------------------------------------------------------------------
+; Check if current character at visual column B is at right screen edge (col 79)
+; on an 80-column display, and the line continues beyond it.
+; Inputs:
+;   B = visual column (0..119)
+;   HL = pointer to current character in LINE_STORAGE
+; Outputs:
+;   Carry flag = 1 if character should be highlighted in inverse video
+;   Carry flag = 0 otherwise
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+CHECK_CHAR_CONT_HL:
+	LD	A,(ACTIVE_COLS)
+	CP	80
+	JR	NZ,CCCH_NO
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	JR	NZ,CCCH_NO
+	LD	A,(LINE_BLK_ACTIVE)
+	OR	A
+	JR	NZ,CCCH_NO
+	LD	A,(VIEW_RIGHT_COL)
+	DEC	A
+	CP	B
+	JR	NZ,CCCH_NO
+	; Visual col B is rightmost column. Check if line continues past (HL):
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	OR	A
+	JR	Z,CCCH_NO		; Next char is null -> line ends here
+	SCF				; Line continues -> highlight!
+	RET
+CCCH_NO:
+	OR	A			; Clear Carry
+	RET
+
+;------------------------------------------------------------------------------
+; Check if current TAB space at visual column B is at right screen edge (col 79)
+; on an 80-column display, and the line continues beyond it.
+; Inputs:
+;   B = visual column (0..119)
+;   C = remaining spaces in tab (1..8)
+;   HL = pointer to next character in LINE_STORAGE (already incremented past TAB)
+; Outputs:
+;   Carry flag = 1 if space should be highlighted in inverse video
+;   Carry flag = 0 otherwise
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+CHECK_TAB_CONT_HL:
+	LD	A,(ACTIVE_COLS)
+	CP	80
+	JR	NZ,CTCH_NO
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	JR	NZ,CTCH_NO
+	LD	A,(LINE_BLK_ACTIVE)
+	OR	A
+	JR	NZ,CTCH_NO
+	LD	A,(VIEW_RIGHT_COL)
+	DEC	A
+	CP	B
+	JR	NZ,CTCH_NO
+	; B is rightmost column.
+	; If C > 1, tab itself continues into next column:
+	LD	A,C
+	CP	1
+	JR	NZ,CTCH_YES
+	; C == 1: last space of tab. Does line continue after tab?
+	LD	A,(HL)
+	OR	A
+	JR	Z,CTCH_NO		; Null -> line ends here
+CTCH_YES:
+	SCF
+	RET
+CTCH_NO:
+	OR	A			; Clear Carry
+	RET
+
 ; Fast single line refresh: rewrites current line and restores cursor
 RENDER_CURRENT_LINE:
 	; Move to start of current screen line: ESC [ <(CUR_DOC_ROW - TOP_DOC_ROW) + 1> ; 1 H
@@ -3898,7 +3977,7 @@ PCL_PRINT_CHAR:
 	; B < VIEW_LEFT_COL: skip char output
 	INC	HL
 	INC	B
-	JR	PCL_AFTER_CHAR
+	JP	PCL_AFTER_CHAR
 
 PCL_CHECK_RIGHT:
 	LD	A,(VIEW_RIGHT_COL)
@@ -3907,11 +3986,28 @@ PCL_CHECK_RIGHT:
 	JP	C,PRINT_CUR_LINE_DONE	; B > VIEW_RIGHT_COL -> right edge reached
 
 PCL_DO_EMIT:
+	CALL	CHECK_CHAR_CONT_HL
+	JR	C,PCL_EMIT_CONT
 	LD	A,(HL)
 	CALL	PUTC
 	INC	HL
 	INC	B
-	JR	PCL_AFTER_CHAR
+	JP	PCL_AFTER_CHAR
+
+PCL_EMIT_CONT:
+	PUSH	DE
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	POP	DE
+	LD	A,(HL)
+	CALL	PUTC
+	PUSH	DE
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	POP	DE
+	INC	HL
+	INC	B
+	JP	PCL_AFTER_CHAR
 
 PRINT_CUR_TAB:
 	INC	HL
@@ -3934,16 +4030,34 @@ PRINT_CUR_TAB_SPACES:
 	; B < VIEW_LEFT_COL -> skip space
 	INC	B
 	DEC	C
-	JR	NZ,PRINT_CUR_TAB_SPACES
-	JR	PCL_AFTER_CHAR
+	JP	NZ,PRINT_CUR_TAB_SPACES
+	JP	PCL_AFTER_CHAR
 
 PCT_EMIT_SPACE:
+	CALL	CHECK_TAB_CONT_HL
+	JR	C,PCT_SPACE_CONT
 	LD	A,' '
 	CALL	PUTC
 	INC	B
 	DEC	C
-	JR	NZ,PRINT_CUR_TAB_SPACES
-	JR	PCL_AFTER_CHAR
+	JP	NZ,PRINT_CUR_TAB_SPACES
+	JP	PCL_AFTER_CHAR
+
+PCT_SPACE_CONT:
+	PUSH	DE
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	POP	DE
+	LD	A,' '
+	CALL	PUTC
+	PUSH	DE
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	POP	DE
+	INC	B
+	DEC	C
+	JP	NZ,PRINT_CUR_TAB_SPACES
+	JP	PCL_AFTER_CHAR
 
 PCL_AFTER_CHAR:
 	LD	A,(LINE_BLK_ACTIVE)
@@ -4111,7 +4225,7 @@ PLC_PRINT_CHAR:
 	; B < VIEW_LEFT_COL: skip char output
 	INC	HL
 	INC	B
-	JR	PLC_AFTER_CHAR
+	JP	PLC_AFTER_CHAR
 
 PLC_CHECK_RIGHT:
 	LD	A,(VIEW_RIGHT_COL)
@@ -4120,11 +4234,28 @@ PLC_CHECK_RIGHT:
 	JP	C,PRINT_LINE_END	; B > VIEW_RIGHT_COL -> right edge reached
 
 PLC_DO_EMIT:
+	CALL	CHECK_CHAR_CONT_HL
+	JR	C,PLC_EMIT_CONT
 	LD	A,(HL)
 	CALL	PUTC
 	INC	HL
 	INC	B
-	JR	PLC_AFTER_CHAR
+	JP	PLC_AFTER_CHAR
+
+PLC_EMIT_CONT:
+	PUSH	DE
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	POP	DE
+	LD	A,(HL)
+	CALL	PUTC
+	PUSH	DE
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	POP	DE
+	INC	HL
+	INC	B
+	JP	PLC_AFTER_CHAR
 
 PRINT_LINE_TAB:
 	INC	HL
@@ -4147,16 +4278,34 @@ PRINT_LINE_TAB_SPACES:
 	; B < VIEW_LEFT_COL -> skip space
 	INC	B
 	DEC	C
-	JR	NZ,PRINT_LINE_TAB_SPACES
-	JR	PLC_AFTER_CHAR
+	JP	NZ,PRINT_LINE_TAB_SPACES
+	JP	PLC_AFTER_CHAR
 
 PLT_EMIT_SPACE:
+	CALL	CHECK_TAB_CONT_HL
+	JR	C,PLT_SPACE_CONT
 	LD	A,' '
 	CALL	PUTC
 	INC	B
 	DEC	C
-	JR	NZ,PRINT_LINE_TAB_SPACES
-	JR	PLC_AFTER_CHAR
+	JP	NZ,PRINT_LINE_TAB_SPACES
+	JP	PLC_AFTER_CHAR
+
+PLT_SPACE_CONT:
+	PUSH	DE
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+	POP	DE
+	LD	A,' '
+	CALL	PUTC
+	PUSH	DE
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+	POP	DE
+	INC	B
+	DEC	C
+	JP	NZ,PRINT_LINE_TAB_SPACES
+	JP	PLC_AFTER_CHAR
 
 PLC_AFTER_CHAR:
 	; Check if D == LINE_BLK_END (turn off inverse after this char)
