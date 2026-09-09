@@ -106,11 +106,11 @@ def test_se_execution():
         # 4. Run SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"Free: 448 KB", timeout=14.0)
-        if b"Auto-detects CP/M [CRLF]" not in out or b"Free: 448 KB" not in out:
+        out = read_until(master, b"Free: 416 KB", timeout=14.0)
+        if b"Auto-detects CP/M [CRLF]" not in out or b"Free: 416 KB" not in out:
             print("[-] SE.COM splash screen or free memory indicator not detected.", flush=True)
             return False
-        print("[+] SE.COM splash screen successfully displayed with Free: 448 KB status bar.", flush=True)
+        print("[+] SE.COM splash screen successfully displayed with Free: 416 KB status bar.", flush=True)
 
         # 5. Trigger Multi-Sector File I/O Validation Suite ('f')
         time.sleep(0.5)
@@ -644,7 +644,7 @@ def test_se_execution():
             print(f"[-] Splash screen missing Antigravity attribution. Buffer: {repr(out_splash)}", flush=True)
             return False
         out_splash_status = read_until(master, b"Line 1/30,", timeout=4.0)
-        if b"Free: 444 KB" not in out_splash_status:
+        if b"Free: 412 KB" not in out_splash_status:
             print(f"[-] Splash screen status bar missing free memory indicator. Buffer: {repr(out_splash_status)}", flush=True)
             return False
         print("[+] Successfully verified ESC key in editor displays splash screen with version date, attribution, and free memory.", flush=True)
@@ -2603,6 +2603,45 @@ def test_se_execution():
         read_until(master, b"C>", timeout=4.0)
         print("[+] Clean exit back to CP/M prompt.", flush=True)
         print("[+] Successfully verified Open File Screen Line Number Specification (Step 55)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 56: Verifying 13-Bank Far RAM Discovery and HBIOS Bank 0x80 Protection
+        # ---------------------------------------------------------------------
+        print("[*] Step 56: Verifying 13-Bank Far RAM discovery and HBIOS Bank 0x80 protection...", flush=True)
+        drain_all(master)
+        time.sleep(0.5)
+        os.write(master, b"se\r")
+        out_s56 = read_until(master, b"Free: 416 KB", timeout=20.0)
+        if b"Free: 416 KB" not in out_s56:
+            print(f"[-] Step 56 failed: Splash status bar does not show 'Free: 416 KB'. Buffer: {repr(out_s56)}", flush=True)
+            return False
+
+        # Run memory diagnostics ('t')
+        time.sleep(0.5)
+        os.write(master, b"t")
+        out_diag = read_until(master, b"Press any key to return", timeout=12.0)
+        if b"Usable Far RAM Banks (32K): 13): 8D 8C 8B 8A 89 88 87 86 85 84 83 82 81" not in out_diag:
+            print(f"[-] Step 56 failed: Did not discover exactly 13 Far RAM banks without 0x80. Buffer: {repr(out_diag)}", flush=True)
+            return False
+        if b"3,328 Lines (416 KB Extended RAM)" not in out_diag:
+            print(f"[-] Step 56 failed: Far document storage does not indicate 3,328 Lines. Buffer: {repr(out_diag)}", flush=True)
+            return False
+        if b"ALL 512KB EXTENDED MEMORY TESTS PASSED SUCCESSFULLY!" not in out_diag:
+            print(f"[-] Step 56 failed: Extended memory diagnostic tests failed. Buffer: {repr(out_diag)}", flush=True)
+            return False
+
+        # Return to splash screen
+        drain_all(master)
+        time.sleep(0.3)
+        os.write(master, b" ")
+        read_until(master, b"Free: 416 KB", timeout=15.0)
+
+        # Clean exit to CP/M
+        drain_all(master)
+        time.sleep(0.3)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Successfully verified 13-Bank Far RAM discovery and HBIOS Bank 0x80 protection (Step 56)!", flush=True)
 
         return True
 

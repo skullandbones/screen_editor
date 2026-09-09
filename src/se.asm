@@ -15,9 +15,9 @@ CMD_LEN		EQU	$0080
 CMD_TAIL	EQU	$0081
 
 MAX_LINE_STRIDE	EQU	128		; 128 bytes stride per line buffer
-MAX_FAR_BANKS	EQU	14		; Up to 14 extended 32KB RAM banks (448 KB)
+MAX_FAR_BANKS	EQU	13		; Up to 13 extended 32KB RAM banks (416 KB on 512K system)
 CACHE_SIZE_LINES EQU	48		; 48 lines in local working cache (6 KB)
-MAX_DOC_LINES	EQU	3584		; 14 banks * 256 lines = 3584 total lines
+MAX_DOC_LINES	EQU	3328		; 13 banks * 256 lines = 3328 total lines
 
 KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
 KEY_CTRL_C	EQU	3
@@ -1601,7 +1601,7 @@ TEST4_SLOT_INIT:
 	JP	NC,TEST5_FAIL_OOM
 
 	; Subtest 5B: Multi-line block copy when DOC_TOTAL_LINES + K > MAX_DOC_LINES
-	LD	HL,3580
+	LD	HL,MAX_DOC_LINES-4	; 3324
 	LD	(DOC_TOTAL_LINES),HL
 	LD	HL,1
 	LD	(BLOCK_START_ROW),HL
@@ -1617,9 +1617,9 @@ TEST4_SLOT_INIT:
 	XOR	A
 	LD	(CUR_COL),A
 	CALL	DO_COPY_BLOCK
-	; Verify DOC_TOTAL_LINES is still 3580
+	; Verify DOC_TOTAL_LINES is still 3324
 	LD	HL,(DOC_TOTAL_LINES)
-	LD	DE,3580
+	LD	DE,MAX_DOC_LINES-4	; 3324
 	LD	A,H
 	CP	D
 	JP	NZ,TEST5_FAIL_ML
@@ -3121,7 +3121,9 @@ DO_COPY_BLK_MULTILINE:
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	DE,(COPY_K_LINES)
 	ADD	HL,DE
-	LD	DE,MAX_DOC_LINES	; 3584
+	LD	A,(EXT_BANK_COUNT)
+	LD	D,A
+	LD	E,0			; DE = EXT_BANK_COUNT * 256
 	LD	A,H
 	CP	D
 	RET	NC
@@ -4625,17 +4627,33 @@ INIT_FAR_RAM_BANKS:
 	LD	A,D
 	LD	(ROM_BANK_COUNT),A
 
-	; 3. Populate EXT_BANK_TABLE allocating downward from CPM_USER_BANK - 1
+	; 3. Query Bank Info to obtain BIOS Bank ID (SYSGET 0xF2)
+	; Returns: D = BIOS Bank ID (e.g. 0x80), E = User Bank ID
+	PUSH	IX
+	LD	B,0F8H
+	LD	C,0F2H
+	RST	08H
+	POP	IX
+	; Ensure D is at least 0x80 in case of unexpected return
+	LD	A,D
+	OR	A
+	JR	NZ,IFRB_GOT_BIOS_BANK
+	LD	D,080H
+IFRB_GOT_BIOS_BANK:
+
+	; 4. Populate EXT_BANK_TABLE allocating downward from CPM_USER_BANK - 1
+	; Stop when bank <= BIOS Bank ID (D, e.g. 0x80) to never overwrite HBIOS
 	LD	HL,EXT_BANK_TABLE
 	LD	B,0			; Counter for populated banks
 	LD	A,(CPM_USER_BANK)
-	LD	C,A			; C = CPM_USER_BANK (e.g. 0x8F)
+	LD	C,A			; C = CPM_USER_BANK (e.g. 0x8E)
 
 POPULATE_BANK_LOOP:
-	DEC	C			; Allocate downward: 0x8E, 0x8D, 0x8C...
+	DEC	C			; Allocate downward: 0x8D, 0x8C...
 	LD	A,C
-	CP	080H
-	JR	C,POPULATE_BANK_DONE	; Stop if below 0x80
+	CP	D			; Compare with BIOS Bank ID (D)
+	JR	Z,POPULATE_BANK_DONE	; Stop if C == BIOS Bank ID!
+	JR	C,POPULATE_BANK_DONE	; Stop if C < BIOS Bank ID!
 
 	LD	(HL),C
 	INC	HL
@@ -4865,7 +4883,9 @@ ALLOC_SLOT:
 
 ALLOC_FRESH_SLOT:
 	LD	HL,(NEXT_FRESH_SLOT)
-	LD	DE,MAX_DOC_LINES	; 3584
+	LD	A,(EXT_BANK_COUNT)
+	LD	D,A
+	LD	E,0			; DE = EXT_BANK_COUNT * 256
 	LD	A,H
 	CP	D
 	JR	C,ALLOC_FRESH_OK
@@ -8313,9 +8333,11 @@ JOIN_SHIFT_DONE:
 ; Line Insertion & Splitting at (CUR_DOC_ROW, CUR_COL) - Enter Key Handling
 ;------------------------------------------------------------------------------
 DO_INSERT_LINE:
-	; Check max document lines (3584)
+	; Check max document lines (EXT_BANK_COUNT * 256)
 	LD	HL,(DOC_TOTAL_LINES)
-	LD	DE,MAX_DOC_LINES
+	LD	A,(EXT_BANK_COUNT)
+	LD	D,A
+	LD	E,0			; DE = EXT_BANK_COUNT * 256
 	LD	A,H
 	CP	D
 	JR	C,INS_CAP_OK
@@ -8589,6 +8611,7 @@ LF_AFTER_CR:
 	; Allocate slot and write line to Far RAM
 	PUSH	BC
 	CALL	APPEND_LINE_SLOT
+	JR	C,LF_OOM
 	LD	HL,LOAD_LINE_TEMP
 	CALL	WRITE_FAR_SLOT
 
@@ -8603,13 +8626,21 @@ LF_AFTER_CR:
 
 	POP	HL			; Restore sector buffer pointer HL!
 
-	; Check max lines (3584 = 14 banks * 256)
+	; Check max lines (EXT_BANK_COUNT * 256)
 	PUSH	HL
 	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,(EXT_BANK_COUNT)
+	LD	D,A
 	LD	A,H
-	CP	00EH
+	CP	D
 	POP	HL
 	JP	NC,FILE_LOAD_DONE
+	JR	NEXT_BYTE_IN_SECTOR
+
+LF_OOM:
+	POP	BC
+	POP	HL			; Restore sector buffer pointer HL!
+	JP	FILE_LOAD_DONE
 
 NEXT_BYTE_IN_SECTOR:
 	INC	HL
@@ -8630,6 +8661,7 @@ FILE_LOAD_DONE:
 	LD	(HL),0
 
 	CALL	APPEND_LINE_SLOT
+	JR	C,LOAD_FINISH
 	LD	HL,LOAD_LINE_TEMP
 	CALL	WRITE_FAR_SLOT
 
@@ -10555,7 +10587,7 @@ STR_TEST_DISCOVERED:	DB	"[*] Usable Far RAM Banks (32K): $"
 
 STR_TEST_BANKS_LIST:	DB	"): ","$"
 
-STR_TEST_CAPACITY:	DB	"[*] Far Document Storage:       3,584 Lines (448 KB Extended RAM)",13,10,13,10,"$"
+STR_TEST_CAPACITY:	DB	"[*] Far Document Storage:       3,328 Lines (416 KB Extended RAM)",13,10,13,10,"$"
 
 STR_TEST_NO_BANKS:	DB	"[-] No Far RAM banks available for extended storage.",13,10,13,10,"$"
 
