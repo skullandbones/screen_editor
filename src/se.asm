@@ -83,6 +83,7 @@ START:
 	LD	(REPLACE_LEN),A
 	LD	(DOC_MODIFIED),A
 	LD	(IN_EDITOR_MODE),A
+	LD	(IS_SPLASH_SCREEN),A
 	LD	(CONFIRM_ACTION),A
 
 	; Check if filename was provided in FCB1
@@ -1108,6 +1109,8 @@ NOT_ALPHA:
 SPLASH_LINES	EQU	23
 
 RENDER_SPLASH:
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
 	LD	DE,STR_SPLASH_BODY
@@ -3694,6 +3697,8 @@ MOVE_FINISH:
 ; Editor Screen Renderer
 ;------------------------------------------------------------------------------
 RENDER_SCREEN:
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
 	LD	DE,STR_HOME
@@ -4140,6 +4145,10 @@ SHOW_LINUX_FMT:
 	CALL	PRINT_STR
 
 SHOW_STATUS_REST:
+	LD	A,(IS_SPLASH_SCREEN)
+	OR	A
+	JP	NZ,SHOW_STATUS_SPLASH_MEM
+
 	LD	A,(BLOCK_ACTIVE)
 	OR	A
 	JR	Z,SHOW_STATUS_NORMAL_KEYS
@@ -4217,6 +4226,11 @@ STATUS_SOLID_MULTILINE:
 SHOW_STATUS_NORMAL_KEYS:
 	LD	DE,STR_STATUS_KEYS
 	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
+SHOW_STATUS_SPLASH_MEM:
+	CALL	PRINT_STATUS_FREE_MEM
+	JR	SHOW_STATUS_ROWCOL
 
 SHOW_STATUS_ROWCOL:
 	; Print dynamic cursor position: Line <cur>/<total>, Col <col>
@@ -4243,6 +4257,116 @@ SHOW_STATUS_ROWCOL:
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
 	CALL	LOCATE_CURSOR
+	RET
+
+MEM_FIELD_WIDTH		EQU	15
+
+;------------------------------------------------------------------------------
+; Print Free Memory in Status Bar (Fixed Width: MEM_FIELD_WIDTH = 15 chars)
+; Formats as "Free: <N> KB   " followed by " | ".
+; Replaces "^K: Editor keys" when rendering status bar on splash screen.
+;------------------------------------------------------------------------------
+PRINT_STATUS_FREE_MEM:
+	CALL	CALC_FREE_MEM_KB	; HL = Free memory in whole KB
+	PUSH	HL
+
+	; Calculate character count of "Free: <N> KB"
+	; "Free: " = 6 chars, " KB" = 3 chars -> 9 chars + digits
+	CALL	GET_DEC_WORD_DIGITS	; A = number of digits (1..5)
+	ADD	A,9			; A = total chars before padding
+	LD	C,A			; C = characters printed so far
+
+	LD	DE,STR_STATUS_FREE	; "Free: "
+	CALL	PRINT_STR
+
+	POP	HL			; HL = Free KB
+	CALL	PRINT_DEC_WORD
+
+	LD	DE,STR_STATUS_KB	; " KB"
+	CALL	PRINT_STR
+
+PSFM_PAD_LOOP:
+	LD	A,C
+	CP	MEM_FIELD_WIDTH		; 15
+	JR	NC,PSFM_DONE
+	LD	A,' '
+	CALL	PUTC
+	INC	C
+	JR	PSFM_PAD_LOOP
+
+PSFM_DONE:
+	LD	DE,STR_STATUS_SEP	; " | "
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate Free Memory in Whole KB
+; Returns: HL = Free Memory in whole KB (slots / 8)
+;------------------------------------------------------------------------------
+CALC_FREE_MEM_KB:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+
+	LD	A,(EXT_BANK_COUNT)
+	LD	H,A
+	LD	L,0			; HL = Total slots (EXT_BANK_COUNT * 256)
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JR	Z,CFM_DIV8		; If no active editor document, 0 slots used
+
+	LD	DE,(DOC_TOTAL_LINES)
+	AND	A
+	SBC	HL,DE			; HL = Total slots - DOC_TOTAL_LINES
+	JR	NC,CFM_DIV8
+	LD	HL,0			; Clamped to 0
+CFM_DIV8:
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L			; HL = Free KB (slots / 8)
+
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
+;------------------------------------------------------------------------------
+; Count Decimal Digits in 16-bit Word (HL)
+; Returns: A = digit count (1..5)
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+GET_DEC_WORD_DIGITS:
+	PUSH	DE
+	LD	A,1
+	LD	DE,10
+	CALL	CMP_HL_DE
+	JR	C,GDWD_DONE
+	INC	A
+	LD	DE,100
+	CALL	CMP_HL_DE
+	JR	C,GDWD_DONE
+	INC	A
+	LD	DE,1000
+	CALL	CMP_HL_DE
+	JR	C,GDWD_DONE
+	INC	A
+	LD	DE,10000
+	CALL	CMP_HL_DE
+	JR	C,GDWD_DONE
+	INC	A
+GDWD_DONE:
+	POP	DE
+	RET
+
+CMP_HL_DE:
+	; Compare HL with DE: Carry=1 if HL < DE. Preserves HL, DE.
+	PUSH	HL
+	OR	A
+	SBC	HL,DE
+	POP	HL
 	RET
 
 FILENAME_FIELD_WIDTH	EQU	14
@@ -10520,6 +10644,10 @@ STR_FMT_LINUX:	DB	"Linux | ","$"
 
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 
+STR_STATUS_FREE:	DB	"Free: ","$"
+
+STR_STATUS_KB:		DB	" KB","$"
+
 STR_SEL_PREFIX:	DB	"[SEL: ","$"
 
 STR_BLK_PREFIX:	DB	"[BLK: ","$"
@@ -10686,6 +10814,7 @@ SEARCH_INPUT_BUF:	DS	65
 REPLACE_PTR_TEMP:	DW	0
 REPLACE_DELTA_TEMP:	DB	0
 IN_EDITOR_MODE:	DB	0
+IS_SPLASH_SCREEN:	DB	0
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
 IS_SAVE_UI:	DB	0		; 1 if currently in Save File Screen
 SEEN_CR:	DB	0		; Line format auto-detection state

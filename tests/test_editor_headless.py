@@ -106,11 +106,11 @@ def test_se_execution():
         # 4. Run SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=14.0)
-        if b"Auto-detects CP/M [CRLF]" not in out:
-            print("[-] SE.COM splash screen not detected.", flush=True)
+        out = read_until(master, b"Free: 448 KB", timeout=14.0)
+        if b"Auto-detects CP/M [CRLF]" not in out or b"Free: 448 KB" not in out:
+            print("[-] SE.COM splash screen or free memory indicator not detected.", flush=True)
             return False
-        print("[+] SE.COM splash screen successfully displayed.", flush=True)
+        print("[+] SE.COM splash screen successfully displayed with Free: 448 KB status bar.", flush=True)
 
         # 5. Trigger Multi-Sector File I/O Validation Suite ('f')
         time.sleep(0.5)
@@ -643,7 +643,11 @@ def test_se_execution():
         if b"Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash" not in out_splash:
             print(f"[-] Splash screen missing Antigravity attribution. Buffer: {repr(out_splash)}", flush=True)
             return False
-        print("[+] Successfully verified ESC key in editor displays splash screen with version date and attribution.", flush=True)
+        out_splash_status = read_until(master, b"Line 1/30,", timeout=4.0)
+        if b"Free: 444 KB" not in out_splash_status:
+            print(f"[-] Splash screen status bar missing free memory indicator. Buffer: {repr(out_splash_status)}", flush=True)
+            return False
+        print("[+] Successfully verified ESC key in editor displays splash screen with version date, attribution, and free memory.", flush=True)
 
         drain_all(master)
         time.sleep(0.2)
