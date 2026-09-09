@@ -15,6 +15,7 @@ CMD_LEN		EQU	$0080
 CMD_TAIL	EQU	$0081
 
 MAX_LINE_STRIDE	EQU	128		; 128 bytes stride per line buffer
+MAX_LINE_CHARS	EQU	120		; Maximum visual characters per line in all modes
 MAX_FAR_BANKS	EQU	13		; Up to 13 extended 32KB RAM banks (416 KB on 512K system)
 CACHE_SIZE_LINES EQU	48		; 48 lines in local working cache (6 KB)
 MAX_DOC_LINES	EQU	3328		; 13 banks * 256 lines = 3328 total lines
@@ -878,6 +879,10 @@ SET_MODE_120X40:
 	LD	(ACTIVE_ROWS),A
 	LD	A,120
 	LD	(ACTIVE_COLS),A
+	XOR	A
+	LD	(VIEW_LEFT_COL),A
+	LD	A,120
+	LD	(VIEW_RIGHT_COL),A
 	RET
 
 SET_MODE_80X24:
@@ -887,6 +892,10 @@ SET_MODE_80X24:
 	LD	(ACTIVE_ROWS),A
 	LD	A,80
 	LD	(ACTIVE_COLS),A
+	XOR	A
+	LD	(VIEW_LEFT_COL),A
+	LD	A,80
+	LD	(VIEW_RIGHT_COL),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -3728,6 +3737,7 @@ MOVE_FINISH:
 ; Editor Screen Renderer
 ;------------------------------------------------------------------------------
 RENDER_SCREEN:
+	CALL	ADJUST_HORIZ_VIEWPORT
 	XOR	A
 	LD	(IS_SPLASH_SCREEN),A
 	LD	DE,STR_INVERSE_OFF
@@ -3859,7 +3869,7 @@ RCL_START_CHARS:
 PRINT_CUR_LINE_LOOP:
 	LD	A,(HL)
 	OR	A
-	JR	Z,PRINT_CUR_LINE_DONE
+	JP	Z,PRINT_CUR_LINE_DONE
 
 	LD	A,(LINE_BLK_ACTIVE)
 	OR	A
@@ -3879,6 +3889,25 @@ PCL_PRINT_CHAR:
 	LD	A,(HL)
 	CP	KEY_TAB
 	JR	Z,PRINT_CUR_TAB
+
+	; Normal character: check viewport clipping [VIEW_LEFT_COL, VIEW_RIGHT_COL)
+	LD	A,(VIEW_LEFT_COL)
+	CP	B
+	JR	Z,PCL_DO_EMIT		; B == VIEW_LEFT_COL -> emit
+	JR	C,PCL_CHECK_RIGHT	; B > VIEW_LEFT_COL -> check right
+	; B < VIEW_LEFT_COL: skip char output
+	INC	HL
+	INC	B
+	JR	PCL_AFTER_CHAR
+
+PCL_CHECK_RIGHT:
+	LD	A,(VIEW_RIGHT_COL)
+	CP	B
+	JP	Z,PRINT_CUR_LINE_DONE	; B == VIEW_RIGHT_COL -> right edge reached
+	JP	C,PRINT_CUR_LINE_DONE	; B > VIEW_RIGHT_COL -> right edge reached
+
+PCL_DO_EMIT:
+	LD	A,(HL)
 	CALL	PUTC
 	INC	HL
 	INC	B
@@ -3893,14 +3922,28 @@ PRINT_CUR_TAB:
 	SUB	C			; A = spaces to emit (1..8)
 	LD	C,A
 PRINT_CUR_TAB_SPACES:
-	LD	A,(ACTIVE_COLS)
+	LD	A,(VIEW_RIGHT_COL)
 	CP	B
-	JR	Z,PRINT_CUR_LINE_DONE
+	JP	Z,PRINT_CUR_LINE_DONE	; Reached right boundary
+	JP	C,PRINT_CUR_LINE_DONE
+
+	LD	A,(VIEW_LEFT_COL)
+	CP	B
+	JR	Z,PCT_EMIT_SPACE
+	JR	C,PCT_EMIT_SPACE
+	; B < VIEW_LEFT_COL -> skip space
+	INC	B
+	DEC	C
+	JR	NZ,PRINT_CUR_TAB_SPACES
+	JR	PCL_AFTER_CHAR
+
+PCT_EMIT_SPACE:
 	LD	A,' '
 	CALL	PUTC
 	INC	B
 	DEC	C
 	JR	NZ,PRINT_CUR_TAB_SPACES
+	JR	PCL_AFTER_CHAR
 
 PCL_AFTER_CHAR:
 	LD	A,(LINE_BLK_ACTIVE)
@@ -3921,10 +3964,11 @@ PCL_AFTER_CHAR:
 
 PCL_NEXT_CHAR:
 	INC	D
-	LD	A,(ACTIVE_COLS)
+	LD	A,(VIEW_RIGHT_COL)
 	CP	B
-	JR	Z,PRINT_CUR_LINE_DONE
-	JR	PRINT_CUR_LINE_LOOP
+	JP	Z,PRINT_CUR_LINE_DONE
+	JP	C,PRINT_CUR_LINE_DONE
+	JP	PRINT_CUR_LINE_LOOP
 
 PRINT_CUR_LINE_DONE:
 	LD	A,(LINE_IN_INVERSE)
@@ -3943,6 +3987,7 @@ RCL_DONE_RESTORE:
 ; Flush any pending deferred screen, line, or status bar rendering
 ;------------------------------------------------------------------------------
 FLUSH_DEFERRED_RENDER:
+	CALL	ADJUST_HORIZ_VIEWPORT
 	LD	A,(NEED_SCREEN_RENDER)
 	OR	A
 	JR	Z,CHECK_DEFERRED_LINE
@@ -4034,7 +4079,7 @@ RBL_START_CHARS:
 PRINT_LINE_CHARS:
 	LD	A,(HL)
 	OR	A
-	JR	Z,PRINT_LINE_END
+	JP	Z,PRINT_LINE_END
 
 	; Check block highlight attribute transitions
 	LD	A,(LINE_BLK_ACTIVE)
@@ -4057,6 +4102,25 @@ PLC_PRINT_CHAR:
 	LD	A,(HL)
 	CP	KEY_TAB
 	JR	Z,PRINT_LINE_TAB
+
+	; Normal character: check viewport clipping [VIEW_LEFT_COL, VIEW_RIGHT_COL)
+	LD	A,(VIEW_LEFT_COL)
+	CP	B
+	JR	Z,PLC_DO_EMIT		; B == VIEW_LEFT_COL -> emit
+	JR	C,PLC_CHECK_RIGHT	; B > VIEW_LEFT_COL -> check right
+	; B < VIEW_LEFT_COL: skip char output
+	INC	HL
+	INC	B
+	JR	PLC_AFTER_CHAR
+
+PLC_CHECK_RIGHT:
+	LD	A,(VIEW_RIGHT_COL)
+	CP	B
+	JP	Z,PRINT_LINE_END	; B == VIEW_RIGHT_COL -> right edge reached
+	JP	C,PRINT_LINE_END	; B > VIEW_RIGHT_COL -> right edge reached
+
+PLC_DO_EMIT:
+	LD	A,(HL)
 	CALL	PUTC
 	INC	HL
 	INC	B
@@ -4071,14 +4135,28 @@ PRINT_LINE_TAB:
 	SUB	C
 	LD	C,A
 PRINT_LINE_TAB_SPACES:
-	LD	A,(ACTIVE_COLS)
+	LD	A,(VIEW_RIGHT_COL)
 	CP	B
-	JR	Z,PRINT_LINE_END
+	JP	Z,PRINT_LINE_END	; Reached right boundary
+	JP	C,PRINT_LINE_END
+
+	LD	A,(VIEW_LEFT_COL)
+	CP	B
+	JR	Z,PLT_EMIT_SPACE
+	JR	C,PLT_EMIT_SPACE
+	; B < VIEW_LEFT_COL -> skip space
+	INC	B
+	DEC	C
+	JR	NZ,PRINT_LINE_TAB_SPACES
+	JR	PLC_AFTER_CHAR
+
+PLT_EMIT_SPACE:
 	LD	A,' '
 	CALL	PUTC
 	INC	B
 	DEC	C
 	JR	NZ,PRINT_LINE_TAB_SPACES
+	JR	PLC_AFTER_CHAR
 
 PLC_AFTER_CHAR:
 	; Check if D == LINE_BLK_END (turn off inverse after this char)
@@ -4101,10 +4179,11 @@ PLC_AFTER_CHAR:
 
 PLC_NEXT_CHAR:
 	INC	D			; Next character index
-	LD	A,(ACTIVE_COLS)
+	LD	A,(VIEW_RIGHT_COL)
 	CP	B
-	JR	Z,PRINT_LINE_END
-	JR	PRINT_LINE_CHARS
+	JP	Z,PRINT_LINE_END
+	JP	C,PRINT_LINE_END
+	JP	PRINT_LINE_CHARS
 
 PRINT_LINE_END:
 	; If inverse video was left on (e.g. EndCol = 254), turn it off
@@ -4559,8 +4638,87 @@ PSF_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Calculate Visual Screen Column from (CUR_DOC_ROW, CUR_COL)
-; Returns: A = Visual Column (0-indexed, 0..ACTIVE_COLS-1)
+; ADJUST_HORIZ_VIEWPORT: Auto-scroll horizontal viewport in 80-column mode
+; Evaluates cursor visual column against VIEW_LEFT_COL and VIEW_RIGHT_COL.
+; If viewport shifts, sets NEED_SCREEN_RENDER = 1.
+; Preserves: AF, BC, DE, HL
+;------------------------------------------------------------------------------
+ADJUST_HORIZ_VIEWPORT:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; If ACTIVE_COLS >= 120, horizontal scrolling is inactive (VIEW_LEFT_COL = 0)
+	LD	A,(ACTIVE_COLS)
+	CP	120
+	JR	NC,AHV_SET_ZERO
+
+	CALL	CALC_VISUAL_COL		; A = true visual column (0..119)
+	LD	B,A			; B = visual column
+
+	; 1. Check if cursor is off-screen to the left (B < VIEW_LEFT_COL)
+	LD	A,(VIEW_LEFT_COL)
+	CP	B
+	JR	Z,AHV_CHECK_RIGHT
+	JR	NC,AHV_PAN_LEFT		; VIEW_LEFT_COL > B
+
+AHV_CHECK_RIGHT:
+	; 2. Check if cursor is off-screen to the right (B >= VIEW_RIGHT_COL)
+	LD	A,(VIEW_RIGHT_COL)
+	CP	B
+	JR	Z,AHV_PAN_RIGHT		; B == VIEW_RIGHT_COL -> pan right
+	JR	C,AHV_PAN_RIGHT		; B > VIEW_RIGHT_COL -> pan right
+	JR	AHV_DONE		; Within visible viewport
+
+AHV_PAN_LEFT:
+	; Pan left: jump to 0 or 20
+	LD	A,B
+	CP	20
+	JR	C,AHV_SET_ZERO		; B < 20 -> VIEW_LEFT_COL = 0
+	LD	A,20
+	JR	AHV_UPDATE
+
+AHV_PAN_RIGHT:
+	; Pan right: jump to 20 or 40
+	LD	A,B
+	CP	100
+	JR	NC,AHV_SET_40		; B >= 100 -> VIEW_LEFT_COL = 40
+	LD	A,20
+	JR	AHV_UPDATE
+
+AHV_SET_40:
+	LD	A,40
+	JR	AHV_UPDATE
+
+AHV_SET_ZERO:
+	XOR	A
+
+AHV_UPDATE:
+	LD	HL,VIEW_LEFT_COL
+	CP	(HL)
+	JR	Z,AHV_DONE		; Viewport left didn't change
+	LD	(HL),A			; Store new VIEW_LEFT_COL
+
+	; Update VIEW_RIGHT_COL = VIEW_LEFT_COL + ACTIVE_COLS
+	LD	HL,ACTIVE_COLS
+	ADD	A,(HL)
+	LD	(VIEW_RIGHT_COL),A
+
+	; Trigger full screen redraw when horizontal viewport shifts
+	LD	A,1
+	LD	(NEED_SCREEN_RENDER),A
+
+AHV_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate Visual Document Column from (CUR_DOC_ROW, CUR_COL)
+; Returns: A = Visual Column (0-indexed, 0..MAX_LINE_CHARS-1: 0..119)
 ; Preserves: BC, DE, HL
 ;------------------------------------------------------------------------------
 CALC_VISUAL_COL:
@@ -4602,14 +4760,13 @@ CALC_VIS_NEXT:
 	JR	NZ,CALC_VIS_LOOP
 
 CALC_VIS_DONE:
-	LD	A,(ACTIVE_COLS)
-	DEC	A			; A = max visual column (ACTIVE_COLS - 1: 119 or 79)
+	LD	A,MAX_LINE_CHARS-1	; 119 (max visual column in all modes)
 	CP	B
 	JR	C,CLAMP_VIS_COL
 	LD	A,B
 	JR	EXIT_CALC_VIS
 CLAMP_VIS_COL:
-	; A is already ACTIVE_COLS - 1
+	; A is already MAX_LINE_CHARS - 1 (119)
 EXIT_CALC_VIS:
 	POP	HL
 	POP	DE
@@ -4617,7 +4774,7 @@ EXIT_CALC_VIS:
 	RET
 
 LOCATE_CURSOR:
-	; Emit ESC [ <ScreenRow+1> ; <VisualCol+1> H
+	; Emit ESC [ <ScreenRow+1> ; <ScreenCol+1> H
 	LD	A,27
 	CALL	PUTC
 	LD	A,'['
@@ -4635,8 +4792,13 @@ LOCATE_CURSOR:
 	LD	A,';'
 	CALL	PUTC
 
-	; Visual Column (1-indexed)
-	CALL	CALC_VISUAL_COL		; A = visual column (0-indexed)
+	; Screen Column (1-indexed) = (Visual Col - VIEW_LEFT_COL) + 1
+	CALL	CALC_VISUAL_COL		; A = visual column (0-indexed, 0..119)
+	LD	B,A
+	LD	A,(VIEW_LEFT_COL)
+	LD	C,A
+	LD	A,B
+	SUB	C			; A = Screen Column (0-indexed, 0..ACTIVE_COLS-1)
 	INC	A
 	CALL	PRINT_DEC_BYTE
 
@@ -5821,11 +5983,10 @@ CURSOR_RIGHT:
 	CP	B
 	JR	NC,CURSOR_RIGHT_NEXT_LINE ; If at or past EOL, wrap to next line!
 
-	; Check if visual cursor is already at ACTIVE_COLS - 1 (col 119 or 79)
+	; Check if visual cursor is already at MAX_LINE_CHARS - 1 (col 119)
 	CALL	CALC_VISUAL_COL
 	LD	D,A
-	LD	A,(ACTIVE_COLS)
-	DEC	A
+	LD	A,MAX_LINE_CHARS-1	; 119
 	CP	D
 	JR	Z,CURSOR_RIGHT_NEXT_LINE ; If at column 119, wrap to next line!
 	JR	C,CURSOR_RIGHT_NEXT_LINE
@@ -7941,13 +8102,13 @@ ROW_IN_BOUNDS:
 	RET	C
 	RET	Z
 
-	; 2. Check visual screen width limit (ACTIVE_COLS: 120 or 80)
-	LD	A,(ACTIVE_COLS)
+	; 2. Check visual line length limit (MAX_LINE_CHARS: 120)
+	LD	A,MAX_LINE_CHARS
 	CP	C
 	JR	Z,CHECK_AT_EOL_REPLACE
 	JR	C,CHECK_AT_EOL_REPLACE
 
-	; If inserting a Tab, check if tab expansion would push visual length > ACTIVE_COLS
+	; If inserting a Tab, check if tab expansion would push visual length > MAX_LINE_CHARS
 	LD	A,(CHAR_INSERT_TEMP)
 	CP	KEY_TAB
 	JR	NZ,LINE_LEN_OK
@@ -7959,13 +8120,13 @@ ROW_IN_BOUNDS:
 	ADD	A,C			; projected visual length
 	DEC	A			; minus 1 for replaced slot
 	LD	E,A
-	LD	A,(ACTIVE_COLS)
+	LD	A,MAX_LINE_CHARS
 	CP	E
-	RET	C			; Tab would exceed screen width!
+	RET	C			; Tab would exceed maximum line width!
 	JR	LINE_LEN_OK
 
 CHECK_AT_EOL_REPLACE:
-	; Visual line is already at maximum capacity (>= ACTIVE_COLS)
+	; Visual line is already at maximum capacity (>= MAX_LINE_CHARS)
 	RET
 
 LINE_LEN_OK:
@@ -8039,11 +8200,10 @@ PAD_SPACES_DONE:
 	POP	HL
 
 ADVANCE_INSERT_CURSOR:
-	; Check if visual cursor is already at or past ACTIVE_COLS - 1 (col 119 or 79)
+	; Check if visual cursor is already at or past MAX_LINE_CHARS - 1 (col 119)
 	CALL	CALC_VISUAL_COL		; A = visual col before advance
 	LD	B,A
-	LD	A,(ACTIVE_COLS)
-	DEC	A			; 119 or 79
+	LD	A,MAX_LINE_CHARS-1	; 119
 	CP	B
 	RET	C
 	RET	Z			; At column 119, cannot advance cursor further!
@@ -8595,6 +8755,9 @@ LOAD_FILE:
 	LD	(TOP_DOC_ROW),HL
 	LD	(CACHE_START_ROW),HL
 	LD	(CACHE_DIRTY),A
+	LD	(VIEW_LEFT_COL),A
+	LD	A,(ACTIVE_COLS)
+	LD	(VIEW_RIGHT_COL),A
 
 	CALL	INIT_SLOT_SYSTEM
 
@@ -8780,6 +8943,9 @@ INIT_EMPTY_DOCUMENT:
 	LD	(DOC_MODIFIED),A
 	LD	(BLOCK_ACTIVE),A
 	LD	(STATUS_OOM_FLAG),A
+	LD	(VIEW_LEFT_COL),A
+	LD	A,(ACTIVE_COLS)
+	LD	(VIEW_RIGHT_COL),A
 
 	; Write empty line to line 0 in Far RAM
 	CALL	CLEAR_LOAD_TEMP
@@ -10879,6 +11045,8 @@ ROM_BANK_COUNT:	DB	0
 SCREEN_MODE:	DB	MODE_120X40	; Default to 120x40
 ACTIVE_ROWS:	DB	40		; Default 40 rows
 ACTIVE_COLS:	DB	120		; Default 120 cols
+VIEW_LEFT_COL:	DB	0		; Horizontal viewport left column offset (0..40)
+VIEW_RIGHT_COL:	DB	120		; Cached right column bound (VIEW_LEFT_COL + ACTIVE_COLS)
 
 ; Screen cursor coordinates use "row" (0..ACTIVE_ROWS-2) internally for terminal
 ; positioning (LOCATE_CURSOR: Screen Row = CUR_DOC_ROW - TOP_DOC_ROW + 1).

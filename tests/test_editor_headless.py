@@ -2735,6 +2735,122 @@ def test_se_execution():
         print("[+] Clean exit back to CP/M prompt.", flush=True)
         print("[+] Successfully verified OOM Status Bar Replacement and Revert on Keypress (Step 57)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 58: Verifying Horizontal Scrolling in 80x24 Mode
+        # ---------------------------------------------------------------------
+        print("[*] Step 58: Verifying Horizontal Scrolling in 80x24 Mode...", flush=True)
+        drain_all(master)
+        time.sleep(0.3)
+        os.write(master, b"se\r")
+        out_s58_sp = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=14.0)
+        if b"Auto-detects CP/M [CRLF]" not in out_s58_sp:
+            print(f"[-] Step 58 failed: Splash screen failed to display. Buffer: {repr(out_s58_sp)}", flush=True)
+            return False
+
+        # Switch to 80x24 mode with '2'
+        drain_all(master)
+        os.write(master, b"2")
+        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        drain_all(master)
+        time.sleep(0.3)
+
+        # Enter editor mode with 'e'
+        os.write(master, b"e")
+        out_s58_edit = read_until(master, b"Line 1/1, Col 0", timeout=6.0)
+        if b"80x24" not in out_s58_edit or b"Line 1/1, Col 0" not in out_s58_edit:
+            print(f"[-] Step 58 failed: Editor mode not entered in 80x24: {repr(out_s58_edit)}", flush=True)
+            return False
+
+        # Type 85 characters: "0123456789" * 8 + "ABCDE"
+        drain_all(master)
+        test_str_85 = ("0123456789" * 8 + "ABCDE").encode("ascii")
+        os.write(master, test_str_85)
+        out_s58_t85 = read_until(master, b"Col 85", timeout=6.0)
+        if b"Col 85" not in out_s58_t85:
+            print(f"[-] Step 58 failed: Failed to type past 80 cols: {repr(out_s58_t85[-200:])}", flush=True)
+            return False
+        if b"ABCDE" not in out_s58_t85:
+            print(f"[-] Step 58 failed: 'ABCDE' not found on scrolled screen buffer: {repr(out_s58_t85[-300:])}", flush=True)
+            return False
+
+        # Type 20 more characters to reach Col 105 (second jump to viewport 40)
+        drain_all(master)
+        os.write(master, b"01234567890123456789")
+        out_s58_t105 = read_until(master, b"Col 105", timeout=6.0)
+        if b"Col 105" not in out_s58_t105:
+            print(f"[-] Step 58 failed: Failed to reach Col 105: {repr(out_s58_t105[-200:])}", flush=True)
+            return False
+
+        # Test Home navigation (Ctrl+A): should jump to Col 0 and scroll viewport back to 0
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x01")  # Ctrl+A
+        out_s58_home = read_until(master, b"Col 0", timeout=4.0)
+        if b"Col 0" not in out_s58_home or b"0123456789" not in out_s58_home:
+            print(f"[-] Step 58 failed: Home failed to return to Col 0: {repr(out_s58_home[-200:])}", flush=True)
+            return False
+
+        # Test End navigation (Ctrl+E): should jump to Col 105 and viewport jump to 40
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x05")  # Ctrl+E
+        out_s58_end = read_until(master, b"Col 105", timeout=4.0)
+        if b"Col 105" not in out_s58_end:
+            print(f"[-] Step 58 failed: End failed to jump to Col 105: {repr(out_s58_end[-200:])}", flush=True)
+            return False
+
+        # Test Left Arrow navigation across boundary 40 (105 -> 39)
+        drain_all(master)
+        for _ in range(66):
+            os.write(master, b"\x1b[D")
+            time.sleep(0.01)
+        out_s58_l39 = read_until(master, b"Col 39", timeout=5.0)
+        if b"Col 39" not in out_s58_l39:
+            print(f"[-] Step 58 failed: Left arrow failed to reach Col 39: {repr(out_s58_l39[-200:])}", flush=True)
+            return False
+
+        # Test Left Arrow navigation across boundary 20 (39 -> 19)
+        drain_all(master)
+        for _ in range(20):
+            os.write(master, b"\x1b[D")
+            time.sleep(0.01)
+        out_s58_l19 = read_until(master, b"Col 19", timeout=5.0)
+        if b"Col 19" not in out_s58_l19:
+            print(f"[-] Step 58 failed: Left arrow failed to reach Col 19: {repr(out_s58_l19[-200:])}", flush=True)
+            return False
+
+        # Test Right Arrow navigation across boundary 80 (19 -> 80)
+        drain_all(master)
+        for _ in range(61):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.01)
+        out_s58_r80 = read_until(master, b"Col 80", timeout=5.0)
+        if b"Col 80" not in out_s58_r80:
+            print(f"[-] Step 58 failed: Right arrow failed to reach Col 80: {repr(out_s58_r80[-200:])}", flush=True)
+            return False
+
+        # Test Right Arrow navigation across boundary 100 (80 -> 100)
+        drain_all(master)
+        for _ in range(20):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.01)
+        out_s58_r100 = read_until(master, b"Col 100", timeout=5.0)
+        if b"Col 100" not in out_s58_r100:
+            print(f"[-] Step 58 failed: Right arrow failed to reach Col 100: {repr(out_s58_r100[-200:])}", flush=True)
+            return False
+
+        # Clean exit to CP/M with Ctrl+Q -> 'n'
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"Save changes?", timeout=4.0)
+        os.write(master, b"n")
+        out_s58_cpm = read_until(master, b"C>", timeout=4.0)
+        if b"C>" not in out_s58_cpm:
+            print(f"[-] Step 58 failed: Failed clean exit to CP/M: {repr(out_s58_cpm)}", flush=True)
+            return False
+        print("[+] Successfully verified Horizontal Scrolling in 80x24 Mode (Step 58)!", flush=True)
+
         return True
 
     finally:
