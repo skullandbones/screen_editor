@@ -84,6 +84,7 @@ START:
 	LD	(DOC_MODIFIED),A
 	LD	(IN_EDITOR_MODE),A
 	LD	(IS_SPLASH_SCREEN),A
+	LD	(STATUS_OOM_FLAG),A
 	LD	(CONFIRM_ACTION),A
 
 	; Check if filename was provided in FCB1
@@ -159,6 +160,7 @@ RESUME_EDITOR:
 SHOW_SPLASH_SCREEN:
 	XOR	A
 	LD	(BLOCK_ACTIVE),A
+	LD	(STATUS_OOM_FLAG),A
 SPLASH_START:
 	CALL	RENDER_SPLASH
 
@@ -276,6 +278,18 @@ MAIN_LOOP:
 
 MAIN_LOOP_GET_KEY:
 	CALL	GET_KEY
+
+	; If OOM status was displayed on status bar, revert upon any keypress
+	LD	B,A
+	LD	A,(STATUS_OOM_FLAG)
+	OR	A
+	JR	Z,ML_NO_OOM_CLEAR
+	XOR	A
+	LD	(STATUS_OOM_FLAG),A
+	LD	A,1
+	LD	(NEED_STATUS_RENDER),A
+ML_NO_OOM_CLEAR:
+	LD	A,B
 
 	; Command: Ctrl+Q -> Exit
 	CP	KEY_CTRL_Q
@@ -498,8 +512,10 @@ CHECK_ENTER:
 	JR	Z,DO_ENTER_CANCEL_SETUP
 	CALL	CANCEL_BLOCK
 	CALL	DO_INSERT_LINE
+	JR	C,ENTER_INS_DONE
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
+ENTER_INS_DONE:
 	JP	MAIN_LOOP
 
 DO_ENTER_CANCEL_SETUP:
@@ -3126,11 +3142,17 @@ DO_COPY_BLK_MULTILINE:
 	LD	E,0			; DE = EXT_BANK_COUNT * 256
 	LD	A,H
 	CP	D
-	RET	NC
-	JR	NZ,COPY_ML_CAP_OK
+	JR	C,COPY_ML_CAP_OK
+	JR	NZ,COPY_ML_CAP_FAIL
 	LD	A,L
 	CP	E
-	RET	NC
+	JR	C,COPY_ML_CAP_OK
+
+COPY_ML_CAP_FAIL:
+	CALL	SET_OOM_STATUS
+	SCF
+	RET
+
 COPY_ML_CAP_OK:
 
 	; Pre-extract BLOCK_END_ROW prefix [0 .. BLOCK_END_COL] into COPY_TAIL_BUF
@@ -3188,6 +3210,7 @@ COPY_ML_ALLOC_LOOP:
 	JR	COPY_ML_ALLOC_DONE
 
 COPY_ML_ALLOC_FAIL:
+	CALL	SET_OOM_STATUS
 	POP	BC
 	LD	HL,(COPY_K_LINES)
 	AND	A
@@ -3196,7 +3219,7 @@ COPY_ML_ALLOC_FAIL:
 	LD	C,L
 	LD	A,B
 	OR	C
-	RET	Z
+	JR	Z,COPY_ML_ALLOC_FAIL_RET
 	LD	IX,COPY_SLOTS_BUF
 COPY_ML_ROLLBACK:
 	LD	L,(IX+0)
@@ -3210,6 +3233,8 @@ COPY_ML_ROLLBACK:
 	LD	A,B
 	OR	C
 	JR	NZ,COPY_ML_ROLLBACK
+COPY_ML_ALLOC_FAIL_RET:
+	SCF
 	RET
 
 COPY_ML_ALLOC_DONE:
@@ -3473,6 +3498,7 @@ COPY_ML_FINISH:
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
 	LD	(DOC_MODIFIED),A
+	AND	A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -3536,6 +3562,9 @@ MOVE_MARK_BEFORE:
 MOVE_EXEC_COPY:
 	; Step 1: Copy block to destination
 	CALL	DO_COPY_BLOCK
+	LD	A,(STATUS_OOM_FLAG)
+	OR	A
+	RET	NZ			; Abort move if copy failed due to OOM!
 
 	; Step 2: Delete original block
 	CALL	DO_DELETE_BLOCK
@@ -4151,6 +4180,10 @@ SHOW_STATUS_REST:
 	OR	A
 	JP	NZ,SHOW_STATUS_SPLASH_MEM
 
+	LD	A,(STATUS_OOM_FLAG)
+	OR	A
+	JP	NZ,SHOW_STATUS_OOM
+
 	LD	A,(BLOCK_ACTIVE)
 	OR	A
 	JR	Z,SHOW_STATUS_NORMAL_KEYS
@@ -4230,6 +4263,11 @@ SHOW_STATUS_NORMAL_KEYS:
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
+SHOW_STATUS_OOM:
+	LD	DE,STR_STATUS_OOM
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
 SHOW_STATUS_SPLASH_MEM:
 	CALL	PRINT_STATUS_FREE_MEM
 	JR	SHOW_STATUS_ROWCOL
@@ -4299,6 +4337,32 @@ PSFM_PAD_LOOP:
 PSFM_DONE:
 	LD	DE,STR_STATUS_SEP	; " | "
 	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; SET_OOM_STATUS: Record Out of Memory condition and update status bar if displayed
+;------------------------------------------------------------------------------
+SET_OOM_STATUS:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	A,1
+	LD	(STATUS_OOM_FLAG),A
+	LD	(NEED_STATUS_RENDER),A
+	; Only update status bar if in editor mode and not splash screen
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JR	Z,SOS_DONE
+	LD	A,(IS_SPLASH_SCREEN)
+	OR	A
+	JR	NZ,SOS_DONE
+	CALL	RENDER_STATUS_BAR
+SOS_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
 	RET
 
 ;------------------------------------------------------------------------------
@@ -8404,6 +8468,8 @@ NO_SLOT_SHIFT_DOWN:
 	JR	DO_SPLIT_TEXT
 
 INS_FAIL:
+	CALL	SET_OOM_STATUS
+	SCF
 	RET
 
 DO_SPLIT_TEXT:
@@ -8478,6 +8544,7 @@ SPLIT_NO_SCROLL:
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
 	LD	(DOC_MODIFIED),A
+	AND	A
 	RET
 
 HBIOS_DETECT:
@@ -8493,6 +8560,8 @@ HBIOS_DETECT:
 ; File Loading: Reads files directly into Far RAM banks
 ;------------------------------------------------------------------------------
 LOAD_FILE:
+	XOR	A
+	LD	(STATUS_OOM_FLAG),A
 	LD	DE,DEFAULT_DMA
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
@@ -8625,21 +8694,12 @@ LF_AFTER_CR:
 	LD	B,0
 
 	POP	HL			; Restore sector buffer pointer HL!
-
-	; Check max lines (EXT_BANK_COUNT * 256)
-	PUSH	HL
-	LD	HL,(DOC_TOTAL_LINES)
-	LD	A,(EXT_BANK_COUNT)
-	LD	D,A
-	LD	A,H
-	CP	D
-	POP	HL
-	JP	NC,FILE_LOAD_DONE
 	JR	NEXT_BYTE_IN_SECTOR
 
 LF_OOM:
 	POP	BC
 	POP	HL			; Restore sector buffer pointer HL!
+	CALL	SET_OOM_STATUS
 	JP	FILE_LOAD_DONE
 
 NEXT_BYTE_IN_SECTOR:
@@ -8661,7 +8721,11 @@ FILE_LOAD_DONE:
 	LD	(HL),0
 
 	CALL	APPEND_LINE_SLOT
-	JR	C,LOAD_FINISH
+	JR	NC,LF_FINAL_OK
+	CALL	SET_OOM_STATUS
+	JR	LOAD_FINISH
+
+LF_FINAL_OK:
 	LD	HL,LOAD_LINE_TEMP
 	CALL	WRITE_FAR_SLOT
 
@@ -8715,6 +8779,7 @@ INIT_EMPTY_DOCUMENT:
 	LD	(CACHE_DIRTY),A
 	LD	(DOC_MODIFIED),A
 	LD	(BLOCK_ACTIVE),A
+	LD	(STATUS_OOM_FLAG),A
 
 	; Write empty line to line 0 in Far RAM
 	CALL	CLEAR_LOAD_TEMP
@@ -10676,6 +10741,8 @@ STR_FMT_LINUX:	DB	"Linux | ","$"
 
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 
+STR_STATUS_OOM:		DB	"Out of memory   | ","$"
+
 STR_STATUS_FREE:	DB	"Free: ","$"
 
 STR_STATUS_KB:		DB	" KB","$"
@@ -10847,6 +10914,7 @@ REPLACE_PTR_TEMP:	DW	0
 REPLACE_DELTA_TEMP:	DB	0
 IN_EDITOR_MODE:	DB	0
 IS_SPLASH_SCREEN:	DB	0
+STATUS_OOM_FLAG:	DB	0
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
 IS_SAVE_UI:	DB	0		; 1 if currently in Save File Screen
 SEEN_CR:	DB	0		; Line format auto-detection state

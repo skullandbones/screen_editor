@@ -71,6 +71,19 @@ def test_se_execution():
         print(f"[-] Disk image not found: {img_file}", flush=True)
         return False
 
+    # Prepare BIG.TXT on test disk image (3,328 lines) for Step 57 OOM verification
+    big_tmp = "/tmp/BIG.TXT"
+    if not os.path.isfile(big_tmp) or os.path.getsize(big_tmp) < 30000:
+        with open(big_tmp, "w") as f:
+            for i in range(1, 3329):
+                f.write(f"Line {i:04d}\r\n")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    workspace_root = os.path.abspath(os.path.join(os.path.dirname(script_dir), "..", ".."))
+    cpmcp_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp")
+    if os.path.isfile(cpmcp_bin):
+        subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big_tmp, "0:BIG.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     print("[*] Launching RomWBW on RC2014 emulator...", flush=True)
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -2642,6 +2655,85 @@ def test_se_execution():
         os.write(master, b"\x11")
         read_until(master, b"C>", timeout=4.0)
         print("[+] Successfully verified 13-Bank Far RAM discovery and HBIOS Bank 0x80 protection (Step 56)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 57: Verifying OOM Status Bar Replacement and Revert on Keypress
+        # ---------------------------------------------------------------------
+        print("[*] Step 57: Verifying OOM status bar replacement and revert on keypress...", flush=True)
+        drain_all(master)
+        time.sleep(0.3)
+        os.write(master, b"se BIG.TXT\r")
+        out_s57 = read_until(master, b"Line 1/3328,", timeout=30.0)
+        if b"Line 1/3328," not in out_s57 or b"^K: Editor keys" not in out_s57:
+            print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing '^K: Editor keys'. Buffer: {repr(out_s57[-200:])}", flush=True)
+            return False
+        print("[+] BIG.TXT (3,328 lines) loaded with status bar showing '^K: Editor keys'.", flush=True)
+
+        # Try inserting a new line (Enter key) when document is at capacity (3,328 lines) -> OOM!
+        drain_all(master)
+        time.sleep(0.3)
+        os.write(master, b"\r")
+        out_s57_oom = read_until(master, b"Out of memory   | ", timeout=6.0)
+        if b"Out of memory" not in out_s57_oom:
+            print(f"[-] Step 57 failed: Status bar did not display 'Out of memory' on Enter. Buffer: {repr(out_s57_oom)}", flush=True)
+            return False
+        if b"Out of memory   | " not in out_s57_oom:
+            print(f"[-] Step 57 failed: 'Out of memory' field does not match fixed 15-char width. Buffer: {repr(out_s57_oom)}", flush=True)
+            return False
+        print("[+] Successfully verified OOM replaces '^K: Editor keys' with fixed-width 'Out of memory'!", flush=True)
+
+        # Press Down Arrow (\x1b[B): should move to Line 2 and revert to '^K: Editor keys'
+        drain_all(master)
+        time.sleep(0.3)
+        os.write(master, b"\x1b[B")
+        out_s57_down = read_until(master, b"Line 2/3328,", timeout=6.0)
+        if b"^K: Editor keys" not in out_s57_down or b"Line 2/3328," not in out_s57_down:
+            print(f"[-] Step 57 failed: Cursor down did not revert to '^K: Editor keys' or move to Line 2. Buffer: {repr(out_s57_down[-200:])}", flush=True)
+            return False
+        print("[+] Successfully verified cursor down moved to Line 2 and reverted to '^K: Editor keys'!", flush=True)
+
+        # Press Up Arrow (\x1b[A) to return to Line 1
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[A")
+        out_s57_up = read_until(master, b"Line 1/3328,", timeout=6.0)
+        if b"Line 1/3328," not in out_s57_up:
+            print(f"[-] Step 57 failed: Cursor up did not return to Line 1. Buffer: {repr(out_s57_up[-200:])}", flush=True)
+            return False
+
+        # Press Enter again at Line 1 -> triggers OOM again
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\r")
+        out_s57_oom2 = read_until(master, b"Out of memory   | ", timeout=6.0)
+        if b"Out of memory" not in out_s57_oom2:
+            print(f"[-] Step 57 failed: Second Enter did not trigger 'Out of memory'. Buffer: {repr(out_s57_oom2)}", flush=True)
+            return False
+        print("[+] Successfully verified second Enter triggers 'Out of memory' again.", flush=True)
+
+        # Press typing key 'x': should insert 'x' and revert to '^K: Editor keys'
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"x")
+        out_s57_x = read_until(master, b"Col 1", timeout=6.0)
+        if b"^K: Editor keys" not in out_s57_x or b"Col 1" not in out_s57_x:
+            print(f"[-] Step 57 failed: Typing 'x' did not revert status bar or advance Col. Buffer: {repr(out_s57_x[-200:])}", flush=True)
+            return False
+        print("[+] Successfully verified typing 'x' inserted char and reverted to '^K: Editor keys'!", flush=True)
+
+        # Clean exit to CP/M with Ctrl+Q -> 'n' (discard changes)
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        out_s57_q = read_until(master, b"Save changes?", timeout=4.0)
+        if b"Save changes?" not in out_s57_q:
+            print(f"[-] Step 57 failed: Missing save changes prompt on exit. Buffer: {repr(out_s57_q)}", flush=True)
+            return False
+        time.sleep(0.2)
+        os.write(master, b"n")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Successfully verified OOM Status Bar Replacement and Revert on Keypress (Step 57)!", flush=True)
 
         return True
 
