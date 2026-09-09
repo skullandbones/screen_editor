@@ -4818,7 +4818,35 @@ AHV_CHECK_RIGHT:
 	CP	B
 	JR	Z,AHV_PAN_RIGHT		; B == VIEW_RIGHT_COL -> pan right
 	JR	C,AHV_PAN_RIGHT		; B > VIEW_RIGHT_COL -> pan right
-	JR	AHV_DONE		; Within visible viewport
+
+	; 3. Check if cursor is on right screen edge (B == VIEW_RIGHT_COL - 1)
+	; on continuing line (Option 2: early auto-pan so cursor never lands on edge highlight)
+	DEC	A
+	CP	B
+	JR	NZ,AHV_DONE		; B < VIEW_RIGHT_COL - 1 -> within viewport
+
+	; B == VIEW_RIGHT_COL - 1. Check if line continues past CUR_COL:
+	PUSH	BC			; Save visual column B
+	LD	BC,(CUR_DOC_ROW)
+	CALL	ENSURE_CACHE_WINDOW	; HL = line start in LINE_STORAGE
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = pointer to char at CUR_COL
+	LD	A,(HL)
+	OR	A
+	JR	Z,AHV_POP_DONE		; At null terminator -> line ends here
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	JR	Z,AHV_POP_DONE		; Next char is null -> char at B is last char
+	; Line continues beyond right edge -> pan right!
+	POP	BC			; Restore visual column B
+	JR	AHV_PAN_RIGHT
+
+AHV_POP_DONE:
+	POP	BC			; Restore visual column B
+	JR	AHV_DONE
 
 AHV_PAN_LEFT:
 	; Pan left: jump to 0 or 20
@@ -4831,8 +4859,8 @@ AHV_PAN_LEFT:
 AHV_PAN_RIGHT:
 	; Pan right: jump to 20 or 40
 	LD	A,B
-	CP	100
-	JR	NC,AHV_SET_40		; B >= 100 -> VIEW_LEFT_COL = 40
+	CP	99
+	JR	NC,AHV_SET_40		; B >= 99 -> VIEW_LEFT_COL = 40
 	LD	A,20
 	JR	AHV_UPDATE
 

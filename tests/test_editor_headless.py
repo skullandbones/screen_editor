@@ -2918,7 +2918,37 @@ def test_se_execution():
         time.sleep(0.2)
         drain_all(master)
 
-        # Test line <= 80 chars (no continuation highlight)
+        # Test early auto-pan on continuing line (Option 2):
+        # Cursor is at Col 0 on 85-char line. Move right to Col 78:
+        for _ in range(78):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.005)
+        out_s59_c78 = read_until(master, b"Col 78", timeout=6.0)
+        time.sleep(0.1)
+        out_s59_c78 += drain_all(master)
+        if b";79H" not in out_s59_c78:
+            print(f"[-] Step 59 failed: Cursor at Col 78 not at screen col 79: {repr(out_s59_c78[-150:])}", flush=True)
+            return False
+
+        # Move right to Col 79: should auto-pan to VIEW_LEFT_COL = 20, screen col 60
+        os.write(master, b"\x1b[C")
+        out_s59_c79 = read_until(master, b"Col 79", timeout=6.0)
+        time.sleep(0.2)
+        out_s59_c79 += drain_all(master)
+        if b";60H" not in out_s59_c79:
+            print(f"[-] Step 59 failed: Auto-pan did not position cursor at screen col 60: {repr(out_s59_c79[-250:])}", flush=True)
+            return False
+
+        # Move left to Col 78: viewport should remain panned at 20, screen col 59
+        os.write(master, b"\x1b[D")
+        out_s59_left = read_until(master, b"Col 78", timeout=6.0)
+        time.sleep(0.1)
+        out_s59_left += drain_all(master)
+        if b";59H" not in out_s59_left:
+            print(f"[-] Step 59 failed: Moving left did not stay panned at screen col 59: {repr(out_s59_left[-150:])}", flush=True)
+            return False
+
+        # Test line <= 80 chars (no continuation highlight and no auto-pan at col 79)
         # End (Ctrl+E), delete 5 characters, Home (Ctrl+A)
         os.write(master, b"\x05")  # Ctrl+E
         read_until(master, b"Col 85", timeout=6.0)
@@ -2932,6 +2962,20 @@ def test_se_execution():
         out_s59_80 = drain_all(master)
         if expected_cont_seq in out_s59_80:
             print(f"[-] Step 59 failed: 80-char line incorrectly highlighted col 79: {repr(out_s59_80)}", flush=True)
+            return False
+
+        # Move to Col 79 on 80-char line: should NOT auto-pan, cursor at screen col 80
+        for _ in range(79):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.005)
+        out_s59_80_c79 = read_until(master, b"Col 79", timeout=6.0)
+        time.sleep(0.2)
+        out_s59_80_c79 += drain_all(master)
+        if b";80H" not in out_s59_80_c79:
+            print(f"[-] Step 59 failed: Cursor on 80-char line at Col 79 not at screen col 80: {repr(out_s59_80_c79[-200:])}", flush=True)
+            return False
+        if expected_cont_seq in out_s59_80_c79:
+            print(f"[-] Step 59 failed: 80-char line has unexpected continuation highlight at col 79: {repr(out_s59_80_c79[-200:])}", flush=True)
             return False
 
         # Clean exit to CP/M with Ctrl+Q -> 'n'
