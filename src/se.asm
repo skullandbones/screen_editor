@@ -1105,7 +1105,7 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ;------------------------------------------------------------------------------
-SPLASH_LINES	EQU	22
+SPLASH_LINES	EQU	23
 
 RENDER_SPLASH:
 	LD	DE,STR_CLEAR_SCREEN
@@ -10383,8 +10383,9 @@ STR_SPLASH_BODY:	DB	27,"[H"
 	DB	"~",13,10
 	DB	"~",13,10
 	DB	"~                               SE - Screen Editor              ",13,10
-	DB	"~                                  version 0.8.2                ",13,10
+	DB	"~                           version 0.8.2 (2026-09-09)          ",13,10
 	DB	"~                                by Dean Jenkins                ",13,10
+	DB	"~          Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash  ",13,10
 	DB	"~",13,10
 	DB	"~                         SE is open source and freely usable   ",13,10
 	DB	"~                         type   e  or  <Enter>   to edit       ",13,10

@@ -125,8 +125,9 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ~
 ~
 ~                               SE - Screen Editor              
-~                                  version 0.8.2                
+~                           version 0.8.2 (2026-09-09)          
 ~                                by Dean Jenkins                
+~          Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash  
 ~
 ~                         SE is open source and freely usable   
 ~                         type   e  or  <Enter>   to edit       
@@ -143,7 +144,6 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ~                     Active Screen: [120x40 (Modern Default)]  
 ~                        Z80 CP/M with 512K Extended Storage    
 ~                        Auto-detects CP/M [CRLF] & Linux [LF]  
-~
 ~
 [ SE v0.8.2 | [No Name]      | 120x40 | CP/M | ^K: Editor keys | Line 1/1, Col 0 ]
 ```

@@ -633,11 +633,17 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b")  # Standalone ESC key
-        out_splash = read_until(master, b"SE - Screen Editor", timeout=4.0)
+        out_splash = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
         if b"SE - Screen Editor" not in out_splash:
             print(f"[-] ESC key failed to show splash screen. Buffer: {repr(out_splash)}", flush=True)
             return False
-        print("[+] Successfully verified ESC key in editor displays splash screen.", flush=True)
+        if b"version 0.8.2 (2026-09-09)" not in out_splash:
+            print(f"[-] Splash screen missing version date. Buffer: {repr(out_splash)}", flush=True)
+            return False
+        if b"Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash" not in out_splash:
+            print(f"[-] Splash screen missing Antigravity attribution. Buffer: {repr(out_splash)}", flush=True)
+            return False
+        print("[+] Successfully verified ESC key in editor displays splash screen with version date and attribution.", flush=True)
 
         drain_all(master)
         time.sleep(0.2)
