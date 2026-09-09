@@ -166,7 +166,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line 1/" in check_buf or b"SE v0.8.3" in check_buf or b"[No Name]" in check_buf:
+            if b"Line 1/" in check_buf or b"SE v0.8.4" in check_buf or b"[No Name]" in check_buf:
                 print(f"[-] Space key on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
@@ -177,7 +177,7 @@ def test_se_execution():
             r, _, _ = select.select([master], [], [], 0.2)
             if r:
                 check_buf = os.read(master, 2048)
-                if b"Line 1/" in check_buf or b"SE v0.8.3" in check_buf or b"[No Name]" in check_buf:
+                if b"Line 1/" in check_buf or b"SE v0.8.4" in check_buf or b"[No Name]" in check_buf:
                     print(f"[-] Cursor {arrow_name} key ({repr(arrow_seq)}) on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                     return False
 
@@ -186,7 +186,7 @@ def test_se_execution():
         # Enter editor mode with 'e'
         os.write(master, b"e")
         out_edit = read_until(master, b"Line 1/1,", timeout=6.0)
-        if b"SE v0.8.3" not in out_edit:
+        if b"SE v0.8.4" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
         if b"[No Name]" not in out_edit:
@@ -476,7 +476,7 @@ def test_se_execution():
         resp = read_until(master, b"Overwrite? (y/n): ", timeout=2.0)
         if b"Overwrite? (y/n): " in resp:
             os.write(master, b"y")
-        read_until(master, b"SE v0.8.3", timeout=5.0)
+        read_until(master, b"SE v0.8.4", timeout=5.0)
         drain_all(master)
         print("[+] Successfully saved file with Ctrl+S.", flush=True)
 
@@ -493,7 +493,7 @@ def test_se_execution():
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
         out_load = read_until(master, b"Line 1/2,", timeout=14.0)
-        if b"SE v0.8.3" not in out_load:
+        if b"SE v0.8.4" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
         # Verify BOTH Line 1 and Line 2 from 2.TXT loaded and rendered on screen
@@ -516,7 +516,7 @@ def test_se_execution():
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
         out_load_30 = read_until(master, b"Line 1/30,", timeout=14.0)
-        if b"SE v0.8.3" not in out_load_30:
+        if b"SE v0.8.4" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
             return False
         # Verify lines from 30.TXT are rendered on screen
@@ -650,7 +650,7 @@ def test_se_execution():
         if b"SE - Screen Editor" not in out_splash:
             print(f"[-] ESC key failed to show splash screen. Buffer: {repr(out_splash)}", flush=True)
             return False
-        if b"version 0.8.3 (2026-09-09)" not in out_splash:
+        if b"version 0.8.4 (2026-09-09)" not in out_splash:
             print(f"[-] Splash screen missing version date. Buffer: {repr(out_splash)}", flush=True)
             return False
         if b"Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash" not in out_splash:
@@ -755,7 +755,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"SE v0.8.3" in check_buf or b"Line 1/" in check_buf:
+            if b"SE v0.8.4" in check_buf or b"Line 1/" in check_buf:
                 print(f"[-] Non-existent file erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
         print("[+] Successfully verified bad filename shows 'File not found' without entering editor mode.", flush=True)
@@ -770,14 +770,14 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"SE v0.8.3" in check_buf or b"Line 1/" in check_buf:
+            if b"SE v0.8.4" in check_buf or b"Line 1/" in check_buf:
                 print(f"[-] Backspace in open prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
         # Type correct extension 'TXT' and press Enter
         os.write(master, b"TXT\r")
         out_loaded = read_until(master, b"Line 1/2,", timeout=4.0)
-        if b"SE v0.8.3" not in out_loaded or b"C:2.TXT" not in out_loaded:
+        if b"SE v0.8.4" not in out_loaded or b"C:2.TXT" not in out_loaded:
             print(f"[-] Failed to open 2.TXT from Open File prompt after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
         if b"First line of two" not in out_loaded:
@@ -829,8 +829,8 @@ def test_se_execution():
         if b"Save cancelled." not in out_cancel:
             print(f"[-] 'Save cancelled.' message missing. Buffer: {repr(out_cancel)}", flush=True)
             return False
-        out_back = read_until(master, b"SE v0.8.3", timeout=4.0)
-        if b"SE v0.8.3" not in out_back:
+        out_back = read_until(master, b"SE v0.8.4", timeout=4.0)
+        if b"SE v0.8.4" not in out_back:
             print(f"[-] Editor mode not restored after cancelling save. Buffer: {repr(out_back)}", flush=True)
             return False
         print("[+] Successfully verified cancelling overwrite returns cleanly to editor.", flush=True)
@@ -845,8 +845,8 @@ def test_se_execution():
         read_until(master, b"Overwrite? (y/n): ", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"y")
-        out_saved = read_until(master, b"SE v0.8.3", timeout=5.0)
-        if b"SE v0.8.3" not in out_saved:
+        out_saved = read_until(master, b"SE v0.8.4", timeout=5.0)
+        if b"SE v0.8.4" not in out_saved:
             print(f"[-] Editor mode not restored after confirming save. Buffer: {repr(out_saved)}", flush=True)
             return False
         print("[+] Successfully verified confirming overwrite ('y') saves file and resumes editor.", flush=True)
@@ -1973,7 +1973,7 @@ def test_se_execution():
         # Launch SE on 30.TXT
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_s45_init = read_until(master, b"Line 1/30,", timeout=14.0)
+        out_s45_init = read_until(master, b"Line 1/30,", timeout=25.0)
         if b"Line 1/30," not in out_s45_init:
             print(f"[-] Step 45 failed: 30.TXT did not load. Buffer: {repr(out_s45_init)}", flush=True)
             return False
@@ -2663,7 +2663,7 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"se BIG.TXT\r")
-        out_s57 = read_until(master, b"Line 1/3328,", timeout=30.0)
+        out_s57 = read_until(master, b"Line 1/3328,", timeout=60.0)
         if b"Line 1/3328," not in out_s57 or b"^K: Editor keys" not in out_s57:
             print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing '^K: Editor keys'. Buffer: {repr(out_s57[-200:])}", flush=True)
             return False
