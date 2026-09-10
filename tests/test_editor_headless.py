@@ -3258,6 +3258,72 @@ def test_se_execution():
         read_until(master, b"C>", timeout=6.0)
         print("[+] Successfully verified Cursor Viewport Constraint (Step 62)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        print("[*] Step 63: Verifying cursor retention past column 79 in 80x24 mode on splash resume...", flush=True)
+
+        # 1. Launch SE.COM
+        time.sleep(0.5)
+        os.write(master, b"se\r")
+        read_until(master, b"Free: 416 KB", timeout=14.0)
+        time.sleep(0.3)
+        drain_all(master)
+
+        # 2. Select 80x24 mode ('2')
+        os.write(master, b"2")
+        read_until(master, b"Free: 416 KB", timeout=8.0)
+        time.sleep(0.3)
+        drain_all(master)
+
+        # 3. Enter editor mode ('e')
+        os.write(master, b"e")
+        out_s63_edit = read_until(master, b"Line    1/1", timeout=6.0)
+        if b"Line    1/1" not in out_s63_edit:
+            print(f"[-] Step 63 failed: Editor mode not entered: {repr(out_s63_edit[-200:])}", flush=True)
+            return False
+
+        # 4. Type 85 characters: ("0123456789" * 8 + "ABCDE")
+        drain_all(master)
+        test_str_85 = ("0123456789" * 8 + "ABCDE").encode("ascii")
+        os.write(master, test_str_85)
+        out_s63_t85 = read_until(master, b"Col 85", timeout=6.0)
+        if b"Col 85" not in out_s63_t85:
+            print(f"[-] Step 63 failed: Failed to type past 80 cols: {repr(out_s63_t85[-200:])}", flush=True)
+            return False
+
+        # 5. Press ESC to enter splash screen
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Free: 416 KB", timeout=6.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        # 6. Press Return to re-enter editor
+        os.write(master, b"\r")
+        out_s63_reenter = read_until(master, b"\x1b[24;1H", timeout=6.0)
+        time.sleep(0.2)
+        out_s63_reenter += drain_all(master)
+
+        idx24 = out_s63_reenter.rfind(b"\x1b[24;1H")
+        if idx24 == -1:
+            print(f"[-] Step 63 failed: Status bar row 24 not found: {repr(out_s63_reenter[-300:])}", flush=True)
+            return False
+        status_line = out_s63_reenter[idx24:idx24+150]
+        if b"Col 85" not in status_line:
+            print(f"[-] Step 63 failed: Cursor truncated! Status bar: {repr(status_line)}", flush=True)
+            return False
+        if b"\x1b[1;66H" not in out_s63_reenter:
+            print(f"[-] Step 63 failed: Cursor escape \x1b[1;66H not found: {repr(out_s63_reenter[-200:])}", flush=True)
+            return False
+        print("[+] Retained cursor at Col 85 (screen row 1, col 66) on splash resume.", flush=True)
+
+        # 7. Clean exit to CP/M with Ctrl+Q -> 'n'
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"Save changes?", timeout=4.0)
+        os.write(master, b"n")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Successfully verified Cursor Retention Past Col 79 on Resume (Step 63)!", flush=True)
+
         return True
 
     finally:

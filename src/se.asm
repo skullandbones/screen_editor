@@ -5039,10 +5039,12 @@ AHV_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; CONSTRAIN_CURSOR_VIEWPORT: Ensure cursor is strictly within the active viewport
+; CONSTRAIN_CURSOR_VIEWPORT: Ensure cursor row is strictly within active viewport
 ; When switching screen modes (e.g. 120x40 -> 80x24) or reentering the editor,
-; prevents the cursor from being located below the status bar or beyond the
-; screen width. Moves cursor up and left if out-of-bounds.
+; prevents the cursor from being located below the status bar.
+; Moves cursor up if out-of-bounds, realigning CUR_COL to TARGET_COL on row change.
+; Note: Horizontal position is managed dynamically by ADJUST_HORIZ_VIEWPORT,
+; supporting up to 120-char lines without horizontal column truncation.
 ; Preserves: AF, BC, DE, HL
 ;------------------------------------------------------------------------------
 CONSTRAIN_CURSOR_VIEWPORT:
@@ -5094,39 +5096,23 @@ CCV_CHECK_CUR_ROW:
 	JR	NC,CCV_CHECK_TOP_ROW
 	; CUR_DOC_ROW > max allowed row: move cursor UP!
 	LD	(CUR_DOC_ROW),HL
+	; Row changed: clamp CUR_COL to new line's length matching TARGET_COL
+	CALL	ADJUST_COL_TO_TARGET
+	JR	CCV_DONE
 
 CCV_CHECK_TOP_ROW:
 	; Check if CUR_DOC_ROW < TOP_DOC_ROW:
 	LD	HL,(CUR_DOC_ROW)
 	LD	DE,(TOP_DOC_ROW)
 	CALL	CMP_HL_DE		; Carry=1 if CUR_DOC_ROW < TOP_DOC_ROW
-	JR	NC,CCV_ROW_DONE
+	JR	NC,CCV_DONE
 	; CUR_DOC_ROW < TOP_DOC_ROW: move cursor DOWN to TOP_DOC_ROW
 	EX	DE,HL
 	LD	(CUR_DOC_ROW),HL
-
-CCV_ROW_DONE:
-	; Adjust CUR_COL to match TARGET_COL on the current line (clamps to line length)
+	; Row changed: clamp CUR_COL to new line's length matching TARGET_COL
 	CALL	ADJUST_COL_TO_TARGET
 
-	; 3. Constrain cursor horizontally: ensure visual column < ACTIVE_COLS
-CCV_COL_LOOP:
-	LD	A,(CUR_COL)
-	OR	A
-	JR	Z,CCV_COL_DONE		; Already at col 0, cannot move further left
-	CALL	CALC_VISUAL_COL		; A = visual column (0..119)
-	LD	HL,ACTIVE_COLS
-	CP	(HL)			; Compare with ACTIVE_COLS (80 or 120)
-	JR	C,CCV_COL_DONE		; If visual col < ACTIVE_COLS, within viewport!
-	; Visual col >= ACTIVE_COLS: move cursor left!
-	LD	HL,CUR_COL
-	DEC	(HL)
-	JR	CCV_COL_LOOP
-
-CCV_COL_DONE:
-	CALL	CALC_VISUAL_COL
-	LD	(TARGET_COL),A		; Sync sticky target column
-
+CCV_DONE:
 	POP	HL
 	POP	DE
 	POP	BC
