@@ -2994,6 +2994,107 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Column 79 Continuation Highlighting and Block Suppression in 80x24 Mode (Step 59)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 60: Insert Key & Overwrite Mode Verification
+        # ---------------------------------------------------------------------
+        print("[*] Step 60: Verifying Insert key and Overwrite mode...", flush=True)
+
+        # 1. Launch 'se 2.TXT' (Line 1: "First line of two", Line 2: "Second line of two")
+        time.sleep(0.5)
+        os.write(master, b"se 2.TXT\r")
+        out_s60_boot = read_until(master, b"Line 1/2,", timeout=14.0)
+        if b"Line 1/2," not in out_s60_boot:
+            print(f"[-] Step 60 failed: Launching se 2.TXT failed. Buffer: {repr(out_s60_boot)}", flush=True)
+            return False
+
+        # 2. Check initial status bar shows "^K: Editor keys | "
+        if b"^K: Editor keys | " not in out_s60_boot:
+            print(f"[-] Step 60 failed: Initial status bar missing '^K: Editor keys | '. Buffer: {repr(out_s60_boot)}", flush=True)
+            return False
+        print("[+] Initial editor mode has '^K: Editor keys | ' on status bar.", flush=True)
+
+        # 3. Press Insert key (ESC [ 2 ~) to switch to Overwrite mode
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[2~")
+        out_s60_ovr = read_until(master, b"Overwrite mode  | ", timeout=6.0)
+        if b"Overwrite mode  | " not in out_s60_ovr:
+            print(f"[-] Step 60 failed: Pressing Insert key (ESC [ 2 ~) did not show 'Overwrite mode  | ': {repr(out_s60_ovr)}", flush=True)
+            return False
+        print("[+] Insert key toggled to Overwrite mode and displayed on status bar.", flush=True)
+
+        # 4. Overwrite "First" with "HELLO" at Col 0
+        time.sleep(0.2)
+        os.write(master, b"HELLO")
+        out_s60_typed = read_until(master, b"Col 5", timeout=6.0)
+        time.sleep(0.2)
+        out_s60_typed += drain_all(master)
+        if b"HELLO line of two" not in out_s60_typed and b"HELLO" not in out_s60_typed:
+            print(f"[-] Step 60 failed: Typing in Overwrite mode did not show overwritten text: {repr(out_s60_typed)}", flush=True)
+            return False
+        print("[+] In Overwrite mode, text overwrote existing characters without shifting.", flush=True)
+
+        # 5. Toggle back to Insert mode with ESC [ 2 ~
+        os.write(master, b"\x1b[2~")
+        out_s60_ins = read_until(master, b"^K: Editor keys | ", timeout=6.0)
+        if b"^K: Editor keys | " not in out_s60_ins:
+            print(f"[-] Step 60 failed: Pressing Insert again did not return to '^K: Editor keys | ': {repr(out_s60_ins)}", flush=True)
+            return False
+        print("[+] Insert key toggled back to Insert mode and status bar restored.", flush=True)
+
+        # 6. In Insert mode at Col 5, insert " XYZ" -> should shift " line of two" right
+        os.write(master, b" XYZ")
+        out_s60_ins_typed = read_until(master, b"Col 9", timeout=6.0)
+        time.sleep(0.2)
+        out_s60_ins_typed += drain_all(master)
+        if b"XYZ" not in out_s60_ins_typed:
+            print(f"[-] Step 60 failed: Typing in Insert mode failed: {repr(out_s60_ins_typed)}", flush=True)
+            return False
+        print("[+] Insert mode shifted trailing text right as expected.", flush=True)
+
+        # 7. Test VT102 Insert key sequence (ESC [ L)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[L")
+        out_s60_vt = read_until(master, b"Overwrite mode  | ", timeout=6.0)
+        if b"Overwrite mode  | " not in out_s60_vt:
+            print(f"[-] Step 60 failed: VT102 Insert key (ESC [ L) did not activate Overwrite mode: {repr(out_s60_vt)}", flush=True)
+            return False
+        print("[+] VT102 Insert key (ESC [ L) toggled to Overwrite mode.", flush=True)
+
+        # 8. Test ICH Insert char sequence (ESC [ @)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[@")
+        out_s60_ich = read_until(master, b"^K: Editor keys | ", timeout=6.0)
+        if b"^K: Editor keys | " not in out_s60_ich:
+            print(f"[-] Step 60 failed: ICH Insert key (ESC [ @) did not restore Insert mode: {repr(out_s60_ich)}", flush=True)
+            return False
+        print("[+] ICH Insert key (ESC [ @) toggled back to Insert mode.", flush=True)
+
+        # 9. Test modified Insert key (ESC [ 2 ; 5 ~)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[2;5~")
+        out_s60_mod = read_until(master, b"Overwrite mode  | ", timeout=6.0)
+        if b"Overwrite mode  | " not in out_s60_mod:
+            print(f"[-] Step 60 failed: Modified Insert key (ESC [ 2 ; 5 ~) failed: {repr(out_s60_mod)}", flush=True)
+            return False
+        print("[+] Modified Insert key (ESC [ 2 ; 5 ~) toggled to Overwrite mode.", flush=True)
+
+        # 10. Clean exit to CP/M with Ctrl+Q -> 'n' (discard changes)
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"\x11")  # Ctrl+Q
+        out_prompt = read_until(master, b"Save changes?", timeout=6.0)
+        if b"Save changes?" not in out_prompt:
+            print(f"[-] Step 60 failed: Save changes prompt missing: {out_prompt}", flush=True)
+            return False
+        time.sleep(0.2)
+        os.write(master, b"n")
+        out_cpm = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_cpm:
+            print(f"[-] Step 60 failed: Failed exit to CP/M: {out_cpm}", flush=True)
+            return False
+        print("[+] Successfully verified Insert Key and Overwrite Mode (Step 60)!", flush=True)
+
         return True
 
     finally:

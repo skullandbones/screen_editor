@@ -181,6 +181,7 @@ Examples:
 * <kbd>Ctrl+C</kbd>: Copy solidified block to current cursor position (or solidify dynamic block).
 * <kbd>Ctrl+X</kbd>: Move solidified block to current cursor position (or solidify dynamic block).
 * <kbd>Ctrl+D</kbd> / <kbd>Delete</kbd>: Forward delete character under cursor (or delete selected/solidified block).
+* <kbd>Insert</kbd>: Toggle between Insert mode (default) and Overwrite mode (status bar displays `Overwrite mode  | `).
 * <kbd>ESC</kbd>: Dismiss active or solidified block highlight (or return to splash screen if no block active).
 * <kbd>Arrow Keys</kbd> / <kbd>Home</kbd> / <kbd>End</kbd> / <kbd>PgUp</kbd> / <kbd>PgDn</kbd>: Move cursor and dynamically expand or contract block highlight (partial lines, single lines, or multi-lines).
 * <kbd>Ctrl+O</kbd>: Open interactive file browser.

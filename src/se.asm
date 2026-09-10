@@ -4487,7 +4487,15 @@ STATUS_SOLID_MULTILINE:
 	JR	SHOW_STATUS_ROWCOL
 
 SHOW_STATUS_NORMAL_KEYS:
+	LD	A,(INSERT_MODE)
+	OR	A
+	JR	Z,SHOW_STATUS_OVERWRITE
 	LD	DE,STR_STATUS_KEYS
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
+SHOW_STATUS_OVERWRITE:
+	LD	DE,STR_STATUS_OVR
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
@@ -5005,6 +5013,8 @@ BUFFER_INIT:
 	LD	(NEED_SCREEN_RENDER),A
 	LD	(NEED_LINE_RENDER),A
 	LD	(NEED_STATUS_RENDER),A
+	LD	A,1
+	LD	(INSERT_MODE),A
 
 	CALL	INIT_SLOT_SYSTEM
 	CALL	INIT_FAR_RAM_BANKS
@@ -5723,6 +5733,10 @@ HANDLE_CSI:
 	JP	Z,PAGE_UP
 	CP	'G'			; Page Down (VT alternative)
 	JP	Z,PAGE_DOWN
+	CP	'L'			; VT102 Insert key (ESC [ L)
+	JP	Z,TOGGLE_INSERT_MODE
+	CP	'@'			; ICH Insert character (ESC [ @)
+	JP	Z,TOGGLE_INSERT_MODE
 
 	; Check if parameter/modifier digits present (e.g. 1;2A, 1~, 4~)
 	CP	'0'
@@ -5744,7 +5758,10 @@ HANDLE_CSI_1:
 HANDLE_CSI_2:
 	LD	A,'2'
 	LD	(CSI_MODIFIER),A
+	LD	(CSI_DIGIT_PREFIX),A
 	CALL	GET_KEY
+	CP	'~'			; Insert key (ESC [ 2 ~)
+	JP	Z,TOGGLE_INSERT_MODE
 	CP	'A'
 	JP	Z,SHIFT_CURSOR_UP
 	CP	'B'
@@ -5888,6 +5905,19 @@ HANDLE_CSI_TILDE:
 	JP	Z,JUMP_FILE_TOP		; ESC [ 1 ; 5 ~ -> Ctrl+Home!
 	CP	'4'
 	JP	Z,JUMP_FILE_BOTTOM	; ESC [ 4 ; 5 ~ -> Ctrl+End!
+	CP	'2'
+	JP	Z,TOGGLE_INSERT_MODE	; ESC [ 2 ; <n> ~ -> Insert!
+	LD	A,(CSI_MODIFIER)
+	CP	'2'
+	JP	Z,TOGGLE_INSERT_MODE
+	RET
+
+TOGGLE_INSERT_MODE:
+	LD	A,(INSERT_MODE)
+	XOR	1
+	LD	(INSERT_MODE),A
+	LD	A,1
+	LD	(NEED_STATUS_RENDER),A
 	RET
 
 CURSOR_HOME:
@@ -8276,9 +8306,19 @@ ROW_IN_BOUNDS:
 	; 1. Check buffer byte capacity limit (126 bytes)
 	LD	A,MAX_LINE_STRIDE-2
 	CP	B
-	RET	C
-	RET	Z
+	JR	C,CHECK_BYTE_CAP_REPLACE
+	JR	Z,CHECK_BYTE_CAP_REPLACE
+	JR	CHECK_VISUAL_LIMIT
 
+CHECK_BYTE_CAP_REPLACE:
+	LD	A,(INSERT_MODE)
+	OR	A
+	RET	NZ			; Insert mode: buffer full
+	LD	A,(CUR_COL)
+	CP	B
+	RET	NC			; In overwrite mode at or past EOL: cannot append when full!
+
+CHECK_VISUAL_LIMIT:
 	; 2. Check visual line length limit (MAX_LINE_CHARS: 120)
 	LD	A,MAX_LINE_CHARS
 	CP	C
@@ -8304,7 +8344,16 @@ ROW_IN_BOUNDS:
 
 CHECK_AT_EOL_REPLACE:
 	; Visual line is already at maximum capacity (>= MAX_LINE_CHARS)
-	RET
+	LD	A,(INSERT_MODE)
+	OR	A
+	RET	NZ			; Insert mode: cannot insert when full!
+	LD	A,(CHAR_INSERT_TEMP)
+	CP	KEY_TAB
+	RET	Z			; Tab might expand: reject when full!
+	LD	A,(CUR_COL)
+	CP	B
+	RET	NC			; At or past EOL: cannot append when full!
+	JR	LINE_LEN_OK		; Overwrite existing char in full line: allowed!
 
 LINE_LEN_OK:
 	LD	A,1
@@ -8316,6 +8365,21 @@ LINE_LEN_OK:
 	CP	B
 	JR	NC,DO_PAD_AND_APPEND	; If CUR_COL >= length: pad spaces and append
 
+	; Check Insert vs Overwrite mode
+	LD	A,(INSERT_MODE)
+	OR	A
+	JR	NZ,DO_SHIFT_AND_INSERT
+
+	; Overwrite mode: replace character at line_start + CUR_COL in place!
+	LD	A,(CUR_COL)
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+	LD	A,(CHAR_INSERT_TEMP)
+	LD	(HL),A
+	JR	ADVANCE_INSERT_CURSOR
+
+DO_SHIFT_AND_INSERT:
 	; 5. If CUR_COL < length: shift characters from (line_start + B) down to (line_start + CUR_COL)
 	PUSH	HL			; Save line start
 	LD	E,B
@@ -9123,6 +9187,8 @@ INIT_EMPTY_DOCUMENT:
 	LD	(VIEW_LEFT_COL),A
 	LD	A,(ACTIVE_COLS)
 	LD	(VIEW_RIGHT_COL),A
+	LD	A,1
+	LD	(INSERT_MODE),A
 
 	; Write empty line to line 0 in Far RAM
 	CALL	CLEAR_LOAD_TEMP
@@ -10328,6 +10394,8 @@ INPUT_GOT_ESC_BYTE:
 
 INPUT_HANDLE_CSI:
 	CALL	GET_KEY
+	CP	'2'			; Insert key (ESC [ 2 ~)
+	JR	Z,INPUT_CSI_INS
 	CP	'5'			; Page Up (ESC [ 5 ~)
 	JR	Z,INPUT_CSI_PGUP
 	CP	'6'			; Page Down (ESC [ 6 ~)
@@ -10338,6 +10406,14 @@ INPUT_HANDLE_CSI:
 	JR	Z,INPUT_DO_PGDN
 	CP	'3'			; Delete key (ESC [ 3 ~)
 	JR	Z,INPUT_CSI_DEL
+	CP	'L'			; VT102 Insert line
+	JP	Z,INPUT_CHAR_LOOP
+	CP	'@'			; ICH Insert char
+	JP	Z,INPUT_CHAR_LOOP
+	JP	INPUT_CHAR_LOOP
+
+INPUT_CSI_INS:
+	CALL	GET_KEY			; Consume trailing '~'
 	JP	INPUT_CHAR_LOOP
 
 INPUT_CSI_PGUP:
@@ -11083,6 +11159,7 @@ STR_FMT_CPM:	DB	"CP/M | ","$"
 STR_FMT_LINUX:	DB	"Linux | ","$"
 
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
+STR_STATUS_OVR:		DB	"Overwrite mode  | ","$"
 
 STR_STATUS_OOM:		DB	"Out of memory   | ","$"
 
@@ -11118,11 +11195,11 @@ STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 	DB	"    Ctrl+F           Find text               Ctrl+N / Ctrl+P Find next / prev",13,10
 	DB	"    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle case in find",13,10,13,10
 	DB	"  EDITING & BLOCK:",13,10
-	DB	"    ASCII 32..126    Insert characters       Enter           New line",13,10
-	DB	"    Backspace        Delete left / join up   Ctrl+D / Delete Delete / join dn",13,10
-	DB	"    Ctrl+B           Start/Toggle block      Ctrl+K          Solidify block",13,10
-	DB	"    Ctrl+C           Copy solidified block   Ctrl+X          Move block",13,10
-	DB	"    Delete / Ctrl+D  Delete block            ESC             Clear block",13,10
+	DB	"    Insert           Toggle Insert/Overwrite Enter           New line",13,10
+	DB	"    ASCII 32..126    Insert/Overwrite text   Backspace       Delete left / join",13,10
+	DB	"    Delete / Ctrl+D  Delete char or block    Ctrl+B          Start/Toggle block",13,10
+	DB	"    Ctrl+C           Copy solidified block   Ctrl+K          Solidify block",13,10
+	DB	"    Ctrl+X           Move solidified block   ESC             Clear block",13,10
 	DB	"================================================================================",13,10
 	DB	"                      Press any key to return to editor...",13,10,"$"
 
@@ -11300,6 +11377,7 @@ LINE_IN_INVERSE:	DB	0		; 1 if terminal currently has inverse video ON
 NEED_SCREEN_RENDER:	DB	0	; 1 if full screen redraw pending
 NEED_LINE_RENDER:	DB	0	; 1 if current line redraw pending
 NEED_STATUS_RENDER:	DB	0	; 1 if status bar redraw / cursor restore pending
+INSERT_MODE:		DB	1	; 1 = Insert mode (default), 0 = Overwrite mode
 
 CACHE_START_ROW:	DW	0		; 16-bit doc row index at LINE_STORAGE[0]
 CACHE_DIRTY:	DB	0		; 1 if local cache has unsaved modifications
