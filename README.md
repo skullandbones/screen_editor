@@ -123,13 +123,8 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 
 ```text
 ~
-~
 ~                               SE - Screen Editor              
-~                           version 0.8.5 (2026-09-09)          
-~                                by Dean Jenkins                
-~          Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash  
 ~
-~                         SE is open source and freely usable   
 ~                         type   e  or  <Enter>   to edit       
 ~                         type   n                to new file   
 ~                         type   o                to open file  
@@ -138,14 +133,14 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ~                         type   l  or  ^L        to goto line  
 ~                         type   t                for mem test  
 ~                         type   f                for file test 
+~                         type   a                for about     
 ~                         type   1                set 120x40    
 ~                         type   2                set 80x24     
 ~                         type   q  or  ^Q        to exit       
-~                     Active Screen: [120x40 (Modern Default)]  
-~                        Z80 CP/M with 512K Extended Storage    
-~                        Auto-detects CP/M [CRLF] & Linux [LF]  
 ~
-| (Untitled)    | 120x40 | CP/M  | Free: 416 KB    | Line    1/1    Col 0  |
+~                     Active Screen: [120x40 (Modern Default)]           
+~
+ | (Untitled)    | 120x40 | CP/M  | Free: 416 KB    | Line    1/1   Col 0   | 
 ```
 
 * Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter/resume full-screen editing mode.
@@ -155,6 +150,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 * Press **`s`** or **`S`** to open the interactive **Save File** screen.
 * Press **`t`** or **`T`** to run the live **512KB Extended Memory Diagnostic**.
 * Press **`f`** or **`F`** to run the **Multi-Sector File I/O Diagnostic**.
+* Press **`a`** or **`A`** to view the **About** screen (architecture, features, license).
 * Press **`1`** to set modern **120 columns x 40 rows** mode (Default).
 * Press **`2`** to set classic **80 columns x 24 rows** terminal mode.
 * Press **`q`**, **`Q`**, or <kbd>Ctrl+Q</kbd> to return cleanly to CP/M.

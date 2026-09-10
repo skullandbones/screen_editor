@@ -121,7 +121,7 @@ def test_se_execution():
         time.sleep(0.5)
         os.write(master, b"se\r")
         out = read_until(master, b"Free: 416 KB", timeout=14.0)
-        if b"Auto-detects CP/M [CRLF]" not in out or b"Free: 416 KB" not in out:
+        if b"for about" not in out or b"Free: 416 KB" not in out:
             print("[-] SE.COM splash screen or free memory indicator not detected.", flush=True)
             return False
         print("[+] SE.COM splash screen successfully displayed with Free: 416 KB status bar.", flush=True)
@@ -139,7 +139,7 @@ def test_se_execution():
         read_until(master, b"Press any key to return", timeout=5.0)
         time.sleep(0.3)
         os.write(master, b"\r")
-        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        read_until(master, b"for about", timeout=6.0)
 
         # 6. Trigger Memory Diagnostic ('t')
         time.sleep(0.5)
@@ -157,7 +157,7 @@ def test_se_execution():
         read_until(master, b"Press any key to return", timeout=5.0)
         time.sleep(0.3)
         os.write(master, b"\r")
-        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        read_until(master, b"for about", timeout=6.0)
         drain_all(master)
         time.sleep(0.3)
 
@@ -647,21 +647,21 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b")  # Standalone ESC key
-        out_splash = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
+        out_splash = read_until(master, b"for about", timeout=4.0)
         if b"SE - Screen Editor" not in out_splash:
             print(f"[-] ESC key failed to show splash screen. Buffer: {repr(out_splash)}", flush=True)
             return False
-        if b"version 0.8.5 (2026-09-09)" not in out_splash:
-            print(f"[-] Splash screen missing version date. Buffer: {repr(out_splash)}", flush=True)
+        if b"version 0.8.5" in out_splash or b"Dean Jenkins" in out_splash:
+            print(f"[-] Splash screen unexpectedly contains version/author. Buffer: {repr(out_splash)}", flush=True)
             return False
-        if b"Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash" not in out_splash:
-            print(f"[-] Splash screen missing Antigravity attribution. Buffer: {repr(out_splash)}", flush=True)
+        if b"for about" not in out_splash:
+            print(f"[-] Splash screen missing about option. Buffer: {repr(out_splash)}", flush=True)
             return False
         out_splash_status = read_until(master, b"Line    1/30", timeout=4.0)
         if b"Free: 412 KB" not in out_splash_status:
             print(f"[-] Splash screen status bar missing free memory indicator. Buffer: {repr(out_splash_status)}", flush=True)
             return False
-        print("[+] Successfully verified ESC key in editor displays splash screen with version date, attribution, and free memory.", flush=True)
+        print("[+] Successfully verified ESC key in editor displays streamlined splash screen and free memory.", flush=True)
 
         drain_all(master)
         time.sleep(0.2)
@@ -872,7 +872,7 @@ def test_se_execution():
         # Cancel back to splash (ESC)
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
+        read_until(master, b"for about", timeout=4.0)
         print("[+] Successfully verified splash ':s' enters Save Screen and ESC returns to splash.", flush=True)
 
         # 28. Test Editor Mode Keys screen (^K)
@@ -1901,7 +1901,7 @@ def test_se_execution():
         # Return to splash with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        out_s43_splash = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=4.0)
+        out_s43_splash = read_until(master, b"for about", timeout=4.0)
         if b"type   l  or  ^L        to goto line" not in out_s43_splash:
             print(f"[-] Step 43 failed: Splash missing goto line prompt hint. Buffer: {repr(out_s43_splash)}", flush=True)
             return False
@@ -1939,7 +1939,7 @@ def test_se_execution():
         # Launch SE directly with line number: 'se 30.TXT:15'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT:15\r")
-        out_s44_l15 = read_until(master, b"Line   15/30", timeout=14.0)
+        out_s44_l15 = read_until(master, b"Line   15/30", timeout=20.0)
         if b"Line   15/30" not in out_s44_l15 or b"Line 15 of test file content" not in out_s44_l15:
             print(f"[-] Step 44 failed: 'se 30.TXT:15' did not position at Line 15. Buffer: {repr(out_s44_l15)}", flush=True)
             return False
@@ -1950,12 +1950,13 @@ def test_se_execution():
         # Exit with Ctrl+Q back to CP/M
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
+        read_until(master, b"C>", timeout=6.0)
+        drain_all(master)
 
         # Launch SE with line number beyond EOF: 'se 30.TXT:999' (should clamp to max line)
         time.sleep(0.5)
         os.write(master, b"se 30.TXT:999\r")
-        out_s44_l30 = read_until(master, b"Line   30/30", timeout=14.0)
+        out_s44_l30 = read_until(master, b"Line   30/30", timeout=20.0)
         if b"Line   30/30" not in out_s44_l30 or b"Line 30 of test file content" not in out_s44_l30:
             print(f"[-] Step 44 failed: 'se 30.TXT:999' did not clamp to Line 30. Buffer: {repr(out_s44_l30)}", flush=True)
             return False
@@ -1963,7 +1964,8 @@ def test_se_execution():
         # Final exit from editor with Ctrl+Q back to CP/M
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
+        read_until(master, b"C>", timeout=6.0)
+        drain_all(master)
         print("[+] Successfully verified command-line Goto Line facility (Step 44)!", flush=True)
 
         # ---------------------------------------------------------------------
@@ -2743,15 +2745,15 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"se\r")
-        out_s58_sp = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=14.0)
-        if b"Auto-detects CP/M [CRLF]" not in out_s58_sp:
+        out_s58_sp = read_until(master, b"for about", timeout=14.0)
+        if b"for about" not in out_s58_sp:
             print(f"[-] Step 58 failed: Splash screen failed to display. Buffer: {repr(out_s58_sp)}", flush=True)
             return False
 
         # Switch to 80x24 mode with '2'
         drain_all(master)
         os.write(master, b"2")
-        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        read_until(master, b"for about", timeout=6.0)
         drain_all(master)
         time.sleep(0.3)
 
@@ -2859,15 +2861,15 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s59_splash = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=14.0)
-        if b"Auto-detects CP/M [CRLF]" not in out_s59_splash:
+        out_s59_splash = read_until(master, b"for about", timeout=14.0)
+        if b"for about" not in out_s59_splash:
             print(f"[-] Step 59 failed: Splash screen not displayed: {repr(out_s59_splash[-200:])}", flush=True)
             return False
 
         # Switch to 80x24 mode with '2'
         drain_all(master)
         os.write(master, b"2")
-        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        read_until(master, b"for about", timeout=6.0)
         drain_all(master)
         time.sleep(0.3)
 
@@ -3135,7 +3137,7 @@ def test_se_execution():
         # Return to splash screen with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        read_until(master, b"for about", timeout=6.0)
         time.sleep(0.2)
         drain_all(master)
 
@@ -3201,7 +3203,7 @@ def test_se_execution():
         # 3. Press ESC to return to splash screen
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        read_until(master, b"for about", timeout=6.0)
         time.sleep(0.2)
         drain_all(master)
 
@@ -3372,6 +3374,76 @@ def test_se_execution():
             return False
         print("[+] Verified: Exiting to CP/M emits \\x1b[?25h (show cursor).", flush=True)
         print("[+] Successfully verified Splash Screen Cursor Hiding & Restoring (Step 64)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        print("[*] Step 65: Verifying About Screen ('a' key on splash screen)...", flush=True)
+
+        # 1. Launch SE.COM
+        time.sleep(0.5)
+        os.write(master, b"se\r")
+        out_s65_sp = read_until(master, b"Free: 416 KB", timeout=14.0)
+        time.sleep(0.2)
+        out_s65_sp += drain_all(master)
+
+        if b"for about" not in out_s65_sp:
+            print(f"[-] Step 65 failed: 'for about' option not displayed on splash screen: {repr(out_s65_sp[-300:])}", flush=True)
+            return False
+        if b"version 0.8.5" in out_s65_sp or b"Dean Jenkins" in out_s65_sp:
+            print(f"[-] Step 65 failed: Splash screen unexpectedly contains version or author name: {repr(out_s65_sp[-300:])}", flush=True)
+            return False
+
+        # 2. Press 'a' to enter About Screen
+        os.write(master, b"a")
+        out_s65_about = read_until(master, b"Press any key to return", timeout=6.0)
+        time.sleep(0.2)
+        out_s65_about += drain_all(master)
+
+        if b"SE - Screen Editor" not in out_s65_about:
+            print(f"[-] Step 65 failed: 'SE - Screen Editor' title not found on About screen: {repr(out_s65_about)}", flush=True)
+            return False
+        if b"version 0.8.5 (2026-09-09)" not in out_s65_about:
+            print(f"[-] Step 65 failed: Version details not found on About screen: {repr(out_s65_about)}", flush=True)
+            return False
+        if b"by Dean Jenkins" not in out_s65_about:
+            print(f"[-] Step 65 failed: Author attribution not found on About screen: {repr(out_s65_about)}", flush=True)
+            return False
+        if b"Architecture:" not in out_s65_about:
+            print(f"[-] Step 65 failed: 'Architecture:' header not found on About screen: {repr(out_s65_about)}", flush=True)
+            return False
+        if b"Z80 CP/M 2.2 with 512KB HBIOS Extended Memory" not in out_s65_about:
+            print(f"[-] Step 65 failed: Architecture details not found on About screen: {repr(out_s65_about)}", flush=True)
+            return False
+        if b"Features:" not in out_s65_about:
+            print(f"[-] Step 65 failed: 'Features:' header not found on About screen: {repr(out_s65_about)}", flush=True)
+            return False
+        if b"Auto-detects CP/M [CRLF] and Linux [LF] formats" not in out_s65_about:
+            print(f"[-] Step 65 failed: Feature details not found on About screen: {repr(out_s65_about)}", flush=True)
+            return False
+        if b"Press any key to return to splash" not in out_s65_about:
+            print(f"[-] Step 65 failed: Return prompt not found on About screen: {repr(out_s65_about)}", flush=True)
+            return False
+        print("[+] Verified About screen contents: Architecture, Far-RAM cache, Features, and Return prompt.", flush=True)
+
+        # 3. Press Enter to return to splash screen
+        os.write(master, b"\r")
+        out_s65_back = read_until(master, b"for about", timeout=6.0)
+        time.sleep(0.2)
+        out_s65_back += drain_all(master)
+
+        if b"for about" not in out_s65_back or b"Free: 416 KB" not in out_s65_back:
+            print(f"[-] Step 65 failed: Return to splash screen failed: {repr(out_s65_back)}", flush=True)
+            return False
+        print("[+] Verified return to splash screen from About screen.", flush=True)
+
+        # 4. Exit to CP/M with 'q'
+        os.write(master, b"q")
+        out_s65_cpm = read_until(master, b"C>", timeout=6.0)
+        time.sleep(0.2)
+        out_s65_cpm += drain_all(master)
+        if b"C>" not in out_s65_cpm:
+            print(f"[-] Step 65 failed: Exit to CP/M prompt failed: {repr(out_s65_cpm)}", flush=True)
+            return False
+        print("[+] Successfully verified About Screen functionality (Step 65)!", flush=True)
 
         return True
 

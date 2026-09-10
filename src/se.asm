@@ -169,6 +169,13 @@ SPLASH_START:
 SPLASH_LOOP:
 	CALL	GET_KEY
 
+	; Standalone ESC or escape sequence (e.g. arrow keys) -> drain and ignore
+	CP	KEY_ESC
+	JR	NZ,SPLASH_NOT_ESC
+	CALL	DRAIN_ESC_SEQUENCE
+	JR	SPLASH_LOOP
+SPLASH_NOT_ESC:
+
 	; Option: 'Q' or 'q' or Ctrl+Q -> Exit
 	CP	'q'
 	JP	Z,HANDLE_SPLASH_EXIT
@@ -225,6 +232,12 @@ SPLASH_LOOP:
 	CP	KEY_CTRL_L
 	JR	Z,DO_SPLASH_GOTO_LINE
 
+	; Option: 'A' or 'a' -> Show About Screen
+	CP	'a'
+	JR	Z,DO_ABOUT_SCREEN
+	CP	'A'
+	JR	Z,DO_ABOUT_SCREEN
+
 	; Option: '1' -> Modern Screen Mode (120x40)
 	CP	'1'
 	JR	Z,DO_SET_120X40
@@ -241,7 +254,7 @@ SPLASH_LOOP:
 	CP	KEY_ENTER
 	JP	Z,ENTER_EDITOR
 
-	JR	SPLASH_LOOP
+	JP	SPLASH_LOOP
 
 DO_SET_120X40:
 	CALL	SET_MODE_120X40
@@ -254,11 +267,22 @@ DO_SET_80X24:
 DO_MEM_TEST:
 	CALL	RUN_MEM_TEST
 	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
 	JP	SHOW_SPLASH_SCREEN
 
 DO_FILE_TEST:
 	CALL	RUN_FILE_TEST
 	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
+	JP	SHOW_SPLASH_SCREEN
+
+DO_ABOUT_SCREEN:
+	CALL	SHOW_ABOUT_SCREEN
+	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
 	JP	SHOW_SPLASH_SCREEN
 
 DO_SPLASH_SAVE:
@@ -1138,7 +1162,7 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ;------------------------------------------------------------------------------
-SPLASH_LINES	EQU	23
+SPLASH_LINES	EQU	17
 
 RENDER_SPLASH:
 	LD	A,1
@@ -1166,9 +1190,6 @@ SHOW_SPLASH_80X24:
 	CALL	PRINT_STR
 
 RENDER_SPLASH_CONT:
-	LD	DE,STR_SPLASH_TAIL
-	CALL	PRINT_STR
-
 	; Fill remaining rows down to status row with '~'
 	LD	A,(ACTIVE_ROWS)
 	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
@@ -1186,6 +1207,46 @@ SPLASH_TILDE_LOOP:
 	DJNZ	SPLASH_TILDE_LOOP
 
 SPLASH_TILDE_DONE:
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_HOME
+	CALL	PRINT_STR
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; About Screen Renderer
+; Displays comprehensive architecture, feature, and author details for SE.COM
+;------------------------------------------------------------------------------
+ABOUT_LINES	EQU	22
+
+SHOW_ABOUT_SCREEN:
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+	LD	DE,STR_ABOUT_BODY
+	CALL	PRINT_STR
+
+	; Fill remaining rows down to status row with '~'
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
+	SUB	ABOUT_LINES		; A = remaining rows
+	JR	Z,ABOUT_TILDE_DONE
+	JR	C,ABOUT_TILDE_DONE
+	LD	B,A
+ABOUT_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	ABOUT_TILDE_LOOP
+
+ABOUT_TILDE_DONE:
 	CALL	RENDER_STATUS_BAR
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
@@ -5847,6 +5908,37 @@ CHECK_KEY_READY:
 	POP	BC
 	OR	A
 	RET
+
+;------------------------------------------------------------------------------
+; Drain Escape Sequence: if characters follow ESC within timeout, drain them
+;------------------------------------------------------------------------------
+DRAIN_ESC_SEQUENCE:
+	LD	BC,1000
+DES_WAIT:
+	CALL	CHECK_KEY_READY
+	JR	NZ,DES_DRAIN_FIRST
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,DES_WAIT
+	RET				; Standalone ESC, nothing to drain
+
+DES_DRAIN_FIRST:
+	CALL	GET_KEY			; Consume byte following ESC ('[' or 'O' etc.)
+DES_DRAIN_MORE:
+	LD	BC,500
+DES_DRAIN_WAIT:
+	CALL	CHECK_KEY_READY
+	JR	NZ,DES_DRAIN_BYTE
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,DES_DRAIN_WAIT
+	RET				; Sequence drained
+
+DES_DRAIN_BYTE:
+	CALL	GET_KEY
+	JR	DES_DRAIN_MORE
 
 HANDLE_VT100_ESC:
 	; Check if a character follows ESC within a short timeout
@@ -11255,13 +11347,8 @@ STR_CRLF:	DB	13,10,"$"
 
 STR_SPLASH_BODY:	DB	27,"[H"
 	DB	"~",13,10
-	DB	"~",13,10
 	DB	"~                               SE - Screen Editor              ",13,10
-	DB	"~                           version 0.8.5 (2026-09-09)          ",13,10
-	DB	"~                                by Dean Jenkins                ",13,10
-	DB	"~          Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash  ",13,10
 	DB	"~",13,10
-	DB	"~                         SE is open source and freely usable   ",13,10
 	DB	"~                         type   e  or  <Enter>   to edit       ",13,10
 	DB	"~                         type   n                to new file   ",13,10
 	DB	"~                         type   o                to open file  ",13,10
@@ -11270,9 +11357,11 @@ STR_SPLASH_BODY:	DB	27,"[H"
 	DB	"~                         type   l  or  ^L        to goto line  ",13,10
 	DB	"~                         type   t                for mem test  ",13,10
 	DB	"~                         type   f                for file test ",13,10
+	DB	"~                         type   a                for about     ",13,10
 	DB	"~                         type   1                set 120x40    ",13,10
 	DB	"~                         type   2                set 80x24     ",13,10
 	DB	"~                         type   q  or  ^Q        to exit       ",13,10
+	DB	"~",13,10
 	DB	"$"
 
 STR_SPLASH_CUR_MODE:	DB	"~                     Active Screen: [$"
@@ -11281,9 +11370,29 @@ STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
 STR_MODE_80X24_LBL:	DB	"80x24 (Classic Terminal)]          ",13,10,"$"
 
-STR_SPLASH_TAIL:	DB	"~                        Z80 CP/M with 512K Extended Storage    ",13,10
-	DB	"~                        Auto-detects CP/M [CRLF] & Linux [LF]  ",13,10
+STR_ABOUT_BODY:	DB	27,"[H"
 	DB	"~",13,10
+	DB	"~                               SE - Screen Editor              ",13,10
+	DB	"~                           version 0.8.5 (2026-09-09)          ",13,10
+	DB	"~                                by Dean Jenkins                ",13,10
+	DB	"~          Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash  ",13,10
+	DB	"~",13,10
+	DB	"~          Architecture:                                       ",13,10
+	DB	"~            * Z80 CP/M 2.2 with 512KB HBIOS Extended Memory   ",13,10
+	DB	"~            * 13 Far-RAM Banks with 64-line sliding cache     ",13,10
+	DB	"~            * Supports up to 3,328 lines (120 chars per line) ",13,10
+	DB	"~            * Dynamic slot allocation and bank recycling      ",13,10
+	DB	"~",13,10
+	DB	"~          Features:                                           ",13,10
+	DB	"~            * Dual screen modes: 120x40 (Modern) & 80x24 (Classic)",13,10
+	DB	"~            * Horizontal scrolling with continuation highlights",13,10
+	DB	"~            * Fast directory browser for Open and Save        ",13,10
+	DB	"~            * Search & Replace with case sensitivity toggle   ",13,10
+	DB	"~            * Block Copy, Move, and Delete with clipboard     ",13,10
+	DB	"~            * Auto-detects CP/M [CRLF] and Linux [LF] formats ",13,10
+	DB	"~",13,10
+	DB	"~          SE is open source and freely usable                 ",13,10
+	DB	"~                     Press any key to return to splash...     ",13,10
 	DB	"$"
 
 STR_TEST_TITLE:	DB	27,"[H",27,"[2J"

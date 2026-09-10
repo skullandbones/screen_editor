@@ -110,8 +110,8 @@ def run_sanity_test():
         # 3. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"Auto-detects CP/M [CRLF]", timeout=14.0)
-        if b"Auto-detects CP/M [CRLF]" not in out:
+        out = read_until(master, b"for about", timeout=14.0)
+        if b"for about" not in out:
             print(f"[-] SE.COM splash screen not detected. Buffer: {repr(out)}", flush=True)
             return False
         print("[+] Splash screen displayed successfully.", flush=True)
