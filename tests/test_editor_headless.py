@@ -651,7 +651,7 @@ def test_se_execution():
         if b"SE - Screen Editor" not in out_splash:
             print(f"[-] ESC key failed to show splash screen. Buffer: {repr(out_splash)}", flush=True)
             return False
-        if b"version 0.8.5" in out_splash or b"Dean Jenkins" in out_splash:
+        if b"version" in out_splash or b"Dean Jenkins" in out_splash:
             print(f"[-] Splash screen unexpectedly contains version/author. Buffer: {repr(out_splash)}", flush=True)
             return False
         if b"for about" not in out_splash:
@@ -3388,7 +3388,7 @@ def test_se_execution():
         if b"for about" not in out_s65_sp:
             print(f"[-] Step 65 failed: 'for about' option not displayed on splash screen: {repr(out_s65_sp[-300:])}", flush=True)
             return False
-        if b"version 0.8.5" in out_s65_sp or b"Dean Jenkins" in out_s65_sp:
+        if b"version" in out_s65_sp or b"Dean Jenkins" in out_s65_sp:
             print(f"[-] Step 65 failed: Splash screen unexpectedly contains version or author name: {repr(out_s65_sp[-300:])}", flush=True)
             return False
 
@@ -3401,7 +3401,7 @@ def test_se_execution():
         if b"SE - Screen Editor" not in out_s65_about:
             print(f"[-] Step 65 failed: 'SE - Screen Editor' title not found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        if b"version 0.8.5 (2026-09-09)" not in out_s65_about:
+        if b"version 0.8.6 (2026-09-10)" not in out_s65_about:
             print(f"[-] Step 65 failed: Version details not found on About screen: {repr(out_s65_about)}", flush=True)
             return False
         if b"by Dean Jenkins" not in out_s65_about:
