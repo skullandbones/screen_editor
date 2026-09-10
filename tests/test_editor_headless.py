@@ -12,6 +12,7 @@ import time
 import tty
 import select
 import subprocess
+import re
 
 def find_paths():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -3178,6 +3179,84 @@ def test_se_execution():
         os.write(master, b"\x11")
         read_until(master, b"C>", timeout=6.0)
         print("[+] Successfully verified Symmetrical Centered Status Bar (Step 61)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        print("[*] Step 62: Verifying cursor viewport constraint when switching 120x40 -> 80x24 mode...", flush=True)
+
+        # 1. Launch 'se 30.TXT' in default 120x40 mode
+        time.sleep(0.5)
+        os.write(master, b"se 30.TXT\r")
+        out_s62_120 = read_until(master, b"Line    1/30", timeout=14.0)
+        if b"Line    1/30" not in out_s62_120:
+            print(f"[-] Step 62 failed: Could not open 30.TXT in 120x40 mode: {repr(out_s62_120[-300:])}", flush=True)
+            return False
+
+        # 2. Move cursor down 28 times to line 29 (in 120x40 mode, line 29 is at screen row 29)
+        os.write(master, b"\x1b[B" * 28)
+        out_l29 = read_until(master, b"Line   29/30", timeout=6.0)
+        if b"Line   29/30" not in out_l29:
+            print(f"[-] Step 62 failed: Failed to move cursor down to line 29: {repr(out_l29[-300:])}", flush=True)
+            return False
+
+        # 3. Press ESC to return to splash screen
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        # 4. On splash screen, select 80x24 mode with '2'
+        os.write(master, b"2")
+        time.sleep(0.2)
+        drain_all(master)
+
+        # 5. Re-enter editor with Enter
+        os.write(master, b"\r")
+        out_s62_80 = read_until(master, b"80x24", timeout=6.0)
+        time.sleep(0.2)
+        out_s62_80 += drain_all(master)
+
+        # Verify status row 24 is rendered: \x1b[24;1H
+        if b"\x1b[24;1H" not in out_s62_80:
+            print(f"[-] Step 62 failed: Status row 24 not found in 80x24 mode: {repr(out_s62_80[-300:])}", flush=True)
+            return False
+
+        # Verify final cursor location escape sequence \x1b[<row>;<col>H
+        cursor_locs = re.findall(rb"\x1b\[(\d+);(\d+)H", out_s62_80)
+        if not cursor_locs:
+            print(f"[-] Step 62 failed: No cursor location escape found in reenter output: {repr(out_s62_80[-300:])}", flush=True)
+            return False
+        last_row, last_col = int(cursor_locs[-1][0]), int(cursor_locs[-1][1])
+        if last_row > 23:
+            print(f"[-] Step 62 failed: Cursor row {last_row} is below the 80x24 status bar (max 23)!", flush=True)
+            return False
+        if last_row != 23:
+            print(f"[-] Step 62 failed: Cursor row is {last_row}, expected 23: {repr(out_s62_80[-300:])}", flush=True)
+            return False
+
+        # Verify status bar reflects constrained Line 23/30
+        if b"Line   23/30" not in out_s62_80:
+            print(f"[-] Step 62 failed: Status bar did not show Line 23/30: {repr(out_s62_80[-300:])}", flush=True)
+            return False
+
+        # 6. Test cursor Up and Down navigation
+        os.write(master, b"\x1b[A")  # Up arrow
+        out_up = read_until(master, b"Line   22/30", timeout=3.0)
+        if b"Line   22/30" not in out_up:
+            print(f"[-] Step 62 failed: Cursor Up failed: {repr(out_up[-300:])}", flush=True)
+            return False
+
+        os.write(master, b"\x1b[B")  # Down arrow
+        out_down = read_until(master, b"Line   23/30", timeout=3.0)
+        if b"Line   23/30" not in out_down:
+            print(f"[-] Step 62 failed: Cursor Down failed: {repr(out_down[-300:])}", flush=True)
+            return False
+
+        # 7. Clean exit back to CP/M with Ctrl+Q
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=6.0)
+        print("[+] Successfully verified Cursor Viewport Constraint (Step 62)!", flush=True)
 
         return True
 

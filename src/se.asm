@@ -154,6 +154,7 @@ ENTER_EDITOR:
 	LD	(TARGET_COL),A
 
 RESUME_EDITOR:
+	CALL	CONSTRAIN_CURSOR_VIEWPORT
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	RET
@@ -5031,6 +5032,101 @@ AHV_UPDATE:
 	LD	(NEED_SCREEN_RENDER),A
 
 AHV_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
+;------------------------------------------------------------------------------
+; CONSTRAIN_CURSOR_VIEWPORT: Ensure cursor is strictly within the active viewport
+; When switching screen modes (e.g. 120x40 -> 80x24) or reentering the editor,
+; prevents the cursor from being located below the status bar or beyond the
+; screen width. Moves cursor up and left if out-of-bounds.
+; Preserves: AF, BC, DE, HL
+;------------------------------------------------------------------------------
+CONSTRAIN_CURSOR_VIEWPORT:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; Ensure TOP_DOC_ROW < DOC_TOTAL_LINES
+	LD	DE,(DOC_TOTAL_LINES)
+	LD	A,D
+	OR	E
+	JR	Z,CCV_CALC_MAX_VIS
+	LD	HL,(TOP_DOC_ROW)
+	CALL	CMP_HL_DE		; Carry=1 if TOP_DOC_ROW < DOC_TOTAL_LINES
+	JR	C,CCV_CALC_MAX_VIS
+	; TOP_DOC_ROW >= DOC_TOTAL_LINES: clamp TOP_DOC_ROW = DOC_TOTAL_LINES - 1
+	EX	DE,HL
+	DEC	HL
+	LD	(TOP_DOC_ROW),HL
+
+CCV_CALC_MAX_VIS:
+	; 1. Calculate max visible doc row = TOP_DOC_ROW + (ACTIVE_ROWS - 2)
+	LD	A,(ACTIVE_ROWS)
+	SUB	2			; A = max screen row index (e.g. 22 for 80x24, 38 for 120x40)
+	LD	E,A
+	LD	D,0
+	LD	HL,(TOP_DOC_ROW)
+	ADD	HL,DE			; HL = TOP_DOC_ROW + (ACTIVE_ROWS - 2)
+	EX	DE,HL			; DE = max visible doc row
+
+	; 2. Clamp DE to DOC_TOTAL_LINES - 1 (if DOC_TOTAL_LINES > 0)
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	A,H
+	OR	L
+	JR	Z,CCV_CHECK_CUR_ROW	; If 0 lines, DE remains upper bound
+	DEC	HL			; HL = DOC_TOTAL_LINES - 1
+	; If DE > HL (last line < DE), clamp DE = HL
+	CALL	CMP_HL_DE		; Carry=1 if HL < DE
+	JR	NC,CCV_CHECK_CUR_ROW
+	EX	DE,HL			; DE = DOC_TOTAL_LINES - 1
+
+CCV_CHECK_CUR_ROW:
+	; Now DE is the maximum valid CUR_DOC_ROW for the viewport.
+	; Check if CUR_DOC_ROW > DE:
+	LD	HL,(CUR_DOC_ROW)
+	EX	DE,HL			; HL = max allowed row, DE = CUR_DOC_ROW
+	CALL	CMP_HL_DE		; Carry=1 if HL < DE (i.e. max allowed < CUR_DOC_ROW)
+	JR	NC,CCV_CHECK_TOP_ROW
+	; CUR_DOC_ROW > max allowed row: move cursor UP!
+	LD	(CUR_DOC_ROW),HL
+
+CCV_CHECK_TOP_ROW:
+	; Check if CUR_DOC_ROW < TOP_DOC_ROW:
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	CALL	CMP_HL_DE		; Carry=1 if CUR_DOC_ROW < TOP_DOC_ROW
+	JR	NC,CCV_ROW_DONE
+	; CUR_DOC_ROW < TOP_DOC_ROW: move cursor DOWN to TOP_DOC_ROW
+	EX	DE,HL
+	LD	(CUR_DOC_ROW),HL
+
+CCV_ROW_DONE:
+	; Adjust CUR_COL to match TARGET_COL on the current line (clamps to line length)
+	CALL	ADJUST_COL_TO_TARGET
+
+	; 3. Constrain cursor horizontally: ensure visual column < ACTIVE_COLS
+CCV_COL_LOOP:
+	LD	A,(CUR_COL)
+	OR	A
+	JR	Z,CCV_COL_DONE		; Already at col 0, cannot move further left
+	CALL	CALC_VISUAL_COL		; A = visual column (0..119)
+	LD	HL,ACTIVE_COLS
+	CP	(HL)			; Compare with ACTIVE_COLS (80 or 120)
+	JR	C,CCV_COL_DONE		; If visual col < ACTIVE_COLS, within viewport!
+	; Visual col >= ACTIVE_COLS: move cursor left!
+	LD	HL,CUR_COL
+	DEC	(HL)
+	JR	CCV_COL_LOOP
+
+CCV_COL_DONE:
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),A		; Sync sticky target column
+
 	POP	HL
 	POP	DE
 	POP	BC
