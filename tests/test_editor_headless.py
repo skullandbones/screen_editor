@@ -166,7 +166,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line 1/" in check_buf or b"SE v0.8.5" in check_buf or b"[No Name]" in check_buf:
+            if b"Line 1/" in check_buf or b"[No Name]" in check_buf:
                 print(f"[-] Space key on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
@@ -177,7 +177,7 @@ def test_se_execution():
             r, _, _ = select.select([master], [], [], 0.2)
             if r:
                 check_buf = os.read(master, 2048)
-                if b"Line 1/" in check_buf or b"SE v0.8.5" in check_buf or b"[No Name]" in check_buf:
+                if b"Line 1/" in check_buf or b"[No Name]" in check_buf:
                     print(f"[-] Cursor {arrow_name} key ({repr(arrow_seq)}) on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                     return False
 
@@ -186,7 +186,7 @@ def test_se_execution():
         # Enter editor mode with 'e'
         os.write(master, b"e")
         out_edit = read_until(master, b"Line 1/1,", timeout=6.0)
-        if b"SE v0.8.5" not in out_edit:
+        if b"Line 1/1," not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
         if b"[No Name]" not in out_edit:
@@ -476,7 +476,7 @@ def test_se_execution():
         resp = read_until(master, b"Overwrite? (y/n): ", timeout=2.0)
         if b"Overwrite? (y/n): " in resp:
             os.write(master, b"y")
-        read_until(master, b"SE v0.8.5", timeout=5.0)
+        read_until(master, b"Line 1/1,", timeout=5.0)
         drain_all(master)
         print("[+] Successfully saved file with Ctrl+S.", flush=True)
 
@@ -493,7 +493,7 @@ def test_se_execution():
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
         out_load = read_until(master, b"Line 1/2,", timeout=14.0)
-        if b"SE v0.8.5" not in out_load:
+        if b"C:2.TXT" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
         # Verify BOTH Line 1 and Line 2 from 2.TXT loaded and rendered on screen
@@ -516,7 +516,7 @@ def test_se_execution():
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
         out_load_30 = read_until(master, b"Line 1/30,", timeout=14.0)
-        if b"SE v0.8.5" not in out_load_30:
+        if b"C:30.TXT" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
             return False
         # Verify lines from 30.TXT are rendered on screen
@@ -755,7 +755,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"SE v0.8.5" in check_buf or b"Line 1/" in check_buf:
+            if b"Line 1/" in check_buf:
                 print(f"[-] Non-existent file erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
         print("[+] Successfully verified bad filename shows 'File not found' without entering editor mode.", flush=True)
@@ -770,14 +770,14 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"SE v0.8.5" in check_buf or b"Line 1/" in check_buf:
+            if b"Line 1/" in check_buf:
                 print(f"[-] Backspace in open prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
         # Type correct extension 'TXT' and press Enter
         os.write(master, b"TXT\r")
         out_loaded = read_until(master, b"Line 1/2,", timeout=4.0)
-        if b"SE v0.8.5" not in out_loaded or b"C:2.TXT" not in out_loaded:
+        if b"C:2.TXT" not in out_loaded:
             print(f"[-] Failed to open 2.TXT from Open File prompt after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
         if b"First line of two" not in out_loaded:
@@ -829,8 +829,8 @@ def test_se_execution():
         if b"Save cancelled." not in out_cancel:
             print(f"[-] 'Save cancelled.' message missing. Buffer: {repr(out_cancel)}", flush=True)
             return False
-        out_back = read_until(master, b"SE v0.8.5", timeout=4.0)
-        if b"SE v0.8.5" not in out_back:
+        out_back = read_until(master, b"C:2.TXT", timeout=4.0)
+        if b"C:2.TXT" not in out_back:
             print(f"[-] Editor mode not restored after cancelling save. Buffer: {repr(out_back)}", flush=True)
             return False
         print("[+] Successfully verified cancelling overwrite returns cleanly to editor.", flush=True)
@@ -845,8 +845,8 @@ def test_se_execution():
         read_until(master, b"Overwrite? (y/n): ", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"y")
-        out_saved = read_until(master, b"SE v0.8.5", timeout=5.0)
-        if b"SE v0.8.5" not in out_saved:
+        out_saved = read_until(master, b"C:2.TXT", timeout=5.0)
+        if b"C:2.TXT" not in out_saved:
             print(f"[-] Editor mode not restored after confirming save. Buffer: {repr(out_saved)}", flush=True)
             return False
         print("[+] Successfully verified confirming overwrite ('y') saves file and resumes editor.", flush=True)
@@ -3094,6 +3094,90 @@ def test_se_execution():
             print(f"[-] Step 60 failed: Failed exit to CP/M: {out_cpm}", flush=True)
             return False
         print("[+] Successfully verified Insert Key and Overwrite Mode (Step 60)!", flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 61: Symmetrical Centered Status Bar (80 & 120 Columns) Verification
+        # ---------------------------------------------------------------------
+        print("[*] Step 61: Verifying symmetrical centered status bar in 80x24 and 120x40 modes...", flush=True)
+
+        # 1. Launch 'se 2.TXT' in default 120x40 mode
+        time.sleep(0.5)
+        os.write(master, b"se 2.TXT\r")
+        out_s61_120 = read_until(master, b"Line 1/2,", timeout=14.0)
+        time.sleep(0.2)
+        out_s61_120 += drain_all(master)
+
+        # Locate status row 40: \x1b[40;1H
+        idx40 = out_s61_120.rfind(b"\x1b[40;1H")
+        if idx40 == -1:
+            print(f"[-] Step 61 failed: Status row 40 not found. Buffer: {repr(out_s61_120[-300:])}", flush=True)
+            return False
+        status_120 = out_s61_120[idx40:]
+        s_idx = status_120.find(b"\x1b[7m")
+        e_idx = status_120.find(b"\x1b[0m")
+        if s_idx == -1 or e_idx == -1:
+            print(f"[-] Step 61 failed: Inverse video escapes not found in status line 40: {repr(status_120[:200])}", flush=True)
+            return False
+        content_120 = status_120[s_idx + 4:e_idx]
+        if len(content_120) != 120:
+            print(f"[-] Step 61 failed: 120x40 status bar width is {len(content_120)}, expected 120: {repr(content_120)}", flush=True)
+            return False
+        # Verify 22 leading spaces and at least 22 trailing spaces
+        if not content_120.startswith(b" " * 22) or content_120[22:23] == b" ":
+            print(f"[-] Step 61 failed: 120x40 status bar left margin not exactly 22 spaces: {repr(content_120[:30])}", flush=True)
+            return False
+        if not content_120.endswith(b" " * 22):
+            print(f"[-] Step 61 failed: 120x40 status bar right margin not at least 22 spaces: {repr(content_120[-30:])}", flush=True)
+            return False
+        print("[+] 120x40 status bar verified: exactly 120 highlighted chars, centered with 22 spaces left & right.", flush=True)
+
+        # Return to splash screen with ESC
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Auto-detects CP/M [CRLF]", timeout=6.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Switch to 80x24 mode with '2'
+        os.write(master, b"2")
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Resume editor with 'e'
+        os.write(master, b"e")
+        out_s61_80 = read_until(master, b"Line 1/2,", timeout=6.0)
+        time.sleep(0.2)
+        out_s61_80 += drain_all(master)
+
+        # Locate status row 24: \x1b[24;1H
+        idx24 = out_s61_80.rfind(b"\x1b[24;1H")
+        if idx24 == -1:
+            print(f"[-] Step 61 failed: Status row 24 not found. Buffer: {repr(out_s61_80[-300:])}", flush=True)
+            return False
+        status_80 = out_s61_80[idx24:]
+        s_idx80 = status_80.find(b"\x1b[7m")
+        e_idx80 = status_80.find(b"\x1b[0m")
+        if s_idx80 == -1 or e_idx80 == -1:
+            print(f"[-] Step 61 failed: Inverse video escapes not found in status line 24: {repr(status_80[:200])}", flush=True)
+            return False
+        content_80 = status_80[s_idx80 + 4:e_idx80]
+        if len(content_80) != 80:
+            print(f"[-] Step 61 failed: 80x24 status bar width is {len(content_80)}, expected 80: {repr(content_80)}", flush=True)
+            return False
+        # Verify 2 leading spaces and at least 2 trailing spaces
+        if not content_80.startswith(b"  ") or content_80.startswith(b"   "):
+            print(f"[-] Step 61 failed: 80x24 status bar left margin not exactly 2 spaces: {repr(content_80[:10])}", flush=True)
+            return False
+        if not content_80.endswith(b"  "):
+            print(f"[-] Step 61 failed: 80x24 status bar right margin not at least 2 spaces: {repr(content_80[-10:])}", flush=True)
+            return False
+        print("[+] 80x24 status bar verified: exactly 80 highlighted chars, centered with 2 spaces left & right.", flush=True)
+
+        # Clean exit back to CP/M with Ctrl+Q
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        read_until(master, b"C>", timeout=6.0)
+        print("[+] Successfully verified Symmetrical Centered Status Bar (Step 61)!", flush=True)
 
         return True
 

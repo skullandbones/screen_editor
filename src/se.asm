@@ -4367,19 +4367,32 @@ LOCATE_STATUS_ROW:
 	CALL	PUTC
 	RET
 
+STATUS_FIELDS_WIDTH	EQU	76
+POS_FIELD_WIDTH		EQU	24
+
 RENDER_STATUS_BAR:
 	CALL	LOCATE_STATUS_ROW
 
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
 
-	LD	DE,STR_STATUS_PREFIX
-	CALL	PRINT_STR
+	; Symmetrical Left Margin: (ACTIVE_COLS - STATUS_FIELDS_WIDTH) / 2
+	LD	A,(ACTIVE_COLS)
+	SUB	STATUS_FIELDS_WIDTH
+	SRL	A			; A = 2 (80x24) or 22 (120x40)
+	LD	B,A
+	OR	A
+	JR	Z,STATUS_LEFT_PAD_DONE
+STATUS_LEFT_PAD_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	STATUS_LEFT_PAD_LOOP
+STATUS_LEFT_PAD_DONE:
 
-	; Print filename if known (HAS_FILE_ARG != 0)
+	; Field 1: Print filename (17 chars: 14 chars name + " | ")
 	CALL	PRINT_STATUS_FILENAME
 
-	; Print active geometry
+	; Field 2: Print active geometry (9 chars: " 80x24 | " or "120x40 | ")
 	LD	A,(SCREEN_MODE)
 	CP	MODE_120X40
 	JR	NZ,SHOW_STATUS_80X24
@@ -4392,6 +4405,7 @@ SHOW_STATUS_80X24:
 	CALL	PRINT_STR
 
 SHOW_STATUS_FORMAT:
+	; Field 3: Print format (8 chars: "CP/M  | " or "Linux | ")
 	LD	A,(SAVE_FORMAT)
 	CP	FMT_CPM
 	JR	NZ,SHOW_LINUX_FMT
@@ -4404,6 +4418,7 @@ SHOW_LINUX_FMT:
 	CALL	PRINT_STR
 
 SHOW_STATUS_REST:
+	; Field 4: Print Mode / Keys / Selection / OOM / Memory (18 chars)
 	LD	A,(IS_SPLASH_SCREEN)
 	OR	A
 	JP	NZ,SHOW_STATUS_SPLASH_MEM
@@ -4414,7 +4429,7 @@ SHOW_STATUS_REST:
 
 	LD	A,(BLOCK_ACTIVE)
 	OR	A
-	JR	Z,SHOW_STATUS_NORMAL_KEYS
+	JP	Z,SHOW_STATUS_NORMAL_KEYS
 
 	CALL	NORMALIZE_BLOCK_BOUNDS
 
@@ -4425,6 +4440,7 @@ SHOW_STATUS_REST:
 	; Dynamic selection active: "[SEL: "
 	LD	DE,STR_SEL_PREFIX
 	CALL	PRINT_STR
+	LD	C,6			; 6 chars for "[SEL: "
 
 	; Check if single-line or multi-line
 	LD	HL,(BLOCK_START_ROW)
@@ -4441,23 +4457,37 @@ SHOW_STATUS_REST:
 	LD	HL,BLOCK_START_COL
 	SUB	(HL)			; A = char count (BLOCK_END_COL - BLOCK_START_COL)
 	CALL	PRINT_DEC_BYTE
-	LD	DE,STR_CHAR_SUFFIX	; "c] | "
+	INC	C			; at least 1 digit
+	CP	10
+	JR	C,S_SEL_DIG_DONE
+	INC	C
+	CP	100
+	JR	C,S_SEL_DIG_DONE
+	INC	C
+S_SEL_DIG_DONE:
+	LD	DE,STR_CHAR_SUFFIX	; "c]"
 	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
+	INC	C
+	INC	C			; + 2 for "c]"
+	JR	STATUS_BLOCK_PAD
 
 STATUS_SEL_MULTILINE:
 	CALL	GET_BLOCK_BOUNDS	; BC = line count
 	LD	L,C
 	LD	H,B
+	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
+	ADD	A,6+2			; 6 ("[SEL: ") + digits + 2 ("L]")
+	LD	C,A
 	CALL	PRINT_DEC_WORD
-	LD	DE,STR_LINE_SUFFIX	; "L] | "
+	LD	DE,STR_LINE_SUFFIX	; "L]"
 	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
+	JR	STATUS_BLOCK_PAD
 
 STATUS_SOLIDIFIED:
 	; Solidified block: "[BLK: "
 	LD	DE,STR_BLK_PREFIX
 	CALL	PRINT_STR
+	LD	C,6			; 6 for "[BLK: "
 
 	LD	HL,(BLOCK_START_ROW)
 	LD	DE,(BLOCK_END_ROW)
@@ -4473,16 +4503,43 @@ STATUS_SOLIDIFIED:
 	LD	HL,BLOCK_START_COL
 	SUB	(HL)			; A = char count (BLOCK_END_COL - BLOCK_START_COL)
 	CALL	PRINT_DEC_BYTE
-	LD	DE,STR_CHAR_LOCK_SUFFIX	; "c LOCK] | "
+	INC	C			; at least 1 digit
+	CP	10
+	JR	C,S_SOL_DIG_DONE
+	INC	C
+	CP	100
+	JR	C,S_SOL_DIG_DONE
+	INC	C
+S_SOL_DIG_DONE:
+	LD	DE,STR_CHAR_LOCK_SUFFIX	; "c LOCK]"
 	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
+	LD	A,C
+	ADD	A,7			; + 7 for "c LOCK]"
+	LD	C,A
+	JR	STATUS_BLOCK_PAD
 
 STATUS_SOLID_MULTILINE:
 	CALL	GET_BLOCK_BOUNDS	; BC = line count
 	LD	L,C
 	LD	H,B
+	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
+	ADD	A,6+7			; 6 ("[BLK: ") + digits + 7 ("L LOCK]")
+	LD	C,A
 	CALL	PRINT_DEC_WORD
-	LD	DE,STR_LINE_LOCK_SUFFIX	; "L LOCK] | "
+	LD	DE,STR_LINE_LOCK_SUFFIX	; "L LOCK]"
+	CALL	PRINT_STR
+
+STATUS_BLOCK_PAD:
+	LD	A,C
+	CP	15
+	JR	NC,STATUS_BLOCK_PAD_DONE
+	LD	A,' '
+	CALL	PUTC
+	INC	C
+	JR	STATUS_BLOCK_PAD
+
+STATUS_BLOCK_PAD_DONE:
+	LD	DE,STR_STATUS_SEP	; " | "
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
@@ -4509,26 +4566,76 @@ SHOW_STATUS_SPLASH_MEM:
 	JR	SHOW_STATUS_ROWCOL
 
 SHOW_STATUS_ROWCOL:
-	; Print dynamic cursor position: Line <cur>/<total>, Col <col>
-	LD	DE,STR_STATUS_POS
-	CALL	PRINT_STR
+	; Field 5: Print dynamic cursor position (POS_FIELD_WIDTH = 24 chars)
+	; "Line <cur>/<total>, Col <col>" followed by trailing spaces
 	LD	HL,(CUR_DOC_ROW)
-	INC	HL			; 1-indexed document line
-	CALL	PRINT_DEC_WORD		; Print 16-bit current line number
+	INC	HL
+	CALL	GET_DEC_WORD_DIGITS	; A = cur digits
+	ADD	A,5+1+6			; 5 ("Line ") + 1 ('/') + 6 (", Col ") = 12
+	LD	C,A
+
+	LD	HL,(DOC_TOTAL_LINES)
+	CALL	GET_DEC_WORD_DIGITS	; A = tot digits
+	ADD	A,C
+	LD	C,A
+
+	CALL	CALC_VISUAL_COL		; A = col (0..119)
+	INC	C			; at least 1 digit
+	CP	10
+	JR	C,SSRC_COL_COUNTED
+	INC	C
+	CP	100
+	JR	C,SSRC_COL_COUNTED
+	INC	C
+SSRC_COL_COUNTED:
+	; C = characters of position string
+	PUSH	BC
+
+	; Emit "Line <cur>/<total>, Col <col>"
+	LD	DE,STR_STATUS_POS	; "Line "
+	CALL	PRINT_STR
+
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL
+	CALL	PRINT_DEC_WORD
+
 	LD	A,'/'
 	CALL	PUTC
+
 	LD	HL,(DOC_TOTAL_LINES)
-	CALL	PRINT_DEC_WORD		; Print 16-bit total rows of file
-	LD	DE,STR_STATUS_COL
+	CALL	PRINT_DEC_WORD
+
+	LD	DE,STR_STATUS_COL	; ", Col "
 	CALL	PRINT_STR
-	CALL	CALC_VISUAL_COL		; A = Visual column (0-indexed, 0..ACTIVE_COLS-1)
+
+	CALL	CALC_VISUAL_COL
 	CALL	PRINT_DEC_BYTE
+
+	; Pad position field with spaces up to POS_FIELD_WIDTH (24)
+	POP	BC
+	LD	A,POS_FIELD_WIDTH
+	SUB	C
+	JR	C,SSRC_POS_DONE
+	JR	Z,SSRC_POS_DONE
+	LD	B,A
+SSRC_POS_PAD:
 	LD	A,' '
 	CALL	PUTC
+	DJNZ	SSRC_POS_PAD
+SSRC_POS_DONE:
 
-	; Clear remainder of status line to EOL in inverse video
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
+	; Symmetrical Right Margin: (ACTIVE_COLS - STATUS_FIELDS_WIDTH) / 2
+	LD	A,(ACTIVE_COLS)
+	SUB	STATUS_FIELDS_WIDTH
+	SRL	A			; A = 2 (80x24) or 22 (120x40)
+	LD	B,A
+	OR	A
+	JR	Z,SSRC_RIGHT_PAD_DONE
+SSRC_RIGHT_PAD:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	SSRC_RIGHT_PAD
+SSRC_RIGHT_PAD_DONE:
 
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
@@ -11152,9 +11259,9 @@ STR_STATUS_PREFIX:	DB	" SE v0.8.5 | ","$"
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 
-STR_STATUS_80X24:	DB	"80x24 | ","$"
+STR_STATUS_80X24:	DB	" 80x24 | ","$"
 
-STR_FMT_CPM:	DB	"CP/M | ","$"
+STR_FMT_CPM:	DB	"CP/M  | ","$"
 
 STR_FMT_LINUX:	DB	"Linux | ","$"
 
@@ -11171,13 +11278,13 @@ STR_SEL_PREFIX:	DB	"[SEL: ","$"
 
 STR_BLK_PREFIX:	DB	"[BLK: ","$"
 
-STR_CHAR_SUFFIX:	DB	"c] | ","$"
+STR_CHAR_SUFFIX:	DB	"c]","$"
 
-STR_LINE_SUFFIX:	DB	"L] | ","$"
+STR_LINE_SUFFIX:	DB	"L]","$"
 
-STR_CHAR_LOCK_SUFFIX:	DB	"c LOCK] | ","$"
+STR_CHAR_LOCK_SUFFIX:	DB	"c LOCK]","$"
 
-STR_LINE_LOCK_SUFFIX:	DB	"L LOCK] | ","$"
+STR_LINE_LOCK_SUFFIX:	DB	"L LOCK]","$"
 
 STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 	DB	"================================================================================",13,10
