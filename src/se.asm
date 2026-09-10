@@ -4367,8 +4367,8 @@ LOCATE_STATUS_ROW:
 	CALL	PUTC
 	RET
 
-STATUS_FIELDS_WIDTH	EQU	76
-POS_FIELD_WIDTH		EQU	24
+STATUS_ENCLOSED_WIDTH	EQU	78
+POS_FIELD_WIDTH		EQU	22
 
 RENDER_STATUS_BAR:
 	CALL	LOCATE_STATUS_ROW
@@ -4376,10 +4376,10 @@ RENDER_STATUS_BAR:
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
 
-	; Symmetrical Left Margin: (ACTIVE_COLS - STATUS_FIELDS_WIDTH) / 2
+	; Symmetrical Left Margin: (ACTIVE_COLS - STATUS_ENCLOSED_WIDTH) / 2
 	LD	A,(ACTIVE_COLS)
-	SUB	STATUS_FIELDS_WIDTH
-	SRL	A			; A = 2 (80x24) or 22 (120x40)
+	SUB	STATUS_ENCLOSED_WIDTH
+	SRL	A			; A = 1 (80x24) or 21 (120x40)
 	LD	B,A
 	OR	A
 	JR	Z,STATUS_LEFT_PAD_DONE
@@ -4388,6 +4388,12 @@ STATUS_LEFT_PAD_LOOP:
 	CALL	PUTC
 	DJNZ	STATUS_LEFT_PAD_LOOP
 STATUS_LEFT_PAD_DONE:
+
+	; Extreme Left Enclosure: "| " (2 chars)
+	LD	A,'|'
+	CALL	PUTC
+	LD	A,' '
+	CALL	PUTC
 
 	; Field 1: Print filename (17 chars: 14 chars name + " | ")
 	CALL	PRINT_STATUS_FILENAME
@@ -4611,7 +4617,7 @@ SSRC_COL_COUNTED:
 	CALL	CALC_VISUAL_COL
 	CALL	PRINT_DEC_BYTE
 
-	; Pad position field with spaces up to POS_FIELD_WIDTH (24)
+	; Pad position field with spaces up to POS_FIELD_WIDTH (22)
 	POP	BC
 	LD	A,POS_FIELD_WIDTH
 	SUB	C
@@ -4624,10 +4630,16 @@ SSRC_POS_PAD:
 	DJNZ	SSRC_POS_PAD
 SSRC_POS_DONE:
 
-	; Symmetrical Right Margin: (ACTIVE_COLS - STATUS_FIELDS_WIDTH) / 2
+	; Extreme Right Enclosure: " |" (2 chars)
+	LD	A,' '
+	CALL	PUTC
+	LD	A,'|'
+	CALL	PUTC
+
+	; Symmetrical Right Margin: (ACTIVE_COLS - STATUS_ENCLOSED_WIDTH) / 2
 	LD	A,(ACTIVE_COLS)
-	SUB	STATUS_FIELDS_WIDTH
-	SRL	A			; A = 2 (80x24) or 22 (120x40)
+	SUB	STATUS_ENCLOSED_WIDTH
+	SRL	A			; A = 1 (80x24) or 21 (120x40)
 	LD	B,A
 	OR	A
 	JR	Z,SSRC_RIGHT_PAD_DONE
@@ -4782,7 +4794,7 @@ FILENAME_FIELD_WIDTH	EQU	14
 
 ;------------------------------------------------------------------------------
 ; Print Filename in Status Bar (Fixed Width: FILENAME_FIELD_WIDTH characters)
-; If filename is unknown (HAS_FILE_ARG == 0), prints "[No Name]" padded.
+; If filename is unknown (HAS_FILE_ARG == 0), prints "(Untitled)" padded.
 ; If filename is known, prints full filename "Drive letter: filename" padded.
 ; Takes care not to duplicate drive letter if filename already contains it.
 ; Always outputs exactly FILENAME_FIELD_WIDTH characters, followed by " | ".
@@ -4794,7 +4806,7 @@ PRINT_STATUS_FILENAME:
 	OR	A
 	JR	NZ,PSF_HAVE_FILE
 
-	; Unknown filename: print "[No Name]"
+	; Unknown filename: print "(Untitled)"
 	LD	DE,STR_NO_NAME
 PSF_NO_NAME_LOOP:
 	LD	A,(DE)
@@ -11312,7 +11324,7 @@ STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 
 STR_STATUS_SEP:	DB	" | ","$"
 
-STR_NO_NAME:	DB	"[No Name]",0
+STR_NO_NAME:	DB	"(Untitled)",0
 
 STR_STATUS_POS:	DB	"Line ","$"
 

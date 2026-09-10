@@ -166,7 +166,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line 1/" in check_buf or b"[No Name]" in check_buf:
+            if b"Line 1/" in check_buf or b"(Untitled)" in check_buf:
                 print(f"[-] Space key on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
@@ -177,7 +177,7 @@ def test_se_execution():
             r, _, _ = select.select([master], [], [], 0.2)
             if r:
                 check_buf = os.read(master, 2048)
-                if b"Line 1/" in check_buf or b"[No Name]" in check_buf:
+                if b"Line 1/" in check_buf or b"(Untitled)" in check_buf:
                     print(f"[-] Cursor {arrow_name} key ({repr(arrow_seq)}) on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                     return False
 
@@ -189,13 +189,13 @@ def test_se_execution():
         if b"Line 1/1," not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
-        if b"[No Name]" not in out_edit:
-            print(f"[-] Missing '[No Name]' in status bar for unnamed buffer. Buffer: {repr(out_edit)}", flush=True)
+        if b"(Untitled)" not in out_edit:
+            print(f"[-] Missing '(Untitled)' in status bar for unnamed buffer. Buffer: {repr(out_edit)}", flush=True)
             return False
         if b"^K: Editor keys" not in out_edit:
             print(f"[-] Missing '^K: Editor keys' in status bar. Buffer: {repr(out_edit)}", flush=True)
             return False
-        print("[+] Successfully entered full-screen editing mode with '[No Name]' and '^K: Editor keys'.", flush=True)
+        print("[+] Successfully entered full-screen editing mode with '(Untitled)' and '^K: Editor keys'.", flush=True)
 
         # 8. Test interactive character typing in empty buffer
         time.sleep(0.3)
@@ -2369,10 +2369,10 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"n")
         out_s53_new = read_until(master, b"Line 1/1,", timeout=4.0)
-        if b"[No Name]" not in out_s53_new:
-            print(f"[-] Step 53 failed: Splash ':n' did not enter blank editor [No Name]. Buffer: {repr(out_s53_new)}", flush=True)
+        if b"(Untitled)" not in out_s53_new:
+            print(f"[-] Step 53 failed: Splash ':n' did not enter blank editor (Untitled). Buffer: {repr(out_s53_new)}", flush=True)
             return False
-        print("[+] Splash ':n' successfully started new blank document [No Name].", flush=True)
+        print("[+] Splash ':n' successfully started new blank document (Untitled).", flush=True)
 
         # 5. Type content in blank document, then return to splash (ESC)
         time.sleep(0.2)
@@ -2411,8 +2411,8 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"e")
         out_s53_fresh = read_until(master, b"Line 1/1,", timeout=4.0)
-        if b"[No Name]" not in out_s53_fresh:
-            print(f"[-] Step 53 failed: Enter/e after close did not start fresh [No Name]. Buffer: {repr(out_s53_fresh)}", flush=True)
+        if b"(Untitled)" not in out_s53_fresh:
+            print(f"[-] Step 53 failed: Enter/e after close did not start fresh (Untitled). Buffer: {repr(out_s53_fresh)}", flush=True)
             return False
 
         # 9. In unmodified editor, test Ctrl+W: closes immediately to splash without prompt
@@ -3122,14 +3122,14 @@ def test_se_execution():
         if len(content_120) != 120:
             print(f"[-] Step 61 failed: 120x40 status bar width is {len(content_120)}, expected 120: {repr(content_120)}", flush=True)
             return False
-        # Verify 22 leading spaces and at least 22 trailing spaces
-        if not content_120.startswith(b" " * 22) or content_120[22:23] == b" ":
-            print(f"[-] Step 61 failed: 120x40 status bar left margin not exactly 22 spaces: {repr(content_120[:30])}", flush=True)
+        # Verify 21 leading spaces, left enclosure '| ', right enclosure ' |', and 21 trailing spaces
+        if not content_120.startswith(b" " * 21 + b"| "):
+            print(f"[-] Step 61 failed: 120x40 status bar left margin not exactly 21 spaces + '| ': {repr(content_120[:30])}", flush=True)
             return False
-        if not content_120.endswith(b" " * 22):
-            print(f"[-] Step 61 failed: 120x40 status bar right margin not at least 22 spaces: {repr(content_120[-30:])}", flush=True)
+        if not content_120.endswith(b" |" + b" " * 21):
+            print(f"[-] Step 61 failed: 120x40 status bar right margin not exactly ' |' + 21 spaces: {repr(content_120[-30:])}", flush=True)
             return False
-        print("[+] 120x40 status bar verified: exactly 120 highlighted chars, centered with 22 spaces left & right.", flush=True)
+        print("[+] 120x40 status bar verified: exactly 120 highlighted chars, enclosed with '|' and centered with 21 spaces left & right.", flush=True)
 
         # Return to splash screen with ESC
         time.sleep(0.2)
@@ -3164,14 +3164,14 @@ def test_se_execution():
         if len(content_80) != 80:
             print(f"[-] Step 61 failed: 80x24 status bar width is {len(content_80)}, expected 80: {repr(content_80)}", flush=True)
             return False
-        # Verify 2 leading spaces and at least 2 trailing spaces
-        if not content_80.startswith(b"  ") or content_80.startswith(b"   "):
-            print(f"[-] Step 61 failed: 80x24 status bar left margin not exactly 2 spaces: {repr(content_80[:10])}", flush=True)
+        # Verify 1 leading space, left enclosure '| ', right enclosure ' |', and 1 trailing space
+        if not content_80.startswith(b" | "):
+            print(f"[-] Step 61 failed: 80x24 status bar left margin not exactly 1 space + '| ': {repr(content_80[:10])}", flush=True)
             return False
-        if not content_80.endswith(b"  "):
-            print(f"[-] Step 61 failed: 80x24 status bar right margin not at least 2 spaces: {repr(content_80[-10:])}", flush=True)
+        if not content_80.endswith(b" | "):
+            print(f"[-] Step 61 failed: 80x24 status bar right margin not exactly ' |' + 1 space: {repr(content_80[-10:])}", flush=True)
             return False
-        print("[+] 80x24 status bar verified: exactly 80 highlighted chars, centered with 2 spaces left & right.", flush=True)
+        print("[+] 80x24 status bar verified: exactly 80 highlighted chars, enclosed with '|' and centered with 1 space left & right.", flush=True)
 
         # Clean exit back to CP/M with Ctrl+Q
         time.sleep(0.2)
