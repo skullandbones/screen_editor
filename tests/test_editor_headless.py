@@ -3324,6 +3324,55 @@ def test_se_execution():
         read_until(master, b"C>", timeout=4.0)
         print("[+] Successfully verified Cursor Retention Past Col 79 on Resume (Step 63)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        print("[*] Step 64: Verifying cursor hiding on splash screen and restoring on editor/CP/M...", flush=True)
+
+        # 1. Launch SE.COM
+        time.sleep(0.5)
+        os.write(master, b"se\r")
+        out_s64_sp = read_until(master, b"Free: 416 KB", timeout=14.0)
+        time.sleep(0.2)
+        out_s64_sp += drain_all(master)
+
+        if b"\x1b[?25l" not in out_s64_sp:
+            print(f"[-] Step 64 failed: Hide cursor escape \\x1b[?25l not found on splash screen: {repr(out_s64_sp[-300:])}", flush=True)
+            return False
+        print("[+] Verified: Splash screen emits \\x1b[?25l (hide cursor).", flush=True)
+
+        # 2. Enter editor mode with 'e'
+        os.write(master, b"e")
+        out_s64_edit = read_until(master, b"Line    1/1", timeout=6.0)
+        time.sleep(0.2)
+        out_s64_edit += drain_all(master)
+
+        if b"\x1b[?25h" not in out_s64_edit:
+            print(f"[-] Step 64 failed: Show cursor escape \\x1b[?25h not found upon entering editor: {repr(out_s64_edit[-300:])}", flush=True)
+            return False
+        print("[+] Verified: Entering editor emits \\x1b[?25h (show cursor).", flush=True)
+
+        # 3. Return to splash screen via ESC
+        os.write(master, b"\x1b")
+        out_s64_sp2 = read_until(master, b"Free: 416 KB", timeout=6.0)
+        time.sleep(0.2)
+        out_s64_sp2 += drain_all(master)
+
+        if b"\x1b[?25l" not in out_s64_sp2:
+            print(f"[-] Step 64 failed: Hide cursor escape \\x1b[?25l not found upon returning to splash: {repr(out_s64_sp2[-300:])}", flush=True)
+            return False
+        print("[+] Verified: Returning to splash screen emits \\x1b[?25l (hide cursor).", flush=True)
+
+        # 4. Exit to CP/M with 'q'
+        os.write(master, b"q")
+        out_s64_cpm = read_until(master, b"C>", timeout=6.0)
+        time.sleep(0.2)
+        out_s64_cpm += drain_all(master)
+
+        if b"\x1b[?25h" not in out_s64_cpm:
+            print(f"[-] Step 64 failed: Show cursor escape \\x1b[?25h not found upon exiting to CP/M: {repr(out_s64_cpm[-300:])}", flush=True)
+            return False
+        print("[+] Verified: Exiting to CP/M emits \\x1b[?25h (show cursor).", flush=True)
+        print("[+] Successfully verified Splash Screen Cursor Hiding & Restoring (Step 64)!", flush=True)
+
         return True
 
     finally:
