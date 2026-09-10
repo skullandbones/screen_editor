@@ -166,7 +166,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line 1/" in check_buf or b"(Untitled)" in check_buf:
+            if b"Line    1/" in check_buf or b"(Untitled)" in check_buf:
                 print(f"[-] Space key on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
@@ -177,7 +177,7 @@ def test_se_execution():
             r, _, _ = select.select([master], [], [], 0.2)
             if r:
                 check_buf = os.read(master, 2048)
-                if b"Line 1/" in check_buf or b"(Untitled)" in check_buf:
+                if b"Line    1/" in check_buf or b"(Untitled)" in check_buf:
                     print(f"[-] Cursor {arrow_name} key ({repr(arrow_seq)}) on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                     return False
 
@@ -185,8 +185,8 @@ def test_se_execution():
 
         # Enter editor mode with 'e'
         os.write(master, b"e")
-        out_edit = read_until(master, b"Line 1/1,", timeout=6.0)
-        if b"Line 1/1," not in out_edit:
+        out_edit = read_until(master, b"Line    1/1", timeout=6.0)
+        if b"Line    1/1" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
             return False
         if b"(Untitled)" not in out_edit:
@@ -315,8 +315,8 @@ def test_se_execution():
         for _ in range(15):
             os.write(master, b"\x1b[B")
             time.sleep(0.01)
-        out_row_clamp = read_until(master, b"Line 4/4,", timeout=3.0)
-        if b"Line 4/4," not in out_row_clamp:
+        out_row_clamp = read_until(master, b"Line    4/4", timeout=3.0)
+        if b"Line    4/4" not in out_row_clamp:
             print("[-] Cursor down clamping at EOF failed. Buffer captured:", out_row_clamp)
             return False
         print("[+] Successfully verified cursor cannot move past the last line of text (line 4).")
@@ -348,8 +348,8 @@ def test_se_execution():
         drain_all(master)
         # Press Backspace at column 0 to join Row 2 into Row 1 -> cursor lands at Row 1, Col 11
         os.write(master, b"\x08")
-        out_join_bs = read_until(master, b"Line 1/3, Col 11", timeout=4.0)
-        if b"Line 1/3, Col 11" not in out_join_bs:
+        out_join_bs = read_until(master, b"Line    1/3    Col 11", timeout=4.0)
+        if b"Line    1/3    Col 11" not in out_join_bs:
             print(f"[-] Line join via Backspace at Col 0 failed. Buffer: {repr(out_join_bs)}", flush=True)
             return False
         drain_all(master)
@@ -362,8 +362,8 @@ def test_se_execution():
         drain_all(master)
         # Press Delete key (\x1b[3~) at EOL to join next line into Row 1 -> cursor stays at Row 1, Col 31
         os.write(master, b"\x1b[3~")
-        out_join_del = read_until(master, b"Line 1/2, Col 31", timeout=4.0)
-        if b"Line 1/2, Col 31" not in out_join_del:
+        out_join_del = read_until(master, b"Line    1/2    Col 31", timeout=4.0)
+        if b"Line    1/2    Col 31" not in out_join_del:
             print(f"[-] Line join via Delete key at EOL failed. Buffer: {repr(out_join_del)}", flush=True)
             return False
         drain_all(master)
@@ -372,36 +372,36 @@ def test_se_execution():
         # 14. Test Real Tab character insertion & Tab-jumping navigation
         # Move cursor to (1,0)
         os.write(master, b"\x01")  # Ctrl+A -> Home
-        read_until(master, b"Line 1/2, Col 0", timeout=3.0)
+        read_until(master, b"Line    1/2    Col 0", timeout=3.0)
         drain_all(master)
         # Press Tab at (1,0) -> advances visual cursor to (1,8) -> displayed as Col 8 (0-indexed)
         os.write(master, b"\t")
-        out_tab1 = read_until(master, b"Line 1/2, Col 8", timeout=4.0)
-        if b"Line 1/2, Col 8" not in out_tab1:
+        out_tab1 = read_until(master, b"Line    1/2    Col 8", timeout=4.0)
+        if b"Line    1/2    Col 8" not in out_tab1:
             print(f"[-] Tab key from col 0 failed to reach col 8. Buffer captured: {repr(out_tab1)}", flush=True)
             return False
         drain_all(master)
 
         # Test Cursor Left jumping across the Tab in a single keystroke
         os.write(master, b"\x1b[D")
-        out_tab_left = read_until(master, b"Line 1/2, Col 0", timeout=4.0)
-        if b"Line 1/2, Col 0" not in out_tab_left:
+        out_tab_left = read_until(master, b"Line    1/2    Col 0", timeout=4.0)
+        if b"Line    1/2    Col 0" not in out_tab_left:
             print(f"[-] Left arrow over Tab failed to jump back to col 0. Buffer captured: {repr(out_tab_left)}", flush=True)
             return False
         drain_all(master)
 
         # Test Cursor Right jumping across the Tab in a single keystroke
         os.write(master, b"\x1b[C")
-        out_tab_right = read_until(master, b"Line 1/2, Col 8", timeout=4.0)
-        if b"Line 1/2, Col 8" not in out_tab_right:
+        out_tab_right = read_until(master, b"Line    1/2    Col 8", timeout=4.0)
+        if b"Line    1/2    Col 8" not in out_tab_right:
             print(f"[-] Right arrow over Tab failed to jump forward to col 8. Buffer captured: {repr(out_tab_right)}", flush=True)
             return False
         drain_all(master)
 
         # Test Backspace deleting the entire Tab in a single keystroke
         os.write(master, b"\x08")
-        out_tab_bs = read_until(master, b"Line 1/2, Col 0", timeout=4.0)
-        if b"Line 1/2, Col 0" not in out_tab_bs:
+        out_tab_bs = read_until(master, b"Line    1/2    Col 0", timeout=4.0)
+        if b"Line    1/2    Col 0" not in out_tab_bs:
             print(f"[-] Backspace over Tab failed to return to col 0. Buffer captured: {repr(out_tab_bs)}", flush=True)
             return False
         drain_all(master)
@@ -443,7 +443,7 @@ def test_se_execution():
             return False
         # Cancel with ESC
         os.write(master, b"\x1b")
-        read_until(master, b"Line 4/4,", timeout=4.0)
+        read_until(master, b"Line    4/4", timeout=4.0)
         drain_all(master)
         print("[+] Successfully verified ^F in editor mode opens Find prompt and ESC cancels cleanly.", flush=True)
 
@@ -476,7 +476,7 @@ def test_se_execution():
         resp = read_until(master, b"Overwrite? (y/n): ", timeout=2.0)
         if b"Overwrite? (y/n): " in resp:
             os.write(master, b"y")
-        read_until(master, b"Line 1/1,", timeout=5.0)
+        read_until(master, b"Line    1/1", timeout=5.0)
         drain_all(master)
         print("[+] Successfully saved file with Ctrl+S.", flush=True)
 
@@ -492,7 +492,7 @@ def test_se_execution():
         # 19. Test File Loading: Open 2-line file 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_load = read_until(master, b"Line 1/2,", timeout=14.0)
+        out_load = read_until(master, b"Line    1/2", timeout=14.0)
         if b"C:2.TXT" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
@@ -515,7 +515,7 @@ def test_se_execution():
         # 20. Test Multi-Sector File Loading and Page-Up / Page-Down Navigation: 'se 30.TXT'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_load_30 = read_until(master, b"Line 1/30,", timeout=14.0)
+        out_load_30 = read_until(master, b"Line    1/30", timeout=14.0)
         if b"C:30.TXT" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
             return False
@@ -536,8 +536,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x1b[6~")
-        out_pgdn = read_until(master, b"Line 30", timeout=4.0)
-        if b"Line 30" not in out_pgdn:
+        out_pgdn = read_until(master, b"Line   30", timeout=4.0)
+        if b"Line   30" not in out_pgdn:
             print(f"[-] Page Down key failed to navigate to bottom of document. Buffer: {repr(out_pgdn)}", flush=True)
             return False
         print("[+] Successfully verified Page-Down key (ESC [ 6 ~) navigation to Line 30.", flush=True)
@@ -546,8 +546,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x1b[5~")
-        out_pgup = read_until(master, b"Line 1", timeout=4.0)
-        if b"Line 1" not in out_pgup:
+        out_pgup = read_until(master, b"Line    1", timeout=4.0)
+        if b"Line    1" not in out_pgup:
             print(f"[-] Page Up key failed to navigate back to top of document. Buffer: {repr(out_pgup)}", flush=True)
             return False
         print("[+] Successfully verified Page-Up key (ESC [ 5 ~) navigation to Line 1.", flush=True)
@@ -556,13 +556,13 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x16")  # Ctrl+V -> Page Down
-        out_ctrl_v = read_until(master, b"Line 30", timeout=4.0)
-        if b"Line 30" not in out_ctrl_v:
+        out_ctrl_v = read_until(master, b"Line   30", timeout=4.0)
+        if b"Line   30" not in out_ctrl_v:
             print(f"[-] Ctrl+V (Page Down) failed. Buffer: {repr(out_ctrl_v)}", flush=True)
             return False
         os.write(master, b"\x15")  # Ctrl+U -> Page Up
-        out_ctrl_u = read_until(master, b"Line 1", timeout=4.0)
-        if b"Line 1" not in out_ctrl_u:
+        out_ctrl_u = read_until(master, b"Line    1", timeout=4.0)
+        if b"Line    1" not in out_ctrl_u:
             print(f"[-] Ctrl+U (Page Up) failed. Buffer: {repr(out_ctrl_u)}", flush=True)
             return False
         print("[+] Successfully verified Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts.", flush=True)
@@ -572,8 +572,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x07")  # Ctrl+G -> Jump to Bottom
-        out_g = read_until(master, b"Line 30", timeout=4.0)
-        if b"Line 30" not in out_g:
+        out_g = read_until(master, b"Line   30", timeout=4.0)
+        if b"Line   30" not in out_g:
             print(f"[-] Ctrl+G failed to jump to bottom of file. Buffer: {repr(out_g)}", flush=True)
             return False
 
@@ -581,8 +581,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x14")  # Ctrl+T -> Jump to Top
-        out_t = read_until(master, b"Line 1", timeout=4.0)
-        if b"Line 1" not in out_t:
+        out_t = read_until(master, b"Line    1", timeout=4.0)
+        if b"Line    1" not in out_t:
             print(f"[-] Ctrl+T failed to jump to top of file. Buffer: {repr(out_t)}", flush=True)
             return False
 
@@ -590,8 +590,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b[1;5F")
-        out_cend = read_until(master, b"Line 30", timeout=4.0)
-        if b"Line 30" not in out_cend:
+        out_cend = read_until(master, b"Line   30", timeout=4.0)
+        if b"Line   30" not in out_cend:
             print(f"[-] Ctrl+End (ESC [ 1 ; 5 F) failed to jump to bottom. Buffer: {repr(out_cend)}", flush=True)
             return False
 
@@ -599,8 +599,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b[1;5H")
-        out_chome = read_until(master, b"Line 1", timeout=4.0)
-        if b"Line 1" not in out_chome:
+        out_chome = read_until(master, b"Line    1", timeout=4.0)
+        if b"Line    1" not in out_chome:
             print(f"[-] Ctrl+Home (ESC [ 1 ; 5 H) failed to jump to top. Buffer: {repr(out_chome)}", flush=True)
             return False
 
@@ -608,8 +608,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b>")
-        out_esc_gt = read_until(master, b"Line 30", timeout=4.0)
-        if b"Line 30" not in out_esc_gt:
+        out_esc_gt = read_until(master, b"Line   30", timeout=4.0)
+        if b"Line   30" not in out_esc_gt:
             print(f"[-] ESC > failed to jump to bottom. Buffer: {repr(out_esc_gt)}", flush=True)
             return False
 
@@ -617,8 +617,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b<")
-        out_esc_lt = read_until(master, b"Line 1", timeout=4.0)
-        if b"Line 1" not in out_esc_lt:
+        out_esc_lt = read_until(master, b"Line    1", timeout=4.0)
+        if b"Line    1" not in out_esc_lt:
             print(f"[-] ESC < failed to jump to top. Buffer: {repr(out_esc_lt)}", flush=True)
             return False
 
@@ -626,8 +626,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1bb")
-        out_esc_b = read_until(master, b"Line 30", timeout=4.0)
-        if b"Line 30" not in out_esc_b:
+        out_esc_b = read_until(master, b"Line   30", timeout=4.0)
+        if b"Line   30" not in out_esc_b:
             print(f"[-] ESC b failed to jump to bottom. Buffer: {repr(out_esc_b)}", flush=True)
             return False
 
@@ -635,8 +635,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1bt")
-        out_esc_t = read_until(master, b"Line 1", timeout=4.0)
-        if b"Line 1" not in out_esc_t:
+        out_esc_t = read_until(master, b"Line    1", timeout=4.0)
+        if b"Line    1" not in out_esc_t:
             print(f"[-] ESC t failed to jump to top. Buffer: {repr(out_esc_t)}", flush=True)
             return False
 
@@ -656,7 +656,7 @@ def test_se_execution():
         if b"Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash" not in out_splash:
             print(f"[-] Splash screen missing Antigravity attribution. Buffer: {repr(out_splash)}", flush=True)
             return False
-        out_splash_status = read_until(master, b"Line 1/30,", timeout=4.0)
+        out_splash_status = read_until(master, b"Line    1/30", timeout=4.0)
         if b"Free: 412 KB" not in out_splash_status:
             print(f"[-] Splash screen status bar missing free memory indicator. Buffer: {repr(out_splash_status)}", flush=True)
             return False
@@ -755,7 +755,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line 1/" in check_buf:
+            if b"Line    1/" in check_buf:
                 print(f"[-] Non-existent file erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
         print("[+] Successfully verified bad filename shows 'File not found' without entering editor mode.", flush=True)
@@ -770,13 +770,13 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line 1/" in check_buf:
+            if b"Line    1/" in check_buf:
                 print(f"[-] Backspace in open prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
         # Type correct extension 'TXT' and press Enter
         os.write(master, b"TXT\r")
-        out_loaded = read_until(master, b"Line 1/2,", timeout=4.0)
+        out_loaded = read_until(master, b"Line    1/2", timeout=4.0)
         if b"C:2.TXT" not in out_loaded:
             print(f"[-] Failed to open 2.TXT from Open File prompt after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
@@ -919,7 +919,7 @@ def test_se_execution():
         read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT\r")
-        out_open_30 = read_until(master, b"Line 1/30,", timeout=4.0)
+        out_open_30 = read_until(master, b"Line    1/30", timeout=4.0)
         if b"C:30.TXT" not in out_open_30 or b"Line 01 of test file content" not in out_open_30:
             print(f"[-] Failed to open 30.TXT via Ctrl+O in editor mode. Buffer: {repr(out_open_30)}", flush=True)
             return False
@@ -1038,7 +1038,7 @@ def test_se_execution():
         drain_all(master)
         # Move to top of document (Ctrl+T) and column 0 (Ctrl+A)
         os.write(master, b"\x14\x01")
-        read_until(master, b"Line 1/", timeout=4.0)
+        read_until(master, b"Line    1/", timeout=4.0)
 
         # Press Ctrl+B (\x02) to activate block mode at Row 1, Col 0: 0 chars selected
         os.write(master, b"\x02")
@@ -1371,12 +1371,12 @@ def test_se_execution():
         # Part 1: Multi-line backwards selection (Row 10 Col 5 left arrow wrapping onto Row 9 to Col 0)
         # Move to top of document (Ctrl+T) and Col 0 (Ctrl+A), then move to Row 10 Col 5
         os.write(master, b"\x14\x01")
-        read_until(master, b"Line 1/", timeout=4.0)
+        read_until(master, b"Line    1/", timeout=4.0)
         os.write(master, b"\x1b[B" * 9)
-        read_until(master, b"Line 10/", timeout=4.0)
+        read_until(master, b"Line   10/", timeout=4.0)
         os.write(master, b"\x1b[C" * 5)
-        out_s38_r10c5 = read_until(master, b", Col 5", timeout=4.0)
-        if b", Col 5" not in out_s38_r10c5:
+        out_s38_r10c5 = read_until(master, b"Col 5", timeout=4.0)
+        if b"Col 5" not in out_s38_r10c5:
             print(f"[-] Step 38 failed: Could not navigate to Row 10 Col 5. Buffer: {repr(out_s38_r10c5)}", flush=True)
             return False
 
@@ -1401,7 +1401,7 @@ def test_se_execution():
             os.write(master, b"\x1b[D")
             time.sleep(0.05)
             buf = drain_all(master)
-            if b"Line 9/" in buf and b", Col 0 " in buf:
+            if b"Line    9/" in buf and b"Col 0 " in buf:
                 break
 
         # Confirm Row 9 remains highlighted (cols 1..254) and status remains [SEL: 2L]
@@ -1434,10 +1434,10 @@ def test_se_execution():
         # Part 2: Single-line backwards selection (Col 5 left to Col 4)
         # Move to top of document (Ctrl+T) and Col 0 (Ctrl+A), then move right 5 columns
         os.write(master, b"\x14\x01")
-        read_until(master, b"Line 1/", timeout=4.0)
+        read_until(master, b"Line    1/", timeout=4.0)
         os.write(master, b"\x1b[C" * 5)
-        out_s38_c5 = read_until(master, b", Col 5", timeout=4.0)
-        if b", Col 5" not in out_s38_c5:
+        out_s38_c5 = read_until(master, b"Col 5", timeout=4.0)
+        if b"Col 5" not in out_s38_c5:
             print(f"[-] Step 38 failed: Could not navigate to Col 5. Buffer: {repr(out_s38_c5)}", flush=True)
             return False
 
@@ -1761,17 +1761,17 @@ def test_se_execution():
 
         # Move to line 1: Ctrl+T, Ctrl+A
         os.write(master, b"\x14\x01")
-        out_init = read_until(master, b", Col 0", timeout=4.0)
-        idx = out_init.rfind(b"Line 1/")
-        if idx != -1 and b"," in out_init[idx + 7 :]:
-            total_str = out_init[idx + 7 :].split(b",")[0].strip()
+        out_init = read_until(master, b"Col 0", timeout=4.0)
+        idx = out_init.rfind(b"Line    1/")
+        if idx != -1 and b"Col" in out_init[idx + 10 :]:
+            total_str = out_init[idx + 10 :].split(b"Col")[0].strip()
         else:
             total_str = b"38"
-        lbl_1 = b"Line 1/" + total_str
-        lbl_10 = b"Line 10/" + total_str
-        lbl_25 = b"Line 25/" + total_str
-        lbl_max = b"Line " + total_str + b"/" + total_str
-        lbl_15 = b"Line 15/" + total_str
+        lbl_1 = b"Line    1/" + total_str
+        lbl_10 = b"Line   10/" + total_str
+        lbl_25 = b"Line   25/" + total_str
+        lbl_max = b"Line   " + total_str + b"/" + total_str
+        lbl_15 = b"Line   15/" + total_str
 
         # 1. Press Ctrl+L -> verify 'Goto line:' prompt on status line
         os.write(master, b"\x0c")
@@ -1788,7 +1788,7 @@ def test_se_execution():
             return False
 
         # 2b. Abort with Down Arrow (\x1b[B): verify prompt aborts, cursor moves to Line 2, no debris!
-        lbl_2 = b"Line 2/" + total_str
+        lbl_2 = b"Line    2/" + total_str
         os.write(master, b"\x0c")
         read_until(master, b"Goto line:", timeout=4.0)
         os.write(master, b"\x1b[B")
@@ -1938,8 +1938,8 @@ def test_se_execution():
         # Launch SE directly with line number: 'se 30.TXT:15'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT:15\r")
-        out_s44_l15 = read_until(master, b"Line 15/30", timeout=14.0)
-        if b"Line 15/30" not in out_s44_l15 or b"Line 15 of test file content" not in out_s44_l15:
+        out_s44_l15 = read_until(master, b"Line   15/30", timeout=14.0)
+        if b"Line   15/30" not in out_s44_l15 or b"Line 15 of test file content" not in out_s44_l15:
             print(f"[-] Step 44 failed: 'se 30.TXT:15' did not position at Line 15. Buffer: {repr(out_s44_l15)}", flush=True)
             return False
         if b"C:30.TXT" not in out_s44_l15:
@@ -1954,8 +1954,8 @@ def test_se_execution():
         # Launch SE with line number beyond EOF: 'se 30.TXT:999' (should clamp to max line)
         time.sleep(0.5)
         os.write(master, b"se 30.TXT:999\r")
-        out_s44_l30 = read_until(master, b"Line 30/30", timeout=14.0)
-        if b"Line 30/30" not in out_s44_l30 or b"Line 30 of test file content" not in out_s44_l30:
+        out_s44_l30 = read_until(master, b"Line   30/30", timeout=14.0)
+        if b"Line   30/30" not in out_s44_l30 or b"Line 30 of test file content" not in out_s44_l30:
             print(f"[-] Step 44 failed: 'se 30.TXT:999' did not clamp to Line 30. Buffer: {repr(out_s44_l30)}", flush=True)
             return False
 
@@ -1973,8 +1973,8 @@ def test_se_execution():
         # Launch SE on 30.TXT
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_s45_init = read_until(master, b"Line 1/30,", timeout=25.0)
-        if b"Line 1/30," not in out_s45_init:
+        out_s45_init = read_until(master, b"Line    1/30", timeout=25.0)
+        if b"Line    1/30" not in out_s45_init:
             print(f"[-] Step 45 failed: 30.TXT did not load. Buffer: {repr(out_s45_init)}", flush=True)
             return False
 
@@ -1988,15 +1988,15 @@ def test_se_execution():
 
         # 2. Search for exact "Line 15"
         os.write(master, b"Line 15\r")
-        out_s45_l15 = read_until(master, b"Line 15/30,", timeout=4.0)
-        if b"Line 15/30," not in out_s45_l15:
+        out_s45_l15 = read_until(master, b"Line   15/30", timeout=4.0)
+        if b"Line   15/30" not in out_s45_l15:
             print(f"[-] Step 45 failed: Search 'Line 15' did not position at line 15. Buffer: {repr(out_s45_l15)}", flush=True)
             return False
 
         # 3. Test case sensitivity: search for lowercase "line 15" from Line 1 (should fail)
         time.sleep(0.2)
         os.write(master, b"\x14\x01")  # Ctrl+T, Ctrl+A to line 1
-        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Line    1/30", timeout=4.0)
 
         os.write(master, b"\x06")
         read_until(master, b"Find (Exact):", timeout=4.0)
@@ -2011,21 +2011,21 @@ def test_se_execution():
         os.write(master, b"\x06")
         read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"content\r")
-        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Line    1/30", timeout=4.0)
 
         # Press Ctrl+N to find next occurrence on Line 2
         time.sleep(0.2)
         os.write(master, b"\x0e")
-        out_s45_n1 = read_until(master, b"Line 2/30,", timeout=4.0)
-        if b"Line 2/30," not in out_s45_n1:
+        out_s45_n1 = read_until(master, b"Line    2/30", timeout=4.0)
+        if b"Line    2/30" not in out_s45_n1:
             print(f"[-] Step 45 failed: Ctrl+N did not advance to Line 2. Buffer: {repr(out_s45_n1)}", flush=True)
             return False
 
         # Press Ctrl+N to find next occurrence on Line 3
         time.sleep(0.2)
         os.write(master, b"\x0e")
-        out_s45_n2 = read_until(master, b"Line 3/30,", timeout=4.0)
-        if b"Line 3/30," not in out_s45_n2:
+        out_s45_n2 = read_until(master, b"Line    3/30", timeout=4.0)
+        if b"Line    3/30" not in out_s45_n2:
             print(f"[-] Step 45 failed: Ctrl+N did not advance to Line 3. Buffer: {repr(out_s45_n2)}", flush=True)
             return False
 
@@ -2039,7 +2039,7 @@ def test_se_execution():
         # Move to line 1
         time.sleep(0.2)
         os.write(master, b"\x14\x01")
-        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Line    1/30", timeout=4.0)
 
         # Open Find: Ctrl+F
         os.write(master, b"\x06")
@@ -2054,8 +2054,8 @@ def test_se_execution():
 
         # Search for lowercase "line 20"
         os.write(master, b"line 20\r")
-        out_s46_l20 = read_until(master, b"Line 20/30,", timeout=4.0)
-        if b"Line 20/30," not in out_s46_l20:
+        out_s46_l20 = read_until(master, b"Line   20/30", timeout=4.0)
+        if b"Line   20/30" not in out_s46_l20:
             print(f"[-] Step 46 failed: Case-insensitive search 'line 20' failed. Buffer: {repr(out_s46_l20)}", flush=True)
             return False
 
@@ -2071,7 +2071,7 @@ def test_se_execution():
         os.write(master, b"\t")
         read_until(master, b"Find (Exact):", timeout=4.0)
         os.write(master, b"\x1b")
-        read_until(master, b"Line 20/30,", timeout=4.0)
+        read_until(master, b"Line   20/30", timeout=4.0)
 
         print("[+] Successfully verified Case Insensitivity Toggle (Ctrl+I) (Step 46)!", flush=True)
 
@@ -2083,7 +2083,7 @@ def test_se_execution():
         # Move to line 1
         time.sleep(0.2)
         os.write(master, b"\x14\x01")
-        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Line    1/30", timeout=4.0)
 
         # Trigger Replace: Ctrl+R
         os.write(master, b"\x12")
@@ -2152,10 +2152,10 @@ def test_se_execution():
         drain_all(master)
         # Move to top of document: Ctrl+T, Ctrl+A (Line 1 Col 0)
         os.write(master, b"\x14\x01")
-        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Line    1/30", timeout=4.0)
         # Move down to Line 2: Down Arrow (\x1b[B)
         os.write(master, b"\x1b[B")
-        read_until(master, b"Line 2/30,", timeout=4.0)
+        read_until(master, b"Line    2/30", timeout=4.0)
         time.sleep(0.2)
         drain_all(master)
         # Start dynamic selection with Ctrl+B
@@ -2225,27 +2225,27 @@ def test_se_execution():
         read_until(master, b"Find (Exact):", timeout=4.0)
         # Erase prefilled "BetaLine" (8 backspaces) and type "content\r"
         os.write(master, b"\x08\x08\x08\x08\x08\x08\x08\x08content\r")
-        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Line    1/30", timeout=4.0)
 
         # Forward search: Ctrl+N -> moves to line 2
         time.sleep(0.2)
         os.write(master, b"\x0e")
-        read_until(master, b"Line 2/30,", timeout=4.0)
+        read_until(master, b"Line    2/30", timeout=4.0)
 
         # Forward search: Ctrl+N -> moves to line 3
         time.sleep(0.2)
         os.write(master, b"\x0e")
-        read_until(master, b"Line 3/30,", timeout=4.0)
+        read_until(master, b"Line    3/30", timeout=4.0)
 
         # Dynamic reverse: Ctrl+P -> moves back to line 2!
         time.sleep(0.2)
         os.write(master, b"\x10")
-        read_until(master, b"Line 2/30,", timeout=4.0)
+        read_until(master, b"Line    2/30", timeout=4.0)
 
         # Dynamic reverse: Ctrl+P -> moves back to line 1!
         time.sleep(0.2)
         os.write(master, b"\x10")
-        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Line    1/30", timeout=4.0)
 
         # Verify 'r' in interactive Replace prompt:
         time.sleep(0.3)
@@ -2259,12 +2259,12 @@ def test_se_execution():
         read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
         # We are on line 1. Skip with 'n' -> moves forward to line 2:
         os.write(master, b"n")
-        read_until(master, b"Line 2/30,", timeout=4.0)
+        read_until(master, b"Line    2/30", timeout=4.0)
         read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
 
         # Press 'r' to dynamically reverse direction -> moves back to line 1!
         os.write(master, b"r")
-        read_until(master, b"Line 1/30,", timeout=4.0)
+        read_until(master, b"Line    1/30", timeout=4.0)
         read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
 
         # Quit replace with 'q'
@@ -2292,8 +2292,8 @@ def test_se_execution():
 
         # 3. Press standalone ESC to cancel exit and resume editor
         os.write(master, b"\x1b")
-        out_s52_cancel = read_until(master, b"Line 1/30,", timeout=4.0)
-        if b"Line 1/30," not in out_s52_cancel:
+        out_s52_cancel = read_until(master, b"Line    1/30", timeout=4.0)
+        if b"Line    1/30" not in out_s52_cancel:
             print(f"[-] Step 52 failed: ESC did not restore editor. Buffer: {repr(out_s52_cancel)}", flush=True)
             return False
         print("[+] Cursor keys ignored and standalone ESC cancelled exit, restoring editor.", flush=True)
@@ -2327,7 +2327,7 @@ def test_se_execution():
         # 7. Verify clean exit without prompt when file is unmodified: 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        read_until(master, b"Line 1/2,", timeout=14.0)
+        read_until(master, b"Line    1/2", timeout=14.0)
         time.sleep(0.2)
         os.write(master, b"\x11")
         out_s52_clean = read_until(master, b"C>", timeout=4.0)
@@ -2345,7 +2345,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        read_until(master, b"Line 1/2,", timeout=14.0)
+        read_until(master, b"Line    1/2", timeout=14.0)
 
         # 2. Modify buffer and send Ctrl+W (\x17)
         time.sleep(0.2)
@@ -2368,7 +2368,7 @@ def test_se_execution():
         # 4. On splash screen, test ':n' to start a new blank document
         time.sleep(0.2)
         os.write(master, b"n")
-        out_s53_new = read_until(master, b"Line 1/1,", timeout=4.0)
+        out_s53_new = read_until(master, b"Line    1/1", timeout=4.0)
         if b"(Untitled)" not in out_s53_new:
             print(f"[-] Step 53 failed: Splash ':n' did not enter blank editor (Untitled). Buffer: {repr(out_s53_new)}", flush=True)
             return False
@@ -2390,7 +2390,7 @@ def test_se_execution():
             return False
         # Cancel with ESC to stay in editor
         os.write(master, b"\x1b")
-        read_until(master, b"Line 1/1,", timeout=4.0)
+        read_until(master, b"Line    1/1", timeout=4.0)
         print("[+] Splash ':w' prompted for unsaved changes and ESC cancelled cleanly.", flush=True)
 
         # 7. Return to splash screen again, test Ctrl+W and discard with 'n'
@@ -2410,7 +2410,7 @@ def test_se_execution():
         # 8. On clean splash screen, press 'e': verify it starts a fresh blank document
         time.sleep(0.2)
         os.write(master, b"e")
-        out_s53_fresh = read_until(master, b"Line 1/1,", timeout=4.0)
+        out_s53_fresh = read_until(master, b"Line    1/1", timeout=4.0)
         if b"(Untitled)" not in out_s53_fresh:
             print(f"[-] Step 53 failed: Enter/e after close did not start fresh (Untitled). Buffer: {repr(out_s53_fresh)}", flush=True)
             return False
@@ -2439,7 +2439,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        read_until(master, b"Line 1/2,", timeout=14.0)
+        read_until(master, b"Line    1/2", timeout=14.0)
 
         # 2. Modify buffer and send Ctrl+O (\x0f)
         time.sleep(0.2)
@@ -2454,7 +2454,7 @@ def test_se_execution():
 
         # 3. Cancel prompt with ESC: verify editor remains with modified document
         os.write(master, b"\x1b")
-        out_s54_cancel = read_until(master, b"Line 1/2,", timeout=4.0)
+        out_s54_cancel = read_until(master, b"Line    1/2", timeout=4.0)
         if b"C:2.TXT" not in out_s54_cancel:
             print(f"[-] Step 54 failed: ESC did not cancel prompt back to editor. Buffer: {repr(out_s54_cancel)}", flush=True)
             return False
@@ -2474,7 +2474,7 @@ def test_se_execution():
         # 5. Cancel Open File screen with ESC: verify return to editor
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        out_s54_ed_back = read_until(master, b"Line 1/2,", timeout=4.0)
+        out_s54_ed_back = read_until(master, b"Line    1/2", timeout=4.0)
         if b"C:2.TXT" not in out_s54_ed_back:
             print(f"[-] Step 54 failed: ESC in Open File screen did not return to editor. Buffer: {repr(out_s54_ed_back)}", flush=True)
             return False
@@ -2490,7 +2490,7 @@ def test_se_execution():
         # Cancel back to editor
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Line 1/2,", timeout=4.0)
+        read_until(master, b"Line    1/2", timeout=4.0)
         print("[+] Unmodified Ctrl+O opened Open File screen immediately without prompt.", flush=True)
 
         # 7. Modify document, return to splash screen (ESC)
@@ -2509,7 +2509,7 @@ def test_se_execution():
             return False
         # Cancel with ESC to stay in editor
         os.write(master, b"\x1b")
-        read_until(master, b"Line 1/2,", timeout=4.0)
+        read_until(master, b"Line    1/2", timeout=4.0)
         print("[+] Splash ':o' with modified document resumed editor and prompted for save changes.", flush=True)
 
         # 9. Return to splash screen again (ESC), test ':o' and discard with 'n'
@@ -2527,7 +2527,7 @@ def test_se_execution():
         # Cancel back to editor
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Line 1/2,", timeout=4.0)
+        read_until(master, b"Line    1/2", timeout=4.0)
         print("[+] Splash ':o' discarded changes and opened Open File screen.", flush=True)
 
         # 10. Exit cleanly with Ctrl+Q
@@ -2545,7 +2545,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        read_until(master, b"Line 1/2,", timeout=14.0)
+        read_until(master, b"Line    1/2", timeout=14.0)
 
         # 2. In editor mode, press Ctrl+O and open '30.TXT:15'
         time.sleep(0.2)
@@ -2553,8 +2553,8 @@ def test_se_execution():
         read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT:15\r")
-        out_s55_l15 = read_until(master, b"Line 15/30,", timeout=4.0)
-        if b"Line 15/30," not in out_s55_l15 or b"C:30.TXT" not in out_s55_l15:
+        out_s55_l15 = read_until(master, b"Line   15/30", timeout=4.0)
+        if b"Line   15/30" not in out_s55_l15 or b"C:30.TXT" not in out_s55_l15:
             print(f"[-] Step 55 failed: '30.TXT:15' did not open at line 15. Buffer: {repr(out_s55_l15)}", flush=True)
             return False
         print("[+] '30.TXT:15' opened successfully at line 15.", flush=True)
@@ -2565,8 +2565,8 @@ def test_se_execution():
         read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"C:30.TXT:25\r")
-        out_s55_l25 = read_until(master, b"Line 25/30,", timeout=4.0)
-        if b"Line 25/30," not in out_s55_l25 or b"C:30.TXT" not in out_s55_l25:
+        out_s55_l25 = read_until(master, b"Line   25/30", timeout=4.0)
+        if b"Line   25/30" not in out_s55_l25 or b"C:30.TXT" not in out_s55_l25:
             print(f"[-] Step 55 failed: 'C:30.TXT:25' did not open at line 25. Buffer: {repr(out_s55_l25)}", flush=True)
             return False
         print("[+] 'C:30.TXT:25' opened successfully at line 25 with explicit drive.", flush=True)
@@ -2577,8 +2577,8 @@ def test_se_execution():
         read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT:1000\r")
-        out_s55_l1000 = read_until(master, b"Line 30/30,", timeout=4.0)
-        if b"Line 30/30," not in out_s55_l1000:
+        out_s55_l1000 = read_until(master, b"Line   30/30", timeout=4.0)
+        if b"Line   30/30" not in out_s55_l1000:
             print(f"[-] Step 55 failed: '30.TXT:1000' did not clamp to line 30. Buffer: {repr(out_s55_l1000)}", flush=True)
             return False
         print("[+] '30.TXT:1000' clamped cleanly to line 30.", flush=True)
@@ -2592,8 +2592,8 @@ def test_se_execution():
         read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT:10\r")
-        out_s55_splash_l10 = read_until(master, b"Line 10/30,", timeout=4.0)
-        if b"Line 10/30," not in out_s55_splash_l10:
+        out_s55_splash_l10 = read_until(master, b"Line   10/30", timeout=4.0)
+        if b"Line   10/30" not in out_s55_splash_l10:
             print(f"[-] Step 55 failed: Splash ':o' '30.TXT:10' did not open at line 10. Buffer: {repr(out_s55_splash_l10)}", flush=True)
             return False
         print("[+] Splash screen ':o' with line number '30.TXT:10' opened at line 10.", flush=True)
@@ -2604,8 +2604,8 @@ def test_se_execution():
         read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT\r")
-        out_s55_l1 = read_until(master, b"Line 1/30,", timeout=4.0)
-        if b"Line 1/30," not in out_s55_l1:
+        out_s55_l1 = read_until(master, b"Line    1/30", timeout=4.0)
+        if b"Line    1/30" not in out_s55_l1:
             print(f"[-] Step 55 failed: '30.TXT' without line number did not open at line 1. Buffer: {repr(out_s55_l1)}", flush=True)
             return False
         print("[+] '30.TXT' without line number opened at default line 1.", flush=True)
@@ -2663,8 +2663,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"se BIG.TXT\r")
-        out_s57 = read_until(master, b"Line 1/3328,", timeout=60.0)
-        if b"Line 1/3328," not in out_s57 or b"^K: Editor keys" not in out_s57:
+        out_s57 = read_until(master, b"Line    1/3328", timeout=60.0)
+        if b"Line    1/3328" not in out_s57 or b"^K: Editor keys" not in out_s57:
             print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing '^K: Editor keys'. Buffer: {repr(out_s57[-200:])}", flush=True)
             return False
         print("[+] BIG.TXT (3,328 lines) loaded with status bar showing '^K: Editor keys'.", flush=True)
@@ -2686,8 +2686,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"\x1b[B")
-        out_s57_down = read_until(master, b"Line 2/3328,", timeout=6.0)
-        if b"^K: Editor keys" not in out_s57_down or b"Line 2/3328," not in out_s57_down:
+        out_s57_down = read_until(master, b"Line    2/3328", timeout=6.0)
+        if b"^K: Editor keys" not in out_s57_down or b"Line    2/3328" not in out_s57_down:
             print(f"[-] Step 57 failed: Cursor down did not revert to '^K: Editor keys' or move to Line 2. Buffer: {repr(out_s57_down[-200:])}", flush=True)
             return False
         print("[+] Successfully verified cursor down moved to Line 2 and reverted to '^K: Editor keys'!", flush=True)
@@ -2696,8 +2696,8 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x1b[A")
-        out_s57_up = read_until(master, b"Line 1/3328,", timeout=6.0)
-        if b"Line 1/3328," not in out_s57_up:
+        out_s57_up = read_until(master, b"Line    1/3328", timeout=6.0)
+        if b"Line    1/3328" not in out_s57_up:
             print(f"[-] Step 57 failed: Cursor up did not return to Line 1. Buffer: {repr(out_s57_up[-200:])}", flush=True)
             return False
 
@@ -2756,8 +2756,8 @@ def test_se_execution():
 
         # Enter editor mode with 'e'
         os.write(master, b"e")
-        out_s58_edit = read_until(master, b"Line 1/1, Col 0", timeout=6.0)
-        if b"80x24" not in out_s58_edit or b"Line 1/1, Col 0" not in out_s58_edit:
+        out_s58_edit = read_until(master, b"Line    1/1    Col 0", timeout=6.0)
+        if b"80x24" not in out_s58_edit or b"Line    1/1    Col 0" not in out_s58_edit:
             print(f"[-] Step 58 failed: Editor mode not entered in 80x24: {repr(out_s58_edit)}", flush=True)
             return False
 
@@ -2872,8 +2872,8 @@ def test_se_execution():
 
         # Enter editor mode with 'e'
         os.write(master, b"e")
-        out_s59_edit = read_until(master, b"Line 1/1, Col 0", timeout=6.0)
-        if b"80x24" not in out_s59_edit or b"Line 1/1, Col 0" not in out_s59_edit:
+        out_s59_edit = read_until(master, b"Line    1/1    Col 0", timeout=6.0)
+        if b"80x24" not in out_s59_edit or b"Line    1/1    Col 0" not in out_s59_edit:
             print(f"[-] Step 59 failed: Editor mode not entered in 80x24: {repr(out_s59_edit)}", flush=True)
             return False
 
@@ -3002,8 +3002,8 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT' (Line 1: "First line of two", Line 2: "Second line of two")
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_s60_boot = read_until(master, b"Line 1/2,", timeout=14.0)
-        if b"Line 1/2," not in out_s60_boot:
+        out_s60_boot = read_until(master, b"Line    1/2", timeout=14.0)
+        if b"Line    1/2" not in out_s60_boot:
             print(f"[-] Step 60 failed: Launching se 2.TXT failed. Buffer: {repr(out_s60_boot)}", flush=True)
             return False
 
@@ -3103,7 +3103,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT' in default 120x40 mode
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_s61_120 = read_until(master, b"Line 1/2,", timeout=14.0)
+        out_s61_120 = read_until(master, b"Line    1/2", timeout=14.0)
         time.sleep(0.2)
         out_s61_120 += drain_all(master)
 
@@ -3145,7 +3145,7 @@ def test_se_execution():
 
         # Resume editor with 'e'
         os.write(master, b"e")
-        out_s61_80 = read_until(master, b"Line 1/2,", timeout=6.0)
+        out_s61_80 = read_until(master, b"Line    1/2", timeout=6.0)
         time.sleep(0.2)
         out_s61_80 += drain_all(master)
 

@@ -145,7 +145,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ~                        Z80 CP/M with 512K Extended Storage    
 ~                        Auto-detects CP/M [CRLF] & Linux [LF]  
 ~
-| (Untitled)    | 120x40 | CP/M  | Free: 416 KB    | Line 1/1, Col 0       |
+| (Untitled)    | 120x40 | CP/M  | Free: 416 KB    | Line    1/1    Col 0  |
 ```
 
 * Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter/resume full-screen editing mode.

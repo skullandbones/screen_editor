@@ -4572,63 +4572,80 @@ SHOW_STATUS_SPLASH_MEM:
 	JR	SHOW_STATUS_ROWCOL
 
 SHOW_STATUS_ROWCOL:
-	; Field 5: Print dynamic cursor position (POS_FIELD_WIDTH = 24 chars)
-	; "Line <cur>/<total>, Col <col>" followed by trailing spaces
-	LD	HL,(CUR_DOC_ROW)
-	INC	HL
-	CALL	GET_DEC_WORD_DIGITS	; A = cur digits
-	ADD	A,5+1+6			; 5 ("Line ") + 1 ('/') + 6 (", Col ") = 12
-	LD	C,A
+	; Field 5: Print fixed-position cursor position (POS_FIELD_WIDTH = 22 chars)
+	; "Line <cur:4>/<total:4> Col <col:3>"
 
-	LD	HL,(DOC_TOTAL_LINES)
-	CALL	GET_DEC_WORD_DIGITS	; A = tot digits
-	ADD	A,C
-	LD	C,A
-
-	CALL	CALC_VISUAL_COL		; A = col (0..119)
-	INC	C			; at least 1 digit
-	CP	10
-	JR	C,SSRC_COL_COUNTED
-	INC	C
-	CP	100
-	JR	C,SSRC_COL_COUNTED
-	INC	C
-SSRC_COL_COUNTED:
-	; C = characters of position string
-	PUSH	BC
-
-	; Emit "Line <cur>/<total>, Col <col>"
+	; 1. Prefix: "Line " (5 chars)
 	LD	DE,STR_STATUS_POS	; "Line "
 	CALL	PRINT_STR
 
+	; 2. Current line: right-justified in 4 chars
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL
+	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
+	LD	C,A
+	LD	A,4
+	SUB	C			; A = 4 - digits
+	JR	C,SSRC_CUR_PRINT
+	JR	Z,SSRC_CUR_PRINT
+	LD	B,A
+SSRC_CUR_PAD:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	SSRC_CUR_PAD
+SSRC_CUR_PRINT:
 	LD	HL,(CUR_DOC_ROW)
 	INC	HL
 	CALL	PRINT_DEC_WORD
 
+	; 3. "/" delimiter (1 char at fixed column)
 	LD	A,'/'
 	CALL	PUTC
 
+	; 4. Max lines: left-justified in 4 chars
+	LD	HL,(DOC_TOTAL_LINES)
+	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
+	LD	C,A
 	LD	HL,(DOC_TOTAL_LINES)
 	CALL	PRINT_DEC_WORD
-
-	LD	DE,STR_STATUS_COL	; ", Col "
-	CALL	PRINT_STR
-
-	CALL	CALC_VISUAL_COL
-	CALL	PRINT_DEC_BYTE
-
-	; Pad position field with spaces up to POS_FIELD_WIDTH (22)
-	POP	BC
-	LD	A,POS_FIELD_WIDTH
-	SUB	C
-	JR	C,SSRC_POS_DONE
-	JR	Z,SSRC_POS_DONE
+	LD	A,4
+	SUB	C			; A = 4 - digits
+	JR	C,SSRC_TOT_PAD_DONE
+	JR	Z,SSRC_TOT_PAD_DONE
 	LD	B,A
-SSRC_POS_PAD:
+SSRC_TOT_PAD:
 	LD	A,' '
 	CALL	PUTC
-	DJNZ	SSRC_POS_PAD
-SSRC_POS_DONE:
+	DJNZ	SSRC_TOT_PAD
+SSRC_TOT_PAD_DONE:
+
+	; 5. " Col " label (5 chars at fixed column)
+	LD	DE,STR_STATUS_COL	; " Col "
+	CALL	PRINT_STR
+
+	; 6. Column: left-justified in 3 chars
+	CALL	CALC_VISUAL_COL		; A = visual col (0..119)
+	LD	C,1
+	CP	10
+	JR	C,SSRC_COL_COUNT_DONE
+	INC	C
+	CP	100
+	JR	C,SSRC_COL_COUNT_DONE
+	INC	C
+SSRC_COL_COUNT_DONE:
+	PUSH	BC
+	CALL	PRINT_DEC_BYTE
+	POP	BC
+	LD	A,3
+	SUB	C			; A = 3 - digits
+	JR	C,SSRC_COL_PAD_DONE
+	JR	Z,SSRC_COL_PAD_DONE
+	LD	B,A
+SSRC_COL_PAD:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	SSRC_COL_PAD
+SSRC_COL_PAD_DONE:
 
 	; Extreme Right Enclosure: " |" (2 chars)
 	LD	A,' '
@@ -11328,7 +11345,7 @@ STR_NO_NAME:	DB	"(Untitled)",0
 
 STR_STATUS_POS:	DB	"Line ","$"
 
-STR_STATUS_COL:	DB	", Col ","$"
+STR_STATUS_COL:	DB	" Col ","$"
 
 MSG_EXIT:	DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
