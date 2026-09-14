@@ -2099,9 +2099,15 @@ def test_se_execution():
 
         # Enter replacement string: "BetaLine 01"
         os.write(master, b"BetaLine 01\r")
-        out_s47_confirm = read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
-        if b"Replace (y/n/a/q/r)? " not in out_s47_confirm:
+        out_s47_confirm = read_until(master, b"everse)? ", timeout=4.0)
+        if b"Replace (" not in out_s47_confirm or b"everse)? " not in out_s47_confirm:
             print(f"[-] Step 47 failed: Confirmation prompt missing. Buffer: {repr(out_s47_confirm)}", flush=True)
+            return False
+        # Verify underscored options (Y, N, A, Q, R)
+        if b"\x1b[4mY\x1b[24mes" not in out_s47_confirm or b"\x1b[4mN\x1b[24mo" not in out_s47_confirm or \
+           b"\x1b[4mA\x1b[24mll" not in out_s47_confirm or b"\x1b[4mQ\x1b[24muit" not in out_s47_confirm or \
+           b"\x1b[4mR\x1b[24meverse" not in out_s47_confirm:
+            print(f"[-] Step 47 failed: Underscored options missing. Buffer: {repr(out_s47_confirm)}", flush=True)
             return False
 
         # Confirm replacement with 'y'
@@ -2259,16 +2265,16 @@ def test_se_execution():
         os.write(master, b"\r")
         read_until(master, b"Replace with:", timeout=4.0)
         os.write(master, b"Item\r")
-        read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
+        read_until(master, b"everse)? ", timeout=4.0)
         # We are on line 1. Skip with 'n' -> moves forward to line 2:
         os.write(master, b"n")
         read_until(master, b"Line    2/30", timeout=4.0)
-        read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
+        read_until(master, b"everse)? ", timeout=4.0)
 
         # Press 'r' to dynamically reverse direction -> moves back to line 1!
         os.write(master, b"r")
         read_until(master, b"Line    1/30", timeout=4.0)
-        read_until(master, b"Replace (y/n/a/q/r)? ", timeout=4.0)
+        read_until(master, b"everse)? ", timeout=4.0)
 
         # Quit replace with 'q'
         os.write(master, b"q")

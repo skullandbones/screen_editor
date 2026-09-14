@@ -8272,7 +8272,7 @@ REPLACE_PROCESS_MATCH:
 	OR	A
 	JP	NZ,REPLACE_EXECUTE_SUBST
 
-	; Prompt user for confirmation: " Replace (y/n/a/q/r)? "
+	; Prompt user for confirmation: " Replace (Yes/No/All/Quit/Reverse)? "
 	CALL	LOCATE_STATUS_ROW
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
@@ -11618,7 +11618,7 @@ STR_FIND_EXACT_BOX_PFX:	DB	"  [","$"
 STR_FIND_INSENS_BOX_PFX:DB	" [","$"
 STR_REPLACE_PROMPT:	DB	"Replace with:","$"
 STR_REPLACE_BOX_PFX:	DB	" [","$"
-STR_REPLACE_CONFIRM:	DB	" Replace (y/n/a/q/r)? ","$"
+STR_REPLACE_CONFIRM:	DB	" Replace (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/",27,"[4m","A",27,"[24m","ll/",27,"[4m","Q",27,"[24m","uit/",27,"[4m","R",27,"[24m","everse)? ","$"
 STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
 STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
 STR_SEARCH_COMPLETED:	DB	" Search completed. ","$"

@@ -169,7 +169,7 @@ Examples:
 * <kbd>Ctrl+F</kbd>: Find text (forward search with document wrap; highlights match as solidified block; pre-fills from active block; displays `Find [Exact] : ` on status bar).
 * <kbd>Ctrl+N</kbd>: Find Next (repeats search forward without re-prompting; reports "Search completed." on wrap loop completion).
 * <kbd>Ctrl+P</kbd>: Find Previous (repeats search backward with document wrap; reports "Search completed." on wrap loop completion).
-* <kbd>Ctrl+R</kbd>: Search and Replace (prompts for find & replacement strings; pre-fills from active block; interactive confirmation `y`=yes, `n`=no, `a`=all, `q`=quit, `r`/`p`=reverse direction; guards 120-character line length limit).
+* <kbd>Ctrl+R</kbd>: Search and Replace (prompts for find & replacement strings; pre-fills from active block; interactive confirmation `Replace (Yes/No/All/Quit/Reverse)?`: `y`=yes, `n`=no, `a`=all, `q`=quit, `r`/`p`=reverse direction; guards 120-character line length limit).
 * <kbd>Ctrl+I</kbd> / <kbd>Tab</kbd>: Toggle case sensitivity in Find/Replace prompt between `[Exact]` (session default) and `[Insens]`.
 * <kbd>Ctrl+L</kbd>: Goto line number (prompts on status line; centers viewport on target line).
 * <kbd>Ctrl+B</kbd>: Start / toggle block selection mode (anchors at cursor row & character column).
