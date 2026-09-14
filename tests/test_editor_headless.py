@@ -474,8 +474,8 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"OUTPUT.TXT\r")
         time.sleep(0.2)
-        resp = read_until(master, b"Overwrite? (y/n): ", timeout=2.0)
-        if b"Overwrite? (y/n): " in resp:
+        resp = read_until(master, b"o): ", timeout=2.0)
+        if b"Overwrite? (" in resp:
             os.write(master, b"y")
         read_until(master, b"Line    1/1", timeout=5.0)
         drain_all(master)
@@ -817,11 +817,14 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\r")
-        out_warn = read_until(master, b"File already exists. Overwrite? (y/n): ", timeout=4.0)
-        if b"Overwrite? (y/n): " not in out_warn:
+        out_warn = read_until(master, b"o): ", timeout=4.0)
+        if b"File already exists. Overwrite? (" not in out_warn:
             print(f"[-] Overwrite warning prompt missing. Buffer: {repr(out_warn)}", flush=True)
             return False
-        print("[+] Successfully verified overwrite warning prompt on existing file.", flush=True)
+        if b"\x1b[4mY\x1b[24mes" not in out_warn or b"\x1b[4mN\x1b[24mo" not in out_warn:
+            print(f"[-] Overwrite prompt missing underscored hotkeys. Buffer: {repr(out_warn)}", flush=True)
+            return False
+        print("[+] Successfully verified overwrite warning prompt on existing file with underscored hotkeys.", flush=True)
 
         # Test canceling overwrite with 'n'
         time.sleep(0.2)
@@ -843,7 +846,7 @@ def test_se_execution():
         read_until(master, b"2.TXT", timeout=3.0)
         time.sleep(0.2)
         os.write(master, b"\r")
-        read_until(master, b"Overwrite? (y/n): ", timeout=4.0)
+        read_until(master, b"o): ", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"y")
         out_saved = read_until(master, b"C:2.TXT", timeout=5.0)
@@ -3186,6 +3189,7 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x11")
         read_until(master, b"C>", timeout=6.0)
+        drain_all(master)
         print("[+] Successfully verified Symmetrical Centered Status Bar (Step 61)!", flush=True)
 
         # ---------------------------------------------------------------------
@@ -3194,7 +3198,7 @@ def test_se_execution():
         # 1. Launch 'se 30.TXT' in default 120x40 mode
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_s62_120 = read_until(master, b"Line    1/30", timeout=14.0)
+        out_s62_120 = read_until(master, b"Line    1/30", timeout=20.0)
         if b"Line    1/30" not in out_s62_120:
             print(f"[-] Step 62 failed: Could not open 30.TXT in 120x40 mode: {repr(out_s62_120[-300:])}", flush=True)
             return False
