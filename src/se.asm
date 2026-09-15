@@ -12737,8 +12737,18 @@ RAW_DATA_BUFFER:	DS	2048
 		DS	512
 LOCAL_STACK:
 
+;==============================================================================
+; Runtime Uninitialized BSS (Not emitted into SE.COM on disk)
+; Allocated in RAM immediately following LOCAL_STACK up to $C0B1
+;==============================================================================
+BSS_START:
+
 ; 48 lines x 128 bytes stride local working cache in TPA (6,144 bytes)
-LINE_STORAGE:	DS	6144
+LINE_STORAGE_SIZE EQU	6144
+LINE_STORAGE	EQU	BSS_START
 
 ; Line Slot Indirection Table (3,584 lines * 2 bytes = 7,168 bytes)
-DOC_LINE_SLOTS:	DS	7168
+DOC_LINE_SLOTS_SIZE EQU	7168
+DOC_LINE_SLOTS	EQU	LINE_STORAGE + LINE_STORAGE_SIZE
+
+BSS_END		EQU	DOC_LINE_SLOTS + DOC_LINE_SLOTS_SIZE
