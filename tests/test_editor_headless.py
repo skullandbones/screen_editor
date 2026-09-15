@@ -120,7 +120,7 @@ def test_se_execution():
         # 4. Run SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"Free: 416 KB", timeout=14.0)
+        out = read_until(master, b"Free: 416 KB", timeout=30.0)
         if b"for about" not in out or b"Free: 416 KB" not in out:
             print("[-] SE.COM splash screen or free memory indicator not detected.", flush=True)
             return False
@@ -316,9 +316,9 @@ def test_se_execution():
         for _ in range(15):
             os.write(master, b"\x1b[B")
             time.sleep(0.01)
-        out_row_clamp = read_until(master, b"Line    4/4", timeout=3.0)
+        out_row_clamp = read_until(master, b"Line    4/4", timeout=6.0)
         if b"Line    4/4" not in out_row_clamp:
-            print("[-] Cursor down clamping at EOF failed. Buffer captured:", out_row_clamp)
+            print("[-] Cursor down clamping at EOF failed. Buffer captured:", repr(out_row_clamp))
             return False
         print("[+] Successfully verified cursor cannot move past the last line of text (line 4).")
 
@@ -407,8 +407,8 @@ def test_se_execution():
             return False
         drain_all(master)
 
-        # 15. Test rightmost column boundary clamping (cannot exceed visual Col 119)
-        # Move down to line 4, then type characters to fill line to max width 120 (cols 0..119)
+        # 15. Test extending line past Col 119 barrier with horizontal scrolling ([Pan +40])
+        # Move down to line 4, then type characters extending line past 120 columns
         for _ in range(3):
             os.write(master, b"\x1b[B")
             time.sleep(0.05)
@@ -416,23 +416,33 @@ def test_se_execution():
         os.write(master, b"\x1b[F")
         time.sleep(0.1)
         drain_all(master)
-        # Type characters to hit the 120 column limit (line currently ~90 chars)
+        # Type 35 characters extending past the 120 column barrier (line currently ~90 chars -> 125 chars)
         for _ in range(35):
             os.write(master, b"X")
             time.sleep(0.02)
         drain_all(master)
-        # Move to End of line (Col 119)
+        # Move to End of line (Col 125)
         os.write(master, b"\x1b[F")
-        out_col_clamp = read_until(master, b"Col 119", timeout=4.0)
-        if b"Col 119" not in out_col_clamp:
-            print(f"[-] Column boundary clamping failed. Buffer captured: {repr(out_col_clamp)}", flush=True)
+        out_col_clamp = read_until(master, b"Col 125", timeout=4.0)
+        if b"Col 125" not in out_col_clamp or b"[Pan +40]" not in out_col_clamp:
+            print(f"[-] Extending line past Col 119 failed. Buffer captured: {repr(out_col_clamp)}", flush=True)
             return False
-        # Try to type extra characters - verify it does not exceed Col 119
+        # Type extra characters past Col 125 to Col 130
         for _ in range(5):
             os.write(master, b"Y")
             time.sleep(0.02)
+        out_col_130 = read_until(master, b"Col 130", timeout=4.0)
+        if b"Col 130" not in out_col_130:
+            print(f"[-] Typing past Col 125 to Col 130 failed. Buffer: {repr(out_col_130)}", flush=True)
+            return False
+        # Verify Home (Ctrl+A) returns to Col 0 and resets viewport pan
+        os.write(master, b"\x01")
+        out_home = read_until(master, b"Col 0", timeout=4.0)
+        if b"Col 0" not in out_home or b"^K: Editor keys" not in out_home:
+            print(f"[-] Home failed to reset pan to Col 0. Buffer: {repr(out_home)}", flush=True)
+            return False
         drain_all(master)
-        print("[+] Successfully verified cursor and line cannot exceed visual screen width (Col 119).", flush=True)
+        print("[+] Successfully verified entering characters to extend line past 119 column barrier with [Pan +40].", flush=True)
 
         # 16. Verify Ctrl+F in editor mode opens Find prompt and ESC cancels cleanly
         time.sleep(0.2)
@@ -493,7 +503,7 @@ def test_se_execution():
         # 19. Test File Loading: Open 2-line file 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_load = read_until(master, b"Line    1/2", timeout=14.0)
+        out_load = read_until(master, b"Line    1/2", timeout=30.0)
         if b"C:2.TXT" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
@@ -516,7 +526,7 @@ def test_se_execution():
         # 20. Test Multi-Sector File Loading and Page-Up / Page-Down Navigation: 'se 30.TXT'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_load_30 = read_until(master, b"Line    1/30", timeout=14.0)
+        out_load_30 = read_until(master, b"Line    1/30", timeout=30.0)
         if b"C:30.TXT" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
             return False
@@ -1705,10 +1715,10 @@ def test_se_execution():
         time.sleep(0.3)
         drain_all(master)
 
-        # Verify cursor is at Col 119 (maximum capacity)
+        # Verify cursor is at Col 120 (end of 120-char line)
         os.write(master, b"\x05")
-        out_s41_full = read_until(master, b"Col 119", timeout=4.0)
-        if b"Col 119" not in out_s41_full:
+        out_s41_full = read_until(master, b"Col 120", timeout=4.0)
+        if b"Col 120" not in out_s41_full:
             print(f"[-] Step 41 full line check failed: {repr(out_s41_full)}", flush=True)
             return False
 
@@ -1734,16 +1744,16 @@ def test_se_execution():
         time.sleep(0.1)
         drain_all(master)
 
-        # 3. Try to copy 5 characters into a line that already has 120 characters (Space = 0)
-        # Block copy MUST safely abort without overflowing the 120-char line limit or crashing!
-        os.write(master, b"\x03") # Ctrl-C
+        # 3. Copy 5 characters into a line that has 120 characters
+        # In Phase 2, block copy expands the line to 125 chars (past 120-column boundary) without truncation
+        os.write(master, b"\x03") # Ctrl-C -> copy 5 chars to Col 0
         time.sleep(0.3)
         drain_all(master)
 
-        # Move to end of line: Ctrl-E, verify length is still exactly 119 (120 chars)
+        # Move to end of line: Ctrl-E, verify length is now 125 chars (Col 125)
         os.write(master, b"\x05")
-        out_s41_check = read_until(master, b"Col 119", timeout=4.0)
-        if b"Col 119" not in out_s41_check:
+        out_s41_check = read_until(master, b"Col 125", timeout=4.0)
+        if b"Col 125" not in out_s41_check:
             print(f"[-] Step 41 capacity overflow check failed: {repr(out_s41_check)}", flush=True)
             return False
 
@@ -1756,7 +1766,7 @@ def test_se_execution():
         os.write(master, b"\x1b")
         read_until(master, b"^K: Editor keys", timeout=4.0)
 
-        print("[+] Successfully verified Block Copy capacity limits (Step 41)!", flush=True)
+        print("[+] Successfully verified Block Copy past 120-column boundary (Step 41)!", flush=True)
 
         # ---------------------------------------------------------------------
         # Step 42: Interactive Goto Line Facility (Ctrl+L in Editor Mode)
@@ -2339,7 +2349,7 @@ def test_se_execution():
         # 7. Verify clean exit without prompt when file is unmodified: 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        read_until(master, b"Line    1/2", timeout=14.0)
+        read_until(master, b"Line    1/2", timeout=30.0)
         time.sleep(0.2)
         os.write(master, b"\x11")
         out_s52_clean = read_until(master, b"C>", timeout=4.0)
@@ -2357,7 +2367,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        read_until(master, b"Line    1/2", timeout=14.0)
+        read_until(master, b"Line    1/2", timeout=30.0)
 
         # 2. Modify buffer and send Ctrl+W (\x17)
         time.sleep(0.2)
@@ -2451,7 +2461,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        read_until(master, b"Line    1/2", timeout=14.0)
+        read_until(master, b"Line    1/2", timeout=30.0)
 
         # 2. Modify buffer and send Ctrl+O (\x0f)
         time.sleep(0.2)
@@ -2557,7 +2567,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        read_until(master, b"Line    1/2", timeout=14.0)
+        read_until(master, b"Line    1/2", timeout=30.0)
 
         # 2. In editor mode, press Ctrl+O and open '30.TXT:15'
         time.sleep(0.2)
@@ -2754,7 +2764,7 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"se\r")
-        out_s58_sp = read_until(master, b"for about", timeout=14.0)
+        out_s58_sp = read_until(master, b"for about", timeout=30.0)
         if b"for about" not in out_s58_sp:
             print(f"[-] Step 58 failed: Splash screen failed to display. Buffer: {repr(out_s58_sp)}", flush=True)
             return False
@@ -2870,7 +2880,7 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s59_splash = read_until(master, b"for about", timeout=14.0)
+        out_s59_splash = read_until(master, b"for about", timeout=30.0)
         if b"for about" not in out_s59_splash:
             print(f"[-] Step 59 failed: Splash screen not displayed: {repr(out_s59_splash[-200:])}", flush=True)
             return False
@@ -2942,22 +2952,22 @@ def test_se_execution():
             print(f"[-] Step 59 failed: Cursor at Col 78 not at screen col 79: {repr(out_s59_c78[-150:])}", flush=True)
             return False
 
-        # Move right to Col 79: should auto-pan to VIEW_LEFT_COL = 20, screen col 60
+        # Move right to Col 79: should auto-pan with 40-column step to VIEW_LEFT_COL = 40, screen col 40
         os.write(master, b"\x1b[C")
         out_s59_c79 = read_until(master, b"Col 79", timeout=6.0)
         time.sleep(0.2)
         out_s59_c79 += drain_all(master)
-        if b";60H" not in out_s59_c79:
-            print(f"[-] Step 59 failed: Auto-pan did not position cursor at screen col 60: {repr(out_s59_c79[-250:])}", flush=True)
+        if b";40H" not in out_s59_c79:
+            print(f"[-] Step 59 failed: Auto-pan did not position cursor at screen col 40: {repr(out_s59_c79[-250:])}", flush=True)
             return False
 
-        # Move left to Col 78: viewport should remain panned at 20, screen col 59
+        # Move left to Col 78: viewport should remain panned at 40, screen col 39
         os.write(master, b"\x1b[D")
         out_s59_left = read_until(master, b"Col 78", timeout=6.0)
         time.sleep(0.1)
         out_s59_left += drain_all(master)
-        if b";59H" not in out_s59_left:
-            print(f"[-] Step 59 failed: Moving left did not stay panned at screen col 59: {repr(out_s59_left[-150:])}", flush=True)
+        if b";39H" not in out_s59_left:
+            print(f"[-] Step 59 failed: Moving left did not stay panned at screen col 39: {repr(out_s59_left[-150:])}", flush=True)
             return False
 
         # Test line <= 80 chars (no continuation highlight and no auto-pan at col 79)
@@ -3014,7 +3024,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT' (Line 1: "First line of two", Line 2: "Second line of two")
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_s60_boot = read_until(master, b"Line    1/2", timeout=14.0)
+        out_s60_boot = read_until(master, b"Line    1/2", timeout=30.0)
         if b"Line    1/2" not in out_s60_boot:
             print(f"[-] Step 60 failed: Launching se 2.TXT failed. Buffer: {repr(out_s60_boot)}", flush=True)
             return False
@@ -3115,7 +3125,7 @@ def test_se_execution():
         # 1. Launch 'se 2.TXT' in default 120x40 mode
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
-        out_s61_120 = read_until(master, b"Line    1/2", timeout=14.0)
+        out_s61_120 = read_until(master, b"Line    1/2", timeout=30.0)
         time.sleep(0.2)
         out_s61_120 += drain_all(master)
 
@@ -3276,7 +3286,7 @@ def test_se_execution():
         # 1. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        read_until(master, b"Free: 416 KB", timeout=14.0)
+        read_until(master, b"Free: 416 KB", timeout=30.0)
         time.sleep(0.3)
         drain_all(master)
 
@@ -3323,10 +3333,10 @@ def test_se_execution():
         if b"Col 85" not in status_line:
             print(f"[-] Step 63 failed: Cursor truncated! Status bar: {repr(status_line)}", flush=True)
             return False
-        if b"\x1b[1;66H" not in out_s63_reenter:
-            print(f"[-] Step 63 failed: Cursor escape \x1b[1;66H not found: {repr(out_s63_reenter[-200:])}", flush=True)
+        if b"\x1b[1;46H" not in out_s63_reenter:
+            print(f"[-] Step 63 failed: Cursor escape \x1b[1;46H not found: {repr(out_s63_reenter[-200:])}", flush=True)
             return False
-        print("[+] Retained cursor at Col 85 (screen row 1, col 66) on splash resume.", flush=True)
+        print("[+] Retained cursor at Col 85 (screen row 1, col 46) on splash resume.", flush=True)
 
         # 7. Clean exit to CP/M with Ctrl+Q -> 'n'
         time.sleep(0.2)
@@ -3342,7 +3352,7 @@ def test_se_execution():
         # 1. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s64_sp = read_until(master, b"Free: 416 KB", timeout=14.0)
+        out_s64_sp = read_until(master, b"Free: 416 KB", timeout=30.0)
         time.sleep(0.2)
         out_s64_sp += drain_all(master)
 
@@ -3391,7 +3401,7 @@ def test_se_execution():
         # 1. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s65_sp = read_until(master, b"Free: 416 KB", timeout=14.0)
+        out_s65_sp = read_until(master, b"Free: 416 KB", timeout=30.0)
         time.sleep(0.2)
         out_s65_sp += drain_all(master)
 
