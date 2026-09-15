@@ -4718,6 +4718,10 @@ SHOW_STATUS_REST:
 	OR	A
 	JP	NZ,SHOW_STATUS_OOM
 
+	LD	A,(FILE_IS_TRUNCATED)
+	OR	A
+	JP	NZ,SHOW_STATUS_TRUNC
+
 	LD	A,(BLOCK_ACTIVE)
 	OR	A
 	JP	Z,SHOW_STATUS_NORMAL_KEYS
@@ -4878,6 +4882,11 @@ SSPO_PAD_LOOP:
 
 SHOW_STATUS_OOM:
 	LD	DE,STR_STATUS_OOM
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
+SHOW_STATUS_TRUNC:
+	LD	DE,STR_STATUS_TRUNC
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
@@ -6329,6 +6338,13 @@ FLC_DONE:
 ; Preserves: DE
 ;------------------------------------------------------------------------------
 APPEND_LINE_SLOT:
+	PUSH	DE
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,MAX_DOC_LINES
+	OR	A
+	SBC	HL,DE
+	POP	DE
+	JR	NC,ALS_OOM
 	CALL	ALLOC_SLOT		; HL = slot ID
 	RET	C
 	PUSH	HL			; Save slot ID
@@ -6343,6 +6359,9 @@ APPEND_LINE_SLOT:
 	INC	HL
 	LD	(HL),B
 	OR	A			; Carry = 0
+	RET
+ALS_OOM:
+	SCF
 	RET
 
 ;------------------------------------------------------------------------------
@@ -10078,6 +10097,10 @@ HBIOS_DETECT:
 LOAD_FILE:
 	XOR	A
 	LD	(STATUS_OOM_FLAG),A
+	LD	(FILE_IS_TRUNCATED),A
+	LD	HL,0
+	LD	(FILE_TOTAL_RECORDS),HL
+	LD	(FILE_RECORDS_HI),A
 	LD	DE,DEFAULT_DMA
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
@@ -10095,6 +10118,22 @@ LOAD_FILE:
 	JP	Z,LOAD_FILE_NOT_FOUND
 	OR	A
 	JP	Z,LOAD_FILE_NOT_FOUND
+
+	; Probe file size using BDOS Call 35 (Compute File Size)
+	LD	DE,WORK_FCB
+	LD	C,35			; BDOS Compute File Size
+	CALL	BDOS_ENTRY
+	LD	HL,(WORK_FCB+33)	; r0, r1
+	LD	(FILE_TOTAL_RECORDS),HL
+	LD	A,(WORK_FCB+35)		; r2
+	LD	(FILE_RECORDS_HI),A
+
+	; Zero FCB extent, s1, s2, rc, and record bytes before open
+	LD	HL,WORK_FCB+12
+	LD	(HL),0
+	LD	DE,WORK_FCB+13
+	LD	BC,23
+	LDIR
 
 	LD	DE,WORK_FCB
 	LD	C,15			; BDOS Open File
@@ -10229,12 +10268,16 @@ LOAD_LINE_OOM_EXT:
 	POP	BC
 	POP	HL
 	CALL	SET_OOM_STATUS
+	LD	A,1
+	LD	(FILE_IS_TRUNCATED),A
 	JP	NEXT_BYTE_IN_SECTOR
 
 LOAD_LINE_OOM:
 	POP	BC
 	POP	HL
 	CALL	SET_OOM_STATUS
+	LD	A,1
+	LD	(FILE_IS_TRUNCATED),A
 	JP	FILE_LOAD_DONE
 
 HANDLE_CR:
@@ -10320,6 +10363,8 @@ LF_OOM_HANDLE:
 	POP	BC
 	POP	HL
 	CALL	SET_OOM_STATUS
+	LD	A,1
+	LD	(FILE_IS_TRUNCATED),A
 	JP	FILE_LOAD_DONE
 
 NEXT_BYTE_IN_SECTOR:
@@ -10408,6 +10453,7 @@ INIT_EMPTY_DOCUMENT:
 	LD	(DOC_MODIFIED),A
 	LD	(BLOCK_ACTIVE),A
 	LD	(STATUS_OOM_FLAG),A
+	LD	(FILE_IS_TRUNCATED),A
 	LD	HL,0
 	LD	(VIEW_LEFT_COL),HL
 	LD	A,(ACTIVE_COLS)
@@ -10632,11 +10678,28 @@ SHOW_HELP_KEYS_UI:
 ; Save File Screen with Sorted Directory Listing, Pre-filling & Overwrite Check
 ;------------------------------------------------------------------------------
 DO_SAVE_FILE_UI:
+	LD	A,(FILE_IS_TRUNCATED)
+	OR	A
+	JR	Z,DO_SAVE_FILE_OK
+	CALL	SHOW_TRUNCATED_SAVE_BLOCKED
+	RET
+
+DO_SAVE_FILE_OK:
 	LD	A,1
 	LD	(IS_SAVE_UI),A
 	CALL	DO_SAVE_FILE_UI_IMPL
 	XOR	A
 	LD	(IS_SAVE_UI),A
+	RET
+
+SHOW_TRUNCATED_SAVE_BLOCKED:
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+	LD	DE,STR_TRUNC_SAVE_BLOCKED
+	CALL	PRINT_STR
+	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
 	RET
 
 DO_SAVE_FILE_UI_IMPL:
@@ -12444,6 +12507,19 @@ STR_STATUS_OVR:		DB	"Overwrite mode  | ","$"
 STR_PAN_PREFIX:		DB	"[Pan +","$"
 
 STR_STATUS_OOM:		DB	"Out of memory   | ","$"
+STR_STATUS_TRUNC:	DB	"[FILE TRUNCATED]| ","$"
+
+STR_TRUNC_SAVE_BLOCKED:
+	DB	13,10
+	DB	"  ===============================================================",13,10
+	DB	"                 ERROR: SAVE DISABLED (PROTECTION)               ",13,10
+	DB	"  ===============================================================",13,10
+	DB	"  This file was truncated upon loading because it exceeds the    ",13,10
+	DB	"  editor's current RAM capacity.                                 ",13,10,13,10
+	DB	"  Saving has been blocked to protect the unread portion of the   ",13,10
+	DB	"  file from being overwritten and permanently lost on disk.      ",13,10,13,10
+	DB	"  Press any key to return to the editor...                       ",13,10
+	DB	"  ===============================================================",13,10,"$"
 
 STR_STATUS_FREE:	DB	"Free: ","$"
 
@@ -12619,6 +12695,9 @@ REPLACE_DELTA_TEMP:	DB	0
 IN_EDITOR_MODE:	DB	0
 IS_SPLASH_SCREEN:	DB	0
 STATUS_OOM_FLAG:	DB	0
+FILE_IS_TRUNCATED:	DB	0		; 1 if file was truncated on load (Save protected)
+FILE_TOTAL_RECORDS:	DW	0		; Total 128-byte records computed by BDOS 35
+FILE_RECORDS_HI:	DB	0		; High byte of 24-bit record count
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
 IS_SAVE_UI:	DB	0		; 1 if currently in Save File Screen
 SEEN_CR:	DB	0		; Line format auto-detection state
