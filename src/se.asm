@@ -81,6 +81,9 @@ START:
 	; Initialize Screen Geometry to Default (120x40)
 	CALL	SET_MODE_120X40
 
+	; Load configuration from SE.CFG if present (local dir first, then program drive)
+	CALL	LOAD_CONFIG
+
 	; Initialize Terminal (Clear Screen & Home)
 	CALL	TERM_INIT
 
@@ -209,15 +212,15 @@ SPLASH_NOT_ESC:
 
 	; Option: 'T' or 't' -> Run Extended Memory Test
 	CP	't'
-	JR	Z,DO_MEM_TEST
+	JP	Z,DO_MEM_TEST
 	CP	'T'
-	JR	Z,DO_MEM_TEST
+	JP	Z,DO_MEM_TEST
 
 	; Option: 'F' or 'f' -> Run Multi-Sector File I/O Test
 	CP	'f'
-	JR	Z,DO_FILE_TEST
+	JP	Z,DO_FILE_TEST
 	CP	'F'
-	JR	Z,DO_FILE_TEST
+	JP	Z,DO_FILE_TEST
 
 	; Option: 'O' or 'o' or Ctrl+O -> Open File Screen
 	CP	'o'
@@ -229,31 +232,37 @@ SPLASH_NOT_ESC:
 
 	; Option: 'S' or 's' -> Save File Screen
 	CP	's'
-	JR	Z,DO_SPLASH_SAVE
+	JP	Z,DO_SPLASH_SAVE
 	CP	'S'
-	JR	Z,DO_SPLASH_SAVE
+	JP	Z,DO_SPLASH_SAVE
 
 	; Option: 'L' or 'l' or Ctrl+L -> Goto Line Screen
 	CP	'l'
-	JR	Z,DO_SPLASH_GOTO_LINE
+	JP	Z,DO_SPLASH_GOTO_LINE
 	CP	'L'
-	JR	Z,DO_SPLASH_GOTO_LINE
+	JP	Z,DO_SPLASH_GOTO_LINE
 	CP	KEY_CTRL_L
-	JR	Z,DO_SPLASH_GOTO_LINE
+	JP	Z,DO_SPLASH_GOTO_LINE
 
 	; Option: 'A' or 'a' -> Show About Screen
 	CP	'a'
-	JR	Z,DO_ABOUT_SCREEN
+	JP	Z,DO_ABOUT_SCREEN
 	CP	'A'
-	JR	Z,DO_ABOUT_SCREEN
+	JP	Z,DO_ABOUT_SCREEN
+
+	; Option: 'C' or 'c' -> Show Configuration Screen
+	CP	'c'
+	JP	Z,DO_CONFIG_SCREEN
+	CP	'C'
+	JP	Z,DO_CONFIG_SCREEN
 
 	; Option: '1' -> Modern Screen Mode (120x40)
 	CP	'1'
-	JR	Z,DO_SET_120X40
+	JP	Z,DO_SET_120X40
 
 	; Option: '2' -> Classic Screen Mode (80x24)
 	CP	'2'
-	JR	Z,DO_SET_80X24
+	JP	Z,DO_SET_80X24
 
 	; Option: 'E' or 'e' or Enter -> Enter/Resume Editor
 	CP	'e'
@@ -293,6 +302,55 @@ DO_ABOUT_SCREEN:
 	CP	KEY_ESC
 	CALL	Z,DRAIN_ESC_SEQUENCE
 	JP	SHOW_SPLASH_SCREEN
+
+DO_CONFIG_SCREEN:
+	CALL	SHOW_CONFIG_SCREEN
+CONFIG_LOOP:
+	CALL	GET_KEY
+
+	; Standalone ESC or escape sequence -> return to splash
+	CP	KEY_ESC
+	JR	NZ,CONFIG_NOT_ESC
+	CALL	DRAIN_ESC_SEQUENCE
+	JP	SHOW_SPLASH_SCREEN
+
+CONFIG_NOT_ESC:
+	; Option: '1' -> Toggle Screen Mode (80x24 <-> 120x40)
+	CP	'1'
+	JR	Z,CONFIG_TOGGLE_MODE
+
+	; Option: 'S' or 's' -> Save Configuration to local SE.CFG
+	CP	's'
+	JR	Z,CONFIG_DO_SAVE
+	CP	'S'
+	JR	Z,CONFIG_DO_SAVE
+
+	; Option: 'Q' or 'q' or Enter -> Return to Splash Screen
+	CP	'q'
+	JP	Z,SHOW_SPLASH_SCREEN
+	CP	'Q'
+	JP	Z,SHOW_SPLASH_SCREEN
+	CP	KEY_ENTER
+	JP	Z,SHOW_SPLASH_SCREEN
+
+	JR	CONFIG_LOOP
+
+CONFIG_TOGGLE_MODE:
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	Z,CONFIG_SET_80
+	CALL	SET_MODE_120X40
+	JR	CONFIG_REDRAW
+CONFIG_SET_80:
+	CALL	SET_MODE_80X24
+CONFIG_REDRAW:
+	CALL	SHOW_CONFIG_SCREEN
+	JR	CONFIG_LOOP
+
+CONFIG_DO_SAVE:
+	CALL	SAVE_CONFIG
+	CALL	SHOW_CONFIG_SCREEN
+	JR	CONFIG_LOOP
 
 DO_SPLASH_SAVE:
 	CALL	DO_SAVE_FILE_UI
@@ -1172,7 +1230,7 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ;------------------------------------------------------------------------------
-SPLASH_LINES	EQU	17
+SPLASH_LINES	EQU	18
 
 RENDER_SPLASH:
 	LD	A,1
@@ -1257,6 +1315,116 @@ ABOUT_TILDE_LOOP:
 	DJNZ	ABOUT_TILDE_LOOP
 
 ABOUT_TILDE_DONE:
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_HOME
+	CALL	PRINT_STR
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Configuration Screen Renderer
+; Displays active screen geometry, config file status, and adjustment commands
+;------------------------------------------------------------------------------
+CONFIG_LINES	EQU	11
+
+SHOW_CONFIG_SCREEN:
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+	LD	DE,STR_CONFIG_HEADER
+	CALL	PRINT_STR
+
+	; Display Active Screen Geometry
+	LD	DE,STR_CONFIG_CUR_MODE
+	CALL	PRINT_STR
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	NZ,SCS_80X24
+	LD	DE,STR_MODE_120X40_LBL
+	CALL	PRINT_STR
+	JR	SCS_STATUS
+SCS_80X24:
+	LD	DE,STR_MODE_80X24_LBL
+	CALL	PRINT_STR
+
+SCS_STATUS:
+	; Display Config File Status
+	LD	DE,STR_CONFIG_STATUS_LBL
+	CALL	PRINT_STR
+	LD	A,(CONFIG_STATUS_FLAG)
+	CP	1
+	JR	Z,SCS_STAT_LOCAL
+	CP	2
+	JR	Z,SCS_STAT_PROG
+	CP	3
+	JR	Z,SCS_STAT_SAVED
+	CP	4
+	JR	Z,SCS_STAT_ERR
+
+	; Default / None
+	LD	DE,STR_CFG_STAT_NONE
+	CALL	PRINT_STR
+	JR	SCS_BODY
+
+SCS_STAT_LOCAL:
+	LD	DE,STR_CFG_STAT_LOCAL
+	CALL	PRINT_STR
+	LD	A,(CONFIG_SOURCE_DRIVE)
+	ADD	A,'A'
+	CALL	PUTC
+	LD	DE,STR_CFG_STAT_END
+	CALL	PRINT_STR
+	JR	SCS_BODY
+
+SCS_STAT_PROG:
+	LD	DE,STR_CFG_STAT_PROG
+	CALL	PRINT_STR
+	LD	A,(CONFIG_SOURCE_DRIVE)
+	ADD	A,'A'
+	CALL	PUTC
+	LD	DE,STR_CFG_STAT_END
+	CALL	PRINT_STR
+	JR	SCS_BODY
+
+SCS_STAT_SAVED:
+	LD	DE,STR_CFG_STAT_SAVED
+	CALL	PRINT_STR
+	LD	A,(CONFIG_SOURCE_DRIVE)
+	ADD	A,'A'
+	CALL	PUTC
+	LD	DE,STR_CFG_STAT_END
+	CALL	PRINT_STR
+	JR	SCS_BODY
+
+SCS_STAT_ERR:
+	LD	DE,STR_CFG_STAT_ERR
+	CALL	PRINT_STR
+
+SCS_BODY:
+	LD	DE,STR_CONFIG_BODY
+	CALL	PRINT_STR
+
+	; Fill remaining rows down to status row with '~'
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
+	SUB	CONFIG_LINES		; A = remaining rows
+	JR	Z,CONFIG_TILDE_DONE
+	JR	C,CONFIG_TILDE_DONE
+	LD	B,A
+CONFIG_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	CONFIG_TILDE_LOOP
+
+CONFIG_TILDE_DONE:
 	CALL	RENDER_STATUS_BAR
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
@@ -11115,6 +11283,483 @@ HBIOS_DETECT:
 	OR	A
 	RET
 
+;==============================================================================
+; Configuration File Subsystem (SE.CFG)
+; Reads, parses, searches, and saves persistent editor configuration.
+; Search order: Local default drive first, then fallback to program drive.
+; Save: Always writes to local default drive.
+;==============================================================================
+
+; LOAD_CONFIG: Load and parse SE.CFG
+LOAD_CONFIG:
+	; 1. Query current default drive via BDOS 25
+	LD	C,25			; BDOS Get Current Drive
+	CALL	BDOS_ENTRY
+	LD	(CURRENT_DEFAULT_DRIVE),A
+	XOR	A
+	LD	(CONFIG_STATUS_FLAG),A
+	LD	A,0FFH
+	LD	(CONFIG_SOURCE_DRIVE),A
+
+	; 2. Try to open SE.CFG on current default drive (drive byte = 0)
+	CALL	INIT_CFG_FCB_LOCAL
+	LD	DE,CFG_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,LOAD_CFG_NOT_LOCAL
+
+	; Local SE.CFG found! Read 128 bytes
+	CALL	READ_CFG_RECORD
+	JR	C,LOAD_CFG_NOT_LOCAL
+	LD	A,1
+	LD	(CONFIG_STATUS_FLAG),A
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	LD	(CONFIG_SOURCE_DRIVE),A
+	CALL	PARSE_CONFIG_BUFFER
+	RET
+
+LOAD_CFG_NOT_LOCAL:
+	; 3. Probe other logged-in drives for SE.COM
+	CALL	PROBE_PROGRAM_DRIVE	; Returns A = drive index (0..15) if found, Carry = 0
+	RET	C			; Not found on any other drive
+
+	; SE.COM found on drive A! Try opening SE.CFG on that drive
+	LD	(CONFIG_SOURCE_DRIVE),A	; Save program drive index (0..15)
+	INC	A			; A = FCB drive code (1=A..16=P)
+	CALL	INIT_CFG_FCB_DRIVE
+	LD	DE,CFG_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,LOAD_CFG_NOT_PROG	; No SE.CFG on program drive
+
+	; SE.CFG found on program drive! Read 128 bytes
+	CALL	READ_CFG_RECORD
+	JR	C,LOAD_CFG_NOT_PROG
+	LD	A,2
+	LD	(CONFIG_STATUS_FLAG),A
+	CALL	PARSE_CONFIG_BUFFER
+	RET
+
+LOAD_CFG_NOT_PROG:
+	LD	A,0FFH
+	LD	(CONFIG_SOURCE_DRIVE),A
+	RET
+
+; PROBE_PROGRAM_DRIVE: Search all logged-in drives for SE.COM (other than current drive)
+; Returns: A = Drive index (0..15), Carry = 0 if found; Carry = 1 if not found
+PROBE_PROGRAM_DRIVE:
+	LD	C,24			; BDOS Return Login Vector
+	CALL	BDOS_ENTRY		; HL = 16-bit vector (bit 0=A, bit 1=B...)
+	LD	D,0			; D = drive index (0..15)
+PPD_LOOP:
+	LD	A,D
+	CP	16
+	JR	NC,PPD_NOT_FOUND
+
+	SRL	H
+	RR	L			; Carry = bit D of login vector
+	JR	NC,PPD_NEXT		; Drive not logged in!
+
+	; Skip if D == CURRENT_DEFAULT_DRIVE
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	CP	D
+	JR	Z,PPD_NEXT
+
+	; Drive D is valid and distinct! Probe for SE.COM on drive D+1
+	PUSH	HL
+	PUSH	DE
+	LD	A,D
+	INC	A			; 1=A, 2=B...
+	CALL	INIT_COM_PROBE_FCB
+	LD	DE,COM_PROBE_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	POP	DE
+	POP	HL
+	CP	0FFH
+	JR	Z,PPD_NEXT		; SE.COM not on drive D
+
+	; Found SE.COM on drive D! Close it
+	PUSH	DE
+	LD	DE,COM_PROBE_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+	POP	DE
+	LD	A,D			; A = drive index (0..15)
+	OR	A			; Carry = 0
+	RET
+
+PPD_NEXT:
+	INC	D
+	JR	PPD_LOOP
+
+PPD_NOT_FOUND:
+	SCF				; Carry = 1
+	RET
+
+; READ_CFG_RECORD: Read 128-byte record from open CFG_FCB into CFG_IO_BUF
+; Returns: Carry = 0 on success, Carry = 1 on read error
+READ_CFG_RECORD:
+	XOR	A
+	LD	(CFG_FCB+32),A		; Clear record byte (cr)
+
+	LD	DE,CFG_IO_BUF
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	LD	DE,CFG_FCB
+	LD	C,20			; BDOS Read Next Record
+	CALL	BDOS_ENTRY
+	PUSH	AF
+
+	LD	DE,CFG_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; Restore BDOS DMA
+	CALL	BDOS_ENTRY
+
+	POP	AF
+	OR	A
+	JR	NZ,RCR_ERR
+	RET				; Carry = 0
+RCR_ERR:
+	SCF				; Carry = 1
+	RET
+
+; PARSE_CONFIG_BUFFER: Scan CFG_IO_BUF for configuration parameters
+PARSE_CONFIG_BUFFER:
+	LD	HL,CFG_IO_BUF
+PCB_LINE_START:
+	; Check if HL >= CFG_IO_BUF + 128
+	LD	DE,CFG_IO_BUF + 128
+	LD	A,L
+	CP	E
+	JR	NZ,PCB_NOT_END
+	LD	A,H
+	CP	D
+	RET	Z			; End of buffer!
+PCB_NOT_END:
+	LD	A,(HL)
+	CP	1AH			; EOF (^Z)
+	RET	Z
+	OR	A			; Null
+	RET	Z
+
+	; Skip leading whitespace (spaces / tabs / CR / LF)
+	CP	' '
+	JR	Z,PCB_SKIP_CHAR
+	CP	9			; Tab
+	JR	Z,PCB_SKIP_CHAR
+	CP	13			; CR
+	JR	Z,PCB_SKIP_CHAR
+	CP	10			; LF
+	JR	Z,PCB_SKIP_CHAR
+
+	; Check if comment (# or ;)
+	CP	'#'
+	JR	Z,PCB_SKIP_LINE
+	CP	';'
+	JR	Z,PCB_SKIP_LINE
+
+	; Check for "SCREEN"
+	CALL	MATCH_KEY_SCREEN	; Returns Carry = 0 if matched, HL advanced past '=' and spaces
+	JR	NC,PCB_SCREEN_VAL
+	JR	PCB_SKIP_LINE
+
+PCB_SCREEN_VAL:
+	; HL now points to value after '='
+	; Check if starts with "80"
+	LD	A,(HL)
+	CP	'8'
+	JR	NZ,PCB_CHECK_120
+	INC	HL
+	LD	A,(HL)
+	CP	'0'
+	JR	NZ,PCB_SKIP_LINE
+	CALL	SET_MODE_80X24
+	JR	PCB_SKIP_LINE
+
+PCB_CHECK_120:
+	CP	'1'
+	JR	NZ,PCB_SKIP_LINE
+	INC	HL
+	LD	A,(HL)
+	CP	'2'
+	JR	NZ,PCB_SKIP_LINE
+	INC	HL
+	LD	A,(HL)
+	CP	'0'
+	JR	NZ,PCB_SKIP_LINE
+	CALL	SET_MODE_120X40
+	JR	PCB_SKIP_LINE
+
+PCB_SKIP_CHAR:
+	INC	HL
+	JR	PCB_LINE_START
+
+PCB_SKIP_LINE:
+	; Advance HL until LF, CR, EOF, or HL >= CFG_IO_BUF + 128
+	LD	DE,CFG_IO_BUF + 128
+	LD	A,L
+	CP	E
+	JR	NZ,PSL_CHECK_CHR
+	LD	A,H
+	CP	D
+	RET	Z
+PSL_CHECK_CHR:
+	LD	A,(HL)
+	INC	HL
+	CP	1AH
+	RET	Z
+	CP	10			; LF
+	JR	Z,PCB_LINE_START
+	JR	PCB_SKIP_LINE
+
+; MATCH_KEY_SCREEN: Compares text at (HL) with "SCREEN" (case-insensitive)
+; Output: Carry = 0 if matched, HL advanced past '=' and trailing spaces
+;         Carry = 1 if no match, HL restored to starting position
+MATCH_KEY_SCREEN:
+	PUSH	HL
+	LD	DE,STR_KEY_SCREEN_NAME
+	LD	B,6
+MKS_LOOP:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	C,A
+	LD	A,(DE)
+	CP	C
+	JR	NZ,MKS_FAIL
+	INC	HL
+	INC	DE
+	DJNZ	MKS_LOOP
+
+	; Skip optional spaces before '='
+MKS_WS1:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKS_WS1_INC
+	CP	9
+	JR	NZ,MKS_CHECK_EQ
+MKS_WS1_INC:
+	INC	HL
+	JR	MKS_WS1
+
+MKS_CHECK_EQ:
+	CP	'='
+	JR	NZ,MKS_FAIL
+	INC	HL			; Skip '='
+
+	; Skip optional spaces after '='
+MKS_WS2:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKS_WS2_INC
+	CP	9
+	JR	NZ,MKS_OK
+MKS_WS2_INC:
+	INC	HL
+	JR	MKS_WS2
+
+MKS_OK:
+	POP	AF			; Discard saved HL
+	OR	A			; Carry = 0
+	RET
+
+MKS_FAIL:
+	POP	HL			; Restore HL
+	SCF				; Carry = 1
+	RET
+
+; SAVE_CONFIG: Save current editor configuration to SE.CFG on current drive
+SAVE_CONFIG:
+	; Fill CFG_IO_BUF with 128 bytes of 0x1A (EOF)
+	LD	HL,CFG_IO_BUF
+	LD	(HL),1AH
+	LD	DE,CFG_IO_BUF+1
+	LD	BC,127
+	LDIR
+
+	; Write header to CFG_IO_BUF
+	LD	HL,STR_CFG_HDR
+	LD	DE,CFG_IO_BUF
+SC_HDR_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_HDR_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_HDR_LOOP
+SC_HDR_DONE:
+
+	; Write "SCREEN="
+	LD	HL,STR_KEY_SCREEN_FULL
+SC_KEY_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_KEY_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_KEY_LOOP
+SC_KEY_DONE:
+
+	; Write value: "120x40" or "80x24" + CRLF
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	NZ,SC_VAL_80
+	LD	HL,STR_VAL_120X40
+	JR	SC_VAL_LOOP
+SC_VAL_80:
+	LD	HL,STR_VAL_80X24
+SC_VAL_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_VAL_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_VAL_LOOP
+SC_VAL_DONE:
+
+	; Set BDOS DMA to CFG_IO_BUF
+	LD	DE,CFG_IO_BUF
+	LD	C,26
+	CALL	BDOS_ENTRY
+
+	; Prepare local CFG_FCB
+	CALL	INIT_CFG_FCB_LOCAL
+
+	; Delete existing SE.CFG on current drive (BDOS 19)
+	LD	DE,CFG_FCB
+	LD	C,19
+	CALL	BDOS_ENTRY
+
+	; Prepare local CFG_FCB again
+	CALL	INIT_CFG_FCB_LOCAL
+
+	; Make file on current drive (BDOS 22)
+	LD	DE,CFG_FCB
+	LD	C,22
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,SC_ERR
+
+	; Write 128-byte record (BDOS 21)
+	LD	DE,CFG_FCB
+	LD	C,21
+	CALL	BDOS_ENTRY
+	OR	A
+	JR	NZ,SC_ERR_CLOSE
+
+	; Close file (BDOS 16)
+	LD	DE,CFG_FCB
+	LD	C,16
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,SC_ERR
+
+	; Restore DMA
+	LD	DE,DEFAULT_DMA
+	LD	C,26
+	CALL	BDOS_ENTRY
+
+	; Success!
+	LD	A,3
+	LD	(CONFIG_STATUS_FLAG),A
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	LD	(CONFIG_SOURCE_DRIVE),A
+	RET
+
+SC_ERR_CLOSE:
+	LD	DE,CFG_FCB
+	LD	C,16
+	CALL	BDOS_ENTRY
+SC_ERR:
+	LD	DE,DEFAULT_DMA
+	LD	C,26
+	CALL	BDOS_ENTRY
+	LD	A,4
+	LD	(CONFIG_STATUS_FLAG),A
+	RET
+
+INIT_CFG_FCB_LOCAL:
+	XOR	A
+	JR	INIT_CFG_FCB_COMMON
+
+INIT_CFG_FCB_DRIVE:
+	; A = drive code (1=A, 2=B...)
+INIT_CFG_FCB_COMMON:
+	LD	HL,CFG_FCB
+	LD	(HL),A			; Drive byte
+	INC	HL
+	LD	(HL),'S'
+	INC	HL
+	LD	(HL),'E'
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),'C'
+	INC	HL
+	LD	(HL),'F'
+	INC	HL
+	LD	(HL),'G'
+	INC	HL
+	LD	B,24
+INIT_CFG_ZERO:
+	LD	(HL),0
+	INC	HL
+	DJNZ	INIT_CFG_ZERO
+	RET
+
+INIT_COM_PROBE_FCB:
+	; A = drive code (1=A, 2=B...)
+	LD	HL,COM_PROBE_FCB
+	LD	(HL),A
+	INC	HL
+	LD	(HL),'S'
+	INC	HL
+	LD	(HL),'E'
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),' '
+	INC	HL
+	LD	(HL),'C'
+	INC	HL
+	LD	(HL),'O'
+	INC	HL
+	LD	(HL),'M'
+	INC	HL
+	LD	B,24
+INIT_COM_ZERO:
+	LD	(HL),0
+	INC	HL
+	DJNZ	INIT_COM_ZERO
+	RET
+
 ;------------------------------------------------------------------------------
 ; File Loading: Reads files directly into Far RAM banks
 ;------------------------------------------------------------------------------
@@ -13383,6 +14028,7 @@ STR_SPLASH_BODY:	DB	27,"[H"
 	DB	"~                         type   t                for mem test  ",13,10
 	DB	"~                         type   f                for file test ",13,10
 	DB	"~                         type   a                for about     ",13,10
+	DB	"~                         type   c                to configure  ",13,10
 	DB	"~                         type   1                set 120x40    ",13,10
 	DB	"~                         type   2                set 80x24     ",13,10
 	DB	"~                         type   q  or  ^Q        to exit       ",13,10
@@ -13394,6 +14040,38 @@ STR_SPLASH_CUR_MODE:	DB	"~                     Active Screen: [$"
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
 STR_MODE_80X24_LBL:	DB	"80x24 (Classic Terminal)]          ",13,10,"$"
+
+STR_CONFIG_HEADER:	DB	27,"[H"
+	DB	"~",13,10
+	DB	"~                     SE - Screen Editor Configuration          ",13,10
+	DB	"~",13,10
+	DB	"$"
+
+STR_CONFIG_CUR_MODE:	DB	"~     1. Screen Geometry : [$"
+
+STR_CONFIG_STATUS_LBL:	DB	"~     2. Config Status   : [$"
+
+STR_CFG_STAT_NONE:	DB	"Default (No SE.CFG found)]         ",13,10,"$"
+STR_CFG_STAT_LOCAL:	DB	"Loaded from local drive ($"
+STR_CFG_STAT_PROG:	DB	"Loaded from program drive ($"
+STR_CFG_STAT_SAVED:	DB	"Saved to local drive ($"
+STR_CFG_STAT_END:	DB	":SE.CFG)]          ",13,10,"$"
+STR_CFG_STAT_ERR:	DB	"ERROR writing SE.CFG]              ",13,10,"$"
+
+STR_CONFIG_BODY:
+	DB	"~",13,10
+	DB	"~   Commands:                                                   ",13,10
+	DB	"~     type   1                toggle 80x24 <-> 120x40           ",13,10
+	DB	"~     type   s                save config to local SE.CFG       ",13,10
+	DB	"~     type   q  or  <ESC>     return to splash screen           ",13,10
+	DB	"~",13,10
+	DB	"$"
+
+STR_CFG_HDR:		DB	"# SE.CFG - Screen Editor Configuration",13,10,0
+STR_KEY_SCREEN_NAME:	DB	"SCREEN",0
+STR_KEY_SCREEN_FULL:	DB	"SCREEN=",0
+STR_VAL_120X40:		DB	"120x40",13,10,0
+STR_VAL_80X24:		DB	"80x24",13,10,0
 
 STR_ABOUT_BODY:	DB	27,"[H"
 	DB	"~",13,10
@@ -13858,6 +14536,13 @@ RAW_SEEN_CR:	DB	0
 RAW_FORMAT_TYPE:	DB	0
 RAW_DATA_PTR:	DW	0
 RAW_DATA_BUFFER:	DS	2048
+
+CFG_FCB:		DS	36
+COM_PROBE_FCB:		DS	36
+CFG_IO_BUF:		DS	128		; 128-byte scratch buffer for SE.CFG I/O
+CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
+CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
+CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
 
 LOCAL_STACK_TOP:
 	DS	256

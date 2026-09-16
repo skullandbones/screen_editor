@@ -38,7 +38,11 @@ test-paging: image
 	@echo "==> Running SE.COM large file paging test suite (3,400 lines)..."
 	python3 tests/test_large_file_paging.py
 
-test-full: test-conformity test-paging
+test-config: image
+	@echo "==> Running SE.CFG configuration file test suite..."
+	python3 tests/test_config_file.py
+
+test-full: test-config test-conformity test-paging
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def *.map *.sym src/*.o src/*.map src/*.sym
