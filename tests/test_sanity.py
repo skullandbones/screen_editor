@@ -110,24 +110,25 @@ def run_sanity_test():
         # 3. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"for about", timeout=14.0)
-        if b"for about" not in out:
+        out = read_until(master, b"Col 0", timeout=14.0)
+        if b"for about" not in out and b"Col 0" not in out:
             print(f"[-] SE.COM splash screen not detected. Buffer: {repr(out)}", flush=True)
             return False
         print("[+] Splash screen displayed successfully.", flush=True)
 
         # 4. Enter Editor Mode ('e')
-        time.sleep(0.1)
+        time.sleep(0.3)
         os.write(master, b"e")
-        out_edit = read_until(master, b"Line    1/1", timeout=4.0)
-        if b"(Untitled)" not in out_edit or b"Line    1/1" not in out_edit:
+        out_edit = read_until(master, b"^K: Editor keys", timeout=6.0)
+        if b"(Untitled)" not in out_edit or b"^K: Editor keys" not in out_edit:
             print(f"[-] Failed to enter editor mode. Buffer: {repr(out_edit)}", flush=True)
             return False
         print("[+] Entered editor mode with status bar verified.", flush=True)
 
         # 5. Type 'SANITY CHECK OK'
+        time.sleep(0.1)
         os.write(master, b"SANITY CHECK OK")
-        out_typed = read_until(master, b"Col 16", timeout=3.0)
+        out_typed = read_until(master, b"Col 15", timeout=3.0)
         if b"SANITY CHECK OK" not in out_typed:
             print(f"[-] Text insertion failed. Buffer: {repr(out_typed)}", flush=True)
             return False

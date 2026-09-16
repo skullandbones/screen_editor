@@ -29,6 +29,7 @@ MAX_COPY_LINE_CHARS EQU	120		; Single-line block copy capacity limit
 MAX_FAR_BANKS	EQU	12		; Up to 12 extended 32KB RAM banks for text slots (384 KB)
 CACHE_SIZE_LINES EQU	48		; 48 lines in local working cache (6,144 bytes)
 MAX_DOC_LINES	EQU	16384		; 32KB Far RAM Line Table (16,384 lines * 2 bytes)
+MAX_VIRTUAL_SLOTS EQU	65534		; Up to 65,534 128-byte virtual slots (~8.3 MB)
 
 KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
 KEY_CTRL_C	EQU	3
@@ -897,6 +898,7 @@ DO_NEW_DOCUMENT:
 	RET
 
 EXIT_PROGRAM:
+	CALL	CLEANUP_SWAP_FILE
 	CALL	TERM_INIT
 	LD	DE,MSG_EXIT
 	CALL	PRINT_STR
@@ -1706,7 +1708,7 @@ TEST4_SLOT_INIT:
 
 	; Subtest 5A: Verify ALLOC_SLOT returns Carry on OOM
 	CALL	INIT_SLOT_SYSTEM
-	LD	HL,MAX_DOC_LINES	; 3584
+	LD	HL,MAX_VIRTUAL_SLOTS	; 65534
 	LD	(NEXT_FRESH_SLOT),HL	; All fresh slots exhausted
 	CALL	ALLOC_SLOT
 	JP	NC,TEST5_FAIL_OOM
@@ -1745,7 +1747,7 @@ TEST4_SLOT_INIT:
 	LD	(BLOCK_START_ROW),HL
 	LD	HL,6
 	LD	(BLOCK_END_ROW),HL
-	LD	HL,MAX_DOC_LINES
+	LD	HL,MAX_VIRTUAL_SLOTS
 	LD	(NEXT_FRESH_SLOT),HL
 	LD	HL,0FFFFH
 	LD	(FIRST_FREE_SLOT),HL
@@ -5966,10 +5968,679 @@ WRITE_LINE_SLOTS_FROM_RAM:
 	POP	IX
 	RET
 
+;==============================================================================
+; Disk-Backed Virtual Slot Paging Subsystem (Phase 4)
+; Transparent 384 KB Far RAM cache backed by $$$SE$$$.SWP via BDOS Random I/O
+;==============================================================================
+
+BIT_MASK_TABLE:
+	DB	001H, 002H, 004H, 008H, 010H, 020H, 040H, 080H
+
+;------------------------------------------------------------------------------
+; TEST_PAGE_ON_DISK: Test if page A has been written to swap file
+; Input: A = 8-bit Page Number (0..255)
+; Returns: Z flag set if bit is 0 (not on disk), NZ flag set if bit is 1 (on disk)
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+TEST_PAGE_ON_DISK:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	C,A
+	AND	7
+	LD	E,A
+	LD	D,0
+	LD	HL,BIT_MASK_TABLE
+	ADD	HL,DE
+	LD	B,(HL)			; B = bit mask (1, 2, 4, 8...)
+
+	LD	A,C
+	RRCA
+	RRCA
+	RRCA
+	AND	01FH			; A = byte offset (0..31)
+	LD	E,A
+	LD	HL,PAGE_ON_DISK_BITMAP
+	ADD	HL,DE
+	LD	A,(HL)
+	AND	B			; Test bit: Z if 0, NZ if 1
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; SET_PAGE_ON_DISK: Mark page A as written to swap file in PAGE_ON_DISK_BITMAP
+; Input: A = 8-bit Page Number (0..255)
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+SET_PAGE_ON_DISK:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	C,A
+	AND	7
+	LD	E,A
+	LD	D,0
+	LD	HL,BIT_MASK_TABLE
+	ADD	HL,DE
+	LD	B,(HL)			; B = bit mask
+
+	LD	A,C
+	RRCA
+	RRCA
+	RRCA
+	AND	01FH
+	LD	E,A
+	LD	HL,PAGE_ON_DISK_BITMAP
+	ADD	HL,DE
+	LD	A,(HL)
+	OR	B			; Set bit
+	LD	(HL),A
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; CALC_PAGE_SLOT_COUNT: Determine number of active slots in page A
+; Input: A = 8-bit Page Number (0..255)
+; Returns: Z flag set if 0 slots; NZ set with B = loop count (0 for 256, or 1..255)
+; Preserves: DE
+;------------------------------------------------------------------------------
+CALC_PAGE_SLOT_COUNT:
+	PUSH	HL
+	LD	HL,(NEXT_FRESH_SLOT)
+	CP	H
+	JR	C,CPSC_FULL		; Page < H_fresh -> full 256 slots
+	JR	NZ,CPSC_EMPTY		; Page > H_fresh -> empty 0 slots
+	; Page == H_fresh
+	LD	A,L			; A = L_fresh
+	OR	A
+	JR	Z,CPSC_EMPTY		; If L_fresh == 0, 0 slots
+	LD	B,A			; B = L_fresh (1..255)
+	POP	HL
+	OR	A			; NZ set
+	RET
+
+CPSC_FULL:
+	LD	B,0			; 0 -> DJNZ executes 256 times
+	POP	HL
+	LD	A,1			; NZ set
+	OR	A
+	RET
+
+CPSC_EMPTY:
+	POP	HL
+	XOR	A			; Z set
+	RET
+
+;------------------------------------------------------------------------------
+; CREATE_SWAP_FILE: Create temporary swap file $$$SE$$$.SWP on current drive
+; Returns: Carry = 0 on success, Carry = 1 on failure
+;------------------------------------------------------------------------------
+CREATE_SWAP_FILE:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; Initialize SWAP_FCB with drive matching document (WORK_FCB)
+	LD	A,(WORK_FCB)
+	LD	(SWAP_FCB),A
+	LD	HL,SWAP_FCB+1
+	LD	(HL),'$'
+	INC	HL
+	LD	(HL),'$'
+	INC	HL
+	LD	(HL),'$'
+	INC	HL
+	LD	(HL),'S'
+	INC	HL
+	LD	(HL),'E'
+	INC	HL
+	LD	(HL),'$'
+	INC	HL
+	LD	(HL),'$'
+	INC	HL
+	LD	(HL),'$'
+	INC	HL
+	LD	(HL),'S'
+	INC	HL
+	LD	(HL),'W'
+	INC	HL
+	LD	(HL),'P'
+	INC	HL
+
+	; Zero bytes 12..35 (24 bytes)
+	LD	B,24
+CSF_ZERO1:
+	LD	(HL),0
+	INC	HL
+	DJNZ	CSF_ZERO1
+
+	; Delete any existing $$$SE$$$.SWP (BDOS 19)
+	LD	DE,SWAP_FCB
+	LD	C,19
+	CALL	BDOS_ENTRY
+
+	; Re-zero bytes 12..35 after delete
+	LD	HL,SWAP_FCB+12
+	LD	B,24
+CSF_ZERO2:
+	LD	(HL),0
+	INC	HL
+	DJNZ	CSF_ZERO2
+
+	; Create $$$SE$$$.SWP (BDOS 22)
+	LD	DE,SWAP_FCB
+	LD	C,22
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,CSF_FAIL
+
+	LD	A,1
+	LD	(SWAP_ACTIVE),A
+
+	POP	HL
+	POP	DE
+	POP	BC
+	OR	A			; Carry = 0
+	RET
+
+CSF_FAIL:
+	POP	HL
+	POP	DE
+	POP	BC
+	SCF				; Carry = 1
+	RET
+
+;------------------------------------------------------------------------------
+; CLEANUP_SWAP_FILE: Close and delete temporary swap file $$$SE$$$.SWP
+;------------------------------------------------------------------------------
+CLEANUP_SWAP_FILE:
+	LD	A,(SWAP_ACTIVE)
+	OR	A
+	RET	Z			; Inactive: nothing to do
+
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; Close SWAP_FCB (BDOS 16)
+	LD	DE,SWAP_FCB
+	LD	C,16
+	CALL	BDOS_ENTRY
+
+	; Delete SWAP_FCB (BDOS 19)
+	LD	DE,SWAP_FCB
+	LD	C,19
+	CALL	BDOS_ENTRY
+
+	XOR	A
+	LD	(SWAP_ACTIVE),A
+
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; FLUSH_BANK_TO_SWAP: Flush Far RAM bank B to $$$SE$$$.SWP
+; Inputs: B = bank index (1..11), SWAP_PAGE_OLD = page number
+; Returns: Carry = 0 on success, Carry = 1 on error
+;------------------------------------------------------------------------------
+FLUSH_BANK_TO_SWAP:
+	; Determine Far RAM bank ID
+	LD	HL,EXT_BANK_TABLE
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	A,(HL)
+	LD	(SWAP_BNK_ID),A
+
+	; Calculate number of slots to flush
+	LD	A,(SWAP_PAGE_OLD)
+	CALL	CALC_PAGE_SLOT_COUNT
+	JR	Z,FBTS_DONE_SUCCESS
+
+	; 1. Set BDOS DMA to SWAP_IO_BUF once before loop
+	PUSH	BC			; Save B = slot count
+	LD	DE,SWAP_IO_BUF
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+	POP	BC			; Restore B
+
+	; 2. Setup SWAP_FCB random record high bytes once before loop
+	LD	A,(SWAP_PAGE_OLD)
+	LD	(SWAP_FCB+34),A		; r1
+	XOR	A
+	LD	(SWAP_FCB+35),A		; r2
+
+	LD	C,0			; C = slot index (0..N-1)
+	LD	HL,0			; HL = Far RAM source offset (0, 128, 256...)
+
+FBTS_SLOT_LOOP:
+	PUSH	BC			; Save B (remaining count), C (slot index)
+	PUSH	HL			; Save Far RAM offset
+
+	; Setup SWAP_FCB record r0 = C, r1 = SWAP_PAGE_OLD, r2 = 0
+	LD	A,C
+	LD	(SWAP_FCB+33),A		; r0
+	LD	A,(SWAP_PAGE_OLD)
+	LD	(SWAP_FCB+34),A		; r1
+	XOR	A
+	LD	(SWAP_FCB+35),A		; r2
+
+	; SYSSETCPY: D = CPM_USER_BANK, E = SWAP_BNK_ID, HL = 128
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(CPM_USER_BANK)
+	LD	D,A
+	LD	A,(SWAP_BNK_ID)
+	LD	E,A
+	LD	HL,FAR_SLOT_SIZE	; 128 bytes
+	RST	08H
+	POP	IX
+
+	; Copy slot from Far RAM offset HL to local SWAP_IO_BUF
+	POP	HL			; HL = Far RAM source offset
+	PUSH	HL
+	LD	DE,SWAP_IO_BUF
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	; BDOS 34 (Write Random)
+	LD	DE,SWAP_FCB
+	LD	C,34
+	CALL	BDOS_ENTRY
+	OR	A
+	JR	NZ,FBTS_WRITE_ERR
+
+	; Advance Far RAM offset by 128 for next slot
+	POP	HL
+	LD	DE,FAR_SLOT_SIZE
+	ADD	HL,DE
+
+	POP	BC
+	INC	C
+	DJNZ	FBTS_SLOT_LOOP
+
+	; Flush complete: mark page on disk in bitmap
+	LD	A,(SWAP_PAGE_OLD)
+	CALL	SET_PAGE_ON_DISK
+
+	; Restore BDOS DMA to DEFAULT_DMA (0x0080)
+	LD	DE,DEFAULT_DMA
+	LD	C,26
+	CALL	BDOS_ENTRY
+
+FBTS_DONE_SUCCESS:
+	OR	A			; Carry = 0
+	RET
+
+FBTS_WRITE_ERR:
+	POP	HL
+	POP	BC
+	; Restore BDOS DMA to DEFAULT_DMA (0x0080)
+	LD	DE,DEFAULT_DMA
+	LD	C,26
+	CALL	BDOS_ENTRY
+
+	LD	A,1
+	LD	(FILE_IS_TRUNCATED),A
+	CALL	SET_OOM_STATUS
+	SCF				; Carry = 1
+	RET
+
+;------------------------------------------------------------------------------
+; FETCH_PAGE_FROM_SWAP: Fetch page from $$$SE$$$.SWP into Far RAM bank B
+; Inputs: B = bank index (1..11), SWAP_PAGE_NEW = page number
+; Returns: Carry = 0 on success, Carry = 1 on error
+;------------------------------------------------------------------------------
+FETCH_PAGE_FROM_SWAP:
+	; Determine Far RAM bank ID
+	LD	HL,EXT_BANK_TABLE
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	A,(HL)
+	LD	(SWAP_BNK_ID),A
+
+	; Calculate number of slots to fetch
+	LD	A,(SWAP_PAGE_NEW)
+	CALL	CALC_PAGE_SLOT_COUNT
+	JP	Z,FPFS_DONE_SUCCESS
+
+	; 1. Set BDOS DMA to SWAP_IO_BUF once before loop
+	PUSH	BC
+	LD	DE,SWAP_IO_BUF
+	LD	C,26
+	CALL	BDOS_ENTRY
+	POP	BC
+
+	; 2. Setup SWAP_FCB random record high bytes once before loop
+	LD	A,(SWAP_PAGE_NEW)
+	LD	(SWAP_FCB+34),A		; r1
+	XOR	A
+	LD	(SWAP_FCB+35),A		; r2
+
+	LD	C,0			; C = slot index (0..N-1)
+	LD	HL,0			; HL = Far RAM dest offset (0, 128, 256...)
+
+FPFS_SLOT_LOOP:
+	PUSH	BC
+	PUSH	HL
+
+	; Setup SWAP_FCB record r0 = C, r1 = SWAP_PAGE_NEW, r2 = 0
+	LD	A,C
+	LD	(SWAP_FCB+33),A		; r0
+	LD	A,(SWAP_PAGE_NEW)
+	LD	(SWAP_FCB+34),A		; r1
+	XOR	A
+	LD	(SWAP_FCB+35),A		; r2
+
+	; BDOS 33 (Read Random)
+	LD	DE,SWAP_FCB
+	LD	C,33
+	CALL	BDOS_ENTRY
+	OR	A
+	JR	Z,FPFS_READ_OK
+
+	; Unwritten record / EOF: zero-fill buffer
+	LD	HL,SWAP_IO_BUF
+	LD	(HL),0
+	LD	DE,SWAP_IO_BUF+1
+	LD	BC,127
+	LDIR
+
+FPFS_READ_OK:
+	; SYSSETCPY: D = SWAP_BNK_ID, E = CPM_USER_BANK, HL = 128
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(SWAP_BNK_ID)
+	LD	D,A
+	LD	A,(CPM_USER_BANK)
+	LD	E,A
+	LD	HL,FAR_SLOT_SIZE	; 128 bytes
+	RST	08H
+	POP	IX
+
+	; Copy slot from SWAP_IO_BUF into Far RAM offset
+	POP	DE			; DE = Far RAM dest offset
+	PUSH	DE
+	LD	HL,SWAP_IO_BUF		; Local source buffer
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	; Advance Far RAM offset by 128 for next slot
+	POP	HL
+	LD	DE,FAR_SLOT_SIZE
+	ADD	HL,DE
+
+	POP	BC
+	INC	C
+	DJNZ	FPFS_SLOT_LOOP
+
+	; Restore BDOS DMA to DEFAULT_DMA (0x0080)
+	LD	DE,DEFAULT_DMA
+	LD	C,26
+	CALL	BDOS_ENTRY
+
+FPFS_DONE_SUCCESS:
+	OR	A			; Carry = 0
+	RET
+
+;------------------------------------------------------------------------------
+; SELECT_VICTIM_BANK: Select victim bank with maximum distance from SWAP_PAGE_TEMP
+; Inputs: SWAP_PAGE_TEMP = target page number (0..255)
+; Returns: B = victim bank index (1..11)
+; Preserves: None
+;------------------------------------------------------------------------------
+SELECT_VICTIM_BANK:
+	LD	C,1			; C = candidate bank index (1..11)
+	LD	B,1			; B = best victim bank index
+	LD	D,0			; D = max distance found so far
+	LD	HL,BANK_PAGE_TABLE+1
+SVB_LOOP:
+	LD	A,(SWAP_PAGE_TEMP)
+	SUB	(HL)			; A = target - resident
+	JR	NC,SVB_POS
+	NEG				; A = abs(target - resident)
+SVB_POS:
+	CP	D
+	JR	C,SVB_NOT_MAX
+	JR	Z,SVB_NOT_MAX
+	LD	D,A			; New max distance
+	LD	B,C			; Best victim bank = C
+SVB_NOT_MAX:
+	INC	HL
+	INC	C
+	LD	A,C
+	CP	MAX_FAR_BANKS		; 12
+	JR	C,SVB_LOOP
+	RET
+
+;------------------------------------------------------------------------------
+; HANDLE_PAGE_FAULT: Evict victim bank if dirty, fetch target page into victim bank
+; Input: SWAP_PAGE_TEMP = target page number
+; Returns: B = allocated victim bank index (1..11), Carry = 0 on success, Carry = 1 on error
+;------------------------------------------------------------------------------
+HANDLE_PAGE_FAULT:
+	; Check if swap file is active
+	LD	A,(SWAP_ACTIVE)
+	OR	A
+	JR	NZ,HPF_HAVE_SWAP
+
+	CALL	CREATE_SWAP_FILE
+	RET	C
+
+HPF_HAVE_SWAP:
+	; Select victim bank with maximum distance from SWAP_PAGE_TEMP
+	CALL	SELECT_VICTIM_BANK	; Returns B = victim bank index (1..11)
+
+	; Check if victim bank B is dirty
+	PUSH	BC
+	LD	HL,BANK_DIRTY_TABLE
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	A,(HL)
+	OR	A
+	JR	Z,HPF_SKIP_FLUSH
+
+	; Flush dirty victim bank B
+	LD	HL,BANK_PAGE_TABLE
+	ADD	HL,DE
+	LD	A,(HL)			; A = OLD_PAGE resident in bank B
+	LD	(SWAP_PAGE_OLD),A
+	CALL	FLUSH_BANK_TO_SWAP
+	POP	BC
+	RET	C			; Return Carry = 1 if flush error
+	JR	HPF_DO_FETCH
+
+HPF_SKIP_FLUSH:
+	POP	BC
+
+HPF_DO_FETCH:
+	; Check if target page (SWAP_PAGE_TEMP) exists on disk
+	PUSH	BC
+	LD	A,(SWAP_PAGE_TEMP)
+	CALL	TEST_PAGE_ON_DISK
+	JR	Z,HPF_SKIP_FETCH	; Bit = 0 -> not on disk, skip fetch!
+
+	LD	A,(SWAP_PAGE_TEMP)
+	LD	(SWAP_PAGE_NEW),A
+	CALL	FETCH_PAGE_FROM_SWAP
+	POP	BC
+	RET	C			; Return Carry = 1 if fetch error
+	JR	HPF_UPDATE_TBL
+
+HPF_SKIP_FETCH:
+	POP	BC
+
+HPF_UPDATE_TBL:
+	; Update BANK_PAGE_TABLE[B] = SWAP_PAGE_TEMP
+	LD	HL,BANK_PAGE_TABLE
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	A,(SWAP_PAGE_TEMP)
+	LD	(HL),A
+
+	; Clear dirty flag: BANK_DIRTY_TABLE[B] = 0
+	LD	HL,BANK_DIRTY_TABLE
+	ADD	HL,DE
+	LD	(HL),0
+
+	OR	A			; Carry = 0 (success)
+	RET
+
+;------------------------------------------------------------------------------
+; ENSURE_PAGE_RESIDENT: Ensure 32KB page A is resident in Far RAM banks
+; Input: A = 8-bit Page Number (0..255)
+; Returns: A = Far RAM Bank ID (e.g. 0x8C), Carry = 0 on success, Carry = 1 on error
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+ENSURE_PAGE_RESIDENT:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	(SWAP_PAGE_TEMP),A
+
+	; Check if Page 0 (pinned in Bank 0)
+	OR	A
+	JR	NZ,EPR_NOT_PAGE_0
+	XOR	A
+	LD	(SWAP_BANK_TEMP),A
+	LD	A,(EXT_BANK_TABLE)	; Bank 0 ID
+	POP	HL
+	POP	DE
+	POP	BC
+	OR	A			; Carry = 0
+	RET
+
+EPR_NOT_PAGE_0:
+	; Scan BANK_PAGE_TABLE[1..11] for Page (SWAP_PAGE_TEMP)
+	LD	B,1			; Bank index 1..11
+	LD	HL,BANK_PAGE_TABLE+1
+EPR_SCAN_LOOP:
+	LD	A,(SWAP_PAGE_TEMP)
+	CP	(HL)
+	JR	Z,EPR_HIT
+	INC	HL
+	INC	B
+	LD	A,B
+	CP	MAX_FAR_BANKS		; 12
+	JR	C,EPR_SCAN_LOOP
+
+	; PAGE FAULT! Page (SWAP_PAGE_TEMP) is NOT resident in any bank.
+	CALL	HANDLE_PAGE_FAULT	; Returns B = victim bank index (1..11), Carry on error
+	JR	C,EPR_FAULT_ERR
+
+EPR_HIT:
+	LD	A,B
+	LD	(SWAP_BANK_TEMP),A
+	; Lookup Far RAM Bank ID in EXT_BANK_TABLE[B]
+	LD	HL,EXT_BANK_TABLE
+	LD	E,B
+	LD	D,0
+	ADD	HL,DE
+	LD	A,(HL)			; A = Far RAM Bank ID
+
+	POP	HL
+	POP	DE
+	POP	BC
+	OR	A			; Carry = 0
+	RET
+
+EPR_FAULT_ERR:
+	POP	HL
+	POP	DE
+	POP	BC
+	SCF				; Carry = 1
+	RET
+
+;------------------------------------------------------------------------------
+; ENSURE_PAGE_RESIDENT_DIRTY: Ensure page A is resident AND mark its bank dirty
+; Input: A = 8-bit Page Number (0..255)
+; Returns: A = Far RAM Bank ID, Carry = 0 on success, Carry = 1 on error
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+ENSURE_PAGE_RESIDENT_DIRTY:
+	CALL	ENSURE_PAGE_RESIDENT
+	RET	C
+	PUSH	AF
+	PUSH	HL
+	PUSH	DE
+	; Mark bank SWAP_BANK_TEMP dirty
+	LD	A,(SWAP_BANK_TEMP)
+	LD	E,A
+	LD	D,0
+	LD	HL,BANK_DIRTY_TABLE
+	ADD	HL,DE
+	LD	(HL),1
+	POP	DE
+	POP	HL
+	POP	AF
+	OR	A			; Carry = 0
+	RET
+
+;------------------------------------------------------------------------------
+; INIT_PAGING_SYSTEM: Reset paging tables, bitmap, and clean up swap file
+; Preserves: All registers
+;------------------------------------------------------------------------------
+INIT_PAGING_SYSTEM:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	CALL	CLEANUP_SWAP_FILE
+
+	XOR	A
+	LD	(SWAP_ACTIVE),A
+	INC	A			; A = 1
+	LD	(NEXT_VICTIM_BANK),A
+
+	; Clear PAGE_ON_DISK_BITMAP (32 bytes)
+	LD	HL,PAGE_ON_DISK_BITMAP
+	LD	B,32
+IPS_CLEAR_BM:
+	LD	(HL),0
+	INC	HL
+	DJNZ	IPS_CLEAR_BM
+
+	; Initialize BANK_PAGE_TABLE[0..11] = 0..11
+	; Initialize BANK_DIRTY_TABLE[0..11] = 0
+	LD	B,0			; B = index 0..11
+	LD	HL,BANK_PAGE_TABLE
+	LD	DE,BANK_DIRTY_TABLE
+IPS_INIT_BANKS:
+	LD	(HL),B
+	XOR	A
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	INC	B
+	LD	A,B
+	CP	MAX_FAR_BANKS
+	JR	C,IPS_INIT_BANKS
+
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
 ;------------------------------------------------------------------------------
 ; WRITE_FAR_SLOT: Write 128-byte line from local memory to physical Far RAM slot
 ; Inputs: HL = Local Source Address (in CPM_USER_BANK)
-;         BC = 16-bit Physical Slot ID (0..3583)
+;         BC = 16-bit Virtual Slot ID (0..65534)
 ; Preserves: All registers except AF
 ;------------------------------------------------------------------------------
 WRITE_FAR_SLOT:
@@ -5979,15 +6650,9 @@ WRITE_FAR_SLOT:
 
 	LD	(FAR_LOCAL_ADDR),HL
 
-	; bank_idx = B (high byte = slot / 256)
+	; Ensure Page B is resident in Far RAM and marked dirty
 	LD	A,B
-	LD	HL,EXT_BANK_TABLE
-	ADD	A,L
-	LD	L,A
-	JR	NC,WFL_NO_CY
-	INC	H
-WFL_NO_CY:
-	LD	A,(HL)			; A = Destination RAM Bank ID
+	CALL	ENSURE_PAGE_RESIDENT_DIRTY
 	LD	(FAR_DEST_BANK),A
 
 	; far_offset = C * 128 = (C << 7)
@@ -6029,7 +6694,7 @@ WFL_NO_CY:
 ;------------------------------------------------------------------------------
 ; READ_FAR_SLOT: Read 128-byte line from physical Far RAM slot into local memory
 ; Inputs: DE = Local Destination Address (in CPM_USER_BANK)
-;         BC = 16-bit Physical Slot ID (0..3583)
+;         BC = 16-bit Virtual Slot ID (0..65534)
 ; Preserves: All registers except AF
 ;------------------------------------------------------------------------------
 READ_FAR_SLOT:
@@ -6039,15 +6704,9 @@ READ_FAR_SLOT:
 
 	LD	(FAR_LOCAL_ADDR),DE
 
-	; bank_idx = B (high byte = slot / 256)
+	; Ensure Page B is resident in Far RAM
 	LD	A,B
-	LD	HL,EXT_BANK_TABLE
-	ADD	A,L
-	LD	L,A
-	JR	NC,RFL_NO_CY
-	INC	H
-RFL_NO_CY:
-	LD	A,(HL)			; A = Source RAM Bank ID
+	CALL	ENSURE_PAGE_RESIDENT
 	LD	(FAR_SRC_BANK),A
 
 	; far_offset = C * 128
@@ -6085,6 +6744,7 @@ RFL_NO_CY:
 	POP	DE
 	POP	BC
 	RET
+
 
 ;------------------------------------------------------------------------------
 ; WRITE_FAR_SLOT_LINE: Write single-stride null-terminated line to physical slot BC
@@ -6500,11 +7160,12 @@ INIT_SLOT_SYSTEM:
 	LD	(NEXT_FRESH_SLOT),HL
 	LD	HL,0FFFFH
 	LD	(FIRST_FREE_SLOT),HL
+	CALL	INIT_PAGING_SYSTEM
 	RET
 
 ;------------------------------------------------------------------------------
 ; WRITE_SLOT_NEXT_TERM: Write 0xFFFF to first 2 bytes of Far RAM slot BC
-; Inputs: BC = 16-bit slot ID
+; Inputs: BC = 16-bit Virtual Slot ID (0..65534)
 ; Preserves: BC, DE, HL
 ;------------------------------------------------------------------------------
 WRITE_SLOT_NEXT_TERM:
@@ -6516,16 +7177,10 @@ WRITE_SLOT_NEXT_TERM:
 	LD	HL,0FFFFH
 	LD	(LINE_SLOT_TEMP),HL
 
-	; bank_idx = B
+	; Ensure Page B is resident and marked dirty
 	LD	A,B
-	LD	HL,EXT_BANK_TABLE
-	ADD	A,L
-	LD	L,A
-	JR	NC,WSNT_NO_CY
-	INC	H
-WSNT_NO_CY:
-	LD	A,(HL)			; A = Destination Bank ID
-	LD	D,A
+	CALL	ENSURE_PAGE_RESIDENT_DIRTY
+	LD	D,A			; D = Far RAM Bank ID
 	LD	A,(CPM_USER_BANK)
 	LD	E,A			; Src Bank = CPM_USER_BANK
 
@@ -6566,7 +7221,7 @@ WSNT_NO_CY:
 	RET
 
 ;------------------------------------------------------------------------------
-; ALLOC_SLOT: Allocate a physical Far RAM slot ID (0..3583)
+; ALLOC_SLOT: Allocate a Virtual Slot ID (0..65534)
 ; Returns: Carry=0, HL = 16-bit slot ID; Carry=1 on out-of-memory
 ; Preserves: BC, DE
 ;------------------------------------------------------------------------------
@@ -6601,9 +7256,7 @@ ALLOC_SLOT:
 
 ALLOC_FRESH_SLOT:
 	LD	HL,(NEXT_FRESH_SLOT)
-	LD	A,(EXT_BANK_COUNT)
-	LD	D,A
-	LD	E,0			; DE = EXT_BANK_COUNT * 256
+	LD	DE,MAX_VIRTUAL_SLOTS
 	LD	A,H
 	CP	D
 	JR	C,ALLOC_FRESH_OK
@@ -6693,10 +7346,15 @@ FLC_LOOP:
 	JR	Z,FLC_DONE
 
 	; Check if HL is within bounds
-	LD	A,(EXT_BANK_COUNT)
-	CP	H
-	JR	C,FLC_DONE
-	JR	Z,FLC_DONE
+	LD	DE,MAX_VIRTUAL_SLOTS
+	LD	A,H
+	CP	D
+	JR	C,FLC_BOUNDS_OK
+	JR	NZ,FLC_DONE
+	LD	A,L
+	CP	E
+	JR	NC,FLC_DONE
+FLC_BOUNDS_OK:
 
 	; Check iteration count
 	LD	A,(FLC_COUNT)
@@ -10533,6 +11191,10 @@ LOAD_FILE:
 	LD	(LOAD_STRIDE_OFF),A
 
 READ_SECTOR_LOOP:
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
 	LD	DE,WORK_FCB
 	LD	C,20			; BDOS Read Next Record
 	CALL	BDOS_ENTRY
@@ -13128,6 +13790,18 @@ NEXT_FRESH_SLOT:	DW	0
 FIRST_FREE_SLOT:	DW	0FFFFH
 DEC_WORD_BUF:	DS	6		; Buffer for PRINT_DEC_WORD (5 digits + null)
 
+SWAP_ACTIVE:		DB	0		; 1 if $$$SE$$$.SWP is active, 0 if RAM-only
+SWAP_FCB:		DS	36		; FCB for temporary swap file
+BANK_PAGE_TABLE:	DS	12		; Virtual page number (0..255) resident in Bank 0..11
+BANK_DIRTY_TABLE:	DS	12		; 1 if bank has unsaved modifications, 0 if clean
+NEXT_VICTIM_BANK:	DB	1		; Round-robin victim pointer (1..11; Bank 0 is pinned)
+PAGE_ON_DISK_BITMAP:	DS	32		; 256 bits: 1 bit per page (1 if written to swap)
+SWAP_PAGE_TEMP:		DB	0		; Target virtual page number
+SWAP_BANK_TEMP:		DB	0		; Target bank index (0..11)
+SWAP_BNK_ID:		DB	0		; Target Far RAM bank ID
+SWAP_PAGE_OLD:		DB	0		; Evicted virtual page number
+SWAP_PAGE_NEW:		DB	0		; Fetched virtual page number
+
 FAR_SRC_LINE_PTR:	DW	0
 FAR_DEST_LINE_PTR:	DW	0
 FAR_HEAD_SLOT:		DW	0
@@ -13203,4 +13877,8 @@ LINE_STORAGE	EQU	BSS_START
 LINE_SHIFT_BUF_SIZE EQU	256
 LINE_SHIFT_BUF	EQU	LINE_STORAGE + LINE_STORAGE_SIZE
 
-BSS_END		EQU	LINE_SHIFT_BUF + LINE_SHIFT_BUF_SIZE
+; Dedicated bounce buffer for swap file BDOS random I/O (128 bytes)
+SWAP_IO_BUF_SIZE EQU	128
+SWAP_IO_BUF	EQU	LINE_SHIFT_BUF + LINE_SHIFT_BUF_SIZE
+
+BSS_END		EQU	SWAP_IO_BUF + SWAP_IO_BUF_SIZE

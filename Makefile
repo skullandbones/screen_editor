@@ -11,7 +11,7 @@ CPMRM ?= $(TOOLS_DIR)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all image test test-sanity test-conformity test-full clean
+.PHONY: all image test test-sanity test-conformity test-paging test-full clean
 
 all: $(TARGET)
 
@@ -34,7 +34,11 @@ test-conformity: image
 	@echo "==> Running full SE.COM conformity regression test suite..."
 	python3 tests/test_editor_headless.py
 
-test-full: test-conformity
+test-paging: image
+	@echo "==> Running SE.COM large file paging test suite (3,400 lines)..."
+	python3 tests/test_large_file_paging.py
+
+test-full: test-conformity test-paging
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def *.map *.sym src/*.o src/*.map src/*.sym
