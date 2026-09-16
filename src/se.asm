@@ -26,9 +26,9 @@ FAR_SLOT_SIZE	EQU	128		; 128 bytes stride per Far-RAM physical slot
 FAR_SLOT_PAYLOAD EQU	126		; 126 bytes text payload per Far-RAM slot
 SLOT_TERM	EQU	0FFFFH		; 16-bit terminal slot marker in Far-RAM
 MAX_COPY_LINE_CHARS EQU	120		; Single-line block copy capacity limit
-MAX_FAR_BANKS	EQU	13		; Up to 13 extended 32KB RAM banks (416 KB on 512K system)
-CACHE_SIZE_LINES EQU	48		; 48 lines in local working cache (12 KB)
-MAX_DOC_LINES	EQU	3328		; 13 banks * 256 lines = 3328 total lines
+MAX_FAR_BANKS	EQU	12		; Up to 12 extended 32KB RAM banks for text slots (384 KB)
+CACHE_SIZE_LINES EQU	48		; 48 lines in local working cache (6,144 bytes)
+MAX_DOC_LINES	EQU	16384		; 32KB Far RAM Line Table (16,384 lines * 2 bytes)
 
 KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
 KEY_CTRL_C	EQU	3
@@ -1303,6 +1303,9 @@ TEST_HBIOS_OK:
 	LD	DE,STR_TEST_RAM_BANKS_END
 	CALL	PRINT_STR
 
+	; Initialize and Discover Far RAM Banks
+	CALL	INIT_FAR_RAM_BANKS
+
 	; Print Active CP/M User Bank
 	LD	DE,STR_TEST_CUR_BANK
 	CALL	PRINT_STR
@@ -1311,8 +1314,13 @@ TEST_HBIOS_OK:
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
-	; Initialize and Discover Far RAM Banks
-	CALL	INIT_FAR_RAM_BANKS
+	; Print Dedicated Line Table Far RAM Bank
+	LD	DE,STR_TEST_LINE_BANK
+	CALL	PRINT_STR
+	LD	A,(LINE_TABLE_BANK)
+	CALL	PRINT_HEX_BYTE
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
 
 	; Print Discovered Far RAM Banks list
 	LD	DE,STR_TEST_DISCOVERED
@@ -1604,14 +1612,12 @@ TEST4_SLOT_INIT:
 	CALL	ALLOC_SLOT		; HL = slot ID
 	EX	DE,HL			; DE = slot ID
 	POP	HL			; HL = line index
-	PUSH	HL
-	ADD	HL,HL			; * 2
-	LD	BC,DOC_LINE_SLOTS
-	ADD	HL,BC
-	LD	(HL),E
-	INC	HL
-	LD	(HL),D
-	POP	HL
+	LD	B,H
+	LD	C,L			; BC = line index
+	EX	DE,HL			; HL = slot ID
+	PUSH	BC
+	CALL	SET_LINE_SLOT		; Store slot ID HL at line BC in Far RAM
+	POP	HL			; HL = line index
 	INC	HL
 	POP	BC
 	DEC	BC
@@ -2830,15 +2836,9 @@ DEL_BLK_FREE_LOOP:
 	JR	C,DEL_BLK_FREE_DONE
 
 DO_FREE_CUR_SLOT:
-	; Slot address in DOC_LINE_SLOTS = DOC_LINE_SLOTS + DEL_BLK_CUR_LINE * 2
-	LD	HL,(DEL_BLK_CUR_LINE)
-	ADD	HL,HL
-	LD	DE,DOC_LINE_SLOTS
-	ADD	HL,DE
-	LD	E,(HL)
-	INC	HL
-	LD	D,(HL)			; DE = slot ID
-	EX	DE,HL			; HL = slot ID
+	; Lookup and free slot ID for DEL_BLK_CUR_LINE
+	LD	BC,(DEL_BLK_CUR_LINE)
+	CALL	GET_LINE_SLOT		; HL = slot ID
 	CALL	FREE_LINE_CHAIN
 
 	LD	HL,(DEL_BLK_CUR_LINE)
@@ -2847,7 +2847,7 @@ DO_FREE_CUR_SLOT:
 	JR	DEL_BLK_FREE_LOOP
 
 DEL_BLK_FREE_DONE:
-	; Step 4: Shift DOC_LINE_SLOTS entries above BLOCK_END_ROW downwards
+	; Step 4: Shift line table entries above BLOCK_END_ROW downwards to BLOCK_START_ROW + 1
 	; Lines removed: K = BLOCK_END_ROW - BLOCK_START_ROW
 	; Number of entries to shift: W = DOC_TOTAL_LINES - (BLOCK_END_ROW + 1)
 	LD	HL,(DOC_TOTAL_LINES)
@@ -2858,28 +2858,14 @@ DEL_BLK_FREE_DONE:
 	JR	Z,DEL_BLK_NO_SHIFT
 	JR	C,DEL_BLK_NO_SHIFT
 
-	; W > 0: shift entries down using LDIR
-	PUSH	HL			; Save W (word count)
-
-	; Destination: DE = DOC_LINE_SLOTS + (BLOCK_START_ROW + 1) * 2
-	LD	HL,(BLOCK_START_ROW)
-	INC	HL
-	ADD	HL,HL
-	LD	DE,DOC_LINE_SLOTS
-	ADD	HL,DE
-	EX	DE,HL			; DE = destination
-
-	; Source: HL = DOC_LINE_SLOTS + (BLOCK_END_ROW + 1) * 2
+	; W > 0: shift entries up towards lower line numbers
+	LD	B,H
+	LD	C,L			; BC = W (word count)
+	LD	DE,(BLOCK_START_ROW)
+	INC	DE			; DE = destination line = BLOCK_START_ROW + 1
 	LD	HL,(BLOCK_END_ROW)
-	INC	HL
-	ADD	HL,HL
-	LD	BC,DOC_LINE_SLOTS
-	ADD	HL,BC			; HL = source
-
-	POP	BC			; BC = W
-	SLA	C
-	RL	B			; BC = W * 2 (byte count)
-	LDIR
+	INC	HL			; HL = source line = BLOCK_END_ROW + 1
+	CALL	SHIFT_LINE_SLOTS_UP
 
 DEL_BLK_NO_SHIFT:
 	; Update DOC_TOTAL_LINES = DOC_TOTAL_LINES - (BLOCK_END_ROW - BLOCK_START_ROW)
@@ -3272,16 +3258,11 @@ DO_COPY_BLK_MULTILINE:
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	DE,(COPY_K_LINES)
 	ADD	HL,DE
-	LD	A,(EXT_BANK_COUNT)
-	LD	D,A
-	LD	E,0			; DE = EXT_BANK_COUNT * 256
-	LD	A,H
-	CP	D
+	LD	DE,MAX_DOC_LINES
+	OR	A
+	SBC	HL,DE
 	JR	C,COPY_ML_CAP_OK
-	JR	NZ,COPY_ML_CAP_FAIL
-	LD	A,L
-	CP	E
-	JR	C,COPY_ML_CAP_OK
+	JR	Z,COPY_ML_CAP_OK
 
 COPY_ML_CAP_FAIL:
 	CALL	SET_OOM_STATUS
@@ -3525,7 +3506,7 @@ COPY_ML_SUFFIX_DONE:
 	LD	HL,LOAD_LINE_TEMP
 	CALL	WRITE_FAR_SLOT_LINE
 
-	; Step 3: Shift DOC_LINE_SLOTS downward from CUR_DOC_ROW + 1 by K words
+	; Step 3: Shift line slots downward from CUR_DOC_ROW + 1 by K words
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	DE,(CUR_DOC_ROW)
 	INC	DE			; DE = CUR_DOC_ROW + 1
@@ -3534,42 +3515,27 @@ COPY_ML_SUFFIX_DONE:
 	JR	Z,COPY_ML_PLUG_SLOTS
 	JR	C,COPY_ML_PLUG_SLOTS
 
-	; Shift W words down by K words using LDDR
-	ADD	HL,HL
+	; Shift W words down by K words
 	LD	B,H
-	LD	C,L			; BC = W * 2
-
-	; Source last byte: HL = DOC_LINE_SLOTS + DOC_TOTAL_LINES * 2 - 1
-	LD	HL,(DOC_TOTAL_LINES)
-	ADD	HL,HL
-	DEC	HL
-	LD	DE,DOC_LINE_SLOTS
-	ADD	HL,DE			; HL = source last byte
-
-	; Dest last byte: DE = HL + K * 2
-	PUSH	HL
+	LD	C,L			; BC = W
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL			; HL = source line = CUR_DOC_ROW + 1
 	LD	DE,(COPY_K_LINES)
-	EX	DE,HL
-	ADD	HL,HL			; HL = K * 2
-	POP	DE			; DE = source last byte
 	ADD	HL,DE
-	EX	DE,HL			; DE = dest last byte, HL = source last byte
-	LDDR
+	EX	DE,HL			; DE = dest line = CUR_DOC_ROW + 1 + K
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL			; HL = source line = CUR_DOC_ROW + 1
+	CALL	SHIFT_LINE_SLOTS_DOWN
 
 COPY_ML_PLUG_SLOTS:
-	; Plug K new slot IDs into DOC_LINE_SLOTS + (CUR_DOC_ROW + 1) * 2
+	; Plug K new slot IDs into LINE_TABLE_BANK + (CUR_DOC_ROW + 1) * 2
 	LD	HL,(CUR_DOC_ROW)
 	INC	HL
-	ADD	HL,HL
-	LD	DE,DOC_LINE_SLOTS
-	ADD	HL,DE
-	EX	DE,HL			; DE = destination in DOC_LINE_SLOTS
-
+	LD	B,H
+	LD	C,L			; BC = CUR_DOC_ROW + 1
 	LD	HL,COPY_SLOTS_BUF	; Source: COPY_SLOTS_BUF
-	LD	BC,(COPY_K_LINES)
-	SLA	C
-	RL	B			; BC = K * 2
-	LDIR
+	LD	DE,(COPY_K_LINES)	; DE = K words
+	CALL	WRITE_LINE_SLOTS_FROM_RAM
 
 	; Step 4: Update DOC_TOTAL_LINES += K
 	LD	HL,(DOC_TOTAL_LINES)
@@ -5620,15 +5586,23 @@ INIT_FAR_RAM_BANKS:
 	LD	D,080H
 IFRB_GOT_BIOS_BANK:
 
-	; 4. Populate EXT_BANK_TABLE allocating downward from CPM_USER_BANK - 1
-	; Stop when bank <= BIOS Bank ID (D, e.g. 0x80) to never overwrite HBIOS
-	LD	HL,EXT_BANK_TABLE
-	LD	B,0			; Counter for populated banks
+	; 4. Allocate LINE_TABLE_BANK: first available bank below CPM_USER_BANK
 	LD	A,(CPM_USER_BANK)
 	LD	C,A			; C = CPM_USER_BANK (e.g. 0x8E)
+	DEC	C			; C = first Far RAM bank (e.g. 0x8D)
+	LD	A,C
+	CP	D			; Compare with BIOS Bank ID (D)
+	JR	Z,IFRB_NO_BANKS		; No Far RAM available!
+	JR	C,IFRB_NO_BANKS
+	LD	(LINE_TABLE_BANK),A	; Dedicated 32KB Line Table bank!
+
+	; 5. Populate EXT_BANK_TABLE allocating downward from LINE_TABLE_BANK - 1
+	; Stop when bank <= BIOS Bank ID (D, e.g. 0x80) to never overwrite HBIOS
+	LD	HL,EXT_BANK_TABLE
+	LD	B,0			; Counter for populated text slot banks
 
 POPULATE_BANK_LOOP:
-	DEC	C			; Allocate downward: 0x8D, 0x8C...
+	DEC	C			; Allocate downward: 0x8C, 0x8B...
 	LD	A,C
 	CP	D			; Compare with BIOS Bank ID (D)
 	JR	Z,POPULATE_BANK_DONE	; Stop if C == BIOS Bank ID!
@@ -5645,6 +5619,351 @@ POPULATE_BANK_LOOP:
 POPULATE_BANK_DONE:
 	LD	A,B
 	LD	(EXT_BANK_COUNT),A
+	RET
+
+IFRB_NO_BANKS:
+	XOR	A
+	LD	(LINE_TABLE_BANK),A
+	LD	(EXT_BANK_COUNT),A
+	RET
+
+;==============================================================================
+; Far RAM Line Table Subsystem (16,384 Lines in 32KB Far RAM Bank)
+;==============================================================================
+
+;------------------------------------------------------------------------------
+; GET_LINE_SLOT: Retrieve 16-bit slot ID for document line BC from Far RAM
+; Inputs: BC = Document Line Index (0..MAX_DOC_LINES-1)
+; Returns: HL = 16-bit physical slot ID
+; Preserves: BC, DE
+;------------------------------------------------------------------------------
+GET_LINE_SLOT:
+	PUSH	BC
+	PUSH	DE
+
+	; Calculate far byte offset = BC * 2
+	LD	L,C
+	LD	H,B
+	ADD	HL,HL			; HL = far byte offset (0..32766)
+
+	; SYSSETCPY: D = User Bank, E = Line Table Bank, HL = 2 bytes
+	PUSH	HL			; Save far offset
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(CPM_USER_BANK)
+	LD	D,A
+	LD	A,(LINE_TABLE_BANK)
+	LD	E,A
+	LD	HL,2
+	RST	08H
+	POP	IX
+
+	; SYSBNKCPY: HL = Far Src Addr, DE = Local Dest Addr
+	POP	HL			; HL = Far Src Addr
+	LD	DE,LINE_SLOT_TEMP
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	LD	HL,(LINE_SLOT_TEMP)	; HL = 16-bit slot ID
+
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; SET_LINE_SLOT: Store 16-bit slot ID for document line BC into Far RAM
+; Inputs: BC = Document Line Index (0..MAX_DOC_LINES-1)
+;         HL = 16-bit physical slot ID
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+SET_LINE_SLOT:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL			; Save slot ID
+
+	LD	(LINE_SLOT_TEMP),HL
+
+	; Calculate far byte offset = BC * 2
+	LD	L,C
+	LD	H,B
+	ADD	HL,HL			; HL = far byte offset (0..32766)
+	EX	DE,HL			; DE = far destination address
+
+	; SYSSETCPY: D = Line Table Bank, E = User Bank, HL = 2 bytes
+	PUSH	DE			; Save far destination address
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(LINE_TABLE_BANK)
+	LD	D,A
+	LD	A,(CPM_USER_BANK)
+	LD	E,A
+	LD	HL,2
+	RST	08H
+	POP	IX
+
+	; SYSBNKCPY: HL = Local Src Addr, DE = Far Dest Addr
+	POP	DE			; DE = Far Dest Addr
+	LD	HL,LINE_SLOT_TEMP
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	POP	HL			; Restore HL (slot ID)
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; SHIFT_LINE_SLOTS_UP: Shift W line slots upward from higher to lower line indices
+; Inputs: DE = Destination Line Index
+;         HL = Source Line Index (DE < HL)
+;         BC = Word Count (W lines to shift)
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+SHIFT_LINE_SLOTS_UP:
+	LD	A,B
+	OR	C
+	RET	Z
+
+	; Calculate total bytes = BC * 2 -> store in SLOT_SHIFT_REM
+	PUSH	HL			; Save Src line
+	PUSH	DE			; Save Dest line
+	LD	L,C
+	LD	H,B
+	ADD	HL,HL
+	LD	(SLOT_SHIFT_REM),HL
+
+	; Dest byte offset = Dest line * 2
+	POP	HL			; HL = Dest line
+	ADD	HL,HL
+	LD	(SLOT_SHIFT_DEST),HL
+
+	; Src byte offset = Src line * 2
+	POP	HL			; HL = Src line
+	ADD	HL,HL
+	LD	(SLOT_SHIFT_SRC),HL
+
+SLOTS_UP_LOOP:
+	LD	HL,(SLOT_SHIFT_REM)
+	LD	A,H
+	OR	L
+	RET	Z
+
+	LD	A,H
+	OR	A
+	JR	NZ,SLOTS_UP_FULL_CHUNK
+	LD	(SLOT_SHIFT_CHUNK),HL
+	JR	SLOTS_UP_DO_COPY
+SLOTS_UP_FULL_CHUNK:
+	LD	HL,LINE_SHIFT_BUF_SIZE	; 256
+	LD	(SLOT_SHIFT_CHUNK),HL
+
+SLOTS_UP_DO_COPY:
+	; 1. Copy chunk from Far RAM LINE_TABLE_BANK to local LINE_SHIFT_BUF
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(CPM_USER_BANK)
+	LD	D,A			; Dest = User Bank
+	LD	A,(LINE_TABLE_BANK)
+	LD	E,A			; Src = Line Table Bank
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	RST	08H
+	POP	IX
+
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	LD	DE,LINE_SHIFT_BUF	; Local Dest
+	LD	HL,(SLOT_SHIFT_SRC)	; Far Src
+	RST	08H
+	POP	IX
+
+	; 2. Copy chunk from local LINE_SHIFT_BUF to Far RAM LINE_TABLE_BANK
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(LINE_TABLE_BANK)
+	LD	D,A			; Dest = Line Table Bank
+	LD	A,(CPM_USER_BANK)
+	LD	E,A			; Src = User Bank
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	RST	08H
+	POP	IX
+
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	LD	DE,(SLOT_SHIFT_DEST)	; Far Dest
+	LD	HL,LINE_SHIFT_BUF	; Local Src
+	RST	08H
+	POP	IX
+
+	; Advance SRC and DEST by CHUNK
+	LD	DE,(SLOT_SHIFT_CHUNK)
+	LD	HL,(SLOT_SHIFT_SRC)
+	ADD	HL,DE
+	LD	(SLOT_SHIFT_SRC),HL
+
+	LD	HL,(SLOT_SHIFT_DEST)
+	ADD	HL,DE
+	LD	(SLOT_SHIFT_DEST),HL
+
+	; Decrement REM by CHUNK
+	LD	HL,(SLOT_SHIFT_REM)
+	OR	A
+	SBC	HL,DE
+	LD	(SLOT_SHIFT_REM),HL
+
+	JR	SLOTS_UP_LOOP
+
+;------------------------------------------------------------------------------
+; SHIFT_LINE_SLOTS_DOWN: Shift W line slots downward from lower to higher indices
+; Inputs: DE = Destination Line Index
+;         HL = Source Line Index (DE > HL)
+;         BC = Word Count (W lines to shift)
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+SHIFT_LINE_SLOTS_DOWN:
+	LD	A,B
+	OR	C
+	RET	Z
+
+	; Calculate total bytes = BC * 2 -> store in SLOT_SHIFT_REM
+	PUSH	HL			; Save Src line
+	PUSH	DE			; Save Dest line
+	LD	L,C
+	LD	H,B
+	ADD	HL,HL
+	LD	(SLOT_SHIFT_REM),HL
+	LD	C,L
+	LD	B,H			; BC = total bytes
+
+	; Dest end byte offset = Dest line * 2 + total bytes
+	POP	HL			; HL = Dest line
+	ADD	HL,HL
+	ADD	HL,BC
+	LD	(SLOT_SHIFT_DEST),HL
+
+	; Src end byte offset = Src line * 2 + total bytes
+	POP	HL			; HL = Src line
+	ADD	HL,HL
+	ADD	HL,BC
+	LD	(SLOT_SHIFT_SRC),HL
+
+SLOTS_DOWN_LOOP:
+	LD	HL,(SLOT_SHIFT_REM)
+	LD	A,H
+	OR	L
+	RET	Z
+
+	LD	A,H
+	OR	A
+	JR	NZ,SLOTS_DOWN_FULL_CHUNK
+	LD	(SLOT_SHIFT_CHUNK),HL
+	JR	SLOTS_DOWN_DO_COPY
+SLOTS_DOWN_FULL_CHUNK:
+	LD	HL,LINE_SHIFT_BUF_SIZE	; 256
+	LD	(SLOT_SHIFT_CHUNK),HL
+
+SLOTS_DOWN_DO_COPY:
+	; Move SRC and DEST back by CHUNK before copying
+	LD	DE,(SLOT_SHIFT_CHUNK)
+	LD	HL,(SLOT_SHIFT_SRC)
+	OR	A
+	SBC	HL,DE
+	LD	(SLOT_SHIFT_SRC),HL
+
+	LD	HL,(SLOT_SHIFT_DEST)
+	OR	A
+	SBC	HL,DE
+	LD	(SLOT_SHIFT_DEST),HL
+
+	; 1. Copy chunk from Far RAM LINE_TABLE_BANK to local LINE_SHIFT_BUF
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(CPM_USER_BANK)
+	LD	D,A			; Dest = User Bank
+	LD	A,(LINE_TABLE_BANK)
+	LD	E,A			; Src = Line Table Bank
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	RST	08H
+	POP	IX
+
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	LD	DE,LINE_SHIFT_BUF	; Local Dest
+	LD	HL,(SLOT_SHIFT_SRC)	; Far Src
+	RST	08H
+	POP	IX
+
+	; 2. Copy chunk from local LINE_SHIFT_BUF to Far RAM LINE_TABLE_BANK
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(LINE_TABLE_BANK)
+	LD	D,A			; Dest = Line Table Bank
+	LD	A,(CPM_USER_BANK)
+	LD	E,A			; Src = User Bank
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	RST	08H
+	POP	IX
+
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	LD	DE,(SLOT_SHIFT_DEST)	; Far Dest
+	LD	HL,LINE_SHIFT_BUF	; Local Src
+	RST	08H
+	POP	IX
+
+	; Decrement REM by CHUNK
+	LD	DE,(SLOT_SHIFT_CHUNK)
+	LD	HL,(SLOT_SHIFT_REM)
+	OR	A
+	SBC	HL,DE
+	LD	(SLOT_SHIFT_REM),HL
+
+	JR	SLOTS_DOWN_LOOP
+
+;------------------------------------------------------------------------------
+; WRITE_LINE_SLOTS_FROM_RAM: Copy K words from local RAM buffer into Line Table
+; Inputs: BC = Destination Line Index in LINE_TABLE_BANK
+;         HL = Source Buffer in RAM (e.g. COPY_SLOTS_BUF)
+;         DE = Word Count (K lines)
+; Preserves: None
+;------------------------------------------------------------------------------
+WRITE_LINE_SLOTS_FROM_RAM:
+	LD	A,D
+	OR	E
+	RET	Z
+
+	PUSH	HL			; Save Source Buffer address
+
+	; Far Dest Addr = BC * 2
+	LD	L,C
+	LD	H,B
+	ADD	HL,HL
+	EX	DE,HL			; DE = Far Dest Addr, HL = Word Count (K)
+
+	; Byte count = K * 2
+	ADD	HL,HL			; HL = Byte Count
+
+	; SYSSETCPY: D = Line Table Bank, E = User Bank, HL = Byte Count
+	PUSH	DE			; Save Far Dest Addr
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(LINE_TABLE_BANK)
+	LD	D,A
+	LD	A,(CPM_USER_BANK)
+	LD	E,A
+	RST	08H
+	POP	IX
+
+	; SYSBNKCPY: HL = Local Src Addr, DE = Far Dest Addr
+	POP	DE			; DE = Far Dest Addr
+	POP	HL			; HL = Local Src Addr
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
 	RET
 
 ;------------------------------------------------------------------------------
@@ -5827,16 +6146,11 @@ WRITE_FAR_LINE:
 
 	LD	(FAR_SRC_LINE_PTR),HL	; Save local source address
 
-	; Lookup head slot ID: DOC_LINE_SLOTS[BC]
-	LD	L,C
-	LD	H,B
-	ADD	HL,HL
-	LD	DE,DOC_LINE_SLOTS
-	ADD	HL,DE
-	LD	C,(HL)
-	INC	HL
-	LD	B,(HL)			; BC = head physical slot ID
-	LD	(FAR_CUR_SLOT),BC
+	; Lookup head slot ID for line BC
+	CALL	GET_LINE_SLOT		; HL = head physical slot ID
+	LD	(FAR_CUR_SLOT),HL
+	LD	B,H
+	LD	C,L			; BC = head physical slot ID
 
 	; Read existing head slot into FAR_IO_BUF to check for existing NEXT_SLOT_ID
 	LD	DE,FAR_IO_BUF
@@ -5956,16 +6270,11 @@ READ_FAR_LINE_MAX:
 	LD	(FAR_DEST_LINE_PTR),DE
 	LD	(FAR_READ_MAX_BYTES),HL
 
-	; Lookup head slot ID: DOC_LINE_SLOTS[BC]
-	LD	L,C
-	LD	H,B
-	ADD	HL,HL
-	LD	DE,DOC_LINE_SLOTS
-	ADD	HL,DE
-	LD	C,(HL)
-	INC	HL
-	LD	B,(HL)			; BC = head physical slot ID
-	LD	(FAR_CUR_SLOT),BC
+	; Lookup head slot ID for line BC
+	CALL	GET_LINE_SLOT		; HL = head physical slot ID
+	LD	(FAR_CUR_SLOT),HL
+	LD	B,H
+	LD	C,L			; BC = head physical slot ID
 
 RFLM_STRIDE_LOOP:
 	; Check if slot ID is 0xFFFF
@@ -6194,6 +6503,69 @@ INIT_SLOT_SYSTEM:
 	RET
 
 ;------------------------------------------------------------------------------
+; WRITE_SLOT_NEXT_TERM: Write 0xFFFF to first 2 bytes of Far RAM slot BC
+; Inputs: BC = 16-bit slot ID
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+WRITE_SLOT_NEXT_TERM:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	HL,0FFFFH
+	LD	(LINE_SLOT_TEMP),HL
+
+	; bank_idx = B
+	LD	A,B
+	LD	HL,EXT_BANK_TABLE
+	ADD	A,L
+	LD	L,A
+	JR	NC,WSNT_NO_CY
+	INC	H
+WSNT_NO_CY:
+	LD	A,(HL)			; A = Destination Bank ID
+	LD	D,A
+	LD	A,(CPM_USER_BANK)
+	LD	E,A			; Src Bank = CPM_USER_BANK
+
+	; far_offset = C * 128 = (C << 7)
+	LD	L,C
+	LD	H,0
+	ADD	HL,HL			; *2
+	ADD	HL,HL			; *4
+	ADD	HL,HL			; *8
+	ADD	HL,HL			; *16
+	ADD	HL,HL			; *32
+	ADD	HL,HL			; *64
+	ADD	HL,HL			; *128
+	EX	DE,HL			; DE = far_offset, H = Dest Bank, L = Src Bank
+
+	; SYSSETCPY: D = Dest Bank, E = Src Bank, HL = 2 bytes
+	PUSH	DE
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	D,H
+	LD	E,L
+	LD	HL,2
+	RST	08H
+	POP	IX
+
+	; SYSBNKCPY: HL = Local Src (LINE_SLOT_TEMP), DE = Far Dest
+	POP	DE
+	LD	HL,LINE_SLOT_TEMP
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
+;------------------------------------------------------------------------------
 ; ALLOC_SLOT: Allocate a physical Far RAM slot ID (0..3583)
 ; Returns: Carry=0, HL = 16-bit slot ID; Carry=1 on out-of-memory
 ; Preserves: BC, DE
@@ -6219,6 +6591,9 @@ ALLOC_SLOT:
 	LD	HL,(FAR_IO_BUF)		; HL = next free slot ID
 	LD	(FIRST_FREE_SLOT),HL
 	POP	HL			; Restore allocated slot ID
+	LD	B,H
+	LD	C,L
+	CALL	WRITE_SLOT_NEXT_TERM	; Ensure allocated slot has 0xFFFF next ptr
 	POP	BC
 	POP	DE
 	OR	A			; Carry = 0 (success)
@@ -6242,6 +6617,9 @@ ALLOC_FRESH_OK:
 	INC	HL
 	LD	(NEXT_FRESH_SLOT),HL
 	POP	HL			; HL = allocated slot ID
+	LD	B,H
+	LD	C,L
+	CALL	WRITE_SLOT_NEXT_TERM	; Ensure fresh slot has 0xFFFF next ptr
 	POP	BC
 	POP	DE
 	OR	A			; Carry = 0 (success)
@@ -6264,8 +6642,16 @@ FREE_SLOT:
 	PUSH	DE
 	PUSH	HL
 
-	; Prepare FAR_IO_BUF: first 2 bytes = current FIRST_FREE_SLOT
 	LD	DE,(FIRST_FREE_SLOT)
+	; Check if slot is already at top of free list (prevent self-loop)
+	LD	A,D
+	CP	H
+	JR	NZ,FS_PROCEED
+	LD	A,E
+	CP	L
+	JR	Z,FS_DONE
+
+FS_PROCEED:
 	LD	(FAR_IO_BUF),DE
 
 	; Write to Far RAM slot HL
@@ -6279,6 +6665,7 @@ FREE_SLOT:
 	PUSH	HL
 	LD	(FIRST_FREE_SLOT),HL
 
+FS_DONE:
 	POP	HL
 	POP	DE
 	POP	BC
@@ -6295,6 +6682,8 @@ FREE_LINE_CHAIN:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
+	LD	A,16
+	LD	(FLC_COUNT),A
 
 FLC_LOOP:
 	; Check if HL == 0xFFFF (SLOT_TERM)
@@ -6309,6 +6698,12 @@ FLC_LOOP:
 	JR	C,FLC_DONE
 	JR	Z,FLC_DONE
 
+	; Check iteration count
+	LD	A,(FLC_COUNT)
+	DEC	A
+	LD	(FLC_COUNT),A
+	JR	Z,FLC_DONE
+
 	; Read slot into FAR_IO_BUF to get NEXT_SLOT_ID
 	PUSH	HL			; Save slot ID being freed
 	LD	B,H
@@ -6317,6 +6712,15 @@ FLC_LOOP:
 	CALL	READ_FAR_SLOT
 	LD	DE,(FAR_IO_BUF)		; DE = NEXT_SLOT_ID
 	POP	HL			; Restore slot ID being freed
+
+	; Check for self-loop (DE == HL)
+	LD	A,D
+	CP	H
+	JR	NZ,FLC_NOT_SELF
+	LD	A,E
+	CP	L
+	JR	Z,FLC_DONE
+FLC_NOT_SELF:
 
 	; Free slot HL
 	CALL	FREE_SLOT
@@ -6333,7 +6737,7 @@ FLC_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; APPEND_LINE_SLOT: Allocate slot and assign to DOC_LINE_SLOTS[DOC_TOTAL_LINES]
+; APPEND_LINE_SLOT: Allocate slot and assign to line table in Far RAM
 ; Returns: Carry=0, BC = allocated slot ID; Carry=1 on out-of-memory
 ; Preserves: DE
 ;------------------------------------------------------------------------------
@@ -6349,15 +6753,8 @@ APPEND_LINE_SLOT:
 	RET	C
 	PUSH	HL			; Save slot ID
 	LD	BC,(DOC_TOTAL_LINES)
-	LD	L,C
-	LD	H,B
-	ADD	HL,HL			; * 2
-	LD	BC,DOC_LINE_SLOTS
-	ADD	HL,BC
-	POP	BC			; BC = slot ID
-	LD	(HL),C
-	INC	HL
-	LD	(HL),B
+	CALL	SET_LINE_SLOT		; Store slot ID HL at line BC in Far RAM
+	POP	BC			; BC = allocated slot ID
 	OR	A			; Carry = 0
 	RET
 ALS_OOM:
@@ -9729,7 +10126,8 @@ DO_BS_ROW0_CHECK:
 	LD	(DOC_MODIFIED),A
 
 	; 1. Free Line 0's slot chain
-	LD	HL,(DOC_LINE_SLOTS)
+	LD	BC,0
+	CALL	GET_LINE_SLOT		; HL = Line 0's slot ID
 	CALL	FREE_LINE_CHAIN
 
 	; 2. Decrement DOC_TOTAL_LINES
@@ -9737,13 +10135,16 @@ DO_BS_ROW0_CHECK:
 	DEC	HL
 	LD	(DOC_TOTAL_LINES),HL
 
-	; 3. Shift DOC_LINE_SLOTS from index 1 down to index 0
-	ADD	HL,HL			; * 2 = byte count
+	; 3. Shift line slots from index 1 down to index 0
+	LD	A,H
+	OR	L
+	JR	Z,DO_BS_ROW0_NO_SHIFT
 	LD	B,H
-	LD	C,L
-	LD	DE,DOC_LINE_SLOTS	; Destination
-	LD	HL,DOC_LINE_SLOTS+2	; Source
-	LDIR
+	LD	C,L			; BC = count of lines to shift (new DOC_TOTAL_LINES)
+	LD	DE,0			; Destination line = 0
+	LD	HL,1			; Source line = 1
+	CALL	SHIFT_LINE_SLOTS_UP
+DO_BS_ROW0_NO_SHIFT:
 
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	LD	A,1
@@ -9884,13 +10285,9 @@ JOIN_APPEND_LOOP:
 	; 5. Free lower line's slot chain (JOIN_DOC_LINE + 1)
 	LD	HL,(JOIN_DOC_LINE)
 	INC	HL			; HL = lower line index (P)
-	ADD	HL,HL			; * 2
-	LD	BC,DOC_LINE_SLOTS
-	ADD	HL,BC
-	LD	E,(HL)
-	INC	HL
-	LD	D,(HL)			; DE = freed slot ID
-	EX	DE,HL			; HL = freed slot ID
+	LD	B,H
+	LD	C,L
+	CALL	GET_LINE_SLOT		; HL = freed slot ID
 	CALL	FREE_LINE_CHAIN
 
 	; 6. Decrement DOC_TOTAL_LINES
@@ -9898,7 +10295,7 @@ JOIN_APPEND_LOOP:
 	DEC	HL
 	LD	(DOC_TOTAL_LINES),HL
 
-	; 7. Shift DOC_LINE_SLOTS from JOIN_DOC_LINE + 2 upwards to JOIN_DOC_LINE + 1
+	; 7. Shift line slots from JOIN_DOC_LINE + 2 upwards to JOIN_DOC_LINE + 1
 	; Number of entries to shift: W = DOC_TOTAL_LINES - (JOIN_DOC_LINE + 1)
 	LD	HL,(DOC_TOTAL_LINES)	; New total lines
 	LD	DE,(JOIN_DOC_LINE)
@@ -9908,25 +10305,13 @@ JOIN_APPEND_LOOP:
 	JR	Z,JOIN_SHIFT_DONE
 	JR	C,JOIN_SHIFT_DONE
 
-	; Words W > 0: shift using LDIR
-	ADD	HL,HL
 	LD	B,H
-	LD	C,L			; BC = byte count
-
-	; Destination: DE = DOC_LINE_SLOTS + P * 2
-	EX	DE,HL			; HL = P
-	ADD	HL,HL			; HL = P * 2
-	LD	DE,DOC_LINE_SLOTS
-	ADD	HL,DE
-	EX	DE,HL			; DE = destination
-
-	; Source: HL = destination + 2
-	LD	L,E
-	LD	H,D
+	LD	C,L			; BC = W
+	LD	HL,(JOIN_DOC_LINE)
 	INC	HL
-	INC	HL
-
-	LDIR
+	INC	HL			; HL = source line = P + 1
+	; DE is already destination line = P
+	CALL	SHIFT_LINE_SLOTS_UP
 
 JOIN_SHIFT_DONE:
 	CALL	INVALIDATE_ACTIVE_LINE
@@ -9942,17 +10327,11 @@ JOIN_SHIFT_DONE:
 ; Line Insertion & Splitting at (CUR_DOC_ROW, CUR_COL) - Enter Key Handling
 ;------------------------------------------------------------------------------
 DO_INSERT_LINE:
-	; Check max document lines (EXT_BANK_COUNT * 256)
+	; Check max document lines (MAX_DOC_LINES)
 	LD	HL,(DOC_TOTAL_LINES)
-	LD	A,(EXT_BANK_COUNT)
-	LD	D,A
-	LD	E,0			; DE = EXT_BANK_COUNT * 256
-	LD	A,H
-	CP	D
-	JR	C,INS_CAP_OK
-	JR	NZ,INS_FAIL
-	LD	A,L
-	CP	E
+	LD	DE,MAX_DOC_LINES
+	OR	A
+	SBC	HL,DE
 	JR	NC,INS_FAIL
 	JR	INS_CAP_OK
 
@@ -9991,7 +10370,7 @@ SPLIT_COPY_LOOP:
 	LD	(DOC_MODIFIED),A
 	CALL	COMMIT_ACTIVE_LINE
 
-	; Shift DOC_LINE_SLOTS downwards from CUR_DOC_ROW + 1 to DOC_TOTAL_LINES - 1
+	; Shift line slots downwards from CUR_DOC_ROW + 1 to DOC_TOTAL_LINES - 1
 	; Number of entries to shift: W = DOC_TOTAL_LINES - (CUR_DOC_ROW + 1)
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	DE,(CUR_DOC_ROW)
@@ -10001,37 +10380,24 @@ SPLIT_COPY_LOOP:
 	JR	Z,NO_SLOT_SHIFT_DOWN
 	JR	C,NO_SLOT_SHIFT_DOWN
 
-	; Words W > 0: shift using LDDR
-	ADD	HL,HL
 	LD	B,H
-	LD	C,L			; BC = byte count
-
-	; Destination last byte: DE = DOC_LINE_SLOTS + N * 2 + 1
-	LD	HL,(DOC_TOTAL_LINES)
-	ADD	HL,HL
-	LD	DE,DOC_LINE_SLOTS + 1
-	ADD	HL,DE
-	EX	DE,HL			; DE = destination last byte
-
-	; Source last byte: HL = DE - 2
-	LD	L,E
-	LD	H,D
-	DEC	HL
-	DEC	HL
-
-	LDDR
+	LD	C,L			; BC = W
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL			; HL = source line = CUR_DOC_ROW + 1
+	LD	DE,(CUR_DOC_ROW)
+	INC	DE
+	INC	DE			; DE = dest line = CUR_DOC_ROW + 2
+	CALL	SHIFT_LINE_SLOTS_DOWN
 
 NO_SLOT_SHIFT_DOWN:
-	; Store new_slot_id into DOC_LINE_SLOTS[CUR_DOC_ROW + 1]
+	; Store new_slot_id into line table at CUR_DOC_ROW + 1
 	POP	DE			; DE = new_slot_id
 	LD	HL,(CUR_DOC_ROW)
-	INC	HL			; HL = CUR_DOC_ROW + 1
-	ADD	HL,HL			; * 2
-	LD	BC,DOC_LINE_SLOTS
-	ADD	HL,BC
-	LD	(HL),E
 	INC	HL
-	LD	(HL),D
+	LD	B,H
+	LD	C,L			; BC = CUR_DOC_ROW + 1
+	EX	DE,HL			; HL = new_slot_id
+	CALL	SET_LINE_SLOT
 
 	; Write split remainder (SPLIT_LINE_TEMP) to CUR_DOC_ROW + 1
 	LD	HL,(CUR_DOC_ROW)
@@ -10438,7 +10804,8 @@ LOAD_FILE_NOT_FOUND:
 INIT_EMPTY_DOCUMENT:
 	CALL	INIT_SLOT_SYSTEM
 	CALL	ALLOC_SLOT		; HL = 0
-	LD	(DOC_LINE_SLOTS),HL	; DOC_LINE_SLOTS[0] = 0
+	LD	BC,0
+	CALL	SET_LINE_SLOT		; Line 0 = slot 0
 
 	LD	HL,1
 	LD	(DOC_TOTAL_LINES),HL
@@ -12173,15 +12540,10 @@ SAVE_LINE_LOOP:
 DO_SAVE_LINE:
 	PUSH	BC			; BC = document line index
 
-	; Lookup head slot ID: DOC_LINE_SLOTS[BC]
-	LD	L,C
-	LD	H,B
-	ADD	HL,HL			; * 2
-	LD	DE,DOC_LINE_SLOTS
-	ADD	HL,DE
-	LD	C,(HL)
-	INC	HL
-	LD	B,(HL)			; BC = head slot ID
+	; Lookup head slot ID: line BC in Far RAM line table
+	CALL	GET_LINE_SLOT		; HL = head slot ID
+	LD	B,H
+	LD	C,L			; BC = head slot ID
 
 SAVE_STRIDE_LOOP:
 	; Check if slot ID is 0xFFFF (SLOT_TERM)
@@ -12411,11 +12773,13 @@ STR_TEST_RAM_BANKS_END:	DB	" x 32KB (512KB Total RAM)",13,10,"$"
 
 STR_TEST_CUR_BANK:	DB	"[*] Active CP/M User RAM Bank:  0x$"
 
-STR_TEST_DISCOVERED:	DB	"[*] Usable Far RAM Banks (32K): $"
+STR_TEST_LINE_BANK:	DB	"[*] Far RAM Line Table Bank:    0x$"
+
+STR_TEST_DISCOVERED:	DB	"[*] Usable Text Slot Banks(32K):$"
 
 STR_TEST_BANKS_LIST:	DB	"): ","$"
 
-STR_TEST_CAPACITY:	DB	"[*] Far Document Storage:       3,328 Lines (416 KB Extended RAM)",13,10,13,10,"$"
+STR_TEST_CAPACITY:	DB	"[*] Far Document Storage:       16,384 Lines (Line Table Bank + 384 KB Slot Storage)",13,10,13,10,"$"
 
 STR_TEST_NO_BANKS:	DB	"[-] No Far RAM banks available for extended storage.",13,10,13,10,"$"
 
@@ -12747,6 +13111,12 @@ DOC_MODIFIED:	DB	0		; 1 if document has unsaved modifications
 CONFIRM_ACTION:	DB	0		; 0=Exit, 1=Close, 2=New
 EXT_BANK_COUNT:	DB	0		; Number of available far RAM banks (up to 14)
 EXT_BANK_TABLE:	DS	14		; Table of far RAM bank IDs
+LINE_TABLE_BANK:	DB	0		; Far RAM Bank dedicated to 16K line slots table
+LINE_SLOT_TEMP:		DW	0		; 2-byte transfer buffer for GET/SET_LINE_SLOT
+SLOT_SHIFT_SRC:		DW	0		; Far RAM source byte offset for block slot shifts
+SLOT_SHIFT_DEST:	DW	0		; Far RAM dest byte offset for block slot shifts
+SLOT_SHIFT_REM:		DW	0		; Remaining bytes to shift
+SLOT_SHIFT_CHUNK:	DW	0		; Current chunk size (up to 256 bytes)
 
 FAR_DEST_BANK:	DB	0
 FAR_SRC_BANK:	DB	0
@@ -12769,6 +13139,8 @@ LOAD_HEAD_SLOT:		DW	0
 LOAD_CUR_SLOT:		DW	0
 LOAD_STRIDE_OFF:	DB	2
 SAVE_NEXT_SLOT:		DW	0
+FLC_COUNT:		DB	0
+
 
 ACTIVE_LINE_ROW:	DW	0FFFFH		; Document row checked out in ACTIVE_LINE_BUF
 ACTIVE_LINE_DIRTY:	DB	0		; 1 if ACTIVE_LINE_BUF has unsaved modifications
@@ -12813,12 +13185,13 @@ RAW_FORMAT_TYPE:	DB	0
 RAW_DATA_PTR:	DW	0
 RAW_DATA_BUFFER:	DS	2048
 
-		DS	512
+LOCAL_STACK_TOP:
+	DS	256
 LOCAL_STACK:
 
 ;==============================================================================
 ; Runtime Uninitialized BSS (Not emitted into SE.COM on disk)
-; Allocated in RAM immediately following LOCAL_STACK up to $C0B1
+; Allocated in RAM immediately following LOCAL_STACK
 ;==============================================================================
 BSS_START:
 
@@ -12826,8 +13199,8 @@ BSS_START:
 LINE_STORAGE_SIZE EQU	6144
 LINE_STORAGE	EQU	BSS_START
 
-; Line Slot Indirection Table (3,584 lines * 2 bytes = 7,168 bytes)
-DOC_LINE_SLOTS_SIZE EQU	7168
-DOC_LINE_SLOTS	EQU	LINE_STORAGE + LINE_STORAGE_SIZE
+; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
+LINE_SHIFT_BUF_SIZE EQU	256
+LINE_SHIFT_BUF	EQU	LINE_STORAGE + LINE_STORAGE_SIZE
 
-BSS_END		EQU	DOC_LINE_SLOTS + DOC_LINE_SLOTS_SIZE
+BSS_END		EQU	LINE_SHIFT_BUF + LINE_SHIFT_BUF_SIZE
