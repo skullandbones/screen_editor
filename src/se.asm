@@ -68,6 +68,14 @@ FMT_LINUX	EQU	1		; LF only (0x0A)
 MODE_120X40	EQU	0		; Modern 120 cols x 40 rows (Default)
 MODE_80X24	EQU	1		; Classic 80 cols x 24 rows
 
+; RAM Drive Modes
+RAMDRV_MODE_PROTECTED	EQU	0	; Preserve RAM disk (banks 0x81..0x88 safe)
+RAMDRV_MODE_ENABLED	EQU	1	; Raw overwrite for maximum RAM buffer
+RAMDRV_MODE_HIBERNATE	EQU	2	; Automatic dump to RAMDRV.IMG & restore on exit
+
+RAMDRV_START_BANK	EQU	081H	; RomWBW MD0:0 starts at bank 0x81
+RAMDRV_END_BANK		EQU	088H	; RomWBW MD0:0 ends at bank 0x88 (8 banks, 256KB)
+
 ;------------------------------------------------------------------------------
 ; Main Entry Point
 ;------------------------------------------------------------------------------
@@ -83,6 +91,11 @@ START:
 
 	; Load configuration from SE.CFG if present (local dir first, then program drive)
 	CALL	LOAD_CONFIG
+
+	; If RAM drive mode is HIBERNATE, dump RAM drive to RAMDRV.IMG before initializing buffer
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	CP	RAMDRV_MODE_HIBERNATE
+	CALL	Z,HIBERNATE_RAMDRIVE
 
 	; Initialize Terminal (Clear Screen & Home)
 	CALL	TERM_INIT
@@ -148,6 +161,7 @@ AUTO_LOAD_RENDER:
 AUTO_LOAD_NOT_FOUND:
 	LD	DE,STR_FILE_NOT_FOUND
 	CALL	PRINT_STR
+	CALL	RESTORE_RAMDRIVE
 	LD	SP,(SAVED_SP)
 	RET
 
@@ -353,8 +367,22 @@ CONFIG_REDRAW:
 
 CONFIG_TOGGLE_RAMDRIVE:
 	LD	A,(CFG_RAMDRIVE_FLAG)
-	XOR	1
+	CP	RAMDRV_MODE_PROTECTED
+	JR	Z,CTR_SET_HIB
+	CP	RAMDRV_MODE_HIBERNATE
+	JR	Z,CTR_SET_ENA
+	; Currently ENABLED (1) -> switch to PROTECTED (0)
+	XOR	A
 	LD	(CFG_RAMDRIVE_FLAG),A
+	JR	CTR_APPLY
+CTR_SET_HIB:
+	LD	A,RAMDRV_MODE_HIBERNATE
+	LD	(CFG_RAMDRIVE_FLAG),A
+	JR	CTR_APPLY
+CTR_SET_ENA:
+	LD	A,RAMDRV_MODE_ENABLED
+	LD	(CFG_RAMDRIVE_FLAG),A
+CTR_APPLY:
 	CALL	BUFFER_INIT
 	CALL	SHOW_CONFIG_SCREEN
 	JR	CONFIG_LOOP
@@ -975,6 +1003,8 @@ EXIT_PROGRAM:
 	LD	DE,STR_SHOW_CURSOR
 	CALL	PRINT_STR
 
+	CALL	RESTORE_RAMDRIVE
+
 	LD	SP,(SAVED_SP)
 	RET
 
@@ -1368,9 +1398,15 @@ SCS_RAM_MODE:
 	LD	DE,STR_CONFIG_RAM_MODE
 	CALL	PRINT_STR
 	LD	A,(CFG_RAMDRIVE_FLAG)
-	OR	A
-	JR	NZ,SCS_RAM_ENABLED
+	CP	RAMDRV_MODE_HIBERNATE
+	JR	Z,SCS_RAM_HIB
+	CP	RAMDRV_MODE_ENABLED
+	JR	Z,SCS_RAM_ENABLED
 	LD	DE,STR_RAM_PROTECTED_LBL
+	CALL	PRINT_STR
+	JR	SCS_STATUS
+SCS_RAM_HIB:
+	LD	DE,STR_RAM_HIBERNATE_LBL
 	CALL	PRINT_STR
 	JR	SCS_STATUS
 SCS_RAM_ENABLED:
@@ -5783,11 +5819,20 @@ INIT_FAR_RAM_BANKS:
 IFRB_GOT_BIOS_BANK:
 
 	; Check if RAM drive memory blocks should be used or protected
+	; Mode 0 (Protected): Protect banks 0x81..0x88
+	; Mode 1 (Enabled): Unconditionally allow banks down to 0x80
+	; Mode 2 (Hibernate): Allow banks down to 0x80 ONLY IF RAMDRIVE_IS_HIBERNATED == 1
 	LD	A,(CFG_RAMDRIVE_FLAG)
-	OR	A
-	JR	NZ,IFRB_FLOOR_SET	; If 1, use D = 0x80 (allow RAM drive blocks)
+	CP	RAMDRV_MODE_ENABLED
+	JR	Z,IFRB_FLOOR_SET	; If 1, use D = 0x80 (allow RAM drive blocks)
+	CP	RAMDRV_MODE_HIBERNATE
+	JR	NZ,IFRB_PROTECTED_MODE
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	CP	1
+	JR	Z,IFRB_FLOOR_SET	; If hibernated, use D = 0x80
 
-	; Protected mode (CFG_RAMDRIVE_FLAG == 0):
+IFRB_PROTECTED_MODE:
+	; Protected mode (CFG_RAMDRIVE_FLAG == 0 or not hibernated):
 	; Query App Banks (SYSGET 0xF5) to find lowest safe App bank (BID_APP0)
 	; Returns: H = First App Bank ID (e.g. 0x89), L = App Bank count (e.g. 3)
 	PUSH	IX
@@ -11595,6 +11640,12 @@ PCB_RAMDRIVE_VAL:
 	; HL now points to value after '='
 	LD	A,(HL)
 	CALL	TO_UPPER
+	CP	'H'			; HIBERNATE
+	JR	Z,PCB_RAM_SET_HIB
+	CP	'A'			; AUTO
+	JR	Z,PCB_RAM_SET_HIB
+	CP	'2'
+	JR	Z,PCB_RAM_SET_HIB
 	CP	'O'			; ON or OFF?
 	JR	NZ,PCB_RAM_CHECK_YES
 	INC	HL
@@ -11602,7 +11653,7 @@ PCB_RAMDRIVE_VAL:
 	CALL	TO_UPPER
 	CP	'N'
 	JR	NZ,PCB_RAM_CHECK_OFF
-	LD	A,1
+	LD	A,RAMDRV_MODE_ENABLED
 	LD	(CFG_RAMDRIVE_FLAG),A
 	JP	PCB_SKIP_LINE
 PCB_RAM_CHECK_OFF:
@@ -11632,8 +11683,13 @@ PCB_RAM_CHECK_YES:
 	JR	Z,PCB_RAM_SET_OFF
 	JP	PCB_SKIP_LINE
 
+PCB_RAM_SET_HIB:
+	LD	A,RAMDRV_MODE_HIBERNATE
+	LD	(CFG_RAMDRIVE_FLAG),A
+	JP	PCB_SKIP_LINE
+
 PCB_RAM_SET_ON:
-	LD	A,1
+	LD	A,RAMDRV_MODE_ENABLED
 	LD	(CFG_RAMDRIVE_FLAG),A
 	JP	PCB_SKIP_LINE
 
@@ -11834,11 +11890,16 @@ SC_RAMKEY_LOOP:
 	JR	SC_RAMKEY_LOOP
 SC_RAMKEY_DONE:
 
-	; Write value: "OFF\r\n" or "ON\r\n"
+	; Write value: "OFF\r\n", "HIBERNATE\r\n", or "ON\r\n"
 	LD	A,(CFG_RAMDRIVE_FLAG)
-	OR	A
-	JR	NZ,SC_RAM_VAL_ON
+	CP	RAMDRV_MODE_HIBERNATE
+	JR	Z,SC_RAM_VAL_HIB
+	CP	RAMDRV_MODE_ENABLED
+	JR	Z,SC_RAM_VAL_ON
 	LD	HL,STR_VAL_RAMDRIVE_OFF
+	JR	SC_RAMVAL_LOOP
+SC_RAM_VAL_HIB:
+	LD	HL,STR_VAL_RAMDRIVE_HIB
 	JR	SC_RAMVAL_LOOP
 SC_RAM_VAL_ON:
 	LD	HL,STR_VAL_RAMDRIVE_ON
@@ -11984,6 +12045,360 @@ INIT_COM_ZERO:
 	LD	(HL),0
 	INC	HL
 	DJNZ	INIT_COM_ZERO
+	RET
+
+;==============================================================================
+; RAM Drive Hibernation & Restoration Subsystem
+; Dumps RomWBW MD0:0 physical banks (0x81..0x88, 256KB) to RAMDRV.IMG on startup
+; and restores them upon exit, unlocking 12 Far RAM banks for the editor buffer.
+;==============================================================================
+
+INIT_RAMDRV_FCB:
+	LD	HL,RAMDRV_FCB
+	LD	(HL),0			; Drive 0 = current default drive
+	INC	HL
+	LD	DE,STR_RAMDRV_FILENAME	; "RAMDRV  IMG" (11 bytes)
+	LD	B,11
+IRF_COPY:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	HL
+	INC	DE
+	DJNZ	IRF_COPY
+	LD	B,24
+IRF_ZERO:
+	LD	(HL),0
+	INC	HL
+	DJNZ	IRF_ZERO
+	RET
+
+; HIBERNATE_RAMDRIVE:
+; Saves physical banks 0x81..0x88 (256 KB) into RAMDRV.IMG on active drive.
+HIBERNATE_RAMDRIVE:
+	; If already hibernated, nothing to do
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	RET	NZ
+
+	; Safety Check 1: Prohibit hibernating if running from Drive A: (RAM drive)
+	LD	C,25			; BDOS Get Current Drive
+	CALL	BDOS_ENTRY
+	LD	(CURRENT_DEFAULT_DRIVE),A
+	OR	A			; Drive A: is 0
+	JP	Z,HIB_FAIL_DRIVE_A
+
+	; Safety Check 2: Pre-check DPB disk size (DSM >= 200 blocks)
+	LD	C,31			; BDOS Get DPB
+	CALL	BDOS_ENTRY		; HL = DPB address
+	; DSM is at offset 5 (little-endian word)
+	INC	HL
+	INC	HL
+	INC	HL
+	INC	HL
+	INC	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)			; DE = DSM
+	LD	A,D
+	OR	A
+	JR	NZ,HIB_SPACE_OK
+	LD	A,E
+	CP	200
+	JP	C,HIB_FAIL_TOO_SMALL
+
+HIB_SPACE_OK:
+	; Ensure CPM_USER_BANK is queried and known
+	PUSH	IX
+	LD	B,0F3H			; SYSGETBNK
+	RST	08H
+	POP	IX
+	LD	A,C
+	LD	(CPM_USER_BANK),A
+
+	; Check for orphaned RAMDRV.IMG from previous crash/power failure
+	CALL	INIT_RAMDRV_FCB
+	LD	DE,RAMDRV_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,HIB_NO_ORPHAN
+
+	; Orphan found! Restore it first to avoid losing data
+	LD	DE,STR_MSG_ORPHAN_FOUND
+	CALL	PRINT_STR
+	CALL	RESTORE_RAMDRIVE_BODY
+	JP	C,HIB_WRITE_ERR
+	LD	DE,STR_MSG_REST_DONE
+	CALL	PRINT_STR
+
+HIB_NO_ORPHAN:
+	; Delete any old RAMDRV.IMG file just in case
+	CALL	INIT_RAMDRV_FCB
+	LD	DE,RAMDRV_FCB
+	LD	C,19			; BDOS Delete File
+	CALL	BDOS_ENTRY
+
+	; Create new RAMDRV.IMG
+	CALL	INIT_RAMDRV_FCB
+	LD	DE,RAMDRV_FCB
+	LD	C,22			; BDOS Make File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JP	Z,HIB_CREATE_ERR
+
+	; Display Hibernating message
+	LD	DE,STR_MSG_HIBERNATING
+	CALL	PRINT_STR
+
+	; Set BDOS DMA buffer to CFG_IO_BUF
+	LD	DE,CFG_IO_BUF
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; Outer Loop: Bank 0x81 through 0x88 (8 banks)
+	LD	A,RAMDRV_START_BANK
+	LD	(HIB_CUR_BANK),A
+
+HIB_BANK_LOOP:
+	; Inner Loop: 256 sectors (offset 0x0000 to 0x7F80)
+	LD	HL,0
+	LD	(HIB_FAR_OFFSET),HL
+
+HIB_SECTOR_LOOP:
+	; Set up HBIOS Far copy parameters (Dest = CPM_USER_BANK, Src = HIB_CUR_BANK, Count = 128)
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(CPM_USER_BANK)
+	LD	D,A			; Dest Bank = CPM_USER_BANK
+	LD	A,(HIB_CUR_BANK)
+	LD	E,A			; Src Bank = HIB_CUR_BANK
+	LD	HL,128			; Byte count = 128
+	RST	08H
+	POP	IX
+
+	; Copy 128 bytes from Far RAM (HIB_CUR_BANK, HIB_FAR_OFFSET) into CFG_IO_BUF
+	LD	HL,(HIB_FAR_OFFSET)	; Src Addr = Far Offset
+	LD	DE,CFG_IO_BUF		; Dest Addr = Local Buffer
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	; Write sector to disk via BDOS 21 (Write Sequential)
+	LD	DE,RAMDRV_FCB
+	LD	C,21			; BDOS Write Sequential
+	CALL	BDOS_ENTRY
+	OR	A
+	JR	NZ,HIB_WRITE_ERR
+
+	; Advance HIB_FAR_OFFSET by 128 bytes
+	LD	HL,(HIB_FAR_OFFSET)
+	LD	DE,128
+	ADD	HL,DE
+	LD	(HIB_FAR_OFFSET),HL
+	LD	A,H
+	CP	080H			; Reached 0x8000 (32KB)?
+	JR	NZ,HIB_SECTOR_LOOP
+
+	; Advance to next bank
+	LD	A,(HIB_CUR_BANK)
+	INC	A
+	LD	(HIB_CUR_BANK),A
+	CP	RAMDRV_END_BANK + 1
+	JR	NZ,HIB_BANK_LOOP
+
+	; Close RAMDRV.IMG
+	LD	DE,RAMDRV_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,HIB_CREATE_ERR
+
+	; Reset DMA buffer to default
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; Mark as hibernated
+	LD	A,1
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+
+	; Print completion message
+	LD	DE,STR_MSG_HIB_DONE
+	CALL	PRINT_STR
+	RET
+
+HIB_FAIL_DRIVE_A:
+	LD	DE,STR_MSG_HIB_DRV_ERR
+	CALL	PRINT_STR
+	XOR	A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	RET
+
+HIB_FAIL_TOO_SMALL:
+	LD	DE,STR_MSG_HIB_TOO_SMALL
+	CALL	PRINT_STR
+	XOR	A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	RET
+
+HIB_WRITE_ERR:
+HIB_CREATE_ERR:
+	; Cleanup partial file and reset DMA
+	LD	DE,RAMDRV_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+	CALL	INIT_RAMDRV_FCB
+	LD	DE,RAMDRV_FCB
+	LD	C,19			; BDOS Delete File
+	CALL	BDOS_ENTRY
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+	XOR	A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	LD	(CFG_RAMDRIVE_FLAG),A	; Revert to protected mode
+	LD	DE,STR_MSG_HIB_ERR
+	CALL	PRINT_STR
+	RET
+
+; RESTORE_RAMDRIVE:
+; Restores physical banks 0x81..0x88 from RAMDRV.IMG if hibernated.
+RESTORE_RAMDRIVE:
+	; Only restore if currently marked as hibernated
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	CP	1
+	RET	NZ
+
+	; Display Restoring message
+	LD	DE,STR_MSG_RESTORING
+	CALL	PRINT_STR
+
+	CALL	RESTORE_RAMDRIVE_BODY
+	JR	C,REST_FAILED
+
+	; Successfully restored!
+	XOR	A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	LD	DE,STR_MSG_REST_DONE
+	CALL	PRINT_STR
+	RET
+
+REST_FAILED:
+	XOR	A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	LD	DE,STR_MSG_REST_ERR
+	CALL	PRINT_STR
+	RET
+
+; RESTORE_RAMDRIVE_BODY:
+; Reads RAMDRV.IMG from disk and writes sectors into Far RAM banks 0x81..0x88.
+; Deletes RAMDRV.IMG upon completion.
+; Output: Carry = 0 on success, Carry = 1 on failure.
+RESTORE_RAMDRIVE_BODY:
+	; Set BDOS DMA buffer to CFG_IO_BUF
+	LD	DE,CFG_IO_BUF
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; Open RAMDRV.IMG
+	CALL	INIT_RAMDRV_FCB
+	LD	DE,RAMDRV_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	Z,RRB_OPEN_ERR
+
+	; Ensure CR = 0
+	XOR	A
+	LD	(RAMDRV_FCB + 32),A
+
+	; Outer Loop: Bank 0x81 through 0x88
+	LD	A,RAMDRV_START_BANK
+	LD	(HIB_CUR_BANK),A
+
+RRB_BANK_LOOP:
+	; Inner Loop: 256 sectors
+	LD	HL,0
+	LD	(HIB_FAR_OFFSET),HL
+
+RRB_SECTOR_LOOP:
+	; Read 128 bytes from disk into CFG_IO_BUF
+	LD	DE,RAMDRV_FCB
+	LD	C,20			; BDOS Read Sequential
+	CALL	BDOS_ENTRY
+	OR	A
+	JR	NZ,RRB_READ_ERR
+
+	; Set up HBIOS Far copy parameters (Dest = HIB_CUR_BANK, Src = CPM_USER_BANK, Count = 128)
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(HIB_CUR_BANK)
+	LD	D,A			; Dest Bank = HIB_CUR_BANK
+	LD	A,(CPM_USER_BANK)
+	LD	E,A			; Src Bank = CPM_USER_BANK
+	LD	HL,128			; Byte count = 128
+	RST	08H
+	POP	IX
+
+	; Copy 128 bytes from CFG_IO_BUF into Far RAM (HIB_CUR_BANK, HIB_FAR_OFFSET)
+	LD	HL,CFG_IO_BUF		; Src Addr = Local Buffer
+	LD	DE,(HIB_FAR_OFFSET)	; Dest Addr = Far Offset
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	; Advance HIB_FAR_OFFSET by 128 bytes
+	LD	HL,(HIB_FAR_OFFSET)
+	LD	DE,128
+	ADD	HL,DE
+	LD	(HIB_FAR_OFFSET),HL
+	LD	A,H
+	CP	080H			; Reached 0x8000 (32KB)?
+	JR	NZ,RRB_SECTOR_LOOP
+
+	; Advance to next bank
+	LD	A,(HIB_CUR_BANK)
+	INC	A
+	LD	(HIB_CUR_BANK),A
+	CP	RAMDRV_END_BANK + 1
+	JR	NZ,RRB_BANK_LOOP
+
+	; Close RAMDRV.IMG
+	LD	DE,RAMDRV_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+
+	; Delete RAMDRV.IMG to free disk space
+	CALL	INIT_RAMDRV_FCB
+	LD	DE,RAMDRV_FCB
+	LD	C,19			; BDOS Delete File
+	CALL	BDOS_ENTRY
+
+	; Reset DMA buffer
+	LD	DE,DEFAULT_DMA
+	LD	C,26
+	CALL	BDOS_ENTRY
+
+	AND	A			; Carry = 0 (success)
+	RET
+
+RRB_READ_ERR:
+RRB_OPEN_ERR:
+	; Close if open
+	LD	DE,RAMDRV_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+
+	; Reset DMA buffer
+	LD	DE,DEFAULT_DMA
+	LD	C,26
+	CALL	BDOS_ENTRY
+
+	SCF				; Carry = 1 (error)
 	RET
 
 ;------------------------------------------------------------------------------
@@ -14276,7 +14691,8 @@ STR_CONFIG_HEADER:	DB	27,"[H"
 STR_CONFIG_CUR_MODE:	DB	"~     1. Screen Geometry : [$"
 STR_CONFIG_RAM_MODE:	DB	"~     2. RAM Drive Blocks: [$"
 STR_RAM_PROTECTED_LBL:	DB	"Protected (Preserve RAM Disk)]     ",13,10,"$"
-STR_RAM_ENABLED_LBL:	DB	"Enabled (Use for Max RAM)]        ",13,10,"$"
+STR_RAM_HIBERNATE_LBL:	DB	"Hibernate (Save/Restore RAMDRV.IMG)]",13,10,"$"
+STR_RAM_ENABLED_LBL:	DB	"Enabled (Use for Max RAM)]          ",13,10,"$"
 
 STR_CONFIG_STATUS_LBL:	DB	"~     3. Config Status   : [$"
 
@@ -14306,6 +14722,18 @@ STR_KEY_RAMD_NAME:	DB	"RAMD",0
 STR_KEY_RAMDRIVE_FULL:	DB	"RAMDRIVE=",0
 STR_VAL_RAMDRIVE_OFF:	DB	"OFF",13,10,0
 STR_VAL_RAMDRIVE_ON:	DB	"ON",13,10,0
+STR_VAL_RAMDRIVE_HIB:	DB	"HIBERNATE",13,10,0
+
+STR_RAMDRV_FILENAME:	DB	"RAMDRV  IMG"
+STR_MSG_HIBERNATING:	DB	13,10,"[SE] Hibernating RAM drive to RAMDRV.IMG... $"
+STR_MSG_HIB_DONE:	DB	"[Done: 256 KB preserved]",13,10,"$"
+STR_MSG_RESTORING:	DB	13,10,"[SE] Restoring RAM drive from RAMDRV.IMG... $"
+STR_MSG_REST_DONE:	DB	"[Done: RAM drive restored]",13,10,"$"
+STR_MSG_ORPHAN_FOUND:	DB	13,10,"[SE] Existing RAMDRV.IMG found! Restoring previous state... $"
+STR_MSG_HIB_DRV_ERR:	DB	13,10,"[SE] Active drive is RAM drive (A:). RAM drive protected.",13,10,"$"
+STR_MSG_HIB_TOO_SMALL:	DB	13,10,"[SE] Active drive has insufficient space (<256KB). RAM drive protected.",13,10,"$"
+STR_MSG_HIB_ERR:	DB	13,10,"[Error] Hibernation failed. RAM drive protected.",13,10,"$"
+STR_MSG_REST_ERR:	DB	13,10,"[Error] RAM drive restoration incomplete.",13,10,"$"
 
 STR_ABOUT_BODY:	DB	27,"[H"
 	DB	"~",13,10
@@ -14777,7 +15205,11 @@ CFG_IO_BUF:		DS	128		; 128-byte scratch buffer for SE.CFG I/O
 CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
 CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
-CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected (preserve RAM disk), 1=enabled (use for max RAM)
+CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
+RAMDRIVE_IS_HIBERNATED:	DB	0		; 0=not hibernated, 1=hibernated to RAMDRV.IMG
+HIB_CUR_BANK:		DB	0		; Current bank being dumped/restored (0x81..0x88)
+HIB_FAR_OFFSET:		DW	0		; Current Far RAM offset (0x0000..0x7F80)
+RAMDRV_FCB:		DS	36		; FCB for RAMDRV.IMG
 
 LOCAL_STACK_TOP:
 	DS	256

@@ -97,6 +97,8 @@ def boot_cpm(emu_bin, rom_file, img_file):
 def remove_cfg_from_image(cpmrm_bin, img_file):
     subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:RAMDRV.IMG"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, content_str):
     remove_cfg_from_image(cpmrm_bin, img_file)
@@ -256,11 +258,18 @@ def run_tests():
         assert b"120x40 (Modern Default)" in out, f"Toggle '1' failed: {out}"
         print("    [+] Toggled geometry to 120x40")
 
-        # Toggle RAM drive with '2' -> should switch to Enabled
+        # Toggle RAM drive with '2' -> should cycle to Hibernate
+        time.sleep(0.3)
+        os.write(master, b"2")
+        out = read_until(master, b"Hibernate (Save/Restore RAMDRV.IMG)", timeout=15.0)
+        assert b"Hibernate (Save/Restore RAMDRV.IMG)" in out, f"Toggle '2' (Hibernate) failed: {out}"
+        print("    [+] Toggled RAM drive blocks to Hibernate")
+
+        # Toggle RAM drive with '2' again -> should cycle to Enabled
         time.sleep(0.3)
         os.write(master, b"2")
         out = read_until(master, b"Enabled (Use for Max RAM)", timeout=10.0)
-        assert b"Enabled (Use for Max RAM)" in out, f"Toggle '2' failed: {out}"
+        assert b"Enabled (Use for Max RAM)" in out, f"Toggle '2' (Enabled) failed: {out}"
         print("    [+] Toggled RAM drive blocks to Enabled")
 
         # Save configuration with 's'
@@ -433,6 +442,102 @@ def run_tests():
         assert b"TEST     DAT" in out, f"RAM drive A: corrupted! TEST.DAT missing: {out}"
         print("    [+] Verified TEST.DAT on RAM drive A: is intact and uncorrupted!")
         print("    [+] Test 5 PASSED: RAM drive preservation verified.")
+    finally:
+        proc.terminate()
+        proc.wait(timeout=1.0)
+        os.close(master)
+
+    # -------------------------------------------------------------------------
+    # TEST 6: Integrated RAM Drive Hibernation & Restoration (Approach A)
+    # -------------------------------------------------------------------------
+    print("\n[*] TEST 6: RAM Drive Hibernation & Restoration (RAMDRIVE=HIBERNATE)...", flush=True)
+    # Configure C:SE.CFG with RAMDRIVE=HIBERNATE
+    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "SCREEN=80x24\r\nRAMDRIVE=HIBERNATE\r\n")
+    proc, master = boot_cpm(emu_bin, rom_file, img_file)
+
+    try:
+        # Switch to RAM drive A: and populate with test data
+        time.sleep(0.3)
+        os.write(master, b"a:\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"A>" in out
+
+        time.sleep(0.3)
+        os.write(master, b"save 4 ramtest.dat\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"A>" in out
+
+        time.sleep(0.3)
+        os.write(master, b"dir ramtest.dat\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"RAMTEST  DAT" in out, f"Failed creating ramtest.dat on A: {out}"
+        print("    [+] Created RAMTEST.DAT (4 sectors / 512 bytes) on RAM drive A:")
+
+        # Switch to C: where SE.COM and SE.CFG reside
+        time.sleep(0.3)
+        os.write(master, b"c:\r")
+        read_until(master, b"C>", timeout=10.0)
+
+        # Launch SE.COM - should trigger hibernation of A: into C:RAMDRV.IMG
+        time.sleep(0.3)
+        os.write(master, b"se\r")
+        out = read_until(master, b"80x24 (Classic Terminal)", timeout=180.0)
+        assert b"Hibernating RAM drive to RAMDRV.IMG" in out, f"Missing hibernation status message: {out}"
+        assert b"[Done: 256 KB preserved]" in out, f"Missing hibernation completion message: {out}"
+        print("    [+] Verified startup status messaging: [SE] Hibernating RAM drive to RAMDRV.IMG... [Done: 256 KB preserved]")
+
+        # Enter Configuration Screen ('c')
+        time.sleep(0.3)
+        os.write(master, b"c")
+        out = read_until(master, b"return to splash screen", timeout=10.0)
+        assert b"Hibernate (Save/Restore RAMDRV.IMG)" in out
+        assert b"Loaded from local drive (C:SE.CFG)" in out
+        print("    [+] Config screen verifies Hibernate mode active")
+
+        # Return to splash ('q') and enter editor ('e')
+        time.sleep(0.3)
+        os.write(master, b"q")
+        read_until(master, b"80x24 (Classic Terminal)", timeout=10.0)
+        time.sleep(0.3)
+        os.write(master, b"e")
+        out = read_until(master, b"Free: 384 KB", timeout=15.0)
+        assert b"Free: 384 KB" in out, f"Expected 384 KB buffer capacity in status bar: {out}"
+        print("    [+] Verified editor document buffer unlocked to 384 KB (all 12 Far banks active)")
+
+        # Type some text to dirty the buffer
+        time.sleep(0.3)
+        os.write(master, b"Testing RAM drive hibernation and restoration!\r")
+        time.sleep(0.3)
+
+        # Exit SE without saving: Ctrl+Q followed by 'n'
+        os.write(master, b"\x11")
+        read_until(master, b"Save changes?", timeout=5.0)
+        os.write(master, b"n")
+        out = read_until(master, b"C>", timeout=240.0)
+        assert b"C>" in out, f"Failed exiting to C>: {out}"
+        assert b"Restoring RAM drive from RAMDRV.IMG" in out, f"Missing restore message: {out}"
+        assert b"[Done: RAM drive restored]" in out, f"Missing restore completion message: {out}"
+        print("    [+] Verified exit status messaging: [SE] Restoring RAM drive from RAMDRV.IMG... [Done: RAM drive restored]")
+
+        # Verify C:RAMDRV.IMG was cleaned up
+        time.sleep(0.3)
+        os.write(master, b"dir ramdrv.img\r")
+        out = read_until(master, b"C>", timeout=10.0)
+        assert b"No file" in out or b"NOT FOUND" in out or b"RAMDRV" not in out, f"RAMDRV.IMG was not deleted: {out}"
+        print("    [+] Verified RAMDRV.IMG temporary snapshot was deleted from disk C:")
+
+        # Switch back to RAM drive A: and verify RAMTEST.DAT is completely intact
+        time.sleep(0.3)
+        os.write(master, b"a:\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"A>" in out
+
+        time.sleep(0.3)
+        os.write(master, b"dir ramtest.dat\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"RAMTEST  DAT" in out, f"RAM drive A: corrupted after restoration! {out}"
+        print("    [+] Verified RAMTEST.DAT on RAM drive A: is intact and uncorrupted!")
+        print("    [+] Test 6 PASSED: RAM drive hibernation & restoration fully verified.")
     finally:
         proc.terminate()
         proc.wait(timeout=1.0)
