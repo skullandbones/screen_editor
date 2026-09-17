@@ -89,8 +89,17 @@ START:
 	; Initialize Screen Geometry to Default (120x40)
 	CALL	SET_MODE_120X40
 
+	; Detect RomWBW RAM drive letter (0=A, 1=B, ..., 0xFF=none)
+	CALL	DETECT_RAMDRIVE_LETTER
+
+	; Check if filename was provided in FCB1 (populates WORK_FCB and HAS_FILE_ARG)
+	CALL	CHECK_COMMAND_LINE
+
 	; Load configuration from SE.CFG if present (local dir first, then program drive)
 	CALL	LOAD_CONFIG
+
+	; Safety check: Prevent hibernation or raw overwrite if target file or active drive is on RAM drive
+	CALL	VALIDATE_RAMDRIVE_SAFETY
 
 	; If RAM drive mode is HIBERNATE, dump RAM drive to RAMDRV.IMG before initializing buffer
 	LD	A,(CFG_RAMDRIVE_FLAG)
@@ -114,9 +123,6 @@ START:
 	LD	(IS_SPLASH_SCREEN),A
 	LD	(STATUS_OOM_FLAG),A
 	LD	(CONFIRM_ACTION),A
-
-	; Check if filename was provided in FCB1
-	CALL	CHECK_COMMAND_LINE
 
 	; Initialize directory drive from default disk or FCB
 	CALL	INIT_DIR_DRIVE
@@ -380,17 +386,32 @@ CTR_SET_HIB:
 	LD	(CFG_RAMDRIVE_FLAG),A
 	JR	CTR_APPLY
 CTR_SET_ENA:
+	; Before enabling raw overwrite, ensure active drive is not the RAM drive
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,CTR_DO_ENA
+	LD	B,A
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	CP	B
+	JR	Z,CTR_SET_PROT		; Active drive is RAM drive: skip Enabled, wrap to Protected!
+CTR_DO_ENA:
 	LD	A,RAMDRV_MODE_ENABLED
 	LD	(CFG_RAMDRIVE_FLAG),A
+	JR	CTR_APPLY
+
+CTR_SET_PROT:
+	XOR	A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	JR	CTR_APPLY
 CTR_APPLY:
 	CALL	BUFFER_INIT
 	CALL	SHOW_CONFIG_SCREEN
-	JR	CONFIG_LOOP
+	JP	CONFIG_LOOP
 
 CONFIG_DO_SAVE:
 	CALL	SAVE_CONFIG
 	CALL	SHOW_CONFIG_SCREEN
-	JR	CONFIG_LOOP
+	JP	CONFIG_LOOP
 
 DO_SPLASH_SAVE:
 	CALL	DO_SAVE_FILE_UI
@@ -1394,9 +1415,24 @@ SCS_80X24:
 	CALL	PRINT_STR
 
 SCS_RAM_MODE:
-	; Display RAM Drive Memory Blocks Option
-	LD	DE,STR_CONFIG_RAM_MODE
+	; Display RAM Drive Option
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,SCS_RAM_NO_LETTER
+	; Drive detected: print "~     2. RAM Drive (" followed by letter, then ":)  : [$"
+	LD	DE,STR_CONFIG_RAM_DRV_PRE
 	CALL	PRINT_STR
+	LD	A,(RAMDRIVE_DRIVE_CHAR)
+	CALL	PUTC
+	LD	DE,STR_CONFIG_RAM_DRV_POST
+	CALL	PRINT_STR
+	JR	SCS_RAM_VALUE
+
+SCS_RAM_NO_LETTER:
+	LD	DE,STR_CONFIG_RAM_NONE
+	CALL	PRINT_STR
+
+SCS_RAM_VALUE:
 	LD	A,(CFG_RAMDRIVE_FLAG)
 	CP	RAMDRV_MODE_HIBERNATE
 	JR	Z,SCS_RAM_HIB
@@ -12068,6 +12104,211 @@ INIT_COM_ZERO:
 ; and restores them upon exit, unlocking 12 Far RAM banks for the editor buffer.
 ;==============================================================================
 
+;------------------------------------------------------------------------------
+; DETECT_RAMDRIVE_LETTER:
+; Detects RomWBW CBIOS RAM drive letter dynamically by inspecting DRVMAP
+; and querying HBIOS BF_DIODEVICE (0x17) for unit MD0 (RAM disk, type 0, unit 0).
+; Output:
+;   A = 0-based drive index (0=A, 1=B, ..., 0xFF = none)
+;   RAMDRIVE_DRIVE_NUM = 0-based drive index or 0xFF
+;   RAMDRIVE_DRIVE_CHAR = drive letter ('A', 'B', ...) or '?'
+;   STR_MSG_HIB_DRV_CHAR and STR_MSG_HIB_FILE_CHAR updated with drive letter
+;   Carry = 0 if RAM drive detected, Carry = 1 if none / not RomWBW
+;------------------------------------------------------------------------------
+DETECT_RAMDRIVE_LETTER:
+	LD	A,0FFH
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	LD	A,'?'
+	LD	(RAMDRIVE_DRIVE_CHAR),A
+
+	; Check HBIOS presence
+	CALL	HBIOS_DETECT
+	JR	NZ,DRL_NOT_FOUND
+
+	; Check RomWBW CBIOS page zero stamp at 0x0040 ('W') and 0x0041 (~'W' = 0xA8)
+	LD	HL,0040H
+	LD	A,(HL)
+	CP	'W'
+	JR	NZ,DRL_NOT_FOUND
+	INC	HL
+	LD	A,(HL)
+	CP	0A8H			; ~'W'
+	JR	NZ,DRL_NOT_FOUND
+
+	; Word at 0x0044 is pointer to CBIOS extension (CBX)
+	LD	HL,(0044H)
+	; DRVMAPADR is at CBX + 2
+	INC	HL
+	INC	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)			; DE = DRVMAPADR
+	LD	A,D
+	OR	E
+	JR	Z,DRL_NOT_FOUND
+
+	; DRVCNT is at DRVMAPADR - 1
+	EX	DE,HL			; HL = DRVMAPADR
+	DEC	HL
+	LD	A,(HL)			; A = DRVCNT
+	INC	HL			; HL = DRVMAPADR
+	OR	A
+	JR	Z,DRL_NOT_FOUND
+	CP	17
+	JR	NC,DRL_NOT_FOUND
+
+	LD	B,A			; B = loop counter (DRVCNT)
+	LD	C,0			; C = CP/M drive index (0 = A:, 1 = B:, ...)
+
+DRL_LOOP:
+	LD	A,(HL)			; A = HBIOS Disk Unit (or 0xFF if unassigned)
+	INC	HL
+	INC	HL
+	INC	HL
+	INC	HL
+	CP	0FFH
+	JR	Z,DRL_NEXT
+
+	PUSH	BC
+	PUSH	HL
+	LD	C,A			; C = HBIOS Disk Unit
+	LD	B,17H			; BF_DIODEVICE (0x17)
+	PUSH	IX
+	RST	08H			; D = Device Type, E = Phys Unit, C = Attributes
+	POP	IX
+	LD	A,D
+	CP	00H			; DIODEV_MD (0x00)
+	JR	NZ,DRL_NOT_MD
+	LD	A,E
+	CP	00H			; Physical Unit 0 = MD0 (RAM disk)
+	JR	NZ,DRL_NOT_MD
+
+	; Match found!
+	POP	HL
+	POP	BC
+	LD	A,C			; A = CP/M drive index (0 = A:, 1 = B:, ...)
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	ADD	A,'A'
+	LD	(RAMDRIVE_DRIVE_CHAR),A
+	LD	(STR_MSG_HIB_DRV_CHAR),A
+	LD	(STR_MSG_HIB_FILE_CHAR),A
+	LD	A,C
+	OR	A			; Carry = 0
+	RET
+
+DRL_NOT_MD:
+	POP	HL
+	POP	BC
+
+DRL_NEXT:
+	INC	C
+	DJNZ	DRL_LOOP
+
+DRL_NOT_FOUND:
+	LD	A,0FFH
+	SCF
+	RET
+
+;------------------------------------------------------------------------------
+; VALIDATE_RAMDRIVE_SAFETY:
+; If CFG_RAMDRIVE_FLAG != 0 (Enabled or Hibernate):
+; Verifies that the RAM drive memory blocks can be safely repurposed.
+; Reverts to Protected mode (CFG_RAMDRIVE_FLAG = 0) if:
+;   1. Active default drive is the RAM drive, OR
+;   2. Target file to load is on the RAM drive.
+; Displays status message if reverting.
+;------------------------------------------------------------------------------
+VALIDATE_RAMDRIVE_SAFETY:
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	OR	A
+	RET	Z			; Already protected mode -> nothing to do
+
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	NZ,VRS_CHECK_ACTIVE
+	; No RAM drive detected! If in Hibernate mode, revert to protected
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	CP	RAMDRV_MODE_HIBERNATE
+	RET	NZ
+	XOR	A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	RET
+
+VRS_CHECK_ACTIVE:
+	LD	B,A			; B = RAM drive number (0-based)
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	CP	B
+	JR	Z,VRS_FAIL_ACTIVE
+
+	; Check if command-line target file is on RAM drive
+	LD	A,(HAS_FILE_ARG)
+	OR	A
+	RET	Z			; No file arg -> safe
+
+	LD	A,(WORK_FCB)
+	OR	A
+	JR	NZ,VRS_TARGET_EXP
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	JR	VRS_TARGET_CMP
+
+VRS_TARGET_EXP:
+	DEC	A			; 1->0 (A:), 2->1 (B:), etc.
+
+VRS_TARGET_CMP:
+	CP	B
+	JR	Z,VRS_FAIL_TARGET
+	RET
+
+VRS_FAIL_ACTIVE:
+	LD	DE,STR_MSG_HIB_DRV_ERR
+	CALL	PRINT_STR
+	CALL	DELAY_BRIEF
+	XOR	A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	RET
+
+VRS_FAIL_TARGET:
+	LD	DE,STR_MSG_HIB_FILE_ERR
+	CALL	PRINT_STR
+	CALL	DELAY_BRIEF
+	XOR	A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	RET
+
+;------------------------------------------------------------------------------
+; CHECK_FCB_IS_HIBERNATED:
+; Checks if WORK_FCB targets the currently hibernated RAM drive.
+; Returns:
+;   Carry = 1 if target drive is hibernated RAM drive
+;   Carry = 0 if target drive is safe to access
+;------------------------------------------------------------------------------
+CHECK_FCB_IS_HIBERNATED:
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	RET	Z			; Not hibernated -> NC
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,CFIH_SAFE		; No RAM drive -> NC
+	LD	B,A			; B = RAM drive number (0-based)
+	LD	A,(WORK_FCB)
+	OR	A
+	JR	NZ,CFIH_EXPLICIT
+	; Target drive is default drive
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	JR	CFIH_COMPARE
+CFIH_EXPLICIT:
+	DEC	A			; 1->0, 2->1, etc.
+CFIH_COMPARE:
+	CP	B
+	JR	NZ,CFIH_SAFE
+	SCF				; Carry = 1: conflict!
+	RET
+CFIH_SAFE:
+	OR	A			; Carry = 0: safe
+	RET
+
 INIT_RAMDRV_FCB:
 	LD	HL,RAMDRV_FCB
 	LD	(HL),0			; Drive 0 = current default drive
@@ -12095,14 +12336,34 @@ HIBERNATE_RAMDRIVE:
 	OR	A
 	RET	NZ
 
-	; Safety Check 1: Prohibit hibernating if running from Drive A: (RAM drive)
+	; Safety Check 1: Prohibit hibernating if running from RAM drive
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	RET	Z			; No RAM drive detected -> nothing to hibernate
+	LD	B,A			; B = RAM drive number (0-based)
 	LD	C,25			; BDOS Get Current Drive
 	CALL	BDOS_ENTRY
 	LD	(CURRENT_DEFAULT_DRIVE),A
-	OR	A			; Drive A: is 0
-	JP	Z,HIB_FAIL_DRIVE_A
+	CP	B
+	JP	Z,HIB_FAIL_RAMDRV_ACTIVE
 
-	; Safety Check 2: Pre-check DPB disk size (DSM >= 200 blocks)
+	; Safety Check 2: Prohibit hibernating if target file is on RAM drive
+	LD	A,(HAS_FILE_ARG)
+	OR	A
+	JR	Z,HIB_CHECK_SPACE
+	LD	A,(WORK_FCB)
+	OR	A
+	JR	NZ,HIB_TARGET_EXP
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	JR	HIB_TARGET_CMP
+HIB_TARGET_EXP:
+	DEC	A
+HIB_TARGET_CMP:
+	CP	B
+	JP	Z,HIB_FAIL_TARGET_ON_RAMDRV
+
+HIB_CHECK_SPACE:
+	; Safety Check 3: Pre-check DPB disk size (DSM >= 200 blocks)
 	LD	C,31			; BDOS Get DPB
 	CALL	BDOS_ENTRY		; HL = DPB address
 	; DSM is at offset 5 (little-endian word)
@@ -12243,9 +12504,19 @@ HIB_SECTOR_LOOP:
 	CALL	PRINT_STR
 	RET
 
-HIB_FAIL_DRIVE_A:
+HIB_FAIL_RAMDRV_ACTIVE:
 	LD	DE,STR_MSG_HIB_DRV_ERR
 	CALL	PRINT_STR
+	CALL	DELAY_BRIEF
+	XOR	A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	RET
+
+HIB_FAIL_TARGET_ON_RAMDRV:
+	LD	DE,STR_MSG_HIB_FILE_ERR
+	CALL	PRINT_STR
+	CALL	DELAY_BRIEF
 	XOR	A
 	LD	(RAMDRIVE_IS_HIBERNATED),A
 	LD	(CFG_RAMDRIVE_FLAG),A
@@ -12429,6 +12700,10 @@ LOAD_FILE:
 	LD	DE,DEFAULT_DMA
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
+
+	; Guard: if target drive is hibernated RAM drive, reject load
+	CALL	CHECK_FCB_IS_HIBERNATED
+	JP	C,LOAD_FILE_NOT_FOUND
 
 	; Zero FCB extent, s1, s2, rc, and record bytes
 	LD	HL,WORK_FCB+12
@@ -12921,6 +13196,24 @@ OPEN_RENDER:
 
 HANDLE_OPEN_DRIVE_SWITCH:
 	; A = new drive (1..16)
+	PUSH	AF
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	JR	Z,HODS_OK
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,HODS_OK
+	INC	A			; 1-based drive number
+	LD	B,A
+	POP	AF
+	PUSH	AF
+	CP	B
+	JR	NZ,HODS_OK
+	; Cannot switch to hibernated RAM drive!
+	POP	AF
+	JP	REFRESH_OPEN_DIR
+HODS_OK:
+	POP	AF
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_DIR_DRIVE_CHAR),A
@@ -13133,6 +13426,7 @@ DO_OVERWRITE_CONFIRMED:
 DO_ACTUAL_SAVE:
 	; Save the file from Far RAM to disk
 	CALL	SAVE_FILE
+	RET	C			; Save failed / target hibernated -> return
 
 	; Mark filename as known and saved
 	LD	A,1
@@ -13143,6 +13437,24 @@ DO_ACTUAL_SAVE:
 
 HANDLE_SAVE_DRIVE_SWITCH:
 	; A = new drive (1..16)
+	PUSH	AF
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	JR	Z,HSDS_OK
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,HSDS_OK
+	INC	A			; 1-based drive number
+	LD	B,A
+	POP	AF
+	PUSH	AF
+	CP	B
+	JR	NZ,HSDS_OK
+	; Cannot switch to hibernated RAM drive!
+	POP	AF
+	JP	REFRESH_SAVE_DIR
+HSDS_OK:
+	POP	AF
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_SAVE_DRIVE_CHAR),A
@@ -13447,6 +13759,19 @@ COLLECT_DIR_ENTRIES:
 	XOR	A
 	LD	(DIR_FILE_COUNT),A
 
+	; Guard: if RAM drive is hibernated and CURRENT_DIR_DRIVE matches, return empty directory
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	JR	Z,CDE_DRIVE_OK
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,CDE_DRIVE_OK
+	INC	A
+	LD	B,A
+	LD	A,(CURRENT_DIR_DRIVE)
+	CP	B
+	RET	Z			; Hibernated drive -> return empty
+CDE_DRIVE_OK:
 	; Set DMA address to RAW_SECTOR_BUF (128 bytes)
 	LD	DE,RAW_SECTOR_BUF
 	LD	C,26			; BDOS Set DMA
@@ -14441,6 +14766,13 @@ STR_COPY_LOOP:
 ; File Saving: Streams lines directly from Far RAM banks to disk
 ;------------------------------------------------------------------------------
 SAVE_FILE:
+	; Guard: if target drive is hibernated RAM drive, reject save
+	CALL	CHECK_FCB_IS_HIBERNATED
+	JR	NC,SAVE_DRIVE_OK
+	SCF
+	RET
+
+SAVE_DRIVE_OK:
 	; Flush local cache dirty lines first
 	CALL	FLUSH_DIRTY_CACHE
 
@@ -14479,7 +14811,11 @@ DO_SAVE_EXISTING:
 	LD	C,22			; BDOS Make File
 	CALL	BDOS_ENTRY
 	CP	0FFH
-	RET	Z			; Error creating file
+	JR	NZ,MAKE_FILE_OK
+	SCF
+	RET
+
+MAKE_FILE_OK:
 
 	; Prepare DMA write pointer
 	LD	DE,DEFAULT_DMA
@@ -14569,6 +14905,12 @@ CLOSE_OUTPUT_FILE:
 	LD	DE,WORK_FCB
 	LD	C,16			; BDOS Close File
 	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	NZ,CLOSE_FILE_OK
+	SCF
+	RET
+CLOSE_FILE_OK:
+	OR	A			; Carry = 0 (success)
 	RET
 
 WRITE_BYTE_TO_DMA:
@@ -14704,7 +15046,9 @@ STR_CONFIG_HEADER:	DB	27,"[H"
 	DB	"$"
 
 STR_CONFIG_CUR_MODE:	DB	"~     1. Screen Geometry : [$"
-STR_CONFIG_RAM_MODE:	DB	"~     2. RAM Drive Blocks: [$"
+STR_CONFIG_RAM_DRV_PRE:	DB	"~     2. RAM Drive (", "$"
+STR_CONFIG_RAM_DRV_POST:DB	":)  : [$"
+STR_CONFIG_RAM_NONE:	DB	"~     2. RAM Drive       : [$"
 STR_RAM_PROTECTED_LBL:	DB	"Protected (Preserve RAM Disk)]     ",13,10,"$"
 STR_RAM_HIBERNATE_LBL:	DB	"Hibernate (Save/Restore RAMDRV.IMG)]",13,10,"$"
 STR_RAM_ENABLED_LBL:	DB	"Enabled (Use for Max RAM)]          ",13,10,"$"
@@ -14745,7 +15089,10 @@ STR_MSG_HIB_DONE:	DB	"[Done: 256 KB preserved]",13,10,"$"
 STR_MSG_RESTORING:	DB	13,10,"[SE] Restoring RAM drive from RAMDRV.IMG... $"
 STR_MSG_REST_DONE:	DB	"[Done: RAM drive restored]",13,10,"$"
 STR_MSG_ORPHAN_FOUND:	DB	13,10,"[SE] Existing RAMDRV.IMG found! Restoring previous state... $"
-STR_MSG_HIB_DRV_ERR:	DB	13,10,"[SE] Active drive is RAM drive (A:). RAM drive protected.",13,10,"$"
+STR_MSG_HIB_DRV_ERR:	DB	13,10,"[SE] Active drive is RAM drive ("
+STR_MSG_HIB_DRV_CHAR:	DB	"A:). RAM drive protected.",13,10,"$"
+STR_MSG_HIB_FILE_ERR:	DB	13,10,"[SE] Target file is on RAM drive ("
+STR_MSG_HIB_FILE_CHAR:	DB	"A:). RAM drive protected.",13,10,"$"
 STR_MSG_HIB_TOO_SMALL:	DB	13,10,"[SE] Active drive has insufficient space (<256KB). RAM drive protected.",13,10,"$"
 STR_MSG_HIB_ERR:	DB	13,10,"[Error] Hibernation failed. RAM drive protected.",13,10,"$"
 STR_MSG_REST_ERR:	DB	13,10,"[Error] RAM drive restoration incomplete.",13,10,"$"
@@ -15222,6 +15569,8 @@ CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
 CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
 RAMDRIVE_IS_HIBERNATED:	DB	0		; 0=not hibernated, 1=hibernated to RAMDRV.IMG
+RAMDRIVE_DRIVE_NUM:	DB	0FFH		; Detected RomWBW RAM drive (0=A, 1=B, ..., 0xFF=none)
+RAMDRIVE_DRIVE_CHAR:	DB	'?'		; Character representation ('A', 'B', etc. or '?')
 HIB_CUR_BANK:		DB	0		; Current bank being dumped/restored (0x81..0x88)
 HIB_FAR_OFFSET:		DW	0		; Current Far RAM offset (0x0000..0x7F80)
 RAMDRV_FCB:		DS	36		; FCB for RAMDRV.IMG

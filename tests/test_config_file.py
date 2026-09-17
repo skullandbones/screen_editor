@@ -157,7 +157,7 @@ def run_tests():
         out = read_until(master, b"return to splash screen", timeout=15.0)
         assert b"SE - Screen Editor Configuration" in out, "Failed to enter Config Screen"
         assert b"120x40 (Modern Default)" in out, "Config Screen wrong geometry"
-        assert b"RAM Drive Blocks: [Protected (Preserve RAM Disk)]" in out, "Default RAM drive blocks not Protected"
+        assert b"RAM Drive (A:)" in out and b"[Protected (Preserve RAM Disk)]" in out, "Default RAM drive blocks not Protected"
         assert b"Default (No SE.CFG found)" in out, "Config Screen wrong status"
         assert b"type   2                toggle RAM drive memory blocks" in out, "Missing toggle command 2"
         print("    [+] Config screen displays 120x40, Protected RAM drive, and Default status")
@@ -205,7 +205,7 @@ def run_tests():
         os.write(master, b"c")
         out = read_until(master, b"return to splash screen", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out, "Config Screen wrong geometry"
-        assert b"RAM Drive Blocks: [Enabled (Use for Max RAM)]" in out, "Config Screen did not reflect RAMDRIVE=ON"
+        assert b"RAM Drive (A:)" in out and b"[Enabled (Use for Max RAM)]" in out, "Config Screen did not reflect RAMDRIVE=ON"
         assert b"Loaded from local drive (C:SE.CFG)" in out, "Config Screen wrong status"
         print("    [+] Config screen displays 80x24 geometry, Enabled RAM drive, and Loaded status")
 
@@ -249,7 +249,7 @@ def run_tests():
         os.write(master, b"c")
         out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out
-        assert b"RAM Drive Blocks: [Protected (Preserve RAM Disk)]" in out
+        assert b"RAM Drive (A:)" in out and b"[Protected (Preserve RAM Disk)]" in out
 
         # Toggle geometry with '1' -> should switch to 120x40
         time.sleep(0.3)
@@ -310,7 +310,7 @@ def run_tests():
         os.write(master, b"c")
         out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
         assert b"120x40 (Modern Default)" in out
-        assert b"RAM Drive Blocks: [Enabled (Use for Max RAM)]" in out
+        assert b"RAM Drive (A:)" in out and b"[Enabled (Use for Max RAM)]" in out
         assert b"Loaded from local drive (C:SE.CFG)" in out
         time.sleep(0.2)
         os.write(master, b"q")
@@ -538,6 +538,115 @@ def run_tests():
         assert b"RAMTEST  DAT" in out, f"RAM drive A: corrupted after restoration! {out}"
         print("    [+] Verified RAMTEST.DAT on RAM drive A: is intact and uncorrupted!")
         print("    [+] Test 6 PASSED: RAM drive hibernation & restoration fully verified.")
+    finally:
+        proc.terminate()
+        proc.wait(timeout=1.0)
+        os.close(master)
+
+    # -------------------------------------------------------------------------
+    # TEST 7: Dynamic RAM Drive Letter Detection & Target File Protection (Drive B:)
+    # -------------------------------------------------------------------------
+    print("\n[*] TEST 7: Dynamic RAM Drive Letter Detection & Target Protection (Drive B:)...", flush=True)
+    # Configure C:SE.CFG with RAMDRIVE=HIBERNATE
+    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "SCREEN=80x24\r\nRAMDRIVE=HIBERNATE\r\n")
+    proc, master = boot_cpm(emu_bin, rom_file, img_file)
+
+    try:
+        # Re-assign drives so B: is the RAM drive (swap A: and B:)
+        time.sleep(0.4)
+        os.write(master, b"assign a:=b:\r")
+        out = read_until(master, b"B>", timeout=15.0)
+
+        # Switch to RAM drive B: and create a test file
+        time.sleep(0.3)
+        os.write(master, b"b:\r")
+        out = read_until(master, b"B>", timeout=10.0)
+        assert b"B>" in out, f"Failed switching to B>: {out}"
+
+        time.sleep(0.3)
+        os.write(master, b"save 3 ramfile.txt\r")
+        out = read_until(master, b"B>", timeout=10.0)
+        assert b"B>" in out
+
+        time.sleep(0.3)
+        os.write(master, b"dir ramfile.txt\r")
+        out = read_until(master, b"B>", timeout=10.0)
+        assert b"RAMFILE  TXT" in out, f"Failed creating ramfile.txt on B: {out}"
+        print("    [+] Successfully assigned RAM drive to B: and created RAMFILE.TXT")
+
+        # Switch to C: where SE.COM and SE.CFG (RAMDRIVE=HIBERNATE) reside
+        time.sleep(0.3)
+        os.write(master, b"c:\r")
+        read_until(master, b"C>", timeout=10.0)
+
+        # Launch SE targeting file on RAM drive: SE B:RAMFILE.TXT
+        time.sleep(0.3)
+        os.write(master, b"se b:ramfile.txt\r")
+        out = read_until(master, b"Target file is on RAM drive (B:). RAM drive protected.", timeout=20.0)
+        assert b"Target file is on RAM drive (B:). RAM drive protected." in out, f"Missing target protection message: {out}"
+        print("    [+] Verified dynamic detection & protection: [SE] Target file is on RAM drive (B:). RAM drive protected.")
+
+        # Allow editor to finish loading and rendering
+        out = read_until(master, b"Col 0", timeout=25.0)
+        assert b"Col 0" in out, f"Failed entering editor mode for B:RAMFILE.TXT: {out}"
+        assert b"B:RAMFILE.TXT" in out, f"Expected B:RAMFILE.TXT in status bar: {out}"
+        print("    [+] Verified document B:RAMFILE.TXT loaded successfully in editor")
+
+        # Type some text to verify buffer editing in protected mode
+        time.sleep(0.3)
+        os.write(master, b"Testing RAM drive B: protection!\r")
+        time.sleep(0.3)
+
+        # Exit editor without saving: Ctrl+Q followed by 'n'
+        os.write(master, b"\x11")
+        read_until(master, b"Save changes?", timeout=5.0)
+        os.write(master, b"n")
+        out = read_until(master, b"C>", timeout=15.0)
+        assert b"C>" in out, f"Failed exiting SE to C>: {out}"
+
+        # Verify RAMDRV.IMG was NOT created on C:
+        time.sleep(0.3)
+        os.write(master, b"dir ramdrv.img\r")
+        out = read_until(master, b"C>", timeout=10.0)
+        assert b"No file" in out or b"NOT FOUND" in out or b"RAMDRV" not in out, f"RAMDRV.IMG was unexpectedly created: {out}"
+        print("    [+] Verified RAMDRV.IMG was not created on disk C:")
+
+        # Now launch SE without arguments to inspect Configuration Screen with B: as RAM drive
+        time.sleep(0.3)
+        os.write(master, b"se\r")
+        out = read_until(master, b"80x24 (Classic Terminal)", timeout=180.0)
+        assert b"Hibernating RAM drive to RAMDRV.IMG" in out, f"Expected hibernation of B:: {out}"
+        time.sleep(0.3)
+        os.write(master, b"c")
+        out = read_until(master, b"return to splash screen", timeout=10.0)
+        assert b"RAM Drive (B:)" in out, f"Config screen did not display detected RAM drive B:: {out}"
+        assert b"Hibernate (Save/Restore RAMDRV.IMG)" in out, f"Config screen wrong mode: {out}"
+        print("    [+] Config screen dynamically displays RAM Drive (B:) with Hibernate mode")
+
+        # Exit SE - should restore RAM drive B: from C:RAMDRV.IMG
+        time.sleep(0.2)
+        os.write(master, b"q")
+        read_until(master, b"80x24 (Classic Terminal)", timeout=10.0)
+        time.sleep(0.2)
+        os.write(master, b"q")
+        out = read_until(master, b"C>", timeout=240.0)
+        assert b"C>" in out
+        assert b"Restoring RAM drive from RAMDRV.IMG" in out
+        assert b"[Done: RAM drive restored]" in out
+        print("    [+] Verified exit restoration of RAM drive B: from RAMDRV.IMG")
+
+        # Switch back to RAM drive B: and verify RAMFILE.TXT is completely intact
+        time.sleep(0.3)
+        os.write(master, b"b:\r")
+        out = read_until(master, b"B>", timeout=10.0)
+        assert b"B>" in out
+
+        time.sleep(0.3)
+        os.write(master, b"dir ramfile.txt\r")
+        out = read_until(master, b"B>", timeout=10.0)
+        assert b"RAMFILE  TXT" in out, f"RAM drive B: file corrupted/missing! {out}"
+        print("    [+] Verified RAMFILE.TXT on RAM drive B: is intact and uncorrupted!")
+        print("    [+] Test 7 PASSED: Dynamic drive letter B: detection and protection fully verified.")
     finally:
         proc.terminate()
         proc.wait(timeout=1.0)
