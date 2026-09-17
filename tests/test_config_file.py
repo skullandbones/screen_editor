@@ -4,19 +4,23 @@ Test Suite for SE.CFG Configuration File & Configuration Screen.
 Verifies:
   1. Default Startup (No SE.CFG):
      - Splash screen shows 120x40.
-     - Configuration screen shows [120x40 (Modern Default)] and [Default (No SE.CFG found)].
+     - Configuration screen shows [120x40 (Modern Default)],
+       [Protected (Preserve RAM Disk)], and [Default (No SE.CFG found)].
   2. Local Configuration Loading (SE.CFG on current drive):
-     - SE.CFG with SCREEN=80x24 automatically configures 80x24 geometry at startup.
-     - Configuration screen displays [80x24 (Classic Terminal)] and [Loaded from local drive (C:SE.CFG)].
+     - SE.CFG with SCREEN=80x24 and RAMDRIVE=ON automatically configures settings.
+     - Configuration screen displays [80x24 (Classic Terminal)],
+       [Enabled (Use for Max RAM)], and [Loaded from local drive (C:SE.CFG)].
   3. Interactive Configuration Screen Toggle & Save:
-     - Toggle geometry via '1' (80x24 -> 120x40).
-     - Save via 's' persists to local SE.CFG.
-     - Configuration status updates to [Saved to local drive (C:SE.CFG)].
-     - Return to splash shows [120x40 (Modern Default)].
+     - Toggle geometry via '1' (80x24 <-> 120x40).
+     - Toggle RAM drive memory blocks via '2' (Protected <-> Enabled).
+     - Save via 's' persists both SCREEN and RAMDRIVE to local SE.CFG.
      - Re-launching SE.COM loads the newly saved SE.CFG automatically.
   4. Program Drive Fallback:
-     - Running C:SE from Drive B: when B: has no SE.CFG falls back to C:SE.CFG.
+     - Running C:SE from Drive D: when D: has no SE.CFG falls back to C:SE.CFG.
      - Configuration screen shows [Loaded from program drive (C:SE.CFG)].
+  5. RAM Drive Data Preservation:
+     - Files on RAM drive B: (RomWBW MD0:0) remain uncorrupted and intact
+       when SE.COM is launched, modified, and exited in protected mode.
 """
 
 import os
@@ -148,11 +152,13 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"Default (No SE.CFG found)", timeout=15.0)
+        out = read_until(master, b"return to splash screen", timeout=15.0)
         assert b"SE - Screen Editor Configuration" in out, "Failed to enter Config Screen"
         assert b"120x40 (Modern Default)" in out, "Config Screen wrong geometry"
+        assert b"RAM Drive Blocks: [Protected (Preserve RAM Disk)]" in out, "Default RAM drive blocks not Protected"
         assert b"Default (No SE.CFG found)" in out, "Config Screen wrong status"
-        print("    [+] Config screen displays 120x40 geometry and Default (No SE.CFG found) status")
+        assert b"type   2                toggle RAM drive memory blocks" in out, "Missing toggle command 2"
+        print("    [+] Config screen displays 120x40, Protected RAM drive, and Default status")
 
         # Exit to splash screen ('q')
         time.sleep(0.2)
@@ -172,10 +178,10 @@ def run_tests():
         os.close(master)
 
     # -------------------------------------------------------------------------
-    # TEST 2: Local SE.CFG Loading (SCREEN=80x24)
+    # TEST 2: Local SE.CFG Loading (SCREEN=80x24 & RAMDRIVE=ON)
     # -------------------------------------------------------------------------
-    print("\n[*] TEST 2: Local SE.CFG Loading (SCREEN=80x24)...", flush=True)
-    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "# Test Config\r\nSCREEN=80x24\r\n")
+    print("\n[*] TEST 2: Local SE.CFG Loading (SCREEN=80x24 & RAMDRIVE=ON)...", flush=True)
+    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "# Test Config\r\nSCREEN=80x24\r\nRAMDRIVE=ON\r\n")
     proc, master = boot_cpm(emu_bin, rom_file, img_file)
 
     try:
@@ -195,10 +201,11 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
+        out = read_until(master, b"return to splash screen", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out, "Config Screen wrong geometry"
+        assert b"RAM Drive Blocks: [Enabled (Use for Max RAM)]" in out, "Config Screen did not reflect RAMDRIVE=ON"
         assert b"Loaded from local drive (C:SE.CFG)" in out, "Config Screen wrong status"
-        print("    [+] Config screen displays 80x24 geometry and Loaded from local drive (C:SE.CFG)")
+        print("    [+] Config screen displays 80x24 geometry, Enabled RAM drive, and Loaded status")
 
         # Exit SE
         time.sleep(0.2)
@@ -218,8 +225,8 @@ def run_tests():
     # TEST 3: Interactive Toggle & Save to SE.CFG
     # -------------------------------------------------------------------------
     print("\n[*] TEST 3: Interactive Toggle & Save to SE.CFG...", flush=True)
-    # Start with SE.CFG containing 80x24
-    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "SCREEN=80x24\r\n")
+    # Start with SE.CFG containing 80x24 and RAMDRIVE=OFF
+    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "SCREEN=80x24\r\nRAMDRIVE=OFF\r\n")
     proc, master = boot_cpm(emu_bin, rom_file, img_file)
 
     try:
@@ -240,6 +247,7 @@ def run_tests():
         os.write(master, b"c")
         out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out
+        assert b"RAM Drive Blocks: [Protected (Preserve RAM Disk)]" in out
 
         # Toggle geometry with '1' -> should switch to 120x40
         time.sleep(0.3)
@@ -247,6 +255,13 @@ def run_tests():
         out = read_until(master, b"120x40 (Modern Default)", timeout=10.0)
         assert b"120x40 (Modern Default)" in out, f"Toggle '1' failed: {out}"
         print("    [+] Toggled geometry to 120x40")
+
+        # Toggle RAM drive with '2' -> should switch to Enabled
+        time.sleep(0.3)
+        os.write(master, b"2")
+        out = read_until(master, b"Enabled (Use for Max RAM)", timeout=10.0)
+        assert b"Enabled (Use for Max RAM)" in out, f"Toggle '2' failed: {out}"
+        print("    [+] Toggled RAM drive blocks to Enabled")
 
         # Save configuration with 's'
         time.sleep(0.3)
@@ -273,8 +288,9 @@ def run_tests():
         assert cfg_bytes is not None, "SE.CFG not found on disk image"
         cfg_text = cfg_bytes.decode("latin1", errors="replace")
         assert "SCREEN=120x40" in cfg_text, f"Unexpected SE.CFG content: {cfg_text}"
+        assert "RAMDRIVE=ON" in cfg_text, f"Unexpected SE.CFG RAMDRIVE content: {cfg_text}"
         assert "# SE.CFG - Screen Editor Configuration" in cfg_text, "Missing header comment"
-        print("    [+] Verified SE.CFG file on disk contains valid header and SCREEN=120x40")
+        print("    [+] Verified SE.CFG file contains SCREEN=120x40 and RAMDRIVE=ON")
 
         # Re-launch SE to verify persistent load
         time.sleep(0.4)
@@ -285,6 +301,7 @@ def run_tests():
         os.write(master, b"c")
         out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
         assert b"120x40 (Modern Default)" in out
+        assert b"RAM Drive Blocks: [Enabled (Use for Max RAM)]" in out
         assert b"Loaded from local drive (C:SE.CFG)" in out
         time.sleep(0.2)
         os.write(master, b"q")
@@ -349,6 +366,73 @@ def run_tests():
         out = read_until(master, b"D>", timeout=15.0)
         assert b"D>" in out, f"Failed exiting to D>: {out}"
         print("    [+] Test 4 PASSED: Program drive fallback verified.")
+    finally:
+        proc.terminate()
+        proc.wait(timeout=1.0)
+        os.close(master)
+
+    # -------------------------------------------------------------------------
+    # TEST 5: RAM Drive Data Preservation with RAMDRIVE=OFF (Protected Mode)
+    # -------------------------------------------------------------------------
+    print("\n[*] TEST 5: RAM Drive Preservation with RAMDRIVE=OFF...", flush=True)
+    remove_cfg_from_image(cpmrm_bin, img_file)
+    proc, master = boot_cpm(emu_bin, rom_file, img_file)
+
+    try:
+        # Switch to RAM drive A: (RomWBW MD0:0)
+        time.sleep(0.3)
+        os.write(master, b"a:\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"A>" in out, f"Failed switching to RAM drive A>: {out}"
+
+        # Create a test file on RAM drive A:
+        time.sleep(0.3)
+        os.write(master, b"save 2 test.dat\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"A>" in out
+
+        # Verify test.dat is on A:
+        time.sleep(0.3)
+        os.write(master, b"dir test.dat\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"TEST     DAT" in out, f"Failed creating test.dat on A: {out}"
+        print("    [+] Created TEST.DAT on RAM drive A:")
+
+        # Switch to C: and launch SE (default RAMDRIVE=OFF)
+        time.sleep(0.3)
+        os.write(master, b"c:\r")
+        read_until(master, b"C>", timeout=10.0)
+        time.sleep(0.3)
+        os.write(master, b"se\r")
+        read_until(master, b"120x40 (Modern Default)", timeout=25.0)
+
+        # Enter editor, type some text, then exit
+        time.sleep(0.3)
+        os.write(master, b"e")
+        read_until(master, b"Col 0", timeout=15.0)
+        time.sleep(0.3)
+        os.write(master, b"Protecting RAM Drive A: from corruption\r")
+        time.sleep(0.3)
+        # Exit without saving: Ctrl+Q followed by 'n'
+        os.write(master, b"\x11")
+        read_until(master, b"Save changes?", timeout=5.0)
+        os.write(master, b"n")
+        out = read_until(master, b"C>", timeout=15.0)
+        assert b"C>" in out, f"Failed exiting SE to C>: {out}"
+        print("    [+] Ran SE.COM, edited document buffer, and exited cleanly")
+
+        # Switch back to RAM drive A: and verify TEST.DAT is STILL intact
+        time.sleep(0.3)
+        os.write(master, b"a:\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"A>" in out
+
+        time.sleep(0.3)
+        os.write(master, b"dir test.dat\r")
+        out = read_until(master, b"A>", timeout=10.0)
+        assert b"TEST     DAT" in out, f"RAM drive A: corrupted! TEST.DAT missing: {out}"
+        print("    [+] Verified TEST.DAT on RAM drive A: is intact and uncorrupted!")
+        print("    [+] Test 5 PASSED: RAM drive preservation verified.")
     finally:
         proc.terminate()
         proc.wait(timeout=1.0)

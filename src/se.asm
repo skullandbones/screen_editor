@@ -319,6 +319,10 @@ CONFIG_NOT_ESC:
 	CP	'1'
 	JR	Z,CONFIG_TOGGLE_MODE
 
+	; Option: '2' -> Toggle RAM Drive Memory Blocks
+	CP	'2'
+	JR	Z,CONFIG_TOGGLE_RAMDRIVE
+
 	; Option: 'S' or 's' -> Save Configuration to local SE.CFG
 	CP	's'
 	JR	Z,CONFIG_DO_SAVE
@@ -344,6 +348,14 @@ CONFIG_TOGGLE_MODE:
 CONFIG_SET_80:
 	CALL	SET_MODE_80X24
 CONFIG_REDRAW:
+	CALL	SHOW_CONFIG_SCREEN
+	JR	CONFIG_LOOP
+
+CONFIG_TOGGLE_RAMDRIVE:
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	XOR	1
+	LD	(CFG_RAMDRIVE_FLAG),A
+	CALL	BUFFER_INIT
 	CALL	SHOW_CONFIG_SCREEN
 	JR	CONFIG_LOOP
 
@@ -1326,7 +1338,7 @@ ABOUT_TILDE_DONE:
 ; Configuration Screen Renderer
 ; Displays active screen geometry, config file status, and adjustment commands
 ;------------------------------------------------------------------------------
-CONFIG_LINES	EQU	11
+CONFIG_LINES	EQU	13
 
 SHOW_CONFIG_SCREEN:
 	LD	A,1
@@ -1346,9 +1358,23 @@ SHOW_CONFIG_SCREEN:
 	JR	NZ,SCS_80X24
 	LD	DE,STR_MODE_120X40_LBL
 	CALL	PRINT_STR
-	JR	SCS_STATUS
+	JR	SCS_RAM_MODE
 SCS_80X24:
 	LD	DE,STR_MODE_80X24_LBL
+	CALL	PRINT_STR
+
+SCS_RAM_MODE:
+	; Display RAM Drive Memory Blocks Option
+	LD	DE,STR_CONFIG_RAM_MODE
+	CALL	PRINT_STR
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	OR	A
+	JR	NZ,SCS_RAM_ENABLED
+	LD	DE,STR_RAM_PROTECTED_LBL
+	CALL	PRINT_STR
+	JR	SCS_STATUS
+SCS_RAM_ENABLED:
+	LD	DE,STR_RAM_ENABLED_LBL
 	CALL	PRINT_STR
 
 SCS_STATUS:
@@ -5756,6 +5782,41 @@ INIT_FAR_RAM_BANKS:
 	LD	D,080H
 IFRB_GOT_BIOS_BANK:
 
+	; Check if RAM drive memory blocks should be used or protected
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	OR	A
+	JR	NZ,IFRB_FLOOR_SET	; If 1, use D = 0x80 (allow RAM drive blocks)
+
+	; Protected mode (CFG_RAMDRIVE_FLAG == 0):
+	; Query App Banks (SYSGET 0xF5) to find lowest safe App bank (BID_APP0)
+	; Returns: H = First App Bank ID (e.g. 0x89), L = App Bank count (e.g. 3)
+	PUSH	IX
+	LD	B,0F8H
+	LD	C,0F5H			; BF_SYSGET_APPBNKS
+	RST	08H
+	POP	IX
+	OR	A			; A = 0 on success
+	JR	NZ,IFRB_NO_APP_BANKS
+	LD	A,H
+	CP	0FFH
+	JR	Z,IFRB_NO_APP_BANKS
+	LD	A,L
+	OR	A
+	JR	Z,IFRB_NO_APP_BANKS
+
+	; Safe floor is BID_APP0 - 1 (e.g. 0x89 - 1 = 0x88)
+	; Downward allocation stops when bank reaches floor, protecting 0x81..0x88
+	DEC	H
+	LD	D,H
+	JR	IFRB_FLOOR_SET
+
+IFRB_NO_APP_BANKS:
+	; No application banks reported; floor = CPM_USER_BANK - 1 (safe fallback: 0 ext banks)
+	LD	A,(CPM_USER_BANK)
+	DEC	A
+	LD	D,A
+
+IFRB_FLOOR_SET:
 	; 4. Allocate LINE_TABLE_BANK: first available bank below CPM_USER_BANK
 	LD	A,(CPM_USER_BANK)
 	LD	C,A			; C = CPM_USER_BANK (e.g. 0x8E)
@@ -11464,42 +11525,11 @@ PCB_NOT_END:
 	JR	Z,PCB_SKIP_LINE
 	CP	';'
 	JR	Z,PCB_SKIP_LINE
-
-	; Check for "SCREEN"
-	CALL	MATCH_KEY_SCREEN	; Returns Carry = 0 if matched, HL advanced past '=' and spaces
-	JR	NC,PCB_SCREEN_VAL
-	JR	PCB_SKIP_LINE
-
-PCB_SCREEN_VAL:
-	; HL now points to value after '='
-	; Check if starts with "80"
-	LD	A,(HL)
-	CP	'8'
-	JR	NZ,PCB_CHECK_120
-	INC	HL
-	LD	A,(HL)
-	CP	'0'
-	JR	NZ,PCB_SKIP_LINE
-	CALL	SET_MODE_80X24
-	JR	PCB_SKIP_LINE
-
-PCB_CHECK_120:
-	CP	'1'
-	JR	NZ,PCB_SKIP_LINE
-	INC	HL
-	LD	A,(HL)
-	CP	'2'
-	JR	NZ,PCB_SKIP_LINE
-	INC	HL
-	LD	A,(HL)
-	CP	'0'
-	JR	NZ,PCB_SKIP_LINE
-	CALL	SET_MODE_120X40
-	JR	PCB_SKIP_LINE
+	JR	PCB_CHECK_KEYS
 
 PCB_SKIP_CHAR:
 	INC	HL
-	JR	PCB_LINE_START
+	JP	PCB_LINE_START
 
 PCB_SKIP_LINE:
 	; Advance HL until LF, CR, EOF, or HL >= CFG_IO_BUF + 128
@@ -11516,8 +11546,101 @@ PSL_CHECK_CHR:
 	CP	1AH
 	RET	Z
 	CP	10			; LF
-	JR	Z,PCB_LINE_START
+	JP	Z,PCB_LINE_START
 	JR	PCB_SKIP_LINE
+
+PCB_CHECK_KEYS:
+	; Check for "SCREEN"
+	CALL	MATCH_KEY_SCREEN	; Returns Carry = 0 if matched, HL advanced past '=' and spaces
+	JR	NC,PCB_SCREEN_VAL
+
+	; Check for "RAMDRIVE" or "RAMDISK"
+	CALL	MATCH_KEY_RAMDRIVE
+	JR	NC,PCB_RAMDRIVE_VAL
+
+	JP	PCB_SKIP_LINE
+
+PCB_SCREEN_VAL:
+	; HL now points to value after '='
+	; Check if starts with "80"
+	LD	A,(HL)
+	CP	'8'
+	JR	NZ,PCB_CHECK_120
+	INC	HL
+	LD	A,(HL)
+	CP	'0'
+	JP	NZ,PCB_SKIP_LINE
+	PUSH	HL
+	CALL	SET_MODE_80X24
+	POP	HL
+	JP	PCB_SKIP_LINE
+
+PCB_CHECK_120:
+	CP	'1'
+	JP	NZ,PCB_SKIP_LINE
+	INC	HL
+	LD	A,(HL)
+	CP	'2'
+	JP	NZ,PCB_SKIP_LINE
+	INC	HL
+	LD	A,(HL)
+	CP	'0'
+	JP	NZ,PCB_SKIP_LINE
+	PUSH	HL
+	CALL	SET_MODE_120X40
+	POP	HL
+	JP	PCB_SKIP_LINE
+
+PCB_RAMDRIVE_VAL:
+	; HL now points to value after '='
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'O'			; ON or OFF?
+	JR	NZ,PCB_RAM_CHECK_YES
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'N'
+	JR	NZ,PCB_RAM_CHECK_OFF
+	LD	A,1
+	LD	(CFG_RAMDRIVE_FLAG),A
+	JP	PCB_SKIP_LINE
+PCB_RAM_CHECK_OFF:
+	CP	'F'
+	JP	NZ,PCB_SKIP_LINE
+	XOR	A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	JP	PCB_SKIP_LINE
+
+PCB_RAM_CHECK_YES:
+	CP	'Y'			; YES
+	JR	Z,PCB_RAM_SET_ON
+	CP	'1'
+	JR	Z,PCB_RAM_SET_ON
+	CP	'E'			; ENABLED
+	JR	Z,PCB_RAM_SET_ON
+	CP	'T'			; TRUE
+	JR	Z,PCB_RAM_SET_ON
+
+	CP	'N'			; NO
+	JR	Z,PCB_RAM_SET_OFF
+	CP	'0'
+	JR	Z,PCB_RAM_SET_OFF
+	CP	'P'			; PROTECTED
+	JR	Z,PCB_RAM_SET_OFF
+	CP	'F'			; FALSE
+	JR	Z,PCB_RAM_SET_OFF
+	JP	PCB_SKIP_LINE
+
+PCB_RAM_SET_ON:
+	LD	A,1
+	LD	(CFG_RAMDRIVE_FLAG),A
+	JP	PCB_SKIP_LINE
+
+PCB_RAM_SET_OFF:
+	XOR	A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	JP	PCB_SKIP_LINE
 
 ; MATCH_KEY_SCREEN: Compares text at (HL) with "SCREEN" (case-insensitive)
 ; Output: Carry = 0 if matched, HL advanced past '=' and trailing spaces
@@ -11574,6 +11697,79 @@ MKS_FAIL:
 	SCF				; Carry = 1
 	RET
 
+; MATCH_KEY_RAMDRIVE: Compares text at (HL) with "RAMD" prefix (case-insensitive)
+; Output: Carry = 0 if matched, HL advanced past '=' and trailing spaces
+;         Carry = 1 if no match, HL restored to starting position
+MATCH_KEY_RAMDRIVE:
+	PUSH	HL
+	LD	DE,STR_KEY_RAMD_NAME
+	LD	B,4
+MKR_LOOP:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	C,A
+	LD	A,(DE)
+	CP	C
+	JR	NZ,MKR_FAIL
+	INC	HL
+	INC	DE
+	DJNZ	MKR_LOOP
+
+	; Skip remaining key characters until '=' or whitespace
+MKR_SKIP_KEY:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKR_WS1
+	CP	9
+	JR	Z,MKR_WS1
+	CP	'='
+	JR	Z,MKR_GOT_EQ
+	CP	13
+	JR	Z,MKR_FAIL
+	CP	10
+	JR	Z,MKR_FAIL
+	CP	1AH
+	JR	Z,MKR_FAIL
+	INC	HL
+	JR	MKR_SKIP_KEY
+
+MKR_WS1:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKR_WS1_INC
+	CP	9
+	JR	NZ,MKR_CHECK_EQ
+MKR_WS1_INC:
+	INC	HL
+	JR	MKR_WS1
+
+MKR_CHECK_EQ:
+	CP	'='
+	JR	NZ,MKR_FAIL
+MKR_GOT_EQ:
+	INC	HL			; Skip '='
+
+	; Skip optional spaces after '='
+MKR_WS2:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKR_WS2_INC
+	CP	9
+	JR	NZ,MKR_OK
+MKR_WS2_INC:
+	INC	HL
+	JR	MKR_WS2
+
+MKR_OK:
+	POP	AF			; Discard saved HL
+	OR	A			; Carry = 0
+	RET
+
+MKR_FAIL:
+	POP	HL
+	SCF				; Carry = 1
+	RET
+
 ; SAVE_CONFIG: Save current editor configuration to SE.CFG on current drive
 SAVE_CONFIG:
 	; Fill CFG_IO_BUF with 128 bytes of 0x1A (EOF)
@@ -11625,6 +11821,36 @@ SC_VAL_LOOP:
 	INC	DE
 	JR	SC_VAL_LOOP
 SC_VAL_DONE:
+
+	; Write "RAMDRIVE="
+	LD	HL,STR_KEY_RAMDRIVE_FULL
+SC_RAMKEY_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_RAMKEY_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_RAMKEY_LOOP
+SC_RAMKEY_DONE:
+
+	; Write value: "OFF\r\n" or "ON\r\n"
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	OR	A
+	JR	NZ,SC_RAM_VAL_ON
+	LD	HL,STR_VAL_RAMDRIVE_OFF
+	JR	SC_RAMVAL_LOOP
+SC_RAM_VAL_ON:
+	LD	HL,STR_VAL_RAMDRIVE_ON
+SC_RAMVAL_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_RAMVAL_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_RAMVAL_LOOP
+SC_RAMVAL_DONE:
 
 	; Set BDOS DMA to CFG_IO_BUF
 	LD	DE,CFG_IO_BUF
@@ -14048,8 +14274,11 @@ STR_CONFIG_HEADER:	DB	27,"[H"
 	DB	"$"
 
 STR_CONFIG_CUR_MODE:	DB	"~     1. Screen Geometry : [$"
+STR_CONFIG_RAM_MODE:	DB	"~     2. RAM Drive Blocks: [$"
+STR_RAM_PROTECTED_LBL:	DB	"Protected (Preserve RAM Disk)]     ",13,10,"$"
+STR_RAM_ENABLED_LBL:	DB	"Enabled (Use for Max RAM)]        ",13,10,"$"
 
-STR_CONFIG_STATUS_LBL:	DB	"~     2. Config Status   : [$"
+STR_CONFIG_STATUS_LBL:	DB	"~     3. Config Status   : [$"
 
 STR_CFG_STAT_NONE:	DB	"Default (No SE.CFG found)]         ",13,10,"$"
 STR_CFG_STAT_LOCAL:	DB	"Loaded from local drive ($"
@@ -14062,6 +14291,7 @@ STR_CONFIG_BODY:
 	DB	"~",13,10
 	DB	"~   Commands:                                                   ",13,10
 	DB	"~     type   1                toggle 80x24 <-> 120x40           ",13,10
+	DB	"~     type   2                toggle RAM drive memory blocks    ",13,10
 	DB	"~     type   s                save config to local SE.CFG       ",13,10
 	DB	"~     type   q  or  <ESC>     return to splash screen           ",13,10
 	DB	"~",13,10
@@ -14072,6 +14302,10 @@ STR_KEY_SCREEN_NAME:	DB	"SCREEN",0
 STR_KEY_SCREEN_FULL:	DB	"SCREEN=",0
 STR_VAL_120X40:		DB	"120x40",13,10,0
 STR_VAL_80X24:		DB	"80x24",13,10,0
+STR_KEY_RAMD_NAME:	DB	"RAMD",0
+STR_KEY_RAMDRIVE_FULL:	DB	"RAMDRIVE=",0
+STR_VAL_RAMDRIVE_OFF:	DB	"OFF",13,10,0
+STR_VAL_RAMDRIVE_ON:	DB	"ON",13,10,0
 
 STR_ABOUT_BODY:	DB	27,"[H"
 	DB	"~",13,10
@@ -14543,6 +14777,7 @@ CFG_IO_BUF:		DS	128		; 128-byte scratch buffer for SE.CFG I/O
 CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
 CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
+CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected (preserve RAM disk), 1=enabled (use for max RAM)
 
 LOCAL_STACK_TOP:
 	DS	256
