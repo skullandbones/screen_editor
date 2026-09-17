@@ -165,7 +165,29 @@ AUTO_LOAD_RENDER:
 	JP	MAIN_LOOP
 
 AUTO_LOAD_NOT_FOUND:
-	LD	DE,STR_FILE_NOT_FOUND
+	LD	A,(CMDLINE_HAS_DRIVE)
+	OR	A
+	JR	NZ,ALNF_EXPLICIT_DRIVE
+
+	; Bare filename ("SE <filename>"): open new empty file ready for editing
+	CALL	INIT_EMPTY_DOCUMENT
+	XOR	A
+	LD	(DOC_MODIFIED),A
+	LD	A,1
+	LD	(IN_EDITOR_MODE),A
+	LD	(HAS_FILE_ARG),A
+	JR	AUTO_LOAD_LINE_DEFAULT
+
+ALNF_EXPLICIT_DRIVE:
+	; Command line specified drive ("SE <n:filename>"): report "<n:filename> file not found" and exit
+	CALL	FCB_TO_FILENAME_STR
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	LD	DE,INPUT_FILENAME_BUF
+	CALL	PRINT_STR
+	LD	DE,STR_FILE_NOT_FOUND_SUFFIX
 	CALL	PRINT_STR
 	CALL	RESTORE_RAMDRIVE
 	LD	SP,(SAVED_SP)
@@ -1142,6 +1164,8 @@ CALL_HL:
 CHECK_COMMAND_LINE:
 	LD	HL,0
 	LD	(CMDLINE_GOTO_LINE),HL
+	XOR	A
+	LD	(CMDLINE_HAS_DRIVE),A
 
 	LD	A,(DEFAULT_FCB+1)
 	CP	' '
@@ -1152,6 +1176,14 @@ CHECK_COMMAND_LINE:
 	LD	A,1
 	LD	(HAS_FILE_ARG),A
 
+	; Check if command line explicitly specified drive letter (1..16 in DEFAULT_FCB)
+	LD	A,(DEFAULT_FCB)
+	OR	A
+	JR	Z,CCL_NO_EXPLICIT_DRIVE
+	LD	A,1
+	LD	(CMDLINE_HAS_DRIVE),A
+
+CCL_NO_EXPLICIT_DRIVE:
 	; Copy drive + filename + ext (12 bytes)
 	LD	HL,DEFAULT_FCB
 	LD	DE,WORK_FCB
@@ -1172,6 +1204,7 @@ CHECK_COMMAND_LINE:
 NO_FILE_ARG:
 	XOR	A
 	LD	(HAS_FILE_ARG),A
+	LD	(CMDLINE_HAS_DRIVE),A
 
 	; Zero entire WORK_FCB (36 bytes)
 	LD	HL,WORK_FCB
@@ -15349,6 +15382,7 @@ STR_OVERWRITE_WARN:	DB	13,10,"File already exists. Overwrite? (",27,"[4m","Y",27
 STR_SAVE_CANCELLED:	DB	13,10,"Save cancelled.",13,10,"$"
 
 STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
+STR_FILE_NOT_FOUND_SUFFIX:	DB	" file not found",13,10,"$"
 
 STR_CSI_C:		DB	27,"[C","$"
 STR_FNF_INLINE:		DB	"  File not found","$"
@@ -15398,6 +15432,7 @@ TARGET_COL:	DW	0		; Sticky visual column (0..1000)
 TOP_DOC_ROW:	DW	0		; 16-bit top visible document line on screen
 DOC_TOTAL_LINES:	DW	1		; 16-bit total document lines count (default 1 empty line)
 HAS_FILE_ARG:	DB	0
+CMDLINE_HAS_DRIVE:	DB	0
 CMDLINE_GOTO_LINE:	DW	0		; 16-bit line number from command line (0 = start)
 OPEN_GOTO_LINE:		DW	0		; 16-bit line number from open file UI (0 = start)
 GOTO_LINE_BUF:	DS	8
