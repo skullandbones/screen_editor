@@ -13164,6 +13164,10 @@ DIV_48_DONE:
 
 RENDER_OPEN_PAGE:
 	CALL	TERM_INIT
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A
+	LD	A,4
+	LD	(UI_CUR_ROW),A
 	LD	DE,STR_DIR_TITLE
 	CALL	PRINT_STR
 
@@ -13172,6 +13176,9 @@ RENDER_OPEN_PAGE:
 
 	; Display Open Prompt & Page Indicator
 	CALL	DISPLAY_OPEN_PROMPT
+
+	; Finish prompt line and fill remaining rows down to status row with '~'
+	CALL	FINISH_UI_PAGE_AND_STATUS
 
 	; Read Filename Input (echoes prefilled string if non-empty, e.g. "A:")
 	CALL	READ_FILENAME_INPUT_PREFILLED
@@ -13324,10 +13331,45 @@ SET_NEXT_PAGE:
 ; Show Editor Mode Keys Screen (Ctrl+K)
 ; Displays summary of all SE editor keys and waits for any key to return.
 ;------------------------------------------------------------------------------
+HELP_LINES	EQU	22
+
 SHOW_HELP_KEYS_UI:
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
 	LD	DE,STR_HELP_SCREEN
 	CALL	PRINT_STR
+
+	; Fill remaining rows down to status row with '~'
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
+	SUB	HELP_LINES		; A = remaining rows
+	JR	Z,HELP_TILDE_DONE
+	JR	C,HELP_TILDE_DONE
+	LD	B,A
+HELP_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	HELP_TILDE_LOOP
+
+HELP_TILDE_DONE:
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_HOME
+	CALL	PRINT_STR
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
 	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -13348,14 +13390,45 @@ DO_SAVE_FILE_OK:
 	LD	(IS_SAVE_UI),A
 	RET
 
+TRUNC_LINES	EQU	12
+
 SHOW_TRUNCATED_SAVE_BLOCKED:
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
 	LD	DE,STR_TRUNC_SAVE_BLOCKED
 	CALL	PRINT_STR
+
+	; Fill remaining rows down to status row with '~'
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1
+	SUB	TRUNC_LINES
+	JR	Z,TRUNC_TILDE_DONE
+	JR	C,TRUNC_TILDE_DONE
+	LD	B,A
+TRUNC_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	TRUNC_TILDE_LOOP
+
+TRUNC_TILDE_DONE:
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_HOME
+	CALL	PRINT_STR
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
 	CALL	GET_KEY
 	CP	KEY_ESC
 	CALL	Z,DRAIN_ESC_SEQUENCE
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
 	RET
 
 DO_SAVE_FILE_UI_IMPL:
@@ -13399,6 +13472,10 @@ DIV_48_SAVE_DONE:
 
 RENDER_SAVE_PAGE:
 	CALL	TERM_INIT
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A
+	LD	A,4
+	LD	(UI_CUR_ROW),A
 	LD	DE,STR_SAVE_TITLE
 	CALL	PRINT_STR
 
@@ -13407,6 +13484,9 @@ RENDER_SAVE_PAGE:
 
 	; Display Save Prompt & Page Indicator
 	CALL	DISPLAY_SAVE_PROMPT
+
+	; Finish prompt line and fill remaining rows down to status row with '~'
+	CALL	FINISH_UI_PAGE_AND_STATUS
 
 	; Read Filename Input (with prefilled string echoed)
 	CALL	READ_FILENAME_INPUT_PREFILLED
@@ -13711,6 +13791,9 @@ DISPLAY_SAVE_PROMPT:
 	JR	C,DISP_SINGLE_SAVE_PROMPT
 
 	; Multi-page prompt
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
+	INC	(HL)
 	LD	DE,STR_SAVE_PAGE_PREFIX
 	CALL	PRINT_STR
 
@@ -13734,12 +13817,19 @@ DISPLAY_SAVE_PROMPT:
 	JR	DISP_SAVE_PROMPT_BODY
 
 DISP_SINGLE_SAVE_PROMPT:
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
 	LD	DE,STR_SAVE_SEP_LINE
 	CALL	PRINT_STR
 	CALL	PRINT_SAVE_FMT_INFO
 
 DISP_SAVE_PROMPT_BODY:
+	LD	HL,UI_CUR_ROW
+	INC	(HL)			; For STR_ESC_CANCEL
+	INC	(HL)			; For Prompt line itself!
 	LD	DE,STR_ESC_CANCEL
+	CALL	PRINT_STR
+	LD	DE,STR_TILDE_INDENT
 	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
@@ -13751,6 +13841,8 @@ DISP_SAVE_PROMPT_BODY:
 	RET
 
 PRINT_SAVE_FMT_INFO:
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
 	LD	DE,STR_SAVE_FMT_PREFIX
 	CALL	PRINT_STR
 	LD	A,(SAVE_FORMAT)
@@ -14066,6 +14158,9 @@ DISPLAY_DIR_PAGE:
 	LD	A,(DIR_FILE_COUNT)
 	OR	A
 	JR	NZ,DO_SHOW_PAGE
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
+	INC	(HL)
 	LD	DE,STR_NO_FILES_FOUND
 	CALL	PRINT_STR
 	RET
@@ -14119,6 +14214,14 @@ HAVE_PAGE_COUNT:
 DISPLAY_PAGE_LOOP:
 	PUSH	BC
 	PUSH	HL			; Save entry pointer
+
+	; If first column of row, emit "~  " prefix
+	LD	A,(DIR_COL_COUNT)
+	OR	A
+	JR	NZ,DPL_NOT_FIRST_COL
+	LD	DE,STR_TILDE_INDENT
+	CALL	PRINT_STR
+DPL_NOT_FIRST_COL:
 
 	; Format entry into a clean 16-char padded column:
 	; e.g. "DIGIT5  .ASM" -> "DIGIT5.ASM      "
@@ -14196,6 +14299,8 @@ DISP_COL_TERMINATE:
 	JR	NZ,NO_ROW_WRAP
 	XOR	A
 	LD	(DIR_COL_COUNT),A
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
@@ -14211,11 +14316,15 @@ NO_ROW_WRAP:
 	LD	A,(DIR_COL_COUNT)
 	OR	A
 	JR	Z,DISP_PAGE_DONE
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
 	LD	DE,STR_CRLF
 	CALL	PRINT_STR
 
 DISP_PAGE_DONE:
-	LD	DE,STR_CRLF
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
+	LD	DE,STR_TILDE_CRLF
 	CALL	PRINT_STR
 	RET
 
@@ -14228,6 +14337,9 @@ DISPLAY_OPEN_PROMPT:
 	JR	C,DISP_SINGLE_PROMPT
 
 	; Multi-page prompt
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
+	INC	(HL)
 	LD	DE,STR_PAGE_PREFIX
 	CALL	PRINT_STR
 
@@ -14250,11 +14362,18 @@ DISPLAY_OPEN_PROMPT:
 	JR	DISP_OPEN_PROMPT_BODY
 
 DISP_SINGLE_PROMPT:
+	LD	HL,UI_CUR_ROW
+	INC	(HL)
 	LD	DE,STR_OPEN_SINGLE_HDR
 	CALL	PRINT_STR
 
 DISP_OPEN_PROMPT_BODY:
+	LD	HL,UI_CUR_ROW
+	INC	(HL)			; For STR_ESC_CANCEL
+	INC	(HL)			; For Prompt line itself!
 	LD	DE,STR_ESC_CANCEL
+	CALL	PRINT_STR
+	LD	DE,STR_TILDE_INDENT
 	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
@@ -14308,6 +14427,78 @@ DFB_BS_LOOP:
 	CALL	PUTC
 	DEC	C
 	JR	NZ,DFB_BS_LOOP
+	RET
+
+;------------------------------------------------------------------------------
+; Finish Open/Save Screen rendering:
+; 1. End prompt line with CRLF
+; 2. Pad remaining rows down to ACTIVE_ROWS - 1 with '~' in column 0
+; 3. Render status bar on row ACTIVE_ROWS
+; 4. Reposition cursor inside filename input box on UI_CUR_ROW
+;------------------------------------------------------------------------------
+FINISH_UI_PAGE_AND_STATUS:
+	; Print CRLF after the prompt box
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+
+	; Fill remaining rows down to ACTIVE_ROWS - 1 with '~'
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1 (last content row)
+	LD	HL,UI_CUR_ROW
+	SUB	(HL)
+	JR	Z,FUPS_STATUS
+	JR	C,FUPS_STATUS
+	LD	B,A
+FUPS_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	FUPS_TILDE_LOOP
+
+FUPS_STATUS:
+	CALL	RENDER_STATUS_BAR
+
+	; Reposition cursor inside filename input box on UI_CUR_ROW
+	; Row = UI_CUR_ROW, Col = 29 + INPUT_BUF_LEN
+	LD	A,(UI_CUR_ROW)
+	LD	H,A
+	LD	A,(INPUT_BUF_LEN)
+	ADD	A,29
+	LD	L,A
+	CALL	LOCATE_RC
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; LOCATE_RC: Move cursor to Row H, Col L (1-indexed for terminal)
+; Format: ESC [ <H> ; <L> H
+; Preserves BC, DE, HL
+;------------------------------------------------------------------------------
+LOCATE_RC:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	A,27
+	CALL	PUTC
+	LD	A,'['
+	CALL	PUTC
+	LD	A,H
+	CALL	PRINT_DEC_BYTE
+	LD	A,';'
+	CALL	PUTC
+	LD	A,L
+	CALL	PRINT_DEC_BYTE
+	LD	A,'H'
+	CALL	PUTC
+	POP	HL
+	POP	DE
+	POP	BC
 	RET
 
 ;------------------------------------------------------------------------------
@@ -15271,16 +15462,18 @@ STR_STATUS_OOM:		DB	"Out of memory   | ","$"
 STR_STATUS_TRUNC:	DB	"[FILE TRUNCATED]| ","$"
 
 STR_TRUNC_SAVE_BLOCKED:
-	DB	13,10
-	DB	"  ===============================================================",13,10
-	DB	"                 ERROR: SAVE DISABLED (PROTECTION)               ",13,10
-	DB	"  ===============================================================",13,10
-	DB	"  This file was truncated upon loading because it exceeds the    ",13,10
-	DB	"  editor's current RAM capacity.                                 ",13,10,13,10
-	DB	"  Saving has been blocked to protect the unread portion of the   ",13,10
-	DB	"  file from being overwritten and permanently lost on disk.      ",13,10,13,10
-	DB	"  Press any key to return to the editor...                       ",13,10
-	DB	"  ===============================================================",13,10,"$"
+	DB	"~",13,10
+	DB	"~  =============================================================",13,10
+	DB	"~                 ERROR: SAVE DISABLED (PROTECTION)             ",13,10
+	DB	"~  =============================================================",13,10
+	DB	"~  This file was truncated upon loading because it exceeds the  ",13,10
+	DB	"~  editor's current RAM capacity.                               ",13,10
+	DB	"~",13,10
+	DB	"~  Saving has been blocked to protect the unread portion of the ",13,10
+	DB	"~  file from being overwritten and permanently lost on disk.    ",13,10
+	DB	"~",13,10
+	DB	"~  Press any key to return to the editor...                     ",13,10
+	DB	"~  =============================================================",13,10,"$"
 
 STR_STATUS_FREE:	DB	"Free: ","$"
 
@@ -15299,28 +15492,28 @@ STR_CHAR_LOCK_SUFFIX:	DB	"c LOCK]","$"
 STR_LINE_LOCK_SUFFIX:	DB	"L LOCK]","$"
 
 STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
-	DB	"================================================================================",13,10
-	DB	"                          SE.COM - EDITOR MODE KEYS                             ",13,10
-	DB	"================================================================================",13,10
-	DB	"  FILE & SYSTEM:",13,10
-	DB	"    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
-	DB	"    Ctrl+W           Close file to splash    Ctrl+Q          Quit to CP/M",13,10
-	DB	"    Ctrl+K           Help / Solidify block   ESC             Splash / Clear block",13,10,13,10
-	DB	"  NAVIGATION & SEARCH:",13,10
-	DB	"    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
-	DB	"    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
-	DB	"    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
-	DB	"    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10
-	DB	"    Ctrl+F           Find text               Ctrl+N / Ctrl+P Find next / prev",13,10
-	DB	"    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle case in find",13,10,13,10
-	DB	"  EDITING & BLOCK:",13,10
-	DB	"    Insert           Toggle Insert/Overwrite Enter           New line",13,10
-	DB	"    ASCII 32..126    Insert/Overwrite text   Backspace       Delete left / join",13,10
-	DB	"    Delete / Ctrl+D  Delete char or block    Ctrl+B          Start/Toggle block",13,10
-	DB	"    Ctrl+C           Copy solidified block   Ctrl+K          Solidify block",13,10
-	DB	"    Ctrl+X           Move solidified block   ESC             Clear block",13,10
-	DB	"================================================================================",13,10
-	DB	"                      Press any key to return to editor...",13,10,"$"
+	DB	"~=============================================================================",13,10
+	DB	"~                          SE.COM - EDITOR MODE KEYS                          ",13,10
+	DB	"~=============================================================================",13,10
+	DB	"~  FILE & SYSTEM:",13,10
+	DB	"~    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
+	DB	"~    Ctrl+W           Close file to splash    Ctrl+Q          Quit to CP/M",13,10
+	DB	"~    Ctrl+K           Help / Solidify block   ESC             Splash / Clear block",13,10
+	DB	"~  NAVIGATION & SEARCH:",13,10
+	DB	"~    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
+	DB	"~    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
+	DB	"~    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
+	DB	"~    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10
+	DB	"~    Ctrl+F           Find text               Ctrl+N / Ctrl+P Find next / prev",13,10
+	DB	"~    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle case in find",13,10
+	DB	"~  EDITING & BLOCK:",13,10
+	DB	"~    Insert           Toggle Insert/Overwrite Enter           New line",13,10
+	DB	"~    ASCII 32..126    Insert/Overwrite text   Backspace       Delete left / join",13,10
+	DB	"~    Delete / Ctrl+D  Delete char or block    Ctrl+B          Start/Toggle block",13,10
+	DB	"~    Ctrl+C           Copy solidified block   Ctrl+K          Solidify block",13,10
+	DB	"~    Ctrl+X           Move solidified block   ESC             Clear block",13,10
+	DB	"~=============================================================================",13,10
+	DB	"~                      Press any key to return to editor...",13,10,"$"
 
 STR_STATUS_SEP:	DB	" | ","$"
 
@@ -15333,32 +15526,35 @@ STR_STATUS_COL:	DB	" Col ","$"
 MSG_EXIT:	DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
 STR_DIR_TITLE:	DB	27,"[H",27,"[2J"
-	DB	"============================================================",13,10
-	DB	"           SE.COM - OPEN FILE (DIRECTORY - DRIVE "
+	DB	"~============================================================",13,10
+	DB	"~          SE.COM - OPEN FILE (DIRECTORY - DRIVE "
 STR_DIR_DRIVE_CHAR:	DB	"A:)        ",13,10
-	DB	"============================================================",13,10,13,10,"$"
+	DB	"~============================================================",13,10
+	DB	"~",13,10,"$"
 
-STR_OPEN_SINGLE_HDR:	DB	"------------------------------------------------------------",13,10,"$"
+STR_OPEN_SINGLE_HDR:	DB	"~-----------------------------------------------------------",13,10,"$"
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
 
-STR_PAGE_PREFIX:	DB	"------------------------------------------------------------",13,10
-	DB	"[Page ","$"
+STR_PAGE_PREFIX:	DB	"~-----------------------------------------------------------",13,10
+	DB	"~[Page ","$"
 
 STR_PAGE_MID:	DB	"/","$"
 
 STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
-STR_NO_FILES_FOUND:	DB	"  [No files found on current drive]",13,10,13,10,"$"
+STR_NO_FILES_FOUND:	DB	"~  [No files found on current drive]",13,10
+	DB	"~",13,10,"$"
 
 DEFAULT_FCB_NAME:	DB	0,"OUTPUT  TXT",0,0,0,0
 
 STR_SAVE_TITLE:	DB	27,"[H",27,"[2J"
-	DB	"============================================================",13,10
-	DB	"           SE.COM - SAVE FILE (DIRECTORY - DRIVE "
+	DB	"~============================================================",13,10
+	DB	"~          SE.COM - SAVE FILE (DIRECTORY - DRIVE "
 STR_SAVE_DRIVE_CHAR:	DB	"A:)        ",13,10
-	DB	"============================================================",13,10,13,10,"$"
+	DB	"~============================================================",13,10
+	DB	"~",13,10,"$"
 
-STR_SAVE_FMT_PREFIX:	DB	"Format: [","$"
+STR_SAVE_FMT_PREFIX:	DB	"~  Format: [","$"
 
 STR_SAVE_FMT_CPM:	DB	"CP/M","$"
 
@@ -15366,20 +15562,23 @@ STR_SAVE_FMT_LINUX:	DB	"Linux","$"
 
 STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 
-STR_SAVE_SEP_LINE:	DB	"------------------------------------------------------------",13,10,"$"
+STR_SAVE_SEP_LINE:	DB	"~-----------------------------------------------------------",13,10,"$"
 
-STR_SAVE_PAGE_PREFIX:	DB	"------------------------------------------------------------",13,10
-	DB	"[Page ","$"
+STR_SAVE_PAGE_PREFIX:	DB	"~-----------------------------------------------------------",13,10
+	DB	"~[Page ","$"
 
 STR_SAVE_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
-STR_ESC_CANCEL:		DB	"<ESC>=Cancel",13,10,"$"
+STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel",13,10,"$"
 
-STR_OVERWRITE_WARN:	DB	13,10,"File already exists. Overwrite? (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o): ","$"
+STR_OVERWRITE_WARN:	DB	13,10,"~  File already exists. Overwrite? (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o): ","$"
 
-STR_SAVE_CANCELLED:	DB	13,10,"Save cancelled.",13,10,"$"
+STR_SAVE_CANCELLED:	DB	13,10,"~  Save cancelled.",13,10,"$"
+
+STR_TILDE_INDENT:	DB	"~  ","$"
+STR_TILDE_CRLF:		DB	"~",13,10,"$"
 
 STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
 STR_FILE_NOT_FOUND_SUFFIX:	DB	" file not found",13,10,"$"
@@ -15408,6 +15607,7 @@ STR_LINE_TOO_LONG:	DB	" Line > 120 chars - skipped. ","$"
 ;------------------------------------------------------------------------------
 SAVED_SP:	DW	0
 SHOWING_FNF_MSG:	DB	0		; 1 if "  File not found" inline message is visible
+UI_CUR_ROW:	DB	0		; Current screen row tracking for Open/Save UI
 BIOS_CONST_VEC:	DW	0
 BIOS_CONIN_VEC:	DW	0
 BIOS_CONOUT_VEC:	DW	0

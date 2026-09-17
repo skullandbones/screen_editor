@@ -2496,18 +2496,19 @@ def test_se_execution():
         # 4. Send Ctrl+O again, discard with 'n': verify Open File screen is displayed
         time.sleep(0.2)
         os.write(master, b"\x0f")
-        read_until(master, b"ESC:", timeout=4.0)
+        read_until(master, b"Save changes?", timeout=4.0)
         os.write(master, b"n")
         out_s54_open_ui = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
         if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_s54_open_ui:
             print(f"[-] Step 54 failed: 'n' (discard) did not open Open File screen. Buffer: {repr(out_s54_open_ui)}", flush=True)
             return False
+        read_until(master, b"Enter filename to open", timeout=4.0)
         print("[+] 'n' (discard) proceeded directly to Open File screen.", flush=True)
 
         # 5. Cancel Open File screen with ESC: verify return to editor
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        out_s54_ed_back = read_until(master, b"Line    1/2", timeout=4.0)
+        out_s54_ed_back = read_until(master, b"^K: Editor keys", timeout=4.0)
         if b"C:2.TXT" not in out_s54_ed_back:
             print(f"[-] Step 54 failed: ESC in Open File screen did not return to editor. Buffer: {repr(out_s54_ed_back)}", flush=True)
             return False
@@ -2520,10 +2521,11 @@ def test_se_execution():
         if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_s54_clean_open or b"Save changes" in out_s54_clean_open:
             print(f"[-] Step 54 failed: Clean Ctrl+O prompted or failed to open directory. Buffer: {repr(out_s54_clean_open)}", flush=True)
             return False
+        read_until(master, b"Enter filename to open", timeout=4.0)
         # Cancel back to editor
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Line    1/2", timeout=4.0)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         print("[+] Unmodified Ctrl+O opened Open File screen immediately without prompt.", flush=True)
 
         # 7. Modify document, return to splash screen (ESC)
@@ -2542,7 +2544,7 @@ def test_se_execution():
             return False
         # Cancel with ESC to stay in editor
         os.write(master, b"\x1b")
-        read_until(master, b"Line    1/2", timeout=4.0)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         print("[+] Splash ':o' with modified document resumed editor and prompted for save changes.", flush=True)
 
         # 9. Return to splash screen again (ESC), test ':o' and discard with 'n'
@@ -2557,10 +2559,11 @@ def test_se_execution():
         if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_s54_spo_open:
             print(f"[-] Step 54 failed: Discarding changes from splash ':o' did not enter Open File screen. Buffer: {repr(out_s54_spo_open)}", flush=True)
             return False
+        read_until(master, b"Enter filename to open", timeout=4.0)
         # Cancel back to editor
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Line    1/2", timeout=4.0)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         print("[+] Splash ':o' discarded changes and opened Open File screen.", flush=True)
 
         # 10. Exit cleanly with Ctrl+Q

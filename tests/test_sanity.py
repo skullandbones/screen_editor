@@ -153,8 +153,9 @@ def run_sanity_test():
         if b"EDITOR MODE KEYS" not in out_help:
             print(f"[-] Help screen failed. Buffer: {repr(out_help)}", flush=True)
             return False
+        drain_all(master)
         os.write(master, b"\r")
-        out_back = read_until(master, b"Line    1/1", timeout=3.0)
+        out_back = read_until(master, b"^K: Editor keys", timeout=3.0)
         if b"SANITY CHECK OK" not in out_back:
             print(f"[-] Return from help screen failed. Buffer: {repr(out_back)}", flush=True)
             return False
