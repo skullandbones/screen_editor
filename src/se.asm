@@ -5779,8 +5779,8 @@ BUFFER_INIT:
 	LD	A,1
 	LD	(INSERT_MODE),A
 
-	CALL	INIT_SLOT_SYSTEM
 	CALL	INIT_FAR_RAM_BANKS
+	CALL	INIT_SLOT_SYSTEM
 	CALL	INVALIDATE_ACTIVE_LINE
 	RET
 
@@ -6675,11 +6675,15 @@ FPFS_DONE_SUCCESS:
 ; Preserves: None
 ;------------------------------------------------------------------------------
 SELECT_VICTIM_BANK:
-	LD	C,1			; C = candidate bank index (1..11)
+	LD	C,1			; C = candidate bank index (1 .. EXT_BANK_COUNT-1)
 	LD	B,1			; B = best victim bank index
 	LD	D,0			; D = max distance found so far
 	LD	HL,BANK_PAGE_TABLE+1
 SVB_LOOP:
+	LD	A,(EXT_BANK_COUNT)
+	CP	C
+	JR	Z,SVB_DONE
+	JR	C,SVB_DONE
 	LD	A,(SWAP_PAGE_TEMP)
 	SUB	(HL)			; A = target - resident
 	JR	NC,SVB_POS
@@ -6693,9 +6697,8 @@ SVB_POS:
 SVB_NOT_MAX:
 	INC	HL
 	INC	C
-	LD	A,C
-	CP	MAX_FAR_BANKS		; 12
-	JR	C,SVB_LOOP
+	JR	SVB_LOOP
+SVB_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
@@ -6799,19 +6802,22 @@ ENSURE_PAGE_RESIDENT:
 	RET
 
 EPR_NOT_PAGE_0:
-	; Scan BANK_PAGE_TABLE[1..11] for Page (SWAP_PAGE_TEMP)
-	LD	B,1			; Bank index 1..11
+	; Scan BANK_PAGE_TABLE[1..EXT_BANK_COUNT-1] for Page (SWAP_PAGE_TEMP)
+	LD	B,1			; Bank index 1..EXT_BANK_COUNT-1
 	LD	HL,BANK_PAGE_TABLE+1
 EPR_SCAN_LOOP:
+	LD	A,(EXT_BANK_COUNT)
+	CP	B
+	JR	Z,EPR_PAGE_FAULT
+	JR	C,EPR_PAGE_FAULT
 	LD	A,(SWAP_PAGE_TEMP)
 	CP	(HL)
 	JR	Z,EPR_HIT
 	INC	HL
 	INC	B
-	LD	A,B
-	CP	MAX_FAR_BANKS		; 12
-	JR	C,EPR_SCAN_LOOP
+	JR	EPR_SCAN_LOOP
 
+EPR_PAGE_FAULT:
 	; PAGE FAULT! Page (SWAP_PAGE_TEMP) is NOT resident in any bank.
 	CALL	HANDLE_PAGE_FAULT	; Returns B = victim bank index (1..11), Carry on error
 	JR	C,EPR_FAULT_ERR
@@ -6895,9 +6901,18 @@ IPS_CLEAR_BM:
 	LD	HL,BANK_PAGE_TABLE
 	LD	DE,BANK_DIRTY_TABLE
 IPS_INIT_BANKS:
-	LD	(HL),B
 	XOR	A
-	LD	(DE),A
+	LD	(DE),A			; BANK_DIRTY_TABLE[B] = 0
+	LD	A,(EXT_BANK_COUNT)
+	CP	B
+	JR	Z,IPS_BANK_INVALID
+	JR	C,IPS_BANK_INVALID
+	LD	(HL),B			; BANK_PAGE_TABLE[B] = B
+	JR	IPS_NEXT_BANK
+IPS_BANK_INVALID:
+	LD	A,0FFH
+	LD	(HL),A			; BANK_PAGE_TABLE[B] = 0xFF (unmapped)
+IPS_NEXT_BANK:
 	INC	HL
 	INC	DE
 	INC	B

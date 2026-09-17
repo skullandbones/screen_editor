@@ -3,12 +3,13 @@
 test_large_file_paging.py - Automated validation of Phase 4 Paging Engine
 
 Verifies that SE.COM:
-1. Loads files exceeding physical Far RAM capacity (3,400 lines > 3,072 physical slots).
-2. Spans across pages into $$$SE$$$.SWP via BDOS random record paging.
-3. Correctly reflects the full document line count in the status bar (Line 1/3400).
-4. Allows navigation and editing across paged boundaries.
-5. Saves the entire multi-thousand line document to disk with 100% byte fidelity.
-6. Cleans up the temporary swap file ($$$SE$$$.SWP) upon clean exit.
+1. Loads files exceeding physical Far RAM capacity in Protected Mode (1,200 lines > 1,024 physical slots).
+2. Loads files exceeding physical Far RAM capacity in Enabled Mode (3,400 lines > 3,072 physical slots).
+3. Spans across pages into $$$SE$$$.SWP via BDOS random record paging.
+4. Correctly reflects the full document line count in the status bar (Line 1/N).
+5. Supports jump-to-bottom (Ctrl+G) and jump-to-top (Ctrl+T) without screen corruption.
+6. Saves multi-thousand line documents to disk with 100% byte fidelity.
+7. Cleans up the temporary swap file ($$$SE$$$.SWP) upon clean exit.
 """
 
 import os
@@ -62,33 +63,43 @@ def drain_all(master_fd, quiet_time=0.2):
             break
     return buf
 
-def main():
+def run_paging_test(num_lines, ramdrive_mode="OFF"):
     emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin, cpmls_bin = find_paths()
-    test_file = "/tmp/SHORT34.TXT"
-    saved_file = "/tmp/SHORT34_SAVED.TXT"
-    cpm_user = "0:SHORT34.TXT"
+    test_file = f"/tmp/SHORT{num_lines}.TXT"
+    saved_file = f"/tmp/SHORT{num_lines}_SAVED.TXT"
+    cpm_user = f"0:S{num_lines}.TXT"
+    cmd_arg = f"S{num_lines}.TXT"
 
-    print("[*] Generating 3,400-line test file (SHORT34.TXT)...")
-    expected_lines = []
+    print(f"\n=================================================================")
+    print(f"[*] Testing {num_lines} lines (RAMDRIVE={ramdrive_mode})...")
+    print(f"=================================================================")
+
+    # Generate test file
     with open(test_file, "wb") as f:
-        for i in range(1, 3401):
-            line = f"Record {i:04d} of 3400\r\n".encode()
-            f.write(line)
-            expected_lines.append(line)
+        for i in range(1, num_lines + 1):
+            f.write(f"Record {i:04d} of {num_lines:04d}\r\n".encode())
     orig_size = os.path.getsize(test_file)
-    print(f"[+] Created {test_file} ({orig_size} bytes, 3,400 lines).")
 
-    # Clean up any leftover swap file or test files on image
-    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:$$$SE$$$.SWP"],
+    # Clean up disk image
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:$$$se$$$.swp"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, cpm_user],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    # Inject SE.COM and test file
     subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"], check=True)
     subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, test_file, cpm_user], check=True)
-    print("[+] Injected SE.COM and SHORT34.TXT into disk image.")
+
+    # Setup configuration if RAMDRIVE=ON
+    if ramdrive_mode == "ON":
+        cfg_tmp = "/tmp/SE_TEST.CFG"
+        with open(cfg_tmp, "wb") as f:
+            f.write(b"SCREEN=120x40\r\nRAMDRIVE=ON\r\n")
+        subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, cfg_tmp, "0:SE.CFG"], check=True)
 
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -101,27 +112,28 @@ def main():
     try:
         # Boot sequence
         read_until(master, b"Boot [H=Help]:", timeout=8.0)
-        time.sleep(0.5)
+        time.sleep(0.3)
         os.write(master, b"c\r")
         read_until(master, b"B>", timeout=8.0)
-        time.sleep(0.5)
+        time.sleep(0.3)
         os.write(master, b"c:\r")
         read_until(master, b"C>", timeout=8.0)
-        time.sleep(0.5)
+        time.sleep(0.3)
 
-        print("[*] Launching 'se SHORT34.TXT' (streaming 3,400 lines into virtual paging engine)...")
+        print(f"[*] Launching 'se {cmd_arg}' (streaming {num_lines} lines into virtual paging engine)...")
         t0 = time.time()
-        os.write(master, b"se SHORT34.TXT\r")
-        out = read_until(master, b"Line    1/3400", timeout=90.0)
+        os.write(master, f"se {cmd_arg}\r".encode())
+        expected_top = f"1/{num_lines}".encode()
+        out = read_until(master, expected_top, timeout=90.0)
         dt = time.time() - t0
         time.sleep(0.3)
         out += drain_all(master)
         print(f"[*] Entered editor in {dt:.1f}s.")
 
-        if b"Line    1/3400" not in out:
-            print(f"[-] FAILED: Status bar did not show 'Line    1/3400'. Buffer: {repr(out[-400:])}")
+        if expected_top not in out:
+            print(f"[-] FAILED: Status bar did not show '{expected_top.decode()}'. Buffer: {repr(out[-300:])}")
             return False
-        print("[+] SUCCESS: Document loaded 3,400 lines with paging active!")
+        print(f"[+] SUCCESS: Document loaded {num_lines} lines with paging active!")
 
         # Verify swap file exists on disk while editor is running
         ls_res = subprocess.run([cpmls_bin, "-f", "wbw_hd1k_0", img_file, "0:$$$SE$$$.SWP"],
@@ -131,8 +143,46 @@ def main():
         else:
             print("[-] Warning: Swap file not found via cpmls during active session.")
 
+        # Test Jump to Bottom (Ctrl+G)
+        print(f"[*] Testing Jump to Bottom (Ctrl+G) across paged memory...")
+        os.write(master, b"\x07")
+        expected_bot = f"Line {num_lines}/{num_lines}".encode()
+        out_bot = read_until(master, expected_bot, timeout=30.0)
+        time.sleep(0.3)
+        out_bot += drain_all(master)
+        if expected_bot not in out_bot:
+            print(f"[-] FAILED jump to bottom. Buffer: {repr(out_bot[-300:])}")
+            return False
+        print(f"[+] Reached bottom: {expected_bot.decode()}")
+
+        bot_rec = f"Record {num_lines:04d} of {num_lines:04d}".encode()
+        if bot_rec in out_bot:
+            print(f"[+] Screen content verified uncorrupted: '{bot_rec.decode()}'!")
+        else:
+            print(f"[-] Screen content mismatch at bottom: '{bot_rec.decode()}' not found! Raw: {repr(out_bot[-300:])}")
+            return False
+
+        # Test Jump to Top (Ctrl+T)
+        print(f"[*] Testing Jump to Top (Ctrl+T) across paged memory...")
+        os.write(master, b"\x14")
+        expected_top_stat = f"Line    1/{num_lines}".encode()
+        out_top = read_until(master, expected_top_stat, timeout=30.0)
+        time.sleep(0.3)
+        out_top += drain_all(master)
+        if expected_top_stat not in out_top:
+            print(f"[-] FAILED jump to top. Buffer: {repr(out_top[-300:])}")
+            return False
+        print(f"[+] Reached top: {expected_top_stat.decode()}")
+
+        top_rec = f"Record 0001 of {num_lines:04d}".encode()
+        if top_rec in out_top:
+            print(f"[+] Screen content verified uncorrupted: '{top_rec.decode()}'!")
+        else:
+            print(f"[-] Screen content mismatch at top: '{top_rec.decode()}' not found! Raw: {repr(out_top[-300:])}")
+            return False
+
         # Save the file via Ctrl+S
-        print("[*] Saving 3,400-line document via Ctrl+S...", flush=True)
+        print(f"[*] Saving {num_lines}-line document via Ctrl+S...", flush=True)
         time.sleep(0.5)
         os.write(master, b"\x13")
         out_save_scr = read_until(master, b"SAVE FILE", timeout=10.0)
@@ -152,9 +202,9 @@ def main():
         time.sleep(0.2)
         os.write(master, b"y")
         t_save0 = time.time()
-        out_resumed = read_until(master, b"Line    1/3400", timeout=150.0)
+        out_resumed = read_until(master, expected_top_stat, timeout=120.0)
         dt_save = time.time() - t_save0
-        if b"Line    1/3400" not in out_resumed:
+        if expected_top_stat not in out_resumed:
             print(f"[-] Failed to resume editor after save. Buffer: {repr(out_resumed[-200:])}", flush=True)
             return False
         print(f"[+] Save completed in {dt_save:.1f}s and editor resumed.", flush=True)
@@ -162,7 +212,7 @@ def main():
         # Exit cleanly via Ctrl+Q (document clean, exits directly to C>)
         print("[*] Exiting SE via Ctrl+Q...", flush=True)
         time.sleep(0.5)
-        os.write(master, b"\x11")  # Ctrl+Q
+        os.write(master, b"\x11")
         out_exit = read_until(master, b"C>", timeout=10.0)
         if b"C>" not in out_exit:
             print(f"[-] Clean exit failed. Buffer: {repr(out_exit[-200:])}", flush=True)
@@ -178,33 +228,23 @@ def main():
             print("[-] FAILED: $$$SE$$$.SWP was not deleted upon exit!")
             return False
 
-        # Extract saved file from disk image
+        # Extract saved file and verify byte fidelity
         if os.path.exists(saved_file):
             os.remove(saved_file)
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, cpm_user, saved_file], check=True)
 
-        saved_size = os.path.getsize(saved_file)
-        print(f"[*] Saved file size: {saved_size} bytes (original: {orig_size} bytes).")
-
         with open(saved_file, "rb") as f:
-            saved_content = f.read()
-
-        # Check byte-for-byte content up to CP/M EOF (^Z)
+            clean_saved = f.read().split(b"\x1a")[0]
         with open(test_file, "rb") as f:
-            orig_content = f.read()
-
-        # In CP/M, files are padded to 128-byte record boundaries with 0x1A
-        clean_saved = saved_content.split(b"\x1a")[0]
-        clean_orig = orig_content.split(b"\x1a")[0]
+            clean_orig = f.read().split(b"\x1a")[0]
 
         if clean_saved == clean_orig:
-            print(f"[+] 100% BYTE FIDELITY VERIFIED across all 3,400 lines ({len(clean_saved)} bytes)!")
+            print(f"[+] 100% BYTE FIDELITY VERIFIED across all {num_lines} lines ({len(clean_saved)} bytes)!")
+            return True
         else:
             print(f"[-] Byte comparison failed! Mismatch in saved content.")
             print(f"    Orig len: {len(clean_orig)}, Saved len: {len(clean_saved)}")
             return False
-
-        return True
 
     finally:
         try:
@@ -213,6 +253,27 @@ def main():
         except:
             pass
         os.close(master)
+        # Cleanup SE.CFG on disk image
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def main():
+    # Test 1: Protected Mode Paging (1,200 lines > 1,024 physical slots)
+    ok1 = run_paging_test(1200, ramdrive_mode="OFF")
+    if not ok1:
+        print("[-] Protected Mode Paging test FAILED.")
+        return False
+
+    # Test 2: Max RAM Mode Paging (3,400 lines > 3,072 physical slots)
+    ok2 = run_paging_test(3400, ramdrive_mode="ON")
+    if not ok2:
+        print("[-] Max RAM Mode Paging test FAILED.")
+        return False
+
+    print("\n=================================================================")
+    print("  ALL LARGE FILE PAGING TESTS PASSED SUCCESSFULLY!               ")
+    print("=================================================================")
+    return True
 
 if __name__ == "__main__":
     success = main()
