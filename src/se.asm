@@ -15100,7 +15100,7 @@ STR_MSG_REST_ERR:	DB	13,10,"[Error] RAM drive restoration incomplete.",13,10,"$"
 STR_ABOUT_BODY:	DB	27,"[H"
 	DB	"~",13,10
 	DB	"~                               SE - Screen Editor              ",13,10
-	DB	"~                           version 0.9.2 (2026-09-16)          ",13,10
+	DB	"~                           version 0.9.3 (2026-09-17)          ",13,10
 	DB	"~                                by Dean Jenkins                ",13,10
 	DB	"~          Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash  ",13,10
 	DB	"~",13,10
@@ -15220,7 +15220,7 @@ STR_FILE_TEST_NOT_FOUND:	DB	"[-] Error: Test file '30.TXT' not found on CP/M dri
 
 STR_FILE_TEST_FAILED:	DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
 
-STR_STATUS_PREFIX:	DB	" SE v0.9.2 | ","$"
+STR_STATUS_PREFIX:	DB	" SE v0.9.3 | ","$"
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 
