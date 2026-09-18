@@ -15571,7 +15571,7 @@ STR_SAVE_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
-STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel",13,10,"$"
+STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel    Enter <drive>: to list directory (e.g. B:)",13,10,"$"
 
 STR_OVERWRITE_WARN:	DB	13,10,"~  File already exists. Overwrite? (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o): ","$"
 

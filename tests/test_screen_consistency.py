@@ -157,8 +157,8 @@ def run_screen_consistency_test(mode_name="80x24"):
         if b"~============================================================" not in out_open:
             print(f"[-] Open screen missing '~' in title bar. Buffer: {repr(out_open)}", flush=True)
             return False
-        if b"~  <ESC>=Cancel" not in out_open:
-            print(f"[-] Open screen missing '~' in cancel line. Buffer: {repr(out_open)}", flush=True)
+        if b"~  <ESC>=Cancel    Enter <drive>: to list directory" not in out_open:
+            print(f"[-] Open screen missing '~  <ESC>=Cancel    Enter <drive>: to list directory'. Buffer: {repr(out_open)}", flush=True)
             return False
         if b"Free:" not in out_open or b"KB" not in out_open:
             print(f"[-] Open screen missing status bar free memory. Buffer: {repr(out_open)}", flush=True)
@@ -195,8 +195,8 @@ def run_screen_consistency_test(mode_name="80x24"):
         if b"~  Format: [" not in out_save:
             print(f"[-] Save screen missing '~' in format indicator. Buffer: {repr(out_save)}", flush=True)
             return False
-        if b"~  <ESC>=Cancel" not in out_save:
-            print(f"[-] Save screen missing '~' in cancel line. Buffer: {repr(out_save)}", flush=True)
+        if b"~  <ESC>=Cancel    Enter <drive>: to list directory" not in out_save:
+            print(f"[-] Save screen missing '~  <ESC>=Cancel    Enter <drive>: to list directory'. Buffer: {repr(out_save)}", flush=True)
             return False
         if b"Free:" not in out_save or b"KB" not in out_save:
             print(f"[-] Save screen missing status bar free memory. Buffer: {repr(out_save)}", flush=True)
