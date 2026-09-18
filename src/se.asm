@@ -13342,8 +13342,25 @@ SHOW_HELP_KEYS_UI:
 	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
-	LD	DE,STR_HELP_SCREEN
+
+	; 1. Row 1: Horizontal Rule
+	CALL	PRINT_HR_EQUAL
+
+	; 2. Row 2: Centered Title
+	CALL	RENDER_HELP_TITLE
+
+	; 3. Row 3: Horizontal Rule
+	CALL	PRINT_HR_EQUAL
+
+	; 4. Rows 4..20: Help Key Descriptions (17 lines)
+	LD	DE,STR_HELP_BODY
 	CALL	PRINT_STR
+
+	; 5. Row 21: Horizontal Dash Rule
+	CALL	PRINT_HR_DASH
+
+	; 6. Row 22: Centered Return Prompt
+	CALL	RENDER_HELP_FOOTER
 
 	; Fill remaining rows down to status row with '~'
 	LD	A,(ACTIVE_ROWS)
@@ -13372,6 +13389,46 @@ HELP_TILDE_DONE:
 	CALL	Z,DRAIN_ESC_SEQUENCE
 	XOR	A
 	LD	(IS_SPLASH_SCREEN),A
+	RET
+
+;------------------------------------------------------------------------------
+; Render Ctrl+K Help Title (Row 2):
+; Emits '~' followed by ((ACTIVE_COLS - 25) / 2 - 1) spaces and STR_HELP_TITLE.
+;------------------------------------------------------------------------------
+RENDER_HELP_TITLE:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	25
+	SRL	A
+	DEC	A
+	LD	B,A
+RHT_PAD_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	RHT_PAD_LOOP
+	LD	DE,STR_HELP_TITLE
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Render Ctrl+K Help Footer (Row 22):
+; Emits '~' followed by ((ACTIVE_COLS - 36) / 2 - 1) spaces and STR_HELP_RETURN_PROMPT.
+;------------------------------------------------------------------------------
+RENDER_HELP_FOOTER:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	36
+	SRL	A
+	DEC	A
+	LD	B,A
+RHF_PAD_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	RHF_PAD_LOOP
+	LD	DE,STR_HELP_RETURN_PROMPT
+	CALL	PRINT_STR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -15620,10 +15677,9 @@ STR_CHAR_LOCK_SUFFIX:	DB	"c LOCK]","$"
 
 STR_LINE_LOCK_SUFFIX:	DB	"L LOCK]","$"
 
-STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
-	DB	"~=============================================================================",13,10
-	DB	"~                          SE.COM - EDITOR MODE KEYS                          ",13,10
-	DB	"~=============================================================================",13,10
+STR_HELP_TITLE:		DB	"SE.COM - EDITOR MODE KEYS",13,10,"$"
+
+STR_HELP_BODY:
 	DB	"~  FILE & SYSTEM:",13,10
 	DB	"~    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
 	DB	"~    Ctrl+W           Close file to splash    Ctrl+Q          Quit to CP/M",13,10
@@ -15640,9 +15696,9 @@ STR_HELP_SCREEN:	DB	27,"[H",27,"[2J"
 	DB	"~    ASCII 32..126    Insert/Overwrite text   Backspace       Delete left / join",13,10
 	DB	"~    Delete / Ctrl+D  Delete char or block    Ctrl+B          Start/Toggle block",13,10
 	DB	"~    Ctrl+C           Copy solidified block   Ctrl+K          Solidify block",13,10
-	DB	"~    Ctrl+X           Move solidified block   ESC             Clear block",13,10
-	DB	"~=============================================================================",13,10
-	DB	"~                      Press any key to return to editor...",13,10,"$"
+	DB	"~    Ctrl+X           Move solidified block   ESC             Clear block",13,10,"$"
+
+STR_HELP_RETURN_PROMPT:	DB	"Press any key to return to editor...",13,10,"$"
 
 STR_STATUS_SEP:	DB	" | ","$"
 

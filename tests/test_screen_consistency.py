@@ -105,17 +105,19 @@ def run_screen_consistency_test(mode_name="80x24"):
         # Configure screen mode
         if mode_name == "80x24":
             os.write(master, b"2")  # Set 80x24
+            read_until(master, b"SE - Screen Editor", timeout=5.0)
         elif mode_name == "120x40":
             os.write(master, b"1")  # Set 120x40
-        time.sleep(0.3)
+            read_until(master, b"SE - Screen Editor", timeout=5.0)
+        time.sleep(0.5)
         drain_all(master)
 
         # 1. Test Help Keys Screen (Ctrl+K from editor mode)
         print("[*] Testing Help Keys Screen...", flush=True)
         os.write(master, b"e")  # enter editor
-        out_ed = read_until(master, b"^K: Editor keys", timeout=5.0)
+        out_ed = read_until(master, b"^K: Editor keys", timeout=6.0)
         if b"^K: Editor keys" not in out_ed:
-            print("[-] Failed to enter editor mode", flush=True)
+            print(f"[-] Failed to enter editor mode. Buffer: {repr(out_ed)}", flush=True)
             return False
 
         drain_all(master)
@@ -126,9 +128,23 @@ def run_screen_consistency_test(mode_name="80x24"):
             print(f"[-] Help screen missing title. Buffer: {repr(out_help)}", flush=True)
             return False
 
-        # Verify tildes and status bar on Help screen
-        if b"~=============================================================================" not in out_help:
-            print(f"[-] Help screen missing '~' in column 0 header. Buffer: {repr(out_help)}", flush=True)
+        # Verify full-width rules, dash rule, and centered title/footer on Help screen
+        expected_rule = b"~" + (b"=" * (78 if mode_name == "80x24" else 118))
+        expected_dash = b"~" + (b"-" * (78 if mode_name == "80x24" else 118))
+        expected_title_pad = b"~" + (b" " * (26 if mode_name == "80x24" else 46)) + b"SE.COM - EDITOR MODE KEYS"
+        expected_prompt_pad = b"~" + (b" " * (21 if mode_name == "80x24" else 41)) + b"Press any key to return to editor..."
+
+        if expected_rule not in out_help:
+            print(f"[-] Help screen missing full-width '=' rule. Buffer: {repr(out_help)}", flush=True)
+            return False
+        if expected_dash not in out_help:
+            print(f"[-] Help screen missing full-width '-' rule. Buffer: {repr(out_help)}", flush=True)
+            return False
+        if expected_title_pad not in out_help:
+            print(f"[-] Help screen missing centered title. Buffer: {repr(out_help)}", flush=True)
+            return False
+        if expected_prompt_pad not in out_help:
+            print(f"[-] Help screen missing centered return prompt. Buffer: {repr(out_help)}", flush=True)
             return False
         if b"Free:" not in out_help or b"KB" not in out_help:
             print(f"[-] Help screen missing status bar free memory. Buffer: {repr(out_help)}", flush=True)
