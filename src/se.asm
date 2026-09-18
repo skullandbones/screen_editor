@@ -13652,24 +13652,28 @@ FILE_NOT_EXISTS:
 
 ;------------------------------------------------------------------------------
 ; Initialize directory layout parameters based on active SCREEN_MODE:
-;   80x24 mode: 4 columns per row, 48 files per page (12 rows x 4 cols)
-;  120x40 mode: 6 columns per row, 96 files per page (16 rows x 6 cols)
+;   80x24 mode: 5 columns per row, 60 files per page (12 rows x 5 cols, 15 chars/col)
+;  120x40 mode: 7 columns per row, 196 files per page (28 rows x 7 cols, 16 chars/col)
 ;------------------------------------------------------------------------------
 INIT_DIR_LAYOUT:
 	LD	A,(SCREEN_MODE)
 	CP	MODE_120X40
 	JR	Z,IDL_120
 	; 80x24 mode
-	LD	A,4
+	LD	A,5
 	LD	(DIR_COLS_PER_ROW),A
-	LD	A,48
+	LD	A,15
+	LD	(DIR_COL_WIDTH),A
+	LD	A,60
 	LD	(DIR_PAGE_CAPACITY),A
 	RET
 IDL_120:
 	; 120x40 mode
-	LD	A,6
+	LD	A,7
 	LD	(DIR_COLS_PER_ROW),A
-	LD	A,96
+	LD	A,16
+	LD	(DIR_COL_WIDTH),A
+	LD	A,196
 	LD	(DIR_PAGE_CAPACITY),A
 	RET
 
@@ -14394,10 +14398,10 @@ PAD_COLUMN:
 	LD	HL,LOAD_LINE_TEMP
 	LD	A,E
 	SUB	L			; A = character count in line
-	; Pad with spaces up to 16 characters
+	; Pad with spaces up to DIR_COL_WIDTH characters
 	LD	C,A
-	LD	A,16
-	SUB	C			; A = 16 - char_count
+	LD	A,(DIR_COL_WIDTH)
+	SUB	C			; A = DIR_COL_WIDTH - char_count
 	JR	Z,DISP_COL_TERMINATE
 	JR	C,DISP_COL_TERMINATE
 	LD	B,A
@@ -14411,7 +14415,7 @@ DISP_COL_TERMINATE:
 	XOR	A
 	LD	(DE),A			; Null-terminate LOAD_LINE_TEMP
 
-	; Print the 16-character column
+	; Print the column
 	LD	DE,LOAD_LINE_TEMP
 	CALL	PRINT_STR
 
@@ -14420,7 +14424,7 @@ DISP_COL_TERMINATE:
 	INC	A
 	LD	(DIR_COL_COUNT),A
 	LD	HL,DIR_COLS_PER_ROW
-	CP	(HL)			; Wrap at DIR_COLS_PER_ROW (4 on 80x24, 6 on 120x40)
+	CP	(HL)			; Wrap at DIR_COLS_PER_ROW (5 on 80x24, 7 on 120x40)
 	JR	NZ,NO_ROW_WRAP
 	XOR	A
 	LD	(DIR_COL_COUNT),A
@@ -15889,8 +15893,9 @@ DIR_PAGE_INDEX:	DB	0
 DIR_PAGE_COUNT:	DB	0
 DIR_START_FILE:	DB	0
 DIR_COL_COUNT:		DB	0
-DIR_COLS_PER_ROW:	DB	4
-DIR_PAGE_CAPACITY:	DB	48
+DIR_COLS_PER_ROW:	DB	5
+DIR_COL_WIDTH:		DB	15
+DIR_PAGE_CAPACITY:	DB	60
 DIR_TEMP_ENTRY:		DS	16
 INPUT_BUF_LEN:	DB	0
 INPUT_FILENAME_BUF:	DS	32

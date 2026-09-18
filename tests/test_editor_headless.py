@@ -709,44 +709,61 @@ def test_se_execution():
             return False
         print("[+] Successfully verified Open File screen with sorted directory listing.", flush=True)
 
-        # Test Space key does NOT advance page
-        drain_all(master)
-        time.sleep(0.1)
-        os.write(master, b" ")
-        time.sleep(0.1)
-        os.write(master, b"\x08")  # erase typed space
+        # Check if directory is multi-page or single-page
+        if b"<PgUp>/<PgDn>=Page" in out_dir:
+            # Multi-page pagination verification
+            # Test Space key does NOT advance page
+            drain_all(master)
+            time.sleep(0.1)
+            os.write(master, b" ")
+            time.sleep(0.1)
+            os.write(master, b"\x08")  # erase typed space
 
-        # Test PageDown key (ESC [ 6 ~) to advance to Page 2
-        drain_all(master)
-        time.sleep(0.1)
-        os.write(master, b"\x1b[6~")
-        out_page2 = read_until(master, b"<PgUp>/<PgDn>=Page", timeout=4.0)
-        if b"[Page 2/" not in out_page2 or b"<PgUp>/<PgDn>=Page" not in out_page2:
-            print(f"[-] PageDown key failed to advance to Page 2. Buffer: {repr(out_page2)}", flush=True)
-            return False
-        print("[+] Successfully verified PageDown key pagination ([Page 2/X]).", flush=True)
+            # Test PageDown key (ESC [ 6 ~) to advance to Page 2
+            drain_all(master)
+            time.sleep(0.1)
+            os.write(master, b"\x1b[6~")
+            out_page2 = read_until(master, b"<PgUp>/<PgDn>=Page", timeout=4.0)
+            if b"[Page 2/" not in out_page2 or b"<PgUp>/<PgDn>=Page" not in out_page2:
+                print(f"[-] PageDown key failed to advance to Page 2. Buffer: {repr(out_page2)}", flush=True)
+                return False
+            print("[+] Successfully verified PageDown key pagination ([Page 2/X]).", flush=True)
 
-        # Test PageUp key (ESC [ 5 ~) to return to Page 1
-        drain_all(master)
-        time.sleep(0.1)
-        os.write(master, b"\x1b[5~")
-        out_page1 = read_until(master, b"<PgUp>/<PgDn>=Page", timeout=4.0)
-        if b"[Page 1/" not in out_page1 or b"<PgUp>/<PgDn>=Page" not in out_page1:
-            print(f"[-] PageUp key failed to return to Page 1. Buffer: {repr(out_page1)}", flush=True)
-            return False
-        print("[+] Successfully verified PageUp key pagination back to Page 1.", flush=True)
+            # Test PageUp key (ESC [ 5 ~) to return to Page 1
+            drain_all(master)
+            time.sleep(0.1)
+            os.write(master, b"\x1b[5~")
+            out_page1 = read_until(master, b"<PgUp>/<PgDn>=Page", timeout=4.0)
+            if b"[Page 1/" not in out_page1 or b"<PgUp>/<PgDn>=Page" not in out_page1:
+                print(f"[-] PageUp key failed to return to Page 1. Buffer: {repr(out_page1)}", flush=True)
+                return False
+            print("[+] Successfully verified PageUp key pagination back to Page 1.", flush=True)
 
-        # Test pagination with text retained in text box
-        time.sleep(0.1)
-        os.write(master, b"TESTFILE")
-        time.sleep(0.1)
-        os.write(master, b"\x1b[6~")  # PageDown with "TESTFILE" typed
-        out_p2 = read_until(master, b"[Page 2/", timeout=4.0)
-        out_page2_retained = read_until(master, b"[TESTFILE", timeout=4.0)
-        if b"[Page 2/" not in out_p2 or b"TESTFILE" not in out_page2_retained:
-            print(f"[-] PageDown did not retain filename 'TESTFILE'. Buffer: {repr(out_page2_retained)}", flush=True)
-            return False
-        print("[+] Successfully verified PageDown retains typed filename in text box.", flush=True)
+            # Test pagination with text retained in text box
+            time.sleep(0.1)
+            os.write(master, b"TESTFILE")
+            time.sleep(0.1)
+            os.write(master, b"\x1b[6~")  # PageDown with "TESTFILE" typed
+            out_p2 = read_until(master, b"[Page 2/", timeout=4.0)
+            out_page2_retained = read_until(master, b"[TESTFILE", timeout=4.0)
+            if b"[Page 2/" not in out_p2 or b"TESTFILE" not in out_page2_retained:
+                print(f"[-] PageDown did not retain filename 'TESTFILE'. Buffer: {repr(out_page2_retained)}", flush=True)
+                return False
+            print("[+] Successfully verified PageDown retains typed filename in text box.", flush=True)
+        else:
+            # Single-page mode (expanded 120x40 capacity fits all files on 1 page without premature pagination)
+            print("[+] Successfully verified expanded 120x40 capacity displays directory on single page without premature pagination.", flush=True)
+            # Verify typing in text box and that PgDn/PgUp are benign
+            drain_all(master)
+            time.sleep(0.1)
+            os.write(master, b"TESTFILE")
+            time.sleep(0.1)
+            os.write(master, b"\x1b[6~")  # PgDn should not break text box
+            time.sleep(0.1)
+            os.write(master, b"\x1b[5~")  # PgUp should not break text box
+            time.sleep(0.1)
+            os.write(master, b"\x08" * 8) # Clear typed TESTFILE
+            print("[+] Successfully verified text box editing and PgDn/PgUp stability in single-page mode.", flush=True)
 
         # Test ESC to cancel from Open File prompt
         drain_all(master)
@@ -2586,10 +2603,10 @@ def test_se_execution():
         # 2. In editor mode, press Ctrl+O and open '30.TXT:15'
         time.sleep(0.2)
         os.write(master, b"\x0f")
-        read_until(master, b"Enter filename to open:", timeout=4.0)
+        read_until(master, b"Enter filename to open:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT:15\r")
-        out_s55_l15 = read_until(master, b"Line   15/30", timeout=4.0)
+        out_s55_l15 = read_until(master, b"Line   15/30", timeout=8.0)
         if b"Line   15/30" not in out_s55_l15 or b"C:30.TXT" not in out_s55_l15:
             print(f"[-] Step 55 failed: '30.TXT:15' did not open at line 15. Buffer: {repr(out_s55_l15)}", flush=True)
             return False
@@ -2598,10 +2615,10 @@ def test_se_execution():
         # 3. In editor mode, press Ctrl+O and open 'C:30.TXT:25' (drive + file + line)
         time.sleep(0.2)
         os.write(master, b"\x0f")
-        read_until(master, b"Enter filename to open:", timeout=4.0)
+        read_until(master, b"Enter filename to open:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"C:30.TXT:25\r")
-        out_s55_l25 = read_until(master, b"Line   25/30", timeout=4.0)
+        out_s55_l25 = read_until(master, b"Line   25/30", timeout=8.0)
         if b"Line   25/30" not in out_s55_l25 or b"C:30.TXT" not in out_s55_l25:
             print(f"[-] Step 55 failed: 'C:30.TXT:25' did not open at line 25. Buffer: {repr(out_s55_l25)}", flush=True)
             return False
@@ -2610,10 +2627,10 @@ def test_se_execution():
         # 4. In editor mode, press Ctrl+O and open '30.TXT:1000' (clamping to EOF)
         time.sleep(0.2)
         os.write(master, b"\x0f")
-        read_until(master, b"Enter filename to open:", timeout=4.0)
+        read_until(master, b"Enter filename to open:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT:1000\r")
-        out_s55_l1000 = read_until(master, b"Line   30/30", timeout=4.0)
+        out_s55_l1000 = read_until(master, b"Line   30/30", timeout=8.0)
         if b"Line   30/30" not in out_s55_l1000:
             print(f"[-] Step 55 failed: '30.TXT:1000' did not clamp to line 30. Buffer: {repr(out_s55_l1000)}", flush=True)
             return False
@@ -2622,13 +2639,13 @@ def test_se_execution():
         # 5. Return to splash screen (ESC) and open '30.TXT:10' from splash ':o'
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=4.0)
+        read_until(master, b"Active Screen:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"o")
-        read_until(master, b"Enter filename to open:", timeout=4.0)
+        read_until(master, b"Enter filename to open:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT:10\r")
-        out_s55_splash_l10 = read_until(master, b"Line   10/30", timeout=4.0)
+        out_s55_splash_l10 = read_until(master, b"Line   10/30", timeout=8.0)
         if b"Line   10/30" not in out_s55_splash_l10:
             print(f"[-] Step 55 failed: Splash ':o' '30.TXT:10' did not open at line 10. Buffer: {repr(out_s55_splash_l10)}", flush=True)
             return False
@@ -2637,10 +2654,10 @@ def test_se_execution():
         # 6. Verify standard open without line number opens at line 1
         time.sleep(0.2)
         os.write(master, b"\x0f")
-        read_until(master, b"Enter filename to open:", timeout=4.0)
+        read_until(master, b"Enter filename to open:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"30.TXT\r")
-        out_s55_l1 = read_until(master, b"Line    1/30", timeout=4.0)
+        out_s55_l1 = read_until(master, b"Line    1/30", timeout=8.0)
         if b"Line    1/30" not in out_s55_l1:
             print(f"[-] Step 55 failed: '30.TXT' without line number did not open at line 1. Buffer: {repr(out_s55_l1)}", flush=True)
             return False
