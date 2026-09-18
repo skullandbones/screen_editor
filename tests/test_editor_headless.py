@@ -3502,13 +3502,24 @@ def test_se_execution():
         os.write(master, b"\x0f")
         out_s66_ui = read_until(master, b"SE.COM - INSERT FILE (DIRECTORY - DRIVE", timeout=6.0)
         out_s66_ui += read_until(master, b"Enter filename to insert:", timeout=4.0)
-        drain_all(master)
+        out_s66_ui += read_until(master, b"\x1b[?25h", timeout=4.0)
+        out_s66_ui += drain_all(master)
 
         if b"SE.COM - INSERT FILE (DIRECTORY - DRIVE" not in out_s66_ui:
             print(f"[-] Step 66 Subtest 1 failed: Insert File title not found: {repr(out_s66_ui)}", flush=True)
             return False
         if b"Enter filename to insert:" not in out_s66_ui:
             print(f"[-] Step 66 Subtest 1 failed: Insert prompt not found: {repr(out_s66_ui)}", flush=True)
+            return False
+
+        # Verify cursor position is at Column 31 (inside [ ] box)
+        m_s66 = re.search(rb"\x1b\[(\d+);(\d+)H\x1b\[\?25h", out_s66_ui)
+        if not m_s66:
+            print(f"[-] Step 66 Subtest 1 failed: Cursor positioning escape sequence not found in UI output: {repr(out_s66_ui[-200:])}", flush=True)
+            return False
+        cursor_col_s66 = int(m_s66.group(2))
+        if cursor_col_s66 != 31:
+            print(f"[-] Step 66 Subtest 1 failed: Expected cursor at column 31 inside [ ] box, got column {cursor_col_s66}", flush=True)
             return False
 
         # Cancel with ESC
