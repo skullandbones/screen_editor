@@ -15536,7 +15536,7 @@ STR_OPEN_SINGLE_HDR:	DB	"~------------------------------------------------------
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
 
 STR_PAGE_PREFIX:	DB	"~-----------------------------------------------------------",13,10
-	DB	"~[Page ","$"
+	DB	"~  [Page ","$"
 
 STR_PAGE_MID:	DB	"/","$"
 
@@ -15565,7 +15565,7 @@ STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 STR_SAVE_SEP_LINE:	DB	"~-----------------------------------------------------------",13,10,"$"
 
 STR_SAVE_PAGE_PREFIX:	DB	"~-----------------------------------------------------------",13,10
-	DB	"~[Page ","$"
+	DB	"~  [Page ","$"
 
 STR_SAVE_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
