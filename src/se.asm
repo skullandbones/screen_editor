@@ -15683,14 +15683,14 @@ STR_HELP_BODY:
 	DB	"~  FILE & SYSTEM:",13,10
 	DB	"~    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
 	DB	"~    Ctrl+W           Close file to splash    Ctrl+Q          Quit to CP/M",13,10
-	DB	"~    Ctrl+K           Help / Solidify block   ESC             Splash / Clear block",13,10
+	DB	"~    Ctrl+K           Help / Solidify block   ESC             Splash / Clear",13,10
 	DB	"~  NAVIGATION & SEARCH:",13,10
 	DB	"~    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
 	DB	"~    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
 	DB	"~    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
 	DB	"~    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10
 	DB	"~    Ctrl+F           Find text               Ctrl+N / Ctrl+P Find next / prev",13,10
-	DB	"~    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle case in find",13,10
+	DB	"~    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle find case",13,10
 	DB	"~  EDITING & BLOCK:",13,10
 	DB	"~    Insert           Toggle Insert/Overwrite Enter           New line",13,10
 	DB	"~    ASCII 32..126    Insert/Overwrite text   Backspace       Delete left / join",13,10
