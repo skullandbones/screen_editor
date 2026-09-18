@@ -13120,6 +13120,9 @@ INIT_EMPTY_DOCUMENT:
 ; Open File Screen with Sorted Directory Listing & Pagination
 ;------------------------------------------------------------------------------
 DO_OPEN_FILE_UI:
+	; Initialize directory layout parameters based on active screen mode
+	CALL	INIT_DIR_LAYOUT
+
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL	INIT_DIR_DRIVE
 
@@ -13137,7 +13140,7 @@ REFRESH_OPEN_DIR:
 	; 2. Sort Directory Entries Alphabetically
 	CALL	SORT_DIR_ENTRIES
 
-	; 3. Calculate Total Pages (48 files per page: 12 rows x 4 cols)
+	; 3. Calculate Total Pages (using dynamic DIR_PAGE_CAPACITY)
 	XOR	A
 	LD	(DIR_PAGE_INDEX),A
 
@@ -13151,13 +13154,15 @@ REFRESH_OPEN_DIR:
 CALC_PAGES:
 	DEC	A			; A = N - 1
 	LD	B,0			; B = quotient
-DIV_48_LOOP:
-	CP	48
-	JR	C,DIV_48_DONE
-	SUB	48
+	LD	HL,DIR_PAGE_CAPACITY
+	LD	C,(HL)
+DIV_PAGE_LOOP:
+	CP	C
+	JR	C,DIV_PAGE_DONE
+	SUB	C
 	INC	B
-	JR	DIV_48_LOOP
-DIV_48_DONE:
+	JR	DIV_PAGE_LOOP
+DIV_PAGE_DONE:
 	INC	B			; Total pages = quotient + 1
 	LD	A,B
 	LD	(DIR_PAGE_COUNT),A
@@ -13166,10 +13171,7 @@ RENDER_OPEN_PAGE:
 	CALL	TERM_INIT
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
-	LD	A,4
-	LD	(UI_CUR_ROW),A
-	LD	DE,STR_DIR_TITLE
-	CALL	PRINT_STR
+	CALL	RENDER_DIR_TITLE
 
 	; Display Directory Entries for Current Page
 	CALL	DISPLAY_DIR_PAGE
@@ -13432,6 +13434,9 @@ TRUNC_TILDE_DONE:
 	RET
 
 DO_SAVE_FILE_UI_IMPL:
+	; Initialize directory layout parameters based on active screen mode
+	CALL	INIT_DIR_LAYOUT
+
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL	INIT_DIR_DRIVE
 
@@ -13445,7 +13450,7 @@ REFRESH_SAVE_DIR:
 	; 2. Sort Directory Entries Alphabetically
 	CALL	SORT_DIR_ENTRIES
 
-	; 3. Calculate Total Pages (48 files per page: 12 rows x 4 cols)
+	; 3. Calculate Total Pages (using dynamic DIR_PAGE_CAPACITY)
 	XOR	A
 	LD	(DIR_PAGE_INDEX),A
 
@@ -13459,13 +13464,15 @@ REFRESH_SAVE_DIR:
 CALC_SAVE_PAGES:
 	DEC	A			; A = N - 1
 	LD	B,0
-DIV_48_SAVE_LOOP:
-	CP	48
-	JR	C,DIV_48_SAVE_DONE
-	SUB	48
+	LD	HL,DIR_PAGE_CAPACITY
+	LD	C,(HL)
+DIV_PAGE_SAVE_LOOP:
+	CP	C
+	JR	C,DIV_PAGE_SAVE_DONE
+	SUB	C
 	INC	B
-	JR	DIV_48_SAVE_LOOP
-DIV_48_SAVE_DONE:
+	JR	DIV_PAGE_SAVE_LOOP
+DIV_PAGE_SAVE_DONE:
 	INC	B
 	LD	A,B
 	LD	(DIR_PAGE_COUNT),A
@@ -13474,10 +13481,7 @@ RENDER_SAVE_PAGE:
 	CALL	TERM_INIT
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
-	LD	A,4
-	LD	(UI_CUR_ROW),A
-	LD	DE,STR_SAVE_TITLE
-	CALL	PRINT_STR
+	CALL	RENDER_SAVE_TITLE
 
 	; Display Directory Entries for Current Page
 	CALL	DISPLAY_DIR_PAGE
@@ -13647,6 +13651,126 @@ FILE_NOT_EXISTS:
 	RET
 
 ;------------------------------------------------------------------------------
+; Initialize directory layout parameters based on active SCREEN_MODE:
+;   80x24 mode: 4 columns per row, 48 files per page (12 rows x 4 cols)
+;  120x40 mode: 6 columns per row, 96 files per page (16 rows x 6 cols)
+;------------------------------------------------------------------------------
+INIT_DIR_LAYOUT:
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	Z,IDL_120
+	; 80x24 mode
+	LD	A,4
+	LD	(DIR_COLS_PER_ROW),A
+	LD	A,48
+	LD	(DIR_PAGE_CAPACITY),A
+	RET
+IDL_120:
+	; 120x40 mode
+	LD	A,6
+	LD	(DIR_COLS_PER_ROW),A
+	LD	A,96
+	LD	(DIR_PAGE_CAPACITY),A
+	RET
+
+;------------------------------------------------------------------------------
+; Print Full-Width Horizontal Rule with '=': "~==============..."
+; Emits '~' followed by (ACTIVE_COLS - 2) '=' characters and CRLF.
+;------------------------------------------------------------------------------
+PRINT_HR_EQUAL:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	2
+	LD	B,A
+PHE_LOOP:
+	LD	A,'='
+	CALL	PUTC
+	DJNZ	PHE_LOOP
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Print Full-Width Horizontal Rule with '-': "~--------------..."
+; Emits '~' followed by (ACTIVE_COLS - 2) '-' characters and CRLF.
+;------------------------------------------------------------------------------
+PRINT_HR_DASH:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	2
+	LD	B,A
+PHD_LOOP:
+	LD	A,'-'
+	CALL	PUTC
+	DJNZ	PHD_LOOP
+	LD	DE,STR_CRLF
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; Render Open/Save Screen Header (4 rows):
+; Row 1: Full-width "~====..."
+; Row 2: Centered title: "~   SE.COM - OPEN/SAVE FILE (DIRECTORY - DRIVE X:)"
+; Row 3: Full-width "~====..."
+; Row 4: Blank tilde row: "~"
+; Sets UI_CUR_ROW = 4.
+;------------------------------------------------------------------------------
+RENDER_DIR_TITLE:
+	LD	DE,STR_TITLE_OPEN_PRE
+	LD	A,(STR_DIR_DRIVE_CHAR)
+	JR	RENDER_TITLE_COMMON
+
+RENDER_SAVE_TITLE:
+	LD	DE,STR_TITLE_SAVE_PRE
+	LD	A,(STR_SAVE_DRIVE_CHAR)
+
+RENDER_TITLE_COMMON:
+	PUSH	AF
+	PUSH	DE
+
+	; 1. Clear Screen (ESC [ 2 J, ESC [ H)
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+
+	; 2. Row 1: Horizontal Rule
+	CALL	PRINT_HR_EQUAL
+
+	; 3. Row 2: Centered Title
+	; Left margin spaces = (ACTIVE_COLS - 41) / 2 - 1
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	41
+	SRL	A
+	DEC	A
+	LD	B,A
+RTC_PAD_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	RTC_PAD_LOOP
+
+	POP	DE
+	CALL	PRINT_STR
+	POP	AF
+	CALL	PUTC
+	LD	DE,STR_TITLE_DRIVE_SUF
+	CALL	PRINT_STR
+
+	; 4. Row 3: Horizontal Rule
+	CALL	PRINT_HR_EQUAL
+
+	; 5. Row 4: Blank Tilde Row
+	LD	DE,STR_TILDE_CRLF
+	CALL	PRINT_STR
+
+	; Initialize UI_CUR_ROW = 4
+	LD	A,4
+	LD	(UI_CUR_ROW),A
+	RET
+
+;------------------------------------------------------------------------------
 ; Initialize CURRENT_DIR_DRIVE and title strings
 ; If WORK_FCB has an explicit drive, uses it; otherwise queries BDOS 25.
 ;------------------------------------------------------------------------------
@@ -13793,8 +13917,9 @@ DISPLAY_SAVE_PROMPT:
 	; Multi-page prompt
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
+	CALL	PRINT_HR_DASH
 	INC	(HL)
-	LD	DE,STR_SAVE_PAGE_PREFIX
+	LD	DE,STR_PAGE_PREFIX
 	CALL	PRINT_STR
 
 	LD	A,(DIR_PAGE_INDEX)
@@ -13811,7 +13936,7 @@ DISPLAY_SAVE_PROMPT:
 	LD	H,0
 	CALL	PRINT_DEC_WORD
 
-	LD	DE,STR_SAVE_PAGE_SUFFIX
+	LD	DE,STR_PAGE_SUFFIX
 	CALL	PRINT_STR
 	CALL	PRINT_SAVE_FMT_INFO
 	JR	DISP_SAVE_PROMPT_BODY
@@ -13819,8 +13944,7 @@ DISPLAY_SAVE_PROMPT:
 DISP_SINGLE_SAVE_PROMPT:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
-	LD	DE,STR_SAVE_SEP_LINE
-	CALL	PRINT_STR
+	CALL	PRINT_HR_DASH
 	CALL	PRINT_SAVE_FMT_INFO
 
 DISP_SAVE_PROMPT_BODY:
@@ -14166,29 +14290,29 @@ DISPLAY_DIR_PAGE:
 	RET
 
 DO_SHOW_PAGE:
-	; Calculate start file index: DIR_START_FILE = DIR_PAGE_INDEX * 48
+	; Calculate start file index: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
 	LD	A,(DIR_PAGE_INDEX)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL			; *2
-	ADD	HL,HL			; *4
-	ADD	HL,HL			; *8
-	ADD	HL,HL			; *16
-	LD	D,H
-	LD	E,L			; DE = A * 16
-	ADD	HL,HL			; *32
-	ADD	HL,DE			; HL = A * 48
-	LD	A,L
+	OR	A
+	JR	Z,DSP_START_ZERO
+	LD	B,A
+	LD	A,(DIR_PAGE_CAPACITY)
+	LD	C,A
+	XOR	A
+DSP_START_LOOP:
+	ADD	A,C
+	DJNZ	DSP_START_LOOP
+DSP_START_ZERO:
 	LD	(DIR_START_FILE),A
 
 	; Calculate number of files on this page:
-	; Count = min(48, DIR_FILE_COUNT - DIR_START_FILE)
+	; Count = min(DIR_PAGE_CAPACITY, DIR_FILE_COUNT - DIR_START_FILE)
 	LD	A,(DIR_FILE_COUNT)
 	LD	HL,DIR_START_FILE
 	SUB	(HL)
-	CP	48
+	LD	HL,DIR_PAGE_CAPACITY
+	CP	(HL)
 	JR	C,HAVE_PAGE_COUNT
-	LD	A,48
+	LD	A,(HL)
 HAVE_PAGE_COUNT:
 	LD	B,A			; B = number of files to display on this page
 
@@ -14295,7 +14419,8 @@ DISP_COL_TERMINATE:
 	LD	A,(DIR_COL_COUNT)
 	INC	A
 	LD	(DIR_COL_COUNT),A
-	CP	4			; Wrap at 4 columns (64 chars <= 80 cols)
+	LD	HL,DIR_COLS_PER_ROW
+	CP	(HL)			; Wrap at DIR_COLS_PER_ROW (4 on 80x24, 6 on 120x40)
 	JR	NZ,NO_ROW_WRAP
 	XOR	A
 	LD	(DIR_COL_COUNT),A
@@ -14339,6 +14464,7 @@ DISPLAY_OPEN_PROMPT:
 	; Multi-page prompt
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
+	CALL	PRINT_HR_DASH
 	INC	(HL)
 	LD	DE,STR_PAGE_PREFIX
 	CALL	PRINT_STR
@@ -14364,8 +14490,7 @@ DISPLAY_OPEN_PROMPT:
 DISP_SINGLE_PROMPT:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
-	LD	DE,STR_OPEN_SINGLE_HDR
-	CALL	PRINT_STR
+	CALL	PRINT_HR_DASH
 
 DISP_OPEN_PROMPT_BODY:
 	LD	HL,UI_CUR_ROW
@@ -15525,34 +15650,24 @@ STR_STATUS_COL:	DB	" Col ","$"
 
 MSG_EXIT:	DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
-STR_DIR_TITLE:	DB	27,"[H",27,"[2J"
-	DB	"~============================================================",13,10
-	DB	"~          SE.COM - OPEN FILE (DIRECTORY - DRIVE "
-STR_DIR_DRIVE_CHAR:	DB	"A:)        ",13,10
-	DB	"~============================================================",13,10
-	DB	"~",13,10,"$"
+STR_TITLE_OPEN_PRE:	DB	"SE.COM - OPEN FILE (DIRECTORY - DRIVE ","$"
+STR_DIR_DRIVE_CHAR:	DB	"A"
+STR_TITLE_SAVE_PRE:	DB	"SE.COM - SAVE FILE (DIRECTORY - DRIVE ","$"
+STR_SAVE_DRIVE_CHAR:	DB	"A"
+STR_TITLE_DRIVE_SUF:	DB	":)",13,10,"$"
 
-STR_OPEN_SINGLE_HDR:	DB	"~-----------------------------------------------------------",13,10,"$"
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
 
-STR_PAGE_PREFIX:	DB	"~-----------------------------------------------------------",13,10
-	DB	"~  [Page ","$"
+STR_PAGE_PREFIX:	DB	"~  [Page ","$"
 
-STR_PAGE_MID:	DB	"/","$"
+STR_PAGE_MID:		DB	"/","$"
 
 STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
 STR_NO_FILES_FOUND:	DB	"~  [No files found on current drive]",13,10
-	DB	"~",13,10,"$"
+			DB	"~",13,10,"$"
 
 DEFAULT_FCB_NAME:	DB	0,"OUTPUT  TXT",0,0,0,0
-
-STR_SAVE_TITLE:	DB	27,"[H",27,"[2J"
-	DB	"~============================================================",13,10
-	DB	"~          SE.COM - SAVE FILE (DIRECTORY - DRIVE "
-STR_SAVE_DRIVE_CHAR:	DB	"A:)        ",13,10
-	DB	"~============================================================",13,10
-	DB	"~",13,10,"$"
 
 STR_SAVE_FMT_PREFIX:	DB	"~  Format: [","$"
 
@@ -15561,13 +15676,6 @@ STR_SAVE_FMT_CPM:	DB	"CP/M","$"
 STR_SAVE_FMT_LINUX:	DB	"Linux","$"
 
 STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
-
-STR_SAVE_SEP_LINE:	DB	"~-----------------------------------------------------------",13,10,"$"
-
-STR_SAVE_PAGE_PREFIX:	DB	"~-----------------------------------------------------------",13,10
-	DB	"~  [Page ","$"
-
-STR_SAVE_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
@@ -15780,8 +15888,10 @@ DIR_FILE_COUNT:	DB	0
 DIR_PAGE_INDEX:	DB	0
 DIR_PAGE_COUNT:	DB	0
 DIR_START_FILE:	DB	0
-DIR_COL_COUNT:	DB	0
-DIR_TEMP_ENTRY:	DS	16
+DIR_COL_COUNT:		DB	0
+DIR_COLS_PER_ROW:	DB	4
+DIR_PAGE_CAPACITY:	DB	48
+DIR_TEMP_ENTRY:		DS	16
 INPUT_BUF_LEN:	DB	0
 INPUT_FILENAME_BUF:	DS	32
 DIR_NAMES_BUF:	DS	3328	; 256 entries * 13 bytes

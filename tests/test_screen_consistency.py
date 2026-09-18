@@ -153,9 +153,14 @@ def run_screen_consistency_test(mode_name="80x24"):
             print(f"[-] Open screen missing title. Buffer: {repr(out_open)}", flush=True)
             return False
 
-        # Verify tildes and status bar on Open screen
-        if b"~============================================================" not in out_open:
-            print(f"[-] Open screen missing '~' in title bar. Buffer: {repr(out_open)}", flush=True)
+        # Verify full-width rule and centered title
+        expected_rule = b"~" + (b"=" * (78 if mode_name == "80x24" else 118))
+        if expected_rule not in out_open:
+            print(f"[-] Open screen missing full-width rule (len {len(expected_rule)}). Buffer: {repr(out_open)}", flush=True)
+            return False
+        expected_title_pad = b"~" + (b" " * (18 if mode_name == "80x24" else 38)) + b"SE.COM - OPEN FILE"
+        if expected_title_pad not in out_open:
+            print(f"[-] Open screen missing centered title. Buffer: {repr(out_open)}", flush=True)
             return False
         if b"~  <ESC>=Cancel    Enter <drive>: to list directory" not in out_open:
             print(f"[-] Open screen missing '~  <ESC>=Cancel    Enter <drive>: to list directory'. Buffer: {repr(out_open)}", flush=True)
@@ -188,9 +193,13 @@ def run_screen_consistency_test(mode_name="80x24"):
             print(f"[-] Save screen missing title. Buffer: {repr(out_save)}", flush=True)
             return False
 
-        # Verify tildes and status bar on Save screen
-        if b"~============================================================" not in out_save:
-            print(f"[-] Save screen missing '~' in title bar. Buffer: {repr(out_save)}", flush=True)
+        # Verify full-width rule and centered title
+        if expected_rule not in out_save:
+            print(f"[-] Save screen missing full-width rule (len {len(expected_rule)}). Buffer: {repr(out_save)}", flush=True)
+            return False
+        expected_save_title = b"~" + (b" " * (18 if mode_name == "80x24" else 38)) + b"SE.COM - SAVE FILE"
+        if expected_save_title not in out_save:
+            print(f"[-] Save screen missing centered title. Buffer: {repr(out_save)}", flush=True)
             return False
         if b"~  Format: [" not in out_save:
             print(f"[-] Save screen missing '~' in format indicator. Buffer: {repr(out_save)}", flush=True)
