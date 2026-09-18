@@ -90,10 +90,24 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if os.path.isfile(cpmcp_bin):
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big_tmp, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, cfg_tmp, "0:SE.CFG"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ins1_tmp = "/tmp/INS1.TXT"
+        with open(ins1_tmp, "wb") as f:
+            f.write(b"INSERTED")
+        ins2_tmp = "/tmp/INS2.TXT"
+        with open(ins2_tmp, "wb") as f:
+            f.write(b"FIRST LINE\r\nSECOND LINE")
+        subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, ins1_tmp, "0:INS1.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, ins2_tmp, "0:INS2.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     print("[*] Launching RomWBW on RC2014 emulator...", flush=True)
@@ -3455,11 +3469,196 @@ def test_se_execution():
             return False
         print("[+] Successfully verified About Screen functionality (Step 65)!", flush=True)
 
+        # -----------------------------------------------------------------
+        # STEP 66: Block Insert File Feature Verification
+        # -----------------------------------------------------------------
+        print("[*] STEP 66: Testing Block Insert File feature...", flush=True)
+        # Launch SE.COM directly into new document
+        time.sleep(0.5)
+        os.write(master, b"se\r")
+        out_s66_boot = read_until(master, b"Col 0", timeout=14.0)
+        time.sleep(0.3)
+        drain_all(master)
+
+        # Enter editor mode with 'e'
+        os.write(master, b"e")
+        out_s66_ed = read_until(master, b"^K: Editor keys", timeout=6.0)
+        drain_all(master)
+        if b"^K: Editor keys" not in out_s66_ed:
+            print(f"[-] Step 66 failed: Failed to enter editor mode: {repr(out_s66_ed)}", flush=True)
+            return False
+
+        # Subtest 1: Open Insert File screen with block, verify title/prompt and ESC cancel
+        os.write(master, b"Hello ")
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Start block Ctrl-B (empty block at col 6)
+        os.write(master, b"\x02")
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Press Ctrl-O -> opens Block Insert File screen
+        os.write(master, b"\x0f")
+        out_s66_ui = read_until(master, b"SE.COM - INSERT FILE (DIRECTORY - DRIVE", timeout=6.0)
+        out_s66_ui += read_until(master, b"Enter filename to insert:", timeout=4.0)
+        drain_all(master)
+
+        if b"SE.COM - INSERT FILE (DIRECTORY - DRIVE" not in out_s66_ui:
+            print(f"[-] Step 66 Subtest 1 failed: Insert File title not found: {repr(out_s66_ui)}", flush=True)
+            return False
+        if b"Enter filename to insert:" not in out_s66_ui:
+            print(f"[-] Step 66 Subtest 1 failed: Insert prompt not found: {repr(out_s66_ui)}", flush=True)
+            return False
+
+        # Cancel with ESC
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        out_s66_esc = read_until(master, b"Hello ", timeout=4.0)
+        drain_all(master)
+        if b"Hello " not in out_s66_esc:
+            print(f"[-] Step 66 Subtest 1 failed: ESC did not restore editor screen: {repr(out_s66_esc)}", flush=True)
+            return False
+        print("[+] Step 66 Subtest 1 PASSED: Insert screen title/prompt verified and ESC cancelled cleanly.", flush=True)
+
+        # Subtest 2: Non-existent file error handling
+        time.sleep(0.2)
+        os.write(master, b"\x0f")
+        read_until(master, b"Enter filename to insert:", timeout=6.0)
+        drain_all(master)
+
+        os.write(master, b"NOFILE.TXT\r")
+        out_s66_fnf = read_until(master, b"File not found", timeout=6.0)
+        drain_all(master)
+        if b"File not found" not in out_s66_fnf:
+            print(f"[-] Step 66 Subtest 2 failed: 'File not found' message not displayed: {repr(out_s66_fnf)}", flush=True)
+            return False
+
+        # Cancel back to editor with ESC and clear block
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Hello ", timeout=4.0)
+        drain_all(master)
+        os.write(master, b"\x1b")
+        time.sleep(0.2)
+        drain_all(master)
+        print("[+] Step 66 Subtest 2 PASSED: Non-existent file displayed 'File not found' and cancelled cleanly.", flush=True)
+
+        # Subtest 3: Insert single-line file at empty block (cursor)
+        os.write(master, b"\x02")  # Ctrl-B
+        time.sleep(0.2)
+        drain_all(master)
+
+        os.write(master, b"\x0f")  # Ctrl-O
+        read_until(master, b"Enter filename to insert:", timeout=6.0)
+        drain_all(master)
+
+        os.write(master, b"INS1.TXT\r")
+        out_s66_ins1 = read_until(master, b"Hello INSERTED", timeout=8.0)
+        out_s66_ins1 += drain_all(master)
+
+        if b"Hello INSERTED" not in out_s66_ins1:
+            print(f"[-] Step 66 Subtest 3 failed: 'Hello INSERTED' not found: {repr(out_s66_ins1)}", flush=True)
+            return False
+        if b"(Untitled)" not in out_s66_ins1:
+            print(f"[-] Step 66 Subtest 3 failed: WORK_FCB was overwritten, expected (Untitled): {repr(out_s66_ins1)}", flush=True)
+            return False
+        print("[+] Step 66 Subtest 3 PASSED: Single-line inserted at cursor, (Untitled) preserved.", flush=True)
+
+        # Subtest 4: Replace non-empty single-line block with multi-line file
+        os.write(master, b" END")
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Move to col 6 (start of "INSERTED")
+        os.write(master, b"\x01")
+        time.sleep(0.2)
+        drain_all(master)
+        for _ in range(6):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.05)
+        drain_all(master)
+
+        # Block covers "INSERTED" (8 chars)
+        os.write(master, b"\x02")
+        time.sleep(0.1)
+        for _ in range(8):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.05)
+        drain_all(master)
+
+        os.write(master, b"\x0f")
+        read_until(master, b"Enter filename to insert:", timeout=6.0)
+        drain_all(master)
+
+        os.write(master, b"INS2.TXT\r")
+        out_s66_ins2 = read_until(master, b"SECOND LINE END", timeout=8.0)
+        out_s66_ins2 += drain_all(master)
+
+        if b"Hello FIRST LINE" not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: 'Hello FIRST LINE' not found: {repr(out_s66_ins2)}", flush=True)
+            return False
+        if b"SECOND LINE END" not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: 'SECOND LINE END' not found: {repr(out_s66_ins2)}", flush=True)
+            return False
+        print("[+] Step 66 Subtest 4 PASSED: Single-line block replaced with multi-line file.", flush=True)
+
+        # Subtest 5: Replace multi-line block with single-line file
+        os.write(master, b"\x1b[A")  # Up to line 0
+        time.sleep(0.05)
+        os.write(master, b"\x01")    # Home
+        time.sleep(0.05)
+        for _ in range(5):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.05)
+        drain_all(master)
+
+        # Block from Line 0 Col 5 to Line 1 Col 11
+        os.write(master, b"\x02")
+        time.sleep(0.1)
+        os.write(master, b"\x1b[B")  # Down to line 1
+        time.sleep(0.05)
+        os.write(master, b"\x01")
+        time.sleep(0.05)
+        for _ in range(11):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.05)
+        drain_all(master)
+
+        os.write(master, b"\x0f")
+        read_until(master, b"Enter filename to insert:", timeout=6.0)
+        drain_all(master)
+
+        os.write(master, b"INS1.TXT\r")
+        out_s66_ins3 = read_until(master, b"HelloINSERTED END", timeout=8.0)
+        out_s66_ins3 += drain_all(master)
+
+        if b"HelloINSERTED END" not in out_s66_ins3:
+            print(f"[-] Step 66 Subtest 5 failed: 'HelloINSERTED END' not found: {repr(out_s66_ins3)}", flush=True)
+            return False
+        print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted and replaced with single-line file.", flush=True)
+
+        # Exit to CP/M with Ctrl-Q
+        time.sleep(0.2)
+        os.write(master, b"\x11")  # Ctrl-Q
+        time.sleep(0.3)
+        out_s66_q = drain_all(master)
+        if b"Save changes" in out_s66_q:
+            os.write(master, b"n")  # Don't save
+            time.sleep(0.3)
+            drain_all(master)
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Successfully verified Block Insert File feature (Step 66)!", flush=True)
+
         return True
 
     finally:
         if os.path.isfile(cpmrm_bin):
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             proc.kill()

@@ -522,10 +522,13 @@ CHECK_CTRL_S:
 	JP	MAIN_LOOP
 
 CHECK_CTRL_O:
-	; Command: Ctrl+O -> Open File Screen (ESC returns without opening)
+	; Command: Ctrl+O -> Open File Screen or Block Insert File
 	CP	KEY_CTRL_O
 	JR	NZ,CHECK_CTRL_C
 	CALL	FLUSH_DEFERRED_RENDER
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	JP	NZ,DO_BLOCK_INSERT_FILE
 	JP	HANDLE_CTRL_O
 
 CHECK_CTRL_C:
@@ -799,7 +802,7 @@ HANDLE_SPLASH_EXIT:
 	LD	A,1
 	LD	(IN_EDITOR_MODE),A
 	CALL	RESUME_EDITOR
-	JR	SHOW_EXIT_PROMPT
+	JP	SHOW_EXIT_PROMPT
 
 HANDLE_CTRL_Q:
 	LD	A,ACTION_EXIT
@@ -807,7 +810,7 @@ HANDLE_CTRL_Q:
 	LD	A,(DOC_MODIFIED)
 	OR	A
 	JP	Z,EXIT_PROGRAM
-	JR	SHOW_EXIT_PROMPT
+	JP	SHOW_EXIT_PROMPT
 
 HANDLE_CTRL_W:
 	LD	A,ACTION_CLOSE
@@ -815,7 +818,7 @@ HANDLE_CTRL_W:
 	LD	A,(DOC_MODIFIED)
 	OR	A
 	JP	Z,DO_EXEC_CLOSE
-	JR	SHOW_EXIT_PROMPT
+	JP	SHOW_EXIT_PROMPT
 
 HANDLE_SPLASH_CLOSE:
 	; If no editor session is active, ignore close
@@ -828,7 +831,7 @@ HANDLE_SPLASH_CLOSE:
 	OR	A
 	JP	Z,DO_EXEC_CLOSE
 	CALL	RESUME_EDITOR
-	JR	SHOW_EXIT_PROMPT
+	JP	SHOW_EXIT_PROMPT
 SPLASH_CLOSE_NOP:
 	JP	SPLASH_LOOP
 
@@ -839,7 +842,7 @@ HANDLE_SPLASH_NEW:
 	OR	A
 	JP	Z,DO_EXEC_NEW
 	CALL	RESUME_EDITOR
-	JR	SHOW_EXIT_PROMPT
+	JP	SHOW_EXIT_PROMPT
 
 HANDLE_CTRL_O:
 	LD	A,ACTION_OPEN
@@ -847,7 +850,25 @@ HANDLE_CTRL_O:
 	LD	A,(DOC_MODIFIED)
 	OR	A
 	JP	Z,DO_EXEC_OPEN
-	JR	SHOW_EXIT_PROMPT
+	JP	SHOW_EXIT_PROMPT
+
+DO_BLOCK_INSERT_FILE:
+	; Implied Ctrl-K: solidify dynamic block selection if state 1
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	CALL	Z,SOLIDIFY_BLOCK
+	CALL	NORMALIZE_BLOCK_BOUNDS
+	LD	A,1
+	LD	(IS_BLOCK_INSERT_UI),A
+	CALL	DO_OPEN_FILE_UI
+	; User pressed ESC in DO_OPEN_FILE_UI -> cancel back to editor
+	XOR	A
+	LD	(IS_BLOCK_INSERT_UI),A
+	LD	(IS_SPLASH_SCREEN),A
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
 
 HANDLE_SPLASH_OPEN:
 	LD	A,ACTION_OPEN
@@ -2788,8 +2809,13 @@ GBB_DONE_LINE:
 GET_LINE_BLOCK_RANGE:
 	LD	A,(BLOCK_ACTIVE)
 	OR	A
+	JR	NZ,GLBR_IS_ACTIVE
+	XOR	A
+	LD	(LINE_BLK_ACTIVE),A
 	SCF
-	RET	Z			; Carry = 1: no block active
+	RET			; Carry = 1: no block active
+
+GLBR_IS_ACTIVE:
 
 	PUSH	BC
 	PUSH	HL
@@ -13197,6 +13223,11 @@ DO_PARSE_AND_LOAD:
 	LD	BC,36
 	LDIR
 
+	; Check if this is Block Insert File UI!
+	LD	A,(IS_BLOCK_INSERT_UI)
+	OR	A
+	JP	NZ,DO_PARSE_AND_INSERT
+
 	; Parse optional line number from INPUT_FILENAME_BUF
 	CALL	PARSE_OPEN_LINE_NUM
 
@@ -13328,6 +13359,501 @@ DO_NEXT_PAGE:
 SET_NEXT_PAGE:
 	LD	(DIR_PAGE_INDEX),A
 	JP	RENDER_OPEN_PAGE
+
+;------------------------------------------------------------------------------
+; Block Insert File UI & Execution Subsystem
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; DO_PARSE_AND_INSERT:
+; Parse filename from INPUT_FILENAME_BUF into INSERT_FCB, verify file existence,
+; restore document WORK_FCB, perform insertion, and return to editor mode.
+;------------------------------------------------------------------------------
+DO_PARSE_AND_INSERT:
+	; User entered a filename in INPUT_FILENAME_BUF: parse into WORK_FCB
+	LD	DE,INPUT_FILENAME_BUF
+	CALL	PARSE_FILENAME_TO_FCB
+
+	; Copy parsed FCB to INSERT_FCB
+	LD	HL,WORK_FCB
+	LD	DE,INSERT_FCB
+	LD	BC,36
+	LDIR
+
+	; Restore original document WORK_FCB from DIR_TEMP_FCB
+	LD	HL,DIR_TEMP_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
+
+	; Probe and open INSERT_FCB
+	CALL	PROBE_INSERT_FILE
+	JP	C,OPEN_FILE_NOT_FOUND
+
+	; Perform Block Insert
+	CALL	DO_PERFORM_BLOCK_INSERT
+
+	; Insertion complete: clear insert flag and splash flag
+	XOR	A
+	LD	(IS_BLOCK_INSERT_UI),A
+	LD	(IS_SPLASH_SCREEN),A
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_LINE_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+
+	; Reset stack and resume editor mode
+	LD	SP,LOCAL_STACK
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	JP	MAIN_LOOP
+
+;------------------------------------------------------------------------------
+; PROBE_INSERT_FILE: Check if INSERT_FCB exists and can be opened
+; Returns: Carry = 0 on success (INSERT_FCB open, CR initialized to 0)
+;          Carry = 1 on failure (file not found or conflict)
+;------------------------------------------------------------------------------
+PROBE_INSERT_FILE:
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA (0080H)
+	CALL	BDOS_ENTRY
+
+	; Check if INSERT_FCB targets hibernated RAM drive
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	JR	Z,PIF_RAM_OK
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,PIF_RAM_OK
+	LD	B,A			; B = RAM drive number (0-based)
+	LD	A,(INSERT_FCB)
+	OR	A
+	JR	NZ,PIF_EXPLICIT
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	JR	PIF_COMPARE
+PIF_EXPLICIT:
+	DEC	A			; 1->0, 2->1
+PIF_COMPARE:
+	CP	B
+	JR	NZ,PIF_RAM_OK
+	SCF				; Carry = 1: conflict
+	RET
+
+PIF_RAM_OK:
+	; Check if filename is empty / spaces
+	LD	A,(INSERT_FCB+1)
+	CP	' '
+	SCF
+	RET	Z
+	OR	A
+	SCF
+	RET	Z
+
+	; Zero FCB extent, s1, s2, rc, and record bytes
+	LD	HL,INSERT_FCB+12
+	LD	(HL),0
+	LD	DE,INSERT_FCB+13
+	LD	BC,23
+	LDIR
+
+	; Open file via BDOS 15
+	LD	DE,INSERT_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	NZ,PIF_OPEN_OK
+	SCF
+	RET
+
+PIF_OPEN_OK:
+	XOR	A
+	LD	(INSERT_FCB+32),A	; Clear CR (Current Record)
+	OR	A			; Carry = 0: success
+	RET
+
+;------------------------------------------------------------------------------
+; DO_PERFORM_BLOCK_INSERT:
+; Inserts the contents of INSERT_FCB into the document at the block insertion point.
+; If block is non-empty: deletes the block first via DO_DELETE_BLOCK.
+; If block is empty: cancels block selection.
+; Slices host line at insertion point, streams INSERT_FCB records, concatenates
+; lines, and positions cursor immediately after the inserted text.
+;------------------------------------------------------------------------------
+DO_PERFORM_BLOCK_INSERT:
+	; Check if block is empty:
+	; BLOCK_START_ROW == BLOCK_END_ROW and BLOCK_START_COL == BLOCK_END_COL
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,DPBI_NON_EMPTY
+	LD	A,L
+	CP	E
+	JR	NZ,DPBI_NON_EMPTY
+	LD	HL,(BLOCK_START_COL)
+	LD	DE,(BLOCK_END_COL)
+	LD	A,H
+	CP	D
+	JR	NZ,DPBI_NON_EMPTY
+	LD	A,L
+	CP	E
+	JR	NZ,DPBI_NON_EMPTY
+
+	; Block is empty: cancel block selection, ensure cursor is at insertion point
+	CALL	CANCEL_BLOCK
+	LD	HL,(BLOCK_START_ROW)
+	LD	(CUR_DOC_ROW),HL
+	LD	HL,(BLOCK_START_COL)
+	LD	(CUR_COL),HL
+	JR	DPBI_SPLIT_HOST
+
+DPBI_NON_EMPTY:
+	; Non-empty block: DO_DELETE_BLOCK deletes selected text,
+	; clears BLOCK_ACTIVE, and sets (CUR_DOC_ROW, CUR_COL) = (BLOCK_START_ROW, BLOCK_START_COL)
+	CALL	DO_DELETE_BLOCK
+	LD	HL,(BLOCK_START_ROW)
+	LD	(CUR_DOC_ROW),HL
+	LD	HL,(BLOCK_START_COL)
+	LD	(CUR_COL),HL
+
+DPBI_SPLIT_HOST:
+	; Ensure CUR_DOC_ROW is checked out in ACTIVE_LINE_BUF
+	CALL	CHECKOUT_ACTIVE_LINE
+
+	; Clamp CUR_COL to line length
+	CALL	GET_CUR_ROW_LEN		; DE = line byte length
+	LD	HL,(CUR_COL)
+	CALL	CMP_HL_DE		; Carry=1 if CUR_COL < DE
+	JR	C,DPBI_COL_OK
+	LD	(CUR_COL),DE
+DPBI_COL_OK:
+
+	; Split ACTIVE_LINE_BUF at CUR_COL:
+	; Copy suffix (from CUR_COL to null) into SPLIT_LINE_TEMP
+	LD	HL,ACTIVE_LINE_BUF
+	LD	DE,(CUR_COL)
+	ADD	HL,DE			; HL = split point in ACTIVE_LINE_BUF
+	LD	DE,SPLIT_LINE_TEMP
+DPBI_SPLIT_LOOP:
+	LD	A,(HL)
+	LD	(DE),A
+	LD	(HL),0			; Truncate current line at split point
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,DPBI_SPLIT_LOOP
+
+	; Host prefix remains in ACTIVE_LINE_BUF with length (CUR_COL)
+	LD	HL,(CUR_COL)
+	LD	(INSERT_CUR_LEN),HL
+
+	; Detach ACTIVE_LINE_ROW so active line system won't auto-commit scratch buffer
+	LD	HL,0FFFFH
+	LD	(ACTIVE_LINE_ROW),HL
+	XOR	A
+	LD	(ACTIVE_LINE_DIRTY),A
+
+	LD	A,1
+	LD	(INSERT_IS_FIRST_LINE),A
+	XOR	A
+	LD	(SEEN_CR),A
+
+	; Stream sectors from INSERT_FCB
+DPBI_READ_SECTOR:
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA (0080H)
+	CALL	BDOS_ENTRY
+
+	LD	DE,INSERT_FCB
+	LD	C,20			; BDOS Read Next Record
+	CALL	BDOS_ENTRY
+	OR	A
+	JR	NZ,DPBI_HIT_EOF		; EOF or read error
+
+	LD	HL,DEFAULT_DMA
+	LD	B,128			; 128 bytes per sector
+DPBI_BYTE_LOOP:
+	PUSH	BC
+	PUSH	HL
+	LD	A,(HL)
+
+	; Check EOF markers (0 or 26 = ^Z)
+	OR	A
+	JR	Z,DPBI_POP_AND_EOF
+	CP	26			; CP/M ^Z
+	JR	Z,DPBI_POP_AND_EOF
+
+	; Check CR (13)
+	CP	13
+	JR	Z,DPBI_HANDLE_CR
+
+	; Check LF (10)
+	CP	10
+	JR	Z,DPBI_HANDLE_LF
+
+	; Regular character (including Tab 0x09)
+	; If SEEN_CR was 1, we have a bare CR preceding this char!
+	PUSH	AF
+	LD	A,(SEEN_CR)
+	OR	A
+	JR	Z,DPBI_NO_BARE_CR
+	XOR	A
+	LD	(SEEN_CR),A
+	CALL	PBI_EMIT_LINE_BREAK
+	JR	C,DPBI_POP2_AND_EOF	; OOM on line break
+DPBI_NO_BARE_CR:
+	POP	AF
+
+	; Append character A to ACTIVE_LINE_BUF
+	CALL	PBI_APPEND_CHAR
+
+DPBI_NEXT_BYTE:
+	POP	HL
+	POP	BC
+	INC	HL
+	DJNZ	DPBI_BYTE_LOOP
+	JR	DPBI_READ_SECTOR
+
+DPBI_POP2_AND_EOF:
+	POP	AF
+DPBI_POP_AND_EOF:
+	POP	HL
+	POP	BC
+	JR	DPBI_HIT_EOF
+
+DPBI_HANDLE_CR:
+	LD	A,(SEEN_CR)
+	OR	A
+	JR	Z,DPBI_SET_CR
+	CALL	PBI_EMIT_LINE_BREAK
+	JR	C,DPBI_POP_AND_EOF
+DPBI_SET_CR:
+	LD	A,1
+	LD	(SEEN_CR),A
+	JR	DPBI_NEXT_BYTE
+
+DPBI_HANDLE_LF:
+	XOR	A
+	LD	(SEEN_CR),A
+	CALL	PBI_EMIT_LINE_BREAK
+	JR	C,DPBI_POP_AND_EOF
+	JR	DPBI_NEXT_BYTE
+
+DPBI_HIT_EOF:
+	; If SEEN_CR is still 1 at EOF (trailing bare CR), emit line break
+	LD	A,(SEEN_CR)
+	OR	A
+	JR	Z,DPBI_FINISH_EOF
+	XOR	A
+	LD	(SEEN_CR),A
+	CALL	PBI_EMIT_LINE_BREAK
+
+DPBI_FINISH_EOF:
+	; Record cursor position (column right after inserted text)
+	LD	HL,(INSERT_CUR_LEN)
+	LD	(INSERT_NEW_CUR_COL),HL
+
+	; Append SPLIT_LINE_TEMP (saved host line suffix) to ACTIVE_LINE_BUF
+	LD	DE,SPLIT_LINE_TEMP
+DPBI_APPEND_SUFFIX:
+	LD	A,(DE)
+	OR	A
+	JR	Z,DPBI_SUFFIX_DONE
+	CALL	PBI_APPEND_CHAR
+	INC	DE
+	JR	DPBI_APPEND_SUFFIX
+
+DPBI_SUFFIX_DONE:
+	; Write final ACTIVE_LINE_BUF to CUR_DOC_ROW
+	LD	BC,(CUR_DOC_ROW)
+	LD	HL,ACTIVE_LINE_BUF
+	CALL	WRITE_FAR_LINE
+
+	; Set cursor column
+	LD	HL,(INSERT_NEW_CUR_COL)
+	LD	(CUR_COL),HL
+	LD	(TARGET_COL),HL
+
+	; Close INSERT_FCB
+	LD	DE,INSERT_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+
+	; Mark document modified
+	LD	A,1
+	LD	(DOC_MODIFIED),A
+
+	; Invalidate active line and reload cache
+	CALL	INVALIDATE_ACTIVE_LINE
+	CALL	FLUSH_DIRTY_CACHE
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	CALL	CHECKOUT_ACTIVE_LINE
+	CALL	CALC_VISUAL_COL
+	LD	(TARGET_COL),HL
+
+	; Adjust viewport (both vertical and horizontal)
+	CALL	ADJUST_INSERT_VIEWPORT
+	RET
+
+;------------------------------------------------------------------------------
+; PBI_APPEND_CHAR:
+; Append character in register A to ACTIVE_LINE_BUF if within line limit.
+; Updates INSERT_CUR_LEN and maintains null terminator.
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+PBI_APPEND_CHAR:
+	PUSH	HL
+	PUSH	DE
+	LD	HL,(INSERT_CUR_LEN)
+	LD	DE,MAX_INPUT_LINE_CHARS - 1	; 999
+	OR	A
+	SBC	HL,DE
+	JR	NC,PAC_DONE			; If >= 999, ignore char
+	LD	HL,ACTIVE_LINE_BUF
+	LD	DE,(INSERT_CUR_LEN)
+	ADD	HL,DE
+	LD	(HL),A				; Store char
+	INC	HL
+	LD	(HL),0				; Maintain null terminator
+	LD	HL,(INSERT_CUR_LEN)
+	INC	HL
+	LD	(INSERT_CUR_LEN),HL
+PAC_DONE:
+	POP	DE
+	POP	HL
+	RET
+
+;------------------------------------------------------------------------------
+; PBI_EMIT_LINE_BREAK:
+; Writes current ACTIVE_LINE_BUF to CUR_DOC_ROW, allocates slot for CUR_DOC_ROW + 1,
+; shifts lower slots downwards, advances CUR_DOC_ROW, and resets ACTIVE_LINE_BUF.
+; Returns: Carry = 0 on success, Carry = 1 on OOM
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+PBI_EMIT_LINE_BREAK:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; Check max document lines
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,MAX_DOC_LINES
+	OR	A
+	SBC	HL,DE
+	JP	NC,PELB_OOM
+
+	; Allocate slot for new line
+	CALL	ALLOC_SLOT		; HL = new_slot_id, Carry on OOM
+	JP	C,PELB_OOM
+	PUSH	HL			; Save new_slot_id
+
+	; Write current line in ACTIVE_LINE_BUF to CUR_DOC_ROW
+	LD	BC,(CUR_DOC_ROW)
+	LD	HL,ACTIVE_LINE_BUF
+	CALL	WRITE_FAR_LINE
+
+	; Shift line slots downwards from CUR_DOC_ROW + 1 to DOC_TOTAL_LINES - 1
+	; Number of entries to shift: W = DOC_TOTAL_LINES - (CUR_DOC_ROW + 1)
+	LD	HL,(DOC_TOTAL_LINES)
+	LD	DE,(CUR_DOC_ROW)
+	INC	DE			; DE = P = CUR_DOC_ROW + 1
+	AND	A
+	SBC	HL,DE			; HL = W = DOC_TOTAL_LINES - P
+	JR	Z,PELB_NO_SHIFT
+	JR	C,PELB_NO_SHIFT
+
+	LD	B,H
+	LD	C,L			; BC = W
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL			; HL = source line = CUR_DOC_ROW + 1
+	LD	DE,(CUR_DOC_ROW)
+	INC	DE
+	INC	DE			; DE = dest line = CUR_DOC_ROW + 2
+	CALL	SHIFT_LINE_SLOTS_DOWN
+
+PELB_NO_SHIFT:
+	; Store new_slot_id into line table at CUR_DOC_ROW + 1
+	POP	DE			; DE = new_slot_id
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL
+	LD	B,H
+	LD	C,L			; BC = CUR_DOC_ROW + 1
+	EX	DE,HL			; HL = new_slot_id
+	CALL	SET_LINE_SLOT
+
+	; Increment DOC_TOTAL_LINES
+	LD	HL,(DOC_TOTAL_LINES)
+	INC	HL
+	LD	(DOC_TOTAL_LINES),HL
+
+	; Advance CUR_DOC_ROW
+	LD	HL,(CUR_DOC_ROW)
+	INC	HL
+	LD	(CUR_DOC_ROW),HL
+
+	; Reset ACTIVE_LINE_BUF to empty
+	XOR	A
+	LD	(ACTIVE_LINE_BUF),A
+	LD	HL,0
+	LD	(INSERT_CUR_LEN),HL
+	LD	(INSERT_IS_FIRST_LINE),A
+
+	POP	HL
+	POP	DE
+	POP	BC
+	OR	A			; Carry = 0
+	RET
+
+PELB_OOM:
+	CALL	SET_OOM_STATUS
+	POP	HL
+	POP	DE
+	POP	BC
+	SCF				; Carry = 1
+	RET
+
+;------------------------------------------------------------------------------
+; ADJUST_INSERT_VIEWPORT:
+; Adjust TOP_DOC_ROW and VIEW_LEFT_COL to keep cursor visible.
+;------------------------------------------------------------------------------
+ADJUST_INSERT_VIEWPORT:
+	; Check if CUR_DOC_ROW < TOP_DOC_ROW
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	CALL	CMP_HL_DE		; Carry=1 if CUR_DOC_ROW < TOP_DOC_ROW
+	JR	NC,AIV_CHECK_BOTTOM
+	LD	HL,(CUR_DOC_ROW)
+	LD	(TOP_DOC_ROW),HL
+	JR	AIV_CHECK_HORIZ
+
+AIV_CHECK_BOTTOM:
+	; Check if CUR_DOC_ROW - TOP_DOC_ROW >= ACTIVE_ROWS - 2
+	LD	HL,(CUR_DOC_ROW)
+	LD	DE,(TOP_DOC_ROW)
+	AND	A
+	SBC	HL,DE
+	LD	A,H
+	OR	A
+	JR	NZ,AIV_DO_SCROLL_DOWN
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A
+	CP	L
+	JR	NC,AIV_CHECK_HORIZ
+AIV_DO_SCROLL_DOWN:
+	LD	A,(ACTIVE_ROWS)
+	DEC	A
+	DEC	A
+	LD	E,A
+	LD	D,0
+	LD	HL,(CUR_DOC_ROW)
+	AND	A
+	SBC	HL,DE
+	LD	(TOP_DOC_ROW),HL
+
+AIV_CHECK_HORIZ:
+	CALL	ADJUST_HORIZ_VIEWPORT
+	RET
 
 ;------------------------------------------------------------------------------
 ; Show Editor Mode Keys Screen (Ctrl+K)
@@ -13779,6 +14305,13 @@ PHD_LOOP:
 ; Sets UI_CUR_ROW = 4.
 ;------------------------------------------------------------------------------
 RENDER_DIR_TITLE:
+	LD	A,(IS_BLOCK_INSERT_UI)
+	OR	A
+	JR	Z,RDT_NORMAL
+	LD	DE,STR_TITLE_INSERT_PRE
+	LD	A,(STR_DIR_DRIVE_CHAR)
+	JR	RENDER_TITLE_COMMON
+RDT_NORMAL:
 	LD	DE,STR_TITLE_OPEN_PRE
 	LD	A,(STR_DIR_DRIVE_CHAR)
 	JR	RENDER_TITLE_COMMON
@@ -13799,11 +14332,18 @@ RENDER_TITLE_COMMON:
 	CALL	PRINT_HR_EQUAL
 
 	; 3. Row 2: Centered Title
-	; Left margin spaces = (ACTIVE_COLS - 41) / 2 - 1
+	; Title length: 43 if IS_BLOCK_INSERT_UI, 41 otherwise
+	LD	A,(IS_BLOCK_INSERT_UI)
+	OR	A
+	LD	A,41
+	JR	Z,RTC_LEN_OK
+	LD	A,43
+RTC_LEN_OK:
+	LD	B,A
 	LD	A,'~'
 	CALL	PUTC
 	LD	A,(ACTIVE_COLS)
-	SUB	41
+	SUB	B
 	SRL	A
 	DEC	A
 	LD	B,A
@@ -14563,7 +15103,12 @@ DISP_OPEN_PROMPT_BODY:
 	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_ON
 	CALL	PRINT_STR
+	LD	A,(IS_BLOCK_INSERT_UI)
+	OR	A
 	LD	DE,STR_OPEN_PROMPT_TXT	; "Enter filename to open:"
+	JR	Z,DOP_SHOW_TXT
+	LD	DE,STR_INSERT_PROMPT_TXT ; "Enter filename to insert:"
+DOP_SHOW_TXT:
 	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
@@ -15717,6 +16262,8 @@ STR_SAVE_DRIVE_CHAR:	DB	"A"
 STR_TITLE_DRIVE_SUF:	DB	":)",13,10,"$"
 
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
+STR_TITLE_INSERT_PRE:	DB	"SE.COM - INSERT FILE (DIRECTORY - DRIVE ","$"
+STR_INSERT_PROMPT_TXT:	DB	"Enter filename to insert:","$"
 
 STR_PAGE_PREFIX:	DB	"~  [Page ","$"
 
@@ -15830,7 +16377,14 @@ FILE_IS_TRUNCATED:	DB	0		; 1 if file was truncated on load (Save protected)
 FILE_TOTAL_RECORDS:	DW	0		; Total 128-byte records computed by BDOS 35
 FILE_RECORDS_HI:	DB	0		; High byte of 24-bit record count
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
-IS_SAVE_UI:	DB	0		; 1 if currently in Save File Screen
+IS_SAVE_UI:		DB	0		; 1 if currently in Save File Screen
+IS_BLOCK_INSERT_UI:	DB	0		; 1 if currently in Block Insert File Screen
+INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
+INSERT_CUR_LEN:		DW	0		; Streaming insert current line length
+INSERT_NEW_CUR_COL:	DW	0		; Cursor column position after insert
+INSERT_IS_FIRST_LINE:	DB	0		; 1 while processing line 1 of inserted file
+INSERT_ORIG_START_ROW:	DW	0		; Block start row backup
+INSERT_ORIG_START_COL:	DW	0		; Block start col backup
 SEEN_CR:	DB	0		; Line format auto-detection state
 CHAR_INSERT_TEMP:	DB	0
 CSI_DIGIT_PREFIX:	DB	0
