@@ -5040,6 +5040,10 @@ SHOW_LINUX_FMT:
 
 SHOW_STATUS_REST:
 	; Field 4: Print Mode / Keys / Selection / OOM / Memory (18 chars)
+	LD	A,(IS_LOADING_FILE)
+	OR	A
+	JP	NZ,SHOW_STATUS_LOADING
+
 	LD	A,(IS_SPLASH_SCREEN)
 	OR	A
 	JP	NZ,SHOW_STATUS_SPLASH_MEM
@@ -5220,6 +5224,11 @@ SHOW_STATUS_TRUNC:
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
+SHOW_STATUS_LOADING:
+	LD	DE,STR_STATUS_LOADING
+	CALL	PRINT_STR
+	JR	SHOW_STATUS_ROWCOL
+
 SHOW_STATUS_SPLASH_MEM:
 	CALL	PRINT_STATUS_FREE_MEM
 	JR	SHOW_STATUS_ROWCOL
@@ -5227,10 +5236,46 @@ SHOW_STATUS_SPLASH_MEM:
 SHOW_STATUS_ROWCOL:
 	; Field 5: Print fixed-position cursor position (POS_FIELD_WIDTH = 22 chars)
 	; "Line <cur:4>/<total:4> Col <col:3>"
+	LD	A,(IS_LOADING_FILE)
+	OR	A
+	JR	NZ,SHOW_STATUS_LOADING_POS
 
 	; 1. Prefix: "Line " (5 chars)
 	LD	DE,STR_STATUS_POS	; "Line "
 	CALL	PRINT_STR
+	JR	SSRC_NORMAL_POS
+
+SHOW_STATUS_LOADING_POS:
+	; 1. Prefix: "Line " (5 chars)
+	LD	DE,STR_STATUS_POS	; "Line "
+	CALL	PRINT_STR
+
+	; 2. Line number: right-justified in 5 chars
+	LD	HL,(DOC_TOTAL_LINES)
+	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
+	LD	C,A
+	LD	A,5
+	SUB	C
+	JR	C,SSLP_NUM
+	JR	Z,SSLP_NUM
+	LD	B,A
+SSLP_PAD:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	SSLP_PAD
+SSLP_NUM:
+	LD	HL,(DOC_TOTAL_LINES)
+	CALL	PRINT_DEC_WORD
+
+	; 3. Trailing spaces: POS_FIELD_WIDTH (22) - 10 = 12 spaces
+	LD	B,12
+SSLP_TRAIL_PAD:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	SSLP_TRAIL_PAD
+	JP	SSRC_POS_DONE
+
+SSRC_NORMAL_POS:
 
 	; 2. Current line: right-justified in 4 chars
 	LD	HL,(CUR_DOC_ROW)
@@ -5293,7 +5338,7 @@ SSRC_COL_PAD:
 	CALL	PUTC
 	DJNZ	SSRC_COL_PAD
 SSRC_COL_PAD_DONE:
-
+SSRC_POS_DONE:
 	; Extreme Right Enclosure: " |" (2 chars)
 	LD	A,' '
 	CALL	PUTC
@@ -12862,6 +12907,39 @@ LOAD_FILE:
 	LD	A,2
 	LD	(LOAD_STRIDE_OFF),A
 
+	; Initialize loading UI state & display
+	LD	A,1
+	LD	(IS_LOADING_FILE),A
+	LD	(HAS_FILE_ARG),A
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
+	LD	A,100
+	LD	(LOAD_PROGRESS_COUNT),A
+
+	; Hide cursor during load
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+
+	; Clear screen (cursor moves to row 1, col 1)
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+
+	; Fill rows 1 to ACTIVE_ROWS - 1 with '~' in column 0
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1
+	LD	B,A
+LF_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	LF_TILDE_LOOP
+
+	; Render initial status bar on row ACTIVE_ROWS
+	CALL	RENDER_STATUS_BAR
+
 READ_SECTOR_LOOP:
 	LD	DE,DEFAULT_DMA
 	LD	C,26			; BDOS Set DMA
@@ -13048,6 +13126,16 @@ LF_LINE_COUNT_INC:
 	INC	HL
 	LD	(DOC_TOTAL_LINES),HL
 
+	; Check 100-line progress interval
+	LD	A,(LOAD_PROGRESS_COUNT)
+	DEC	A
+	LD	(LOAD_PROGRESS_COUNT),A
+	JR	NZ,LPCI_NO_TICK
+	LD	A,100
+	LD	(LOAD_PROGRESS_COUNT),A
+	CALL	UPDATE_LOAD_PROGRESS
+LPCI_NO_TICK:
+
 	; Reset line loader state for next line
 	LD	HL,0FFFFH
 	LD	(LOAD_HEAD_SLOT),HL
@@ -13102,6 +13190,11 @@ DONE_STRIDE_FULL:
 	LD	(DOC_TOTAL_LINES),HL
 
 LOAD_FINISH:
+	; Final progress update to show exact total lines loaded
+	CALL	UPDATE_LOAD_PROGRESS
+	XOR	A
+	LD	(IS_LOADING_FILE),A
+
 	; Ensure at least 1 line exists
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	A,H
@@ -13120,6 +13213,7 @@ LOAD_FINISH:
 
 LOAD_INIT_CACHE:
 	XOR	A
+	LD	(IS_LOADING_FILE),A
 	LD	(BLOCK_ACTIVE),A
 	LD	(DOC_MODIFIED),A
 	CALL	INVALIDATE_ACTIVE_LINE
@@ -13129,7 +13223,70 @@ LOAD_INIT_CACHE:
 	RET
 
 LOAD_FILE_NOT_FOUND:
+	XOR	A
+	LD	(IS_LOADING_FILE),A
 	SCF				; Carry = 1 (error: file not found)
+	RET
+
+;------------------------------------------------------------------------------
+; UPDATE_LOAD_PROGRESS:
+; Update line field on status bar during file loading.
+; Positions cursor directly to Field 5 and prints "Line <lines:5>" in inverse video.
+; Preserves all registers (AF, BC, DE, HL).
+;------------------------------------------------------------------------------
+UPDATE_LOAD_PROGRESS:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; Locate cursor at (ACTIVE_ROWS, Field 5 Col)
+	; ESC [ <ACTIVE_ROWS> ; <Col> H
+	LD	A,27
+	CALL	PUTC
+	LD	A,'['
+	CALL	PUTC
+	LD	A,(ACTIVE_ROWS)
+	CALL	PRINT_DEC_BYTE
+	LD	A,';'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	STATUS_ENCLOSED_WIDTH	; 80 - 78 = 2,  120 - 78 = 42
+	SRL	A			; 1 or 21
+	ADD	A,55			; Col 56 (80x24) or Col 76 (120x40)
+	CALL	PRINT_DEC_BYTE
+	LD	A,'H'
+	CALL	PUTC
+
+	LD	DE,STR_INVERSE_ON
+	CALL	PRINT_STR
+
+	LD	DE,STR_STATUS_POS	; "Line " (5 chars)
+	CALL	PRINT_STR
+
+	LD	HL,(DOC_TOTAL_LINES)
+	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
+	LD	C,A
+	LD	A,5
+	SUB	C
+	JR	C,ULP_NUM
+	JR	Z,ULP_NUM
+	LD	B,A
+ULP_PAD:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	ULP_PAD
+ULP_NUM:
+	LD	HL,(DOC_TOTAL_LINES)
+	CALL	PRINT_DEC_WORD
+
+	LD	DE,STR_INVERSE_OFF
+	CALL	PRINT_STR
+
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
 	RET
 
 ;------------------------------------------------------------------------------
@@ -16505,6 +16662,7 @@ STR_FMT_LINUX:	DB	"Linux | ","$"
 
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 STR_STATUS_OVR:		DB	"Overwrite mode  | ","$"
+STR_STATUS_LOADING:	DB	"Loading...      | ","$"
 STR_PAN_PREFIX:		DB	"[Pan +","$"
 
 STR_STATUS_OOM:		DB	"Out of memory   | ","$"
@@ -16699,6 +16857,8 @@ SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
 IS_SAVE_UI:		DB	0		; 1 if currently in Save File Screen
 IS_BLOCK_INSERT_UI:	DB	0		; 1 if currently in Block Insert File Screen
 IS_BLOCK_SAVE_UI:	DB	0		; 1 if currently in Block Save File Screen
+IS_LOADING_FILE:	DB	0		; 1 if currently loading file
+LOAD_PROGRESS_COUNT:	DB	100		; Progress interval down-counter (100 lines)
 INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0		; Streaming insert current line length
 INSERT_NEW_CUR_COL:	DW	0		; Cursor column position after insert
