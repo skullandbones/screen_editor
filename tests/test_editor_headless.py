@@ -2351,6 +2351,18 @@ def test_se_execution():
             print(f"[-] Step 52 failed: Save changes prompt missing. Buffer: {repr(out_s52_prompt)}", flush=True)
             return False
 
+        # Verify status row was cleanly cleared across all 120 columns before drawing prompt
+        locate_row40 = b"\x1b[40;1H\x1b[0m"
+        if locate_row40 in out_s52_prompt:
+            idx = out_s52_prompt.index(locate_row40) + len(locate_row40)
+            cleared_spaces = 0
+            while idx < len(out_s52_prompt) and out_s52_prompt[idx:idx+1] == b" ":
+                cleared_spaces += 1
+                idx += 1
+            if cleared_spaces != 120:
+                print(f"[-] Step 52 failed: Status row cleared {cleared_spaces} spaces, expected 120. Debris at right margin!", flush=True)
+                return False
+
         # 2. Send cursor keys (escape sequences) and verify they are ignored (prompt remains active)
         time.sleep(0.2)
         os.write(master, b"\x1b[A\x1b[B\x1b[C\x1b[D")

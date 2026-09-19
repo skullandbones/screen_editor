@@ -168,6 +168,19 @@ def run_sanity_test():
         if b"Save changes?" not in out_prompt:
             print(f"[-] Save changes prompt failed. Buffer: {repr(out_prompt)}", flush=True)
             return False
+
+        # Verify status row was cleanly cleared across all 120 columns (no highlighted debris at right margin)
+        locate_row40 = b"\x1b[40;1H\x1b[0m"
+        if locate_row40 in out_prompt:
+            idx = out_prompt.index(locate_row40) + len(locate_row40)
+            cleared_spaces = 0
+            while idx < len(out_prompt) and out_prompt[idx:idx+1] == b" ":
+                cleared_spaces += 1
+                idx += 1
+            if cleared_spaces != 120:
+                print(f"[-] Save changes prompt failed: Status row cleared {cleared_spaces} spaces, expected 120", flush=True)
+                return False
+
         # Answer 'n' to discard changes and return to CP/M
         os.write(master, b"n")
         out_exit = read_until(master, b"C>", timeout=4.0)
