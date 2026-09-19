@@ -507,10 +507,13 @@ CHECK_CTRL_P:
 	JP	MAIN_LOOP
 
 CHECK_CTRL_S:
-	; Command: Ctrl+S -> Save File Screen
+	; Command: Ctrl+S -> Save File Screen or Block Save File
 	CP	KEY_CTRL_S
 	JR	NZ,CHECK_CTRL_O
 	CALL	FLUSH_DEFERRED_RENDER
+	LD	A,(BLOCK_ACTIVE)
+	OR	A
+	JP	NZ,DO_BLOCK_SAVE_FILE
 	CALL	DO_SAVE_FILE_UI
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
@@ -706,6 +709,13 @@ CHECK_BACKSPACE:
 	JR	Z,DO_HANDLE_BS
 	CP	KEY_DEL
 	JR	NZ,CHECK_ESC_SEQ
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JP	Z,DO_CTRL_D_BLOCK
+	CP	1
+	JP	Z,DO_CTRL_D_IMPLIED_K_DELETE
+	CALL	DO_DELETE_FORWARD
+	JP	MAIN_LOOP
 
 DO_HANDLE_BS:
 	LD	A,(BLOCK_ACTIVE)
@@ -851,6 +861,33 @@ HANDLE_CTRL_O:
 	OR	A
 	JP	Z,DO_EXEC_OPEN
 	JP	SHOW_EXIT_PROMPT
+
+DO_BLOCK_SAVE_FILE:
+	CALL	INVALIDATE_ACTIVE_LINE
+	CALL	FLUSH_DIRTY_CACHE
+	; Implied Ctrl-K: solidify dynamic block selection if state 1
+	LD	A,(BLOCK_ACTIVE)
+	CP	1
+	CALL	Z,SOLIDIFY_BLOCK
+	CALL	NORMALIZE_BLOCK_BOUNDS
+	LD	A,1
+	LD	(IS_BLOCK_SAVE_UI),A
+	CALL	DO_SAVE_FILE_UI
+	; Clean up UI flags (save completed or user pressed ESC)
+	XOR	A
+	LD	(IS_BLOCK_SAVE_UI),A
+	LD	(IS_SAVE_UI),A
+	LD	(IS_SPLASH_SCREEN),A
+	; Note: BLOCK_ACTIVE is intentionally retained at 2 (solidified)
+	; so the user can subsequently press Del (or Ctrl+D) to delete the block.
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	XOR	A
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_LINE_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+	JP	MAIN_LOOP
 
 DO_BLOCK_INSERT_FILE:
 	; Implied Ctrl-K: solidify dynamic block selection if state 1
@@ -14023,8 +14060,18 @@ DO_SAVE_FILE_UI_IMPL:
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL	INIT_DIR_DRIVE
 
-	; Pre-fill filename if known (HAS_FILE_ARG == 1)
+	; Pre-fill filename if known (HAS_FILE_ARG == 1) and not Block Save
+	LD	A,(IS_BLOCK_SAVE_UI)
+	OR	A
+	JR	NZ,DSUI_EMPTY_BUF
 	CALL	FCB_TO_FILENAME_STR
+	JR	DSUI_PREFILL_DONE
+DSUI_EMPTY_BUF:
+	XOR	A
+	LD	(INPUT_BUF_LEN),A
+	LD	HL,INPUT_FILENAME_BUF
+	LD	(HL),0
+DSUI_PREFILL_DONE:
 
 REFRESH_SAVE_DIR:
 	; 1. Collect Directory Entries from CURRENT_DIR_DRIVE
@@ -14077,7 +14124,7 @@ RENDER_SAVE_PAGE:
 
 	; Read Filename Input (with prefilled string echoed)
 	CALL	READ_FILENAME_INPUT_PREFILLED
-	JR	C,CHECK_SAVE_PAGING_OR_CANCEL
+	JP	C,CHECK_SAVE_PAGING_OR_CANCEL
 
 	; Check if user typed a drive specification (e.g. "A:")
 	CALL	CHECK_DRIVE_SWITCH
@@ -14124,6 +14171,10 @@ DO_OVERWRITE_CONFIRMED:
 	CALL	PUTC			; Echo 'y'
 
 DO_ACTUAL_SAVE:
+	LD	A,(IS_BLOCK_SAVE_UI)
+	OR	A
+	JR	NZ,DO_ACTUAL_BLOCK_SAVE
+
 	; Save the file from Far RAM to disk
 	CALL	SAVE_FILE
 	RET	C			; Save failed / target hibernated -> return
@@ -14133,6 +14184,15 @@ DO_ACTUAL_SAVE:
 	LD	(HAS_FILE_ARG),A
 	XOR	A
 	LD	(DOC_MODIFIED),A
+	RET
+
+DO_ACTUAL_BLOCK_SAVE:
+	CALL	SAVE_BLOCK_FILE
+	; Restore original document WORK_FCB from DIR_TEMP_FCB
+	LD	HL,DIR_TEMP_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
 	RET
 
 HANDLE_SAVE_DRIVE_SWITCH:
@@ -14317,6 +14377,13 @@ RDT_NORMAL:
 	JR	RENDER_TITLE_COMMON
 
 RENDER_SAVE_TITLE:
+	LD	A,(IS_BLOCK_SAVE_UI)
+	OR	A
+	JR	Z,RST_NORMAL
+	LD	DE,STR_TITLE_BLOCK_SAVE_PRE
+	LD	A,(STR_SAVE_DRIVE_CHAR)
+	JR	RENDER_TITLE_COMMON
+RST_NORMAL:
 	LD	DE,STR_TITLE_SAVE_PRE
 	LD	A,(STR_SAVE_DRIVE_CHAR)
 
@@ -14332,12 +14399,16 @@ RENDER_TITLE_COMMON:
 	CALL	PRINT_HR_EQUAL
 
 	; 3. Row 2: Centered Title
-	; Title length: 43 if IS_BLOCK_INSERT_UI, 41 otherwise
+	; Title length: 43 if IS_BLOCK_INSERT_UI, 42 if IS_BLOCK_SAVE_UI, 41 otherwise
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
-	LD	A,41
-	JR	Z,RTC_LEN_OK
 	LD	A,43
+	JR	NZ,RTC_LEN_OK
+	LD	A,(IS_BLOCK_SAVE_UI)
+	OR	A
+	LD	A,42
+	JR	NZ,RTC_LEN_OK
+	LD	A,41
 RTC_LEN_OK:
 	LD	B,A
 	LD	A,'~'
@@ -15724,6 +15795,258 @@ STR_COPY_LOOP:
 	JR	STR_COPY_LOOP
 
 ;------------------------------------------------------------------------------
+; SAVE_BLOCK_FILE: Streams active solidified block text to disk (WORK_FCB)
+; Formats line endings according to SAVE_FORMAT (CRLF or LF).
+;------------------------------------------------------------------------------
+SAVE_BLOCK_FILE:
+	; Guard: if target drive is hibernated RAM drive, reject save
+	CALL	CHECK_FCB_IS_HIBERNATED
+	JR	NC,SAVE_BLK_DRIVE_OK
+	SCF
+	RET
+
+SAVE_BLK_DRIVE_OK:
+	; Flush local cache dirty lines first
+	CALL	FLUSH_DIRTY_CACHE
+
+	LD	A,(WORK_FCB+1)
+	CP	' '
+	JP	NZ,DO_SAVE_BLK_EXISTING
+
+	; Zero entire WORK_FCB (36 bytes)
+	LD	HL,WORK_FCB
+	LD	(HL),0
+	LD	DE,WORK_FCB+1
+	LD	BC,35
+	LDIR
+
+	; Copy default filename (0, "OUTPUT  TXT")
+	LD	HL,DEFAULT_FCB_NAME
+	LD	DE,WORK_FCB
+	LD	BC,12
+	LDIR
+
+DO_SAVE_BLK_EXISTING:
+	; Zero FCB extent and record bytes (bytes 12..35)
+	LD	HL,WORK_FCB+12
+	LD	(HL),0
+	LD	DE,WORK_FCB+13
+	LD	BC,23
+	LDIR
+
+	; Delete old file
+	LD	DE,WORK_FCB
+	LD	C,19			; BDOS Delete File
+	CALL	BDOS_ENTRY
+
+	; Create new file
+	LD	DE,WORK_FCB
+	LD	C,22			; BDOS Make File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	NZ,MAKE_BLK_FILE_OK
+	SCF
+	RET
+
+MAKE_BLK_FILE_OK:
+	; Prepare DMA write pointer
+	LD	DE,DEFAULT_DMA
+	LD	(CUR_DMA_PTR),DE
+	LD	A,128
+	LD	(DMA_BYTES_LEFT),A
+
+	; Check if block is empty:
+	; BLOCK_START_ROW == BLOCK_END_ROW and BLOCK_START_COL == BLOCK_END_COL
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,SBF_NON_EMPTY
+	LD	A,L
+	CP	E
+	JR	NZ,SBF_NON_EMPTY
+	LD	HL,(BLOCK_START_COL)
+	LD	DE,(BLOCK_END_COL)
+	LD	A,H
+	CP	D
+	JR	NZ,SBF_NON_EMPTY
+	LD	A,L
+	CP	E
+	JR	NZ,SBF_NON_EMPTY
+	; Block is completely empty -> flush and close (0 bytes written)
+	JP	SAVE_FLUSH_REMAINDER
+
+SBF_NON_EMPTY:
+	; Check if single-line or multi-line
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JP	NZ,SBF_MULTILINE
+	LD	A,L
+	CP	E
+	JP	NZ,SBF_MULTILINE
+
+	;--------------------------------------------------------------------------
+	; Single-Line Block
+	;--------------------------------------------------------------------------
+	LD	BC,(BLOCK_START_ROW)
+	LD	DE,SPLIT_LINE_TEMP
+	LD	HL,MAX_ACTIVE_LINE_STRIDE-2
+	CALL	READ_FAR_LINE_MAX
+
+	; Advance HL in SPLIT_LINE_TEMP to BLOCK_START_COL
+	LD	HL,SPLIT_LINE_TEMP
+	LD	BC,(BLOCK_START_COL)
+SBF_SGL_ADV:
+	LD	A,B
+	OR	C
+	JR	Z,SBF_SGL_AT_START
+	LD	A,(HL)
+	OR	A
+	JP	Z,SAVE_FLUSH_REMAINDER	; Line ended before BLOCK_START_COL
+	INC	HL
+	DEC	BC
+	JR	SBF_SGL_ADV
+
+SBF_SGL_AT_START:
+	; Number of chars to stream: BC = BLOCK_END_COL - BLOCK_START_COL
+	LD	DE,(BLOCK_START_COL)
+	LD	BC,(BLOCK_END_COL)
+	LD	A,C
+	SUB	E
+	LD	C,A
+	LD	A,B
+	SBC	A,D
+	LD	B,A
+	JP	C,SAVE_FLUSH_REMAINDER
+	OR	C
+	JP	Z,SAVE_FLUSH_REMAINDER
+
+SBF_SGL_STREAM:
+	LD	A,B
+	OR	C
+	JR	Z,SBF_SGL_DONE
+	LD	A,(HL)
+	OR	A
+	JR	Z,SBF_SGL_DONE		; Line ended before BLOCK_END_COL
+	CALL	WRITE_BYTE_TO_DMA
+	INC	HL
+	DEC	BC
+	JR	SBF_SGL_STREAM
+
+SBF_SGL_DONE:
+	CALL	WRITE_SAVE_LINE_ENDING
+	JP	SAVE_FLUSH_REMAINDER
+
+	;--------------------------------------------------------------------------
+	; Multi-Line Block
+	;--------------------------------------------------------------------------
+SBF_MULTILINE:
+	; Step 1: Head row (BLOCK_START_ROW), from BLOCK_START_COL to end of line
+	LD	BC,(BLOCK_START_ROW)
+	LD	DE,SPLIT_LINE_TEMP
+	LD	HL,MAX_ACTIVE_LINE_STRIDE-2
+	CALL	READ_FAR_LINE_MAX
+
+	LD	HL,SPLIT_LINE_TEMP
+	LD	BC,(BLOCK_START_COL)
+SBF_ML_HEAD_ADV:
+	LD	A,B
+	OR	C
+	JR	Z,SBF_ML_HEAD_STREAM
+	LD	A,(HL)
+	OR	A
+	JR	Z,SBF_ML_HEAD_DONE
+	INC	HL
+	DEC	BC
+	JR	SBF_ML_HEAD_ADV
+
+SBF_ML_HEAD_STREAM:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SBF_ML_HEAD_DONE
+	CALL	WRITE_BYTE_TO_DMA
+	INC	HL
+	JR	SBF_ML_HEAD_STREAM
+
+SBF_ML_HEAD_DONE:
+	CALL	WRITE_SAVE_LINE_ENDING
+
+	; Step 2: Middle rows: from (BLOCK_START_ROW + 1) to (BLOCK_END_ROW - 1)
+	LD	BC,(BLOCK_START_ROW)
+	INC	BC
+SBF_ML_MID_LOOP:
+	LD	HL,(BLOCK_END_ROW)
+	LD	A,H
+	CP	B
+	JR	NZ,SBF_ML_MID_COMPARE
+	LD	A,L
+	CP	C
+	JR	Z,SBF_ML_TAIL
+SBF_ML_MID_COMPARE:
+	PUSH	BC
+	LD	DE,SPLIT_LINE_TEMP
+	LD	HL,MAX_ACTIVE_LINE_STRIDE-2
+	CALL	READ_FAR_LINE_MAX
+
+	LD	HL,SPLIT_LINE_TEMP
+SBF_ML_MID_STREAM:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SBF_ML_MID_LINE_DONE
+	CALL	WRITE_BYTE_TO_DMA
+	INC	HL
+	JR	SBF_ML_MID_STREAM
+
+SBF_ML_MID_LINE_DONE:
+	CALL	WRITE_SAVE_LINE_ENDING
+	POP	BC
+	INC	BC
+	JR	SBF_ML_MID_LOOP
+
+	; Step 3: Tail row (BLOCK_END_ROW)
+SBF_ML_TAIL:
+	LD	HL,(BLOCK_END_COL)
+	LD	A,H
+	OR	L
+	JP	Z,SAVE_FLUSH_REMAINDER
+
+	LD	BC,(BLOCK_END_ROW)
+	LD	DE,SPLIT_LINE_TEMP
+	LD	HL,MAX_ACTIVE_LINE_STRIDE-2
+	CALL	READ_FAR_LINE_MAX
+
+	LD	HL,SPLIT_LINE_TEMP
+	LD	BC,(BLOCK_END_COL)
+SBF_ML_TAIL_STREAM:
+	LD	A,B
+	OR	C
+	JR	Z,SBF_ML_TAIL_DONE
+	LD	A,(HL)
+	OR	A
+	JR	Z,SBF_ML_TAIL_DONE
+	CALL	WRITE_BYTE_TO_DMA
+	INC	HL
+	DEC	BC
+	JR	SBF_ML_TAIL_STREAM
+
+SBF_ML_TAIL_DONE:
+	CALL	WRITE_SAVE_LINE_ENDING
+	JP	SAVE_FLUSH_REMAINDER
+
+WRITE_SAVE_LINE_ENDING:
+	LD	A,(SAVE_FORMAT)
+	CP	FMT_CPM
+	JR	NZ,WSLE_LF_ONLY
+	LD	A,13
+	CALL	WRITE_BYTE_TO_DMA
+WSLE_LF_ONLY:
+	LD	A,10
+	CALL	WRITE_BYTE_TO_DMA
+	RET
+
+;------------------------------------------------------------------------------
 ; File Saving: Streams lines directly from Far RAM banks to disk
 ;------------------------------------------------------------------------------
 SAVE_FILE:
@@ -15836,18 +16159,7 @@ SAVE_PAYLOAD_LOOP:
 	JR	SAVE_STRIDE_LOOP
 
 SAVE_LINE_END:
-	; Write Line Ending depending on SAVE_FORMAT
-	LD	A,(SAVE_FORMAT)
-	CP	FMT_CPM
-	JR	NZ,WRITE_LF_ONLY
-
-	LD	A,13
-	CALL	WRITE_BYTE_TO_DMA
-
-WRITE_LF_ONLY:
-	LD	A,10
-	CALL	WRITE_BYTE_TO_DMA
-
+	CALL	WRITE_SAVE_LINE_ENDING
 	POP	BC
 	INC	BC
 	JP	SAVE_LINE_LOOP
@@ -16265,6 +16577,7 @@ STR_TITLE_OPEN_PRE:	DB	"SE.COM - OPEN FILE (DIRECTORY - DRIVE ","$"
 STR_DIR_DRIVE_CHAR:	DB	"A"
 STR_TITLE_SAVE_PRE:	DB	"SE.COM - SAVE FILE (DIRECTORY - DRIVE ","$"
 STR_SAVE_DRIVE_CHAR:	DB	"A"
+STR_TITLE_BLOCK_SAVE_PRE: DB	"SE.COM - SAVE BLOCK (DIRECTORY - DRIVE ","$"
 STR_TITLE_DRIVE_SUF:	DB	":)",13,10,"$"
 
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
@@ -16385,6 +16698,7 @@ FILE_RECORDS_HI:	DB	0		; High byte of 24-bit record count
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
 IS_SAVE_UI:		DB	0		; 1 if currently in Save File Screen
 IS_BLOCK_INSERT_UI:	DB	0		; 1 if currently in Block Insert File Screen
+IS_BLOCK_SAVE_UI:	DB	0		; 1 if currently in Block Save File Screen
 INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0		; Streaming insert current line length
 INSERT_NEW_CUR_COL:	DW	0		; Cursor column position after insert

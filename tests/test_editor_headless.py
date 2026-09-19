@@ -94,6 +94,8 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BLKSGL.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if os.path.isfile(cpmcp_bin):
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big_tmp, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -3649,17 +3651,90 @@ def test_se_execution():
             return False
         print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted and replaced with single-line file.", flush=True)
 
+        print("[+] Successfully verified Block Insert File feature (Step 66)!", flush=True)
+
+        # 67. Test Block Save feature (Ctrl+S when BLOCK_ACTIVE != 0)
+        # We currently have "HelloINSERTED END" on line 1.
+        # Move cursor to col 5 (start of "INSERTED")
+        time.sleep(0.2)
+        os.write(master, b"\x01")  # Ctrl+A (Home)
+        time.sleep(0.05)
+        for _ in range(5):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.03)
+        drain_all(master)
+
+        # Start block selection with Ctrl-B
+        os.write(master, b"\x02")
+        time.sleep(0.05)
+        # Select "INSERTED" (8 chars)
+        for _ in range(8):
+            os.write(master, b"\x1b[C")
+            time.sleep(0.03)
+        drain_all(master)
+
+        # Trigger Block Save via Ctrl+S
+        os.write(master, b"\x13")
+        out_s67_ui = read_until(master, b"SAVE BLOCK (DIRECTORY - DRIVE C:)", timeout=6.0)
+        out_s67_ui += read_until(master, b"Enter filename to save:", timeout=4.0)
+        if b"SAVE BLOCK (DIRECTORY - DRIVE C:)" not in out_s67_ui or b"Enter filename to save:" not in out_s67_ui:
+            print(f"[-] Step 67 failed: Block Save UI prompt missing: {repr(out_s67_ui)}", flush=True)
+            return False
+        print("[+] Step 67 Subtest 1 PASSED: Ctrl+S with active block opened SAVE BLOCK UI.", flush=True)
+
+        # Cancel with ESC and verify block retained as solidified
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        out_s67_esc = read_until(master, b"[BLK: 8c", timeout=5.0)
+        out_s67_esc += drain_all(master)
+        if b"[BLK: 8c" not in out_s67_esc:
+            print(f"[-] Step 67 Subtest 2 failed: Block not retained after ESC cancel: {repr(out_s67_esc)}", flush=True)
+            return False
+        print("[+] Step 67 Subtest 2 PASSED: ESC cancelled back to editor with block retained [BLK: 8c].", flush=True)
+
+        # Press Ctrl+S again and save to BLKSGL.TXT
+        os.write(master, b"\x13")
+        read_until(master, b"Enter filename to save:", timeout=5.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        os.write(master, b"BLKSGL.TXT\r")
+        out_s67_saved = read_until(master, b"[BLK: 8c", timeout=6.0)
+        out_s67_saved += drain_all(master)
+        if b"[BLK: 8c" not in out_s67_saved:
+            print(f"[-] Step 67 Subtest 3 failed: Block not retained after successful save: {repr(out_s67_saved)}", flush=True)
+            return False
+        print("[+] Step 67 Subtest 3 PASSED: Block saved and block selection remained solidified.", flush=True)
+
+        # Delete saved block with Del key (\x1b[3~)
+        os.write(master, b"\x1b[3~")
+        out_s67_del = read_until(master, b"Hello END", timeout=5.0)
+        out_s67_del += drain_all(master)
+        if b"Hello END" not in out_s67_del or b"[BLK:" in out_s67_del:
+            print(f"[-] Step 67 Subtest 4 failed: Block deletion with Del failed: {repr(out_s67_del)}", flush=True)
+            return False
+        print("[+] Step 67 Subtest 4 PASSED: Saved block deleted with Del key, line is now 'Hello END'.", flush=True)
+
         # Exit to CP/M with Ctrl-Q
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl-Q
         time.sleep(0.3)
-        out_s66_q = drain_all(master)
-        if b"Save changes" in out_s66_q:
+        out_s67_q = drain_all(master)
+        if b"Save changes" in out_s67_q:
             os.write(master, b"n")  # Don't save
             time.sleep(0.3)
             drain_all(master)
         read_until(master, b"C>", timeout=4.0)
-        print("[+] Successfully verified Block Insert File feature (Step 66)!", flush=True)
+
+        # Verify saved file on disk via CP/M TYPE
+        os.write(master, b"type blksgl.txt\r")
+        out_type = read_until(master, b"C>", timeout=5.0)
+        if b"INSERTED" not in out_type:
+            print(f"[-] Step 67 Subtest 5 failed: 'INSERTED' not found in BLKSGL.TXT: {repr(out_type)}", flush=True)
+            return False
+        print("[+] Step 67 Subtest 5 PASSED: Verified BLKSGL.TXT contains saved block content 'INSERTED'.", flush=True)
+        print("[+] Successfully verified Block Save feature (Step 67)!", flush=True)
 
         return True
 
@@ -3670,6 +3745,8 @@ def test_se_execution():
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BLKSGL.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             proc.kill()
