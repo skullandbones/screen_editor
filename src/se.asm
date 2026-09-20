@@ -83,6 +83,16 @@ START:
 	LD	(SAVED_SP),SP
 	LD	SP,LOCAL_STACK
 
+	; Query initial CP/M user area via BDOS 32 (Get User Number, E=0xFF)
+	LD	E,0FFH
+	LD	C,32
+	CALL	BDOS_ENTRY
+	LD	(ORIG_CPM_USER),A
+	LD	(CURRENT_DIR_USER),A
+	LD	(DOC_USER_NUM),A
+	LD	(WORK_FCB_USER),A
+	LD	(BLOCK_IO_USER),A
+
 	; Initialize Direct BIOS Console Vectors
 	CALL	INIT_BIOS_JUMPS
 
@@ -1064,6 +1074,8 @@ DO_CLOSE_DOCUMENT:
 	LD	(HAS_FILE_ARG),A
 	LD	(IN_EDITOR_MODE),A
 	LD	(DOC_MODIFIED),A
+	LD	(DOC_USER_NUM),A
+	LD	(WORK_FCB_USER),A
 	CALL	CLEAR_CACHE_DIRTY_FLAGS
 	LD	(BLOCK_ACTIVE),A
 	; Clear WORK_FCB (36 bytes)
@@ -1091,6 +1103,12 @@ EXIT_PROGRAM:
 	CALL	PRINT_STR
 	LD	DE,STR_SHOW_CURSOR
 	CALL	PRINT_STR
+
+	; Restore original CP/M user area
+	LD	A,(ORIG_CPM_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
 
 	CALL	RESTORE_RAMDRIVE
 
@@ -1213,38 +1231,54 @@ CHECK_COMMAND_LINE:
 	XOR	A
 	LD	(CMDLINE_HAS_DRIVE),A
 
-	LD	A,(DEFAULT_FCB+1)
-	CP	' '
-	JR	Z,NO_FILE_ARG
-	CP	0
-	JR	Z,NO_FILE_ARG
+	; Check DEFAULT_DMA length byte at 0080H
+	LD	A,(DEFAULT_DMA)
+	OR	A
+	JP	Z,NO_FILE_ARG
 
+	; Null-terminate command line tail: DEFAULT_DMA + 1 + length
+	LD	E,A
+	LD	D,0
+	LD	HL,DEFAULT_DMA+1
+	ADD	HL,DE
+	LD	(HL),0			; Null-terminate
+
+	; Skip leading spaces
+	LD	HL,DEFAULT_DMA+1
+CCL_SKIP_SP:
+	LD	A,(HL)
+	CP	' '
+	JR	NZ,CCL_CHECK_NONEMPTY
+	INC	HL
+	JR	CCL_SKIP_SP
+
+CCL_CHECK_NONEMPTY:
+	OR	A
+	JP	Z,NO_FILE_ARG		; Only spaces -> no file arg
+
+	; We have a command line argument!
 	LD	A,1
 	LD	(HAS_FILE_ARG),A
 
-	; Check if command line explicitly specified drive letter (1..16 in DEFAULT_FCB)
-	LD	A,(DEFAULT_FCB)
+	; Parse optional :<line> suffix from DEFAULT_DMA
+	CALL	PARSE_CMDLINE_LINE_NUM
+
+	; Parse command line argument into WORK_FCB and WORK_FCB_USER
+	LD	HL,DEFAULT_DMA+1
+	CALL	PARSE_STRING_TO_FCB
+
+	; Check if command line had an explicit drive
+	LD	A,(PREFIX_DRIVE)
 	OR	A
-	JR	Z,CCL_NO_EXPLICIT_DRIVE
+	JR	Z,CCL_CHECK_USER
 	LD	A,1
 	LD	(CMDLINE_HAS_DRIVE),A
 
-CCL_NO_EXPLICIT_DRIVE:
-	; Copy drive + filename + ext (12 bytes)
-	LD	HL,DEFAULT_FCB
-	LD	DE,WORK_FCB
-	LD	BC,12
-	LDIR
-
-	; Zero remaining FCB bytes (12..35)
-	LD	HL,WORK_FCB+12
-	LD	(HL),0
-	LD	DE,WORK_FCB+13
-	LD	BC,23
-	LDIR
-
-	; Parse optional line number from DEFAULT_DMA (0080H)
-	CALL	PARSE_CMDLINE_LINE_NUM
+CCL_CHECK_USER:
+	; Update DOC_USER_NUM and CURRENT_DIR_USER to match WORK_FCB_USER
+	LD	A,(WORK_FCB_USER)
+	LD	(DOC_USER_NUM),A
+	LD	(CURRENT_DIR_USER),A
 	RET
 
 NO_FILE_ARG:
@@ -1316,40 +1350,32 @@ NOT_LINE_NUM:
 	RET
 
 FOUND_COLON:
-	; Check if this colon is actually a drive colon (e.g. C:15)
-	; A drive colon has:
-	;   - Char at (HL-1) is a letter 'A'..'Z' or 'a'..'z'
-	;   - Char at (HL-2) is space or HL-1 was the first char (E == 1)
-	LD	A,E			; E = 1-based index of colon within DEFAULT_DMA
-	CP	2
-	JR	C,IS_LINE_COLON		; Colon at pos 1 cannot be drive colon (need letter before it)
-	DEC	HL
-	LD	A,(HL)			; A = char before colon
-	INC	HL
-	CALL	IS_ALPHA_CHAR
-	JR	NC,IS_LINE_COLON	; Preceding char not a letter -> must be line colon!
+	; HL points to ':' in DEFAULT_DMA. Check if this colon is inside a drive/user prefix.
+	PUSH	HL			; Save colon pointer
+	LD	HL,DEFAULT_DMA+1
+	CALL	PARSE_DRIVE_USER_PREFIX
+	JR	NC,FCLN_IS_LINE		; No prefix at start -> line colon
 
-	; Char before colon is a letter. Check char before that (HL-2).
+	; Prefix matched: HL is now past the prefix colon!
+	POP	DE			; DE = colon pointer
+	PUSH	DE
+	LD	A,D
+	CP	H
+	JR	NZ,FCLN_CMP
 	LD	A,E
-	CP	2
-	JR	Z,IS_DRIVE_COLON	; Letter at pos 1, colon at pos 2 -> drive colon (e.g. "C:...")
-	DEC	HL
-	DEC	HL
-	LD	A,(HL)			; A = char at HL-2
-	INC	HL
-	INC	HL
-	CP	' '
-	JR	Z,IS_DRIVE_COLON	; Preceded by space -> drive colon (e.g. " C:...")
+	CP	L
+FCLN_CMP:
+	JR	C,FCLN_IS_DRIVE		; DE < HL -> colon is part of prefix!
 
-IS_LINE_COLON:
-	; Colon is followed by digits. HL points to ':'
-	; HL+1 points to first digit
-	INC	HL
+FCLN_IS_LINE:
+	POP	HL			; Restore colon pointer
+	INC	HL			; HL points to digits
 	CALL	PARSE_DEC_WORD		; DE = 16-bit parsed value
 	LD	(CMDLINE_GOTO_LINE),DE
 	RET
 
-IS_DRIVE_COLON:
+FCLN_IS_DRIVE:
+	POP	HL			; Restore colon pointer
 	RET
 
 ; Helper: Return Carry=1 if A is 'A'..'Z' or 'a'..'z'
@@ -5593,7 +5619,7 @@ PSF_LIMIT_SET:
 PSF_NO_NAME_LOOP:
 	LD	A,(DE)
 	OR	A
-	JR	Z,PSF_CHECK_MODIFIED
+	JP	Z,PSF_CHECK_MODIFIED
 	CALL	PUTC
 	INC	DE
 	INC	C
@@ -5624,6 +5650,25 @@ PSF_USE_FCB_DRIVE:
 PSF_EMIT_DRIVE:
 	CALL	PUTC
 	INC	C
+
+	; If DOC_USER_NUM > 0, emit user number digits
+	LD	A,(DOC_USER_NUM)
+	OR	A
+	JR	Z,PSF_EMIT_COLON
+	CP	10
+	JR	C,PSF_USER_1DIGIT
+	PUSH	AF
+	LD	A,'1'
+	CALL	PUTC
+	INC	C
+	POP	AF
+	SUB	10
+PSF_USER_1DIGIT:
+	ADD	A,'0'
+	CALL	PUTC
+	INC	C
+
+PSF_EMIT_COLON:
 	LD	A,':'
 	CALL	PUTC
 	INC	C
@@ -12933,6 +12978,12 @@ LOAD_FILE:
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
 
+	; Set BDOS user area to WORK_FCB_USER
+	LD	A,(WORK_FCB_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+
 	; Guard: if target drive is hibernated RAM drive, reject load
 	CALL	CHECK_FCB_IS_HIBERNATED
 	JP	C,LOAD_FILE_NOT_FOUND
@@ -13268,6 +13319,11 @@ LOAD_FINISH:
 	XOR	A
 	LD	(IS_LOADING_FILE),A
 
+	; Update DOC_USER_NUM and CURRENT_DIR_USER to match loaded file
+	LD	A,(WORK_FCB_USER)
+	LD	(DOC_USER_NUM),A
+	LD	(CURRENT_DIR_USER),A
+
 	; Ensure at least 1 line exists
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	A,H
@@ -13296,6 +13352,11 @@ LOAD_INIT_CACHE:
 	RET
 
 LOAD_FILE_NOT_FOUND:
+	; Restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
 	XOR	A
 	LD	(IS_LOADING_FILE),A
 	SCF				; Carry = 1 (error: file not found)
@@ -13512,11 +13573,11 @@ RENDER_OPEN_PAGE:
 
 	; Check if user typed a drive specification (e.g. "A:")
 	CALL	CHECK_DRIVE_SWITCH
-	JR	C,HANDLE_OPEN_DRIVE_SWITCH
+	JP	C,HANDLE_OPEN_DRIVE_SWITCH
 
 	; Check if user typed a filter pattern (e.g. "*.TXT" or "B:*.TXT")
 	CALL	CHECK_FILTER_PATTERN
-	JR	C,HANDLE_OPEN_FILTER
+	JP	C,HANDLE_OPEN_FILTER
 
 DO_PARSE_AND_LOAD:
 	; Backup current WORK_FCB to DIR_TEMP_FCB in case open fails
@@ -13570,7 +13631,11 @@ OPEN_RENDER:
 	JP	MAIN_LOOP
 
 HANDLE_OPEN_DRIVE_SWITCH:
-	; A = new drive (1..16)
+	; A = new drive (1..16 or 0), C = new user (0..15 or 0xFF)
+	PUSH	BC			; Save target user
+	OR	A
+	JR	Z,HODS_DRIVE_DONE	; Drive unchanged
+
 	PUSH	AF
 	LD	A,(RAMDRIVE_IS_HIBERNATED)
 	OR	A
@@ -13586,12 +13651,23 @@ HANDLE_OPEN_DRIVE_SWITCH:
 	JR	NZ,HODS_OK
 	; Cannot switch to hibernated RAM drive!
 	POP	AF
+	POP	BC
 	JP	REFRESH_OPEN_DIR
+
 HODS_OK:
 	POP	AF
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_DIR_DRIVE_CHAR),A
+
+HODS_DRIVE_DONE:
+	POP	BC			; C = target user
+	LD	A,C
+	CP	0FFH
+	JR	Z,HODS_FINISH
+	LD	(CURRENT_DIR_USER),A
+
+HODS_FINISH:
 	JP	REFRESH_OPEN_DIR
 
 HANDLE_OPEN_FILTER:
@@ -13607,6 +13683,8 @@ OPEN_FILE_NOT_FOUND:
 	LD	DE,WORK_FCB
 	LD	BC,36
 	LDIR
+	LD	A,(DOC_USER_NUM)
+	LD	(WORK_FCB_USER),A
 
 	; Move cursor past ']' box before printing error message
 	LD	A,(INPUT_BUF_LEN)
@@ -13693,16 +13771,38 @@ DO_PARSE_AND_INSERT:
 	LD	BC,36
 	LDIR
 
+	; Save WORK_FCB_USER into BLOCK_IO_USER
+	LD	A,(WORK_FCB_USER)
+	LD	(BLOCK_IO_USER),A
+
 	; Restore original document WORK_FCB from DIR_TEMP_FCB
 	LD	HL,DIR_TEMP_FCB
 	LD	DE,WORK_FCB
 	LD	BC,36
 	LDIR
 
+	; Restore WORK_FCB_USER from DOC_USER_NUM
+	LD	A,(DOC_USER_NUM)
+	LD	(WORK_FCB_USER),A
+
+	; Set BDOS user area to BLOCK_IO_USER
+	LD	A,(BLOCK_IO_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+
 	; Probe and open INSERT_FCB
 	CALL	PROBE_INSERT_FILE
-	JP	C,OPEN_FILE_NOT_FOUND
+	JR	NC,DPAI_PROBE_OK
 
+	; Probe failed: restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+	JP	OPEN_FILE_NOT_FOUND
+
+DPAI_PROBE_OK:
 	; Setup loading UI for block insert
 	LD	A,(HAS_FILE_ARG)
 	LD	(SAVED_HAS_FILE_ARG),A
@@ -13747,6 +13847,12 @@ DO_PARSE_AND_INSERT:
 	LD	(NEED_SCREEN_RENDER),A
 	LD	(NEED_LINE_RENDER),A
 	LD	(NEED_STATUS_RENDER),A
+
+	; Restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
 
 	; Reset stack and resume editor mode
 	LD	SP,LOCAL_STACK
@@ -14541,6 +14647,8 @@ OVERWRITE_KEY_LOOP:
 	LD	DE,WORK_FCB
 	LD	BC,36
 	LDIR
+	LD	A,(DOC_USER_NUM)
+	LD	(WORK_FCB_USER),A
 
 	LD	DE,STR_SAVE_CANCELLED
 	CALL	PRINT_STR
@@ -14573,31 +14681,48 @@ DO_ACTUAL_BLOCK_SAVE:
 	LD	DE,WORK_FCB
 	LD	BC,36
 	LDIR
+	LD	A,(DOC_USER_NUM)
+	LD	(WORK_FCB_USER),A
 	RET
 
 HANDLE_SAVE_DRIVE_SWITCH:
-	; A = new drive (1..16)
+	; A = new drive (1..16 or 0), C = new user (0..15 or 0xFF)
+	PUSH	BC			; Save target user
+	OR	A
+	JR	Z,HSDS_DRIVE_DONE	; Drive unchanged
+
 	PUSH	AF
 	LD	A,(RAMDRIVE_IS_HIBERNATED)
 	OR	A
-	JR	Z,HSDS_OK
+	JR	Z,HSDS_DRIVE_OK
 	LD	A,(RAMDRIVE_DRIVE_NUM)
 	CP	0FFH
-	JR	Z,HSDS_OK
+	JR	Z,HSDS_DRIVE_OK
 	INC	A			; 1-based drive number
 	LD	B,A
 	POP	AF
 	PUSH	AF
 	CP	B
-	JR	NZ,HSDS_OK
+	JR	NZ,HSDS_DRIVE_OK
 	; Cannot switch to hibernated RAM drive!
 	POP	AF
+	POP	BC
 	JP	REFRESH_SAVE_DIR
-HSDS_OK:
+
+HSDS_DRIVE_OK:
 	POP	AF
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_SAVE_DRIVE_CHAR),A
+
+HSDS_DRIVE_DONE:
+	POP	BC			; C = target user
+	LD	A,C
+	CP	0FFH
+	JR	Z,HSDS_FINISH
+	LD	(CURRENT_DIR_USER),A
+
+HSDS_FINISH:
 	JP	REFRESH_SAVE_DIR
 
 HANDLE_SAVE_FILTER:
@@ -14651,6 +14776,12 @@ SET_SAVE_NEXT_PAGE:
 ; Returns: Carry = 1 if file exists, Carry = 0 if file does not exist
 ;------------------------------------------------------------------------------
 CHECK_FILE_EXISTS:
+	; Set BDOS user area to WORK_FCB_USER before probing
+	LD	A,(WORK_FCB_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+
 	; Set DMA address to RAW_SECTOR_BUF
 	LD	DE,RAW_SECTOR_BUF
 	LD	C,26			; BDOS Set DMA
@@ -14680,10 +14811,23 @@ CHECK_FILE_EXISTS:
 	LD	DE,RAW_TEST_FCB
 	LD	C,16
 	CALL	BDOS_ENTRY
+
+	; Restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+
 	SCF				; Carry = 1 (file exists)
 	RET
 
 FILE_NOT_EXISTS:
+	; Restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+
 	OR	A			; Carry = 0 (file does not exist)
 	RET
 
@@ -14806,6 +14950,17 @@ RENDER_TITLE_COMMON:
 RTC_BASE_LEN_OK:
 	LD	B,A
 
+	; Check if CURRENT_DIR_USER > 0: add 1 or 2 to title length
+	LD	A,(CURRENT_DIR_USER)
+	OR	A
+	JR	Z,RTC_CHECK_FILTER_LEN
+	CP	10
+	JR	C,RTC_U_LEN_1
+	INC	B			; 2 digits (10..15): +2 chars
+RTC_U_LEN_1:
+	INC	B			; 1 digit (1..9): +1 char
+
+RTC_CHECK_FILTER_LEN:
 	; Check if custom filter is active
 	LD	A,(DIR_FILTER_ACTIVE)
 	OR	A
@@ -14845,6 +15000,22 @@ RTC_PAD_LOOP:
 	CALL	PRINT_STR
 	POP	AF
 	CALL	PUTC
+
+	; If CURRENT_DIR_USER > 0, print user digits
+	LD	A,(CURRENT_DIR_USER)
+	OR	A
+	JR	Z,RTC_USER_DONE
+	CP	10
+	JR	C,RTC_PRINT_U_1DIGIT
+	PUSH	AF
+	LD	A,'1'
+	CALL	PUTC
+	POP	AF
+	SUB	10
+RTC_PRINT_U_1DIGIT:
+	ADD	A,'0'
+	CALL	PUTC
+RTC_USER_DONE:
 
 	LD	A,(DIR_FILTER_ACTIVE)
 	OR	A
@@ -14895,34 +15066,293 @@ IDD_USE_FCB:
 	RET
 
 ;------------------------------------------------------------------------------
-; Check if INPUT_FILENAME_BUF contains a drive specification (e.g. "A:")
-; Returns:
-;   Carry = 1 -> Drive switch requested; A = drive code 1..16 (1=A, 2=B, etc.)
-;   Carry = 0 -> Not a drive switch
+; Helper: Check if character in A is a valid drive letter 'A'..'P' / 'a'..'p'
+; Returns: Carry = 1 and A = drive code 1..16 (1=A, 2=B, etc.)
+;          Carry = 0 if not a drive letter
 ;------------------------------------------------------------------------------
-CHECK_DRIVE_SWITCH:
-	LD	A,(INPUT_BUF_LEN)
-	CP	2
-	RET	NZ			; Not length 2 -> Carry = 0
-
-	LD	A,(INPUT_FILENAME_BUF+1)
-	CP	':'
-	JR	NZ,CDS_NO		; Second character not ':' -> Carry = 0
-
-	LD	A,(INPUT_FILENAME_BUF)
+IS_DRIVE_LETTER:
 	CALL	TO_UPPER
 	CP	'A'
-	JR	C,CDS_NO
+	JR	C,IDL_NOT_DRV
 	CP	'P'+1
-	JR	NC,CDS_NO
-
-	; Valid drive letter 'A'..'P'
-	LD	(INPUT_FILENAME_BUF),A	; Normalize buffer to uppercase letter
-	SUB	'A'-1			; 'A' -> 1, 'B' -> 2, etc.
-	SCF				; Carry = 1
+	JR	NC,IDL_NOT_DRV
+	SUB	'A'-1			; 'A' -> 1, ..., 'P' -> 16
+	SCF
+	RET
+IDL_NOT_DRV:
+	OR	A			; Carry = 0
 	RET
 
-CDS_NO:
+;------------------------------------------------------------------------------
+; Helper: Check if character in A is a digit '0'..'9'
+; Returns: Carry = 1 and A = digit value 0..9
+;          Carry = 0 if not a digit
+;------------------------------------------------------------------------------
+IS_DIGIT_CHAR:
+	CP	'0'
+	JR	C,IDC_NOT_DIG
+	CP	'9'+1
+	JR	NC,IDC_NOT_DIG
+	SUB	'0'			; 0..9
+	SCF
+	RET
+IDC_NOT_DIG:
+	OR	A
+	RET
+
+;------------------------------------------------------------------------------
+; Helper: Parse 2-digit user number from ASCII digits in D (tens) and E (units)
+; Returns: Carry = 1 and A = user number (0..15)
+;          Carry = 0 if user number > 15
+;------------------------------------------------------------------------------
+PARSE_2DIGIT_USER:
+	LD	A,D
+	CP	'0'
+	JR	Z,P2U_TENS_ZERO
+	CP	'1'
+	JR	NZ,P2U_INVALID		; Tens > 1 -> invalid (> 19)
+	; Tens is '1'
+	LD	A,E
+	CP	'5'+1
+	JR	NC,P2U_INVALID		; Units > '5' -> invalid (> 15)
+	SUB	'0'
+	ADD	A,10			; 10..15
+	SCF
+	RET
+P2U_TENS_ZERO:
+	LD	A,E
+	SUB	'0'			; 0..9
+	SCF
+	RET
+P2U_INVALID:
+	OR	A
+	RET
+
+;------------------------------------------------------------------------------
+; PARSE_DRIVE_USER_PREFIX:
+; Parses CP/M drive and/or user area prefix at HL:
+;   "C:"   -> Drive C, User unchanged
+;   "1:"   -> Drive unchanged, User 1
+;   "C1:"  -> Drive C, User 1
+;   "1C:"  -> Drive C, User 1
+;   "C15:" -> Drive C, User 15
+;   "15C:" -> Drive C, User 15
+;   "15:"  -> Drive unchanged, User 15
+; Returns:
+;   Carry = 1: Valid prefix matched.
+;              HL advanced past ':'.
+;              A = Target Drive (1..16 if specified, or 0 if unchanged).
+;              C = Target User (0..15 if specified, or 0xFF if unchanged).
+;              Also stored in (PREFIX_DRIVE) and (PREFIX_USER).
+;   Carry = 0: No valid prefix.
+;              HL preserved.
+;------------------------------------------------------------------------------
+PARSE_DRIVE_USER_PREFIX:
+	PUSH	HL
+PDUP_SKIP_SPACES:
+	LD	A,(HL)
+	CP	' '
+	JR	NZ,PDUP_CHECK_COLON
+	INC	HL
+	JR	PDUP_SKIP_SPACES
+
+PDUP_CHECK_COLON:
+	; Look for ':' at HL+1, HL+2, or HL+3
+	INC	HL
+	LD	A,(HL)
+	CP	':'
+	JR	Z,PDUP_LEN1		; ':' at HL+1 -> 1 char before colon
+
+	INC	HL
+	LD	A,(HL)
+	CP	':'
+	JP	Z,PDUP_LEN2		; ':' at HL+2 -> 2 chars before colon
+
+	INC	HL
+	LD	A,(HL)
+	CP	':'
+	JP	Z,PDUP_LEN3		; ':' at HL+3 -> 3 chars before colon
+
+PDUP_FAIL:
+	POP	HL			; Restore original HL
+	OR	A			; Carry = 0
+	RET
+
+; Length 1 before colon: (HL-1)
+PDUP_LEN1:
+	DEC	HL			; HL points to Char 0
+	LD	A,(HL)
+	CALL	IS_DRIVE_LETTER
+	JR	C,PDUP_L1_DRIVE
+	LD	A,(HL)
+	CALL	IS_DIGIT_CHAR
+	JR	C,PDUP_L1_USER
+	JP	PDUP_FAIL
+
+PDUP_L1_DRIVE:
+	LD	(PREFIX_DRIVE),A
+	LD	A,0FFH
+	LD	(PREFIX_USER),A
+	INC	HL			; past Char 0
+	INC	HL			; past ':'
+	JP	PDUP_SUCCESS
+
+PDUP_L1_USER:
+	LD	(PREFIX_USER),A
+	XOR	A
+	LD	(PREFIX_DRIVE),A
+	INC	HL			; past Char 0
+	INC	HL			; past ':'
+	JP	PDUP_SUCCESS
+
+; Length 2 before colon: (HL-2), (HL-1)
+PDUP_LEN2:
+	DEC	HL
+	DEC	HL			; HL points to Char 0
+	LD	A,(HL)
+	CALL	IS_DRIVE_LETTER
+	JR	C,PDUP_L2_LETTER_FIRST
+	LD	A,(HL)
+	CALL	IS_DIGIT_CHAR
+	JR	C,PDUP_L2_DIGIT_FIRST
+	JP	PDUP_FAIL
+
+PDUP_L2_LETTER_FIRST:
+	LD	(PREFIX_DRIVE),A
+	INC	HL			; Char 1
+	LD	A,(HL)
+	CALL	IS_DIGIT_CHAR
+	JP	NC,PDUP_FAIL
+	LD	(PREFIX_USER),A
+	INC	HL			; past Char 1
+	INC	HL			; past ':'
+	JP	PDUP_SUCCESS
+
+PDUP_L2_DIGIT_FIRST:
+	INC	HL			; Char 1
+	LD	A,(HL)
+	CALL	IS_DRIVE_LETTER
+	JR	C,PDUP_L2_DIGIT_LETTER
+
+	LD	A,(HL)
+	CALL	IS_DIGIT_CHAR
+	JP	NC,PDUP_FAIL
+
+	DEC	HL			; Char 0
+	LD	D,(HL)
+	INC	HL			; Char 1
+	LD	E,(HL)
+	CALL	PARSE_2DIGIT_USER
+	JP	NC,PDUP_FAIL
+	LD	(PREFIX_USER),A
+	XOR	A
+	LD	(PREFIX_DRIVE),A
+	INC	HL			; past Char 1
+	INC	HL			; past ':'
+	JP	PDUP_SUCCESS
+
+PDUP_L2_DIGIT_LETTER:
+	LD	(PREFIX_DRIVE),A
+	DEC	HL			; Char 0
+	LD	A,(HL)
+	SUB	'0'
+	LD	(PREFIX_USER),A
+	INC	HL			; Char 1
+	INC	HL			; past Char 1
+	INC	HL			; past ':'
+	JP	PDUP_SUCCESS
+
+; Length 3 before colon: (HL-3), (HL-2), (HL-1)
+PDUP_LEN3:
+	DEC	HL
+	DEC	HL
+	DEC	HL			; HL points to Char 0
+	LD	A,(HL)
+	CALL	IS_DRIVE_LETTER
+	JR	C,PDUP_L3_LETTER_FIRST
+	LD	A,(HL)
+	CALL	IS_DIGIT_CHAR
+	JR	C,PDUP_L3_DIGIT_FIRST
+	JP	PDUP_FAIL
+
+PDUP_L3_LETTER_FIRST:
+	LD	(PREFIX_DRIVE),A
+	INC	HL			; Char 1
+	LD	D,(HL)
+	INC	HL			; Char 2
+	LD	E,(HL)
+	CALL	PARSE_2DIGIT_USER
+	JP	NC,PDUP_FAIL
+	LD	(PREFIX_USER),A
+	INC	HL			; past Char 2
+	INC	HL			; past ':'
+	JP	PDUP_SUCCESS
+
+PDUP_L3_DIGIT_FIRST:
+	LD	D,(HL)			; Char 0
+	INC	HL
+	LD	E,(HL)			; Char 1
+	INC	HL
+	LD	A,(HL)			; Char 2
+	CALL	IS_DRIVE_LETTER
+	JP	NC,PDUP_FAIL
+	LD	(PREFIX_DRIVE),A
+	CALL	PARSE_2DIGIT_USER
+	JP	NC,PDUP_FAIL
+	LD	(PREFIX_USER),A
+	INC	HL			; past Char 2
+	INC	HL			; past ':'
+	JP	PDUP_SUCCESS
+
+PDUP_SUCCESS:
+	POP	AF			; Discard saved initial HL
+	LD	A,(PREFIX_DRIVE)
+	LD	C,A
+	LD	A,(PREFIX_USER)
+	EX	AF,AF'
+	LD	A,C
+	EX	AF,AF'
+	LD	C,A
+	EX	AF,AF'
+	SCF
+	RET
+
+;------------------------------------------------------------------------------
+; Check if INPUT_FILENAME_BUF contains a drive/user specification (e.g. "C:", "C1:", "1C:", "1:")
+; Returns:
+;   Carry = 1 -> Drive/user switch requested:
+;                A = drive code (1..16, or 0 if unchanged)
+;                C = user code (0..15, or 0xFF if unchanged)
+;   Carry = 0 -> Not a bare drive/user switch
+;------------------------------------------------------------------------------
+CHECK_DRIVE_SWITCH:
+	LD	HL,INPUT_FILENAME_BUF
+	CALL	PARSE_DRIVE_USER_PREFIX
+	RET	NC			; No prefix -> Carry = 0
+
+	; Check that remainder after ':' is empty (only null or spaces)
+CDS_CHECK_REM:
+	LD	A,(HL)
+	OR	A
+	JR	Z,CDS_IS_SWITCH
+	CP	' '
+	JR	NZ,CDS_NOT_SWITCH
+	INC	HL
+	JR	CDS_CHECK_REM
+
+CDS_IS_SWITCH:
+	LD	A,(PREFIX_DRIVE)
+	LD	C,A
+	LD	A,(PREFIX_USER)
+	EX	AF,AF'
+	LD	A,C
+	EX	AF,AF'
+	LD	C,A
+	EX	AF,AF'
+	SCF
+	RET
+
+CDS_NOT_SWITCH:
 	OR	A			; Carry = 0
 	RET
 
@@ -14954,25 +15384,13 @@ CFP_SCAN_LOOP:
 
 CFP_FOUND_WC:
 	LD	HL,INPUT_FILENAME_BUF
-
-	; Check if byte 1 is ':' (e.g. "J:*.TXT")
-	LD	A,(INPUT_BUF_LEN)
-	CP	3
-	JR	C,CFP_NO_DRIVE_PREFIX
-	LD	A,(INPUT_FILENAME_BUF+1)
-	CP	':'
-	JR	NZ,CFP_NO_DRIVE_PREFIX
-
-	; Validate drive letter 'A'..'P'
-	LD	A,(INPUT_FILENAME_BUF)
-	CALL	TO_UPPER
-	CP	'A'
-	JR	C,CFP_NO_DRIVE_PREFIX
-	CP	'P'+1
+	CALL	PARSE_DRIVE_USER_PREFIX
 	JR	NC,CFP_NO_DRIVE_PREFIX
 
-	; Valid drive letter: convert to 1..16
-	SUB	'A'-1
+	; Prefix was found! Check if drive was specified
+	LD	A,(PREFIX_DRIVE)
+	OR	A
+	JR	Z,CFP_CHECK_USER_PRE
 	LD	C,A			; C = target drive (1..16)
 
 	; Guard: if target drive matches hibernated RAM drive, reject switch
@@ -14984,7 +15402,7 @@ CFP_FOUND_WC:
 	JR	Z,CFP_DRIVE_OK
 	INC	A
 	CP	C
-	JR	Z,CFP_SKIP_DRIVE_SWITCH
+	JR	Z,CFP_CHECK_USER_PRE
 
 CFP_DRIVE_OK:
 	LD	A,C
@@ -14993,8 +15411,11 @@ CFP_DRIVE_OK:
 	LD	(STR_DIR_DRIVE_CHAR),A
 	LD	(STR_SAVE_DRIVE_CHAR),A
 
-CFP_SKIP_DRIVE_SWITCH:
-	LD	HL,INPUT_FILENAME_BUF+2	; Skip "d:"
+CFP_CHECK_USER_PRE:
+	LD	A,(PREFIX_USER)
+	CP	0FFH
+	JR	Z,CFP_PARSE_START
+	LD	(CURRENT_DIR_USER),A
 	JR	CFP_PARSE_START
 
 CFP_NO_DRIVE_PREFIX:
@@ -15174,12 +15595,40 @@ DO_CONVERT_FCB:
 	; Check drive (WORK_FCB+0)
 	LD	A,(WORK_FCB)
 	OR	A
-	JR	Z,FCB_NO_DRIVE
+	JR	Z,FCB_CHECK_USER
 	; Explicit drive 1..16
 	ADD	A,'A'-1
 	LD	(DE),A
 	INC	DE
 	INC	C
+
+FCB_CHECK_USER:
+	; Check if DOC_USER_NUM > 0
+	LD	A,(DOC_USER_NUM)
+	OR	A
+	JR	Z,FCB_EMIT_COLON
+	CP	10
+	JR	C,FCB_U_1DIGIT
+	PUSH	AF
+	LD	A,'1'
+	LD	(DE),A
+	INC	DE
+	INC	C
+	POP	AF
+	SUB	10
+FCB_U_1DIGIT:
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+FCB_EMIT_COLON:
+	; Emit ':' only if drive or user was emitted
+	LD	A,(WORK_FCB)
+	LD	B,A
+	LD	A,(DOC_USER_NUM)
+	OR	B
+	JR	Z,FCB_NO_DRIVE
 	LD	A,':'
 	LD	(DE),A
 	INC	DE
@@ -15372,6 +15821,12 @@ SET_SEARCH_ZEROS:
 	INC	HL
 	DJNZ	SET_SEARCH_ZEROS
 
+	; Set BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+
 	; Search First (BDOS 17)
 	LD	DE,DIR_SEARCH_FCB
 	LD	C,17
@@ -15396,8 +15851,10 @@ DIR_COLLECT_LOOP:
 	LD	A,(HL)
 	CP	0E5H
 	JR	Z,DIR_NEXT_ENTRY	; Deleted entry
-	CP	020H
-	JR	NC,DIR_NEXT_ENTRY	; Non-user entry (> 31)
+	LD	B,A
+	LD	A,(CURRENT_DIR_USER)
+	CP	B
+	JR	NZ,DIR_NEXT_ENTRY	; Non-matching user entry
 
 	; Check that filename is not blank (first char != space and != 0, with bit 7 stripped)
 	INC	HL			; HL = pointer to filename (bytes 1..8)
@@ -16278,46 +16735,46 @@ POLN_NOT_NUM:
 	RET
 
 POLN_FOUND_COLON:
-	; Check if this colon is actually a drive colon (e.g. C:15)
-	; A drive colon has:
-	;   - Char at (HL-1) is a letter 'A'..'Z' or 'a'..'z'
-	;   - Char at (HL-2) is space or HL-1 was the first char (E == 2)
-	LD	A,E			; E = 1-based index of colon within INPUT_FILENAME_BUF
-	CP	2
-	JR	C,POLN_IS_LINE_COLON	; Colon at pos 1 cannot be drive colon
-	DEC	HL
-	LD	A,(HL)			; A = char before colon
-	INC	HL
-	CALL	IS_ALPHA_CHAR
-	JR	NC,POLN_IS_LINE_COLON	; Preceding char not a letter -> line colon!
+	; HL points to ':' in INPUT_FILENAME_BUF. Check if this colon is inside a drive/user prefix.
+	PUSH	HL			; Save colon pointer
+	LD	HL,INPUT_FILENAME_BUF
+	CALL	PARSE_DRIVE_USER_PREFIX
+	JR	NC,POLN_IS_LINE_COLON	; No prefix at start -> line colon
 
-	; Char before colon is a letter. Check char before that (HL-2).
+	; Prefix matched: HL is now past the prefix colon!
+	POP	DE			; DE = colon pointer
+	PUSH	DE
+	LD	A,D
+	CP	H
+	JR	NZ,POLN_CMP
 	LD	A,E
-	CP	2
-	JR	Z,POLN_IS_DRIVE_COLON	; Letter at pos 1, colon at pos 2 -> drive colon (e.g. "C:...")
-	DEC	HL
-	DEC	HL
-	LD	A,(HL)			; A = char at HL-2
-	INC	HL
-	INC	HL
-	CP	' '
-	JR	Z,POLN_IS_DRIVE_COLON	; Preceded by space -> drive colon (e.g. " C:...")
+	CP	L
+POLN_CMP:
+	JR	C,POLN_IS_DRIVE_COLON	; DE < HL -> colon is part of prefix!
 
 POLN_IS_LINE_COLON:
-	; Colon is followed by digits. HL points to ':'
-	; HL+1 points to first digit
-	INC	HL
+	POP	HL			; Restore colon pointer
+	INC	HL			; HL points to digits
 	CALL	PARSE_DEC_WORD		; DE = 16-bit parsed value
 	LD	(OPEN_GOTO_LINE),DE
 	RET
 
 POLN_IS_DRIVE_COLON:
+	POP	HL			; Restore colon pointer
 	RET
 
 ;------------------------------------------------------------------------------
-; Parse Filename String (e.g. "30.TXT" or "A:TEST.DAT") into WORK_FCB
+; Parse Filename String (e.g. "C1:TEST.DAT", "1C:TEST.DAT", "1:TEST.DAT", "TEST.DAT")
+; PARSE_FILENAME_TO_FCB: parses INPUT_FILENAME_BUF
+; PARSE_STRING_TO_FCB: parses string pointed to by HL
+; Outputs: WORK_FCB populated, WORK_FCB_USER populated
 ;------------------------------------------------------------------------------
 PARSE_FILENAME_TO_FCB:
+	LD	HL,INPUT_FILENAME_BUF
+
+PARSE_STRING_TO_FCB:
+	PUSH	HL
+
 	; Clear WORK_FCB (36 bytes of 0)
 	LD	HL,WORK_FCB
 	LD	(HL),0
@@ -16333,39 +16790,43 @@ FILL_FCB_SPACES:
 	INC	HL
 	DJNZ	FILL_FCB_SPACES
 
-	LD	HL,INPUT_FILENAME_BUF
+	POP	HL
 
 	; Skip leading spaces
 PARSE_SKIP_SPACES:
 	LD	A,(HL)
 	CP	' '
-	JR	NZ,PARSE_CHECK_DRIVE
+	JR	NZ,PARSE_CHECK_PREFIX
 	INC	HL
 	JR	PARSE_SKIP_SPACES
 
-PARSE_CHECK_DRIVE:
-	; Check if byte 1 is ':' (e.g. "A:FILE.TXT")
-	INC	HL
-	LD	A,(HL)
-	DEC	HL
-	CP	':'
-	JR	NZ,PARSE_DEFAULT_DRIVE
+PARSE_CHECK_PREFIX:
+	CALL	PARSE_DRIVE_USER_PREFIX
+	JR	NC,PARSE_NO_PREFIX
 
-	; Drive letter in (HL)
-	LD	A,(HL)
-	CALL	TO_UPPER
-	SUB	'A'-1			; 'A' -> 1, 'B' -> 2
+	; Prefix matched!
+	; Check drive
+	LD	A,(PREFIX_DRIVE)
+	OR	A
+	JR	NZ,PSTF_USE_PDRIVE
+	LD	A,(CURRENT_DIR_DRIVE)
+PSTF_USE_PDRIVE:
 	LD	(WORK_FCB),A
-	INC	HL			; Skip drive letter
-	INC	HL			; Skip ':'
+
+	; Check user
+	LD	A,(PREFIX_USER)
+	CP	0FFH
+	JR	NZ,PSTF_USE_PUSER
+	LD	A,(CURRENT_DIR_USER)
+PSTF_USE_PUSER:
+	LD	(WORK_FCB_USER),A
 	JR	PARSE_NAME_START
 
-PARSE_DEFAULT_DRIVE:
-	; If no explicit drive, default to CURRENT_DIR_DRIVE (if non-zero)
+PARSE_NO_PREFIX:
 	LD	A,(CURRENT_DIR_DRIVE)
-	OR	A
-	JR	Z,PARSE_NAME_START
 	LD	(WORK_FCB),A
+	LD	A,(CURRENT_DIR_USER)
+	LD	(WORK_FCB_USER),A
 
 PARSE_NAME_START:
 	; Read up to 8 characters of filename into WORK_FCB+1 .. WORK_FCB+8
@@ -16464,6 +16925,12 @@ SAVE_BLOCK_FILE:
 	RET
 
 SAVE_BLK_DRIVE_OK:
+	; Set BDOS user area to WORK_FCB_USER
+	LD	A,(WORK_FCB_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+
 	; Flush local cache dirty lines first
 	CALL	FLUSH_DIRTY_CACHE
 
@@ -16503,6 +16970,12 @@ DO_SAVE_BLK_EXISTING:
 	CALL	BDOS_ENTRY
 	CP	0FFH
 	JR	NZ,MAKE_BLK_FILE_OK
+
+	; Restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
 	SCF
 	RET
 
@@ -16778,6 +17251,12 @@ SAVE_FILE:
 	RET
 
 SAVE_DRIVE_OK:
+	; Set BDOS user area to WORK_FCB_USER
+	LD	A,(WORK_FCB_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+
 	; Flush local cache dirty lines first
 	CALL	FLUSH_DIRTY_CACHE
 
@@ -16817,6 +17296,11 @@ DO_SAVE_EXISTING:
 	CALL	BDOS_ENTRY
 	CP	0FFH
 	JR	NZ,MAKE_FILE_OK
+	; Restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
 	SCF
 	RET
 
@@ -16904,10 +17388,28 @@ CLOSE_OUTPUT_FILE:
 	CP	0FFH
 	JR	NZ,CLOSE_FILE_OK
 	CALL	CLEANUP_SAVE_PROGRESS
+	; Restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
 	SCF
 	RET
 CLOSE_FILE_OK:
 	CALL	FINISH_SAVE_PROGRESS
+	; If this was NOT a block save, update DOC_USER_NUM and CURRENT_DIR_USER
+	LD	A,(IS_BLOCK_SAVE_UI)
+	OR	A
+	JR	NZ,CFO_IS_BLK
+	LD	A,(WORK_FCB_USER)
+	LD	(DOC_USER_NUM),A
+	LD	(CURRENT_DIR_USER),A
+CFO_IS_BLK:
+	; Restore BDOS user area to CURRENT_DIR_USER
+	LD	A,(CURRENT_DIR_USER)
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
 	OR	A			; Carry = 0 (success)
 	RET
 
@@ -17334,7 +17836,7 @@ STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
-STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel  Enter <drive>: or [drive:][pattern] to list (e.g. B: or *.TXT)",13,10,"$"
+STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 
 STR_OVERWRITE_WARN:	DB	13,10,"~  File already exists. Overwrite? (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o): ","$"
 
@@ -17553,6 +18055,13 @@ WORK_FCB:	DS	36
 DIR_TEMP_FCB:	DS	36
 
 CURRENT_DIR_DRIVE:	DB	0		; Active directory drive (1=A:, 2=B:, 3=C:, etc.)
+CURRENT_DIR_USER:	DB	0		; Active directory user area (0..15)
+ORIG_CPM_USER:		DB	0		; CP/M user area on entry (0..15)
+DOC_USER_NUM:		DB	0		; User area for currently loaded document (0..15)
+WORK_FCB_USER:		DB	0		; User area for pending WORK_FCB operation (0..15)
+BLOCK_IO_USER:		DB	0		; User area for Block Insert / Block Save (0..15)
+PREFIX_DRIVE:		DB	0		; Parsed prefix drive (1..16 or 0)
+PREFIX_USER:		DB	0FFH		; Parsed prefix user (0..15 or 0xFF)
 DIR_SEARCH_FCB:	DS	36
 DIR_FILE_COUNT:	DB	0
 DIR_PAGE_INDEX:	DB	0

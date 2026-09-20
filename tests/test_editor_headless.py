@@ -124,6 +124,17 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, ins2_tmp, "0:INS2.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        u1_tmp = "/tmp/U1FILE.TXT"
+        with open(u1_tmp, "w") as f:
+            f.write("Hello from User 1 area!\r\nSecond line of user 1 file.\r\n")
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "1:U1FILE.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "1:SAVEU1.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "1:BLKU1.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, u1_tmp, "1:U1FILE.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     print("[*] Launching RomWBW on RC2014 emulator...", flush=True)
     master, slave = os.openpty()
@@ -4265,6 +4276,185 @@ def test_se_execution():
         print("[+] Step 70 Subtest 4 PASSED: Block Save File filter verified.", flush=True)
         print("[+] Successfully verified Directory Listing Filter on Open, Save, Insert, and Block Save (Step 70)!", flush=True)
 
+        # =============================================================
+        # STEP 71: CP/M User Areas Support (C1: and 1C: Formats)
+        # =============================================================
+        print("[*] STEP 71: Testing CP/M User Areas Support (C1: and 1C:)...", flush=True)
+
+        # Subtest 1: Command line invocation with c1: prefix
+        time.sleep(0.5)
+        os.write(master, b"se c1:u1file.txt\r")
+        out_s71_sub1 = read_until(master, b"Hello from User 1 area!", timeout=30.0)
+        if b"Hello from User 1 area!" not in out_s71_sub1:
+            print(f"[-] Step 71 Subtest 1 failed: 'se c1:u1file.txt' did not display file. Buffer: {repr(out_s71_sub1)}", flush=True)
+            return False
+        if b"C1:U1FILE.TXT" not in out_s71_sub1:
+            out_s71_sub1 += drain_all(master)
+        if b"C1:U1FILE.TXT" not in out_s71_sub1:
+            print(f"[-] Step 71 Subtest 1 failed: Status bar missing 'C1:U1FILE.TXT'. Buffer: {repr(out_s71_sub1)}", flush=True)
+            return False
+        print("[+] Step 71 Subtest 1 PASSED: 'se c1:u1file.txt' loaded with status bar 'C1:U1FILE.TXT'.", flush=True)
+
+        # Subtest 2: Modified indicator with user area in status bar
+        os.write(master, b"X")
+        out_s71_sub2 = read_until(master, b"C1:U1FILE.TXT*", timeout=4.0)
+        if b"C1:U1FILE.TXT*" not in out_s71_sub2:
+            print(f"[-] Step 71 Subtest 2 failed: Modified indicator not visible in 'C1:U1FILE.TXT*'. Buffer: {repr(out_s71_sub2)}", flush=True)
+            return False
+        print("[+] Step 71 Subtest 2 PASSED: Modified indicator 'C1:U1FILE.TXT*' verified.", flush=True)
+
+        # Discard changes and exit to CP/M
+        os.write(master, b"\x11") # Ctrl+Q
+        read_until(master, b"Save changes?", timeout=4.0)
+        os.write(master, b"N")
+        out_s71_cpm = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s71_cpm:
+            print(f"[-] Step 71 failed: Exit to CP/M failed: {repr(out_s71_cpm)}", flush=True)
+            return False
+
+        # Subtest 3: Command line invocation with 1c: prefix
+        time.sleep(0.5)
+        os.write(master, b"se 1c:u1file.txt\r")
+        out_s71_sub3 = read_until(master, b"Hello from User 1 area!", timeout=30.0)
+        if b"Hello from User 1 area!" not in out_s71_sub3:
+            print(f"[-] Step 71 Subtest 3 failed: 'se 1c:u1file.txt' did not display file. Buffer: {repr(out_s71_sub3)}", flush=True)
+            return False
+        print("[+] Step 71 Subtest 3 PASSED: 'se 1c:u1file.txt' loaded correctly.", flush=True)
+
+        # Subtest 4: Save As across User Areas (1C:SAVEU1.TXT)
+        time.sleep(0.2)
+        os.write(master, b"\x13") # Ctrl+S
+        out_s71_save = read_until(master, b"Enter filename to save:", timeout=6.0)
+        if b"Enter filename to save:" not in out_s71_save:
+            print(f"[-] Step 71 Subtest 4 failed: Save prompt not reached. Buffer: {repr(out_s71_save)}", flush=True)
+            return False
+        if b"DRIVE C1:)" not in out_s71_save:
+            print(f"[-] Step 71 Subtest 4 failed: Save screen title does not show 'DRIVE C1:)'. Buffer: {repr(out_s71_save)}", flush=True)
+            return False
+
+        time.sleep(0.1)
+        os.write(master, b"\x08" * 20 + b"1C:SAVEU1.TXT\r")
+        out_s71_saved = read_until(master, b"C1:SAVEU1.TXT", timeout=8.0)
+        if b"C1:SAVEU1.TXT" not in out_s71_saved:
+            print(f"[-] Step 71 Subtest 4 failed: Save did not return to editor with status bar. Buffer: {repr(out_s71_saved)}", flush=True)
+            return False
+        print("[+] Step 71 Subtest 4 PASSED: Saved as '1C:SAVEU1.TXT' into User 1.", flush=True)
+
+        # Subtest 5: Directory screen interactive switching: C0:, 1:, 1C:*.TXT
+        time.sleep(0.2)
+        os.write(master, b"\x0f") # Ctrl+O
+        out_s71_open = read_until(master, b"Enter filename to open:", timeout=6.0)
+        if b"Enter filename to open:" not in out_s71_open:
+            print(f"[-] Step 71 Subtest 5 failed: Open screen not displayed. Buffer: {repr(out_s71_open)}", flush=True)
+            return False
+        if b"DRIVE C1:)" not in out_s71_open:
+            print(f"[-] Step 71 Subtest 5 failed: Open title not DRIVE C1:). Buffer: {repr(out_s71_open)}", flush=True)
+            return False
+
+        # Switch to User 0 via C0:
+        time.sleep(0.2)
+        os.write(master, b"\x08" * 20 + b"C0:\r")
+        out_s71_c0 = read_until(master, b"(DIRECTORY - DRIVE C:)", timeout=6.0)
+        if b"(DIRECTORY - DRIVE C:)" not in out_s71_c0:
+            print(f"[-] Step 71 Subtest 5 failed: Switch to C0: failed. Buffer: {repr(out_s71_c0)}", flush=True)
+            return False
+
+        # Switch to User 1 via 1:
+        time.sleep(0.2)
+        os.write(master, b"\x08" * 20 + b"1:\r")
+        out_s71_u1 = read_until(master, b"(DIRECTORY - DRIVE C1:)", timeout=6.0)
+        if b"(DIRECTORY - DRIVE C1:)" not in out_s71_u1:
+            print(f"[-] Step 71 Subtest 5 failed: Switch to 1: failed. Buffer: {repr(out_s71_u1)}", flush=True)
+            return False
+
+        # Filter in User 1 via 1C:*.TXT
+        time.sleep(0.2)
+        os.write(master, b"\x08" * 20 + b"1C:*.TXT\r")
+        out_s71_filt = read_until(master, b"(DIRECTORY - DRIVE C1: [*.TXT])", timeout=6.0)
+        if b"(DIRECTORY - DRIVE C1: [*.TXT])" not in out_s71_filt:
+            print(f"[-] Step 71 Subtest 5 failed: 1C:*.TXT filter title failed. Buffer: {repr(out_s71_filt)}", flush=True)
+            return False
+        if b"U1FILE.TXT" not in out_s71_filt or b"SAVEU1.TXT" not in out_s71_filt:
+            print(f"[-] Step 71 Subtest 5 failed: U1 files not listed in filter. Buffer: {repr(out_s71_filt)}", flush=True)
+            return False
+
+        # Cancel Open dialog with ESC
+        time.sleep(0.1)
+        os.write(master, b"\x1b")
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+        print("[+] Step 71 Subtest 5 PASSED: Interactive directory switching and filtering verified.", flush=True)
+
+        # Subtest 6: Block Save & Insert across User Areas
+        os.write(master, b"\x02") # Ctrl+B start block
+        read_until(master, b"[BLK:", timeout=4.0)
+        os.write(master, b"\x1b[B") # Cursor down 1 row
+        drain_all(master)
+        os.write(master, b"\x02") # Ctrl+B solidify block
+        read_until(master, b"LOCK]", timeout=4.0)
+
+        # Block Save (Ctrl+S with active block)
+        time.sleep(0.1)
+        os.write(master, b"\x13")
+        out_s71_bs = read_until(master, b"Enter filename to save:", timeout=6.0)
+        if b"DRIVE C1:" not in out_s71_bs:
+            print(f"[-] Step 71 Subtest 6 failed: Block save title not DRIVE C1:). Buffer: {repr(out_s71_bs)}", flush=True)
+            return False
+
+        time.sleep(0.1)
+        os.write(master, b"\x08" * 20 + b"C1:BLKU1.TXT\r")
+        out_s71_bs_done = read_until(master, b"LOCK]", timeout=8.0)
+        if b"LOCK]" not in out_s71_bs_done:
+            print(f"[-] Step 71 Subtest 6 failed: Block save failed to complete. Buffer: {repr(out_s71_bs_done)}", flush=True)
+            return False
+
+        # Block Insert from 1C:BLKU1.TXT (Ctrl+O with active block)
+        time.sleep(0.1)
+        os.write(master, b"\x0f")
+        out_s71_bi = read_until(master, b"Enter filename to insert:", timeout=6.0)
+        if b"Enter filename to insert:" not in out_s71_bi:
+            print(f"[-] Step 71 Subtest 6 failed: Block insert prompt not reached. Buffer: {repr(out_s71_bi)}", flush=True)
+            return False
+
+        time.sleep(0.1)
+        os.write(master, b"\x08" * 20 + b"1C:BLKU1.TXT\r")
+        out_s71_bi_done = read_until(master, b"^K: Editor keys", timeout=8.0)
+        if b"^K: Editor keys" not in out_s71_bi_done:
+            print(f"[-] Step 71 Subtest 6 failed: Block insert did not return to editor. Buffer: {repr(out_s71_bi_done)}", flush=True)
+            return False
+        print("[+] Step 71 Subtest 6 PASSED: Block Save and Insert verified in User 1.", flush=True)
+
+        # Subtest 7: Exit to CP/M preserves original User 0
+        os.write(master, b"\x11") # Ctrl+Q
+        read_until(master, b"Save changes?", timeout=4.0)
+        os.write(master, b"N")
+        out_s71_exit = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s71_exit:
+            print(f"[-] Step 71 Subtest 7 failed: Exit to CP/M failed: {repr(out_s71_exit)}", flush=True)
+            return False
+
+        time.sleep(0.2)
+        os.write(master, b"dir u1file.txt\r")
+        out_s71_dir0 = read_until(master, b"C>", timeout=6.0)
+        if b"No File" not in out_s71_dir0 and b"NO FILE" not in out_s71_dir0:
+            print(f"[-] Step 71 Subtest 7 failed: U1FILE.TXT found in User 0 DIR! Buffer: {repr(out_s71_dir0)}", flush=True)
+            return False
+
+        time.sleep(0.2)
+        os.write(master, b"user 1\r")
+        read_until(master, b"C>", timeout=4.0)
+        os.write(master, b"dir u1file.txt\r")
+        out_s71_dir1 = read_until(master, b"C>", timeout=6.0)
+        if b"U1FILE" not in out_s71_dir1:
+            print(f"[-] Step 71 Subtest 7 failed: U1FILE.TXT not found in User 1 DIR! Buffer: {repr(out_s71_dir1)}", flush=True)
+            return False
+
+        # Switch back to User 0 in CP/M
+        time.sleep(0.2)
+        os.write(master, b"user 0\r")
+        read_until(master, b"C>", timeout=4.0)
+        print("[+] Step 71 Subtest 7 PASSED: Exit preserved User 0; CP/M user 1 contains files.", flush=True)
+        print("[+] Successfully verified CP/M User Areas Support (Step 71)!", flush=True)
+
         return True
 
     finally:
@@ -4290,6 +4480,12 @@ def test_se_execution():
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:LONGNAME.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:TESTF.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "1:U1FILE.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "1:SAVEU1.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "1:BLKU1.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             proc.kill()
