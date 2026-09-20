@@ -1012,8 +1012,8 @@ def test_se_execution():
         os.write(master, b"\x0f")  # Ctrl+O
         read_until(master, b"Enter filename to open:", timeout=4.0)
         time.sleep(0.2)
-        # Type 'B:' and hit Return to switch to Drive B:
-        os.write(master, b"B:\r")
+        # Type 'B:' and hit Return to switch to Drive B: (clearing preloaded prefix first)
+        os.write(master, b"\x08" * 20 + b"B:\r")
         out_drive_b = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE B:)", timeout=4.0)
         if b"OPEN FILE (DIRECTORY - DRIVE B:)" not in out_drive_b:
             print(f"[-] Failed to switch to Drive B: in Open Screen. Buffer: {repr(out_drive_b)}", flush=True)
@@ -2654,7 +2654,7 @@ def test_se_execution():
         os.write(master, b"\x0f")
         read_until(master, b"Enter filename to open:", timeout=8.0)
         time.sleep(0.2)
-        os.write(master, b"C:30.TXT:25\r")
+        os.write(master, b"\x08" * 20 + b"C:30.TXT:25\r")
         out_s55_l25 = read_until(master, b"Line   25/30", timeout=8.0)
         if b"Line   25/30" not in out_s55_l25 or b"C:30.TXT" not in out_s55_l25:
             print(f"[-] Step 55 failed: 'C:30.TXT:25' did not open at line 25. Buffer: {repr(out_s55_l25)}", flush=True)
@@ -3535,14 +3535,14 @@ def test_se_execution():
             print(f"[-] Step 66 Subtest 1 failed: Insert prompt not found: {repr(out_s66_ui)}", flush=True)
             return False
 
-        # Verify cursor position is at Column 31 (inside [ ] box)
+        # Verify cursor position is at Column 34 (inside [ ] box after preloaded 'C0:')
         m_s66 = re.search(rb"\x1b\[(\d+);(\d+)H\x1b\[\?25h", out_s66_ui)
         if not m_s66:
             print(f"[-] Step 66 Subtest 1 failed: Cursor positioning escape sequence not found in UI output: {repr(out_s66_ui[-200:])}", flush=True)
             return False
         cursor_col_s66 = int(m_s66.group(2))
-        if cursor_col_s66 != 31:
-            print(f"[-] Step 66 Subtest 1 failed: Expected cursor at column 31 inside [ ] box, got column {cursor_col_s66}", flush=True)
+        if cursor_col_s66 != 34:
+            print(f"[-] Step 66 Subtest 1 failed: Expected cursor at column 34 inside [ ] box, got column {cursor_col_s66}", flush=True)
             return False
 
         # Cancel with ESC
@@ -4174,7 +4174,7 @@ def test_se_execution():
         # Press Ctrl+S: input box prefills with TESTF.TXT
         os.write(master, b"\x13")
         out_s70_save2 = read_until(master, b"Enter filename to save:", timeout=8.0)
-        out_s70_save2 += read_until(master, b"[TESTF.TXT", timeout=4.0)
+        out_s70_save2 += read_until(master, b"TESTF.TXT", timeout=4.0)
         if b"TESTF.TXT" not in out_s70_save2:
             print(f"[-] Step 70 failed: Save prompt did not prefill 'TESTF.TXT'. Buffer: {repr(out_s70_save2)}", flush=True)
             return False
@@ -4338,11 +4338,15 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x0f") # Ctrl+O
         out_s71_open = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s71_open += read_until(master, b"[C1:", timeout=4.0)
         if b"Enter filename to open:" not in out_s71_open:
             print(f"[-] Step 71 Subtest 5 failed: Open screen not displayed. Buffer: {repr(out_s71_open)}", flush=True)
             return False
-        if b"DRIVE C:)" not in out_s71_open:
-            print(f"[-] Step 71 Subtest 5 failed: Open title not DRIVE C:). Buffer: {repr(out_s71_open)}", flush=True)
+        if b"DRIVE C1:)" not in out_s71_open:
+            print(f"[-] Step 71 Subtest 5 failed: Open title not DRIVE C1:). Buffer: {repr(out_s71_open)}", flush=True)
+            return False
+        if b"[C1:" not in out_s71_open:
+            print(f"[-] Step 71 Subtest 5 failed: Open edit box not preloaded with C1:. Buffer: {repr(out_s71_open)}", flush=True)
             return False
 
         # Switch to User 0 via C0:
@@ -4391,8 +4395,12 @@ def test_se_execution():
         time.sleep(0.1)
         os.write(master, b"\x13")
         out_s71_bs = read_until(master, b"Enter filename to save:", timeout=6.0)
-        if b"DRIVE C:)" not in out_s71_bs:
-            print(f"[-] Step 71 Subtest 6 failed: Block save title not DRIVE C:). Buffer: {repr(out_s71_bs)}", flush=True)
+        out_s71_bs += read_until(master, b"[C1:", timeout=4.0)
+        if b"DRIVE C1:)" not in out_s71_bs:
+            print(f"[-] Step 71 Subtest 6 failed: Block save title not DRIVE C1:). Buffer: {repr(out_s71_bs)}", flush=True)
+            return False
+        if b"[C1:" not in out_s71_bs:
+            print(f"[-] Step 71 Subtest 6 failed: Block save edit box not preloaded with C1:. Buffer: {repr(out_s71_bs)}", flush=True)
             return False
 
         time.sleep(0.1)

@@ -93,6 +93,15 @@ START:
 	LD	(WORK_FCB_USER),A
 	LD	(BLOCK_IO_USER),A
 
+	; Query initial CP/M drive via BDOS 25 (Return Current Disk)
+	LD	C,25
+	CALL	BDOS_ENTRY
+	INC	A			; 0..15 -> 1..16
+	LD	(CURRENT_DIR_DRIVE),A
+	ADD	A,'A'-1
+	LD	(STR_DIR_DRIVE_CHAR),A
+	LD	(STR_SAVE_DRIVE_CHAR),A
+
 	; Initialize Direct BIOS Console Vectors
 	CALL	INIT_BIOS_JUMPS
 
@@ -1277,6 +1286,15 @@ CCL_CHECK_USER:
 	LD	A,(WORK_FCB_USER)
 	LD	(DOC_USER_NUM),A
 	LD	(CURRENT_DIR_USER),A
+	; Update CURRENT_DIR_DRIVE and title strings to match WORK_FCB
+	LD	A,(WORK_FCB)
+	OR	A
+	JR	Z,CCL_DONE
+	LD	(CURRENT_DIR_DRIVE),A
+	ADD	A,'A'-1
+	LD	(STR_DIR_DRIVE_CHAR),A
+	LD	(STR_SAVE_DRIVE_CHAR),A
+CCL_DONE:
 	RET
 
 NO_FILE_ARG:
@@ -13509,17 +13527,15 @@ DO_OPEN_FILE_UI:
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL	INIT_DIR_DRIVE
 
-	; User area defaults to 0 unless explicitly provided in edit box
-	XOR	A
+	; Initialize directory user area from current document user area
+	LD	A,(DOC_USER_NUM)
 	LD	(CURRENT_DIR_USER),A
 
 	; Filter defaults to all files shown unless explicitly provided in edit box
 	CALL	RESET_DIR_FILTER
 
-	; Clear INPUT_FILENAME_BUF for initial prompt
-	XOR	A
-	LD	(INPUT_BUF_LEN),A
-	LD	(INPUT_FILENAME_BUF),A
+	; Preload edit box with known current drive and user area prefix (e.g. "J0:", "A4:")
+	CALL	PRELOAD_DRIVE_USER_PREFIX
 	LD	HL,0
 	LD	(OPEN_GOTO_LINE),HL
 
@@ -14557,14 +14573,17 @@ DO_SAVE_FILE_UI_IMPL:
 	; Filter defaults to all files shown unless explicitly provided in edit box
 	CALL	RESET_DIR_FILTER
 
-	; User area defaults to 0 unless explicitly provided in edit box
-	XOR	A
+	; Initialize directory user area from current document user area
+	LD	A,(DOC_USER_NUM)
 	LD	(CURRENT_DIR_USER),A
 
 	; Pre-fill filename if known (HAS_FILE_ARG == 1) and not Block Save
 	LD	A,(IS_BLOCK_SAVE_UI)
 	OR	A
 	JR	NZ,DSUI_EMPTY_BUF
+	LD	A,(HAS_FILE_ARG)
+	OR	A
+	JR	Z,DSUI_EMPTY_BUF
 	CALL	FCB_TO_FILENAME_STR
 
 	; Check if prefilled string explicitly contains a user area
@@ -14578,10 +14597,7 @@ DO_SAVE_FILE_UI_IMPL:
 	JR	DSUI_PREFILL_DONE
 
 DSUI_EMPTY_BUF:
-	XOR	A
-	LD	(INPUT_BUF_LEN),A
-	LD	HL,INPUT_FILENAME_BUF
-	LD	(HL),0
+	CALL	PRELOAD_DRIVE_USER_PREFIX
 DSUI_PREFILL_DONE:
 
 REFRESH_SAVE_DIR:
@@ -15124,6 +15140,57 @@ RDF_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
+; Preload INPUT_FILENAME_BUF with current drive and document user area characters
+; (e.g. "J0:", "A4:", "C0:", "C1:", "B15:")
+; Sets INPUT_BUF_LEN and null-terminates the buffer.
+; Outputs: INPUT_FILENAME_BUF populated, INPUT_BUF_LEN set
+;------------------------------------------------------------------------------
+PRELOAD_DRIVE_USER_PREFIX:
+	LD	DE,INPUT_FILENAME_BUF
+	LD	C,0			; Length counter
+
+	; Emit drive letter (CURRENT_DIR_DRIVE)
+	LD	A,(CURRENT_DIR_DRIVE)
+	OR	A
+	JR	NZ,PDUP_HAS_DRV
+	LD	A,1			; Fallback drive A if 0
+PDUP_HAS_DRV:
+	ADD	A,'A'-1
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+	; Emit user area digits (DOC_USER_NUM)
+	LD	A,(DOC_USER_NUM)
+	CP	10
+	JR	C,PDUP_U_1DIGIT
+	PUSH	AF
+	LD	A,'1'
+	LD	(DE),A
+	INC	DE
+	INC	C
+	POP	AF
+	SUB	10
+PDUP_U_1DIGIT:
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+	; Emit ':'
+	LD	A,':'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+	; Null-terminate buffer
+	XOR	A
+	LD	(DE),A
+	LD	A,C
+	LD	(INPUT_BUF_LEN),A
+	RET
+
+;------------------------------------------------------------------------------
 ; Helper: Check if character in A is a valid drive letter 'A'..'P' / 'a'..'p'
 ; Returns: Carry = 1 and A = drive code 1..16 (1=A, 2=B, etc.)
 ;          Carry = 0 if not a drive letter
@@ -15659,7 +15726,12 @@ DO_CONVERT_FCB:
 	; Check drive (WORK_FCB+0)
 	LD	A,(WORK_FCB)
 	OR	A
-	JR	Z,FCB_CHECK_USER
+	JR	NZ,FCB_HAS_DRV
+	LD	A,(CURRENT_DIR_DRIVE)
+	OR	A
+	JR	NZ,FCB_HAS_DRV
+	LD	A,1			; Fallback drive A if 0
+FCB_HAS_DRV:
 	; Explicit drive 1..16
 	ADD	A,'A'-1
 	LD	(DE),A
@@ -15667,10 +15739,8 @@ DO_CONVERT_FCB:
 	INC	C
 
 FCB_CHECK_USER:
-	; Check if DOC_USER_NUM > 0
+	; Always emit user area digits (DOC_USER_NUM), including 0
 	LD	A,(DOC_USER_NUM)
-	OR	A
-	JR	Z,FCB_EMIT_COLON
 	CP	10
 	JR	C,FCB_U_1DIGIT
 	PUSH	AF
@@ -15687,12 +15757,6 @@ FCB_U_1DIGIT:
 	INC	C
 
 FCB_EMIT_COLON:
-	; Emit ':' only if drive or user was emitted
-	LD	A,(WORK_FCB)
-	LD	B,A
-	LD	A,(DOC_USER_NUM)
-	OR	B
-	JR	Z,FCB_NO_DRIVE
 	LD	A,':'
 	LD	(DE),A
 	INC	DE
