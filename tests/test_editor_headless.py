@@ -3806,6 +3806,120 @@ def test_se_execution():
         print("[+] Step 67 Subtest 5 PASSED: Verified BLKSGL.TXT contains saved block content 'INSERTED'.", flush=True)
         print("[+] Successfully verified Block Save feature (Step 67)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # STEP 68: Save Progress Indicator ("Saving... | Line <count>")
+        # ---------------------------------------------------------------------
+        print("[*] STEP 68: Testing Save Progress Indicator and 100-line ticker...", flush=True)
+
+        # Subtest 1: File Save progress on 300-line file (BIG300.TXT -> SAV300.TXT)
+        time.sleep(0.5)
+        os.write(master, b"se BIG300.TXT\r")
+        out_s68_load = read_until(master, b"^K: Editor keys", timeout=35.0)
+        drain_all(master)
+        if b"^K: Editor keys" not in out_s68_load:
+            print(f"[-] Step 68 failed: Failed to open BIG300.TXT: {repr(out_s68_load[-200:])}", flush=True)
+            return False
+
+        # Trigger Save with Ctrl+S (\x13)
+        time.sleep(0.2)
+        os.write(master, b"\x13")
+        read_until(master, b"Enter filename to save:", timeout=6.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Type SAV300.TXT and press Enter (clearing pre-filled filename first)
+        os.write(master, b"\x08" * 20 + b"SAV300.TXT\r")
+        out_s68_save = read_until(master, b"^K: Editor keys", timeout=35.0)
+        out_s68_save += drain_all(master)
+
+        if b"\x1b[?25l" not in out_s68_save:
+            print("[-] Step 68 failed: Cursor hide escape sequence not found during save.", flush=True)
+            return False
+        if b"Saving..." not in out_s68_save:
+            print(f"[-] Step 68 failed: 'Saving...' not found in status bar during save: {repr(out_s68_save[:400])}", flush=True)
+            return False
+        if b"SAV300.TXT" not in out_s68_save:
+            print("[-] Step 68 failed: Target filename 'SAV300.TXT' not found in Field 1 during save.", flush=True)
+            return False
+
+        found_s68_ticks = [t for t in [b"Line   100", b"Line   200", b"Line   300"] if t in out_s68_save]
+        if len(found_s68_ticks) < 3:
+            print(f"[-] Step 68 failed: Missing progress ticks during file save: {found_s68_ticks}", flush=True)
+            return False
+        print(f"[+] Step 68 Subtest 1 PASSED: File save progress verified with ticks: {[t.decode() for t in found_s68_ticks]}", flush=True)
+
+        # Subtest 2: Block Save progress on 250-line block (BLK300.TXT)
+        os.write(master, b"\x14")  # Ctrl+T (Top of file)
+        time.sleep(0.2)
+        drain_all(master)
+
+        os.write(master, b"\x02")  # Ctrl+B (Start block)
+        time.sleep(0.1)
+        os.write(master, b"\x1b[B" * 250)  # Down 250 lines
+        time.sleep(0.5)
+        drain_all(master)
+
+        os.write(master, b"\x13")  # Ctrl+S -> Block Save
+        read_until(master, b"SAVE BLOCK (DIRECTORY - DRIVE C:)", timeout=6.0)
+        read_until(master, b"Enter filename to save:", timeout=4.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        os.write(master, b"BLK300.TXT\r")
+        out_s68_bsave = read_until(master, b"LOCK]", timeout=30.0)
+        out_s68_bsave += drain_all(master)
+
+        if b"Saving..." not in out_s68_bsave:
+            print(f"[-] Step 68 failed: 'Saving...' not found during block save: {repr(out_s68_bsave[:400])}", flush=True)
+            return False
+        if b"BLK300.TXT" not in out_s68_bsave:
+            print("[-] Step 68 failed: Target block filename 'BLK300.TXT' not found in Field 1 during save.", flush=True)
+            return False
+
+        found_s68_bticks = [t for t in [b"Line   100", b"Line   200"] if t in out_s68_bsave]
+        if len(found_s68_bticks) < 2:
+            print(f"[-] Step 68 failed: Missing progress ticks during block save: {found_s68_bticks}", flush=True)
+            return False
+        if b"[BLK: 251L LOCK]" not in out_s68_bsave and b"LOCK]" not in out_s68_bsave:
+            print(f"[-] Step 68 failed: Block status not restored: {repr(out_s68_bsave[-200:])}", flush=True)
+            return False
+        print(f"[+] Step 68 Subtest 2 PASSED: Block save progress verified with ticks: {[t.decode() for t in found_s68_bticks]}", flush=True)
+
+        # Subtest 3: Save on Exit progress (EXIT_SAVE_AND_QUIT)
+        os.write(master, b"\x1b")  # ESC (Clear block)
+        time.sleep(0.2)
+        drain_all(master)
+
+        os.write(master, b"Z")  # Dirty document
+        time.sleep(0.2)
+        drain_all(master)
+
+        os.write(master, b"\x11")  # Ctrl+Q
+        out_s68_prompt = read_until(master, b"Save changes?", timeout=5.0)
+        if b"Save changes?" not in out_s68_prompt:
+            print(f"[-] Step 68 failed: Save changes prompt not found: {repr(out_s68_prompt)}", flush=True)
+            return False
+
+        os.write(master, b"y")  # Confirm save
+        out_s68_exit = read_until(master, b"C>", timeout=35.0)
+        out_s68_exit += drain_all(master)
+
+        if b"Saving..." not in out_s68_exit:
+            print(f"[-] Step 68 failed: 'Saving...' not found during exit save: {repr(out_s68_exit[:400])}", flush=True)
+            return False
+
+        found_s68_eticks = [t for t in [b"Line   100", b"Line   200", b"Line   300"] if t in out_s68_exit]
+        if len(found_s68_eticks) < 2:
+            print(f"[-] Step 68 failed: Missing progress ticks during exit save: {found_s68_eticks}", flush=True)
+            return False
+        if b"C>" not in out_s68_exit:
+            print("[-] Step 68 failed: Did not exit cleanly to CP/M.", flush=True)
+            return False
+        print(f"[+] Step 68 Subtest 3 PASSED: Exit save progress verified with ticks: {[t.decode() for t in found_s68_eticks]}", flush=True)
+        print("[+] Successfully verified Save Progress Indicator (Step 68)!", flush=True)
+
         return True
 
     finally:
@@ -3817,6 +3931,10 @@ def test_se_execution():
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BLKSGL.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SAV300.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BLK300.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             proc.kill()
