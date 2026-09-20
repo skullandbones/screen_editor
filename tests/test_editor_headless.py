@@ -4099,7 +4099,7 @@ def test_se_execution():
 
         # Reset filter: '*.*'
         time.sleep(0.2)
-        os.write(master, b"*.*\r")
+        os.write(master, b"\x08" * 20 + b"*.*\r")
         out_s70_reset = read_until(master, b"Enter filename to open:", timeout=6.0)
         last_s70_reset = out_s70_reset[out_s70_reset.rfind(b"DIRECTORY - DRIVE C:"):]
         header_s70_reset = last_s70_reset.split(b"\r\n")[0]
@@ -4112,7 +4112,7 @@ def test_se_execution():
 
         # Combined drive switch and filter: 'B:*.COM'
         time.sleep(0.2)
-        os.write(master, b"B:*.COM\r")
+        os.write(master, b"\x08" * 20 + b"B:*.COM\r")
         out_s70_b = read_until(master, b"Enter filename to open:", timeout=6.0)
         if b"OPEN FILE (DIRECTORY - DRIVE B: [*.COM])" not in out_s70_b:
             print(f"[-] Step 70 failed: Combined drive+filter failed. Buffer: {repr(out_s70_b)}", flush=True)
@@ -4120,7 +4120,7 @@ def test_se_execution():
 
         # Switch back to Drive C: with reset: 'C:*.*'
         time.sleep(0.2)
-        os.write(master, b"C:*.*\r")
+        os.write(master, b"\x08" * 20 + b"C:*.*\r")
         out_s70_c = read_until(master, b"Enter filename to open:", timeout=6.0)
         last_s70_c = out_s70_c[out_s70_c.rfind(b"DIRECTORY - DRIVE C:"):]
         header_s70_c = last_s70_c.split(b"\r\n")[0]
@@ -4130,7 +4130,7 @@ def test_se_execution():
 
         # Test inline 'File not found' then filtering
         time.sleep(0.2)
-        os.write(master, b"NONEXIST.XYZ\r")
+        os.write(master, b"\x08" * 20 + b"NONEXIST.XYZ\r")
         out_s70_fnf = read_until(master, b"File not found", timeout=4.0)
         if b"File not found" not in out_s70_fnf:
             print(f"[-] Step 70 failed: 'File not found' inline message not displayed. Buffer: {repr(out_s70_fnf)}", flush=True)
@@ -4159,48 +4159,50 @@ def test_se_execution():
         os.write(master, b"Hello Filter Test")
 
         # Save file as TESTF.TXT
-        time.sleep(0.2)
+        time.sleep(0.3)
         os.write(master, b"\x13") # Ctrl+S
-        read_until(master, b"Enter filename to save:", timeout=4.0)
+        read_until(master, b"Enter filename to save:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"TESTF.TXT\r")
-        read_until(master, b"Line    1/1", timeout=4.0)
+        read_until(master, b"Line    1/1", timeout=6.0)
+        time.sleep(0.3)
 
         # Modify document
-        time.sleep(0.2)
         os.write(master, b" more text")
+        time.sleep(0.3)
 
         # Press Ctrl+S: input box prefills with TESTF.TXT
-        time.sleep(0.2)
         os.write(master, b"\x13")
-        out_s70_save2 = read_until(master, b"Enter filename to save:", timeout=4.0)
+        out_s70_save2 = read_until(master, b"Enter filename to save:", timeout=8.0)
+        out_s70_save2 += read_until(master, b"[TESTF.TXT", timeout=4.0)
         if b"TESTF.TXT" not in out_s70_save2:
             print(f"[-] Step 70 failed: Save prompt did not prefill 'TESTF.TXT'. Buffer: {repr(out_s70_save2)}", flush=True)
             return False
 
         # Type '*.TXT' and Enter to filter directory on Save screen
-        time.sleep(0.2)
+        time.sleep(0.3)
         os.write(master, b"\x08" * 20 + b"*.TXT\r")
-        out_s70_save_filt = read_until(master, b"Enter filename to save:", timeout=6.0)
+        out_s70_save_filt = read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=8.0)
         if b"SAVE FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_save_filt:
             print(f"[-] Step 70 failed: Save header did not update to [*.TXT]. Buffer: {repr(out_s70_save_filt)}", flush=True)
             return False
-        if b"TESTF.TXT" not in out_s70_save_filt:
-            print(f"[-] Step 70 failed: Save prompt did NOT restore document filename. Buffer: {repr(out_s70_save_filt)}", flush=True)
+        out_s70_save_filt += read_until(master, b"Enter filename to save:", timeout=6.0)
+        if b"*.TXT" not in out_s70_save_filt:
+            print(f"[-] Step 70 failed: Save prompt did NOT preserve input string '*.TXT'. Buffer: {repr(out_s70_save_filt)}", flush=True)
             return False
 
-        # Press Return to save directly, confirm overwrite
-        time.sleep(0.2)
-        os.write(master, b"\r")
-        out_s70_ow = read_until(master, b"Overwrite?", timeout=4.0)
+        # Clear '*.TXT' and save as TESTF.TXT, confirm overwrite
+        time.sleep(0.3)
+        os.write(master, b"\x08" * 20 + b"TESTF.TXT\r")
+        out_s70_ow = read_until(master, b"Overwrite?", timeout=6.0)
         if b"Overwrite?" in out_s70_ow:
             time.sleep(0.2)
             os.write(master, b"y")
-        out_s70_saved = read_until(master, b"Line    1/1", timeout=4.0)
+        out_s70_saved = read_until(master, b"Line    1/1", timeout=6.0)
         if b"TESTF.TXT" not in out_s70_saved:
             print(f"[-] Step 70 failed: Return did not save file. Buffer: {repr(out_s70_saved)}", flush=True)
             return False
-        print("[+] Step 70 Subtest 2 PASSED: Save File filter & filename restoration verified.", flush=True)
+        print("[+] Step 70 Subtest 2 PASSED: Save File filter & filename preservation verified.", flush=True)
 
         # Subtest 3: Block Insert Screen Filter
         # Start block with Ctrl+B in editor
@@ -4339,8 +4341,8 @@ def test_se_execution():
         if b"Enter filename to open:" not in out_s71_open:
             print(f"[-] Step 71 Subtest 5 failed: Open screen not displayed. Buffer: {repr(out_s71_open)}", flush=True)
             return False
-        if b"DRIVE C1:)" not in out_s71_open:
-            print(f"[-] Step 71 Subtest 5 failed: Open title not DRIVE C1:). Buffer: {repr(out_s71_open)}", flush=True)
+        if b"DRIVE C:)" not in out_s71_open:
+            print(f"[-] Step 71 Subtest 5 failed: Open title not DRIVE C:). Buffer: {repr(out_s71_open)}", flush=True)
             return False
 
         # Switch to User 0 via C0:
@@ -4366,6 +4368,7 @@ def test_se_execution():
         if b"(DIRECTORY - DRIVE C1: [*.TXT])" not in out_s71_filt:
             print(f"[-] Step 71 Subtest 5 failed: 1C:*.TXT filter title failed. Buffer: {repr(out_s71_filt)}", flush=True)
             return False
+        out_s71_filt += read_until(master, b"Enter filename to open:", timeout=6.0)
         if b"U1FILE.TXT" not in out_s71_filt or b"SAVEU1.TXT" not in out_s71_filt:
             print(f"[-] Step 71 Subtest 5 failed: U1 files not listed in filter. Buffer: {repr(out_s71_filt)}", flush=True)
             return False
@@ -4388,8 +4391,8 @@ def test_se_execution():
         time.sleep(0.1)
         os.write(master, b"\x13")
         out_s71_bs = read_until(master, b"Enter filename to save:", timeout=6.0)
-        if b"DRIVE C1:" not in out_s71_bs:
-            print(f"[-] Step 71 Subtest 6 failed: Block save title not DRIVE C1:). Buffer: {repr(out_s71_bs)}", flush=True)
+        if b"DRIVE C:)" not in out_s71_bs:
+            print(f"[-] Step 71 Subtest 6 failed: Block save title not DRIVE C:). Buffer: {repr(out_s71_bs)}", flush=True)
             return False
 
         time.sleep(0.1)

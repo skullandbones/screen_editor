@@ -13509,6 +13509,13 @@ DO_OPEN_FILE_UI:
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL	INIT_DIR_DRIVE
 
+	; User area defaults to 0 unless explicitly provided in edit box
+	XOR	A
+	LD	(CURRENT_DIR_USER),A
+
+	; Filter defaults to all files shown unless explicitly provided in edit box
+	CALL	RESET_DIR_FILTER
+
 	; Clear INPUT_FILENAME_BUF for initial prompt
 	XOR	A
 	LD	(INPUT_BUF_LEN),A
@@ -13662,17 +13669,23 @@ HODS_DRIVE_DONE:
 	POP	BC			; C = target user
 	LD	A,C
 	CP	0FFH
-	JR	Z,HODS_FINISH
+	JR	Z,HODS_USER_DEFAULT_ZERO
+	LD	(CURRENT_DIR_USER),A
+	JR	HODS_RESET_FILTER
+HODS_USER_DEFAULT_ZERO:
+	XOR	A
 	LD	(CURRENT_DIR_USER),A
 
-HODS_FINISH:
+HODS_RESET_FILTER:
+	; A drive/user switch without wildcard defaults to all files shown
+	CALL	RESET_DIR_FILTER
+	XOR	A
+	LD	(SHOWING_FNF_MSG),A
 	JP	REFRESH_OPEN_DIR
 
 HANDLE_OPEN_FILTER:
 	XOR	A
 	LD	(SHOWING_FNF_MSG),A
-	LD	(INPUT_BUF_LEN),A
-	LD	(INPUT_FILENAME_BUF),A
 	JP	REFRESH_OPEN_DIR
 
 OPEN_FILE_NOT_FOUND:
@@ -13725,6 +13738,7 @@ CHECK_PAGING_OR_CANCEL:
 	JR	Z,DO_NEXT_PAGE
 	CP	3
 	JR	Z,DO_PREV_PAGE
+	CALL	RESTORE_DOC_USER
 	RET				; Cancelled -> return to splash
 
 DO_PREV_PAGE:
@@ -14540,12 +14554,29 @@ DO_SAVE_FILE_UI_IMPL:
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL	INIT_DIR_DRIVE
 
+	; Filter defaults to all files shown unless explicitly provided in edit box
+	CALL	RESET_DIR_FILTER
+
+	; User area defaults to 0 unless explicitly provided in edit box
+	XOR	A
+	LD	(CURRENT_DIR_USER),A
+
 	; Pre-fill filename if known (HAS_FILE_ARG == 1) and not Block Save
 	LD	A,(IS_BLOCK_SAVE_UI)
 	OR	A
 	JR	NZ,DSUI_EMPTY_BUF
 	CALL	FCB_TO_FILENAME_STR
+
+	; Check if prefilled string explicitly contains a user area
+	LD	HL,INPUT_FILENAME_BUF
+	CALL	PARSE_DRIVE_USER_PREFIX
+	JR	NC,DSUI_PREFILL_DONE
+	LD	A,(PREFIX_USER)
+	CP	0FFH
+	JR	Z,DSUI_PREFILL_DONE
+	LD	(CURRENT_DIR_USER),A
 	JR	DSUI_PREFILL_DONE
+
 DSUI_EMPTY_BUF:
 	XOR	A
 	LD	(INPUT_BUF_LEN),A
@@ -14717,24 +14748,19 @@ HSDS_DRIVE_DONE:
 	POP	BC			; C = target user
 	LD	A,C
 	CP	0FFH
-	JR	Z,HSDS_FINISH
+	JR	Z,HSDS_USER_DEFAULT_ZERO
+	LD	(CURRENT_DIR_USER),A
+	JR	HSDS_RESET_FILTER
+HSDS_USER_DEFAULT_ZERO:
+	XOR	A
 	LD	(CURRENT_DIR_USER),A
 
-HSDS_FINISH:
+HSDS_RESET_FILTER:
+	; A drive/user switch without wildcard defaults to all files shown
+	CALL	RESET_DIR_FILTER
 	JP	REFRESH_SAVE_DIR
 
 HANDLE_SAVE_FILTER:
-	LD	A,(IS_BLOCK_SAVE_UI)
-	OR	A
-	JR	NZ,HSF_EMPTY
-	CALL	FCB_TO_FILENAME_STR
-	JR	HSF_REFRESH
-HSF_EMPTY:
-	XOR	A
-	LD	(INPUT_BUF_LEN),A
-	LD	HL,INPUT_FILENAME_BUF
-	LD	(HL),0
-HSF_REFRESH:
 	JP	REFRESH_SAVE_DIR
 
 CHECK_SAVE_PAGING_OR_CANCEL:
@@ -14745,6 +14771,7 @@ CHECK_SAVE_PAGING_OR_CANCEL:
 	JR	Z,DO_SAVE_NEXT_PAGE
 	CP	3
 	JR	Z,DO_SAVE_PREV_PAGE
+	CALL	RESTORE_DOC_USER
 	RET				; Cancelled -> return
 
 DO_SAVE_PREV_PAGE:
@@ -15061,6 +15088,39 @@ IDD_USE_FCB:
 	ADD	A,'A'-1
 	LD	(STR_DIR_DRIVE_CHAR),A
 	LD	(STR_SAVE_DRIVE_CHAR),A
+	RET
+
+;------------------------------------------------------------------------------
+; Restore BDOS user area and CURRENT_DIR_USER to the active document user area
+;------------------------------------------------------------------------------
+RESTORE_DOC_USER:
+	LD	A,(DOC_USER_NUM)
+	LD	(CURRENT_DIR_USER),A
+	LD	E,A
+	LD	C,32			; BDOS Set User Area
+	CALL	BDOS_ENTRY
+	RET
+
+;------------------------------------------------------------------------------
+; Reset directory filter to default *.* (all files shown)
+;------------------------------------------------------------------------------
+RESET_DIR_FILTER:
+	XOR	A
+	LD	(DIR_FILTER_ACTIVE),A
+	LD	HL,DIR_FILTER_FCB
+	LD	B,11
+RDF_LOOP:
+	LD	(HL),'?'
+	INC	HL
+	DJNZ	RDF_LOOP
+	LD	HL,DIR_FILTER_STR
+	LD	(HL),'*'
+	INC	HL
+	LD	(HL),'.'
+	INC	HL
+	LD	(HL),'*'
+	INC	HL
+	LD	(HL),0
 	RET
 
 ;------------------------------------------------------------------------------
@@ -15412,11 +15472,17 @@ CFP_DRIVE_OK:
 CFP_CHECK_USER_PRE:
 	LD	A,(PREFIX_USER)
 	CP	0FFH
-	JR	Z,CFP_PARSE_START
+	JR	Z,CFP_USER_DEFAULT_ZERO
+	LD	(CURRENT_DIR_USER),A
+	JR	CFP_PARSE_START
+CFP_USER_DEFAULT_ZERO:
+	XOR	A
 	LD	(CURRENT_DIR_USER),A
 	JR	CFP_PARSE_START
 
 CFP_NO_DRIVE_PREFIX:
+	XOR	A
+	LD	(CURRENT_DIR_USER),A
 	LD	HL,INPUT_FILENAME_BUF
 
 CFP_PARSE_START:
