@@ -5554,6 +5554,7 @@ CMP_HL_DE:
 	RET
 
 FILENAME_FIELD_WIDTH	EQU	14
+PSF_MAX_LEN:		DB	14
 
 ;------------------------------------------------------------------------------
 ; Print Filename in Status Bar (Fixed Width: FILENAME_FIELD_WIDTH characters)
@@ -5564,7 +5565,21 @@ FILENAME_FIELD_WIDTH	EQU	14
 ;------------------------------------------------------------------------------
 PRINT_STATUS_FILENAME:
 	LD	C,0			; C = characters printed so far
+	LD	A,FILENAME_FIELD_WIDTH	; Default max chars = 14
+	LD	(PSF_MAX_LEN),A
 
+	LD	A,(IS_SAVING_FILE)
+	OR	A
+	JR	NZ,PSF_LIMIT_SET
+
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JR	Z,PSF_LIMIT_SET
+
+	LD	A,FILENAME_FIELD_WIDTH-1 ; If modified, reserve 1 char for '*' (max 13)
+	LD	(PSF_MAX_LEN),A
+
+PSF_LIMIT_SET:
 	LD	A,(IS_SAVING_FILE)
 	OR	A
 	JR	NZ,PSF_HAVE_FILE
@@ -5578,7 +5593,7 @@ PRINT_STATUS_FILENAME:
 PSF_NO_NAME_LOOP:
 	LD	A,(DE)
 	OR	A
-	JR	Z,PSF_PAD_SPACES
+	JR	Z,PSF_CHECK_MODIFIED
 	CALL	PUTC
 	INC	DE
 	INC	C
@@ -5623,9 +5638,10 @@ PSF_NAME_LOOP:
 	JR	Z,PSF_CHECK_EXT
 	OR	A
 	JR	Z,PSF_CHECK_EXT
-	LD	A,C
-	CP	FILENAME_FIELD_WIDTH
-	JR	NC,PSF_CHECK_EXT
+	LD	A,(PSF_MAX_LEN)
+	CP	C
+	JR	Z,PSF_CHECK_EXT
+	JR	C,PSF_CHECK_EXT
 	LD	A,(HL)
 	CALL	PUTC
 	INC	C
@@ -5637,13 +5653,14 @@ PSF_CHECK_EXT:
 	LD	HL,WORK_FCB+9
 	LD	A,(HL)
 	CP	' '
-	JR	Z,PSF_PAD_SPACES
+	JR	Z,PSF_CHECK_MODIFIED
 	OR	A
-	JR	Z,PSF_PAD_SPACES
+	JR	Z,PSF_CHECK_MODIFIED
 
-	LD	A,C
-	CP	FILENAME_FIELD_WIDTH
-	JR	NC,PSF_PAD_SPACES
+	LD	A,(PSF_MAX_LEN)
+	CP	C
+	JR	Z,PSF_CHECK_MODIFIED
+	JR	C,PSF_CHECK_MODIFIED
 
 	LD	A,'.'
 	CALL	PUTC
@@ -5653,17 +5670,33 @@ PSF_CHECK_EXT:
 PSF_EXT_LOOP:
 	LD	A,(HL)
 	CP	' '
-	JR	Z,PSF_PAD_SPACES
+	JR	Z,PSF_CHECK_MODIFIED
 	OR	A
-	JR	Z,PSF_PAD_SPACES
-	LD	A,C
-	CP	FILENAME_FIELD_WIDTH
-	JR	NC,PSF_PAD_SPACES
+	JR	Z,PSF_CHECK_MODIFIED
+	LD	A,(PSF_MAX_LEN)
+	CP	C
+	JR	Z,PSF_CHECK_MODIFIED
+	JR	C,PSF_CHECK_MODIFIED
 	LD	A,(HL)
 	CALL	PUTC
 	INC	C
 	INC	HL
 	DJNZ	PSF_EXT_LOOP
+
+PSF_CHECK_MODIFIED:
+	; Check if document is modified and not currently saving
+	LD	A,(IS_SAVING_FILE)
+	OR	A
+	JR	NZ,PSF_PAD_SPACES
+
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JR	Z,PSF_PAD_SPACES
+
+	; Document is modified: print '*' indicator (max 13 chars printed, so space exists)
+	LD	A,'*'
+	CALL	PUTC
+	INC	C
 
 PSF_PAD_SPACES:
 	; Pad remaining characters with spaces up to FILENAME_FIELD_WIDTH

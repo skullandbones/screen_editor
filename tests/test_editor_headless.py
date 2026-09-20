@@ -82,7 +82,8 @@ def test_se_execution():
     with open(cfg_tmp, "w") as f:
         f.write("SCREEN=120x40\r\nRAMDRIVE=ON\r\n")
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    workspace_root = os.path.abspath(os.path.join(os.path.dirname(script_dir), "..", ".."))
+    repo_root = os.path.dirname(script_dir)
+    workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
     cpmrm_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm")
     cpmcp_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp")
     if os.path.isfile(cpmrm_bin):
@@ -96,6 +97,18 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BLKSGL.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SAV300.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BLK300.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:LONGNAME.TXT"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        two_txt_host = os.path.join(repo_root, "2.TXT")
+        if os.path.isfile(two_txt_host) and os.path.isfile(cpmcp_bin):
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:2.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, two_txt_host, "0:2.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if os.path.isfile(cpmcp_bin):
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big_tmp, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -3920,9 +3933,138 @@ def test_se_execution():
         print(f"[+] Step 68 Subtest 3 PASSED: Exit save progress verified with ticks: {[t.decode() for t in found_s68_eticks]}", flush=True)
         print("[+] Successfully verified Save Progress Indicator (Step 68)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # STEP 69: Modified Document Indicator ('*') in Status Bar
+        # ---------------------------------------------------------------------
+        print("[*] STEP 69: Testing Unsaved Modification Indicator ('*') in Status Bar...", flush=True)
+
+        # Subtest 1: Open existing file 2.TXT, verify clean, modify, verify '*', save with Ctrl+S, verify clean
+        time.sleep(0.5)
+        drain_all(master)
+        os.write(master, b"se 2.TXT\r")
+        out_s69_load = read_until(master, b"^K: Editor keys", timeout=20.0)
+        out_s69_load += drain_all(master)
+
+        if b"| C:2.TXT        |" not in out_s69_load:
+            print(f"[-] Step 69 failed: Clean status bar not found: {repr(out_s69_load[-400:])}", flush=True)
+            return False
+        if b"C:2.TXT*" in out_s69_load:
+            print("[-] Step 69 failed: Clean status bar contains '*' unexpectedly!", flush=True)
+            return False
+        print("[+] Step 69 Subtest 1a PASSED: Initial clean status bar verified: '| C:2.TXT        |'", flush=True)
+
+        # Modify document by typing a character
+        os.write(master, b"X")
+        time.sleep(0.3)
+        out_s69_mod = drain_all(master)
+        if b"| C:2.TXT*       |" not in out_s69_mod:
+            print(f"[-] Step 69 failed: Modified status bar not found after typing: {repr(out_s69_mod[-400:])}", flush=True)
+            return False
+        print("[+] Step 69 Subtest 1b PASSED: Modified status bar verified: '| C:2.TXT*       |'", flush=True)
+
+        # Save with Ctrl+S (\x13)
+        os.write(master, b"\x13")
+        read_until(master, b"Enter filename to save:", timeout=6.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Press Enter to keep same filename 2.TXT
+        os.write(master, b"\r")
+        out_s69_ow = read_until(master, b"File already exists. Overwrite?", timeout=6.0)
+        if b"File already exists. Overwrite?" not in out_s69_ow:
+            print(f"[-] Step 69 failed: Overwrite prompt not received: {repr(out_s69_ow)}", flush=True)
+            return False
+
+        # Confirm overwrite with 'y'
+        os.write(master, b"y")
+        out_s69_saved = read_until(master, b"^K: Editor keys", timeout=15.0)
+        out_s69_saved += drain_all(master)
+
+        if b"| C:2.TXT        |" not in out_s69_saved:
+            print(f"[-] Step 69 failed: Status bar after save did not restore clean state: {repr(out_s69_saved[-400:])}", flush=True)
+            return False
+        if b"C:2.TXT*" in out_s69_saved:
+            print("[-] Step 69 failed: Status bar after save still has '*'!", flush=True)
+            return False
+        print("[+] Step 69 Subtest 1c PASSED: Clean state restored after save: '| C:2.TXT        |'", flush=True)
+
+        # Subtest 2: Untitled document from splash screen ('n' on splash)
+        os.write(master, b"\x1b")  # Return to splash screen
+        read_until(master, b"Screen Editor", timeout=6.0)
+        drain_all(master)
+
+        os.write(master, b"n")  # New File
+        out_s69_new = read_until(master, b"^K: Editor keys", timeout=6.0)
+        out_s69_new += drain_all(master)
+
+        if b"| (Untitled)     |" not in out_s69_new:
+            print(f"[-] Step 69 failed: Initial (Untitled) status bar not found: {repr(out_s69_new[-400:])}", flush=True)
+            return False
+        if b"(Untitled)*" in out_s69_new:
+            print("[-] Step 69 failed: Initial (Untitled) contains '*' unexpectedly!", flush=True)
+            return False
+        print("[+] Step 69 Subtest 2a PASSED: Initial (Untitled) verified: '| (Untitled)     |'", flush=True)
+
+        # Type character in Untitled file
+        os.write(master, b"Y")
+        time.sleep(0.3)
+        out_s69_new_mod = drain_all(master)
+        if b"| (Untitled)*    |" not in out_s69_new_mod:
+            print(f"[-] Step 69 failed: Modified (Untitled)* status bar not found: {repr(out_s69_new_mod[-400:])}", flush=True)
+            return False
+        print("[+] Step 69 Subtest 2b PASSED: Modified (Untitled) verified: '| (Untitled)*    |'", flush=True)
+
+        # Discard and exit to CP/M prompt
+        os.write(master, b"\x11")  # Ctrl+Q
+        read_until(master, b"Save changes?", timeout=6.0)
+        os.write(master, b"n")
+        out_s69_exit1 = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s69_exit1:
+            print(f"[-] Step 69 failed: Exit to CP/M failed: {repr(out_s69_exit1)}", flush=True)
+            return False
+
+        # Subtest 3: Maximum-length (14 characters) filename field capping
+        time.sleep(0.5)
+        drain_all(master)
+        os.write(master, b"se LONGNAME.TXT\r")
+        out_s69_long = read_until(master, b"^K: Editor keys", timeout=20.0)
+        out_s69_long += drain_all(master)
+
+        if b"| C:LONGNAME.TXT |" not in out_s69_long:
+            print(f"[-] Step 69 failed: Initial 14-char status bar not found: {repr(out_s69_long[-400:])}", flush=True)
+            return False
+        print("[+] Step 69 Subtest 3a PASSED: Initial 14-char file verified: '| C:LONGNAME.TXT |'", flush=True)
+
+        # Type character to make 14-char file modified
+        os.write(master, b"Z")
+        time.sleep(0.3)
+        out_s69_long_mod = drain_all(master)
+        if b"| C:LONGNAME.TX* |" not in out_s69_long_mod:
+            print(f"[-] Step 69 failed: Modified 14-char status bar not found: {repr(out_s69_long_mod[-400:])}", flush=True)
+            return False
+        print("[+] Step 69 Subtest 3b PASSED: Modified 14-char file verified: '| C:LONGNAME.TX* |'", flush=True)
+
+        # Discard and exit to CP/M prompt
+        os.write(master, b"\x11")  # Ctrl+Q
+        read_until(master, b"Save changes?", timeout=6.0)
+        os.write(master, b"n")
+        out_s69_exit2 = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s69_exit2:
+            print(f"[-] Step 69 failed: Exit 2 to CP/M failed: {repr(out_s69_exit2)}", flush=True)
+            return False
+
+        print("[+] Successfully verified Modified Document Indicator ('*') in Status Bar (Step 69)!", flush=True)
+
         return True
 
     finally:
+        two_txt_host = os.path.join(repo_root, "2.TXT")
+        if os.path.isfile(two_txt_host) and os.path.isfile(cpmcp_bin) and os.path.isfile(cpmrm_bin):
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:2.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, two_txt_host, "0:2.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if os.path.isfile(cpmrm_bin):
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -3935,6 +4077,8 @@ def test_se_execution():
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SAV300.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BLK300.TXT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:LONGNAME.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             proc.kill()
