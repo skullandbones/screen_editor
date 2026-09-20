@@ -3572,7 +3572,7 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"INS1.TXT\r")
-        out_s66_ins1 = read_until(master, b"Hello INSERTED", timeout=8.0)
+        out_s66_ins1 = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
         out_s66_ins1 += drain_all(master)
 
         if b"Loading..." not in out_s66_ins1:
@@ -3584,13 +3584,16 @@ def test_se_execution():
         if b"INS1.TXT" not in out_s66_ins1:
             print(f"[-] Step 66 Subtest 3 failed: 'INS1.TXT' not found in status bar during insert: {repr(out_s66_ins1)}", flush=True)
             return False
-        if b"Hello INSERTED" not in out_s66_ins1:
-            print(f"[-] Step 66 Subtest 3 failed: 'Hello INSERTED' not found: {repr(out_s66_ins1)}", flush=True)
+        if b"[BLK: 8c LOCK]" not in out_s66_ins1:
+            print(f"[-] Step 66 Subtest 3 failed: '[BLK: 8c LOCK]' not found on status bar: {repr(out_s66_ins1)}", flush=True)
+            return False
+        if b"INSERTED" not in out_s66_ins1:
+            print(f"[-] Step 66 Subtest 3 failed: 'INSERTED' not found: {repr(out_s66_ins1)}", flush=True)
             return False
         if b"(Untitled)" not in out_s66_ins1:
             print(f"[-] Step 66 Subtest 3 failed: WORK_FCB was overwritten, expected (Untitled): {repr(out_s66_ins1)}", flush=True)
             return False
-        print("[+] Step 66 Subtest 3 PASSED: Single-line inserted at cursor, (Untitled) preserved.", flush=True)
+        print("[+] Step 66 Subtest 3 PASSED: Single-line inserted at cursor, solidified [BLK: 8c LOCK], (Untitled) preserved.", flush=True)
 
         # Subtest 4: Replace non-empty single-line block with multi-line file
         os.write(master, b" END")
@@ -3619,7 +3622,7 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"INS2.TXT\r")
-        out_s66_ins2 = read_until(master, b"SECOND LINE END", timeout=8.0)
+        out_s66_ins2 = read_until(master, b"[BLK: 2L LOCK]", timeout=8.0)
         out_s66_ins2 += drain_all(master)
 
         if b"Loading..." not in out_s66_ins2:
@@ -3631,15 +3634,23 @@ def test_se_execution():
         if b"INS2.TXT" not in out_s66_ins2:
             print(f"[-] Step 66 Subtest 4 failed: 'INS2.TXT' not found in status bar during insert: {repr(out_s66_ins2)}", flush=True)
             return False
-        if b"Hello FIRST LINE" not in out_s66_ins2:
-            print(f"[-] Step 66 Subtest 4 failed: 'Hello FIRST LINE' not found: {repr(out_s66_ins2)}", flush=True)
+        if b"[BLK: 2L LOCK]" not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: '[BLK: 2L LOCK]' not found on status bar: {repr(out_s66_ins2)}", flush=True)
             return False
-        if b"SECOND LINE END" not in out_s66_ins2:
-            print(f"[-] Step 66 Subtest 4 failed: 'SECOND LINE END' not found: {repr(out_s66_ins2)}", flush=True)
+        if b"FIRST LINE" not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: 'FIRST LINE' not found: {repr(out_s66_ins2)}", flush=True)
             return False
-        print("[+] Step 66 Subtest 4 PASSED: Single-line block replaced with multi-line file.", flush=True)
+        if b"SECOND LINE" not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: 'SECOND LINE' not found: {repr(out_s66_ins2)}", flush=True)
+            return False
+        print("[+] Step 66 Subtest 4 PASSED: Single-line block replaced with multi-line file and solidified [BLK: 2L LOCK].", flush=True)
 
         # Subtest 5: Replace multi-line block with single-line file
+        # Dismiss previous solidified block with ESC
+        os.write(master, b"\x1b")
+        time.sleep(0.1)
+        drain_all(master)
+
         os.write(master, b"\x1b[A")  # Up to line 0
         time.sleep(0.05)
         os.write(master, b"\x01")    # Home
@@ -3666,13 +3677,49 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"INS1.TXT\r")
-        out_s66_ins3 = read_until(master, b"HelloINSERTED END", timeout=8.0)
+        out_s66_ins3 = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
         out_s66_ins3 += drain_all(master)
 
-        if b"HelloINSERTED END" not in out_s66_ins3:
-            print(f"[-] Step 66 Subtest 5 failed: 'HelloINSERTED END' not found: {repr(out_s66_ins3)}", flush=True)
+        if b"[BLK: 8c LOCK]" not in out_s66_ins3:
+            print(f"[-] Step 66 Subtest 5 failed: '[BLK: 8c LOCK]' not found: {repr(out_s66_ins3)}", flush=True)
             return False
-        print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted and replaced with single-line file.", flush=True)
+        if b"INSERTED" not in out_s66_ins3:
+            print(f"[-] Step 66 Subtest 5 failed: 'INSERTED' not found: {repr(out_s66_ins3)}", flush=True)
+            return False
+        print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted, replaced with single-line file, and solidified [BLK: 8c LOCK].", flush=True)
+
+        # Subtest 6: Test block delete of inserted file, re-insert and ESC dismiss
+        # Line 1 currently has "Hello" + [BLK: 8c LOCK] "INSERTED" + " END"
+        # Press Del (\x7f) to delete the inserted block
+        os.write(master, b"\x7f")
+        out_s66_del = read_until(master, b"^K: Editor keys", timeout=6.0)
+        out_s66_del += drain_all(master)
+        if b"^K: Editor keys" not in out_s66_del:
+            print(f"[-] Step 66 Subtest 6 failed: Status bar did not revert after block delete: {repr(out_s66_del)}", flush=True)
+            return False
+
+        # Re-insert INS1.TXT at cursor
+        os.write(master, b"\x02")  # Ctrl-B
+        time.sleep(0.2)
+        drain_all(master)
+        os.write(master, b"\x0f")  # Ctrl-O
+        read_until(master, b"Enter filename to insert:", timeout=6.0)
+        drain_all(master)
+        os.write(master, b"INS1.TXT\r")
+        out_s66_reins = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
+        out_s66_reins += drain_all(master)
+        if b"[BLK: 8c LOCK]" not in out_s66_reins:
+            print(f"[-] Step 66 Subtest 6 failed: Re-insert not solidified: {repr(out_s66_reins)}", flush=True)
+            return False
+
+        # Dismiss solidified block with ESC
+        os.write(master, b"\x1b")
+        out_s66_esc2 = read_until(master, b"^K: Editor keys", timeout=4.0)
+        out_s66_esc2 += drain_all(master)
+        if b"^K: Editor keys" not in out_s66_esc2:
+            print(f"[-] Step 66 Subtest 6 failed: ESC did not dismiss solidified block: {repr(out_s66_esc2)}", flush=True)
+            return False
+        print("[+] Step 66 Subtest 6 PASSED: Block delete of inserted file verified, re-inserted and dismissed with ESC.", flush=True)
 
         print("[+] Successfully verified Block Insert File feature (Step 66)!", flush=True)
 
