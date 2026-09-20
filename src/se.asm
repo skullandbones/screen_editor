@@ -5255,7 +5255,7 @@ SHOW_STATUS_LOADING_POS:
 	CALL	PRINT_STR
 
 	; 2. Line number: right-justified in 5 chars
-	LD	HL,(DOC_TOTAL_LINES)
+	LD	HL,(LOAD_PROGRESS_LINES)
 	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
 	LD	C,A
 	LD	A,5
@@ -5268,7 +5268,7 @@ SSLP_PAD:
 	CALL	PUTC
 	DJNZ	SSLP_PAD
 SSLP_NUM:
-	LD	HL,(DOC_TOTAL_LINES)
+	LD	HL,(LOAD_PROGRESS_LINES)
 	CALL	PRINT_DEC_WORD
 
 	; 3. Trailing spaces: POS_FIELD_WIDTH (22) - 10 = 12 spaces
@@ -12956,30 +12956,10 @@ LOAD_FILE:
 	LD	(IS_SPLASH_SCREEN),A
 	LD	A,100
 	LD	(LOAD_PROGRESS_COUNT),A
+	LD	HL,0
+	LD	(LOAD_PROGRESS_LINES),HL
 
-	; Hide cursor during load
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-
-	; Clear screen (cursor moves to row 1, col 1)
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
-
-	; Fill rows 1 to ACTIVE_ROWS - 1 with '~' in column 0
-	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1
-	LD	B,A
-LF_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
-	DJNZ	LF_TILDE_LOOP
-
-	; Render initial status bar on row ACTIVE_ROWS
-	CALL	RENDER_STATUS_BAR
+	CALL	DRAW_LOADING_SCREEN
 
 READ_SECTOR_LOOP:
 	LD	DE,DEFAULT_DMA
@@ -13166,6 +13146,7 @@ LF_LINE_COUNT_INC:
 	LD	HL,(DOC_TOTAL_LINES)
 	INC	HL
 	LD	(DOC_TOTAL_LINES),HL
+	LD	(LOAD_PROGRESS_LINES),HL
 
 	; Check 100-line progress interval
 	LD	A,(LOAD_PROGRESS_COUNT)
@@ -13229,6 +13210,7 @@ DONE_STRIDE_FULL:
 	LD	HL,(DOC_TOTAL_LINES)
 	INC	HL
 	LD	(DOC_TOTAL_LINES),HL
+	LD	(LOAD_PROGRESS_LINES),HL
 
 LOAD_FINISH:
 	; Final progress update to show exact total lines loaded
@@ -13270,6 +13252,37 @@ LOAD_FILE_NOT_FOUND:
 	RET
 
 ;------------------------------------------------------------------------------
+; DRAW_LOADING_SCREEN:
+; Clear screen, fill column 0 with tildes '~', and draw initial status bar.
+; Preserves: none
+;------------------------------------------------------------------------------
+DRAW_LOADING_SCREEN:
+	; Hide cursor during load
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+
+	; Clear screen (cursor moves to row 1, col 1)
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+
+	; Fill rows 1 to ACTIVE_ROWS - 1 with '~' in column 0
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1
+	LD	B,A
+DLS_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	DLS_TILDE_LOOP
+
+	; Render initial status bar on row ACTIVE_ROWS
+	CALL	RENDER_STATUS_BAR
+	RET
+
+;------------------------------------------------------------------------------
 ; UPDATE_LOAD_PROGRESS:
 ; Update line field on status bar during file loading.
 ; Positions cursor directly to Field 5 and prints "Line <lines:5>" in inverse video.
@@ -13305,7 +13318,7 @@ UPDATE_LOAD_PROGRESS:
 	LD	DE,STR_STATUS_POS	; "Line " (5 chars)
 	CALL	PRINT_STR
 
-	LD	HL,(DOC_TOTAL_LINES)
+	LD	HL,(LOAD_PROGRESS_LINES)
 	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
 	LD	C,A
 	LD	A,5
@@ -13318,7 +13331,7 @@ ULP_PAD:
 	CALL	PUTC
 	DJNZ	ULP_PAD
 ULP_NUM:
-	LD	HL,(DOC_TOTAL_LINES)
+	LD	HL,(LOAD_PROGRESS_LINES)
 	CALL	PRINT_DEC_WORD
 
 	LD	DE,STR_INVERSE_OFF
@@ -13625,12 +13638,46 @@ DO_PARSE_AND_INSERT:
 	CALL	PROBE_INSERT_FILE
 	JP	C,OPEN_FILE_NOT_FOUND
 
+	; Setup loading UI for block insert
+	LD	A,(HAS_FILE_ARG)
+	LD	(SAVED_HAS_FILE_ARG),A
+
+	; Display inserted file name in status bar
+	LD	HL,INSERT_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
+
+	LD	A,1
+	LD	(HAS_FILE_ARG),A
+	LD	(IS_LOADING_FILE),A
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
+	LD	(INSERT_LINE_HAD_CHARS),A
+	LD	HL,0
+	LD	(LOAD_PROGRESS_LINES),HL
+	LD	A,100
+	LD	(LOAD_PROGRESS_COUNT),A
+
+	CALL	DRAW_LOADING_SCREEN
+
 	; Perform Block Insert
 	CALL	DO_PERFORM_BLOCK_INSERT
 
-	; Insertion complete: clear insert flag and splash flag
+	; Restore original document WORK_FCB from DIR_TEMP_FCB
+	LD	HL,DIR_TEMP_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
+
+	; Restore original HAS_FILE_ARG
+	LD	A,(SAVED_HAS_FILE_ARG)
+	LD	(HAS_FILE_ARG),A
+
+	; Insertion complete: clear insert flag, loading flag, and splash flag
 	XOR	A
 	LD	(IS_BLOCK_INSERT_UI),A
+	LD	(IS_LOADING_FILE),A
 	LD	(IS_SPLASH_SCREEN),A
 	LD	(NEED_SCREEN_RENDER),A
 	LD	(NEED_LINE_RENDER),A
@@ -13884,6 +13931,16 @@ DPBI_HIT_EOF:
 	CALL	PBI_EMIT_LINE_BREAK
 
 DPBI_FINISH_EOF:
+	; Final progress update for inserted file
+	LD	A,(INSERT_LINE_HAD_CHARS)
+	OR	A
+	JR	Z,DPBI_NO_FINAL_INC
+	LD	HL,(LOAD_PROGRESS_LINES)
+	INC	HL
+	LD	(LOAD_PROGRESS_LINES),HL
+DPBI_NO_FINAL_INC:
+	CALL	UPDATE_LOAD_PROGRESS
+
 	; Record cursor position (column right after inserted text)
 	LD	HL,(INSERT_CUR_LEN)
 	LD	(INSERT_NEW_CUR_COL),HL
@@ -13953,6 +14010,8 @@ PBI_APPEND_CHAR:
 	LD	HL,(INSERT_CUR_LEN)
 	INC	HL
 	LD	(INSERT_CUR_LEN),HL
+	LD	A,1
+	LD	(INSERT_LINE_HAD_CHARS),A
 PAC_DONE:
 	POP	DE
 	POP	HL
@@ -14032,6 +14091,22 @@ PELB_NO_SHIFT:
 	LD	HL,0
 	LD	(INSERT_CUR_LEN),HL
 	LD	(INSERT_IS_FIRST_LINE),A
+	LD	(INSERT_LINE_HAD_CHARS),A
+
+	; Increment LOAD_PROGRESS_LINES
+	LD	HL,(LOAD_PROGRESS_LINES)
+	INC	HL
+	LD	(LOAD_PROGRESS_LINES),HL
+
+	; Check 100-line progress interval
+	LD	A,(LOAD_PROGRESS_COUNT)
+	DEC	A
+	LD	(LOAD_PROGRESS_COUNT),A
+	JR	NZ,PBIL_NO_TICK
+	LD	A,100
+	LD	(LOAD_PROGRESS_COUNT),A
+	CALL	UPDATE_LOAD_PROGRESS
+PBIL_NO_TICK:
 
 	POP	HL
 	POP	DE
@@ -16900,6 +16975,9 @@ IS_BLOCK_INSERT_UI:	DB	0		; 1 if currently in Block Insert File Screen
 IS_BLOCK_SAVE_UI:	DB	0		; 1 if currently in Block Save File Screen
 IS_LOADING_FILE:	DB	0		; 1 if currently loading file
 LOAD_PROGRESS_COUNT:	DB	100		; Progress interval down-counter (100 lines)
+LOAD_PROGRESS_LINES:	DW	0		; Lines read counter for loading status bar
+SAVED_HAS_FILE_ARG:	DB	0		; Saved HAS_FILE_ARG during block insert
+INSERT_LINE_HAD_CHARS:	DB	0		; 1 if current line of inserted file had chars
 IS_EXIT_PROMPT:		DB	0		; 1 if currently in Save Changes Exit Prompt
 INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0		; Streaming insert current line length

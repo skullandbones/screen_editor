@@ -3575,6 +3575,15 @@ def test_se_execution():
         out_s66_ins1 = read_until(master, b"Hello INSERTED", timeout=8.0)
         out_s66_ins1 += drain_all(master)
 
+        if b"Loading..." not in out_s66_ins1:
+            print(f"[-] Step 66 Subtest 3 failed: 'Loading...' not found during insert: {repr(out_s66_ins1)}", flush=True)
+            return False
+        if b"~" not in out_s66_ins1:
+            print(f"[-] Step 66 Subtest 3 failed: '~' not found during insert: {repr(out_s66_ins1)}", flush=True)
+            return False
+        if b"INS1.TXT" not in out_s66_ins1:
+            print(f"[-] Step 66 Subtest 3 failed: 'INS1.TXT' not found in status bar during insert: {repr(out_s66_ins1)}", flush=True)
+            return False
         if b"Hello INSERTED" not in out_s66_ins1:
             print(f"[-] Step 66 Subtest 3 failed: 'Hello INSERTED' not found: {repr(out_s66_ins1)}", flush=True)
             return False
@@ -3613,6 +3622,15 @@ def test_se_execution():
         out_s66_ins2 = read_until(master, b"SECOND LINE END", timeout=8.0)
         out_s66_ins2 += drain_all(master)
 
+        if b"Loading..." not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: 'Loading...' not found during insert: {repr(out_s66_ins2)}", flush=True)
+            return False
+        if b"~" not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: '~' not found during insert: {repr(out_s66_ins2)}", flush=True)
+            return False
+        if b"INS2.TXT" not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: 'INS2.TXT' not found in status bar during insert: {repr(out_s66_ins2)}", flush=True)
+            return False
         if b"Hello FIRST LINE" not in out_s66_ins2:
             print(f"[-] Step 66 Subtest 4 failed: 'Hello FIRST LINE' not found: {repr(out_s66_ins2)}", flush=True)
             return False
