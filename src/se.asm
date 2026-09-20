@@ -384,11 +384,15 @@ CONFIG_NOT_ESC:
 	CP	'2'
 	JR	Z,CONFIG_TOGGLE_RAMDRIVE
 
+	; Option: '3' -> Toggle Tab Width (4 <-> 8)
+	CP	'3'
+	JR	Z,CONFIG_TOGGLE_TAB
+
 	; Option: 'S' or 's' -> Save Configuration to local SE.CFG
 	CP	's'
-	JR	Z,CONFIG_DO_SAVE
+	JP	Z,CONFIG_DO_SAVE
 	CP	'S'
-	JR	Z,CONFIG_DO_SAVE
+	JP	Z,CONFIG_DO_SAVE
 
 	; Option: 'Q' or 'q' or Enter -> Return to Splash Screen
 	CP	'q'
@@ -446,6 +450,24 @@ CTR_SET_PROT:
 	JR	CTR_APPLY
 CTR_APPLY:
 	CALL	BUFFER_INIT
+	CALL	SHOW_CONFIG_SCREEN
+	JP	CONFIG_LOOP
+
+CONFIG_TOGGLE_TAB:
+	LD	A,(CFG_TAB_WIDTH)
+	CP	4
+	JR	Z,CTT_SET_8
+	LD	A,4
+	LD	(CFG_TAB_WIDTH),A
+	LD	A,3
+	LD	(CFG_TAB_MASK),A
+	JR	CTT_DONE
+CTT_SET_8:
+	LD	A,8
+	LD	(CFG_TAB_WIDTH),A
+	LD	A,7
+	LD	(CFG_TAB_MASK),A
+CTT_DONE:
 	CALL	SHOW_CONFIG_SCREEN
 	JP	CONFIG_LOOP
 
@@ -1510,7 +1532,7 @@ ABOUT_TILDE_DONE:
 ; Configuration Screen Renderer
 ; Displays active screen geometry, config file status, and adjustment commands
 ;------------------------------------------------------------------------------
-CONFIG_LINES	EQU	13
+CONFIG_LINES	EQU	15
 
 SHOW_CONFIG_SCREEN:
 	LD	A,1
@@ -1561,13 +1583,27 @@ SCS_RAM_VALUE:
 	JR	Z,SCS_RAM_ENABLED
 	LD	DE,STR_RAM_PROTECTED_LBL
 	CALL	PRINT_STR
-	JR	SCS_STATUS
+	JR	SCS_TAB_MODE
 SCS_RAM_HIB:
 	LD	DE,STR_RAM_HIBERNATE_LBL
 	CALL	PRINT_STR
-	JR	SCS_STATUS
+	JR	SCS_TAB_MODE
 SCS_RAM_ENABLED:
 	LD	DE,STR_RAM_ENABLED_LBL
+	CALL	PRINT_STR
+
+SCS_TAB_MODE:
+	; Display Tab Width Option
+	LD	DE,STR_CONFIG_TAB_LBL
+	CALL	PRINT_STR
+	LD	A,(CFG_TAB_WIDTH)
+	CP	4
+	JR	Z,SCS_TAB_4
+	LD	DE,STR_TAB_8_LBL
+	CALL	PRINT_STR
+	JR	SCS_STATUS
+SCS_TAB_4:
+	LD	DE,STR_TAB_4_LBL
 	CALL	PRINT_STR
 
 SCS_STATUS:
@@ -4411,6 +4447,22 @@ CT16_NO:
 	OR	A
 	RET
 
+;------------------------------------------------------------------------------
+; GET_TAB_SPACES: Compute spaces to next tab stop (1..CFG_TAB_WIDTH)
+; Input: A = Visual Column (low byte, 0..255)
+; Returns: A = Spaces to advance (1..4 or 1..8)
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+GET_TAB_SPACES:
+	PUSH	BC
+	CPL
+	LD	B,A
+	LD	A,(CFG_TAB_MASK)
+	AND	B
+	INC	A
+	POP	BC
+	RET
+
 ; Fast single line refresh: rewrites current line and restores cursor
 RENDER_CURRENT_LINE:
 	; Move to start of current screen line: ESC [ <(CUR_DOC_ROW - TOP_DOC_ROW) + 1> ; 1 H
@@ -4568,10 +4620,8 @@ PCL_EMIT_CONT:
 PRINT_CUR_TAB:
 	INC	HL
 	LD	A,E
-	AND	7
-	NEG
-	ADD	A,8
-	LD	(REND_TAB_SPACES),A	; spaces to emit (1..8)
+	CALL	GET_TAB_SPACES
+	LD	(REND_TAB_SPACES),A	; spaces to emit (1..CFG_TAB_WIDTH)
 
 PRINT_CUR_TAB_SPACES:
 	; Check if DE >= VIEW_RIGHT_COL
@@ -4875,9 +4925,7 @@ PLC_EMIT_CONT:
 PRINT_LINE_TAB:
 	INC	HL
 	LD	A,E
-	AND	7
-	NEG
-	ADD	A,8
+	CALL	GET_TAB_SPACES
 	LD	(REND_TAB_SPACES),A
 
 PRINT_LINE_TAB_SPACES:
@@ -6011,11 +6059,9 @@ CALC_VIS_LOOP:
 	JR	CALC_VIS_NEXT
 
 CALC_VIS_TAB:
-	; Tab advances BC to next multiple of 8
+	; Tab advances BC to next tab stop
 	LD	A,C
-	AND	7
-	NEG
-	ADD	A,8			; spaces to add (1..8)
+	CALL	GET_TAB_SPACES		; spaces to add (1..CFG_TAB_WIDTH)
 	ADD	A,C
 	LD	C,A
 	JR	NC,CALC_VIS_NEXT
@@ -8745,9 +8791,7 @@ GET_ROW_LEN_LOOP:
 GET_ROW_TAB:
 	INC	DE
 	LD	A,C
-	AND	7
-	NEG
-	ADD	A,8			; spaces to add (1..8)
+	CALL	GET_TAB_SPACES		; spaces to add (1..CFG_TAB_WIDTH)
 	ADD	A,C
 	LD	C,A
 	JR	NC,GET_ROW_NEXT
@@ -8819,9 +8863,7 @@ MAP_TARGET_TAB:
 	PUSH	HL
 	LD	HL,(ACT_VIS_ACC)
 	LD	A,L
-	AND	7
-	NEG
-	ADD	A,8
+	CALL	GET_TAB_SPACES
 	ADD	A,L
 	LD	L,A
 	JR	NC,MAP_TAB_NO_CY
@@ -11129,9 +11171,7 @@ CHECK_VISUAL_LIMIT:
 	JR	NZ,LINE_LEN_OK
 	CALL	CALC_VISUAL_COL		; HL = visual col at CUR_COL
 	LD	A,L
-	AND	7
-	NEG
-	ADD	A,8			; spaces added (1..8)
+	CALL	GET_TAB_SPACES
 	DEC	A			; minus 1 for replaced char
 	LD	E,A
 	LD	D,0
@@ -11947,6 +11987,10 @@ PCB_CHECK_KEYS:
 	CALL	MATCH_KEY_RAMDRIVE
 	JR	NC,PCB_RAMDRIVE_VAL
 
+	; Check for "TAB" or "TABS"
+	CALL	MATCH_KEY_TAB
+	JP	NC,PCB_TAB_VAL
+
 	JP	PCB_SKIP_LINE
 
 PCB_SCREEN_VAL:
@@ -12040,6 +12084,26 @@ PCB_RAM_SET_ON:
 PCB_RAM_SET_OFF:
 	XOR	A
 	LD	(CFG_RAMDRIVE_FLAG),A
+	JP	PCB_SKIP_LINE
+
+PCB_TAB_VAL:
+	; HL now points to value after '='
+	LD	A,(HL)
+	CP	'4'
+	JR	NZ,PCB_TAB_CHK_8
+	LD	A,4
+	LD	(CFG_TAB_WIDTH),A
+	LD	A,3
+	LD	(CFG_TAB_MASK),A
+	JP	PCB_SKIP_LINE
+
+PCB_TAB_CHK_8:
+	CP	'8'
+	JP	NZ,PCB_SKIP_LINE
+	LD	A,8
+	LD	(CFG_TAB_WIDTH),A
+	LD	A,7
+	LD	(CFG_TAB_MASK),A
 	JP	PCB_SKIP_LINE
 
 ; MATCH_KEY_SCREEN: Compares text at (HL) with "SCREEN" (case-insensitive)
@@ -12170,6 +12234,80 @@ MKR_FAIL:
 	SCF				; Carry = 1
 	RET
 
+; MATCH_KEY_TAB: Compares text at (HL) with "TAB" prefix (case-insensitive)
+; Matches "TAB", "TABS", "TABWIDTH"
+; Output: Carry = 0 if matched, HL advanced past '=' and trailing spaces
+;         Carry = 1 if no match, HL restored to starting position
+MATCH_KEY_TAB:
+	PUSH	HL
+	LD	DE,STR_KEY_TAB_NAME
+	LD	B,3
+MKT_LOOP:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	C,A
+	LD	A,(DE)
+	CP	C
+	JR	NZ,MKT_FAIL
+	INC	HL
+	INC	DE
+	DJNZ	MKT_LOOP
+
+	; Skip remaining key characters until '=' or whitespace
+MKT_SKIP_KEY:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKT_WS1
+	CP	9
+	JR	Z,MKT_WS1
+	CP	'='
+	JR	Z,MKT_GOT_EQ
+	CP	13
+	JR	Z,MKT_FAIL
+	CP	10
+	JR	Z,MKT_FAIL
+	CP	1AH
+	JR	Z,MKT_FAIL
+	INC	HL
+	JR	MKT_SKIP_KEY
+
+MKT_WS1:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKT_WS1_INC
+	CP	9
+	JR	NZ,MKT_CHECK_EQ
+MKT_WS1_INC:
+	INC	HL
+	JR	MKT_WS1
+
+MKT_CHECK_EQ:
+	CP	'='
+	JR	NZ,MKT_FAIL
+MKT_GOT_EQ:
+	INC	HL			; Skip '='
+
+	; Skip optional spaces after '='
+MKT_WS2:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKT_WS2_INC
+	CP	9
+	JR	NZ,MKT_OK
+MKT_WS2_INC:
+	INC	HL
+	JR	MKT_WS2
+
+MKT_OK:
+	POP	AF			; Discard saved HL
+	OR	A			; Carry = 0
+	RET
+
+MKT_FAIL:
+	POP	HL
+	SCF				; Carry = 1
+	RET
+
 ; SAVE_CONFIG: Save current editor configuration to SE.CFG on current drive
 SAVE_CONFIG:
 	; Fill CFG_IO_BUF with 128 bytes of 0x1A (EOF)
@@ -12256,6 +12394,35 @@ SC_RAMVAL_LOOP:
 	INC	DE
 	JR	SC_RAMVAL_LOOP
 SC_RAMVAL_DONE:
+	; Write "TAB="
+	LD	HL,STR_KEY_TAB_FULL
+SC_TABKEY_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_TABKEY_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_TABKEY_LOOP
+SC_TABKEY_DONE:
+
+	; Write value: "8" or "4" + CRLF
+	LD	A,(CFG_TAB_WIDTH)
+	CP	4
+	JR	Z,SC_TAB_VAL_4
+	LD	HL,STR_VAL_TAB_8
+	JR	SC_TABVAL_LOOP
+SC_TAB_VAL_4:
+	LD	HL,STR_VAL_TAB_4
+SC_TABVAL_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_TABVAL_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_TABVAL_LOOP
+SC_TABVAL_DONE:
 
 	; Set BDOS DMA to CFG_IO_BUF
 	LD	DE,CFG_IO_BUF
@@ -17681,7 +17848,11 @@ STR_RAM_PROTECTED_LBL:	DB	"Protected (Preserve RAM Disk)]     ",13,10,"$"
 STR_RAM_HIBERNATE_LBL:	DB	"Hibernate (Save/Restore RAMDRV.IMG)]",13,10,"$"
 STR_RAM_ENABLED_LBL:	DB	"Enabled (Use for Max RAM)]          ",13,10,"$"
 
-STR_CONFIG_STATUS_LBL:	DB	"~     3. Config Status   : [$"
+STR_CONFIG_TAB_LBL:	DB	"~     3. Tab Width       : [$"
+STR_TAB_8_LBL:		DB	"8 Spaces (Default)]                ",13,10,"$"
+STR_TAB_4_LBL:		DB	"4 Spaces]                          ",13,10,"$"
+
+STR_CONFIG_STATUS_LBL:	DB	"~     4. Config Status   : [$"
 
 STR_CFG_STAT_NONE:	DB	"Default (No SE.CFG found)]         ",13,10,"$"
 STR_CFG_STAT_LOCAL:	DB	"Loaded from local drive ($"
@@ -17695,6 +17866,7 @@ STR_CONFIG_BODY:
 	DB	"~   Commands:                                                   ",13,10
 	DB	"~     type   1                toggle 80x24 <-> 120x40           ",13,10
 	DB	"~     type   2                toggle RAM drive memory blocks    ",13,10
+	DB	"~     type   3                toggle Tab width (4 <-> 8)        ",13,10
 	DB	"~     type   s                save config to local SE.CFG       ",13,10
 	DB	"~     type   q  or  <ESC>     return to splash screen           ",13,10
 	DB	"~",13,10
@@ -17710,6 +17882,10 @@ STR_KEY_RAMDRIVE_FULL:	DB	"RAMDRIVE=",0
 STR_VAL_RAMDRIVE_OFF:	DB	"OFF",13,10,0
 STR_VAL_RAMDRIVE_ON:	DB	"ON",13,10,0
 STR_VAL_RAMDRIVE_HIB:	DB	"HIBERNATE",13,10,0
+STR_KEY_TAB_NAME:	DB	"TAB",0
+STR_KEY_TAB_FULL:	DB	"TAB=",0
+STR_VAL_TAB_8:		DB	"8",13,10,0
+STR_VAL_TAB_4:		DB	"4",13,10,0
 
 STR_RAMDRV_FILENAME:	DB	"RAMDRV  IMG"
 STR_MSG_HIBERNATING:	DB	13,10,"[SE] Hibernating RAM drive to RAMDRV.IMG... $"
@@ -18224,6 +18400,8 @@ CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
 CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
 CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
+CFG_TAB_WIDTH:		DB	8		; Tab width: 4 or 8 (default 8)
+CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)
 RAMDRIVE_IS_HIBERNATED:	DB	0		; 0=not hibernated, 1=hibernated to RAMDRV.IMG
 RAMDRIVE_DRIVE_NUM:	DB	0FFH		; Detected RomWBW RAM drive (0=A, 1=B, ..., 0xFF=none)
 RAMDRIVE_DRIVE_CHAR:	DB	'?'		; Character representation ('A', 'B', etc. or '?')

@@ -158,8 +158,10 @@ def run_tests():
         assert b"SE - Screen Editor Configuration" in out, "Failed to enter Config Screen"
         assert b"120x40 (Modern Default)" in out, "Config Screen wrong geometry"
         assert b"RAM Drive (A:)" in out and b"[Protected (Preserve RAM Disk)]" in out, "Default RAM drive blocks not Protected"
-        assert b"Default (No SE.CFG found)" in out, "Config Screen wrong status"
+        assert b"Tab Width       : [8 Spaces (Default)]" in out, "Default tab width not 8 Spaces"
+        assert b"4. Config Status   : [Default (No SE.CFG found)]" in out, "Config Screen wrong status"
         assert b"type   2                toggle RAM drive memory blocks" in out, "Missing toggle command 2"
+        assert b"type   3                toggle Tab width (4 <-> 8)" in out, "Missing toggle command 3"
         print("    [+] Config screen displays 120x40, Protected RAM drive, and Default status")
 
         # Exit to splash screen ('q')
@@ -298,8 +300,9 @@ def run_tests():
         cfg_text = cfg_bytes.decode("latin1", errors="replace")
         assert "SCREEN=120x40" in cfg_text, f"Unexpected SE.CFG content: {cfg_text}"
         assert "RAMDRIVE=ON" in cfg_text, f"Unexpected SE.CFG RAMDRIVE content: {cfg_text}"
+        assert "TAB=8" in cfg_text, f"Unexpected SE.CFG TAB content: {cfg_text}"
         assert "# SE.CFG - Screen Editor Configuration" in cfg_text, "Missing header comment"
-        print("    [+] Verified SE.CFG file contains SCREEN=120x40 and RAMDRIVE=ON")
+        print("    [+] Verified SE.CFG file contains SCREEN=120x40, RAMDRIVE=ON, and TAB=8")
 
         # Re-launch SE to verify persistent load
         time.sleep(0.4)
@@ -652,7 +655,200 @@ def run_tests():
         proc.wait(timeout=1.0)
         os.close(master)
 
-    # Cleanup test SE.CFG from disk image
+    # -------------------------------------------------------------------------
+    # TEST 8: Tab Width Configuration & Persistence (TAB=4 & TAB=8)
+    # -------------------------------------------------------------------------
+    print("\n[*] TEST 8: Tab Width Configuration & Persistence (TAB=4 & TAB=8)...", flush=True)
+    remove_cfg_from_image(cpmrm_bin, img_file)
+    proc, master = boot_cpm(emu_bin, rom_file, img_file)
+
+    try:
+        # Switch to C:
+        time.sleep(0.4)
+        os.write(master, b"c:\r")
+        out = read_until(master, b"C>", timeout=15.0)
+        assert b"C>" in out
+
+        # Launch SE
+        time.sleep(0.4)
+        os.write(master, b"se\r")
+        out = read_until(master, b"120x40 (Modern Default)", timeout=25.0)
+
+        # Enter Configuration Screen ('c')
+        time.sleep(0.3)
+        os.write(master, b"c")
+        out = read_until(master, b"return to splash screen", timeout=10.0)
+        assert b"Tab Width       : [8 Spaces (Default)]" in out, "Default tab width was not 8 Spaces"
+        print("    [+] Config screen shows default 8 Spaces tab width")
+
+        # Press '3' -> toggle to 4 Spaces
+        time.sleep(0.3)
+        os.write(master, b"3")
+        out = read_until(master, b"Tab Width       : [4 Spaces]", timeout=10.0)
+        assert b"Tab Width       : [4 Spaces]" in out, f"Toggle '3' failed to set 4 Spaces: {out}"
+        print("    [+] Toggled Tab Width to 4 Spaces")
+
+        # Press '3' again -> toggle back to 8 Spaces
+        time.sleep(0.3)
+        os.write(master, b"3")
+        out = read_until(master, b"Tab Width       : [8 Spaces (Default)]", timeout=10.0)
+        assert b"Tab Width       : [8 Spaces (Default)]" in out, f"Toggle '3' failed to set 8 Spaces: {out}"
+        print("    [+] Toggled Tab Width back to 8 Spaces")
+
+        # Press '3' once more -> toggle to 4 Spaces
+        time.sleep(0.3)
+        os.write(master, b"3")
+        out = read_until(master, b"Tab Width       : [4 Spaces]", timeout=10.0)
+        assert b"Tab Width       : [4 Spaces]" in out
+
+        # Save configuration ('s')
+        time.sleep(0.3)
+        os.write(master, b"s")
+        out = read_until(master, b"Saved to local drive (C:SE.CFG)", timeout=10.0)
+        assert b"Saved to local drive (C:SE.CFG)" in out, f"Save 's' failed: {out}"
+        print("    [+] Config screen saved TAB=4 to local SE.CFG")
+
+        # Exit to CP/M
+        time.sleep(0.2)
+        os.write(master, b"q")
+        read_until(master, b"120x40 (Modern Default)", timeout=10.0)
+        time.sleep(0.2)
+        os.write(master, b"q")
+        out = read_until(master, b"C>", timeout=10.0)
+        assert b"C>" in out
+
+        # Verify disk file content contains TAB=4
+        cfg_bytes = get_cfg_from_image(cpmcp_bin, img_file)
+        assert cfg_bytes is not None, "SE.CFG not found on disk image"
+        cfg_text = cfg_bytes.decode("latin1", errors="replace")
+        assert "TAB=4" in cfg_text, f"Expected TAB=4 in SE.CFG: {cfg_text}"
+        print("    [+] Verified disk SE.CFG contains TAB=4")
+
+        # Re-launch SE to verify TAB=4 is loaded automatically from SE.CFG
+        time.sleep(0.4)
+        os.write(master, b"se\r")
+        out = read_until(master, b"120x40 (Modern Default)", timeout=25.0)
+        time.sleep(0.3)
+        os.write(master, b"c")
+        out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
+        assert b"Tab Width       : [4 Spaces]" in out, f"SE did not load 4 Spaces from SE.CFG: {out}"
+        print("    [+] Re-launched SE successfully loaded TAB=4 from SE.CFG")
+
+        # Exit SE
+        time.sleep(0.2)
+        os.write(master, b"q")
+        read_until(master, b"120x40 (Modern Default)", timeout=10.0)
+        time.sleep(0.2)
+        os.write(master, b"q")
+        out = read_until(master, b"C>", timeout=10.0)
+        assert b"C>" in out
+        print("    [+] Test 8 PASSED: Tab width configuration and persistence fully verified.")
+    finally:
+        proc.terminate()
+        proc.wait(timeout=1.0)
+        os.close(master)
+
+    # -------------------------------------------------------------------------
+    # TEST 9: Visual Tab Expansion in Editor (TAB=4 vs TAB=8)
+    # -------------------------------------------------------------------------
+    print("\n[*] TEST 9: Visual Tab Expansion in Editor (TAB=4 vs TAB=8)...", flush=True)
+    # 1. Test with TAB=4
+    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "SCREEN=120x40\r\nTAB=4\r\n")
+
+    # Inject test file TABTEST.TXT: "A\tB\r\n"
+    tmp_tab_file = "/tmp/TABTEST.TXT"
+    with open(tmp_tab_file, "wb") as f:
+        f.write(b"A\tB\r\n")
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:TABTEST.TXT"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, tmp_tab_file, "0:TABTEST.TXT"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    if os.path.exists(tmp_tab_file):
+        os.remove(tmp_tab_file)
+
+    proc, master = boot_cpm(emu_bin, rom_file, img_file)
+
+    try:
+        # Switch to C:
+        time.sleep(0.4)
+        os.write(master, b"c:\r")
+        out = read_until(master, b"C>", timeout=15.0)
+        assert b"C>" in out
+
+        # Launch SE TABTEST.TXT
+        time.sleep(0.4)
+        os.write(master, b"se tabtest.txt\r")
+        out = read_until(master, b"Col 0", timeout=25.0)
+        assert b"Col 0" in out, f"Editor did not open at Col 0: {out}"
+        print("    [+] Opened TABTEST.TXT in 4-space tab mode at Col 0")
+
+        # Move right onto Tab (index 1) -> visual column should be 1
+        time.sleep(0.2)
+        os.write(master, b"\x1b[C")
+        out = read_until(master, b"Col 1", timeout=10.0)
+        assert b"Col 1" in out, f"Cursor not at Col 1: {out}"
+
+        # Move right onto 'B' (index 2) -> with TAB=4, next tab stop is 4! Visual column should be 4!
+        time.sleep(0.2)
+        os.write(master, b"\x1b[C")
+        out = read_until(master, b"Col 4", timeout=10.0)
+        assert b"Col 4" in out, f"With TAB=4, expected Col 4 at 'B': {out}"
+        print("    [+] Verified cursor advances to visual Col 4 after tab in 4-space mode")
+
+        # Exit editor without saving
+        time.sleep(0.2)
+        os.write(master, b"\x11")  # Ctrl+Q
+        out = read_until(master, b"C>", timeout=10.0)
+        assert b"C>" in out
+    finally:
+        proc.terminate()
+        proc.wait(timeout=1.0)
+        os.close(master)
+
+    # 2. Test with TAB=8
+    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "SCREEN=120x40\r\nTAB=8\r\n")
+    proc, master = boot_cpm(emu_bin, rom_file, img_file)
+
+    try:
+        # Switch to C:
+        time.sleep(0.4)
+        os.write(master, b"c:\r")
+        out = read_until(master, b"C>", timeout=15.0)
+        assert b"C>" in out
+
+        # Launch SE TABTEST.TXT
+        time.sleep(0.4)
+        os.write(master, b"se tabtest.txt\r")
+        out = read_until(master, b"Col 0", timeout=25.0)
+        assert b"Col 0" in out
+
+        # Move right onto Tab (index 1)
+        time.sleep(0.2)
+        os.write(master, b"\x1b[C")
+        out = read_until(master, b"Col 1", timeout=10.0)
+        assert b"Col 1" in out
+
+        # Move right onto 'B' (index 2) -> with TAB=8, next tab stop is 8! Visual column should be 8!
+        time.sleep(0.2)
+        os.write(master, b"\x1b[C")
+        out = read_until(master, b"Col 8", timeout=10.0)
+        assert b"Col 8" in out, f"With TAB=8, expected Col 8 at 'B': {out}"
+        print("    [+] Verified cursor advances to visual Col 8 after tab in 8-space mode")
+
+        # Exit editor without saving
+        time.sleep(0.2)
+        os.write(master, b"\x11")  # Ctrl+Q
+        out = read_until(master, b"C>", timeout=10.0)
+        assert b"C>" in out
+        print("    [+] Test 9 PASSED: Visual tab expansion in editor verified for both 4 and 8 widths.")
+    finally:
+        proc.terminate()
+        proc.wait(timeout=1.0)
+        os.close(master)
+
+    # Cleanup test files from disk image
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:TABTEST.TXT"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     remove_cfg_from_image(cpmrm_bin, img_file)
     print("\n=================================================================", flush=True)
     print("  ALL CONFIGURATION TESTS PASSED SUCCESSFULLY!                   ", flush=True)
