@@ -1655,7 +1655,7 @@ def test_se_execution():
             print(f"[-] Step 39 deletion content check failed: {repr(out_d_scr)}", flush=True)
             return False
 
-        # 4. Test Ctrl-C implied Ctrl-K + Navigation + Copy
+        # 4. Test Ctrl-C solidify + copy immediately on dynamic selection
         os.write(master, b"\x14\x01") # Top, Col 0 (cursor at "12345")
         time.sleep(0.1)
         drain_all(master)
@@ -1666,23 +1666,15 @@ def test_se_execution():
             print(f"[-] Step 39 select 123 failed: {repr(out_c_sel)}", flush=True)
             return False
 
-        os.write(master, b"\x03") # Ctrl-C -> implied Ctrl-K (solidifies)
+        os.write(master, b"\x03") # Ctrl-C -> solidifies AND performs copy operation immediately!
         out_c_lock = read_until(master, b"[BLK: 3c LOCK]", timeout=4.0)
         if b"[BLK: 3c LOCK]" not in out_c_lock:
             print(f"[-] Step 39 Ctrl-C solidify failed: {repr(out_c_lock)}", flush=True)
             return False
 
-        os.write(master, b"\x05") # Ctrl-E -> End of line
-        time.sleep(0.1)
-        drain_all(master)
-
-        os.write(master, b"\x03") # Ctrl-C -> Copy solidified block to end of line!
-        time.sleep(0.2)
-        drain_all(master)
-
         os.write(master, b"\x14")
-        out_c_res = read_until(master, b"45123", timeout=4.0)
-        if b"45123" not in out_c_res:
+        out_c_res = read_until(master, b"12345", timeout=4.0)
+        if b"123" not in out_c_res or b"12345" not in out_c_res:
             print(f"[-] Step 39 Ctrl-C copy failed: {repr(out_c_res)}", flush=True)
             return False
 

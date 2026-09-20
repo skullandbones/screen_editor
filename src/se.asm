@@ -545,20 +545,18 @@ CHECK_CTRL_O:
 	JP	HANDLE_CTRL_O
 
 CHECK_CTRL_C:
-	; Command: Ctrl+C -> Copy solidified block / solidify dynamic block
+	; Command: Ctrl+C -> Copy block (solidifies dynamic block first if active)
 	CP	KEY_CTRL_C
 	JR	NZ,CHECK_CTRL_K
 	LD	A,(BLOCK_ACTIVE)
 	CP	2
 	JR	Z,DO_CTRL_C_COPY
 	CP	1
-	JR	Z,DO_CTRL_C_SOLIDIFY
+	JR	Z,DO_CTRL_C_IMPLIED_SOLIDIFY_COPY
 	JP	MAIN_LOOP		; Ignore if block not active
 
-DO_CTRL_C_SOLIDIFY:
+DO_CTRL_C_IMPLIED_SOLIDIFY_COPY:
 	CALL	SOLIDIFY_BLOCK
-	JP	MAIN_LOOP
-
 DO_CTRL_C_COPY:
 	CALL	DO_COPY_BLOCK
 	JP	MAIN_LOOP
