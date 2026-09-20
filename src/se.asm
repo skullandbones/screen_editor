@@ -13514,6 +13514,10 @@ RENDER_OPEN_PAGE:
 	CALL	CHECK_DRIVE_SWITCH
 	JR	C,HANDLE_OPEN_DRIVE_SWITCH
 
+	; Check if user typed a filter pattern (e.g. "*.TXT" or "B:*.TXT")
+	CALL	CHECK_FILTER_PATTERN
+	JR	C,HANDLE_OPEN_FILTER
+
 DO_PARSE_AND_LOAD:
 	; Backup current WORK_FCB to DIR_TEMP_FCB in case open fails
 	LD	HL,WORK_FCB
@@ -13590,6 +13594,13 @@ HODS_OK:
 	LD	(STR_DIR_DRIVE_CHAR),A
 	JP	REFRESH_OPEN_DIR
 
+HANDLE_OPEN_FILTER:
+	XOR	A
+	LD	(SHOWING_FNF_MSG),A
+	LD	(INPUT_BUF_LEN),A
+	LD	(INPUT_FILENAME_BUF),A
+	JP	REFRESH_OPEN_DIR
+
 OPEN_FILE_NOT_FOUND:
 	; Restore previous WORK_FCB from DIR_TEMP_FCB
 	LD	HL,DIR_TEMP_FCB
@@ -13625,6 +13636,10 @@ FNF_FWD_LOOP:
 	; Check if user edited input to a drive specification (e.g. "B:")
 	CALL	CHECK_DRIVE_SWITCH
 	JR	C,HANDLE_OPEN_DRIVE_SWITCH
+
+	; Check if user edited input to a filter pattern (e.g. "*.TXT")
+	CALL	CHECK_FILTER_PATTERN
+	JR	C,HANDLE_OPEN_FILTER
 
 	JP	DO_PARSE_AND_LOAD
 
@@ -14491,6 +14506,10 @@ RENDER_SAVE_PAGE:
 	CALL	CHECK_DRIVE_SWITCH
 	JR	C,HANDLE_SAVE_DRIVE_SWITCH
 
+	; Check if user typed a filter pattern (e.g. "*.TXT" or "B:*.TXT")
+	CALL	CHECK_FILTER_PATTERN
+	JP	C,HANDLE_SAVE_FILTER
+
 	; User entered/confirmed a filename in INPUT_FILENAME_BUF:
 	; Save current WORK_FCB to DIR_TEMP_FCB (36 bytes)
 	LD	HL,WORK_FCB
@@ -14579,6 +14598,20 @@ HSDS_OK:
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_SAVE_DRIVE_CHAR),A
+	JP	REFRESH_SAVE_DIR
+
+HANDLE_SAVE_FILTER:
+	LD	A,(IS_BLOCK_SAVE_UI)
+	OR	A
+	JR	NZ,HSF_EMPTY
+	CALL	FCB_TO_FILENAME_STR
+	JR	HSF_REFRESH
+HSF_EMPTY:
+	XOR	A
+	LD	(INPUT_BUF_LEN),A
+	LD	HL,INPUT_FILENAME_BUF
+	LD	(HL),0
+HSF_REFRESH:
 	JP	REFRESH_SAVE_DIR
 
 CHECK_SAVE_PAGING_OR_CANCEL:
@@ -14764,14 +14797,38 @@ RENDER_TITLE_COMMON:
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
 	LD	A,43
-	JR	NZ,RTC_LEN_OK
+	JR	NZ,RTC_BASE_LEN_OK
 	LD	A,(IS_BLOCK_SAVE_UI)
 	OR	A
 	LD	A,42
-	JR	NZ,RTC_LEN_OK
+	JR	NZ,RTC_BASE_LEN_OK
 	LD	A,41
-RTC_LEN_OK:
+RTC_BASE_LEN_OK:
 	LD	B,A
+
+	; Check if custom filter is active
+	LD	A,(DIR_FILTER_ACTIVE)
+	OR	A
+	JR	Z,RTC_CALC_PAD
+
+	; Calculate extra length: length of DIR_FILTER_STR + 3
+	PUSH	BC
+	LD	HL,DIR_FILTER_STR
+	LD	C,3
+RTC_FSTR_LEN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,RTC_FSTR_LEN_DONE
+	INC	C
+	INC	HL
+	JR	RTC_FSTR_LEN_LOOP
+RTC_FSTR_LEN_DONE:
+	POP	BC
+	LD	A,B
+	ADD	A,C
+	LD	B,A
+
+RTC_CALC_PAD:
 	LD	A,'~'
 	CALL	PUTC
 	LD	A,(ACTIVE_COLS)
@@ -14788,8 +14845,24 @@ RTC_PAD_LOOP:
 	CALL	PRINT_STR
 	POP	AF
 	CALL	PUTC
+
+	LD	A,(DIR_FILTER_ACTIVE)
+	OR	A
+	JR	NZ,RTC_PRINT_FILTERED
+
 	LD	DE,STR_TITLE_DRIVE_SUF
 	CALL	PRINT_STR
+	JR	RTC_TITLE_DONE
+
+RTC_PRINT_FILTERED:
+	LD	DE,STR_TITLE_FILTER_PRE	; ": ["
+	CALL	PRINT_STR
+	LD	DE,DIR_FILTER_STR
+	CALL	PRINT_STR
+	LD	DE,STR_TITLE_FILTER_SUF	; "])", 13, 10
+	CALL	PRINT_STR
+
+RTC_TITLE_DONE:
 
 	; 4. Row 3: Horizontal Rule
 	CALL	PRINT_HR_EQUAL
@@ -14851,6 +14924,230 @@ CHECK_DRIVE_SWITCH:
 
 CDS_NO:
 	OR	A			; Carry = 0
+	RET
+
+;------------------------------------------------------------------------------
+; Check if INPUT_FILENAME_BUF contains a wildcard filter pattern (e.g. "*.TXT" or "J:*.TXT")
+; If so, parses drive (if specified) and pattern into DIR_FILTER_FCB and DIR_FILTER_STR.
+; Returns:
+;   Carry = 1 -> Filter pattern processed
+;   Carry = 0 -> Not a filter pattern
+;------------------------------------------------------------------------------
+CHECK_FILTER_PATTERN:
+	LD	A,(INPUT_BUF_LEN)
+	OR	A
+	RET	Z			; Empty buffer -> Carry = 0
+
+	; Scan buffer for '*' or '?'
+	LD	B,A
+	LD	HL,INPUT_FILENAME_BUF
+CFP_SCAN_LOOP:
+	LD	A,(HL)
+	CP	'*'
+	JR	Z,CFP_FOUND_WC
+	CP	'?'
+	JR	Z,CFP_FOUND_WC
+	INC	HL
+	DJNZ	CFP_SCAN_LOOP
+	OR	A			; Carry = 0
+	RET
+
+CFP_FOUND_WC:
+	LD	HL,INPUT_FILENAME_BUF
+
+	; Check if byte 1 is ':' (e.g. "J:*.TXT")
+	LD	A,(INPUT_BUF_LEN)
+	CP	3
+	JR	C,CFP_NO_DRIVE_PREFIX
+	LD	A,(INPUT_FILENAME_BUF+1)
+	CP	':'
+	JR	NZ,CFP_NO_DRIVE_PREFIX
+
+	; Validate drive letter 'A'..'P'
+	LD	A,(INPUT_FILENAME_BUF)
+	CALL	TO_UPPER
+	CP	'A'
+	JR	C,CFP_NO_DRIVE_PREFIX
+	CP	'P'+1
+	JR	NC,CFP_NO_DRIVE_PREFIX
+
+	; Valid drive letter: convert to 1..16
+	SUB	'A'-1
+	LD	C,A			; C = target drive (1..16)
+
+	; Guard: if target drive matches hibernated RAM drive, reject switch
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	JR	Z,CFP_DRIVE_OK
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,CFP_DRIVE_OK
+	INC	A
+	CP	C
+	JR	Z,CFP_SKIP_DRIVE_SWITCH
+
+CFP_DRIVE_OK:
+	LD	A,C
+	LD	(CURRENT_DIR_DRIVE),A
+	ADD	A,'A'-1
+	LD	(STR_DIR_DRIVE_CHAR),A
+	LD	(STR_SAVE_DRIVE_CHAR),A
+
+CFP_SKIP_DRIVE_SWITCH:
+	LD	HL,INPUT_FILENAME_BUF+2	; Skip "d:"
+	JR	CFP_PARSE_START
+
+CFP_NO_DRIVE_PREFIX:
+	LD	HL,INPUT_FILENAME_BUF
+
+CFP_PARSE_START:
+	; Copy uppercase pattern to DIR_FILTER_STR (max 12 chars null-terminated)
+	PUSH	HL
+	LD	DE,DIR_FILTER_STR
+	LD	B,12
+CFP_COPY_STR:
+	LD	A,(HL)
+	OR	A
+	JR	Z,CFP_COPY_END
+	CALL	TO_UPPER
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	CFP_COPY_STR
+CFP_COPY_END:
+	XOR	A
+	LD	(DE),A			; Null-terminate
+	POP	HL
+
+	; Clear DIR_FILTER_FCB with 11 spaces
+	PUSH	HL
+	LD	HL,DIR_FILTER_FCB
+	LD	B,11
+CFP_CLR_FCB:
+	LD	(HL),' '
+	INC	HL
+	DJNZ	CFP_CLR_FCB
+	POP	HL
+
+	; Parse filename part (bytes 0..7 of DIR_FILTER_FCB)
+	LD	DE,DIR_FILTER_FCB
+	LD	B,8
+CFP_NAME_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,CFP_NAME_END_NODOT
+	CP	' '
+	JR	Z,CFP_NAME_END_NODOT
+	CP	'.'
+	JR	Z,CFP_NAME_DOT
+	CP	'*'
+	JR	Z,CFP_NAME_STAR
+	CALL	TO_UPPER
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DJNZ	CFP_NAME_LOOP
+
+	; Consumed 8 chars of name -> skip until '.' or end
+CFP_SKIP_NAME_REST:
+	LD	A,(HL)
+	OR	A
+	JR	Z,CFP_NAME_END_NODOT
+	CP	' '
+	JR	Z,CFP_NAME_END_NODOT
+	CP	'.'
+	JR	Z,CFP_NAME_DOT
+	INC	HL
+	JR	CFP_SKIP_NAME_REST
+
+CFP_NAME_STAR:
+	; Fill remaining name bytes with '?'
+	LD	A,'?'
+CFP_STAR_NAME_PAD:
+	LD	(DE),A
+	INC	DE
+	DJNZ	CFP_STAR_NAME_PAD
+	INC	HL
+CFP_SKIP_STAR_REST:
+	LD	A,(HL)
+	OR	A
+	JR	Z,CFP_NAME_END_NODOT
+	CP	' '
+	JR	Z,CFP_NAME_END_NODOT
+	CP	'.'
+	JR	Z,CFP_NAME_DOT
+	INC	HL
+	JR	CFP_SKIP_STAR_REST
+
+CFP_NAME_DOT:
+	INC	HL			; Skip '.'
+	JR	CFP_PARSE_EXT
+
+CFP_NAME_END_NODOT:
+	; No '.' in input (e.g. '*' or 'A*') -> fill ext with '?'
+	LD	DE,DIR_FILTER_FCB+8
+	LD	A,'?'
+	LD	(DE),A
+	INC	DE
+	LD	(DE),A
+	INC	DE
+	LD	(DE),A
+	JR	CFP_CHECK_ACTIVE
+
+CFP_PARSE_EXT:
+	LD	DE,DIR_FILTER_FCB+8
+	LD	B,3
+CFP_EXT_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,CFP_CHECK_ACTIVE
+	CP	' '
+	JR	Z,CFP_CHECK_ACTIVE
+	CP	'*'
+	JR	Z,CFP_EXT_STAR
+	CALL	TO_UPPER
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DJNZ	CFP_EXT_LOOP
+	JR	CFP_CHECK_ACTIVE
+
+CFP_EXT_STAR:
+	LD	A,'?'
+CFP_STAR_EXT_PAD:
+	LD	(DE),A
+	INC	DE
+	DJNZ	CFP_STAR_EXT_PAD
+
+CFP_CHECK_ACTIVE:
+	; Check if DIR_FILTER_FCB is all '?' (meaning *.*)
+	LD	HL,DIR_FILTER_FCB
+	LD	B,11
+CFP_CHK_QM:
+	LD	A,(HL)
+	CP	'?'
+	JR	NZ,CFP_SET_ACTIVE
+	INC	HL
+	DJNZ	CFP_CHK_QM
+
+	; All 11 chars are '?' -> Inactive (standard *.*)
+	XOR	A
+	LD	(DIR_FILTER_ACTIVE),A
+	LD	HL,DIR_FILTER_STR
+	LD	(HL),'*'
+	INC	HL
+	LD	(HL),'.'
+	INC	HL
+	LD	(HL),'*'
+	INC	HL
+	LD	(HL),0
+	SCF
+	RET
+
+CFP_SET_ACTIVE:
+	LD	A,1
+	LD	(DIR_FILTER_ACTIVE),A
+	SCF
 	RET
 
 ;------------------------------------------------------------------------------
@@ -15059,16 +15356,16 @@ CDE_DRIVE_OK:
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
 
-	; Prepare DIR_SEARCH_FCB: Drive = CURRENT_DIR_DRIVE, 11 '?' wildcards, rest 0
+	; Prepare DIR_SEARCH_FCB: Drive = CURRENT_DIR_DRIVE, 11 filter bytes, rest 0
 	LD	HL,DIR_SEARCH_FCB
 	LD	A,(CURRENT_DIR_DRIVE)
 	LD	(HL),A			; Active directory drive (1=A, 2=B, etc.)
 	INC	HL
-	LD	B,11
-SET_SEARCH_QM:
-	LD	(HL),'?'
-	INC	HL
-	DJNZ	SET_SEARCH_QM
+	EX	DE,HL
+	LD	HL,DIR_FILTER_FCB
+	LD	BC,11
+	LDIR
+	EX	DE,HL
 	LD	B,24
 SET_SEARCH_ZEROS:
 	LD	(HL),0
@@ -17009,6 +17306,8 @@ STR_TITLE_SAVE_PRE:	DB	"SE.COM - SAVE FILE (DIRECTORY - DRIVE ","$"
 STR_SAVE_DRIVE_CHAR:	DB	"A"
 STR_TITLE_BLOCK_SAVE_PRE: DB	"SE.COM - SAVE BLOCK (DIRECTORY - DRIVE ","$"
 STR_TITLE_DRIVE_SUF:	DB	":)",13,10,"$"
+STR_TITLE_FILTER_PRE:	DB	": [","$"
+STR_TITLE_FILTER_SUF:	DB	"])",13,10,"$"
 
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
 STR_TITLE_INSERT_PRE:	DB	"SE.COM - INSERT FILE (DIRECTORY - DRIVE ","$"
@@ -17035,7 +17334,7 @@ STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
-STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel    Enter <drive>: to list directory (e.g. B:)",13,10,"$"
+STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel  Enter <drive>: or [drive:][pattern] to list (e.g. B: or *.TXT)",13,10,"$"
 
 STR_OVERWRITE_WARN:	DB	13,10,"~  File already exists. Overwrite? (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o): ","$"
 
@@ -17267,6 +17566,9 @@ DIR_TEMP_ENTRY:		DS	16
 INPUT_BUF_LEN:	DB	0
 INPUT_FILENAME_BUF:	DS	32
 DIR_NAMES_BUF:	DS	3328	; 256 entries * 13 bytes
+DIR_FILTER_FCB:		DB	"???????????"	; 11-byte FCB wildcard pattern (8 name + 3 ext)
+DIR_FILTER_STR:		DB	"*.*",0,0,0,0,0,0,0,0,0 ; Display string for active filter (null-terminated)
+DIR_FILTER_ACTIVE:	DB	0		; 0 = *.* (all files), 1 = custom filter active
 
 RAW_TEST_FCB:	DS	36
 RAW_SECTOR_BUF:	DS	128
