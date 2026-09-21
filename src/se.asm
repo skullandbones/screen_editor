@@ -1462,8 +1462,47 @@ NOT_ALPHA:
 
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
+; Dynamically centered both horizontally and vertically for active screen geometry.
+; Total menu lines: 18
 ;------------------------------------------------------------------------------
-SPLASH_LINES	EQU	19
+SPLASH_MENU_LINES	EQU	18
+
+;------------------------------------------------------------------------------
+; PRINT_TILDE_CRLF: Print '~' followed by CRLF
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+PRINT_TILDE_CRLF:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	RET
+
+;------------------------------------------------------------------------------
+; PRINT_SPLASH_PREFIX: Print '~' followed by geometry-dependent left padding
+; Padding: ((ACTIVE_COLS - 42) / 2) spaces
+; 80x24:  19 spaces (1 + 19 + 41 + 19 = 80)
+; 120x40: 39 spaces (1 + 39 + 41 + 39 = 120)
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+PRINT_SPLASH_PREFIX:
+	PUSH	BC
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	42
+	SRL	A
+	JR	Z,PSP_DONE
+	LD	B,A
+PSP_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	PSP_LOOP
+PSP_DONE:
+	POP	BC
+	RET
 
 RENDER_SPLASH:
 	LD	A,1
@@ -1472,42 +1511,87 @@ RENDER_SPLASH:
 	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
-	LD	DE,STR_SPLASH_BODY
+
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB	SPLASH_MENU_LINES	; 23 - 18 = 5 (80x24), 39 - 18 = 21 (120x40)
+	JR	Z,SPLASH_NO_TOP_PAD
+	JR	C,SPLASH_NO_TOP_PAD
+	SRL	A			; 2 (80x24), 10 (120x40)
+	JR	Z,SPLASH_NO_TOP_PAD
+	LD	(SPLASH_TOP_PAD_COUNT),A
+	LD	B,A
+SPLASH_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	SPLASH_TOP_PAD_LOOP
+	JR	SPLASH_CONTENT_START
+
+SPLASH_NO_TOP_PAD:
+	XOR	A
+	LD	(SPLASH_TOP_PAD_COUNT),A
+
+SPLASH_CONTENT_START:
+	; Row 1: Title (centered within 41-col block with 11 spaces)
+	CALL	PRINT_SPLASH_PREFIX
+	LD	DE,STR_SPLASH_TITLE_PAD
+	CALL	PRINT_STR
+	LD	DE,STR_SPLASH_TITLE
 	CALL	PRINT_STR
 
-	; Display currently active mode
+	; Row 2: Blank line
+	CALL	PRINT_TILDE_CRLF
+
+	; Rows 3..16: 14 Commands
+	LD	HL,STR_SPLASH_CMDS
+SPLASH_CMDS_LINE:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SPLASH_CMDS_DONE
+	CALL	PRINT_SPLASH_PREFIX
+SPLASH_CMDS_CHAR:
+	LD	A,(HL)
+	INC	HL
+	CALL	PUTC
+	CP	10			; LF reached?
+	JR	NZ,SPLASH_CMDS_CHAR
+	JR	SPLASH_CMDS_LINE
+SPLASH_CMDS_DONE:
+
+	; Row 17: Blank line
+	CALL	PRINT_TILDE_CRLF
+
+	; Row 18: Active Screen Mode
+	CALL	PRINT_SPLASH_PREFIX
 	LD	DE,STR_SPLASH_CUR_MODE
 	CALL	PRINT_STR
 
 	LD	A,(SCREEN_MODE)
 	CP	MODE_120X40
 	JR	NZ,SHOW_SPLASH_80X24
-	LD	DE,STR_MODE_120X40_LBL
+	LD	DE,STR_SPLASH_120X40_LBL
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_CONT
+	JR	RENDER_SPLASH_BOTTOM_PAD
 
 SHOW_SPLASH_80X24:
-	LD	DE,STR_MODE_80X24_LBL
+	LD	DE,STR_SPLASH_80X24_LBL
 	CALL	PRINT_STR
 
-RENDER_SPLASH_CONT:
-	; Fill remaining rows down to status row with '~'
+RENDER_SPLASH_BOTTOM_PAD:
+	; Bottom padding: (ACTIVE_ROWS - 1) - SPLASH_TOP_PAD_COUNT - SPLASH_MENU_LINES
 	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
-	SUB	SPLASH_LINES		; A = remaining rows
-	JR	Z,SPLASH_TILDE_DONE
-	JR	C,SPLASH_TILDE_DONE
+	DEC	A			; Text rows available
+	LD	HL,SPLASH_TOP_PAD_COUNT
+	SUB	(HL)
+	SUB	SPLASH_MENU_LINES
+	JR	Z,SPLASH_BOTTOM_DONE
+	JR	C,SPLASH_BOTTOM_DONE
 	LD	B,A
-SPLASH_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
-	DJNZ	SPLASH_TILDE_LOOP
+SPLASH_BOTTOM_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	SPLASH_BOTTOM_LOOP
 
-SPLASH_TILDE_DONE:
+SPLASH_BOTTOM_DONE:
 	CALL	RENDER_STATUS_BAR
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
@@ -19231,28 +19315,29 @@ STR_SHOW_CURSOR:	DB	27,"[?25h","$"
 
 STR_CRLF:	DB	13,10,"$"
 
-STR_SPLASH_BODY:	DB	27,"[H"
-	DB	"~",13,10
-	DB	"~                               SE - Screen Editor              ",13,10
-	DB	"~",13,10
-	DB	"~                         type   e  or  <Enter>   to edit       ",13,10
-	DB	"~                         type   n                to new file   ",13,10
-	DB	"~                         type   o                to open file  ",13,10
-	DB	"~                         type   s                to save file  ",13,10
-	DB	"~                         type   w  or  ^W        to close file ",13,10
-	DB	"~                         type   l  or  ^L        to goto line  ",13,10
-	DB	"~                         type   t                for mem test  ",13,10
-	DB	"~                         type   f                for file test ",13,10
-	DB	"~                         type   a                for about     ",13,10
-	DB	"~                         type   m                for memory info ",13,10
-	DB	"~                         type   c                to configure  ",13,10
-	DB	"~                         type   1                set 120x40    ",13,10
-	DB	"~                         type   2                set 80x24     ",13,10
-	DB	"~                         type   q  or  ^Q        to exit       ",13,10
-	DB	"~",13,10
-	DB	"$"
+STR_SPLASH_TITLE_PAD:	DB	"           ", "$"
+STR_SPLASH_TITLE:	DB	"SE - Screen Editor", 13, 10, "$"
 
-STR_SPLASH_CUR_MODE:	DB	"~                     Active Screen: [$"
+STR_SPLASH_CMDS:
+	DB	"  type   e  or  <Enter>   to edit",13,10
+	DB	"  type   n                to new file",13,10
+	DB	"  type   o                to open file",13,10
+	DB	"  type   s                to save file",13,10
+	DB	"  type   w  or  ^W        to close file",13,10
+	DB	"  type   l  or  ^L        to goto line",13,10
+	DB	"  type   t                for mem test",13,10
+	DB	"  type   f                for file test",13,10
+	DB	"  type   a                for about",13,10
+	DB	"  type   m                for memory info",13,10
+	DB	"  type   c                to configure",13,10
+	DB	"  type   1                set 120x40",13,10
+	DB	"  type   2                set 80x24",13,10
+	DB	"  type   q  or  ^Q        to exit",13,10
+	DB	0
+
+STR_SPLASH_CUR_MODE:	DB	"Active Screen: [$"
+STR_SPLASH_120X40_LBL:	DB	"120x40 (Modern Default)]",13,10,"$"
+STR_SPLASH_80X24_LBL:	DB	"80x24 (Classic Terminal)] ",13,10,"$"
 
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
@@ -19916,6 +20001,7 @@ CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
 CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
 SCS_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
+SPLASH_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on splash screen
 CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
 CFG_TAB_WIDTH:		DB	8		; Tab width: 4 or 8 (default 8)
 CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)
