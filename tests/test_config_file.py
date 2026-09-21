@@ -158,16 +158,18 @@ def run_tests():
         assert b"SE - Screen Editor Configuration" in out, "Failed to enter Config Screen"
         assert b"120x40 (Modern Default)" in out, "Config Screen wrong geometry"
         assert b"RAM Drive (A:)" in out and b"[Protected (Preserve RAM Disk)]" in out, "Default RAM drive blocks not Protected"
-        assert b"Tab Width       : [8 Spaces (Default)]" in out, "Default tab width not 8 Spaces"
-        assert b"4. Config Status   : [Default (No SE.CFG found)]" in out, "Config Screen wrong status"
+        assert b"3. Max Doc Lines   : [16K (16,384 Lines)]" in out, "Default max lines not 16K"
+        assert b"4. Tab Width       : [8 Spaces (Default)]" in out, "Default tab width not 8 Spaces"
+        assert b"Config Status      : [Default (No SE.CFG found)]" in out, "Config Screen wrong status"
         assert b"type   2                toggle RAM drive memory blocks" in out, "Missing toggle command 2"
-        assert b"type   3                toggle Tab width (4 <-> 8)" in out, "Missing toggle command 3"
+        assert b"type   3                toggle Max lines (16K <-> 32K)" in out, "Missing toggle command 3"
+        assert b"type   4                toggle Tab width (4 <-> 8)" in out, "Missing toggle command 4"
         print("    [+] Config screen displays 120x40, Protected RAM drive, and Default status")
 
         # Exit to splash screen ('q')
         time.sleep(0.2)
         os.write(master, b"q")
-        out = read_until(master, b"120x40 (Modern Default)", timeout=15.0)
+        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=15.0)
         assert b"120x40 (Modern Default)" in out, "Failed returning to splash"
 
         # Exit SE ('q')
@@ -249,7 +251,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
+        out = read_until(master, b"return to splash screen", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out
         assert b"RAM Drive (A:)" in out and b"[Protected (Preserve RAM Disk)]" in out
 
@@ -280,13 +282,15 @@ def run_tests():
         out = read_until(master, b"Saved to local drive (C:SE.CFG)", timeout=10.0)
         assert b"Saved to local drive (C:SE.CFG)" in out, f"Save 's' failed: {out}"
         print("    [+] Config screen updated status to Saved to local drive (C:SE.CFG)")
+        drain_all(master)
 
         # Return to splash screen ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        out = read_until(master, b"120x40 (Modern Default)", timeout=10.0)
+        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=10.0)
         assert b"120x40 (Modern Default)" in out, "Splash screen did not reflect newly saved geometry"
         print("    [+] Returned to splash screen with active 120x40 geometry")
+        drain_all(master)
 
         # Exit SE ('q')
         time.sleep(0.3)
@@ -301,23 +305,28 @@ def run_tests():
         assert "SCREEN=120x40" in cfg_text, f"Unexpected SE.CFG content: {cfg_text}"
         assert "RAMDRIVE=ON" in cfg_text, f"Unexpected SE.CFG RAMDRIVE content: {cfg_text}"
         assert "TAB=8" in cfg_text, f"Unexpected SE.CFG TAB content: {cfg_text}"
+        assert "LINES=16K" in cfg_text, f"Unexpected SE.CFG LINES content: {cfg_text}"
         assert "# SE.CFG - Screen Editor Configuration" in cfg_text, "Missing header comment"
-        print("    [+] Verified SE.CFG file contains SCREEN=120x40, RAMDRIVE=ON, and TAB=8")
+        print("    [+] Verified SE.CFG file contains SCREEN=120x40, RAMDRIVE=ON, TAB=8, and LINES=16K")
 
         # Re-launch SE to verify persistent load
+        drain_all(master)
         time.sleep(0.4)
         os.write(master, b"se\r")
-        out = read_until(master, b"120x40 (Modern Default)", timeout=25.0)
+        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=25.0)
         assert b"120x40 (Modern Default)" in out, "Re-launch did not retain saved 120x40"
+        drain_all(master)
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
+        out = read_until(master, b"return to splash screen", timeout=10.0)
         assert b"120x40 (Modern Default)" in out
         assert b"RAM Drive (A:)" in out and b"[Enabled (Use for Max RAM)]" in out
         assert b"Loaded from local drive (C:SE.CFG)" in out
+        drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"120x40 (Modern Default)", timeout=10.0)
+        read_until(master, b"Active Screen:", timeout=10.0)
+        drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
         out = read_until(master, b"C>", timeout=10.0)
@@ -364,7 +373,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"Loaded from program drive (C:SE.CFG)", timeout=15.0)
+        out = read_until(master, b"return to splash screen", timeout=15.0)
         assert b"80x24 (Classic Terminal)" in out
         assert b"Loaded from program drive (C:SE.CFG)" in out, f"Expected program drive status: {out}"
         print("    [+] Config screen displays Loaded from program drive (C:SE.CFG)")
@@ -681,23 +690,23 @@ def run_tests():
         assert b"Tab Width       : [8 Spaces (Default)]" in out, "Default tab width was not 8 Spaces"
         print("    [+] Config screen shows default 8 Spaces tab width")
 
-        # Press '3' -> toggle to 4 Spaces
+        # Press '4' -> toggle to 4 Spaces
         time.sleep(0.3)
-        os.write(master, b"3")
+        os.write(master, b"4")
         out = read_until(master, b"Tab Width       : [4 Spaces]", timeout=10.0)
-        assert b"Tab Width       : [4 Spaces]" in out, f"Toggle '3' failed to set 4 Spaces: {out}"
+        assert b"Tab Width       : [4 Spaces]" in out, f"Toggle '4' failed to set 4 Spaces: {out}"
         print("    [+] Toggled Tab Width to 4 Spaces")
 
-        # Press '3' again -> toggle back to 8 Spaces
+        # Press '4' again -> toggle back to 8 Spaces
         time.sleep(0.3)
-        os.write(master, b"3")
+        os.write(master, b"4")
         out = read_until(master, b"Tab Width       : [8 Spaces (Default)]", timeout=10.0)
-        assert b"Tab Width       : [8 Spaces (Default)]" in out, f"Toggle '3' failed to set 8 Spaces: {out}"
+        assert b"Tab Width       : [8 Spaces (Default)]" in out, f"Toggle '4' failed to set 8 Spaces: {out}"
         print("    [+] Toggled Tab Width back to 8 Spaces")
 
-        # Press '3' once more -> toggle to 4 Spaces
+        # Press '4' once more -> toggle to 4 Spaces
         time.sleep(0.3)
-        os.write(master, b"3")
+        os.write(master, b"4")
         out = read_until(master, b"Tab Width       : [4 Spaces]", timeout=10.0)
         assert b"Tab Width       : [4 Spaces]" in out
 
@@ -707,11 +716,13 @@ def run_tests():
         out = read_until(master, b"Saved to local drive (C:SE.CFG)", timeout=10.0)
         assert b"Saved to local drive (C:SE.CFG)" in out, f"Save 's' failed: {out}"
         print("    [+] Config screen saved TAB=4 to local SE.CFG")
+        drain_all(master)
 
         # Exit to CP/M
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"120x40 (Modern Default)", timeout=10.0)
+        read_until(master, b"Active Screen:", timeout=10.0)
+        drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
         out = read_until(master, b"C>", timeout=10.0)
@@ -725,19 +736,23 @@ def run_tests():
         print("    [+] Verified disk SE.CFG contains TAB=4")
 
         # Re-launch SE to verify TAB=4 is loaded automatically from SE.CFG
+        drain_all(master)
         time.sleep(0.4)
         os.write(master, b"se\r")
-        out = read_until(master, b"120x40 (Modern Default)", timeout=25.0)
+        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=25.0)
+        drain_all(master)
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"Loaded from local drive (C:SE.CFG)", timeout=10.0)
+        out = read_until(master, b"return to splash screen", timeout=10.0)
         assert b"Tab Width       : [4 Spaces]" in out, f"SE did not load 4 Spaces from SE.CFG: {out}"
         print("    [+] Re-launched SE successfully loaded TAB=4 from SE.CFG")
+        drain_all(master)
 
         # Exit SE
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"120x40 (Modern Default)", timeout=10.0)
+        read_until(master, b"Active Screen:", timeout=10.0)
+        drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
         out = read_until(master, b"C>", timeout=10.0)
@@ -841,6 +856,82 @@ def run_tests():
         out = read_until(master, b"C>", timeout=10.0)
         assert b"C>" in out
         print("    [+] Test 9 PASSED: Visual tab expansion in editor verified for both 4 and 8 widths.")
+    finally:
+        proc.terminate()
+        proc.wait(timeout=1.0)
+        os.close(master)
+
+    # -------------------------------------------------------------------------
+    # TEST 10: Max Document Lines Configuration (LINES=32K & LINES=16K)
+    # -------------------------------------------------------------------------
+    print("\n[*] TEST 10: Max Document Lines Configuration (LINES=32K & LINES=16K)...", flush=True)
+    put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, "# Test Config\r\nLINES=32K\r\n")
+    proc, master = boot_cpm(emu_bin, rom_file, img_file)
+
+    try:
+        # Switch to C:
+        time.sleep(0.4)
+        os.write(master, b"c:\r")
+        out = read_until(master, b"C>", timeout=15.0)
+        assert b"C>" in out
+
+        # Run SE
+        time.sleep(0.4)
+        os.write(master, b"se\r")
+        out = read_until(master, b"to configure", timeout=25.0)
+        assert b"to configure" in out
+
+        # Check Memory Screen ('m')
+        time.sleep(0.3)
+        os.write(master, b"m")
+        out = read_until(master, b"return to splash screen", timeout=10.0)
+        assert b"Active: Line Slots (0..16K)" in out, f"Missing Bank 0 line slots in 32K mode: {out}"
+        assert b"Active: Line Slots (16K..32K)" in out, f"Missing Bank 1 line slots in 32K mode: {out}"
+        print("    [+] Memory screen shows both 32KB line banks (0..16K and 16K..32K) allocated")
+
+        # Return to splash screen ('q')
+        time.sleep(0.2)
+        os.write(master, b"q")
+        out = read_until(master, b"to configure", timeout=10.0)
+
+        # Enter Config Screen ('c')
+        time.sleep(0.3)
+        os.write(master, b"c")
+        out = read_until(master, b"return to splash screen", timeout=10.0)
+        assert b"3. Max Doc Lines   : [32K (32,768 Lines)]" in out, f"Config screen did not show 32K lines: {out}"
+        print("    [+] Config screen shows 32K (32,768 Lines) loaded from SE.CFG")
+
+        # Toggle '3' to switch back to 16K
+        time.sleep(0.3)
+        os.write(master, b"3")
+        out = read_until(master, b"16K (16,384 Lines)]", timeout=10.0)
+        assert b"3. Max Doc Lines   : [16K (16,384 Lines)]" in out, f"Toggle '3' to 16K failed: {out}"
+        print("    [+] Toggled Max Doc Lines to 16K (16,384 Lines)")
+
+        # Save config with 's'
+        time.sleep(0.3)
+        os.write(master, b"s")
+        out = read_until(master, b"Saved to local drive", timeout=10.0)
+        assert b"Saved to local drive" in out
+        drain_all(master)
+
+        # Return to splash screen ('q') and exit ('q')
+        time.sleep(0.2)
+        os.write(master, b"q")
+        read_until(master, b"Active Screen:", timeout=10.0)
+        drain_all(master)
+        time.sleep(0.2)
+        os.write(master, b"q")
+        out = read_until(master, b"C>", timeout=10.0)
+        assert b"C>" in out
+
+        # Verify disk SE.CFG file content
+        cfg_bytes = get_cfg_from_image(cpmcp_bin, img_file)
+        assert cfg_bytes is not None, "SE.CFG not found on disk image"
+        cfg_text = cfg_bytes.decode("latin1", errors="replace")
+        assert "LINES=16K" in cfg_text, f"Unexpected SE.CFG LINES content: {cfg_text}"
+        print("    [+] Verified SE.CFG file persisted LINES=16K successfully")
+        print("    [+] Test 10 PASSED: Max document lines configuration and memory table verified.")
     finally:
         proc.terminate()
         proc.wait(timeout=1.0)

@@ -28,7 +28,9 @@ SLOT_TERM	EQU	0FFFFH		; 16-bit terminal slot marker in Far-RAM
 MAX_COPY_LINE_CHARS EQU	120		; Single-line block copy capacity limit
 MAX_FAR_BANKS	EQU	12		; Up to 12 extended 32KB RAM banks for text slots (384 KB)
 CACHE_SIZE_LINES EQU	40		; 40 lines in local working cache (5,120 bytes)
-MAX_DOC_LINES	EQU	16384		; 32KB Far RAM Line Table (16,384 lines * 2 bytes)
+MAX_DOC_LINES_16K EQU	16384		; 32KB Far RAM Line Table (16,384 lines * 2 bytes)
+MAX_DOC_LINES_32K EQU	32768		; 64KB Far RAM Line Table (32,768 lines * 2 bytes)
+MAX_DOC_LINES	EQU	32768		; Absolute ceiling limit for line indices
 MAX_VIRTUAL_SLOTS EQU	65534		; Up to 65,534 128-byte virtual slots (~8.3 MB)
 
 KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
@@ -397,8 +399,12 @@ CONFIG_NOT_ESC:
 	CP	'2'
 	JR	Z,CONFIG_TOGGLE_RAMDRIVE
 
-	; Option: '3' -> Toggle Tab Width (4 <-> 8)
+	; Option: '3' -> Toggle Max Lines (16K <-> 32K)
 	CP	'3'
+	JP	Z,CONFIG_TOGGLE_LINES
+
+	; Option: '4' -> Toggle Tab Width (4 <-> 8)
+	CP	'4'
 	JR	Z,CONFIG_TOGGLE_TAB
 
 	; Option: 'S' or 's' -> Save Configuration to local SE.CFG
@@ -481,6 +487,14 @@ CTT_SET_8:
 	LD	A,7
 	LD	(CFG_TAB_MASK),A
 CTT_DONE:
+	CALL	SHOW_CONFIG_SCREEN
+	JP	CONFIG_LOOP
+
+CONFIG_TOGGLE_LINES:
+	LD	A,(CFG_LINES_MODE)
+	XOR	1			; Toggle 0 <-> 1
+	LD	(CFG_LINES_MODE),A
+	CALL	BUFFER_INIT		; Reallocate Far RAM banks
 	CALL	SHOW_CONFIG_SCREEN
 	JP	CONFIG_LOOP
 
@@ -1545,7 +1559,55 @@ ABOUT_TILDE_DONE:
 ; Configuration Screen Renderer
 ; Displays active screen geometry, config file status, and adjustment commands
 ;------------------------------------------------------------------------------
-CONFIG_LINES	EQU	15
+;------------------------------------------------------------------------------
+; Configuration Screen Renderer (SHOW_CONFIG_SCREEN)
+; Dynamically centered both horizontally and vertically for active screen geometry.
+; Option order:
+;   Config Status (at top, unnumbered status)
+;   1. Screen Geometry
+;   2. RAM Drive
+;   3. Max Doc Lines
+;   4. Tab Width
+; Total menu lines: 16
+;------------------------------------------------------------------------------
+CONFIG_MENU_LINES	EQU	16
+
+;------------------------------------------------------------------------------
+; PRINT_CONFIG_PREFIX: Print '~' followed by geometry-dependent left padding
+; Padding: ((ACTIVE_COLS - 59) / 2) spaces
+; 80x24:  10 spaces
+; 120x40: 30 spaces
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+PRINT_CONFIG_PREFIX:
+	PUSH	BC
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	59
+	SRL	A
+	JR	Z,PCP_DONE
+	LD	B,A
+PCP_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	PCP_LOOP
+PCP_DONE:
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; PRINT_CONFIG_BLANK_LINE: Print '~' followed by CRLF
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+PRINT_CONFIG_BLANK_LINE:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	RET
 
 SHOW_CONFIG_SCREEN:
 	LD	A,1
@@ -1554,10 +1616,96 @@ SHOW_CONFIG_SCREEN:
 	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
-	LD	DE,STR_CONFIG_HEADER
+
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - CONFIG_MENU_LINES) / 2
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; Text rows available
+	SUB	CONFIG_MENU_LINES
+	JR	Z,SCS_NO_TOP_PAD
+	JR	C,SCS_NO_TOP_PAD
+	SRL	A
+	JR	Z,SCS_NO_TOP_PAD
+	LD	(SCS_TOP_PAD_COUNT),A
+	LD	B,A
+SCS_TOP_PAD_LOOP:
+	CALL	PRINT_CONFIG_BLANK_LINE
+	DJNZ	SCS_TOP_PAD_LOOP
+	JR	SCS_MENU_START
+
+SCS_NO_TOP_PAD:
+	XOR	A
+	LD	(SCS_TOP_PAD_COUNT),A
+
+SCS_MENU_START:
+	; Row 1: Title (centered within 58-char block with 13 spaces)
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CONFIG_TITLE_PAD
+	CALL	PRINT_STR
+	LD	DE,STR_CONFIG_TITLE
 	CALL	PRINT_STR
 
-	; Display Active Screen Geometry
+	; Row 2: Blank line
+	CALL	PRINT_CONFIG_BLANK_LINE
+
+	; Row 3: Config Status (at top, unnumbered)
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CONFIG_STATUS_LBL
+	CALL	PRINT_STR
+	LD	A,(CONFIG_STATUS_FLAG)
+	CP	1
+	JR	Z,SCS_STAT_LOCAL
+	CP	2
+	JR	Z,SCS_STAT_PROG
+	CP	3
+	JR	Z,SCS_STAT_SAVED
+	CP	4
+	JR	Z,SCS_STAT_ERR
+
+	; Default / None
+	LD	DE,STR_CFG_STAT_NONE
+	CALL	PRINT_STR
+	JR	SCS_AFTER_STATUS
+
+SCS_STAT_LOCAL:
+	LD	DE,STR_CFG_STAT_LOCAL
+	CALL	PRINT_STR
+	LD	A,(CONFIG_SOURCE_DRIVE)
+	ADD	A,'A'
+	CALL	PUTC
+	LD	DE,STR_CFG_STAT_END
+	CALL	PRINT_STR
+	JR	SCS_AFTER_STATUS
+
+SCS_STAT_PROG:
+	LD	DE,STR_CFG_STAT_PROG
+	CALL	PRINT_STR
+	LD	A,(CONFIG_SOURCE_DRIVE)
+	ADD	A,'A'
+	CALL	PUTC
+	LD	DE,STR_CFG_STAT_END
+	CALL	PRINT_STR
+	JR	SCS_AFTER_STATUS
+
+SCS_STAT_SAVED:
+	LD	DE,STR_CFG_STAT_SAVED
+	CALL	PRINT_STR
+	LD	A,(CONFIG_SOURCE_DRIVE)
+	ADD	A,'A'
+	CALL	PUTC
+	LD	DE,STR_CFG_STAT_END
+	CALL	PRINT_STR
+	JR	SCS_AFTER_STATUS
+
+SCS_STAT_ERR:
+	LD	DE,STR_CFG_STAT_ERR
+	CALL	PRINT_STR
+
+SCS_AFTER_STATUS:
+	; Row 4: Blank line
+	CALL	PRINT_CONFIG_BLANK_LINE
+
+	; Row 5: 1. Screen Geometry
+	CALL	PRINT_CONFIG_PREFIX
 	LD	DE,STR_CONFIG_CUR_MODE
 	CALL	PRINT_STR
 	LD	A,(SCREEN_MODE)
@@ -1571,11 +1719,11 @@ SCS_80X24:
 	CALL	PRINT_STR
 
 SCS_RAM_MODE:
-	; Display RAM Drive Option
+	; Row 6: 2. RAM Drive
+	CALL	PRINT_CONFIG_PREFIX
 	LD	A,(RAMDRIVE_DRIVE_NUM)
 	CP	0FFH
 	JR	Z,SCS_RAM_NO_LETTER
-	; Drive detected: print "~     2. RAM Drive (" followed by letter, then ":)  : [$"
 	LD	DE,STR_CONFIG_RAM_DRV_PRE
 	CALL	PRINT_STR
 	LD	A,(RAMDRIVE_DRIVE_CHAR)
@@ -1596,17 +1744,33 @@ SCS_RAM_VALUE:
 	JR	Z,SCS_RAM_ENABLED
 	LD	DE,STR_RAM_PROTECTED_LBL
 	CALL	PRINT_STR
-	JR	SCS_TAB_MODE
+	JR	SCS_LINES_MODE
 SCS_RAM_HIB:
 	LD	DE,STR_RAM_HIBERNATE_LBL
 	CALL	PRINT_STR
-	JR	SCS_TAB_MODE
+	JR	SCS_LINES_MODE
 SCS_RAM_ENABLED:
 	LD	DE,STR_RAM_ENABLED_LBL
 	CALL	PRINT_STR
 
+SCS_LINES_MODE:
+	; Row 7: 3. Max Doc Lines (grouped with RAM Drive!)
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CONFIG_LINES_LBL
+	CALL	PRINT_STR
+	LD	A,(CFG_LINES_MODE)
+	CP	1
+	JR	Z,SCS_LINES_32K
+	LD	DE,STR_LINES_16K_LBL
+	CALL	PRINT_STR
+	JR	SCS_TAB_MODE
+SCS_LINES_32K:
+	LD	DE,STR_LINES_32K_LBL
+	CALL	PRINT_STR
+
 SCS_TAB_MODE:
-	; Display Tab Width Option
+	; Row 8: 4. Tab Width (at the bottom!)
+	CALL	PRINT_CONFIG_PREFIX
 	LD	DE,STR_CONFIG_TAB_LBL
 	CALL	PRINT_STR
 	LD	A,(CFG_TAB_WIDTH)
@@ -1614,82 +1778,56 @@ SCS_TAB_MODE:
 	JR	Z,SCS_TAB_4
 	LD	DE,STR_TAB_8_LBL
 	CALL	PRINT_STR
-	JR	SCS_STATUS
+	JR	SCS_CMDS_BLOCK
 SCS_TAB_4:
 	LD	DE,STR_TAB_4_LBL
 	CALL	PRINT_STR
 
-SCS_STATUS:
-	; Display Config File Status
-	LD	DE,STR_CONFIG_STATUS_LBL
-	CALL	PRINT_STR
-	LD	A,(CONFIG_STATUS_FLAG)
-	CP	1
-	JR	Z,SCS_STAT_LOCAL
-	CP	2
-	JR	Z,SCS_STAT_PROG
-	CP	3
-	JR	Z,SCS_STAT_SAVED
-	CP	4
-	JR	Z,SCS_STAT_ERR
+SCS_CMDS_BLOCK:
+	; Row 9: Blank line
+	CALL	PRINT_CONFIG_BLANK_LINE
 
-	; Default / None
-	LD	DE,STR_CFG_STAT_NONE
-	CALL	PRINT_STR
-	JR	SCS_BODY
-
-SCS_STAT_LOCAL:
-	LD	DE,STR_CFG_STAT_LOCAL
-	CALL	PRINT_STR
-	LD	A,(CONFIG_SOURCE_DRIVE)
-	ADD	A,'A'
-	CALL	PUTC
-	LD	DE,STR_CFG_STAT_END
-	CALL	PRINT_STR
-	JR	SCS_BODY
-
-SCS_STAT_PROG:
-	LD	DE,STR_CFG_STAT_PROG
-	CALL	PRINT_STR
-	LD	A,(CONFIG_SOURCE_DRIVE)
-	ADD	A,'A'
-	CALL	PUTC
-	LD	DE,STR_CFG_STAT_END
-	CALL	PRINT_STR
-	JR	SCS_BODY
-
-SCS_STAT_SAVED:
-	LD	DE,STR_CFG_STAT_SAVED
-	CALL	PRINT_STR
-	LD	A,(CONFIG_SOURCE_DRIVE)
-	ADD	A,'A'
-	CALL	PUTC
-	LD	DE,STR_CFG_STAT_END
-	CALL	PRINT_STR
-	JR	SCS_BODY
-
-SCS_STAT_ERR:
-	LD	DE,STR_CFG_STAT_ERR
+	; Rows 10..16: Commands
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CMD_HEADER
 	CALL	PRINT_STR
 
-SCS_BODY:
-	LD	DE,STR_CONFIG_BODY
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CMD_1
 	CALL	PRINT_STR
 
-	; Fill remaining rows down to status row with '~'
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CMD_2
+	CALL	PRINT_STR
+
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CMD_3
+	CALL	PRINT_STR
+
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CMD_4
+	CALL	PRINT_STR
+
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CMD_S
+	CALL	PRINT_STR
+
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CMD_Q
+	CALL	PRINT_STR
+
+	; Calculate bottom padding: (ACTIVE_ROWS - 1) - (SCS_TOP_PAD_COUNT + CONFIG_MENU_LINES)
+	LD	A,(SCS_TOP_PAD_COUNT)
+	ADD	A,CONFIG_MENU_LINES
+	LD	B,A
 	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
-	SUB	CONFIG_LINES		; A = remaining rows
+	DEC	A
+	SUB	B
 	JR	Z,CONFIG_TILDE_DONE
 	JR	C,CONFIG_TILDE_DONE
 	LD	B,A
 CONFIG_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
+	CALL	PRINT_CONFIG_BLANK_LINE
 	DJNZ	CONFIG_TILDE_LOOP
 
 CONFIG_TILDE_DONE:
@@ -1949,15 +2087,22 @@ PMIS_SHOW_SE:
 	RET
 
 PMIS_SE_HBIOS:
-	; Calculate SE RAM: (1 [TPA] + (1 if LINE_TABLE_BANK!=0) + EXT_BANK_COUNT) * 32
+	; Calculate SE RAM: (1 [TPA] + (1 if LINE_TABLE_BANK!=0) + (1 if LINE_TABLE_BANK_1!=0) + EXT_BANK_COUNT) * 32
 	LD	A,1
 	LD	HL,LINE_TABLE_BANK
 	LD	B,(HL)
 	INC	B
 	DEC	B
-	JR	Z,PMIS_NO_LINE_BANK
+	JR	Z,PMIS_NO_LINE_BANK_0
 	INC	A			; A = 2
-PMIS_NO_LINE_BANK:
+PMIS_NO_LINE_BANK_0:
+	LD	HL,LINE_TABLE_BANK_1
+	LD	B,(HL)
+	INC	B
+	DEC	B
+	JR	Z,PMIS_NO_LINE_BANK_1
+	INC	A			; A = 3
+PMIS_NO_LINE_BANK_1:
 	LD	HL,EXT_BANK_COUNT
 	ADD	A,(HL)			; A = total SE 32KB banks
 	LD	L,A
@@ -2087,6 +2232,31 @@ PMBR_NOT_IN_EXT:
 	LD	E,A
 	LD	A,(LINE_TABLE_BANK)
 	OR	A
+	JR	Z,PMBR_CHK_LINE_1
+	CP	E
+	JR	NZ,PMBR_CHK_LINE_1
+	LD	DE,STR_ROLE_APP
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	; If LINE_TABLE_BANK_1 != 0, print STR_USAGE_LINE_TABLE_0, else STR_USAGE_LINE_TABLE
+	LD	A,(LINE_TABLE_BANK_1)
+	OR	A
+	JR	NZ,PMBR_LT0_SPLIT
+	LD	DE,STR_USAGE_LINE_TABLE
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+PMBR_LT0_SPLIT:
+	LD	DE,STR_USAGE_LINE_TABLE_0
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_CHK_LINE_1:
+	; Check if E == LINE_TABLE_BANK_1 (and != 0)
+	LD	A,(LINE_TABLE_BANK_1)
+	OR	A
 	JR	Z,PMBR_CHK_CPM_USER
 	CP	E
 	JR	NZ,PMBR_CHK_CPM_USER
@@ -2094,7 +2264,7 @@ PMBR_NOT_IN_EXT:
 	CALL	PRINT_STR
 	LD	DE,STR_MEM_SPACES_3
 	CALL	PRINT_STR
-	LD	DE,STR_USAGE_LINE_TABLE
+	LD	DE,STR_USAGE_LINE_TABLE_1
 	CALL	PRINT_STR
 	CALL	PRINT_CRLF
 	RET
@@ -2695,7 +2865,11 @@ TEST4_SLOT_INIT:
 	JP	NC,TEST5_FAIL_OOM
 
 	; Subtest 5B: Multi-line block copy when DOC_TOTAL_LINES + K > MAX_DOC_LINES
-	LD	HL,MAX_DOC_LINES-4	; 3324
+	LD	HL,(MAX_DOC_LINES_LIMIT)
+	DEC	HL
+	DEC	HL
+	DEC	HL
+	DEC	HL			; MAX_DOC_LINES_LIMIT - 4
 	LD	(DOC_TOTAL_LINES),HL
 	LD	HL,1
 	LD	(BLOCK_START_ROW),HL
@@ -2711,9 +2885,13 @@ TEST4_SLOT_INIT:
 	XOR	A
 	LD	(CUR_COL),A
 	CALL	DO_COPY_BLOCK
-	; Verify DOC_TOTAL_LINES is still 3324
+	; Verify DOC_TOTAL_LINES is still MAX_DOC_LINES_LIMIT - 4
 	LD	HL,(DOC_TOTAL_LINES)
-	LD	DE,MAX_DOC_LINES-4	; 3324
+	LD	DE,(MAX_DOC_LINES_LIMIT)
+	DEC	DE
+	DEC	DE
+	DEC	DE
+	DEC	DE
 	LD	A,H
 	CP	D
 	JP	NZ,TEST5_FAIL_ML
@@ -2803,6 +2981,198 @@ TEST5_CHECK_LEN_DONE:
 	CALL	PRINT_STR
 
 	; -------------------------------------------------------------------------
+	; TEST 6: 32K Line Slots & Boundary Shift Engine (if LINES=32K active)
+	; -------------------------------------------------------------------------
+	LD	A,(CFG_LINES_MODE)
+	OR	A
+	JP	Z,TEST6_SKIP		; If LINES=16K, skip Test 6
+
+	LD	DE,STR_TEST6_TITLE
+	CALL	PRINT_STR
+
+	; Subtest 6A: Far RAM line slot Read/Write across 16K boundary (into Bank 1)
+	; Line 0 -> 0x1234
+	LD	BC,0
+	LD	HL,01234H
+	CALL	SET_LINE_SLOT
+	; Line 16383 (Bank 0 last entry) -> 0x5678
+	LD	BC,16383
+	LD	HL,05678H
+	CALL	SET_LINE_SLOT
+	; Line 16384 (Bank 1 first entry) -> 0x9ABC
+	LD	BC,16384
+	LD	HL,09ABCH
+	CALL	SET_LINE_SLOT
+	; Line 16385 (Bank 1 second entry) -> 0xDEF0
+	LD	BC,16385
+	LD	HL,0DEF0H
+	CALL	SET_LINE_SLOT
+	; Line 32767 (Bank 1 last entry) -> 0x4321
+	LD	BC,32767
+	LD	HL,04321H
+	CALL	SET_LINE_SLOT
+
+	; Verify Line 0
+	LD	BC,0
+	CALL	GET_LINE_SLOT
+	LD	DE,01234H
+	OR	A
+	SBC	HL,DE
+	JP	NZ,TEST6_FAIL_SLOT
+
+	; Verify Line 16383
+	LD	BC,16383
+	CALL	GET_LINE_SLOT
+	LD	DE,05678H
+	OR	A
+	SBC	HL,DE
+	JP	NZ,TEST6_FAIL_SLOT
+
+	; Verify Line 16384
+	LD	BC,16384
+	CALL	GET_LINE_SLOT
+	LD	DE,09ABCH
+	OR	A
+	SBC	HL,DE
+	JP	NZ,TEST6_FAIL_SLOT
+
+	; Verify Line 16385
+	LD	BC,16385
+	CALL	GET_LINE_SLOT
+	LD	DE,0DEF0H
+	OR	A
+	SBC	HL,DE
+	JP	NZ,TEST6_FAIL_SLOT
+
+	; Verify Line 32767
+	LD	BC,32767
+	CALL	GET_LINE_SLOT
+	LD	DE,04321H
+	OR	A
+	SBC	HL,DE
+	JP	NZ,TEST6_FAIL_SLOT
+
+	; Subtest 6B: SHIFT_LINE_SLOTS_DOWN across 16K boundary (line 16380..16389 by +1)
+	LD	BC,16380
+TEST6_INIT_DOWN:
+	LD	H,B
+	LD	L,C
+	LD	DE,01000H
+	ADD	HL,DE			; HL = line + 0x1000
+	CALL	SET_LINE_SLOT
+	INC	BC
+	LD	A,B
+	CP	40H			; High byte of 16390 (0x4006)
+	JR	NZ,TEST6_INIT_DOWN
+	LD	A,C
+	CP	06H			; Low byte of 16390 (0x4006)
+	JR	NZ,TEST6_INIT_DOWN
+
+	; Shift lines 16380..16389 down by 1 (dest = 16381, src = 16380, count = 10)
+	LD	HL,16380		; Source line
+	LD	DE,16381		; Dest line
+	LD	BC,10			; Count
+	CALL	SHIFT_LINE_SLOTS_DOWN
+
+	; Verify shifted lines 16381..16390
+	LD	BC,16380
+TEST6_CHECK_DOWN:
+	PUSH	BC
+	INC	BC			; Check destination: line + 1
+	CALL	GET_LINE_SLOT		; HL = value at line + 1
+	POP	BC
+	LD	D,B
+	LD	E,C
+	PUSH	HL
+	LD	HL,01000H
+	ADD	HL,DE
+	EX	DE,HL			; DE = expected value
+	POP	HL
+	OR	A
+	SBC	HL,DE
+	JP	NZ,TEST6_FAIL_DOWN
+	INC	BC
+	LD	A,B
+	CP	40H
+	JR	NZ,TEST6_CHECK_DOWN
+	LD	A,C
+	CP	06H
+	JR	NZ,TEST6_CHECK_DOWN
+
+	; Subtest 6C: SHIFT_LINE_SLOTS_UP across 16K boundary (shift lines 16381..16390 back to 16380..16389)
+	LD	HL,16381		; Source line
+	LD	DE,16380		; Dest line
+	LD	BC,10			; Count
+	CALL	SHIFT_LINE_SLOTS_UP
+
+	; Verify lines 16380..16389 restored
+	LD	BC,16380
+TEST6_CHECK_UP:
+	PUSH	BC
+	CALL	GET_LINE_SLOT		; HL = value at line
+	POP	BC
+	LD	D,B
+	LD	E,C
+	PUSH	HL
+	LD	HL,01000H
+	ADD	HL,DE
+	EX	DE,HL			; DE = expected value
+	POP	HL
+	OR	A
+	SBC	HL,DE
+	JP	NZ,TEST6_FAIL_UP
+	INC	BC
+	LD	A,B
+	CP	40H
+	JR	NZ,TEST6_CHECK_UP
+	LD	A,C
+	CP	06H
+	JR	NZ,TEST6_CHECK_UP
+
+	; Subtest 6D: WRITE_LINE_SLOTS_FROM_RAM across 16K boundary
+	LD	HL,LOAD_LINE_TEMP
+	LD	DE,07000H
+	LD	B,8
+TEST6_PREP_RAM:
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	INC	HL
+	INC	DE
+	DJNZ	TEST6_PREP_RAM
+
+	; Call WRITE_LINE_SLOTS_FROM_RAM: BC = dest line, HL = src buffer, DE = word count
+	LD	BC,16380
+	LD	HL,LOAD_LINE_TEMP
+	LD	DE,8
+	CALL	WRITE_LINE_SLOTS_FROM_RAM
+
+	; Verify lines 16380..16387
+	LD	BC,16380
+	LD	DE,07000H
+TEST6_CHECK_RAM:
+	PUSH	BC
+	PUSH	DE
+	CALL	GET_LINE_SLOT
+	POP	DE
+	POP	BC
+	OR	A
+	SBC	HL,DE
+	JP	NZ,TEST6_FAIL_RAM
+	INC	DE
+	INC	BC
+	LD	A,B
+	CP	40H			; High byte of 16388 (0x4004)
+	JR	NZ,TEST6_CHECK_RAM
+	LD	A,C
+	CP	04H			; Low byte of 16388 (0x4004)
+	JR	NZ,TEST6_CHECK_RAM
+
+	LD	DE,STR_TEST6_PASS
+	CALL	PRINT_STR
+
+TEST6_SKIP:
+	; -------------------------------------------------------------------------
 	; Restore Empty Document State & Display Final Success
 	; -------------------------------------------------------------------------
 	CALL	INIT_EMPTY_DOCUMENT
@@ -2841,6 +3211,26 @@ TEST5_FAIL_ML:
 
 TEST5_FAIL_SL:
 	LD	DE,STR_TEST5_FAIL_SL
+	CALL	PRINT_STR
+	JP	TEST_FAIL
+
+TEST6_FAIL_SLOT:
+	LD	DE,STR_TEST6_FAIL_SLOT
+	CALL	PRINT_STR
+	JP	TEST_FAIL
+
+TEST6_FAIL_DOWN:
+	LD	DE,STR_TEST6_FAIL_DOWN
+	CALL	PRINT_STR
+	JP	TEST_FAIL
+
+TEST6_FAIL_UP:
+	LD	DE,STR_TEST6_FAIL_UP
+	CALL	PRINT_STR
+	JP	TEST_FAIL
+
+TEST6_FAIL_RAM:
+	LD	DE,STR_TEST6_FAIL_RAM
 	CALL	PRINT_STR
 	JP	TEST_FAIL
 
@@ -4246,7 +4636,7 @@ DO_COPY_BLK_MULTILINE:
 	LD	HL,(DOC_TOTAL_LINES)
 	LD	DE,(COPY_K_LINES)
 	ADD	HL,DE
-	LD	DE,MAX_DOC_LINES
+	LD	DE,(MAX_DOC_LINES_LIMIT)
 	OR	A
 	SBC	HL,DE
 	JR	C,COPY_ML_CAP_OK
@@ -6849,7 +7239,7 @@ IFRB_NO_APP_BANKS:
 	LD	D,A
 
 IFRB_FLOOR_SET:
-	; 4. Allocate LINE_TABLE_BANK: first available bank below CPM_USER_BANK
+	; 4. Allocate Line Table Banks: below CPM_USER_BANK
 	LD	A,(CPM_USER_BANK)
 	LD	C,A			; C = CPM_USER_BANK (e.g. 0x8E)
 	DEC	C			; C = first Far RAM bank (e.g. 0x8D)
@@ -6857,9 +7247,33 @@ IFRB_FLOOR_SET:
 	CP	D			; Compare with BIOS Bank ID (D)
 	JR	Z,IFRB_NO_BANKS		; No Far RAM available!
 	JR	C,IFRB_NO_BANKS
-	LD	(LINE_TABLE_BANK),A	; Dedicated 32KB Line Table bank!
+	LD	(LINE_TABLE_BANK),A	; Bank 0 for line slots (0..16383)
+	XOR	A
+	LD	(LINE_TABLE_BANK_1),A
+	LD	HL,MAX_DOC_LINES_16K
+	LD	(MAX_DOC_LINES_LIMIT),HL
 
-	; 5. Populate EXT_BANK_TABLE allocating downward from LINE_TABLE_BANK - 1
+	; Check if 32K lines mode requested (CFG_LINES_MODE == 1)
+	LD	A,(CFG_LINES_MODE)
+	OR	A
+	JR	Z,IFRB_ALLOC_TEXT_BANKS
+
+	; Check if at least 3 banks available from C down to floor D:
+	; (C - D >= 3 guarantees 1 bank for Line 0, 1 bank for Line 1, >= 1 bank for Text)
+	LD	A,C
+	SUB	D
+	CP	3
+	JR	C,IFRB_ALLOC_TEXT_BANKS	; Less than 3 banks: fallback to 16K mode!
+
+	; Allocate 2nd line table bank:
+	DEC	C			; C = second Far RAM bank (e.g. 0x8C)
+	LD	A,C
+	LD	(LINE_TABLE_BANK_1),A	; Bank 1 for line slots (16384..32767)
+	LD	HL,MAX_DOC_LINES_32K
+	LD	(MAX_DOC_LINES_LIMIT),HL
+
+IFRB_ALLOC_TEXT_BANKS:
+	; 5. Populate EXT_BANK_TABLE allocating downward from C - 1
 	; Stop when bank <= BIOS Bank ID (D, e.g. 0x80) to never overwrite HBIOS
 	LD	HL,EXT_BANK_TABLE
 	LD	B,0			; Counter for populated text slot banks
@@ -6887,7 +7301,10 @@ POPULATE_BANK_DONE:
 IFRB_NO_BANKS:
 	XOR	A
 	LD	(LINE_TABLE_BANK),A
+	LD	(LINE_TABLE_BANK_1),A
 	LD	(EXT_BANK_COUNT),A
+	LD	HL,MAX_DOC_LINES_16K
+	LD	(MAX_DOC_LINES_LIMIT),HL
 	RET
 
 ;==============================================================================
@@ -6904,25 +7321,37 @@ GET_LINE_SLOT:
 	PUSH	BC
 	PUSH	DE
 
-	; Calculate far byte offset = BC * 2
+	; Determine Bank (Bank 0 if BC < 16384, Bank 1 if BC >= 16384)
+	BIT	6,B
+	JR	NZ,GLS_BANK_1
+	LD	A,(LINE_TABLE_BANK)
+	JR	GLS_GOT_BANK
+GLS_BANK_1:
+	LD	A,(LINE_TABLE_BANK_1)
+GLS_GOT_BANK:
+	LD	E,A			; E = Line Table Bank (Src)
+
+	; Calculate far byte offset = (BC & 0x3FFF) * 2
 	LD	L,C
 	LD	H,B
+	RES	6,H			; Clear bit 14 so HL is 0..16383
 	ADD	HL,HL			; HL = far byte offset (0..32766)
 
 	; SYSSETCPY: D = User Bank, E = Line Table Bank, HL = 2 bytes
 	PUSH	HL			; Save far offset
+	PUSH	DE			; Save E (Line Table Bank)
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
 	LD	A,(CPM_USER_BANK)
 	LD	D,A
-	LD	A,(LINE_TABLE_BANK)
-	LD	E,A
+	; E is already Line Table Bank!
 	LD	HL,2
 	RST	08H
 	POP	IX
+	POP	DE
+	POP	HL			; Restore far offset into HL
 
 	; SYSBNKCPY: HL = Far Src Addr, DE = Local Dest Addr
-	POP	HL			; HL = Far Src Addr
 	LD	DE,LINE_SLOT_TEMP
 	PUSH	IX
 	LD	B,0F5H			; SYSBNKCPY
@@ -6948,27 +7377,39 @@ SET_LINE_SLOT:
 
 	LD	(LINE_SLOT_TEMP),HL
 
-	; Calculate far byte offset = BC * 2
+	; Determine Bank (Bank 0 if BC < 16384, Bank 1 if BC >= 16384)
+	BIT	6,B
+	JR	NZ,SLS_BANK_1
+	LD	A,(LINE_TABLE_BANK)
+	JR	SLS_GOT_BANK
+SLS_BANK_1:
+	LD	A,(LINE_TABLE_BANK_1)
+SLS_GOT_BANK:
+	LD	D,A			; D = Line Table Bank (Dest)
+
+	; Calculate far byte offset = (BC & 0x3FFF) * 2
 	LD	L,C
 	LD	H,B
+	RES	6,H
 	ADD	HL,HL			; HL = far byte offset (0..32766)
-	EX	DE,HL			; DE = far destination address
 
 	; SYSSETCPY: D = Line Table Bank, E = User Bank, HL = 2 bytes
-	PUSH	DE			; Save far destination address
+	PUSH	HL			; Save far destination address
+	PUSH	DE			; Save D (Line Table Bank)
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
-	LD	A,(LINE_TABLE_BANK)
-	LD	D,A
+	; D is already Line Table Bank!
 	LD	A,(CPM_USER_BANK)
 	LD	E,A
 	LD	HL,2
 	RST	08H
 	POP	IX
+	POP	DE
+	POP	HL			; Restore far destination address into HL
 
 	; SYSBNKCPY: HL = Local Src Addr, DE = Far Dest Addr
-	POP	DE			; DE = Far Dest Addr
-	LD	HL,LINE_SLOT_TEMP
+	EX	DE,HL			; DE = Far Dest Addr
+	LD	HL,LINE_SLOT_TEMP	; HL = Local Src Addr
 	PUSH	IX
 	LD	B,0F5H			; SYSBNKCPY
 	RST	08H
@@ -6991,77 +7432,134 @@ SHIFT_LINE_SLOTS_UP:
 	OR	C
 	RET	Z
 
-	; Calculate total bytes = BC * 2 -> store in SLOT_SHIFT_REM
-	PUSH	HL			; Save Src line
-	PUSH	DE			; Save Dest line
-	LD	L,C
-	LD	H,B
-	ADD	HL,HL
-	LD	(SLOT_SHIFT_REM),HL
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
 
-	; Dest byte offset = Dest line * 2
-	POP	HL			; HL = Dest line
-	ADD	HL,HL
-	LD	(SLOT_SHIFT_DEST),HL
-
-	; Src byte offset = Src line * 2
-	POP	HL			; HL = Src line
-	ADD	HL,HL
+	LD	(SLOT_SHIFT_REM),BC
 	LD	(SLOT_SHIFT_SRC),HL
+	LD	(SLOT_SHIFT_DEST),DE
 
 SLOTS_UP_LOOP:
 	LD	HL,(SLOT_SHIFT_REM)
 	LD	A,H
 	OR	L
-	RET	Z
+	JP	Z,SLOTS_UP_DONE
 
-	LD	A,H
+	; Candidate chunk = min(128, rem)
+	LD	DE,128
+	CALL	CMP_HL_DE		; Carry=1 if HL < 128
+	JR	C,SLOTS_UP_USE_REM
+	EX	DE,HL			; HL = 128
+SLOTS_UP_USE_REM:
+	LD	(SLOT_SHIFT_CHUNK),HL	; Save candidate chunk
+
+	; Check distance to line 16384 boundary for Source
+	LD	DE,(SLOT_SHIFT_SRC)
+	BIT	6,D			; Source >= 16384?
+	JR	NZ,SLOTS_UP_SRC_OK	; In Bank 1, no boundary ahead
+	; Source < 16384: distance = 16384 - Source
+	LD	HL,16384
 	OR	A
-	JR	NZ,SLOTS_UP_FULL_CHUNK
-	LD	(SLOT_SHIFT_CHUNK),HL
-	JR	SLOTS_UP_DO_COPY
-SLOTS_UP_FULL_CHUNK:
-	LD	HL,LINE_SHIFT_BUF_SIZE	; 256
-	LD	(SLOT_SHIFT_CHUNK),HL
+	SBC	HL,DE			; HL = distance
+	EX	DE,HL			; DE = distance
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	CALL	CMP_HL_DE		; Carry=1 if chunk < distance
+	JR	C,SLOTS_UP_SRC_OK
+	LD	(SLOT_SHIFT_CHUNK),DE	; Clamp chunk to distance
+SLOTS_UP_SRC_OK:
 
-SLOTS_UP_DO_COPY:
-	; 1. Copy chunk from Far RAM LINE_TABLE_BANK to local LINE_SHIFT_BUF
+	; Check distance to line 16384 boundary for Dest
+	LD	DE,(SLOT_SHIFT_DEST)
+	BIT	6,D			; Dest >= 16384?
+	JR	NZ,SLOTS_UP_DEST_OK	; In Bank 1, no boundary ahead
+	; Dest < 16384: distance = 16384 - Dest
+	LD	HL,16384
+	OR	A
+	SBC	HL,DE			; HL = distance
+	EX	DE,HL			; DE = distance
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	CALL	CMP_HL_DE		; Carry=1 if chunk < distance
+	JR	C,SLOTS_UP_DEST_OK
+	LD	(SLOT_SHIFT_CHUNK),DE	; Clamp chunk to distance
+SLOTS_UP_DEST_OK:
+
+	; Determine Source Bank & In-Bank Offset:
+	LD	BC,(SLOT_SHIFT_SRC)
+	BIT	6,B
+	JR	NZ,SLOTS_UP_SRC_B1
+	LD	A,(LINE_TABLE_BANK)
+	JR	SLOTS_UP_GOT_SBANK
+SLOTS_UP_SRC_B1:
+	LD	A,(LINE_TABLE_BANK_1)
+SLOTS_UP_GOT_SBANK:
+	LD	(FAR_SRC_BANK),A
+
+	LD	L,C
+	LD	H,B
+	RES	6,H
+	ADD	HL,HL
+	LD	(FAR_SRC_ADDR),HL
+
+	; Determine Dest Bank & In-Bank Offset:
+	LD	BC,(SLOT_SHIFT_DEST)
+	BIT	6,B
+	JR	NZ,SLOTS_UP_DST_B1
+	LD	A,(LINE_TABLE_BANK)
+	JR	SLOTS_UP_GOT_DBANK
+SLOTS_UP_DST_B1:
+	LD	A,(LINE_TABLE_BANK_1)
+SLOTS_UP_GOT_DBANK:
+	LD	(FAR_DEST_BANK),A
+
+	LD	L,C
+	LD	H,B
+	RES	6,H
+	ADD	HL,HL
+	LD	(FAR_DEST_ADDR),HL
+
+	; Calculate byte count = chunk * 2
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	ADD	HL,HL
+	LD	(SLOT_SHIFT_BYTES),HL
+
+	; 1. Copy chunk from Far RAM Source Bank to local LINE_SHIFT_BUF
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
 	LD	A,(CPM_USER_BANK)
 	LD	D,A			; Dest = User Bank
-	LD	A,(LINE_TABLE_BANK)
-	LD	E,A			; Src = Line Table Bank
-	LD	HL,(SLOT_SHIFT_CHUNK)
+	LD	A,(FAR_SRC_BANK)
+	LD	E,A			; Src = Line Table Source Bank
+	LD	HL,(SLOT_SHIFT_BYTES)
 	RST	08H
 	POP	IX
 
 	PUSH	IX
 	LD	B,0F5H			; SYSBNKCPY
 	LD	DE,LINE_SHIFT_BUF	; Local Dest
-	LD	HL,(SLOT_SHIFT_SRC)	; Far Src
+	LD	HL,(FAR_SRC_ADDR)	; Far Src
 	RST	08H
 	POP	IX
 
-	; 2. Copy chunk from local LINE_SHIFT_BUF to Far RAM LINE_TABLE_BANK
+	; 2. Copy chunk from local LINE_SHIFT_BUF to Far RAM Dest Bank
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
-	LD	A,(LINE_TABLE_BANK)
-	LD	D,A			; Dest = Line Table Bank
+	LD	A,(FAR_DEST_BANK)
+	LD	D,A			; Dest = Line Table Dest Bank
 	LD	A,(CPM_USER_BANK)
 	LD	E,A			; Src = User Bank
-	LD	HL,(SLOT_SHIFT_CHUNK)
+	LD	HL,(SLOT_SHIFT_BYTES)
 	RST	08H
 	POP	IX
 
 	PUSH	IX
 	LD	B,0F5H			; SYSBNKCPY
-	LD	DE,(SLOT_SHIFT_DEST)	; Far Dest
+	LD	DE,(FAR_DEST_ADDR)	; Far Dest
 	LD	HL,LINE_SHIFT_BUF	; Local Src
 	RST	08H
 	POP	IX
 
-	; Advance SRC and DEST by CHUNK
+	; Advance Source and Dest by CHUNK; Decrement Rem by CHUNK
 	LD	DE,(SLOT_SHIFT_CHUNK)
 	LD	HL,(SLOT_SHIFT_SRC)
 	ADD	HL,DE
@@ -7071,13 +7569,18 @@ SLOTS_UP_DO_COPY:
 	ADD	HL,DE
 	LD	(SLOT_SHIFT_DEST),HL
 
-	; Decrement REM by CHUNK
 	LD	HL,(SLOT_SHIFT_REM)
 	OR	A
 	SBC	HL,DE
 	LD	(SLOT_SHIFT_REM),HL
 
-	JR	SLOTS_UP_LOOP
+	JP	SLOTS_UP_LOOP
+
+SLOTS_UP_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
 
 ;------------------------------------------------------------------------------
 ; SHIFT_LINE_SLOTS_DOWN: Shift W line slots downward from lower to higher indices
@@ -7091,88 +7594,150 @@ SHIFT_LINE_SLOTS_DOWN:
 	OR	C
 	RET	Z
 
-	; Calculate total bytes = BC * 2 -> store in SLOT_SHIFT_REM
-	PUSH	HL			; Save Src line
-	PUSH	DE			; Save Dest line
-	LD	L,C
-	LD	H,B
-	ADD	HL,HL
-	LD	(SLOT_SHIFT_REM),HL
-	LD	C,L
-	LD	B,H			; BC = total bytes
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
 
-	; Dest end byte offset = Dest line * 2 + total bytes
-	POP	HL			; HL = Dest line
-	ADD	HL,HL
-	ADD	HL,BC
-	LD	(SLOT_SHIFT_DEST),HL
+	LD	(SLOT_SHIFT_REM),BC
 
-	; Src end byte offset = Src line * 2 + total bytes
-	POP	HL			; HL = Src line
-	ADD	HL,HL
+	; End Source line = HL + BC
 	ADD	HL,BC
 	LD	(SLOT_SHIFT_SRC),HL
+
+	; End Dest line = DE + BC
+	EX	DE,HL
+	ADD	HL,BC
+	LD	(SLOT_SHIFT_DEST),HL
 
 SLOTS_DOWN_LOOP:
 	LD	HL,(SLOT_SHIFT_REM)
 	LD	A,H
 	OR	L
-	RET	Z
+	JP	Z,SLOTS_DOWN_DONE
 
-	LD	A,H
+	; Candidate chunk = min(128, rem)
+	LD	DE,128
+	CALL	CMP_HL_DE		; Carry=1 if HL < 128
+	JR	C,SLOTS_DOWN_USE_REM
+	EX	DE,HL			; HL = 128
+SLOTS_DOWN_USE_REM:
+	LD	(SLOT_SHIFT_CHUNK),HL	; Save candidate chunk
+
+	; Check distance down to line 16384 boundary for Source end
+	LD	DE,(SLOT_SHIFT_SRC)
+	LD	HL,16384
+	CALL	CMP_HL_DE		; Carry=1 if 16384 < DE (src_end > 16384)
+	JR	NC,SLOTS_DOWN_SRC_OK
+	; src_end > 16384: distance = src_end - 16384
+	EX	DE,HL			; HL = src_end, DE = 16384
 	OR	A
-	JR	NZ,SLOTS_DOWN_FULL_CHUNK
-	LD	(SLOT_SHIFT_CHUNK),HL
-	JR	SLOTS_DOWN_DO_COPY
-SLOTS_DOWN_FULL_CHUNK:
-	LD	HL,LINE_SHIFT_BUF_SIZE	; 256
-	LD	(SLOT_SHIFT_CHUNK),HL
+	SBC	HL,DE			; HL = distance
+	EX	DE,HL			; DE = distance
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	CALL	CMP_HL_DE		; Carry=1 if chunk < distance
+	JR	C,SLOTS_DOWN_SRC_OK
+	LD	(SLOT_SHIFT_CHUNK),DE	; Clamp chunk to distance
+SLOTS_DOWN_SRC_OK:
 
-SLOTS_DOWN_DO_COPY:
-	; Move SRC and DEST back by CHUNK before copying
+	; Check distance down to line 16384 boundary for Dest end
+	LD	DE,(SLOT_SHIFT_DEST)
+	LD	HL,16384
+	CALL	CMP_HL_DE		; Carry=1 if 16384 < DE (dest_end > 16384)
+	JR	NC,SLOTS_DOWN_DEST_OK
+	; dest_end > 16384: distance = dest_end - 16384
+	EX	DE,HL			; HL = dest_end, DE = 16384
+	OR	A
+	SBC	HL,DE			; HL = distance
+	EX	DE,HL			; DE = distance
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	CALL	CMP_HL_DE		; Carry=1 if chunk < distance
+	JR	C,SLOTS_DOWN_DEST_OK
+	LD	(SLOT_SHIFT_CHUNK),DE	; Clamp chunk to distance
+SLOTS_DOWN_DEST_OK:
+
+	; Move Source and Dest back by CHUNK to get chunk start lines
 	LD	DE,(SLOT_SHIFT_CHUNK)
 	LD	HL,(SLOT_SHIFT_SRC)
 	OR	A
 	SBC	HL,DE
-	LD	(SLOT_SHIFT_SRC),HL
+	LD	(SLOT_SHIFT_SRC),HL	; Chunk source start line
 
 	LD	HL,(SLOT_SHIFT_DEST)
 	OR	A
 	SBC	HL,DE
-	LD	(SLOT_SHIFT_DEST),HL
+	LD	(SLOT_SHIFT_DEST),HL	; Chunk dest start line
 
-	; 1. Copy chunk from Far RAM LINE_TABLE_BANK to local LINE_SHIFT_BUF
+	; Determine Source Bank & In-Bank Offset:
+	LD	BC,(SLOT_SHIFT_SRC)
+	BIT	6,B
+	JR	NZ,SLOTS_DN_SRC_B1
+	LD	A,(LINE_TABLE_BANK)
+	JR	SLOTS_DN_GOT_SBANK
+SLOTS_DN_SRC_B1:
+	LD	A,(LINE_TABLE_BANK_1)
+SLOTS_DN_GOT_SBANK:
+	LD	(FAR_SRC_BANK),A
+
+	LD	L,C
+	LD	H,B
+	RES	6,H
+	ADD	HL,HL
+	LD	(FAR_SRC_ADDR),HL
+
+	; Determine Dest Bank & In-Bank Offset:
+	LD	BC,(SLOT_SHIFT_DEST)
+	BIT	6,B
+	JR	NZ,SLOTS_DN_DST_B1
+	LD	A,(LINE_TABLE_BANK)
+	JR	SLOTS_DN_GOT_DBANK
+SLOTS_DN_DST_B1:
+	LD	A,(LINE_TABLE_BANK_1)
+SLOTS_DN_GOT_DBANK:
+	LD	(FAR_DEST_BANK),A
+
+	LD	L,C
+	LD	H,B
+	RES	6,H
+	ADD	HL,HL
+	LD	(FAR_DEST_ADDR),HL
+
+	; Calculate byte count = chunk * 2
+	LD	HL,(SLOT_SHIFT_CHUNK)
+	ADD	HL,HL
+	LD	(SLOT_SHIFT_BYTES),HL
+
+	; 1. Copy chunk from Far RAM Source Bank to local LINE_SHIFT_BUF
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
 	LD	A,(CPM_USER_BANK)
 	LD	D,A			; Dest = User Bank
-	LD	A,(LINE_TABLE_BANK)
-	LD	E,A			; Src = Line Table Bank
-	LD	HL,(SLOT_SHIFT_CHUNK)
+	LD	A,(FAR_SRC_BANK)
+	LD	E,A			; Src = Line Table Source Bank
+	LD	HL,(SLOT_SHIFT_BYTES)
 	RST	08H
 	POP	IX
 
 	PUSH	IX
 	LD	B,0F5H			; SYSBNKCPY
 	LD	DE,LINE_SHIFT_BUF	; Local Dest
-	LD	HL,(SLOT_SHIFT_SRC)	; Far Src
+	LD	HL,(FAR_SRC_ADDR)	; Far Src
 	RST	08H
 	POP	IX
 
-	; 2. Copy chunk from local LINE_SHIFT_BUF to Far RAM LINE_TABLE_BANK
+	; 2. Copy chunk from local LINE_SHIFT_BUF to Far RAM Dest Bank
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
-	LD	A,(LINE_TABLE_BANK)
-	LD	D,A			; Dest = Line Table Bank
+	LD	A,(FAR_DEST_BANK)
+	LD	D,A			; Dest = Line Table Dest Bank
 	LD	A,(CPM_USER_BANK)
 	LD	E,A			; Src = User Bank
-	LD	HL,(SLOT_SHIFT_CHUNK)
+	LD	HL,(SLOT_SHIFT_BYTES)
 	RST	08H
 	POP	IX
 
 	PUSH	IX
 	LD	B,0F5H			; SYSBNKCPY
-	LD	DE,(SLOT_SHIFT_DEST)	; Far Dest
+	LD	DE,(FAR_DEST_ADDR)	; Far Dest
 	LD	HL,LINE_SHIFT_BUF	; Local Src
 	RST	08H
 	POP	IX
@@ -7184,36 +7749,38 @@ SLOTS_DOWN_DO_COPY:
 	SBC	HL,DE
 	LD	(SLOT_SHIFT_REM),HL
 
-	JR	SLOTS_DOWN_LOOP
+	JP	SLOTS_DOWN_LOOP
 
-;------------------------------------------------------------------------------
-; WRITE_LINE_SLOTS_FROM_RAM: Copy K words from local RAM buffer into Line Table
-; Inputs: BC = Destination Line Index in LINE_TABLE_BANK
-;         HL = Source Buffer in RAM (e.g. COPY_SLOTS_BUF)
-;         DE = Word Count (K lines)
-; Preserves: None
-;------------------------------------------------------------------------------
-WRITE_LINE_SLOTS_FROM_RAM:
-	LD	A,D
-	OR	E
-	RET	Z
+SLOTS_DOWN_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
 
+; Subroutine: WRITE_SLOTS_TO_ONE_BANK
+; Inputs: A = Line Table Bank ID
+;         BC = In-Bank Destination Line Index (0..16383)
+;         HL = Source Buffer in RAM
+;         DE = Line Count (K lines)
+; Destroys: AF, BC, DE, HL
+WRITE_SLOTS_TO_ONE_BANK:
+	LD	(FAR_DEST_BANK),A
 	PUSH	HL			; Save Source Buffer address
 
 	; Far Dest Addr = BC * 2
 	LD	L,C
 	LD	H,B
 	ADD	HL,HL
-	EX	DE,HL			; DE = Far Dest Addr, HL = Word Count (K)
+	EX	DE,HL			; DE = Far Dest Addr, HL = Line Count (K)
 
 	; Byte count = K * 2
 	ADD	HL,HL			; HL = Byte Count
 
-	; SYSSETCPY: D = Line Table Bank, E = User Bank, HL = Byte Count
+	; SYSSETCPY: D = Dest Bank, E = User Bank, HL = Byte Count
 	PUSH	DE			; Save Far Dest Addr
 	PUSH	IX
 	LD	B,0F4H			; SYSSETCPY
-	LD	A,(LINE_TABLE_BANK)
+	LD	A,(FAR_DEST_BANK)
 	LD	D,A
 	LD	A,(CPM_USER_BANK)
 	LD	E,A
@@ -7227,6 +7794,87 @@ WRITE_LINE_SLOTS_FROM_RAM:
 	LD	B,0F5H			; SYSBNKCPY
 	RST	08H
 	POP	IX
+	RET
+
+;------------------------------------------------------------------------------
+; WRITE_LINE_SLOTS_FROM_RAM: Copy K words from local RAM buffer into Line Table
+; Inputs: BC = Destination Line Index (0..32767)
+;         HL = Source Buffer in RAM (e.g. COPY_SLOTS_BUF)
+;         DE = Word Count (K lines)
+; Preserves: None
+;------------------------------------------------------------------------------
+WRITE_LINE_SLOTS_FROM_RAM:
+	LD	A,D
+	OR	E
+	RET	Z
+
+	LD	(WLSR_SRC),HL
+	LD	(WLSR_K),DE
+	LD	(WLSR_DEST),BC
+
+	; Check if destination line BC >= 16384
+	BIT	6,B
+	JR	NZ,WLSR_BANK_1
+
+	; Destination starts in Bank 0 (BC < 16384).
+	; Does BC + DE > 16384?
+	LD	H,B
+	LD	L,C
+	ADD	HL,DE			; HL = End line (BC + DE)
+	LD	DE,16384
+	OR	A
+	SBC	HL,DE
+	JR	C,WLSR_BANK_0_ALL	; End line < 16384 -> all in Bank 0
+	JR	Z,WLSR_BANK_0_ALL	; End line == 16384 -> all in Bank 0
+
+	; Straddles Bank 0 and Bank 1:
+	; K1 = 16384 - BC
+	LD	HL,16384
+	LD	BC,(WLSR_DEST)
+	OR	A
+	SBC	HL,BC			; HL = K1
+	PUSH	HL			; Save K1
+
+	; Write Part 1: K1 lines to Bank 0 at (WLSR_DEST)
+	EX	DE,HL			; DE = K1
+	LD	BC,(WLSR_DEST)
+	LD	HL,(WLSR_SRC)
+	LD	A,(LINE_TABLE_BANK)
+	CALL	WRITE_SLOTS_TO_ONE_BANK
+
+	; K2 = WLSR_K - K1
+	POP	DE			; DE = K1
+	LD	HL,(WLSR_K)
+	OR	A
+	SBC	HL,DE			; HL = K2 = total K - K1
+	EX	DE,HL			; DE = K2, HL = K1
+
+	; RAM buffer advanced by K1 * 2 bytes:
+	ADD	HL,HL			; HL = K1 * 2 bytes
+	LD	BC,(WLSR_SRC)
+	ADD	HL,BC			; HL = WLSR_SRC + K1 * 2
+
+	; Write Part 2: K2 lines to Bank 1 starting at index 0
+	LD	BC,0			; In-bank line index = 0
+	LD	A,(LINE_TABLE_BANK_1)
+	CALL	WRITE_SLOTS_TO_ONE_BANK
+	RET
+
+WLSR_BANK_0_ALL:
+	LD	A,(LINE_TABLE_BANK)
+	LD	BC,(WLSR_DEST)
+	LD	HL,(WLSR_SRC)
+	LD	DE,(WLSR_K)
+	CALL	WRITE_SLOTS_TO_ONE_BANK
+	RET
+
+WLSR_BANK_1:
+	; BC >= 16384: in-bank line index = BC - 16384 (clear bit 14)
+	RES	6,B
+	LD	A,(LINE_TABLE_BANK_1)
+	LD	HL,(WLSR_SRC)
+	LD	DE,(WLSR_K)
+	CALL	WRITE_SLOTS_TO_ONE_BANK
 	RET
 
 ;==============================================================================
@@ -8678,7 +9326,7 @@ FLC_DONE:
 APPEND_LINE_SLOT:
 	PUSH	DE
 	LD	HL,(DOC_TOTAL_LINES)
-	LD	DE,MAX_DOC_LINES
+	LD	DE,(MAX_DOC_LINES_LIMIT)
 	OR	A
 	SBC	HL,DE
 	POP	DE
@@ -12272,9 +12920,9 @@ JOIN_SHIFT_DONE:
 ; Line Insertion & Splitting at (CUR_DOC_ROW, CUR_COL) - Enter Key Handling
 ;------------------------------------------------------------------------------
 DO_INSERT_LINE:
-	; Check max document lines (MAX_DOC_LINES)
+	; Check max document lines (MAX_DOC_LINES_LIMIT)
 	LD	HL,(DOC_TOTAL_LINES)
-	LD	DE,MAX_DOC_LINES
+	LD	DE,(MAX_DOC_LINES_LIMIT)
 	OR	A
 	SBC	HL,DE
 	JR	NC,INS_FAIL
@@ -12620,6 +13268,14 @@ PCB_CHECK_KEYS:
 	CALL	MATCH_KEY_TAB
 	JP	NC,PCB_TAB_VAL
 
+	; Check for "LINES" or "LINE"
+	CALL	MATCH_KEY_LINES
+	JP	NC,PCB_LINES_VAL
+
+	; Check for "MAXLINES" or "MAXLINE"
+	CALL	MATCH_KEY_MAXLINES
+	JP	NC,PCB_LINES_VAL
+
 	JP	PCB_SKIP_LINE
 
 PCB_SCREEN_VAL:
@@ -12733,6 +13389,35 @@ PCB_TAB_CHK_8:
 	LD	(CFG_TAB_WIDTH),A
 	LD	A,7
 	LD	(CFG_TAB_MASK),A
+	JP	PCB_SKIP_LINE
+
+PCB_LINES_VAL:
+	; HL now points to value after '='
+PCB_LV_WS:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,PCB_LV_WS_INC
+	CP	9
+	JR	NZ,PCB_LV_CHECK
+PCB_LV_WS_INC:
+	INC	HL
+	JR	PCB_LV_WS
+PCB_LV_CHECK:
+	LD	A,(HL)
+	CP	'3'			; 32K or 32768 or 32
+	JR	Z,PCB_LV_SET_32K
+	CP	'1'			; 16K or 16384 or 16
+	JR	Z,PCB_LV_SET_16K
+	JP	PCB_SKIP_LINE
+
+PCB_LV_SET_32K:
+	LD	A,1
+	LD	(CFG_LINES_MODE),A
+	JP	PCB_SKIP_LINE
+
+PCB_LV_SET_16K:
+	XOR	A
+	LD	(CFG_LINES_MODE),A
 	JP	PCB_SKIP_LINE
 
 ; MATCH_KEY_SCREEN: Compares text at (HL) with "SCREEN" (case-insensitive)
@@ -12937,6 +13622,85 @@ MKT_FAIL:
 	SCF				; Carry = 1
 	RET
 
+; MATCH_KEY_LINES: Compares text at (HL) with "LINE" prefix (case-insensitive)
+MATCH_KEY_LINES:
+	PUSH	HL
+	LD	DE,STR_KEY_LINES_NAME
+	LD	B,4
+	JR	MKL_SHARED_LOOP
+
+; MATCH_KEY_MAXLINES: Compares text at (HL) with "MAXLINE" prefix (case-insensitive)
+MATCH_KEY_MAXLINES:
+	PUSH	HL
+	LD	DE,STR_KEY_MAXLINES_NAME
+	LD	B,7
+MKL_SHARED_LOOP:
+MKL_LOOP:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	C,A
+	LD	A,(DE)
+	CP	C
+	JR	NZ,MKL_FAIL
+	INC	HL
+	INC	DE
+	DJNZ	MKL_LOOP
+
+	; Skip remaining key characters until '=' or whitespace
+MKL_SKIP_KEY:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKL_WS1
+	CP	9
+	JR	Z,MKL_WS1
+	CP	'='
+	JR	Z,MKL_GOT_EQ
+	CP	13
+	JR	Z,MKL_FAIL
+	CP	10
+	JR	Z,MKL_FAIL
+	CP	1AH
+	JR	Z,MKL_FAIL
+	INC	HL
+	JR	MKL_SKIP_KEY
+
+MKL_WS1:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKL_WS1_INC
+	CP	9
+	JR	NZ,MKL_CHECK_EQ
+MKL_WS1_INC:
+	INC	HL
+	JR	MKL_WS1
+
+MKL_CHECK_EQ:
+	CP	'='
+	JR	NZ,MKL_FAIL
+MKL_GOT_EQ:
+	INC	HL			; Skip '='
+
+	; Skip optional spaces after '='
+MKL_WS2:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,MKL_WS2_INC
+	CP	9
+	JR	NZ,MKL_OK
+MKL_WS2_INC:
+	INC	HL
+	JR	MKL_WS2
+
+MKL_OK:
+	POP	AF			; Discard saved HL
+	OR	A			; Carry = 0
+	RET
+
+MKL_FAIL:
+	POP	HL
+	SCF				; Carry = 1
+	RET
+
 ; SAVE_CONFIG: Save current editor configuration to SE.CFG on current drive
 SAVE_CONFIG:
 	; Fill CFG_IO_BUF with 128 bytes of 0x1A (EOF)
@@ -13052,6 +13816,36 @@ SC_TABVAL_LOOP:
 	INC	DE
 	JR	SC_TABVAL_LOOP
 SC_TABVAL_DONE:
+
+	; Write "LINES="
+	LD	HL,STR_KEY_LINES_FULL
+SC_LINEKEY_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_LINEKEY_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_LINEKEY_LOOP
+SC_LINEKEY_DONE:
+
+	; Write value: "32K\r\n" or "16K\r\n"
+	LD	A,(CFG_LINES_MODE)
+	CP	1
+	JR	Z,SC_LINES_VAL_32K
+	LD	HL,STR_VAL_LINES_16K
+	JR	SC_LINESVAL_LOOP
+SC_LINES_VAL_32K:
+	LD	HL,STR_VAL_LINES_32K
+SC_LINESVAL_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SC_LINESVAL_DONE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	SC_LINESVAL_LOOP
+SC_LINESVAL_DONE:
 
 	; Set BDOS DMA to CFG_IO_BUF
 	LD	DE,CFG_IO_BUF
@@ -15064,7 +15858,7 @@ PBI_EMIT_LINE_BREAK:
 
 	; Check max document lines
 	LD	HL,(DOC_TOTAL_LINES)
-	LD	DE,MAX_DOC_LINES
+	LD	DE,(MAX_DOC_LINES_LIMIT)
 	OR	A
 	SBC	HL,DE
 	JP	NC,PELB_OOM
@@ -18464,25 +19258,26 @@ STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
 STR_MODE_80X24_LBL:	DB	"80x24 (Classic Terminal)]          ",13,10,"$"
 
-STR_CONFIG_HEADER:	DB	27,"[H"
-	DB	"~",13,10
-	DB	"~                     SE - Screen Editor Configuration          ",13,10
-	DB	"~",13,10
-	DB	"$"
+STR_CONFIG_TITLE_PAD:	DB	"             ", "$"
+STR_CONFIG_TITLE:	DB	"SE - Screen Editor Configuration",13,10,"$"
 
-STR_CONFIG_CUR_MODE:	DB	"~     1. Screen Geometry : [$"
-STR_CONFIG_RAM_DRV_PRE:	DB	"~     2. RAM Drive (", "$"
-STR_CONFIG_RAM_DRV_POST:DB	":)  : [$"
-STR_CONFIG_RAM_NONE:	DB	"~     2. RAM Drive       : [$"
+STR_CONFIG_STATUS_LBL:	DB	"Config Status      : [", "$"
+
+STR_CONFIG_CUR_MODE:	DB	"1. Screen Geometry : [", "$"
+STR_CONFIG_RAM_DRV_PRE:	DB	"2. RAM Drive (", "$"
+STR_CONFIG_RAM_DRV_POST:DB	":)  : [", "$"
+STR_CONFIG_RAM_NONE:	DB	"2. RAM Drive       : [", "$"
 STR_RAM_PROTECTED_LBL:	DB	"Protected (Preserve RAM Disk)]     ",13,10,"$"
 STR_RAM_HIBERNATE_LBL:	DB	"Hibernate (Save/Restore RAMDRV.IMG)]",13,10,"$"
 STR_RAM_ENABLED_LBL:	DB	"Enabled (Use for Max RAM)]          ",13,10,"$"
 
-STR_CONFIG_TAB_LBL:	DB	"~     3. Tab Width       : [$"
+STR_CONFIG_LINES_LBL:	DB	"3. Max Doc Lines   : [", "$"
+STR_LINES_16K_LBL:	DB	"16K (16,384 Lines)]                ",13,10,"$"
+STR_LINES_32K_LBL:	DB	"32K (32,768 Lines)]                ",13,10,"$"
+
+STR_CONFIG_TAB_LBL:	DB	"4. Tab Width       : [", "$"
 STR_TAB_8_LBL:		DB	"8 Spaces (Default)]                ",13,10,"$"
 STR_TAB_4_LBL:		DB	"4 Spaces]                          ",13,10,"$"
-
-STR_CONFIG_STATUS_LBL:	DB	"~     4. Config Status   : [$"
 
 STR_CFG_STAT_NONE:	DB	"Default (No SE.CFG found)]         ",13,10,"$"
 STR_CFG_STAT_LOCAL:	DB	"Loaded from local drive ($"
@@ -18491,16 +19286,13 @@ STR_CFG_STAT_SAVED:	DB	"Saved to local drive ($"
 STR_CFG_STAT_END:	DB	":SE.CFG)]          ",13,10,"$"
 STR_CFG_STAT_ERR:	DB	"ERROR writing SE.CFG]              ",13,10,"$"
 
-STR_CONFIG_BODY:
-	DB	"~",13,10
-	DB	"~   Commands:                                                   ",13,10
-	DB	"~     type   1                toggle 80x24 <-> 120x40           ",13,10
-	DB	"~     type   2                toggle RAM drive memory blocks    ",13,10
-	DB	"~     type   3                toggle Tab width (4 <-> 8)        ",13,10
-	DB	"~     type   s                save config to local SE.CFG       ",13,10
-	DB	"~     type   q  or  <ESC>     return to splash screen           ",13,10
-	DB	"~",13,10
-	DB	"$"
+STR_CMD_HEADER:		DB	"Commands:                                                   ",13,10,"$"
+STR_CMD_1:		DB	"  type   1                toggle 80x24 <-> 120x40           ",13,10,"$"
+STR_CMD_2:		DB	"  type   2                toggle RAM drive memory blocks    ",13,10,"$"
+STR_CMD_3:		DB	"  type   3                toggle Max lines (16K <-> 32K)    ",13,10,"$"
+STR_CMD_4:		DB	"  type   4                toggle Tab width (4 <-> 8)        ",13,10,"$"
+STR_CMD_S:		DB	"  type   s                save config to local SE.CFG       ",13,10,"$"
+STR_CMD_Q:		DB	"  type   q  or  <ESC>     return to splash screen           ",13,10,"$"
 
 STR_CFG_HDR:		DB	"# SE.CFG - Screen Editor Configuration",13,10,0
 STR_KEY_SCREEN_NAME:	DB	"SCREEN",0
@@ -18516,6 +19308,11 @@ STR_KEY_TAB_NAME:	DB	"TAB",0
 STR_KEY_TAB_FULL:	DB	"TAB=",0
 STR_VAL_TAB_8:		DB	"8",13,10,0
 STR_VAL_TAB_4:		DB	"4",13,10,0
+STR_KEY_LINES_NAME:	DB	"LINE",0
+STR_KEY_MAXLINES_NAME:	DB	"MAXLINE",0
+STR_KEY_LINES_FULL:	DB	"LINES=",0
+STR_VAL_LINES_16K:	DB	"16K",13,10,0
+STR_VAL_LINES_32K:	DB	"32K",13,10,0
 
 STR_RAMDRV_FILENAME:	DB	"RAMDRV  IMG"
 STR_MSG_HIBERNATING:	DB	13,10,"[SE] Hibernating RAM drive to RAMDRV.IMG... $"
@@ -18601,6 +19398,8 @@ STR_USAGE_RAMDISK_PRESERVED:
 			DB	"Preserved: RAM Disk Active  ","$"
 STR_USAGE_SE_PROG:	DB	"Active: SE Program & Cache  ","$"
 STR_USAGE_LINE_TABLE:	DB	"Active: 16K Line Slot Table ","$"
+STR_USAGE_LINE_TABLE_0:	DB	"Active: Line Slots (0..16K) ","$"
+STR_USAGE_LINE_TABLE_1:	DB	"Active: Line Slots (16K..32K)","$"
 STR_USAGE_DOC_PFX:	DB	"Active: Doc Buffer Bank ","$"
 STR_USAGE_DOC_SFX:	DB	"  ","$"
 STR_USAGE_OS:		DB	"Reserved: Operating System  ","$"
@@ -18671,6 +19470,18 @@ STR_TEST5_FAIL_OOM:	DB	"    [-] Test 5 FAILED: ALLOC_SLOT did not report Carry o
 STR_TEST5_FAIL_ML:	DB	"    [-] Test 5 FAILED: Multi-line copy did not reject OOM capacity!",13,10,"$"
 
 STR_TEST5_FAIL_SL:	DB	"    [-] Test 5 FAILED: Single-line copy exceeded line capacity!",13,10,"$"
+
+STR_TEST6_TITLE:	DB	"[*] Test 6: 32K Line Slots & Boundary Shift Engine...",13,10,"$"
+
+STR_TEST6_PASS:		DB	"    --> [PASS] 32K Line Slots & Boundary Shift Engine verified.",13,10,13,10,"$"
+
+STR_TEST6_FAIL_SLOT:	DB	"    [-] Test 6 FAILED: Far RAM slot R/W mismatch across boundary!",13,10,"$"
+
+STR_TEST6_FAIL_DOWN:	DB	"    [-] Test 6 FAILED: SHIFT_LINE_SLOTS_DOWN boundary mismatch!",13,10,"$"
+
+STR_TEST6_FAIL_UP:	DB	"    [-] Test 6 FAILED: SHIFT_LINE_SLOTS_UP boundary mismatch!",13,10,"$"
+
+STR_TEST6_FAIL_RAM:	DB	"    [-] Test 6 FAILED: WRITE_LINE_SLOTS_FROM_RAM boundary mismatch!",13,10,"$"
 
 STR_TEST_ALL_PASSED:	DB	"============================================================",13,10
 	DB	"[+] ALL 512KB EXTENDED MEMORY TESTS PASSED SUCCESSFULLY!",13,10
@@ -18993,12 +19804,19 @@ DOC_MODIFIED:	DB	0		; 1 if document has unsaved modifications
 CONFIRM_ACTION:	DB	0		; 0=Exit, 1=Close, 2=New
 EXT_BANK_COUNT:	DB	0		; Number of available far RAM banks (up to 14)
 EXT_BANK_TABLE:	DS	14		; Table of far RAM bank IDs
-LINE_TABLE_BANK:	DB	0		; Far RAM Bank dedicated to 16K line slots table
+LINE_TABLE_BANK:	DB	0		; Far RAM Bank dedicated to 16K line slots table (Bank 0)
+LINE_TABLE_BANK_1:	DB	0		; Far RAM Bank dedicated to 16K..32K line slots table (Bank 1)
+CFG_LINES_MODE:		DB	0		; 0 = 16K lines (default), 1 = 32K lines
+MAX_DOC_LINES_LIMIT:	DW	MAX_DOC_LINES_16K ; Dynamic max document lines (16384 or 32768)
 LINE_SLOT_TEMP:		DW	0		; 2-byte transfer buffer for GET/SET_LINE_SLOT
-SLOT_SHIFT_SRC:		DW	0		; Far RAM source byte offset for block slot shifts
-SLOT_SHIFT_DEST:	DW	0		; Far RAM dest byte offset for block slot shifts
-SLOT_SHIFT_REM:		DW	0		; Remaining bytes to shift
-SLOT_SHIFT_CHUNK:	DW	0		; Current chunk size (up to 256 bytes)
+SLOT_SHIFT_SRC:		DW	0		; Far RAM source line for block slot shifts
+SLOT_SHIFT_DEST:	DW	0		; Far RAM dest line for block slot shifts
+SLOT_SHIFT_REM:		DW	0		; Remaining lines to shift
+SLOT_SHIFT_CHUNK:	DW	0		; Current chunk size in lines (up to 128)
+SLOT_SHIFT_BYTES:	DW	0		; Current chunk size in bytes (up to 256)
+WLSR_K:			DW	0		; Temporary K for WRITE_LINE_SLOTS_FROM_RAM
+WLSR_SRC:		DW	0		; Temporary Source for WRITE_LINE_SLOTS_FROM_RAM
+WLSR_DEST:		DW	0		; Temporary Dest for WRITE_LINE_SLOTS_FROM_RAM
 
 FAR_DEST_BANK:	DB	0
 FAR_SRC_BANK:	DB	0
@@ -19097,6 +19915,7 @@ CFG_IO_BUF:		DS	128		; 128-byte scratch buffer for SE.CFG I/O
 CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
 CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
+SCS_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
 CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
 CFG_TAB_WIDTH:		DB	8		; Tab width: 4 or 8 (default 8)
 CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)

@@ -11,7 +11,7 @@ CPMRM ?= $(TOOLS_DIR)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all image test test-sanity test-conformity test-paging test-full clean
+.PHONY: all image test test-sanity test-conformity test-paging test-config test-32k test-full clean
 
 all: $(TARGET)
 
@@ -42,7 +42,11 @@ test-config: image
 	@echo "==> Running SE.CFG configuration file test suite..."
 	python3 tests/test_config_file.py
 
-test-full: test-config test-conformity test-paging
+test-32k: image
+	@echo "==> Running 32K document lines test suite..."
+	python3 tests/test_32k_lines.py
+
+test-full: test-config test-32k test-conformity test-paging
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def *.map *.sym src/*.o src/*.map src/*.sym
