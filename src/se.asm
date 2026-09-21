@@ -2009,6 +2009,33 @@ QMSI_SAVE_APP_DEFAULT:
 ; Memory Information Screen Renderer
 ; Displays dynamic 16-row 32KB extended memory allocation map & system summary
 ;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+; PRINT_MEM_PREFIX: Print '~' followed by geometry-dependent left padding
+; Table content width is 72 columns (excluding col 0 '~').
+; Padding: ((ACTIVE_COLS - 74) / 2) spaces
+; 80x24:   3 spaces (1 +  3 + 72 +  4 = 80)
+; 120x40: 23 spaces (1 + 23 + 72 + 24 = 120)
+; Preserves: All registers except AF
+;------------------------------------------------------------------------------
+PRINT_MEM_PREFIX:
+	PUSH	BC
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(ACTIVE_COLS)
+	SUB	74
+	JR	C,PMP_DONE
+	JR	Z,PMP_DONE
+	SRL	A
+	JR	Z,PMP_DONE
+	LD	B,A
+PMP_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	PMP_LOOP
+PMP_DONE:
+	POP	BC
+	RET
+
 MEM_INFO_LINES	EQU	23
 
 SHOW_MEM_INFO_SCREEN:
@@ -2020,7 +2047,30 @@ SHOW_MEM_INFO_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
 
-	; Line 1: Title
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - MEM_INFO_LINES) / 2
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB	MEM_INFO_LINES		; 23 - 23 = 0 (80x24), 39 - 23 = 16 (120x40)
+	JR	Z,MEM_INFO_NO_TOP_PAD
+	JR	C,MEM_INFO_NO_TOP_PAD
+	SRL	A			; 0 (80x24), 8 (120x40)
+	JR	Z,MEM_INFO_NO_TOP_PAD
+	LD	(MEM_TOP_PAD_COUNT),A
+	LD	B,A
+MEM_INFO_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	MEM_INFO_TOP_PAD_LOOP
+	JR	MEM_INFO_CONTENT_START
+
+MEM_INFO_NO_TOP_PAD:
+	XOR	A
+	LD	(MEM_TOP_PAD_COUNT),A
+
+MEM_INFO_CONTENT_START:
+	; Line 1: Title (centered within 72-col block)
+	CALL	PRINT_MEM_PREFIX
+	LD	DE,STR_MEM_TITLE_PAD
+	CALL	PRINT_STR
 	LD	DE,STR_MEM_INFO_TITLE
 	CALL	PRINT_STR
 
@@ -2028,14 +2078,15 @@ SHOW_MEM_INFO_SCREEN:
 	CALL	PRINT_MEM_INFO_SUMMARY
 
 	; Line 3: Blank line with tilde
-	LD	DE,STR_MEM_INFO_BLANK
-	CALL	PRINT_STR
+	CALL	PRINT_TILDE_CRLF
 
 	; Line 4: Table column headers
+	CALL	PRINT_MEM_PREFIX
 	LD	DE,STR_MEM_TABLE_HDR
 	CALL	PRINT_STR
 
 	; Line 5: Table column dividers
+	CALL	PRINT_MEM_PREFIX
 	LD	DE,STR_MEM_TABLE_DIV
 	CALL	PRINT_STR
 
@@ -2051,30 +2102,29 @@ MEM_BANK_ROW_LOOP:
 	JR	C,MEM_BANK_ROW_LOOP
 
 	; Line 22: Blank line with tilde
-	LD	DE,STR_MEM_INFO_BLANK
-	CALL	PRINT_STR
+	CALL	PRINT_TILDE_CRLF
 
-	; Line 23: Return prompt
+	; Line 23: Return prompt (centered within 72-col block)
+	CALL	PRINT_MEM_PREFIX
+	LD	DE,STR_MEM_PROMPT_PAD
+	CALL	PRINT_STR
 	LD	DE,STR_MEM_RETURN_PROMPT
 	CALL	PRINT_STR
 
-	; Fill remaining rows down to status row with '~'
+	; Calculate bottom padding: (ACTIVE_ROWS - 1) - MEM_TOP_PAD_COUNT - MEM_INFO_LINES
 	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
-	SUB	MEM_INFO_LINES		; A = remaining rows
-	JR	Z,MEM_INFO_TILDE_DONE
-	JR	C,MEM_INFO_TILDE_DONE
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	LD	HL,MEM_TOP_PAD_COUNT
+	SUB	(HL)
+	SUB	MEM_INFO_LINES		; Remaining bottom padding
+	JR	Z,MEM_INFO_BOTTOM_DONE
+	JR	C,MEM_INFO_BOTTOM_DONE
 	LD	B,A
-MEM_INFO_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
-	DJNZ	MEM_INFO_TILDE_LOOP
+MEM_INFO_BOTTOM_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	MEM_INFO_BOTTOM_LOOP
 
-MEM_INFO_TILDE_DONE:
+MEM_INFO_BOTTOM_DONE:
 	CALL	RENDER_STATUS_BAR
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
@@ -2086,6 +2136,7 @@ MEM_INFO_TILDE_DONE:
 ; PRINT_MEM_INFO_SUMMARY: Print system summary row (HBIOS, OS, RAM, SE RAM)
 ;------------------------------------------------------------------------------
 PRINT_MEM_INFO_SUMMARY:
+	CALL	PRINT_MEM_PREFIX
 	LD	DE,STR_MEM_SUM_PREFIX
 	CALL	PRINT_STR
 
@@ -2205,9 +2256,8 @@ PMIS_NO_LINE_BANK_1:
 ; PRINT_MEM_BANK_ROW: Print single bank row for MEM_BANK_LOOP_IDX (0..15)
 ;------------------------------------------------------------------------------
 PRINT_MEM_BANK_ROW:
-	; Column 0 Tilde and padding: "~   "
-	LD	DE,STR_MEM_ROW_PREFIX
-	CALL	PRINT_STR
+	; Column 0 Tilde and geometry padding
+	CALL	PRINT_MEM_PREFIX
 
 	; 2-Digit Decimal Bank Index (00..15)
 	LD	A,(MEM_BANK_LOOP_IDX)
@@ -19441,18 +19491,22 @@ STR_ABOUT_BODY:	DB	27,"[H"
 ;------------------------------------------------------------------------------
 ; Memory Information Screen Strings
 ;------------------------------------------------------------------------------
+STR_MEM_TITLE_PAD:
+	DB	"                      ","$"	; 22 spaces to center within 72 columns
 STR_MEM_INFO_TITLE:
-	DB	"~                     SE.COM - Extended Memory Map",13,10,"$"
+	DB	"SE.COM - Extended Memory Map",13,10,"$"
 STR_MEM_INFO_BLANK:
 	DB	"~",13,10,"$"
 STR_MEM_TABLE_HDR:
-	DB	"~   Bank  Phys   Size   System / OS Role        SE.COM Usage",13,10,"$"
+	DB	"Bank  Phys   Size   System / OS Role        SE.COM Usage",13,10,"$"
 STR_MEM_TABLE_DIV:
-	DB	"~   ----  ----   ----   ---------------------   ----------------------------",13,10,"$"
+	DB	"----  ----   ----   ---------------------   ----------------------------",13,10,"$"
+STR_MEM_PROMPT_PAD:
+	DB	"              ","$"		; 14 spaces to center within 72 columns
 STR_MEM_RETURN_PROMPT:
-	DB	"~                 Press any key or ESC to return to splash...",13,10,"$"
+	DB	"Press any key to return to splash screen...",13,10,"$"
 
-STR_MEM_SUM_PREFIX:	DB	"~  HBIOS: ","$"
+STR_MEM_SUM_PREFIX:	DB	"HBIOS: ","$"
 STR_MEM_SUM_NONE:	DB	"None","$"
 STR_MEM_SUM_ROMWBW:	DB	"RomWBW v","$"
 STR_MEM_SUM_OS:		DB	" | OS: ","$"
@@ -20002,6 +20056,7 @@ CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
 SCS_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
 SPLASH_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on splash screen
+MEM_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on memory screen
 CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
 CFG_TAB_WIDTH:		DB	8		; Tab width: 4 or 8 (default 8)
 CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)
