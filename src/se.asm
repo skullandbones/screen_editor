@@ -85,6 +85,11 @@ START:
 	LD	(SAVED_SP),SP
 	LD	SP,LOCAL_STACK
 
+	; Query initial CP/M Version via BDOS 12 (Get Version Number)
+	LD	C,12
+	CALL	BDOS_ENTRY
+	LD	(CPM_VERSION_ID),HL
+
 	; Query initial CP/M user area via BDOS 32 (Get User Number, E=0xFF)
 	LD	E,0FFH
 	LD	C,32
@@ -2490,6 +2495,25 @@ PMBR_CHK_OS_BANK:
 	RET
 
 PMBR_FREE_APP:
+	; Check if this is CP/M 3.x Buffer Bank (CPM_USER_BANK - 1 = 0x8C)
+	LD	A,(CPM_VERSION_ID)
+	CP	030H
+	JR	C,PMBR_FREE_ACTUAL
+	LD	A,(CPM_USER_BANK)
+	DEC	A
+	CP	E
+	JR	NZ,PMBR_FREE_ACTUAL
+	; Bank is CP/M 3 Buffers!
+	LD	DE,STR_ROLE_OS
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_CPM3_BUFS
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_FREE_ACTUAL:
 	; 7. Free / Unallocated Application Memory
 	LD	DE,STR_ROLE_APP
 	CALL	PRINT_STR
@@ -7368,8 +7392,19 @@ IFRB_PROTECTED_MODE:
 
 IFRB_NO_APP_BANKS:
 	; No application banks reported; floor = CPM_USER_BANK - 1 (safe fallback: 0 ext banks)
+	; In CP/M 3.x, reserve Bank 0x8C (Buffers), so floor = CPM_USER_BANK - 2
 	LD	A,(CPM_USER_BANK)
 	DEC	A
+	PUSH	AF
+	LD	A,(CPM_VERSION_ID)
+	CP	030H
+	JR	C,IFRB_NAB_NOT_CPM3
+	POP	AF
+	DEC	A
+	JR	IFRB_NAB_DONE
+IFRB_NAB_NOT_CPM3:
+	POP	AF
+IFRB_NAB_DONE:
 	LD	D,A
 
 IFRB_FLOOR_SET:
@@ -7377,6 +7412,13 @@ IFRB_FLOOR_SET:
 	LD	A,(CPM_USER_BANK)
 	LD	C,A			; C = CPM_USER_BANK (e.g. 0x8E)
 	DEC	C			; C = first Far RAM bank (e.g. 0x8D)
+	; In CP/M 3.x, Bank 2 (0x8C) is reserved for OS disk buffers & hash.
+	; Decrement C once more so Far RAM begins at 0x8B.
+	LD	A,(CPM_VERSION_ID)
+	CP	030H
+	JR	C,IFRB_NOT_CPM3
+	DEC	C			; C = 0x8B under CP/M 3
+IFRB_NOT_CPM3:
 	LD	A,C
 	CP	D			; Compare with BIOS Bank ID (D)
 	JR	Z,IFRB_NO_BANKS		; No Far RAM available!
@@ -14140,17 +14182,22 @@ DETECT_RAMDRIVE_LETTER:
 
 	; Check HBIOS presence
 	CALL	HBIOS_DETECT
-	JR	NZ,DRL_NOT_FOUND
+	JP	NZ,DRL_NOT_FOUND
+
+	; Check CP/M version: CP/M 3.x uses BDOS 50 (Direct BIOS Call) + DRVTBL
+	LD	A,(CPM_VERSION_ID)
+	CP	030H
+	JP	NC,DRL_CPM3
 
 	; Check RomWBW CBIOS page zero stamp at 0x0040 ('W') and 0x0041 (~'W' = 0xA8)
 	LD	HL,0040H
 	LD	A,(HL)
 	CP	'W'
-	JR	NZ,DRL_NOT_FOUND
+	JP	NZ,DRL_NOT_FOUND
 	INC	HL
 	LD	A,(HL)
 	CP	0A8H			; ~'W'
-	JR	NZ,DRL_NOT_FOUND
+	JP	NZ,DRL_NOT_FOUND
 
 	; Word at 0x0044 is pointer to CBIOS extension (CBX)
 	LD	HL,(0044H)
@@ -14162,7 +14209,7 @@ DETECT_RAMDRIVE_LETTER:
 	LD	D,(HL)			; DE = DRVMAPADR
 	LD	A,D
 	OR	E
-	JR	Z,DRL_NOT_FOUND
+	JP	Z,DRL_NOT_FOUND
 
 	; DRVCNT is at DRVMAPADR - 1
 	EX	DE,HL			; HL = DRVMAPADR
@@ -14170,9 +14217,9 @@ DETECT_RAMDRIVE_LETTER:
 	LD	A,(HL)			; A = DRVCNT
 	INC	HL			; HL = DRVMAPADR
 	OR	A
-	JR	Z,DRL_NOT_FOUND
+	JP	Z,DRL_NOT_FOUND
 	CP	17
-	JR	NC,DRL_NOT_FOUND
+	JP	NC,DRL_NOT_FOUND
 
 	LD	B,A			; B = loop counter (DRVCNT)
 	LD	C,0			; C = CP/M drive index (0 = A:, 1 = B:, ...)
@@ -14220,6 +14267,125 @@ DRL_NOT_MD:
 DRL_NEXT:
 	INC	C
 	DJNZ	DRL_LOOP
+	JP	DRL_NOT_FOUND
+
+DRL_CPM3:
+	; Call BDOS 50: BIOS 22 (DRVTBL)
+	LD	A,22
+	LD	(CPM3_BIOSPB_FUNC),A
+	XOR	A
+	LD	(CPM3_BIOSPB_A),A
+	LD	HL,0
+	LD	(CPM3_BIOSPB_BC),HL
+	LD	(CPM3_BIOSPB_DE),HL
+	LD	(CPM3_BIOSPB_HL),HL
+	LD	DE,CPM3_BIOSPB
+	LD	C,50
+	CALL	BDOS_ENTRY
+	; HL = address of DRVTBL (16-word array) in common memory
+	LD	A,H
+	OR	L
+	JR	Z,DRL_NOT_FOUND
+	LD	(CPM3_DRVTBL_PTR),HL
+
+	; Query System Bank ID from HBIOS (SYSGET BNKINFO: B=0xF8, C=0xF2)
+	PUSH	IX
+	LD	B,0F8H
+	LD	C,0F2H
+	RST	08H
+	POP	IX
+	; D = BIOS Bank, E = User/System Bank (typically 0x8E)
+	LD	A,E
+	LD	(CPM3_SYS_BANK),A
+
+	; Query User Bank ID from HBIOS (SYSGETBNK: B=0xF3)
+	PUSH	IX
+	LD	B,0F3H
+	RST	08H
+	POP	IX
+	LD	A,C
+	LD	(CPM_USER_BANK),A
+
+	; Iterate through all 16 drive entries in DRVTBL
+	LD	HL,(CPM3_DRVTBL_PTR)
+	LD	B,16			; 16 drives A..P
+	LD	C,0			; CP/M drive index (0 = A:, 1 = B:, ...)
+
+DRL_CPM3_LOOP:
+	PUSH	BC
+	PUSH	HL
+
+	; Read 16-bit DPH pointer from (HL)
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)			; DE = DPH address
+	LD	A,D
+	OR	E
+	JP	Z,DRL_CPM3_NEXT		; Unassigned drive (0x0000)
+
+	; In System Bank, (DPH - 2) is Disk Unit, (DPH - 1) is Slice
+	DEC	DE
+	DEC	DE			; DE = DPH - 2
+	EX	DE,HL			; HL = DPH - 2 (source in System Bank)
+
+	; Copy 2 bytes from SYS_BANK:(DPH-2) to CPM_USER_BANK:(CPM3_DPH_BUF)
+	PUSH	HL
+	PUSH	IX
+	LD	B,0F4H			; SYSSETCPY
+	LD	A,(CPM_USER_BANK)
+	LD	D,A			; Dest = User Bank
+	LD	A,(CPM3_SYS_BANK)
+	LD	E,A			; Src = System Bank
+	LD	HL,2
+	RST	08H
+	POP	IX
+	POP	HL
+
+	LD	DE,CPM3_DPH_BUF
+	PUSH	IX
+	LD	B,0F5H			; SYSBNKCPY
+	RST	08H
+	POP	IX
+
+	; Query HBIOS BF_DIODEVICE (0x17) with unit in CPM3_DPH_BUF[0]
+	LD	A,(CPM3_DPH_BUF)
+	LD	C,A			; C = Unit
+	LD	B,17H			; BF_DIODEVICE
+	PUSH	IX
+	RST	08H
+	POP	IX
+	; D = Device Type, E = Physical Unit
+	; DIODEV_MD = 0x00, MD0 = 0x00
+	LD	A,D
+	OR	A
+	JR	NZ,DRL_CPM3_NOT_MD
+	LD	A,E
+	OR	A
+	JR	NZ,DRL_CPM3_NOT_MD
+
+	; Match found!
+	POP	HL
+	POP	BC
+	LD	A,C			; A = drive index (0=A, 1=B...)
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	ADD	A,'A'
+	LD	(RAMDRIVE_DRIVE_CHAR),A
+	LD	(STR_MSG_HIB_DRV_CHAR),A
+	LD	(STR_MSG_HIB_FILE_CHAR),A
+	LD	A,C
+	OR	A			; Carry = 0
+	RET
+
+DRL_CPM3_NOT_MD:
+DRL_CPM3_NEXT:
+	POP	HL
+	INC	HL
+	INC	HL
+	POP	BC
+	INC	C
+	DEC	B
+	JP	NZ,DRL_CPM3_LOOP
+	JR	DRL_NOT_FOUND
 
 DRL_NOT_FOUND:
 	LD	A,0FFH
@@ -14357,11 +14523,11 @@ HIBERNATE_RAMDRIVE:
 	LD	A,(RAMDRIVE_DRIVE_NUM)
 	CP	0FFH
 	RET	Z			; No RAM drive detected -> nothing to hibernate
-	LD	B,A			; B = RAM drive number (0-based)
 	LD	C,25			; BDOS Get Current Drive
 	CALL	BDOS_ENTRY
 	LD	(CURRENT_DEFAULT_DRIVE),A
-	CP	B
+	LD	HL,RAMDRIVE_DRIVE_NUM
+	CP	(HL)
 	JP	Z,HIB_FAIL_RAMDRV_ACTIVE
 
 	; Safety Check 2: Prohibit hibernating if target file is on RAM drive
@@ -14376,7 +14542,8 @@ HIBERNATE_RAMDRIVE:
 HIB_TARGET_EXP:
 	DEC	A
 HIB_TARGET_CMP:
-	CP	B
+	LD	HL,RAMDRIVE_DRIVE_NUM
+	CP	(HL)
 	JP	Z,HIB_FAIL_TARGET_ON_RAMDRV
 
 HIB_CHECK_SPACE:
@@ -19542,6 +19709,7 @@ STR_USAGE_LINE_TABLE_1:	DB	"Active: Line Slots (16K..32K)","$"
 STR_USAGE_DOC_PFX:	DB	"Active: Doc Buffer Bank ","$"
 STR_USAGE_DOC_SFX:	DB	"  ","$"
 STR_USAGE_OS:		DB	"Reserved: Operating System  ","$"
+STR_USAGE_CPM3_BUFS:	DB	"Reserved: CP/M 3 Buffers    ","$"
 STR_USAGE_FREE:		DB	"Free / Unallocated          ","$"
 STR_USAGE_NOT_PRES:	DB	"Not Present                 ","$"
 
@@ -20066,6 +20234,15 @@ RAMDRIVE_DRIVE_CHAR:	DB	'?'		; Character representation ('A', 'B', etc. or '?')
 HIB_CUR_BANK:		DB	0		; Current bank being dumped/restored (0x81..0x88)
 HIB_FAR_OFFSET:		DW	0		; Current Far RAM offset (0x0000..0x7F80)
 RAMDRV_FCB:		DS	36		; FCB for RAMDRV.IMG
+CPM3_BIOSPB:
+CPM3_BIOSPB_FUNC:	DB	0
+CPM3_BIOSPB_A:		DB	0
+CPM3_BIOSPB_BC:		DW	0
+CPM3_BIOSPB_DE:		DW	0
+CPM3_BIOSPB_HL:		DW	0
+CPM3_DRVTBL_PTR:	DW	0
+CPM3_SYS_BANK:		DB	0
+CPM3_DPH_BUF:		DB	0,0
 
 LOCAL_STACK_TOP:
 	DS	256

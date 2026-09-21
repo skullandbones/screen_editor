@@ -11,7 +11,8 @@ CPMRM ?= $(TOOLS_DIR)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all image test test-sanity test-conformity test-paging test-config test-32k test-full clean
+.PHONY: all image test test-sanity test-conformity test-paging \
+	test-config test-32k test-cpm3 test-full clean
 
 all: $(TARGET)
 
@@ -20,9 +21,11 @@ $(TARGET): $(ASM_SRC)
 	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
 
 image: $(TARGET)
-	@echo "==> Injecting $(TARGET) into modern hd1k combo image (Slice 0)..."
+	@echo "==> Injecting $(TARGET) into modern hd1k combo image (Slices 0 & 3)..."
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
 
 test: test-sanity
 
@@ -46,7 +49,12 @@ test-32k: image
 	@echo "==> Running 32K document lines test suite..."
 	python3 tests/test_32k_lines.py
 
-test-full: test-config test-32k test-conformity test-paging
+test-cpm3: image
+	@echo "==> Running CP/M 3.1 Z80 emulator test suite..."
+	python3 tests/test_cpm3.py
+
+test-full: test-config test-32k test-cpm3 test-conformity test-paging
 
 clean:
-	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def *.map *.sym src/*.o src/*.map src/*.sym
+	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \
+		*.map *.sym src/*.o src/*.map src/*.sym
