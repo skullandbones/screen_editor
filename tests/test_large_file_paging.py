@@ -143,6 +143,28 @@ def run_paging_test(num_lines, ramdrive_mode="OFF"):
         else:
             print("[-] Warning: Swap file not found via cpmls during active session.")
 
+        # Test Ctrl+O directory listing while swap file is active
+        print("[*] Testing Ctrl+O directory listing with active swap...")
+        os.write(master, b"\x0f")
+        out_open = read_until(master, b"OPEN FILE (DIRECTORY", timeout=10.0)
+        time.sleep(0.3)
+        out_open += drain_all(master)
+        if b"OPEN FILE (DIRECTORY" not in out_open:
+            print(f"[-] FAILED Ctrl+O screen: {repr(out_open[-200:])}")
+            return False
+        if b"$$$SE$$$" in out_open or b"$$$se$$$" in out_open:
+            print("[-] FAILED: Swap file displayed in directory listing!")
+            return False
+        # Press ESC to cancel back to editor
+        os.write(master, b"\x1b")
+        out_resume = read_until(master, expected_top, timeout=10.0)
+        time.sleep(0.2)
+        out_resume += drain_all(master)
+        if expected_top not in out_resume:
+            print(f"[-] FAILED to resume after ESC: {repr(out_resume[-200:])}")
+            return False
+        print("[+] Verified: Ctrl+O directory cleanly filters swap file!")
+
         # Test Jump to Bottom (Ctrl+G)
         print(f"[*] Testing Jump to Bottom (Ctrl+G) across paged memory...")
         os.write(master, b"\x07")
@@ -188,6 +210,9 @@ def run_paging_test(num_lines, ramdrive_mode="OFF"):
         out_save_scr = read_until(master, b"SAVE FILE", timeout=10.0)
         if b"SAVE FILE" not in out_save_scr:
             print(f"[-] Save screen not reached. Buffer: {repr(out_save_scr[-200:])}", flush=True)
+            return False
+        if b"$$$SE$$$" in out_save_scr or b"$$$se$$$" in out_save_scr:
+            print("[-] FAILED: Swap file found in Save File directory!")
             return False
 
         # Press Enter to confirm pre-filled filename

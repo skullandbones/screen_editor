@@ -17911,6 +17911,10 @@ COPY_EXT_TEMP:
 	XOR	A
 	LD	(DE),A
 
+	; Filter out temporary swap files ($$$SE$$$.SWP or $$$*.SWP)
+	CALL	CHECK_DIR_SWAP_FILE
+	JR	C,DIR_NEXT_ENTRY	; Swap file -> skip
+
 	; Check if this filename is already in DIR_NAMES_BUF (duplicate extent filter)
 	CALL	CHECK_DIR_DUPLICATE
 	JR	C,DIR_NEXT_ENTRY	; Already collected -> skip duplicate
@@ -17995,6 +17999,71 @@ CHECK_DUP_NO_MATCH:
 
 	OR	A			; Carry = 0 (not duplicate)
 	RET
+
+;------------------------------------------------------------------------------
+; CHECK_DIR_SWAP_FILE: Check if DIR_TEMP_ENTRY is a swap file
+; Matches $$$SE$$$.SWP or any generic $$$*.SWP
+; Returns: Carry = 1 if swap file (skip), Carry = 0 if regular file
+;------------------------------------------------------------------------------
+CHECK_DIR_SWAP_FILE:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; 1. Check exact match with $$$SE$$$.SWP (12 characters)
+	LD	HL,DIR_TEMP_ENTRY
+	LD	DE,STR_SWAP_FILE_MATCH
+	LD	B,12
+CDSF_MATCH_LOOP:
+	LD	A,(DE)
+	CP	(HL)
+	JR	NZ,CDSF_CHECK_GENERIC
+	INC	HL
+	INC	DE
+	DJNZ	CDSF_MATCH_LOOP
+	SCF				; Carry = 1: matches $$$SE$$$.SWP
+	JR	CDSF_DONE
+
+CDSF_CHECK_GENERIC:
+	; 2. Check generic swap pattern: starts with "$$$" and extension "SWP"
+	LD	HL,DIR_TEMP_ENTRY
+	LD	A,(HL)
+	CP	'$'
+	JR	NZ,CDSF_NOT_SWAP
+	INC	HL
+	LD	A,(HL)
+	CP	'$'
+	JR	NZ,CDSF_NOT_SWAP
+	INC	HL
+	LD	A,(HL)
+	CP	'$'
+	JR	NZ,CDSF_NOT_SWAP
+	; Extension is at DIR_TEMP_ENTRY+9 (3 bytes: 'S', 'W', 'P')
+	LD	HL,DIR_TEMP_ENTRY+9
+	LD	A,(HL)
+	CP	'S'
+	JR	NZ,CDSF_NOT_SWAP
+	INC	HL
+	LD	A,(HL)
+	CP	'W'
+	JR	NZ,CDSF_NOT_SWAP
+	INC	HL
+	LD	A,(HL)
+	CP	'P'
+	JR	NZ,CDSF_NOT_SWAP
+	SCF				; Carry = 1: matches $$$*.SWP
+	JR	CDSF_DONE
+
+CDSF_NOT_SWAP:
+	OR	A			; Carry = 0: normal file
+CDSF_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+STR_SWAP_FILE_MATCH:
+	DB	"$$$SE$$$.SWP",0
 
 ;------------------------------------------------------------------------------
 ; Sort Directory Entries Alphabetically (Bubble Sort)
@@ -18217,9 +18286,8 @@ DISP_COL_TERMINATE:
 	XOR	A
 	LD	(DE),A			; Null-terminate LOAD_LINE_TEMP
 
-	; Print the column
-	LD	DE,LOAD_LINE_TEMP
-	CALL	PRINT_STR
+	; Print column (null-terminated; avoids early '$' stop in PRINT_STR)
+	CALL	PRINT_DIR_COL_ENTRY
 
 	; Increment column counter
 	LD	A,(DIR_COL_COUNT)
@@ -18257,6 +18325,24 @@ DISP_PAGE_DONE:
 	INC	(HL)
 	LD	DE,STR_TILDE_CRLF
 	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; PRINT_DIR_COL_ENTRY: Print null-terminated column from LOAD_LINE_TEMP
+; Does not terminate on '$' so filenames with '$' render cleanly
+;------------------------------------------------------------------------------
+PRINT_DIR_COL_ENTRY:
+	PUSH	HL
+	LD	HL,LOAD_LINE_TEMP
+PDCE_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,PDCE_DONE
+	CALL	PUTC
+	INC	HL
+	JR	PDCE_LOOP
+PDCE_DONE:
+	POP	HL
 	RET
 
 ;------------------------------------------------------------------------------
@@ -18335,8 +18421,12 @@ DRAW_FILENAME_BOX:
 	LD	B,A			; B = length of prefilled text (0..20)
 	OR	A
 	JR	Z,DFB_PAD_SPACES
-	LD	DE,INPUT_FILENAME_BUF
-	CALL	PRINT_STR
+	LD	HL,INPUT_FILENAME_BUF
+DFB_PRINT_LOOP:
+	LD	A,(HL)
+	CALL	PUTC
+	INC	HL
+	DJNZ	DFB_PRINT_LOOP
 
 DFB_PAD_SPACES:
 	; Pad (20 - B) spaces
