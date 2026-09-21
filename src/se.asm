@@ -27,7 +27,7 @@ FAR_SLOT_PAYLOAD EQU	126		; 126 bytes text payload per Far-RAM slot
 SLOT_TERM	EQU	0FFFFH		; 16-bit terminal slot marker in Far-RAM
 MAX_COPY_LINE_CHARS EQU	120		; Single-line block copy capacity limit
 MAX_FAR_BANKS	EQU	12		; Up to 12 extended 32KB RAM banks for text slots (384 KB)
-CACHE_SIZE_LINES EQU	48		; 48 lines in local working cache (6,144 bytes)
+CACHE_SIZE_LINES EQU	40		; 40 lines in local working cache (5,120 bytes)
 MAX_DOC_LINES	EQU	16384		; 32KB Far RAM Line Table (16,384 lines * 2 bytes)
 MAX_VIRTUAL_SLOTS EQU	65534		; Up to 65,534 128-byte virtual slots (~8.3 MB)
 
@@ -311,6 +311,12 @@ SPLASH_NOT_ESC:
 	CP	'A'
 	JP	Z,DO_ABOUT_SCREEN
 
+	; Option: 'M' or 'm' -> Show Memory Info Screen
+	CP	'm'
+	JP	Z,DO_MEM_INFO_SCREEN
+	CP	'M'
+	JP	Z,DO_MEM_INFO_SCREEN
+
 	; Option: 'C' or 'c' -> Show Configuration Screen
 	CP	'c'
 	JP	Z,DO_CONFIG_SCREEN
@@ -359,6 +365,13 @@ DO_FILE_TEST:
 
 DO_ABOUT_SCREEN:
 	CALL	SHOW_ABOUT_SCREEN
+	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
+	JP	SHOW_SPLASH_SCREEN
+
+DO_MEM_INFO_SCREEN:
+	CALL	SHOW_MEM_INFO_SCREEN
 	CALL	GET_KEY
 	CP	KEY_ESC
 	CALL	Z,DRAIN_ESC_SEQUENCE
@@ -1436,7 +1449,7 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ;------------------------------------------------------------------------------
-SPLASH_LINES	EQU	18
+SPLASH_LINES	EQU	19
 
 RENDER_SPLASH:
 	LD	A,1
@@ -1685,6 +1698,551 @@ CONFIG_TILDE_DONE:
 	CALL	PRINT_STR
 	LD	DE,STR_HIDE_CURSOR
 	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; QUERY_MEM_SCREEN_INFO: Dynamic detection of CP/M and HBIOS parameters
+; Called prior to rendering the memory information screen.
+;------------------------------------------------------------------------------
+QUERY_MEM_SCREEN_INFO:
+	; 1. Query CP/M Version via BDOS 12
+	LD	C,12			; BDOS Get Version Number
+	CALL	BDOS_ENTRY
+	LD	(CPM_VERSION_ID),HL
+
+	; 2. Check HBIOS presence
+	CALL	HBIOS_DETECT
+	JR	Z,QMSI_HBIOS_OK
+	; Non-HBIOS fallback
+	XOR	A
+	LD	(HBIOS_PRESENT),A
+	RET
+
+QMSI_HBIOS_OK:
+	LD	A,1
+	LD	(HBIOS_PRESENT),A
+
+	; Query HBIOS Version (BF_SYSVER = 0xF1)
+	PUSH	IX
+	LD	B,0F1H			; BF_SYSVER
+	LD	C,000H
+	RST	08H
+	POP	IX
+	; DE has version in BCD: D = Major << 4 | Minor, E = Update << 4 | Patch
+	LD	A,D
+	RRCA
+	RRCA
+	RRCA
+	RRCA
+	AND	0FH
+	LD	(HBIOS_VER_MAJ),A
+	LD	A,D
+	AND	0FH
+	LD	(HBIOS_VER_MIN),A
+	LD	A,E
+	RRCA
+	RRCA
+	RRCA
+	RRCA
+	AND	0FH
+	LD	(HBIOS_VER_PATCH),A
+
+	; Query BIOS Bank ID (SYSGET 0xF2)
+	PUSH	IX
+	LD	B,0F8H
+	LD	C,0F2H
+	RST	08H
+	POP	IX
+	LD	A,D
+	OR	A
+	JR	NZ,QMSI_GOT_BIOS_BANK
+	LD	A,080H
+QMSI_GOT_BIOS_BANK:
+	LD	(HBIOS_BIOS_BANK),A
+
+	; Query App Banks (SYSGET 0xF5)
+	PUSH	IX
+	LD	B,0F8H
+	LD	C,0F5H			; BF_SYSGET_APPBNKS
+	RST	08H
+	POP	IX
+	OR	A
+	JR	NZ,QMSI_SAVE_APP_DEFAULT
+	LD	A,H
+	CP	0FFH
+	JR	Z,QMSI_SAVE_APP_DEFAULT
+	LD	(HBIOS_APP_BANK),A
+	LD	A,L
+	LD	(HBIOS_APP_COUNT),A
+	RET
+
+QMSI_SAVE_APP_DEFAULT:
+	LD	A,089H
+	LD	(HBIOS_APP_BANK),A
+	LD	A,3
+	LD	(HBIOS_APP_COUNT),A
+	RET
+
+;------------------------------------------------------------------------------
+; Memory Information Screen Renderer
+; Displays dynamic 16-row 32KB extended memory allocation map & system summary
+;------------------------------------------------------------------------------
+MEM_INFO_LINES	EQU	23
+
+SHOW_MEM_INFO_SCREEN:
+	CALL	QUERY_MEM_SCREEN_INFO
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+	LD	DE,STR_CLEAR_SCREEN
+	CALL	PRINT_STR
+
+	; Line 1: Title
+	LD	DE,STR_MEM_INFO_TITLE
+	CALL	PRINT_STR
+
+	; Line 2: System Summary Line
+	CALL	PRINT_MEM_INFO_SUMMARY
+
+	; Line 3: Blank line with tilde
+	LD	DE,STR_MEM_INFO_BLANK
+	CALL	PRINT_STR
+
+	; Line 4: Table column headers
+	LD	DE,STR_MEM_TABLE_HDR
+	CALL	PRINT_STR
+
+	; Line 5: Table column dividers
+	LD	DE,STR_MEM_TABLE_DIV
+	CALL	PRINT_STR
+
+	; Lines 6..21: The 16 individual bank rows (Banks 00 through 15)
+	XOR	A
+	LD	(MEM_BANK_LOOP_IDX),A
+MEM_BANK_ROW_LOOP:
+	CALL	PRINT_MEM_BANK_ROW
+	LD	A,(MEM_BANK_LOOP_IDX)
+	INC	A
+	LD	(MEM_BANK_LOOP_IDX),A
+	CP	16
+	JR	C,MEM_BANK_ROW_LOOP
+
+	; Line 22: Blank line with tilde
+	LD	DE,STR_MEM_INFO_BLANK
+	CALL	PRINT_STR
+
+	; Line 23: Return prompt
+	LD	DE,STR_MEM_RETURN_PROMPT
+	CALL	PRINT_STR
+
+	; Fill remaining rows down to status row with '~'
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
+	SUB	MEM_INFO_LINES		; A = remaining rows
+	JR	Z,MEM_INFO_TILDE_DONE
+	JR	C,MEM_INFO_TILDE_DONE
+	LD	B,A
+MEM_INFO_TILDE_LOOP:
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+	DJNZ	MEM_INFO_TILDE_LOOP
+
+MEM_INFO_TILDE_DONE:
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_HOME
+	CALL	PRINT_STR
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; PRINT_MEM_INFO_SUMMARY: Print system summary row (HBIOS, OS, RAM, SE RAM)
+;------------------------------------------------------------------------------
+PRINT_MEM_INFO_SUMMARY:
+	LD	DE,STR_MEM_SUM_PREFIX
+	CALL	PRINT_STR
+
+	LD	A,(HBIOS_PRESENT)
+	OR	A
+	JR	NZ,PMIS_HBIOS_YES
+	LD	DE,STR_MEM_SUM_NONE
+	CALL	PRINT_STR
+	JR	PMIS_SHOW_OS
+
+PMIS_HBIOS_YES:
+	LD	DE,STR_MEM_SUM_ROMWBW
+	CALL	PRINT_STR
+	LD	A,(HBIOS_VER_MAJ)
+	CALL	PRINT_DEC_BYTE
+	LD	A,'.'
+	CALL	PUTC
+	LD	A,(HBIOS_VER_MIN)
+	CALL	PRINT_DEC_BYTE
+
+PMIS_SHOW_OS:
+	LD	DE,STR_MEM_SUM_OS
+	CALL	PRINT_STR
+
+	LD	HL,(CPM_VERSION_ID)
+	LD	A,H
+	CP	014H
+	JR	Z,PMIS_OS_ZSYS
+	LD	A,L
+	CP	031H
+	JR	Z,PMIS_OS_CPM31
+	CP	030H
+	JR	Z,PMIS_OS_CPM30
+	LD	DE,STR_OS_CPM22
+	JR	PMIS_PRINT_OS
+PMIS_OS_ZSYS:
+	LD	DE,STR_OS_ZSYS
+	JR	PMIS_PRINT_OS
+PMIS_OS_CPM31:
+	LD	DE,STR_OS_CPM31
+	JR	PMIS_PRINT_OS
+PMIS_OS_CPM30:
+	LD	DE,STR_OS_CPM30
+PMIS_PRINT_OS:
+	CALL	PRINT_STR
+
+	LD	DE,STR_MEM_SUM_RAM
+	CALL	PRINT_STR
+
+	LD	A,(HBIOS_PRESENT)
+	OR	A
+	JR	NZ,PMIS_RAM_HBIOS
+	LD	DE,STR_MEM_SUM_RAM_BASE
+	CALL	PRINT_STR
+	JR	PMIS_SHOW_SE
+
+PMIS_RAM_HBIOS:
+	LD	A,(RAM_BANK_COUNT)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; x2
+	ADD	HL,HL			; x4
+	ADD	HL,HL			; x8
+	ADD	HL,HL			; x16
+	ADD	HL,HL			; x32 (KB)
+	CALL	PRINT_DEC_WORD
+	LD	DE,STR_MEM_SUM_KB_MID
+	CALL	PRINT_STR
+	LD	A,(RAM_BANK_COUNT)
+	CALL	PRINT_DEC_BYTE
+	LD	DE,STR_MEM_SUM_X32K
+	CALL	PRINT_STR
+
+PMIS_SHOW_SE:
+	LD	DE,STR_MEM_SUM_SE
+	CALL	PRINT_STR
+
+	LD	A,(HBIOS_PRESENT)
+	OR	A
+	JR	NZ,PMIS_SE_HBIOS
+	LD	DE,STR_MEM_SUM_64K_END
+	CALL	PRINT_STR
+	RET
+
+PMIS_SE_HBIOS:
+	; Calculate SE RAM: (1 [TPA] + (1 if LINE_TABLE_BANK!=0) + EXT_BANK_COUNT) * 32
+	LD	A,1
+	LD	HL,LINE_TABLE_BANK
+	LD	B,(HL)
+	INC	B
+	DEC	B
+	JR	Z,PMIS_NO_LINE_BANK
+	INC	A			; A = 2
+PMIS_NO_LINE_BANK:
+	LD	HL,EXT_BANK_COUNT
+	ADD	A,(HL)			; A = total SE 32KB banks
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; x2
+	ADD	HL,HL			; x4
+	ADD	HL,HL			; x8
+	ADD	HL,HL			; x16
+	ADD	HL,HL			; x32 (KB)
+	CALL	PRINT_DEC_WORD
+	LD	DE,STR_MEM_SUM_KB_END
+	CALL	PRINT_STR
+	RET
+
+;------------------------------------------------------------------------------
+; PRINT_MEM_BANK_ROW: Print single bank row for MEM_BANK_LOOP_IDX (0..15)
+;------------------------------------------------------------------------------
+PRINT_MEM_BANK_ROW:
+	; Column 0 Tilde and padding: "~   "
+	LD	DE,STR_MEM_ROW_PREFIX
+	CALL	PRINT_STR
+
+	; 2-Digit Decimal Bank Index (00..15)
+	LD	A,(MEM_BANK_LOOP_IDX)
+	CALL	PRINT_2DIGIT_DEC
+
+	; 4 spaces (align under 'Bank  ')
+	LD	DE,STR_MEM_SPACES_4
+	CALL	PRINT_STR
+
+	; Physical Bank ID (80h..8Fh)
+	LD	A,(MEM_BANK_LOOP_IDX)
+	ADD	A,080H
+	CALL	PRINT_HEX_BYTE
+	LD	A,'h'
+	CALL	PUTC
+
+	; 4 spaces (align under 'Phys   ')
+	LD	DE,STR_MEM_SPACES_4
+	CALL	PRINT_STR
+
+	; Check if bank is installed
+	LD	A,(HBIOS_PRESENT)
+	OR	A
+	JR	NZ,PMBR_CHECK_RAM_COUNT
+
+	; Non-HBIOS check: Only Bank 0 is base memory
+	LD	A,(MEM_BANK_LOOP_IDX)
+	OR	A
+	JP	NZ,PMBR_NOT_INSTALLED
+	; Bank 00 non-HBIOS: 64K TPA
+	LD	DE,STR_MEM_SIZE_64K
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_ROLE_TPA_CPM2
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_SE_PROG
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_CHECK_RAM_COUNT:
+	LD	A,(MEM_BANK_LOOP_IDX)
+	LD	HL,RAM_BANK_COUNT
+	CP	(HL)
+	JP	NC,PMBR_NOT_INSTALLED
+
+	; Bank is installed: print "32K "
+	LD	DE,STR_MEM_SIZE_32K
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+
+	; Determine Role and Usage for installed bank
+	; 1. Check if physical bank ID (0x80 + i) is in EXT_BANK_TABLE
+	LD	A,(MEM_BANK_LOOP_IDX)
+	ADD	A,080H
+	LD	E,A			; E = physical bank ID
+	LD	A,(EXT_BANK_COUNT)
+	OR	A
+	JR	Z,PMBR_NOT_IN_EXT
+	LD	B,A			; B = EXT_BANK_COUNT
+	LD	C,1			; C = 1-based doc bank index (1..14)
+	LD	HL,EXT_BANK_TABLE
+PMBR_EXT_LOOP:
+	LD	A,(HL)
+	CP	E
+	JR	Z,PMBR_FOUND_IN_EXT
+	INC	HL
+	INC	C
+	DJNZ	PMBR_EXT_LOOP
+	JR	PMBR_NOT_IN_EXT
+
+PMBR_FOUND_IN_EXT:
+	; Bank E is in EXT_BANK_TABLE as Document Buffer Bank C!
+	; Check Role: if E < HBIOS_APP_BANK -> RAM Disk (MD0:), else Application Memory
+	LD	A,(HBIOS_APP_BANK)
+	CP	E
+	JR	C,PMBR_EXT_ROLE_APP	; If HBIOS_APP_BANK < E -> App
+	JR	Z,PMBR_EXT_ROLE_APP	; If HBIOS_APP_BANK == E -> App
+	LD	DE,STR_ROLE_RAMDISK
+	JR	PMBR_EXT_PRINT_ROLE
+PMBR_EXT_ROLE_APP:
+	LD	DE,STR_ROLE_APP
+PMBR_EXT_PRINT_ROLE:
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+
+	; Usage: "Active: Doc Buffer Bank " + 2-digit C + "  "
+	LD	DE,STR_USAGE_DOC_PFX
+	CALL	PRINT_STR
+	LD	A,C
+	CALL	PRINT_2DIGIT_DEC
+	LD	DE,STR_USAGE_DOC_SFX
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_NOT_IN_EXT:
+	; 2. Check if E == LINE_TABLE_BANK (and != 0)
+	LD	A,(MEM_BANK_LOOP_IDX)
+	ADD	A,080H
+	LD	E,A
+	LD	A,(LINE_TABLE_BANK)
+	OR	A
+	JR	Z,PMBR_CHK_CPM_USER
+	CP	E
+	JR	NZ,PMBR_CHK_CPM_USER
+	LD	DE,STR_ROLE_APP
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_LINE_TABLE
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_CHK_CPM_USER:
+	; 3. Check if E == CPM_USER_BANK
+	LD	A,(MEM_BANK_LOOP_IDX)
+	ADD	A,080H
+	LD	E,A
+	LD	A,(CPM_USER_BANK)
+	CP	E
+	JR	NZ,PMBR_CHK_HBIOS_BIOS
+	; Print TPA role according to OS version
+	LD	HL,(CPM_VERSION_ID)
+	LD	A,H
+	CP	014H
+	JR	Z,PMBR_TPA_ZSYS
+	LD	A,L
+	CP	031H
+	JR	Z,PMBR_TPA_CPM31
+	LD	DE,STR_ROLE_TPA_CPM2
+	JR	PMBR_PRINT_TPA_ROLE
+PMBR_TPA_ZSYS:
+	LD	DE,STR_ROLE_TPA_ZSYS
+	JR	PMBR_PRINT_TPA_ROLE
+PMBR_TPA_CPM31:
+	LD	DE,STR_ROLE_TPA_CPM3
+PMBR_PRINT_TPA_ROLE:
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_SE_PROG
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_CHK_HBIOS_BIOS:
+	; 4. Check if E == HBIOS_BIOS_BANK (e.g. 0x80)
+	LD	A,(MEM_BANK_LOOP_IDX)
+	ADD	A,080H
+	LD	E,A
+	LD	A,(HBIOS_BIOS_BANK)
+	CP	E
+	JR	NZ,PMBR_CHK_RAMDISK_PRESERVED
+	LD	DE,STR_ROLE_HBIOS
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_HBIOS
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_CHK_RAMDISK_PRESERVED:
+	; 5. Check if E < HBIOS_APP_BANK (and not in EXT -> preserved RAM disk)
+	LD	A,(MEM_BANK_LOOP_IDX)
+	ADD	A,080H
+	LD	E,A
+	LD	A,(HBIOS_APP_BANK)
+	CP	E
+	JR	C,PMBR_CHK_OS_BANK	; If HBIOS_APP_BANK < E -> not RAM disk
+	JR	Z,PMBR_CHK_OS_BANK	; If HBIOS_APP_BANK == E -> not RAM disk
+	; E < HBIOS_APP_BANK: preserved RAM disk
+	LD	DE,STR_ROLE_RAMDISK
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_RAMDISK_PRESERVED
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_CHK_OS_BANK:
+	; 6. Check if E > CPM_USER_BANK (e.g. 0x8F)
+	LD	A,(MEM_BANK_LOOP_IDX)
+	ADD	A,080H
+	LD	E,A
+	LD	A,(CPM_USER_BANK)
+	CP	E
+	JR	NC,PMBR_FREE_APP	; If CPM_USER_BANK >= E -> free app
+	; E > CPM_USER_BANK:
+	LD	DE,STR_ROLE_OS
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_OS
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_FREE_APP:
+	; 7. Free / Unallocated Application Memory
+	LD	DE,STR_ROLE_APP
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_FREE
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_NOT_INSTALLED:
+	; Bank not installed: Size = " -- ", Role = Not Installed, Usage = Not Present
+	LD	DE,STR_MEM_SIZE_NONE
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_ROLE_NOT_INST
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_NOT_PRES
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+;------------------------------------------------------------------------------
+; PRINT_2DIGIT_DEC: Print 2-digit decimal number (00..99) in A
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+PRINT_2DIGIT_DEC:
+	PUSH	AF
+	CP	10
+	JR	NC,P2D_TEN_PLUS
+	LD	A,'0'
+	CALL	PUTC
+	POP	AF
+	ADD	A,'0'
+	CALL	PUTC
+	RET
+P2D_TEN_PLUS:
+	LD	A,'1'
+	CALL	PUTC
+	POP	AF
+	SUB	10
+	ADD	A,'0'
+	CALL	PUTC
+	RET
+
+;------------------------------------------------------------------------------
+; PRINT_CRLF: Print CR, LF
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+PRINT_CRLF:
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
 	RET
 
 ;------------------------------------------------------------------------------
@@ -2082,7 +2640,7 @@ TEST4_SLOT_INIT:
 	; Clear local LINE_STORAGE memory completely to prove reload works from Far RAM
 	LD	HL,LINE_STORAGE
 	LD	DE,LINE_STORAGE+1
-	LD	BC,6143
+	LD	BC,LINE_STORAGE_SIZE-1
 	LD	(HL),0
 	LDIR
 
@@ -6180,10 +6738,10 @@ LOCATE_CURSOR:
 ; 512KB HBIOS RAM Far-Banking Multi-Bank Document Engine
 ;------------------------------------------------------------------------------
 BUFFER_INIT:
-	; Clear LINE_STORAGE (6,144 bytes) with 0
+	; Clear LINE_STORAGE with 0
 	LD	HL,LINE_STORAGE
 	LD	DE,LINE_STORAGE+1
-	LD	BC,6143
+	LD	BC,LINE_STORAGE_SIZE-1
 	LD	(HL),0
 	LDIR
 
@@ -17892,6 +18450,7 @@ STR_SPLASH_BODY:	DB	27,"[H"
 	DB	"~                         type   t                for mem test  ",13,10
 	DB	"~                         type   f                for file test ",13,10
 	DB	"~                         type   a                for about     ",13,10
+	DB	"~                         type   m                for memory info ",13,10
 	DB	"~                         type   c                to configure  ",13,10
 	DB	"~                         type   1                set 120x40    ",13,10
 	DB	"~                         type   2                set 80x24     ",13,10
@@ -17996,6 +18555,65 @@ STR_ABOUT_BODY:	DB	27,"[H"
 	DB	"~          SE is open source and freely usable                 ",13,10
 	DB	"~                     Press any key to return to splash...     ",13,10
 	DB	"$"
+
+;------------------------------------------------------------------------------
+; Memory Information Screen Strings
+;------------------------------------------------------------------------------
+STR_MEM_INFO_TITLE:
+	DB	"~                     SE.COM - Extended Memory Map",13,10,"$"
+STR_MEM_INFO_BLANK:
+	DB	"~",13,10,"$"
+STR_MEM_TABLE_HDR:
+	DB	"~   Bank  Phys   Size   System / OS Role        SE.COM Usage",13,10,"$"
+STR_MEM_TABLE_DIV:
+	DB	"~   ----  ----   ----   ---------------------   ----------------------------",13,10,"$"
+STR_MEM_RETURN_PROMPT:
+	DB	"~                 Press any key or ESC to return to splash...",13,10,"$"
+
+STR_MEM_SUM_PREFIX:	DB	"~  HBIOS: ","$"
+STR_MEM_SUM_NONE:	DB	"None","$"
+STR_MEM_SUM_ROMWBW:	DB	"RomWBW v","$"
+STR_MEM_SUM_OS:		DB	" | OS: ","$"
+STR_MEM_SUM_RAM:	DB	" | RAM: ","$"
+STR_MEM_SUM_RAM_BASE:	DB	"64 KB Base","$"
+STR_MEM_SUM_KB_MID:	DB	" KB (","$"
+STR_MEM_SUM_X32K:	DB	"x32K)","$"
+STR_MEM_SUM_SE:		DB	" | SE: ","$"
+STR_MEM_SUM_KB_END:	DB	" KB",13,10,"$"
+STR_MEM_SUM_64K_END:	DB	"64 KB",13,10,"$"
+
+STR_OS_ZSYS:		DB	"Z-System","$"
+STR_OS_CPM31:		DB	"CP/M 3.1","$"
+STR_OS_CPM30:		DB	"CP/M 3.0","$"
+STR_OS_CPM22:		DB	"CP/M 2.2","$"
+
+STR_ROLE_HBIOS:		DB	"HBIOS System Firmware","$"
+STR_ROLE_RAMDISK:	DB	"RAM Disk (MD0:)      ","$"
+STR_ROLE_APP:		DB	"Application Memory   ","$"
+STR_ROLE_TPA_CPM2:	DB	"CP/M 2.2 TPA & Base  ","$"
+STR_ROLE_TPA_CPM3:	DB	"CP/M 3.1 TPA & Base  ","$"
+STR_ROLE_TPA_ZSYS:	DB	"Z-System TPA & Base  ","$"
+STR_ROLE_OS:		DB	"Operating System Bank","$"
+STR_ROLE_NOT_INST:	DB	"Not Installed        ","$"
+
+STR_USAGE_HBIOS:	DB	"Reserved: Protected HBIOS   ","$"
+STR_USAGE_RAMDISK_PRESERVED:
+			DB	"Preserved: RAM Disk Active  ","$"
+STR_USAGE_SE_PROG:	DB	"Active: SE Program & Cache  ","$"
+STR_USAGE_LINE_TABLE:	DB	"Active: 16K Line Slot Table ","$"
+STR_USAGE_DOC_PFX:	DB	"Active: Doc Buffer Bank ","$"
+STR_USAGE_DOC_SFX:	DB	"  ","$"
+STR_USAGE_OS:		DB	"Reserved: Operating System  ","$"
+STR_USAGE_FREE:		DB	"Free / Unallocated          ","$"
+STR_USAGE_NOT_PRES:	DB	"Not Present                 ","$"
+
+STR_MEM_SIZE_32K:	DB	"32K ","$"
+STR_MEM_SIZE_NONE:	DB	" -- ","$"
+STR_MEM_SIZE_64K:	DB	"64K ","$"
+STR_MEM_SPACES_4:	DB	"    ","$"
+STR_MEM_SPACES_3:	DB	"   ","$"
+STR_MEM_SPACES_2:	DB	"  ","$"
+STR_MEM_ROW_PREFIX:	DB	"~   ","$"
 
 STR_TEST_TITLE:	DB	27,"[H",27,"[2J"
 	DB	"============================================================",13,10
@@ -18255,6 +18873,15 @@ CPM_USER_BANK:	DB	0
 TARGET_RAM_BANK:	DB	0
 RAM_BANK_COUNT:	DB	0
 ROM_BANK_COUNT:	DB	0
+HBIOS_PRESENT:		DB	0
+HBIOS_BIOS_BANK:	DB	080H
+HBIOS_APP_BANK:		DB	089H
+HBIOS_APP_COUNT:	DB	0
+HBIOS_VER_MAJ:		DB	0
+HBIOS_VER_MIN:		DB	0
+HBIOS_VER_PATCH:	DB	0
+CPM_VERSION_ID:		DW	0
+MEM_BANK_LOOP_IDX:	DB	0
 
 SCREEN_MODE:	DB	MODE_120X40	; Default to 120x40
 ACTIVE_ROWS:	DB	40		; Default 40 rows
@@ -18463,7 +19090,6 @@ RAW_LINES_COUNT:	DW	0
 RAW_SEEN_CR:	DB	0
 RAW_FORMAT_TYPE:	DB	0
 RAW_DATA_PTR:	DW	0
-RAW_DATA_BUFFER:	DS	2048
 
 CFG_FCB:		DS	36
 COM_PROBE_FCB:		DS	36
@@ -18491,9 +19117,12 @@ LOCAL_STACK:
 ;==============================================================================
 BSS_START:
 
-; 48 lines x 128 bytes stride local working cache in TPA (6,144 bytes)
-LINE_STORAGE_SIZE EQU	6144
+; 40 lines x 128 bytes stride local working cache in TPA (5,120 bytes)
+LINE_STORAGE_SIZE EQU	CACHE_SIZE_LINES * 128
 LINE_STORAGE	EQU	BSS_START
+
+; Splash screen file test ('f') reuses LINE_STORAGE (5,120 bytes)
+RAW_DATA_BUFFER	EQU	LINE_STORAGE
 
 ; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
 LINE_SHIFT_BUF_SIZE EQU	256
