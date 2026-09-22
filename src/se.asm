@@ -19833,7 +19833,7 @@ STR_MSG_REST_ERR:	DB	13,10,"[Error] RAM drive restoration incomplete.",13,10,"$"
 STR_ABOUT_BODY:	DB	27,"[H"
 	DB	"~",13,10
 	DB	"~                               SE - Screen Editor              ",13,10
-	DB	"~                           version 0.9.5 (2026-09-20)          ",13,10
+	DB	"~                           version 0.9.6 (2026-09-22)          ",13,10
 	DB	"~                                by Dean Jenkins                ",13,10
 	DB	"~          Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash  ",13,10
 	DB	"~",13,10
@@ -19998,7 +19998,7 @@ STR_TEST_FAILED:	DB	13,10,"[-] EXTENDED MEMORY TEST FAILED (Data verification mi
 
 STR_TEST_PROMPT:	DB	"Press any key to return to Splash Screen...$"
 
-STR_STATUS_PREFIX:	DB	" SE v0.9.5 | ","$"
+STR_STATUS_PREFIX:	DB	" SE v0.9.6 | ","$"
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 
