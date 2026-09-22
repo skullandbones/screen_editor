@@ -15168,6 +15168,13 @@ INIT_EMPTY_DOCUMENT:
 ; Open File Screen with Sorted Directory Listing & Pagination
 ;------------------------------------------------------------------------------
 DO_OPEN_FILE_UI:
+	; Invalidate active line and flush dirty cache before directory collection
+	; overlays LINE_STORAGE
+	CALL	INVALIDATE_ACTIVE_LINE
+	CALL	FLUSH_DIRTY_CACHE
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
+
 	; Initialize directory layout parameters based on active screen mode
 	CALL	INIT_DIR_LAYOUT
 
@@ -15420,6 +15427,8 @@ CHECK_PAGING_OR_CANCEL:
 	CP	3
 	JR	Z,DO_PREV_PAGE
 	CALL	RESTORE_DOC_USER
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
 	RET				; Cancelled -> return to splash
 
 DO_PREV_PAGE:
@@ -16185,11 +16194,20 @@ DO_SAVE_FILE_UI:
 	RET
 
 DO_SAVE_FILE_OK:
+	; Invalidate active line and flush dirty cache before directory collection
+	; overlays LINE_STORAGE
+	CALL	INVALIDATE_ACTIVE_LINE
+	CALL	FLUSH_DIRTY_CACHE
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
+
 	LD	A,1
 	LD	(IS_SAVE_UI),A
 	CALL	DO_SAVE_FILE_UI_IMPL
 	XOR	A
 	LD	(IS_SAVE_UI),A
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
 	RET
 
 TRUNC_LINES	EQU	12
@@ -20373,7 +20391,6 @@ INPUT_CURSOR_POS:	DB	0
 INPUT_CHAR_TEMP:	DB	0
 INLINE_MSG_LEN:		DB	16
 INPUT_FILENAME_BUF:	DS	32
-DIR_NAMES_BUF:	DS	3328	; 256 entries * 13 bytes
 DIR_FILTER_FCB:		DB	"???????????"	; 11-byte FCB wildcard pattern (8 name + 3 ext)
 DIR_FILTER_STR:		DB	"*.*",0,0,0,0,0,0,0,0,0 ; Display string for active filter (null-terminated)
 DIR_FILTER_ACTIVE:	DB	0		; 0 = *.* (all files), 1 = custom filter active
@@ -20422,6 +20439,11 @@ BSS_START:
 ; 40 lines x 128 bytes stride local working cache in TPA (5,120 bytes)
 LINE_STORAGE_SIZE EQU	CACHE_SIZE_LINES * 128
 LINE_STORAGE	EQU	BSS_START
+
+; Overlay directory entries buffer onto LINE_STORAGE (mutually exclusive with editor)
+; DIR_NAMES_BUF requires 3,328 bytes (256 entries * 13 bytes), which easily fits
+; within LINE_STORAGE (5,120 bytes) with 1,792 bytes to spare.
+DIR_NAMES_BUF	EQU	LINE_STORAGE
 
 ; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
 LINE_SHIFT_BUF_SIZE EQU	256
