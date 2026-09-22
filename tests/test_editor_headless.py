@@ -4540,7 +4540,181 @@ def test_se_execution():
             print(f"[-] Step 72 failed: Clean exit to CP/M failed. Buffer: {repr(out_s72_cpm)}", flush=True)
             return False
         print("    [+] Clean exit to CP/M prompt verified.")
-        print("[+] Successfully verified Memory Information Screen (Step 72)!", flush=True)
+        print("[+] Successfully verified Memory Information Screen (Step 72)!",
+              flush=True)
+
+        # ---------------------------------------------------------------------
+        # Step 73: In-line Filename Edit Box Navigation and Editing
+        # ---------------------------------------------------------------------
+        print("[*] Step 73: Verifying Filename Edit Box In-line Editing...",
+              flush=True)
+        drain_all(master)
+        time.sleep(0.3)
+        # Ensure any leftover 30.TXT on Drive D (slice 1) is cleared
+        if os.path.isfile(cpmrm_bin):
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_1", img_file,
+                            "0:30.TXT"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+
+        # Launch editor with 30.TXT
+        os.write(master, b"se 30.TXT\r")
+        out_s73_ed = read_until(master, b"^K: Editor keys", timeout=30.0)
+        if b"^K: Editor keys" not in out_s73_ed:
+            print("[-] Step 73 failed to load 30.TXT into editor.",
+                  flush=True)
+            return False
+        print("    [+] Editor loaded 30.TXT successfully.")
+
+        # Subtest 1: Save File Dialog In-Line Editing
+        # Open Save dialog (Ctrl+S)
+        time.sleep(0.3)
+        os.write(master, b"\x13")
+        out_s73_save = read_until(master, b"Enter filename to save:",
+                                  timeout=8.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+        if b"Enter filename to save:" not in out_s73_save:
+            print("[-] Step 73 failed: Save dialog prompt not found.",
+                  flush=True)
+            return False
+        print("    [+] Save dialog reached with preloaded filename.")
+
+        # Preloaded filename is 'C0:30.TXT', cursor is at end (col 9).
+        # Test Home key (ESC [ H) -> moves cursor to col 0.
+        time.sleep(0.1)
+        os.write(master, b"\x1b[H")
+
+        # Test Delete key (ESC [ 3 ~) -> deletes character 'C'.
+        # Buffer becomes '0:30.TXT'.
+        time.sleep(0.1)
+        os.write(master, b"\x1b[3~")
+
+        # Test character insertion -> type 'D'. Buffer becomes 'D0:30.TXT'.
+        time.sleep(0.1)
+        os.write(master, b"D")
+
+        # Test Right Arrow (ESC [ C) twice -> moves right to col 3.
+        time.sleep(0.1)
+        os.write(master, b"\x1b[C\x1b[C")
+
+        # Test Left Arrow (ESC [ D) 3 times -> moves left to col 0.
+        time.sleep(0.1)
+        os.write(master, b"\x1b[D\x1b[D\x1b[D")
+
+        # Test End key (ESC [ F) -> moves cursor to end (col 9).
+        time.sleep(0.1)
+        os.write(master, b"\x1b[F")
+
+        # Test Backspace (\x08) -> deletes 'T'. Buffer becomes 'D0:30.TX'.
+        time.sleep(0.1)
+        os.write(master, b"\x08")
+
+        # Restore 'T' -> buffer becomes 'D0:30.TXT'.
+        time.sleep(0.1)
+        os.write(master, b"T")
+
+        # Press Enter (\r) to save to D0:30.TXT.
+        time.sleep(0.1)
+        os.write(master, b"\r")
+        out_s73_saved = read_until(master, b"^K: Editor keys", timeout=25.0)
+        if b"^K: Editor keys" not in out_s73_saved:
+            print("[-] Step 73 failed: Save to D0:30.TXT did not finish.",
+                  flush=True)
+            return False
+        print("    [+] Save dialog in-line editing verified; "
+              "saved to D0:30.TXT.")
+
+        # Subtest 2: Open File Dialog In-Line Editing
+        # Open Open File dialog (Ctrl+O)
+        time.sleep(0.3)
+        os.write(master, b"\x0f")
+        out_s73_open = read_until(master, b"Enter filename to open:",
+                                  timeout=8.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+        if b"Enter filename to open:" not in out_s73_open:
+            print("[-] Step 73 failed: Open dialog prompt not found.",
+                  flush=True)
+            return False
+        print("    [+] Open dialog reached with preloaded filename.")
+
+        # Preloaded prefix is 'D0:', cursor is at end (col 3).
+        # Test Home key (ESC [ H) -> moves cursor to col 0.
+        time.sleep(0.1)
+        os.write(master, b"\x1b[H")
+
+        # Test Delete key (ESC [ 3 ~) -> deletes 'D' (buffer becomes '0:').
+        time.sleep(0.1)
+        os.write(master, b"\x1b[3~")
+
+        # Type 'C' -> buffer becomes 'C0:'.
+        time.sleep(0.1)
+        os.write(master, b"C")
+
+        # Test End key (ESC [ F) -> moves cursor to end (col 3).
+        time.sleep(0.1)
+        os.write(master, b"\x1b[F")
+
+        # Append filename '30.TXT' -> buffer becomes 'C0:30.TXT'.
+        time.sleep(0.1)
+        os.write(master, b"30.TXT")
+
+        # Press Enter to open C0:30.TXT.
+        time.sleep(0.1)
+        os.write(master, b"\r")
+        out_s73_opened = read_until(master, b"^K: Editor keys", timeout=25.0)
+        if b"^K: Editor keys" not in out_s73_opened:
+            print("[-] Step 73 failed: Open C0:30.TXT did not complete.",
+                  flush=True)
+            return False
+        print("    [+] Open dialog in-line editing verified; "
+              "loaded C0:30.TXT.")
+
+        # Subtest 3: WordStar Navigation Keys in Dialog
+        time.sleep(0.3)
+        os.write(master, b"\x0f")
+        read_until(master, b"Enter filename to open:", timeout=8.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Ctrl+A (Home), Ctrl+D (Right), Ctrl+S (Left), Ctrl+G (Del), Ctrl+E
+        time.sleep(0.1)
+        os.write(master, b"\x01")        # Ctrl+A (Home)
+        time.sleep(0.1)
+        os.write(master, b"\x04\x04")    # Ctrl+D (Right) twice
+        time.sleep(0.1)
+        os.write(master, b"\x13")        # Ctrl+S (Left) once
+        time.sleep(0.1)
+        os.write(master, b"\x07")        # Ctrl+G (Delete char at cursor)
+        time.sleep(0.1)
+        os.write(master, b"\x05")        # Ctrl+E (End)
+        time.sleep(0.1)
+        # Cancel dialog using ESC
+        os.write(master, b"\x1b")
+        out_s73_esc = read_until(master, b"^K: Editor keys", timeout=8.0)
+        if b"^K: Editor keys" not in out_s73_esc:
+            print("[-] Step 73 failed: ESC did not cancel Open dialog.",
+                  flush=True)
+            return False
+        print("    [+] WordStar navigation and ESC cancellation verified.")
+
+        # Exit editor cleanly to CP/M
+        time.sleep(0.3)
+        os.write(master, b"\x11")        # Ctrl+Q
+        out_s73_exit = read_until(master, b"C>", timeout=8.0)
+        if b"Save changes?" in out_s73_exit:
+            os.write(master, b"N")
+            out_s73_exit += read_until(master, b"C>", timeout=8.0)
+        if b"C>" not in out_s73_exit:
+            print("[-] Step 73 failed: Clean exit to CP/M failed.", flush=True)
+            return False
+        print("    [+] Clean exit to CP/M prompt verified.")
+        print("[+] Successfully verified Edit Box In-line Editing (Step 73)!",
+              flush=True)
 
         return True
 
@@ -4552,6 +4726,10 @@ def test_se_execution():
             subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, two_txt_host, "0:2.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if os.path.isfile(cpmrm_bin):
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_1", img_file,
+                            "0:30.TXT"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],

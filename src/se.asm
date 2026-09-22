@@ -40,6 +40,10 @@ KEY_CTRL_Q	EQU	17
 KEY_CTRL_W	EQU	23		; Close file to splash
 KEY_CTRL_S	EQU	19
 KEY_CTRL_O	EQU	15		; Open File Screen
+KEY_CTRL_A	EQU	1		; Start of line (Home)
+KEY_CTRL_D	EQU	4		; Cursor Right
+KEY_CTRL_E	EQU	5		; End of line (End)
+KEY_CTRL_G	EQU	7		; Delete character at cursor
 
 ACTION_EXIT	EQU	0		; Confirmation action: Exit to CP/M
 ACTION_CLOSE	EQU	1		; Confirmation action: Close document to splash
@@ -18418,6 +18422,7 @@ DRAW_FILENAME_BOX:
 
 	; Check if any prefilled text in INPUT_FILENAME_BUF
 	LD	A,(INPUT_BUF_LEN)
+	LD	(INPUT_CURSOR_POS),A
 	LD	B,A			; B = length of prefilled text (0..20)
 	OR	A
 	JR	Z,DFB_PAD_SPACES
@@ -18543,6 +18548,7 @@ LOCATE_RC:
 READ_FILENAME_INPUT:
 	XOR	A
 	LD	(INPUT_BUF_LEN),A
+	LD	(INPUT_CURSOR_POS),A
 	LD	(SHOWING_FNF_MSG),A
 	LD	HL,INPUT_FILENAME_BUF
 	LD	(HL),0
@@ -18554,6 +18560,8 @@ RESUME_FILENAME_INPUT:
 READ_FILENAME_INPUT_PREFILLED:
 	XOR	A
 	LD	(SHOWING_FNF_MSG),A
+	LD	A,(INPUT_BUF_LEN)
+	LD	(INPUT_CURSOR_POS),A
 	JR	INPUT_CHAR_LOOP
 
 INPUT_CHAR_LOOP:
@@ -18575,7 +18583,7 @@ INPUT_CHAR_LOOP:
 
 CHECK_ESC_KEY:
 	CP	KEY_ESC
-	JR	NZ,INPUT_CHECK_PAGE_KEYS
+	JP	NZ,INPUT_CHECK_PAGE_KEYS
 
 	; Check if character follows ESC within a short timeout
 	LD	BC,1000
@@ -18600,6 +18608,24 @@ INPUT_GOT_ESC_BYTE:
 
 INPUT_HANDLE_CSI:
 	CALL	GET_KEY
+	CP	'D'			; Left Arrow (ESC [ D)
+	JP	Z,INPUT_CURSOR_LEFT
+	CP	'C'			; Right Arrow (ESC [ C)
+	JP	Z,INPUT_CURSOR_RIGHT
+	CP	'H'			; Home (ESC [ H)
+	JP	Z,INPUT_CURSOR_HOME
+	CP	'F'			; End (ESC [ F)
+	JP	Z,INPUT_CURSOR_END
+	CP	'1'			; Home (ESC [ 1 ~)
+	JR	Z,INPUT_CSI_HOME_TILDE
+	CP	'4'			; End (ESC [ 4 ~)
+	JR	Z,INPUT_CSI_END_TILDE
+	CP	'7'			; Home (ESC [ 7 ~)
+	JR	Z,INPUT_CSI_HOME_TILDE
+	CP	'8'			; End (ESC [ 8 ~)
+	JR	Z,INPUT_CSI_END_TILDE
+	CP	'3'			; Delete key (ESC [ 3 ~)
+	JR	Z,INPUT_CSI_DEL
 	CP	'2'			; Insert key (ESC [ 2 ~)
 	JR	Z,INPUT_CSI_INS
 	CP	'5'			; Page Up (ESC [ 5 ~)
@@ -18610,13 +18636,23 @@ INPUT_HANDLE_CSI:
 	JR	Z,INPUT_DO_PGUP
 	CP	'G'			; Page Down (VT alt)
 	JR	Z,INPUT_DO_PGDN
-	CP	'3'			; Delete key (ESC [ 3 ~)
-	JR	Z,INPUT_CSI_DEL
 	CP	'L'			; VT102 Insert line
 	JP	Z,INPUT_CHAR_LOOP
 	CP	'@'			; ICH Insert char
 	JP	Z,INPUT_CHAR_LOOP
 	JP	INPUT_CHAR_LOOP
+
+INPUT_CSI_HOME_TILDE:
+	CALL	GET_KEY			; Consume trailing '~'
+	JP	INPUT_CURSOR_HOME
+
+INPUT_CSI_END_TILDE:
+	CALL	GET_KEY			; Consume trailing '~'
+	JP	INPUT_CURSOR_END
+
+INPUT_CSI_DEL:
+	CALL	GET_KEY			; Consume trailing '~'
+	JP	INPUT_DEL_CHAR
 
 INPUT_CSI_INS:
 	CALL	GET_KEY			; Consume trailing '~'
@@ -18636,24 +18672,40 @@ INPUT_DO_PGDN:
 	SCF				; Carry = 1
 	RET
 
-INPUT_CSI_DEL:
-	CALL	GET_KEY			; Consume trailing '~'
-	JP	INPUT_BS		; Treat Delete as Backspace
-
 INPUT_HANDLE_SS3:
-	CALL	GET_KEY			; Consume char
+	CALL	GET_KEY
+	CP	'D'			; Left Arrow (ESC O D)
+	JP	Z,INPUT_CURSOR_LEFT
+	CP	'C'			; Right Arrow (ESC O C)
+	JP	Z,INPUT_CURSOR_RIGHT
+	CP	'H'			; Home (ESC O H)
+	JP	Z,INPUT_CURSOR_HOME
+	CP	'F'			; End (ESC O F)
+	JP	Z,INPUT_CURSOR_END
 	JP	INPUT_CHAR_LOOP
 
 INPUT_CHECK_PAGE_KEYS:
 	; Ctrl+U or Ctrl+B -> Page Up
 	CP	KEY_CTRL_U
 	JR	Z,INPUT_DO_PGUP
-	CP	2			; Ctrl+B
+	CP	KEY_CTRL_B
 	JR	Z,INPUT_DO_PGUP
 
 	; Ctrl+V -> Page Down
 	CP	KEY_CTRL_V
 	JR	Z,INPUT_DO_PGDN
+
+	; WordStar navigation keys
+	CP	KEY_CTRL_A		; Ctrl+A -> Home
+	JP	Z,INPUT_CURSOR_HOME
+	CP	KEY_CTRL_E		; Ctrl+E -> End
+	JP	Z,INPUT_CURSOR_END
+	CP	KEY_CTRL_S		; Ctrl+S -> Cursor Left
+	JP	Z,INPUT_CURSOR_LEFT
+	CP	KEY_CTRL_D		; Ctrl+D -> Cursor Right
+	JP	Z,INPUT_CURSOR_RIGHT
+	CP	KEY_CTRL_G		; Ctrl+G -> Delete char at cursor
+	JP	Z,INPUT_DEL_CHAR
 
 CHECK_ENTER_KEY:
 	; Enter -> Finish input or advance page if empty
@@ -18673,50 +18725,268 @@ CHECK_ENTER_KEY:
 	JP	NC,INPUT_CHAR_LOOP
 
 	; Check buffer capacity (max 20 chars)
-	LD	B,A			; Save char in B
+	LD	(INPUT_CHAR_TEMP),A
 	LD	A,(INPUT_BUF_LEN)
 	CP	20
 	JP	NC,INPUT_CHAR_LOOP
 
-	; Store character
+	; Check if cursor is at end of string or inside text
+	LD	A,(INPUT_CURSOR_POS)
+	LD	HL,INPUT_BUF_LEN
+	CP	(HL)
+	JR	NZ,INPUT_INSERT_MIDDLE
+
+	; Appending at end:
 	LD	HL,INPUT_FILENAME_BUF
 	LD	E,A
 	LD	D,0
 	ADD	HL,DE
-	LD	(HL),B
+	LD	A,(INPUT_CHAR_TEMP)
+	LD	(HL),A
 	INC	HL
 	LD	(HL),0			; Null-terminate
 
-	LD	A,(INPUT_BUF_LEN)
-	INC	A
-	LD	(INPUT_BUF_LEN),A
+	LD	HL,INPUT_BUF_LEN
+	INC	(HL)
+	LD	HL,INPUT_CURSOR_POS
+	INC	(HL)
 
 	; Echo character
-	LD	A,B
+	LD	A,(INPUT_CHAR_TEMP)
 	CALL	PUTC
 	JP	INPUT_CHAR_LOOP
 
-INPUT_BS:
+INPUT_INSERT_MIDDLE:
+	; Shift bytes right from INPUT_CURSOR_POS to INPUT_BUF_LEN
+	; Source end: HL = INPUT_FILENAME_BUF + INPUT_BUF_LEN
+	; Dest end:   DE = INPUT_FILENAME_BUF + INPUT_BUF_LEN + 1
+	; Count:      BC = INPUT_BUF_LEN - INPUT_CURSOR_POS + 1
 	LD	A,(INPUT_BUF_LEN)
+	LD	E,A
+	LD	D,0
+	LD	HL,INPUT_FILENAME_BUF
+	ADD	HL,DE			; HL = Source end
+	LD	D,H
+	LD	E,L
+	INC	DE			; DE = Dest end: HL + 1
+
+	LD	A,(INPUT_BUF_LEN)
+	LD	C,A
+	LD	A,(INPUT_CURSOR_POS)
+	SUB	C			; A = P - L
+	NEG				; A = L - P
+	INC	A			; +1 for null byte
+	LD	C,A
+	LD	B,0
+	LDDR
+
+	; Store character at INPUT_FILENAME_BUF + INPUT_CURSOR_POS
+	LD	A,(INPUT_CURSOR_POS)
+	LD	E,A
+	LD	D,0
+	LD	HL,INPUT_FILENAME_BUF
+	ADD	HL,DE
+	LD	A,(INPUT_CHAR_TEMP)
+	LD	(HL),A
+
+	; Increment length and cursor position
+	LD	HL,INPUT_BUF_LEN
+	INC	(HL)
+	LD	HL,INPUT_CURSOR_POS
+	INC	(HL)
+
+	; Echo character (screen cursor moves to new INPUT_CURSOR_POS)
+	LD	A,(INPUT_CHAR_TEMP)
+	CALL	PUTC
+
+	; Refresh remaining box from new cursor position
+	CALL	REFRESH_BOX_FROM_CURSOR
+	JP	INPUT_CHAR_LOOP
+
+INPUT_CURSOR_LEFT:
+	LD	A,(INPUT_CURSOR_POS)
 	OR	A
-	JP	Z,INPUT_CHAR_LOOP	; Nothing to backspace
+	JP	Z,INPUT_CHAR_LOOP	; At col 0 -> ignore
 
 	DEC	A
-	LD	(INPUT_BUF_LEN),A
+	LD	(INPUT_CURSOR_POS),A
+	LD	A,008H
+	CALL	PUTC
+	JP	INPUT_CHAR_LOOP
+
+INPUT_CURSOR_RIGHT:
+	LD	A,(INPUT_CURSOR_POS)
+	LD	HL,INPUT_BUF_LEN
+	CP	(HL)
+	JP	NC,INPUT_CHAR_LOOP	; At end -> ignore
+
+	; Advance cursor on screen by printing current character
 	LD	HL,INPUT_FILENAME_BUF
 	LD	E,A
 	LD	D,0
 	ADD	HL,DE
-	LD	(HL),0			; Null-terminate at new end
+	LD	A,(HL)
+	CALL	PUTC
 
-	; Visual backspace: \x08 \x08
+	LD	HL,INPUT_CURSOR_POS
+	INC	(HL)
+	JP	INPUT_CHAR_LOOP
+
+INPUT_CURSOR_HOME:
+	LD	A,(INPUT_CURSOR_POS)
+	OR	A
+	JP	Z,INPUT_CHAR_LOOP
+
+	LD	B,A
+	XOR	A
+	LD	(INPUT_CURSOR_POS),A
+ICH_BS_LOOP:
 	LD	A,008H
 	CALL	PUTC
+	DJNZ	ICH_BS_LOOP
+	JP	INPUT_CHAR_LOOP
+
+INPUT_CURSOR_END:
+	CALL	INPUT_MOVE_CURSOR_TO_END
+	JP	INPUT_CHAR_LOOP
+
+INPUT_DEL_CHAR:
+	LD	A,(INPUT_CURSOR_POS)
+	LD	HL,INPUT_BUF_LEN
+	CP	(HL)
+	JP	NC,INPUT_CHAR_LOOP	; Nothing at/past cursor to delete
+
+DO_DELETE_CHAR_AT_CURSOR:
+	; Decrement INPUT_BUF_LEN
+	LD	HL,INPUT_BUF_LEN
+	DEC	(HL)
+
+	; Shift bytes left from (INPUT_CURSOR_POS + 1) to INPUT_BUF_LEN
+	; Dest:   DE = INPUT_FILENAME_BUF + INPUT_CURSOR_POS
+	; Source: HL = INPUT_FILENAME_BUF + INPUT_CURSOR_POS + 1
+	; Count:  BC = INPUT_BUF_LEN - INPUT_CURSOR_POS + 1 (null included)
+	LD	A,(INPUT_CURSOR_POS)
+	LD	E,A
+	LD	D,0
+	LD	HL,INPUT_FILENAME_BUF
+	ADD	HL,DE
+	EX	DE,HL			; DE = Dest
+	LD	H,D
+	LD	L,E
+	INC	HL			; HL = Source (DE + 1)
+
+	LD	A,(INPUT_BUF_LEN)
+	LD	C,A
+	LD	A,(INPUT_CURSOR_POS)
+	SUB	C			; A = P - L
+	NEG				; A = L - P
+	INC	A			; +1 for null byte
+	LD	C,A
+	LD	B,0
+	LDIR
+
+	; Redraw box from cursor position
+	CALL	REFRESH_BOX_FROM_CURSOR
+	JP	INPUT_CHAR_LOOP
+
+INPUT_BS:
+	LD	A,(INPUT_CURSOR_POS)
+	OR	A
+	JP	Z,INPUT_CHAR_LOOP	; At col 0 -> nothing to backspace
+
+	DEC	A
+	LD	(INPUT_CURSOR_POS),A
+
+	; Move terminal cursor left 1 column
+	LD	A,008H
+	CALL	PUTC
+
+	; Fall through to delete character at updated INPUT_CURSOR_POS
+	JR	DO_DELETE_CHAR_AT_CURSOR
+
+;------------------------------------------------------------------------------
+; REFRESH_BOX_FROM_CURSOR:
+; Redraws edit box from INPUT_CURSOR_POS to col 20, then backspaces to
+; INPUT_CURSOR_POS. Assumes terminal cursor is currently at INPUT_CURSOR_POS.
+; Preserves BC, DE.
+;------------------------------------------------------------------------------
+REFRESH_BOX_FROM_CURSOR:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; 1. Print characters from INPUT_CURSOR_POS to INPUT_BUF_LEN
+	LD	A,(INPUT_CURSOR_POS)
+	LD	E,A
+	LD	D,0
+	LD	HL,INPUT_FILENAME_BUF
+	ADD	HL,DE			; HL = pointer to current char
+	LD	A,(INPUT_BUF_LEN)
+	SUB	E			; A = INPUT_BUF_LEN - INPUT_CURSOR_POS
+	JR	Z,RBFC_SPACES		; If past text, jump to spaces
+	LD	B,A
+RBFC_CHAR_LOOP:
+	LD	A,(HL)
+	CALL	PUTC
+	INC	HL
+	DJNZ	RBFC_CHAR_LOOP
+
+RBFC_SPACES:
+	; 2. Print spaces from INPUT_BUF_LEN to 20: (20 - INPUT_BUF_LEN)
+	LD	A,20
+	LD	HL,INPUT_BUF_LEN
+	SUB	(HL)			; A = 20 - INPUT_BUF_LEN
+	JR	Z,RBFC_MOVE_BACK
+	LD	B,A
+RBFC_SPACE_LOOP:
 	LD	A,' '
 	CALL	PUTC
+	DJNZ	RBFC_SPACE_LOOP
+
+RBFC_MOVE_BACK:
+	; 3. Emit (20 - INPUT_CURSOR_POS) backspaces to return to cursor
+	LD	A,20
+	LD	HL,INPUT_CURSOR_POS
+	SUB	(HL)			; A = 20 - INPUT_CURSOR_POS
+	JR	Z,RBFC_DONE
+	LD	B,A
+RBFC_BS_LOOP:
 	LD	A,008H
 	CALL	PUTC
-	JP	INPUT_CHAR_LOOP
+	DJNZ	RBFC_BS_LOOP
+
+RBFC_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; Advance cursor on screen from INPUT_CURSOR_POS to INPUT_BUF_LEN
+;------------------------------------------------------------------------------
+INPUT_MOVE_CURSOR_TO_END:
+	LD	A,(INPUT_CURSOR_POS)
+	LD	HL,INPUT_BUF_LEN
+	CP	(HL)
+	RET	NC			; Already at/past end
+
+	LD	B,(HL)
+	SUB	B
+	NEG				; A = INPUT_BUF_LEN - INPUT_CURSOR_POS
+	LD	B,A
+	LD	A,(INPUT_CURSOR_POS)
+	LD	HL,INPUT_FILENAME_BUF
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE
+IMCTE_LOOP:
+	LD	A,(HL)
+	CALL	PUTC
+	INC	HL
+	DJNZ	IMCTE_LOOP
+	LD	A,(INPUT_BUF_LEN)
+	LD	(INPUT_CURSOR_POS),A
+	RET
 
 ;------------------------------------------------------------------------------
 ; Clear "  File not found" inline message if currently visible
@@ -18783,7 +19053,8 @@ INPUT_ENTER:
 	OR	A
 	JR	Z,INPUT_ENTER_EMPTY	; Empty string on Enter
 
-	; Non-empty string: success
+	; Non-empty string: advance cursor to end of text
+	CALL	INPUT_MOVE_CURSOR_TO_END
 	OR	A			; Carry = 0 (success)
 	RET
 
@@ -20290,7 +20561,9 @@ DIR_COLS_PER_ROW:	DB	5
 DIR_COL_WIDTH:		DB	15
 DIR_PAGE_CAPACITY:	DB	60
 DIR_TEMP_ENTRY:		DS	16
-INPUT_BUF_LEN:	DB	0
+INPUT_BUF_LEN:		DB	0
+INPUT_CURSOR_POS:	DB	0
+INPUT_CHAR_TEMP:	DB	0
 INPUT_FILENAME_BUF:	DS	32
 DIR_NAMES_BUF:	DS	3328	; 256 entries * 13 bytes
 DIR_FILTER_FCB:		DB	"???????????"	; 11-byte FCB wildcard pattern (8 name + 3 ext)
