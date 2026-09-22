@@ -4709,6 +4709,187 @@ def test_se_execution():
         print("[+] Successfully verified Edit Box In-line Editing (Step 73)!",
               flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 74: Splash RAM Drive Status and Unavailable RAM Drive Guard
+        # ---------------------------------------------------------------------
+        print("[*] Step 74: Verifying Splash RAM Drive Status & Guard...",
+              flush=True)
+
+        # 1. Reset SE.CFG so SE starts with default (Preserve)
+        time.sleep(0.3)
+        os.write(master, b"era se.cfg\r")
+        read_until(master, b"C>", timeout=10.0)
+
+        # 2. Launch SE without file arguments
+        time.sleep(0.3)
+        os.write(master, b"se\r")
+        out_s74_splash = read_until(master, b"Active Screen: [", timeout=20.0)
+        out_s74_splash += read_until(master, b"RAM Drive (", timeout=5.0)
+        out_s74_splash += read_until(master, b"to configure", timeout=5.0)
+
+        # Verify Splash Screen shows RAM Drive line under Active Screen
+        if b"RAM Drive (A:): [Preserved (Active)]" not in out_s74_splash:
+            print("[-] Step 74 failed: Splash screen missing 'RAM Drive (A:): "
+                  f"[Preserved (Active)]'. Buffer: {repr(out_s74_splash)}",
+                  flush=True)
+            return False
+        print("    [+] Splash screen shows "
+              "'RAM Drive (A:): [Preserved (Active)]'.")
+
+        # 2. Enter configuration screen with 'c'
+        time.sleep(0.3)
+        os.write(master, b"c")
+        out_s74_cfg = read_until(master, b"return to splash screen",
+                                 timeout=10.0)
+        if b"Preserve (RAM Drive Active, 128KB)]" not in out_s74_cfg:
+            print("[-] Step 74 failed: Config screen label 'Preserve' "
+                  f"missing. Buffer: {repr(out_s74_cfg)}", flush=True)
+            return False
+        print("    [+] Config screen displays "
+              "'Preserve (RAM Drive Active, 128KB)]'.")
+
+        # Cycle mode to Hibernate ('2')
+        time.sleep(0.3)
+        os.write(master, b"2")
+        out_s74_hib = read_until(master, b"Hibernate (Backup/Restore, 384KB)]",
+                                 timeout=10.0)
+        if b"Hibernate (Backup/Restore, 384KB)]" not in out_s74_hib:
+            print("[-] Step 74 failed: Config screen toggle to Hibernate "
+                  f"failed. Buffer: {repr(out_s74_hib)}", flush=True)
+            return False
+        print("    [+] Config screen toggled to "
+              "'Hibernate (Backup/Restore, 384KB)]'.")
+
+        # Cycle mode to Overwrite ('2')
+        time.sleep(0.3)
+        os.write(master, b"2")
+        out_s74_ovw = read_until(
+            master, b"Overwrite (Sacrifice Drive, 384KB)]", timeout=10.0)
+        if b"Overwrite (Sacrifice Drive, 384KB)]" not in out_s74_ovw:
+            print("[-] Step 74 failed: Config screen toggle to Overwrite "
+                  f"failed. Buffer: {repr(out_s74_ovw)}", flush=True)
+            return False
+        print("    [+] Config screen toggled to "
+              "'Overwrite (Sacrifice Drive, 384KB)]'.")
+
+        # Save config with 's' and return to splash with 'q'
+        time.sleep(0.3)
+        os.write(master, b"s")
+        read_until(master, b"Saved to local drive", timeout=10.0)
+        time.sleep(0.3)
+        os.write(master, b"q")
+        out_s74_splash2 = read_until(master, b"Active Screen: [", timeout=10.0)
+        out_s74_splash2 += read_until(master, b"RAM Drive (", timeout=5.0)
+        out_s74_splash2 += read_until(master, b"]", timeout=5.0)
+        if b"RAM Drive (A:): [Overwritten (Max RAM)]" not in out_s74_splash2:
+            print("[-] Step 74 failed: Splash screen does not show "
+                  f"Overwritten. Buffer: {repr(out_s74_splash2)}", flush=True)
+            return False
+        print("    [+] Splash screen updated to "
+              "'RAM Drive (A:): [Overwritten (Max RAM)]'.")
+
+        # 3. Test Open File screen with unavailable RAM drive
+        time.sleep(0.3)
+        os.write(master, b"o")            # Open file
+        out_s74_open = read_until(master, b"Enter filename to open:",
+                                  timeout=10.0)
+        if b"Enter filename to open:" not in out_s74_open:
+            print("[-] Step 74 failed: Failed to enter Open File screen.",
+                  flush=True)
+            return False
+
+        # Clear preloaded 'C0:' and switch to unavailable RAM drive A:
+        time.sleep(0.3)
+        os.write(master, b"\x08\x08\x08a:\r")
+        out_s74_open_err = read_until(master, b"RAM drive not available",
+                                      timeout=10.0)
+        if b"RAM drive not available" not in out_s74_open_err:
+            print("[-] Step 74 failed: 'RAM drive not available' not "
+                  f"shown on A: in Open screen. Buffer: "
+                  f"{repr(out_s74_open_err)}", flush=True)
+            return False
+        print("    [+] Open screen displayed inline "
+              "'  RAM drive not available' on 'a:'.")
+
+        # Typing backspace clears message and deletes ':', type ':nofile.txt'
+        time.sleep(0.3)
+        os.write(master, b"\x08:nofile.txt\r")
+        out_s74_open_err2 = read_until(master, b"RAM drive not available",
+                                       timeout=10.0)
+        if b"RAM drive not available" not in out_s74_open_err2:
+            print("[-] Step 74 failed: 'RAM drive not available' not "
+                  f"shown on A:NOFILE.TXT. Buffer: "
+                  f"{repr(out_s74_open_err2)}", flush=True)
+            return False
+        print("    [+] Open screen displayed inline "
+              "error on 'a:nofile.txt'.")
+
+        # Cancel Open dialog with ESC
+        time.sleep(0.3)
+        os.write(master, b"\x1b")
+        read_until(master, b"to configure", timeout=10.0)
+        print("    [+] ESC cancelled Open dialog back to splash screen.")
+
+        # 4. Enter editor mode with 'e' and test Save File screen
+        time.sleep(0.3)
+        os.write(master, b"e")
+        read_until(master, b"Free:", timeout=10.0)
+
+        # Open Save dialog with Ctrl+S
+        time.sleep(0.3)
+        os.write(master, b"\x13")        # Ctrl+S
+        out_s74_save = read_until(master, b"Enter filename to save:",
+                                  timeout=10.0)
+        if b"Enter filename to save:" not in out_s74_save:
+            print("[-] Step 74 failed: Failed to enter Save File screen.",
+                  flush=True)
+            return False
+
+        # Clear preloaded 'C0:' and switch to unavailable RAM drive A:
+        time.sleep(0.3)
+        os.write(master, b"\x08\x08\x08a:\r")
+        out_s74_save_err = read_until(master, b"RAM drive not available",
+                                      timeout=10.0)
+        if b"RAM drive not available" not in out_s74_save_err:
+            print("[-] Step 74 failed: 'RAM drive not available' not "
+                  f"shown on A: in Save screen. Buffer: "
+                  f"{repr(out_s74_save_err)}", flush=True)
+            return False
+        print("    [+] Save screen displayed inline "
+              "'  RAM drive not available' on 'a:'.")
+
+        # Typing backspace clears message and deletes ':', type ':savefile.txt'
+        time.sleep(0.3)
+        os.write(master, b"\x08:savefile.txt\r")
+        out_s74_save_err2 = read_until(master, b"RAM drive not available",
+                                       timeout=10.0)
+        if b"RAM drive not available" not in out_s74_save_err2:
+            print("[-] Step 74 failed: 'RAM drive not available' not "
+                  f"shown on A:SAVEFILE.TXT. Buffer: "
+                  f"{repr(out_s74_save_err2)}", flush=True)
+            return False
+        print("    [+] Save screen displayed inline "
+              "error on 'a:savefile.txt'.")
+
+        # Cancel Save dialog with ESC
+        time.sleep(0.3)
+        os.write(master, b"\x1b")
+        time.sleep(0.3)
+
+        # Exit editor cleanly to CP/M
+        time.sleep(0.3)
+        os.write(master, b"\x11")        # Ctrl+Q
+        out_s74_exit = read_until(master, b"C>", timeout=8.0)
+        if b"Save changes?" in out_s74_exit:
+            os.write(master, b"N")
+            out_s74_exit += read_until(master, b"C>", timeout=8.0)
+        if b"C>" not in out_s74_exit:
+            print("[-] Step 74 failed: Clean exit to CP/M failed.", flush=True)
+            return False
+        print("    [+] Clean exit to CP/M prompt verified.")
+        print("[+] Successfully verified Splash RAM Drive Status and "
+              "Unavailable Guard (Step 74)!", flush=True)
+
         return True
 
     finally:

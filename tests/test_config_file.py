@@ -156,8 +156,10 @@ def run_tests():
         os.write(master, b"c")
         out = read_until(master, b"return to splash screen", timeout=15.0)
         assert b"SE - Screen Editor Configuration" in out, "Failed to enter Config Screen"
-        assert b"120x40 (Modern Default)" in out, "Config Screen wrong geometry"
-        assert b"RAM Drive (A:)" in out and b"[Protected (Preserve RAM Disk)]" in out, "Default RAM drive blocks not Protected"
+        assert b"RAM Drive (A:)" in out and (
+            b"[Preserve (RAM Drive Active, 128KB)]" in out or
+            b"[Protected (Preserve RAM Disk)]" in out
+        ), "Default RAM drive blocks not Preserve"
         assert b"3. Max Doc Lines   : [16K (16,384 Lines)]" in out, "Default max lines not 16K"
         assert b"4. Tab Width       : [8 Spaces (Default)]" in out, "Default tab width not 8 Spaces"
         assert b"Config Status      : [Default (No SE.CFG found)]" in out, "Config Screen wrong status"
@@ -209,9 +211,13 @@ def run_tests():
         os.write(master, b"c")
         out = read_until(master, b"return to splash screen", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out, "Config Screen wrong geometry"
-        assert b"RAM Drive (A:)" in out and b"[Enabled (Use for Max RAM)]" in out, "Config Screen did not reflect RAMDRIVE=ON"
+        assert b"RAM Drive (A:)" in out and (
+            b"[Overwrite (Sacrifice Drive, 384KB)]" in out or
+            b"[Enabled (Use for Max RAM)]" in out
+        ), "Config Screen did not reflect RAMDRIVE=ON/OVERWRITE"
         assert b"Loaded from local drive (C:SE.CFG)" in out, "Config Screen wrong status"
-        print("    [+] Config screen displays 80x24 geometry, Enabled RAM drive, and Loaded status")
+        print("    [+] Config screen displays 80x24 geometry, Overwrite RAM "
+              "drive, and Loaded status")
 
         # Exit SE
         time.sleep(0.2)
@@ -253,7 +259,10 @@ def run_tests():
         os.write(master, b"c")
         out = read_until(master, b"return to splash screen", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out
-        assert b"RAM Drive (A:)" in out and b"[Protected (Preserve RAM Disk)]" in out
+        assert b"RAM Drive (A:)" in out and (
+            b"[Preserve (RAM Drive Active, 128KB)]" in out or
+            b"[Protected (Preserve RAM Disk)]" in out
+        )
 
         # Toggle geometry with '1' -> should switch to 120x40
         time.sleep(0.3)
@@ -265,16 +274,22 @@ def run_tests():
         # Toggle RAM drive with '2' -> should cycle to Hibernate
         time.sleep(0.3)
         os.write(master, b"2")
-        out = read_until(master, b"Hibernate (Save/Restore RAMDRV.IMG)", timeout=15.0)
-        assert b"Hibernate (Save/Restore RAMDRV.IMG)" in out, f"Toggle '2' (Hibernate) failed: {out}"
+        out = read_until(master, b"Hibernate (Backup/Restore, 384KB)",
+                         timeout=15.0)
+        assert b"Hibernate (Backup/Restore, 384KB)" in out, (
+            f"Toggle '2' (Hibernate) failed: {out}"
+        )
         print("    [+] Toggled RAM drive blocks to Hibernate")
 
-        # Toggle RAM drive with '2' again -> should cycle to Enabled
+        # Toggle RAM drive with '2' again -> should cycle to Overwrite
         time.sleep(0.3)
         os.write(master, b"2")
-        out = read_until(master, b"Enabled (Use for Max RAM)", timeout=10.0)
-        assert b"Enabled (Use for Max RAM)" in out, f"Toggle '2' (Enabled) failed: {out}"
-        print("    [+] Toggled RAM drive blocks to Enabled")
+        out = read_until(master, b"Overwrite (Sacrifice Drive, 384KB)",
+                         timeout=10.0)
+        assert b"Overwrite (Sacrifice Drive, 384KB)" in out, (
+            f"Toggle '2' (Overwrite) failed: {out}"
+        )
+        print("    [+] Toggled RAM drive blocks to Overwrite")
 
         # Save configuration with 's'
         time.sleep(0.3)
@@ -303,24 +318,33 @@ def run_tests():
         assert cfg_bytes is not None, "SE.CFG not found on disk image"
         cfg_text = cfg_bytes.decode("latin1", errors="replace")
         assert "SCREEN=120x40" in cfg_text, f"Unexpected SE.CFG content: {cfg_text}"
-        assert "RAMDRIVE=ON" in cfg_text, f"Unexpected SE.CFG RAMDRIVE content: {cfg_text}"
+        assert ("RAMDRIVE=OVERWRITE" in cfg_text or
+                "RAMDRIVE=ON" in cfg_text), (
+            f"Unexpected SE.CFG RAMDRIVE: {cfg_text}"
+        )
         assert "TAB=8" in cfg_text, f"Unexpected SE.CFG TAB content: {cfg_text}"
         assert "LINES=16K" in cfg_text, f"Unexpected SE.CFG LINES content: {cfg_text}"
         assert "# SE.CFG - Screen Editor Configuration" in cfg_text, "Missing header comment"
-        print("    [+] Verified SE.CFG file contains SCREEN=120x40, RAMDRIVE=ON, TAB=8, and LINES=16K")
+        print("    [+] Verified SE.CFG file contains SCREEN=120x40, "
+              "RAMDRIVE=OVERWRITE, TAB=8, and LINES=16K")
 
         # Re-launch SE to verify persistent load
         drain_all(master)
         time.sleep(0.4)
         os.write(master, b"se\r")
         out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=25.0)
-        assert b"120x40 (Modern Default)" in out, "Re-launch did not retain saved 120x40"
+        assert b"120x40 (Modern Default)" in out, (
+            f"Re-launch did not retain saved 120x40. Buffer: {repr(out)}"
+        )
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"c")
         out = read_until(master, b"return to splash screen", timeout=10.0)
         assert b"120x40 (Modern Default)" in out
-        assert b"RAM Drive (A:)" in out and b"[Enabled (Use for Max RAM)]" in out
+        assert b"RAM Drive (A:)" in out and (
+            b"[Overwrite (Sacrifice Drive, 384KB)]" in out or
+            b"[Enabled (Use for Max RAM)]" in out
+        )
         assert b"Loaded from local drive (C:SE.CFG)" in out
         drain_all(master)
         time.sleep(0.2)
@@ -494,15 +518,20 @@ def run_tests():
         time.sleep(0.3)
         os.write(master, b"se\r")
         out = read_until(master, b"80x24 (Classic Terminal)", timeout=180.0)
-        assert b"Hibernating RAM drive to RAMDRV.IMG" in out, f"Missing hibernation status message: {out}"
-        assert b"[Done: 256 KB preserved]" in out, f"Missing hibernation completion message: {out}"
-        print("    [+] Verified startup status messaging: [SE] Hibernating RAM drive to RAMDRV.IMG... [Done: 256 KB preserved]")
+        assert (b"Hibernating RAM drive (" in out and
+                b") to RAMDRV.IMG" in out), f"Missing hibernation msg: {out}"
+        assert b"[Done: 256 KB preserved]" in out, (
+            f"Missing hibernation completion: {out}"
+        )
+        print("    [+] Verified startup status messaging: [SE] Hibernating "
+              "RAM drive (A:) to RAMDRV.IMG... [Done: 256 KB preserved]")
 
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
         out = read_until(master, b"return to splash screen", timeout=10.0)
-        assert b"Hibernate (Save/Restore RAMDRV.IMG)" in out
+        assert (b"Hibernate (Backup/Restore, 384KB)" in out or
+                b"Hibernate (Save/Restore RAMDRV.IMG)" in out)
         assert b"Loaded from local drive (C:SE.CFG)" in out
         print("    [+] Config screen verifies Hibernate mode active")
 
@@ -527,9 +556,13 @@ def run_tests():
         os.write(master, b"n")
         out = read_until(master, b"C>", timeout=240.0)
         assert b"C>" in out, f"Failed exiting to C>: {out}"
-        assert b"Restoring RAM drive from RAMDRV.IMG" in out, f"Missing restore message: {out}"
-        assert b"[Done: RAM drive restored]" in out, f"Missing restore completion message: {out}"
-        print("    [+] Verified exit status messaging: [SE] Restoring RAM drive from RAMDRV.IMG... [Done: RAM drive restored]")
+        assert (b"Restoring RAM drive (" in out and
+                b") from RAMDRV.IMG" in out), f"Missing restore msg: {out}"
+        assert (b"[Done: RAM drive (" in out and
+                b") restored]" in out), f"Missing restore completion: {out}"
+        print("    [+] Verified exit status messaging: [SE] Restoring "
+              "RAM drive (A:) from RAMDRV.IMG... "
+              "[Done: RAM drive (A:) restored]")
 
         # Verify C:RAMDRV.IMG was cleaned up
         time.sleep(0.3)
@@ -627,13 +660,22 @@ def run_tests():
         time.sleep(0.3)
         os.write(master, b"se\r")
         out = read_until(master, b"80x24 (Classic Terminal)", timeout=180.0)
-        assert b"Hibernating RAM drive to RAMDRV.IMG" in out, f"Expected hibernation of B:: {out}"
+        assert (b"Hibernating RAM drive (" in out and
+                b") to RAMDRV.IMG" in out), (
+            f"Expected hibernation of B:: {out}"
+        )
         time.sleep(0.3)
         os.write(master, b"c")
         out = read_until(master, b"return to splash screen", timeout=10.0)
-        assert b"RAM Drive (B:)" in out, f"Config screen did not display detected RAM drive B:: {out}"
-        assert b"Hibernate (Save/Restore RAMDRV.IMG)" in out, f"Config screen wrong mode: {out}"
-        print("    [+] Config screen dynamically displays RAM Drive (B:) with Hibernate mode")
+        assert b"RAM Drive (B:)" in out, (
+            f"Config screen did not display detected RAM drive B:: {out}"
+        )
+        assert (b"Hibernate (Backup/Restore, 384KB)" in out or
+                b"Hibernate (Save/Restore RAMDRV.IMG)" in out), (
+            f"Config screen wrong mode: {out}"
+        )
+        print("    [+] Config screen dynamically displays RAM Drive (B:) with "
+              "Hibernate mode")
 
         # Exit SE - should restore RAM drive B: from C:RAMDRV.IMG
         time.sleep(0.2)
@@ -643,8 +685,10 @@ def run_tests():
         os.write(master, b"q")
         out = read_until(master, b"C>", timeout=240.0)
         assert b"C>" in out
-        assert b"Restoring RAM drive from RAMDRV.IMG" in out
-        assert b"[Done: RAM drive restored]" in out
+        assert (b"Restoring RAM drive (" in out and
+                b") from RAMDRV.IMG" in out)
+        assert (b"[Done: RAM drive (" in out and
+                b") restored]" in out)
         print("    [+] Verified exit restoration of RAM drive B: from RAMDRV.IMG")
 
         # Switch back to RAM drive B: and verify RAMFILE.TXT is completely intact

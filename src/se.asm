@@ -1459,9 +1459,9 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ; Dynamically centered both horizontally and vertically for active screen geometry.
-; Total menu lines: 17
+;; Total menu lines: 18
 ;------------------------------------------------------------------------------
-SPLASH_MENU_LINES	EQU	17
+SPLASH_MENU_LINES	EQU	18
 
 ;------------------------------------------------------------------------------
 ; PRINT_TILDE_CRLF: Print '~' followed by CRLF
@@ -1478,26 +1478,25 @@ PRINT_TILDE_CRLF:
 
 ;------------------------------------------------------------------------------
 ; PRINT_SPLASH_PREFIX: Print '~' followed by geometry-dependent left padding
-; Padding: ((ACTIVE_COLS - 42) / 2) spaces
-; 80x24:  19 spaces (1 + 19 + 41 + 19 = 80)
-; 120x40: 39 spaces (1 + 39 + 41 + 39 = 120)
-; Preserves: All registers except AF
+; Total visual block width: 41 columns.
+; 80x24: 19 spaces left padding (19 + 41 = 60 columns).
+; 120x40: 39 spaces left padding (39 + 41 = 80 columns).
+; Preserves: All registers except AF and BC
 ;------------------------------------------------------------------------------
 PRINT_SPLASH_PREFIX:
-	PUSH	BC
 	LD	A,'~'
 	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	42
-	SRL	A
-	JR	Z,PSP_DONE
-	LD	B,A
+	LD	A,(SCREEN_MODE)
+	CP	MODE_120X40
+	JR	NZ,PSP_80X24
+	LD	B,39
+	JR	PSP_LOOP
+PSP_80X24:
+	LD	B,19
 PSP_LOOP:
 	LD	A,' '
 	CALL	PUTC
 	DJNZ	PSP_LOOP
-PSP_DONE:
-	POP	BC
 	RET
 
 RENDER_SPLASH:
@@ -1511,10 +1510,10 @@ RENDER_SPLASH:
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
 	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB	SPLASH_MENU_LINES	; 23 - 17 = 6 (80x24), 39 - 17 = 22 (120x40)
+	SUB	SPLASH_MENU_LINES	; 23 - 18 = 5 (80x24), 39 - 18 = 21
 	JR	Z,SPLASH_NO_TOP_PAD
 	JR	C,SPLASH_NO_TOP_PAD
-	SRL	A			; 3 (80x24), 11 (120x40)
+	SRL	A			; 2 (80x24), 10 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	LD	(SPLASH_TOP_PAD_COUNT),A
 	LD	B,A
@@ -1567,10 +1566,46 @@ SPLASH_CMDS_DONE:
 	JR	NZ,SHOW_SPLASH_80X24
 	LD	DE,STR_SPLASH_120X40_LBL
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
+	JR	RENDER_SPLASH_RAM_STATUS
 
 SHOW_SPLASH_80X24:
 	LD	DE,STR_SPLASH_80X24_LBL
+	CALL	PRINT_STR
+
+RENDER_SPLASH_RAM_STATUS:
+	; Row 18: RAM Drive Status
+	CALL	PRINT_SPLASH_PREFIX
+	LD	A,(RAMDRIVE_DRIVE_NUM)
+	CP	0FFH
+	JR	Z,SPLASH_RAM_NONE
+
+	LD	DE,STR_SPLASH_RAM_PRE
+	CALL	PRINT_STR
+
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	JR	NZ,SPLASH_RAM_HIB
+
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	CP	RAMDRV_MODE_ENABLED
+	JR	Z,SPLASH_RAM_OVW
+
+	LD	DE,STR_SPLASH_RAM_PRESERV
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_RAM_HIB:
+	LD	DE,STR_SPLASH_RAM_HIBERN
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_RAM_OVW:
+	LD	DE,STR_SPLASH_RAM_OVERWR
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_RAM_NONE:
+	LD	DE,STR_SPLASH_RAM_NONE
 	CALL	PRINT_STR
 
 RENDER_SPLASH_BOTTOM_PAD:
@@ -13170,21 +13205,17 @@ PCB_RAMDRIVE_VAL:
 	JR	Z,PCB_RAM_SET_HIB
 	CP	'2'
 	JR	Z,PCB_RAM_SET_HIB
-	CP	'O'			; ON or OFF?
+	CP	'O'			; ON, OFF, or OVERWRITE?
 	JR	NZ,PCB_RAM_CHECK_YES
 	INC	HL
 	LD	A,(HL)
 	CALL	TO_UPPER
-	CP	'N'
-	JR	NZ,PCB_RAM_CHECK_OFF
-	LD	A,RAMDRV_MODE_ENABLED
-	LD	(CFG_RAMDRIVE_FLAG),A
-	JP	PCB_SKIP_LINE
-PCB_RAM_CHECK_OFF:
-	CP	'F'
-	JP	NZ,PCB_SKIP_LINE
-	XOR	A
-	LD	(CFG_RAMDRIVE_FLAG),A
+	CP	'N'			; ON
+	JR	Z,PCB_RAM_SET_ON
+	CP	'V'			; OVERWRITE
+	JR	Z,PCB_RAM_SET_ON
+	CP	'F'			; OFF
+	JR	Z,PCB_RAM_SET_OFF
 	JP	PCB_SKIP_LINE
 
 PCB_RAM_CHECK_YES:
@@ -13196,12 +13227,14 @@ PCB_RAM_CHECK_YES:
 	JR	Z,PCB_RAM_SET_ON
 	CP	'T'			; TRUE
 	JR	Z,PCB_RAM_SET_ON
+	CP	'M'			; MAXRAM
+	JR	Z,PCB_RAM_SET_ON
 
 	CP	'N'			; NO
 	JR	Z,PCB_RAM_SET_OFF
 	CP	'0'
 	JR	Z,PCB_RAM_SET_OFF
-	CP	'P'			; PROTECTED
+	CP	'P'			; PRESERVE / PROTECTED
 	JR	Z,PCB_RAM_SET_OFF
 	CP	'F'			; FALSE
 	JR	Z,PCB_RAM_SET_OFF
@@ -13928,9 +13961,7 @@ DRL_LOOP:
 	LD	A,C			; A = CP/M drive index (0 = A:, 1 = B:, ...)
 	LD	(RAMDRIVE_DRIVE_NUM),A
 	ADD	A,'A'
-	LD	(RAMDRIVE_DRIVE_CHAR),A
-	LD	(STR_MSG_HIB_DRV_CHAR),A
-	LD	(STR_MSG_HIB_FILE_CHAR),A
+	CALL	SET_RAMDRIVE_CHAR
 	LD	A,C
 	OR	A			; Carry = 0
 	RET
@@ -14044,9 +14075,7 @@ DRL_CPM3_LOOP:
 	LD	A,C			; A = drive index (0=A, 1=B...)
 	LD	(RAMDRIVE_DRIVE_NUM),A
 	ADD	A,'A'
-	LD	(RAMDRIVE_DRIVE_CHAR),A
-	LD	(STR_MSG_HIB_DRV_CHAR),A
-	LD	(STR_MSG_HIB_FILE_CHAR),A
+	CALL	SET_RAMDRIVE_CHAR
 	LD	A,C
 	OR	A			; Carry = 0
 	RET
@@ -14065,6 +14094,24 @@ DRL_CPM3_NEXT:
 DRL_NOT_FOUND:
 	LD	A,0FFH
 	SCF
+	RET
+
+;------------------------------------------------------------------------------
+; SET_RAMDRIVE_CHAR:
+; Sets RAMDRIVE_DRIVE_CHAR and updates all status/message strings containing
+; the drive letter.
+; Input: A = Drive character ('A'..'P')
+; Destroys: None
+;------------------------------------------------------------------------------
+SET_RAMDRIVE_CHAR:
+	LD	(RAMDRIVE_DRIVE_CHAR),A
+	LD	(STR_MSG_HIB_DRV_CHAR),A
+	LD	(STR_MSG_HIB_FILE_CHAR),A
+	LD	(STR_MSG_HIB_LETTER),A
+	LD	(STR_MSG_REST_LETTER),A
+	LD	(STR_MSG_REST_DONE_LTR),A
+	LD	(STR_MSG_ORPHAN_LETTER),A
+	LD	(STR_SPLASH_RAM_LTR),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -14136,36 +14183,70 @@ VRS_FAIL_TARGET:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_FCB_IS_HIBERNATED:
-; Checks if WORK_FCB targets the currently hibernated RAM drive.
+; CHECK_TARGET_DRIVE_UNAVAILABLE:
+; Checks if 1-based drive in A (1=A..16=P, or 0=CURRENT_DIR_DRIVE) targets
+; an unavailable RAM drive (overwritten or hibernated).
 ; Returns:
-;   Carry = 1 if target drive is hibernated RAM drive
-;   Carry = 0 if target drive is safe to access
+;   Carry = 1: Drive is unavailable RAM drive
+;   Carry = 0: Drive is available / valid
+; Preserves: A, BC, DE, HL
 ;------------------------------------------------------------------------------
-CHECK_FCB_IS_HIBERNATED:
-	LD	A,(RAMDRIVE_IS_HIBERNATED)
+CHECK_TARGET_DRIVE_UNAVAILABLE:
+	PUSH	BC
+	PUSH	AF
 	OR	A
-	RET	Z			; Not hibernated -> NC
+	JR	NZ,CTDU_HAVE_DRV
+	LD	A,(CURRENT_DIR_DRIVE)
+	OR	A
+	JR	NZ,CTDU_HAVE_DRV
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	INC	A
+
+CTDU_HAVE_DRV:
+	DEC	A			; A = 0-based drive (0=A..15=P)
+	LD	B,A
 	LD	A,(RAMDRIVE_DRIVE_NUM)
 	CP	0FFH
-	JR	Z,CFIH_SAFE		; No RAM drive -> NC
-	LD	B,A			; B = RAM drive number (0-based)
+	JR	Z,CTDU_SAFE		; No RAM drive detected -> safe
+	CP	B
+	JR	NZ,CTDU_SAFE		; Target is not the RAM drive -> safe
+
+	; Target matches RAM drive. Check if hibernated or overwritten:
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	JR	NZ,CTDU_UNAVAIL
+	LD	A,(CFG_RAMDRIVE_FLAG)
+	CP	RAMDRV_MODE_ENABLED
+	JR	NZ,CTDU_SAFE
+
+CTDU_UNAVAIL:
+	POP	AF
+	POP	BC
+	SCF				; Carry = 1 (unavailable!)
+	RET
+
+CTDU_SAFE:
+	POP	AF
+	POP	BC
+	OR	A			; Carry = 0 (safe)
+	RET
+
+;------------------------------------------------------------------------------
+; CHECK_FCB_IS_HIBERNATED:
+; Checks if WORK_FCB targets the currently unavailable RAM drive.
+; Returns:
+;   Carry = 1 if target drive is unavailable RAM drive
+;   Carry = 0 if target drive is safe to access
+; Preserves: BC, DE, HL
+;------------------------------------------------------------------------------
+CHECK_FCB_IS_HIBERNATED:
 	LD	A,(WORK_FCB)
 	OR	A
-	JR	NZ,CFIH_EXPLICIT
-	; Target drive is default drive
+	JR	NZ,CFIH_HAVE_DRV
 	LD	A,(CURRENT_DEFAULT_DRIVE)
-	JR	CFIH_COMPARE
-CFIH_EXPLICIT:
-	DEC	A			; 1->0, 2->1, etc.
-CFIH_COMPARE:
-	CP	B
-	JR	NZ,CFIH_SAFE
-	SCF				; Carry = 1: conflict!
-	RET
-CFIH_SAFE:
-	OR	A			; Carry = 0: safe
-	RET
+	INC	A
+CFIH_HAVE_DRV:
+	JP	CHECK_TARGET_DRIVE_UNAVAILABLE
 
 INIT_RAMDRV_FCB:
 	LD	HL,RAMDRV_FCB
@@ -15185,6 +15266,11 @@ DO_PARSE_AND_LOAD:
 	LD	DE,INPUT_FILENAME_BUF
 	CALL	PARSE_FILENAME_TO_FCB
 
+	; Check if target drive is unavailable RAM drive
+	LD	A,(WORK_FCB)
+	CALL	CHECK_TARGET_DRIVE_UNAVAILABLE
+	JR	C,OPEN_RAMDRV_UNAVAILABLE
+
 	; Load the file into Far RAM
 	CALL	LOAD_FILE
 	JR	C,OPEN_FILE_NOT_FOUND
@@ -15223,26 +15309,14 @@ HANDLE_OPEN_DRIVE_SWITCH:
 	OR	A
 	JR	Z,HODS_DRIVE_DONE	; Drive unchanged
 
-	PUSH	AF
-	LD	A,(RAMDRIVE_IS_HIBERNATED)
-	OR	A
-	JR	Z,HODS_OK
-	LD	A,(RAMDRIVE_DRIVE_NUM)
-	CP	0FFH
-	JR	Z,HODS_OK
-	INC	A			; 1-based drive number
-	LD	B,A
-	POP	AF
-	PUSH	AF
-	CP	B
-	JR	NZ,HODS_OK
-	; Cannot switch to hibernated RAM drive!
-	POP	AF
+	CALL	CHECK_TARGET_DRIVE_UNAVAILABLE
+	JR	NC,HODS_OK
+
+	; Cannot switch to unavailable RAM drive!
 	POP	BC
-	JP	REFRESH_OPEN_DIR
+	JR	OPEN_RAMDRV_UNAVAILABLE
 
 HODS_OK:
-	POP	AF
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_DIR_DRIVE_CHAR),A
@@ -15270,6 +15344,20 @@ HANDLE_OPEN_FILTER:
 	LD	(SHOWING_FNF_MSG),A
 	JP	REFRESH_OPEN_DIR
 
+OPEN_RAMDRV_UNAVAILABLE:
+	; Restore previous WORK_FCB from DIR_TEMP_FCB
+	LD	HL,DIR_TEMP_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
+	LD	A,(DOC_USER_NUM)
+	LD	(WORK_FCB_USER),A
+
+	; Display inline "  RAM drive not available"
+	LD	DE,STR_RAMDRV_UNAVAIL_INLINE
+	LD	C,25			; length of message
+	JR	SHOW_INLINE_OPEN_ERROR
+
 OPEN_FILE_NOT_FOUND:
 	; Restore previous WORK_FCB from DIR_TEMP_FCB
 	LD	HL,DIR_TEMP_FCB
@@ -15279,38 +15367,49 @@ OPEN_FILE_NOT_FOUND:
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
 
+	; Display inline "  File not found"
+	LD	DE,STR_FNF_INLINE
+	LD	C,16			; length of message
+
+SHOW_INLINE_OPEN_ERROR:
+	LD	A,C
+	LD	(INLINE_MSG_LEN),A
+
 	; Move cursor past ']' box before printing error message
 	LD	A,(INPUT_BUF_LEN)
 	LD	B,A
 	LD	A,21
 	SUB	B
+	JR	Z,FNF_FWD_DONE
 	LD	B,A			; B = 21 - INPUT_BUF_LEN
 FNF_FWD_LOOP:
 	PUSH	BC
+	PUSH	DE
 	LD	DE,STR_CSI_C		; ESC [ C
 	CALL	PRINT_STR
+	POP	DE
 	POP	BC
 	DJNZ	FNF_FWD_LOOP
+FNF_FWD_DONE:
 
-	; Display inline "  File not found" right after ']'
-	LD	DE,STR_FNF_INLINE
+	; Display inline message right after ']'
 	CALL	PRINT_STR
 
-	; Set flag that "  File not found" is currently visible
+	; Set flag that inline message is currently visible
 	LD	A,1
 	LD	(SHOWING_FNF_MSG),A
 
 	; Resume input loop without blanking filename in text box
 	CALL	RESUME_FILENAME_INPUT
-	JR	C,CHECK_PAGING_OR_CANCEL
+	JP	C,CHECK_PAGING_OR_CANCEL
 
 	; Check if user edited input to a drive specification (e.g. "B:")
 	CALL	CHECK_DRIVE_SWITCH
-	JR	C,HANDLE_OPEN_DRIVE_SWITCH
+	JP	C,HANDLE_OPEN_DRIVE_SWITCH
 
 	; Check if user edited input to a filter pattern (e.g. "*.TXT")
 	CALL	CHECK_FILTER_PATTERN
-	JR	C,HANDLE_OPEN_FILTER
+	JP	C,HANDLE_OPEN_FILTER
 
 	JP	DO_PARSE_AND_LOAD
 
@@ -15358,6 +15457,11 @@ DO_PARSE_AND_INSERT:
 	; User entered a filename in INPUT_FILENAME_BUF: parse into WORK_FCB
 	LD	DE,INPUT_FILENAME_BUF
 	CALL	PARSE_FILENAME_TO_FCB
+
+	; Check if target drive is unavailable RAM drive
+	LD	A,(WORK_FCB)
+	CALL	CHECK_TARGET_DRIVE_UNAVAILABLE
+	JP	C,OPEN_RAMDRV_UNAVAILABLE
 
 	; Copy parsed FCB to INSERT_FCB
 	LD	HL,WORK_FCB
@@ -16221,12 +16325,13 @@ RENDER_SAVE_PAGE:
 
 	; Check if user typed a drive specification (e.g. "A:")
 	CALL	CHECK_DRIVE_SWITCH
-	JR	C,HANDLE_SAVE_DRIVE_SWITCH
+	JP	C,HANDLE_SAVE_DRIVE_SWITCH
 
 	; Check if user typed a filter pattern (e.g. "*.TXT" or "B:*.TXT")
 	CALL	CHECK_FILTER_PATTERN
 	JP	C,HANDLE_SAVE_FILTER
 
+DO_PARSE_AND_SAVE:
 	; User entered/confirmed a filename in INPUT_FILENAME_BUF:
 	; Save current WORK_FCB to DIR_TEMP_FCB (36 bytes)
 	LD	HL,WORK_FCB
@@ -16236,6 +16341,11 @@ RENDER_SAVE_PAGE:
 
 	; Parse entered filename into WORK_FCB
 	CALL	PARSE_FILENAME_TO_FCB
+
+	; Check if target drive is unavailable RAM drive
+	LD	A,(WORK_FCB)
+	CALL	CHECK_TARGET_DRIVE_UNAVAILABLE
+	JR	C,SAVE_RAMDRV_UNAVAILABLE
 
 	; Check if file already exists on disk
 	CALL	CHECK_FILE_EXISTS
@@ -16296,32 +16406,71 @@ DO_ACTUAL_BLOCK_SAVE:
 	LD	(WORK_FCB_USER),A
 	RET
 
+SAVE_RAMDRV_UNAVAILABLE:
+	; Restore previous WORK_FCB from DIR_TEMP_FCB
+	LD	HL,DIR_TEMP_FCB
+	LD	DE,WORK_FCB
+	LD	BC,36
+	LDIR
+	LD	A,(DOC_USER_NUM)
+	LD	(WORK_FCB_USER),A
+
+	; Display inline "  RAM drive not available"
+	LD	DE,STR_RAMDRV_UNAVAIL_INLINE
+	LD	A,25
+	LD	(INLINE_MSG_LEN),A
+
+	; Move cursor past ']' box before printing error message
+	LD	A,(INPUT_BUF_LEN)
+	LD	B,A
+	LD	A,21
+	SUB	B
+	JR	Z,SRU_FWD_DONE
+	LD	B,A			; B = 21 - INPUT_BUF_LEN
+SRU_FWD_LOOP:
+	PUSH	BC
+	PUSH	DE
+	LD	DE,STR_CSI_C		; ESC [ C
+	CALL	PRINT_STR
+	POP	DE
+	POP	BC
+	DJNZ	SRU_FWD_LOOP
+SRU_FWD_DONE:
+
+	CALL	PRINT_STR
+
+	; Set flag that inline message is currently visible
+	LD	A,1
+	LD	(SHOWING_FNF_MSG),A
+
+	; Resume input loop without blanking filename in text box
+	CALL	RESUME_FILENAME_INPUT
+	JP	C,CHECK_SAVE_PAGING_OR_CANCEL
+
+	; Check if user edited input to a drive specification (e.g. "B:")
+	CALL	CHECK_DRIVE_SWITCH
+	JR	C,HANDLE_SAVE_DRIVE_SWITCH
+
+	; Check if user edited input to a filter pattern (e.g. "*.TXT")
+	CALL	CHECK_FILTER_PATTERN
+	JP	C,HANDLE_SAVE_FILTER
+
+	JP	DO_PARSE_AND_SAVE
+
 HANDLE_SAVE_DRIVE_SWITCH:
 	; A = new drive (1..16 or 0), C = new user (0..15 or 0xFF)
 	PUSH	BC			; Save target user
 	OR	A
 	JR	Z,HSDS_DRIVE_DONE	; Drive unchanged
 
-	PUSH	AF
-	LD	A,(RAMDRIVE_IS_HIBERNATED)
-	OR	A
-	JR	Z,HSDS_DRIVE_OK
-	LD	A,(RAMDRIVE_DRIVE_NUM)
-	CP	0FFH
-	JR	Z,HSDS_DRIVE_OK
-	INC	A			; 1-based drive number
-	LD	B,A
-	POP	AF
-	PUSH	AF
-	CP	B
-	JR	NZ,HSDS_DRIVE_OK
-	; Cannot switch to hibernated RAM drive!
-	POP	AF
+	CALL	CHECK_TARGET_DRIVE_UNAVAILABLE
+	JR	NC,HSDS_DRIVE_OK
+
+	; Cannot switch to unavailable RAM drive!
 	POP	BC
-	JP	REFRESH_SAVE_DIR
+	JR	SAVE_RAMDRV_UNAVAILABLE
 
 HSDS_DRIVE_OK:
-	POP	AF
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_SAVE_DRIVE_CHAR),A
@@ -18105,30 +18254,30 @@ DFB_PRINT_LOOP:
 	DJNZ	DFB_PRINT_LOOP
 
 DFB_PAD_SPACES:
-	; Pad (20 - B) spaces
+	; Pad (20 - INPUT_BUF_LEN) spaces
 	LD	A,20
-	SUB	B
+	LD	HL,INPUT_BUF_LEN
+	SUB	(HL)
 	JR	Z,DFB_CLOSE_BOX
-	LD	C,A
+	LD	B,A
 DFB_SPACE_LOOP:
 	LD	A,' '
 	CALL	PUTC
-	DEC	C
-	JR	NZ,DFB_SPACE_LOOP
+	DJNZ	DFB_SPACE_LOOP
 
 DFB_CLOSE_BOX:
 	LD	A,']'
 	CALL	PUTC
 
-	; Move cursor back (21 - B) positions to sit on next space after prefilled text
+	; Move cursor back (21 - INPUT_BUF_LEN) positions to sit on next space after prefilled text
 	LD	A,21
-	SUB	B
-	LD	C,A
+	LD	HL,INPUT_BUF_LEN
+	SUB	(HL)
+	LD	B,A
 DFB_BS_LOOP:
 	LD	A,008H
 	CALL	PUTC
-	DEC	C
-	JR	NZ,DFB_BS_LOOP
+	DJNZ	DFB_BS_LOOP
 	RET
 
 ;------------------------------------------------------------------------------
@@ -18675,31 +18824,39 @@ CHECK_CLEAR_FNF:
 	XOR	A
 	LD	(SHOWING_FNF_MSG),A
 
-	; Erase 16 chars of "  File not found": 16 backspaces, 16 spaces, 16 backspaces
-	LD	B,16
+	; Erase inline message: B backspaces, B spaces, B backspaces
+	LD	A,(INLINE_MSG_LEN)
+	LD	B,A
 ERASE_FNF_BS1:
 	LD	A,008H
 	CALL	PUTC
 	DJNZ	ERASE_FNF_BS1
 
-	LD	B,16
+	LD	A,(INLINE_MSG_LEN)
+	LD	B,A
 ERASE_FNF_SP:
 	LD	A,' '
 	CALL	PUTC
 	DJNZ	ERASE_FNF_SP
 
-	LD	B,16
+	LD	A,(INLINE_MSG_LEN)
+	LD	B,A
 ERASE_FNF_BS2:
 	LD	A,008H
 	CALL	PUTC
 	DJNZ	ERASE_FNF_BS2
 
-	; Move cursor from after ']' back inside box to INPUT_BUF_LEN position:
+	; Reset INLINE_MSG_LEN to default 16
+	LD	A,16
+	LD	(INLINE_MSG_LEN),A
+
+	; Move cursor from after ']' box back inside to INPUT_BUF_LEN:
 	; Emit (21 - INPUT_BUF_LEN) backspaces
 	LD	A,(INPUT_BUF_LEN)
 	LD	B,A
 	LD	A,21
 	SUB	B
+	JR	Z,CLEAR_FNF_DONE
 	LD	B,A
 ERASE_FNF_RET_BOX:
 	LD	A,008H
@@ -19587,6 +19744,13 @@ STR_SPLASH_CUR_MODE:	DB	"Active Screen: [$"
 STR_SPLASH_120X40_LBL:	DB	"120x40 (Modern Default)]",13,10,"$"
 STR_SPLASH_80X24_LBL:	DB	"80x24 (Classic Terminal)] ",13,10,"$"
 
+STR_SPLASH_RAM_PRE:	DB	"RAM Drive ("
+STR_SPLASH_RAM_LTR:	DB	"A:): [$"
+STR_SPLASH_RAM_NONE:	DB	"RAM Drive     : [None Detected]",13,10,"$"
+STR_SPLASH_RAM_PRESERV:	DB	"Preserved (Active)]",13,10,"$"
+STR_SPLASH_RAM_OVERWR:	DB	"Overwritten (Max RAM)]",13,10,"$"
+STR_SPLASH_RAM_HIBERN:	DB	"Hibernated (Temp Image)]",13,10,"$"
+
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
 STR_MODE_80X24_LBL:	DB	"80x24 (Classic Terminal)]          ",13,10,"$"
@@ -19600,9 +19764,9 @@ STR_CONFIG_CUR_MODE:	DB	"1. Screen Geometry : [", "$"
 STR_CONFIG_RAM_DRV_PRE:	DB	"2. RAM Drive (", "$"
 STR_CONFIG_RAM_DRV_POST:DB	":)  : [", "$"
 STR_CONFIG_RAM_NONE:	DB	"2. RAM Drive       : [", "$"
-STR_RAM_PROTECTED_LBL:	DB	"Protected (Preserve RAM Disk)]     ",13,10,"$"
-STR_RAM_HIBERNATE_LBL:	DB	"Hibernate (Save/Restore RAMDRV.IMG)]",13,10,"$"
-STR_RAM_ENABLED_LBL:	DB	"Enabled (Use for Max RAM)]          ",13,10,"$"
+STR_RAM_PROTECTED_LBL:	DB	"Preserve (RAM Drive Active, 128KB)]",13,10,"$"
+STR_RAM_HIBERNATE_LBL:	DB	"Hibernate (Backup/Restore, 384KB)] ",13,10,"$"
+STR_RAM_ENABLED_LBL:	DB	"Overwrite (Sacrifice Drive, 384KB)]",13,10,"$"
 
 STR_CONFIG_LINES_LBL:	DB	"3. Max Doc Lines   : [", "$"
 STR_LINES_16K_LBL:	DB	"16K (16,384 Lines)]                ",13,10,"$"
@@ -19634,8 +19798,8 @@ STR_VAL_120X40:		DB	"120x40",13,10,0
 STR_VAL_80X24:		DB	"80x24",13,10,0
 STR_KEY_RAMD_NAME:	DB	"RAMD",0
 STR_KEY_RAMDRIVE_FULL:	DB	"RAMDRIVE=",0
-STR_VAL_RAMDRIVE_OFF:	DB	"OFF",13,10,0
-STR_VAL_RAMDRIVE_ON:	DB	"ON",13,10,0
+STR_VAL_RAMDRIVE_OFF:	DB	"PRESERVE",13,10,0
+STR_VAL_RAMDRIVE_ON:	DB	"OVERWRITE",13,10,0
 STR_VAL_RAMDRIVE_HIB:	DB	"HIBERNATE",13,10,0
 STR_KEY_TAB_NAME:	DB	"TAB",0
 STR_KEY_TAB_FULL:	DB	"TAB=",0
@@ -19648,11 +19812,16 @@ STR_VAL_LINES_16K:	DB	"16K",13,10,0
 STR_VAL_LINES_32K:	DB	"32K",13,10,0
 
 STR_RAMDRV_FILENAME:	DB	"RAMDRV  IMG"
-STR_MSG_HIBERNATING:	DB	13,10,"[SE] Hibernating RAM drive to RAMDRV.IMG... $"
+STR_MSG_HIBERNATING:	DB	13,10,"[SE] Hibernating RAM drive ("
+STR_MSG_HIB_LETTER:	DB	"A:) to RAMDRV.IMG... $"
 STR_MSG_HIB_DONE:	DB	"[Done: 256 KB preserved]",13,10,"$"
-STR_MSG_RESTORING:	DB	13,10,"[SE] Restoring RAM drive from RAMDRV.IMG... $"
-STR_MSG_REST_DONE:	DB	"[Done: RAM drive restored]",13,10,"$"
-STR_MSG_ORPHAN_FOUND:	DB	13,10,"[SE] Existing RAMDRV.IMG found! Restoring previous state... $"
+STR_MSG_RESTORING:	DB	13,10,"[SE] Restoring RAM drive ("
+STR_MSG_REST_LETTER:	DB	"A:) from RAMDRV.IMG... $"
+STR_MSG_REST_DONE:	DB	"[Done: RAM drive ("
+STR_MSG_REST_DONE_LTR:	DB	"A:) restored]",13,10,"$"
+STR_MSG_ORPHAN_FOUND:
+	DB	13,10,"[SE] Existing RAMDRV.IMG found! Restoring RAM drive ("
+STR_MSG_ORPHAN_LETTER:	DB	"A:)... $"
 STR_MSG_HIB_DRV_ERR:	DB	13,10,"[SE] Active drive is RAM drive ("
 STR_MSG_HIB_DRV_CHAR:	DB	"A:). RAM drive protected.",13,10,"$"
 STR_MSG_HIB_FILE_ERR:	DB	13,10,"[SE] Target file is on RAM drive ("
@@ -19959,6 +20128,7 @@ STR_FILE_NOT_FOUND_SUFFIX:	DB	" file not found",13,10,"$"
 
 STR_CSI_C:		DB	27,"[C","$"
 STR_FNF_INLINE:		DB	"  File not found","$"
+STR_RAMDRV_UNAVAIL_INLINE:	DB	"  RAM drive not available","$"
 STR_GOTO_LINE_PROMPT:	DB	"Goto line:","$"
 STR_GOTO_LINE_BOX:	DB	" [     ]","$"
 STR_BS_6:		DB	8,8,8,8,8,8,"$"
@@ -20201,6 +20371,7 @@ DIR_TEMP_ENTRY:		DS	16
 INPUT_BUF_LEN:		DB	0
 INPUT_CURSOR_POS:	DB	0
 INPUT_CHAR_TEMP:	DB	0
+INLINE_MSG_LEN:		DB	16
 INPUT_FILENAME_BUF:	DS	32
 DIR_NAMES_BUF:	DS	3328	; 256 entries * 13 bytes
 DIR_FILTER_FCB:		DB	"???????????"	; 11-byte FCB wildcard pattern (8 name + 3 ext)
