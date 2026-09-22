@@ -177,20 +177,13 @@ def test_se_execution():
             return False
         print("[+] SE.COM splash screen successfully displayed with Free memory status bar.", flush=True)
 
-        # 5. Trigger Multi-Sector File I/O Validation Suite ('f')
-        time.sleep(0.5)
-        os.write(master, b"f")
-        out_file_test = read_until(master, b"MULTI-SECTOR FILE VALIDATION: ALL TESTS PASSED", timeout=8.0)
-        if b"MULTI-SECTOR FILE VALIDATION: ALL TESTS PASSED" not in out_file_test:
-            print("[-] Multi-sector file I/O validation test FAILED. Buffer captured:\n", out_file_test.decode("latin1", errors="replace"), flush=True)
+        # 5. Verify splash screen does not show removed file test option ('f')
+        if b"for file test" in out:
+            print("[-] File test option ('for file test') unexpectedly "
+                  "found on splash screen.", flush=True)
             return False
-        print("[+] Multi-Sector File I/O Diagnostic Suite ('30.TXT' 8 sectors, 30 lines) ALL PASSED!", flush=True)
-
-        # Return to Splash Screen
-        read_until(master, b"Press any key to return", timeout=5.0)
-        time.sleep(0.3)
-        os.write(master, b"\r")
-        read_until(master, b"for about", timeout=6.0)
+        print("[+] Verified file test ('f') cleanly removed from splash screen.",
+              flush=True)
 
         # 6. Trigger Memory Diagnostic ('t')
         time.sleep(0.5)

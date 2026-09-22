@@ -288,12 +288,6 @@ SPLASH_NOT_ESC:
 	CP	'T'
 	JP	Z,DO_MEM_TEST
 
-	; Option: 'F' or 'f' -> Run Multi-Sector File I/O Test
-	CP	'f'
-	JP	Z,DO_FILE_TEST
-	CP	'F'
-	JP	Z,DO_FILE_TEST
-
 	; Option: 'O' or 'o' or Ctrl+O -> Open File Screen
 	CP	'o'
 	JP	Z,HANDLE_SPLASH_OPEN
@@ -362,13 +356,6 @@ DO_SET_80X24:
 
 DO_MEM_TEST:
 	CALL	RUN_MEM_TEST
-	CALL	GET_KEY
-	CP	KEY_ESC
-	CALL	Z,DRAIN_ESC_SEQUENCE
-	JP	SHOW_SPLASH_SCREEN
-
-DO_FILE_TEST:
-	CALL	RUN_FILE_TEST
 	CALL	GET_KEY
 	CP	KEY_ESC
 	CALL	Z,DRAIN_ESC_SEQUENCE
@@ -1472,9 +1459,9 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ; Dynamically centered both horizontally and vertically for active screen geometry.
-; Total menu lines: 18
+; Total menu lines: 17
 ;------------------------------------------------------------------------------
-SPLASH_MENU_LINES	EQU	18
+SPLASH_MENU_LINES	EQU	17
 
 ;------------------------------------------------------------------------------
 ; PRINT_TILDE_CRLF: Print '~' followed by CRLF
@@ -1524,10 +1511,10 @@ RENDER_SPLASH:
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
 	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB	SPLASH_MENU_LINES	; 23 - 18 = 5 (80x24), 39 - 18 = 21 (120x40)
+	SUB	SPLASH_MENU_LINES	; 23 - 17 = 6 (80x24), 39 - 17 = 22 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	JR	C,SPLASH_NO_TOP_PAD
-	SRL	A			; 2 (80x24), 10 (120x40)
+	SRL	A			; 3 (80x24), 11 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	LD	(SPLASH_TOP_PAD_COUNT),A
 	LD	B,A
@@ -1551,7 +1538,7 @@ SPLASH_CONTENT_START:
 	; Row 2: Blank line
 	CALL	PRINT_TILDE_CRLF
 
-	; Rows 3..16: 14 Commands
+	; Rows 3..15: 13 Commands
 	LD	HL,STR_SPLASH_CMDS
 SPLASH_CMDS_LINE:
 	LD	A,(HL)
@@ -1567,10 +1554,10 @@ SPLASH_CMDS_CHAR:
 	JR	SPLASH_CMDS_LINE
 SPLASH_CMDS_DONE:
 
-	; Row 17: Blank line
+	; Row 16: Blank line
 	CALL	PRINT_TILDE_CRLF
 
-	; Row 18: Active Screen Mode
+	; Row 17: Active Screen Mode
 	CALL	PRINT_SPLASH_PREFIX
 	LD	DE,STR_SPLASH_CUR_MODE
 	CALL	PRINT_STR
@@ -3409,322 +3396,6 @@ TEST_FAIL:
 TEST_END:
 	LD	DE,STR_TEST_PROMPT
 	CALL	PRINT_STR
-	RET
-
-;------------------------------------------------------------------------------
-; Multi-Sector File I/O & Raw Data Validation Suite (30.TXT)
-;------------------------------------------------------------------------------
-RUN_FILE_TEST:
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
-
-	LD	DE,STR_FILE_TEST_TITLE
-	CALL	PRINT_STR
-
-	; 1. Prepare FCB for 30.TXT
-	LD	HL,RAW_TEST_FCB
-	LD	(HL),0			; Drive 0 (Default / C:)
-	INC	HL
-	LD	(HL),'3'
-	INC	HL
-	LD	(HL),'0'
-	INC	HL
-	LD	B,6
-PAD_FT_NAME:
-	LD	(HL),' '
-	INC	HL
-	DJNZ	PAD_FT_NAME
-	LD	(HL),'T'
-	INC	HL
-	LD	(HL),'X'
-	INC	HL
-	LD	(HL),'T'
-	INC	HL
-	LD	B,24
-CLR_FT_REM:
-	LD	(HL),0
-	INC	HL
-	DJNZ	CLR_FT_REM
-
-	; 2. Set DMA Buffer
-	LD	DE,RAW_SECTOR_BUF
-	LD	C,26			; BDOS Set DMA
-	CALL	BDOS_ENTRY
-
-	; 3. Open 30.TXT
-	LD	DE,RAW_TEST_FCB
-	LD	C,15			; BDOS Open File
-	CALL	BDOS_ENTRY
-	CP	0FFH
-	JP	Z,FILE_TEST_NOT_FOUND
-
-	LD	DE,STR_FILE_TEST_OPEN_OK
-	CALL	PRINT_STR
-
-	; 4. Initialize counters and pointers
-	XOR	A
-	LD	(RAW_TEST_FCB+32),A	; Clear Current Record (CR)
-	LD	(RAW_SEEN_CR),A
-	LD	(RAW_FORMAT_TYPE),A	; FMT_CPM = 0
-	LD	HL,0
-	LD	(RAW_SECTORS_READ),HL
-	LD	(RAW_BYTES_COUNT),HL
-	LD	(RAW_LINES_COUNT),HL
-
-	LD	HL,RAW_DATA_BUFFER
-	LD	(RAW_DATA_PTR),HL
-	LD	(HL),0
-
-	; 5. Multi-Sector Sequential Read Loop
-READ_RAW_SECTOR_LOOP:
-	LD	DE,RAW_TEST_FCB
-	LD	C,20			; BDOS Read Next Record
-	CALL	BDOS_ENTRY
-	OR	A
-	JP	NZ,RAW_READ_EOF
-
-	; Increment sector counter
-	LD	HL,(RAW_SECTORS_READ)
-	INC	HL
-	LD	(RAW_SECTORS_READ),HL
-
-	; Process 128 bytes in RAW_SECTOR_BUF
-	LD	HL,RAW_SECTOR_BUF
-	LD	C,128
-
-RAW_BYTE_PARSE_LOOP:
-	LD	A,(HL)
-	CP	26			; CP/M EOF (^Z)
-	JP	Z,RAW_READ_EOF
-	OR	A			; NULL padding after text
-	JP	Z,RAW_READ_EOF
-
-	; Count valid data byte
-	PUSH	HL
-	LD	HL,(RAW_BYTES_COUNT)
-	INC	HL
-	LD	(RAW_BYTES_COUNT),HL
-	POP	HL
-
-	; Copy byte to RAW_DATA_BUFFER if within buffer size (2040 bytes)
-	PUSH	HL
-	PUSH	BC
-	LD	HL,(RAW_DATA_PTR)
-	LD	DE,RAW_DATA_BUFFER+2040
-	LD	A,H
-	CP	D
-	JR	C,STORE_RAW_BYTE
-	JR	NZ,SKIP_STORE_RAW
-	LD	A,L
-	CP	E
-	JR	NC,SKIP_STORE_RAW
-
-STORE_RAW_BYTE:
-	POP	BC
-	POP	HL
-	LD	A,(HL)
-	PUSH	HL
-	LD	HL,(RAW_DATA_PTR)
-	LD	(HL),A
-	INC	HL
-	LD	(HL),0			; Keep null-terminated
-	LD	(RAW_DATA_PTR),HL
-	POP	HL
-	JR	CHECK_RAW_CRLF
-
-SKIP_STORE_RAW:
-	POP	BC
-	POP	HL
-
-CHECK_RAW_CRLF:
-	LD	A,(HL)
-	CP	13			; CR
-	JR	NZ,CHECK_RAW_LF
-	LD	A,1
-	LD	(RAW_SEEN_CR),A
-	JR	RAW_NEXT_BYTE
-
-CHECK_RAW_LF:
-	CP	10			; LF
-	JR	NZ,CHECK_RAW_NORMAL
-
-	; LF detected -> increment line counter
-	PUSH	HL
-	LD	HL,(RAW_LINES_COUNT)
-	INC	HL
-	LD	(RAW_LINES_COUNT),HL
-	POP	HL
-
-	LD	A,(RAW_SEEN_CR)
-	OR	A
-	JR	NZ,RAW_LF_AFTER_CR
-	LD	A,FMT_LINUX
-	LD	(RAW_FORMAT_TYPE),A
-RAW_LF_AFTER_CR:
-	XOR	A
-	LD	(RAW_SEEN_CR),A
-	JR	RAW_NEXT_BYTE
-
-CHECK_RAW_NORMAL:
-	XOR	A
-	LD	(RAW_SEEN_CR),A
-
-RAW_NEXT_BYTE:
-	INC	HL
-	DEC	C
-	JP	NZ,RAW_BYTE_PARSE_LOOP
-	JP	READ_RAW_SECTOR_LOOP
-
-RAW_READ_EOF:
-	; Restore DMA buffer to DEFAULT_DMA
-	LD	DE,DEFAULT_DMA
-	LD	C,26
-	CALL	BDOS_ENTRY
-
-	; If bytes ended without trailing newline, count final line
-	LD	HL,(RAW_BYTES_COUNT)
-	LD	A,H
-	OR	L
-	JR	Z,SHOW_RAW_METRICS
-
-	; Check if last byte was newline or if lines count is 0
-	LD	HL,(RAW_LINES_COUNT)
-	LD	A,H
-	OR	L
-	JR	NZ,SHOW_RAW_METRICS
-	INC	HL
-	LD	(RAW_LINES_COUNT),HL
-
-SHOW_RAW_METRICS:
-	; Print Sectors Read
-	LD	DE,STR_RAW_SECTORS_LBL
-	CALL	PRINT_STR
-	LD	HL,(RAW_SECTORS_READ)
-	CALL	PRINT_DEC_WORD
-	LD	DE,STR_RAW_SECTORS_TAIL
-	CALL	PRINT_STR
-
-	; Print Bytes Count
-	LD	DE,STR_RAW_BYTES_LBL
-	CALL	PRINT_STR
-	LD	HL,(RAW_BYTES_COUNT)
-	CALL	PRINT_DEC_WORD
-	LD	DE,STR_RAW_BYTES_TAIL
-	CALL	PRINT_STR
-
-	; Print Lines Count
-	LD	DE,STR_RAW_LINES_LBL
-	CALL	PRINT_STR
-	LD	HL,(RAW_LINES_COUNT)
-	CALL	PRINT_DEC_WORD
-	LD	DE,STR_RAW_LINES_TAIL
-	CALL	PRINT_STR
-
-	; Print Format Detected
-	LD	DE,STR_RAW_FMT_LBL
-	CALL	PRINT_STR
-	LD	A,(RAW_FORMAT_TYPE)
-	CP	FMT_CPM
-	JR	NZ,SHOW_RAW_FMT_LINUX
-	LD	DE,STR_RAW_FMT_CPM
-	CALL	PRINT_STR
-	JR	SHOW_LINE_PREVIEWS
-
-SHOW_RAW_FMT_LINUX:
-	LD	DE,STR_RAW_FMT_LINUX
-	CALL	PRINT_STR
-
-SHOW_LINE_PREVIEWS:
-	; First line preview
-	LD	DE,STR_RAW_FIRST_LINE_LBL
-	CALL	PRINT_STR
-	LD	HL,RAW_DATA_BUFFER
-	CALL	PRINT_RAW_LINE_PREVIEW
-	LD	DE,STR_QUOTE_CRLF
-	CALL	PRINT_STR
-
-	; Last line preview
-	LD	DE,STR_RAW_LAST_LINE_LBL
-	CALL	PRINT_STR
-	CALL	FIND_LAST_RAW_LINE	; Returns HL = pointer to start of last line
-	CALL	PRINT_RAW_LINE_PREVIEW
-	LD	DE,STR_QUOTE_CRLF
-	CALL	PRINT_STR
-
-	; Validation Assertions:
-	; Sectors > 1 AND Lines == 30
-	LD	HL,(RAW_SECTORS_READ)
-	LD	A,H
-	OR	A
-	JR	NZ,CHECK_LINES_COUNT
-	LD	A,L
-	CP	2
-	JP	C,FILE_TEST_FAIL
-
-CHECK_LINES_COUNT:
-	LD	HL,(RAW_LINES_COUNT)
-	LD	A,H
-	OR	A
-	JP	NZ,FILE_TEST_FAIL
-	LD	A,L
-	CP	30
-	JP	NZ,FILE_TEST_FAIL
-
-	LD	DE,STR_FILE_TEST_PASSED
-	CALL	PRINT_STR
-	JR	FILE_TEST_DONE
-
-FILE_TEST_NOT_FOUND:
-	LD	DE,STR_FILE_TEST_NOT_FOUND
-	CALL	PRINT_STR
-	JR	FILE_TEST_DONE
-
-FILE_TEST_FAIL:
-	LD	DE,STR_FILE_TEST_FAILED
-	CALL	PRINT_STR
-
-FILE_TEST_DONE:
-	LD	DE,STR_TEST_PROMPT
-	CALL	PRINT_STR
-	RET
-
-PRINT_RAW_LINE_PREVIEW:
-	LD	B,50			; Max 50 characters preview
-PRLP_LOOP:
-	LD	A,(HL)
-	OR	A
-	RET	Z
-	CP	13			; CR
-	RET	Z
-	CP	10			; LF
-	RET	Z
-	CALL	PUTC
-	INC	HL
-	DJNZ	PRLP_LOOP
-	RET
-
-FIND_LAST_RAW_LINE:
-	LD	HL,RAW_DATA_BUFFER
-	LD	DE,RAW_DATA_BUFFER
-FLRL_SCAN:
-	LD	A,(HL)
-	OR	A
-	JR	Z,FLRL_DONE
-	CP	10			; LF
-	JR	NZ,FLRL_NEXT
-	; Next char after LF is new line start
-	INC	HL
-	LD	A,(HL)
-	OR	A
-	JR	Z,FLRL_DONE
-	LD	D,H
-	LD	E,L
-	JR	FLRL_SCAN
-FLRL_NEXT:
-	INC	HL
-	JR	FLRL_SCAN
-FLRL_DONE:
-	EX	DE,HL
 	RET
 
 ;------------------------------------------------------------------------------
@@ -19904,7 +19575,6 @@ STR_SPLASH_CMDS:
 	DB	"  type   w  or  ^W        to close file",13,10
 	DB	"  type   l  or  ^L        to goto line",13,10
 	DB	"  type   t                for mem test",13,10
-	DB	"  type   f                for file test",13,10
 	DB	"  type   a                for about",13,10
 	DB	"  type   m                for memory info",13,10
 	DB	"  type   c                to configure",13,10
@@ -20158,39 +19828,6 @@ STR_TEST_ALL_PASSED:	DB	"=======================================================
 STR_TEST_FAILED:	DB	13,10,"[-] EXTENDED MEMORY TEST FAILED (Data verification mismatch)",13,10,13,10,"$"
 
 STR_TEST_PROMPT:	DB	"Press any key to return to Splash Screen...$"
-
-STR_FILE_TEST_TITLE:	DB	27,"[H",27,"[2J"
-	DB	"============================================================",13,10
-	DB	"        SE.COM MULTI-SECTOR FILE I/O VALIDATION TEST        ",13,10
-	DB	"============================================================",13,10,13,10,"$"
-
-STR_FILE_TEST_OPEN_OK:	DB	"[+] BDOS Open File ('30.TXT'): SUCCESS",13,10,"$"
-
-STR_RAW_SECTORS_LBL:	DB	"[*] Total Sectors Read:       $"
-STR_RAW_SECTORS_TAIL:	DB	" sectors (128 bytes/sector)",13,10,"$"
-
-STR_RAW_BYTES_LBL:	DB	"[*] Total Data Bytes:         $"
-STR_RAW_BYTES_TAIL:	DB	" bytes",13,10,"$"
-
-STR_RAW_LINES_LBL:	DB	"[*] Total Text Lines Parsed:  $"
-STR_RAW_LINES_TAIL:	DB	" lines",13,10,"$"
-
-STR_RAW_FMT_LBL:	DB	"[*] Line Ending Format:       $"
-STR_RAW_FMT_CPM:	DB	"CP/M [CRLF]",13,10,"$"
-STR_RAW_FMT_LINUX:	DB	"Linux [LF]",13,10,"$"
-
-STR_RAW_FIRST_LINE_LBL:	DB	"[*] First Line Content:       ", 34, "$"
-STR_RAW_LAST_LINE_LBL:	DB	"[*] Last Line Content:        ", 34, "$"
-STR_QUOTE_CRLF:	DB	34, 13, 10, "$"
-
-STR_FILE_TEST_PASSED:	DB	13,10
-	DB	"============================================================",13,10
-	DB	"[+] MULTI-SECTOR FILE VALIDATION: ALL TESTS PASSED!",13,10
-	DB	"============================================================",13,10,"$"
-
-STR_FILE_TEST_NOT_FOUND:	DB	"[-] Error: Test file '30.TXT' not found on CP/M drive!",13,10,"$"
-
-STR_FILE_TEST_FAILED:	DB	"[-] Error: Multi-sector file validation FAILED!",13,10,"$"
 
 STR_STATUS_PREFIX:	DB	" SE v0.9.5 | ","$"
 
@@ -20572,12 +20209,6 @@ DIR_FILTER_ACTIVE:	DB	0		; 0 = *.* (all files), 1 = custom filter active
 
 RAW_TEST_FCB:	DS	36
 RAW_SECTOR_BUF:	DS	128
-RAW_SECTORS_READ:	DW	0
-RAW_BYTES_COUNT:	DW	0
-RAW_LINES_COUNT:	DW	0
-RAW_SEEN_CR:	DB	0
-RAW_FORMAT_TYPE:	DB	0
-RAW_DATA_PTR:	DW	0
 
 CFG_FCB:		DS	36
 COM_PROBE_FCB:		DS	36
@@ -20620,9 +20251,6 @@ BSS_START:
 ; 40 lines x 128 bytes stride local working cache in TPA (5,120 bytes)
 LINE_STORAGE_SIZE EQU	CACHE_SIZE_LINES * 128
 LINE_STORAGE	EQU	BSS_START
-
-; Splash screen file test ('f') reuses LINE_STORAGE (5,120 bytes)
-RAW_DATA_BUFFER	EQU	LINE_STORAGE
 
 ; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
 LINE_SHIFT_BUF_SIZE EQU	256
