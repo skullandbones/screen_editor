@@ -148,7 +148,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 * Press **`w`**, **`W`**, or <kbd>Ctrl+W</kbd> to close the current file to splash screen.
 * Press **`o`** or **`O`** to open the interactive **Open File** directory browser.
 * Press **`s`** or **`S`** to open the interactive **Save File** screen.
-* Press **`a`** or **`A`** to view the **About** screen (architecture, features, license).
+* Press **`a`** or **`A`** to view the **About** screen (version, author, tools, license).
 * Press **`m`** or **`M`** to view the interactive **Memory Info** table.
 * Press **`c`** or **`C`** to open the interactive **Configuration** screen.
 * Press **`1`** to set modern **120 columns x 40 rows** mode (Default).

@@ -1784,9 +1784,64 @@ SPLASH_BOTTOM_DONE:
 
 ;------------------------------------------------------------------------------
 ; About Screen Renderer
-; Displays comprehensive architecture, feature, and author details for SE.COM
+; Dynamically centered both horizontally and vertically for active screen geometry.
+; Displays essential project, version, author, tools, and MIT license details.
 ;------------------------------------------------------------------------------
-ABOUT_LINES	EQU	22
+ABOUT_MENU_LINES	EQU	9
+
+;------------------------------------------------------------------------------
+; PRINT_ABOUT_LINE: Print '~', center the string at DE horizontally, then CRLF
+; In: DE = pointer to '$' or null-terminated string
+; Calculates string length, computes padding = ((ACTIVE_COLS - 1 - length) / 2)
+; Emits '~', padding spaces, string, and CRLF
+; Preserves: All registers
+;------------------------------------------------------------------------------
+PRINT_ABOUT_LINE:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	PUSH	DE
+	POP	HL			; HL = string pointer
+	LD	B,0
+PAL_LEN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,PAL_LEN_DONE
+	CP	'$'
+	JR	Z,PAL_LEN_DONE
+	INC	HL
+	INC	B
+	JR	PAL_LEN
+PAL_LEN_DONE:
+	LD	A,'~'
+	CALL	PUTC
+
+	LD	A,(ACTIVE_COLS)
+	DEC	A			; Columns remaining after '~'
+	SUB	B			; Subtract length in B
+	JR	C,PAL_NO_PAD		; If string longer than remaining cols, no pad
+	SRL	A			; Divide by 2 for symmetrical left margin
+	JR	Z,PAL_NO_PAD
+	LD	B,A
+PAL_PAD_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	PAL_PAD_LOOP
+
+PAL_NO_PAD:
+	CALL	PRINT_STR
+	LD	A,13
+	CALL	PUTC
+	LD	A,10
+	CALL	PUTC
+
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
 
 SHOW_ABOUT_SCREEN:
 	LD	A,1
@@ -1795,26 +1850,74 @@ SHOW_ABOUT_SCREEN:
 	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
-	LD	DE,STR_ABOUT_BODY
-	CALL	PRINT_STR
 
-	; Fill remaining rows down to status row with '~'
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - ABOUT_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
-	SUB	ABOUT_LINES		; A = remaining rows
-	JR	Z,ABOUT_TILDE_DONE
-	JR	C,ABOUT_TILDE_DONE
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB	ABOUT_MENU_LINES	; 23 - 9 = 14 (80x24), 39 - 9 = 30 (120x40)
+	JR	Z,ABOUT_NO_TOP_PAD
+	JR	C,ABOUT_NO_TOP_PAD
+	SRL	A			; 7 in 80x24, 15 in 120x40
+	JR	Z,ABOUT_NO_TOP_PAD
+	LD	(ABOUT_TOP_PAD_COUNT),A
 	LD	B,A
-ABOUT_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
-	DJNZ	ABOUT_TILDE_LOOP
+ABOUT_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	ABOUT_TOP_PAD_LOOP
+	JR	ABOUT_CONTENT_START
 
-ABOUT_TILDE_DONE:
+ABOUT_NO_TOP_PAD:
+	XOR	A
+	LD	(ABOUT_TOP_PAD_COUNT),A
+
+ABOUT_CONTENT_START:
+	; Row 1: Title
+	LD	DE,STR_ABOUT_TITLE
+	CALL	PRINT_ABOUT_LINE
+
+	; Row 2: Version
+	LD	DE,STR_ABOUT_VERSION
+	CALL	PRINT_ABOUT_LINE
+
+	; Row 3: Author
+	LD	DE,STR_ABOUT_AUTHOR
+	CALL	PRINT_ABOUT_LINE
+
+	; Row 4: Blank line
+	CALL	PRINT_TILDE_CRLF
+
+	; Row 5: AI & environment attribution
+	LD	DE,STR_ABOUT_AI
+	CALL	PRINT_ABOUT_LINE
+
+	; Row 6: Blank line
+	CALL	PRINT_TILDE_CRLF
+
+	; Row 7: MIT License
+	LD	DE,STR_ABOUT_LICENSE
+	CALL	PRINT_ABOUT_LINE
+
+	; Row 8: Blank line
+	CALL	PRINT_TILDE_CRLF
+
+	; Row 9: Return prompt
+	LD	DE,STR_ABOUT_RETURN
+	CALL	PRINT_ABOUT_LINE
+
+	; Bottom padding: (ACTIVE_ROWS - 1) - ABOUT_TOP_PAD_COUNT - ABOUT_MENU_LINES
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; Text rows available
+	LD	HL,ABOUT_TOP_PAD_COUNT
+	SUB	(HL)
+	SUB	ABOUT_MENU_LINES
+	JR	Z,ABOUT_BOTTOM_DONE
+	JR	C,ABOUT_BOTTOM_DONE
+	LD	B,A
+ABOUT_BOTTOM_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	ABOUT_BOTTOM_LOOP
+
+ABOUT_BOTTOM_DONE:
 	CALL	RENDER_STATUS_BAR
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
@@ -21371,30 +21474,15 @@ STR_MSG_HIB_TOO_SMALL:	DB	13,10,"[SE] Active drive has insufficient space (<256K
 STR_MSG_HIB_ERR:	DB	13,10,"[Error] Hibernation failed. RAM drive protected.",13,10,"$"
 STR_MSG_REST_ERR:	DB	13,10,"[Error] RAM drive restoration incomplete.",13,10,"$"
 
-STR_ABOUT_BODY:	DB	27,"[H"
-	DB	"~",13,10
-	DB	"~                               SE - Screen Editor              ",13,10
-	DB	"~                           version 0.9.6 (2026-09-22)          ",13,10
-	DB	"~                                by Dean Jenkins                ",13,10
-	DB	"~          Created using Google Antigravity 2.12.2 and Gemini 3.7 Flash  ",13,10
-	DB	"~",13,10
-	DB	"~          Architecture:                                       ",13,10
-	DB	"~            * Z80 CP/M 2.2 with 512KB HBIOS Extended Memory   ",13,10
-	DB	"~            * 13 Far-RAM Banks with 64-line sliding cache     ",13,10
-	DB	"~            * Supports up to 3,328 lines (120 chars per line) ",13,10
-	DB	"~            * Dynamic slot allocation and bank recycling      ",13,10
-	DB	"~",13,10
-	DB	"~          Features:                                           ",13,10
-	DB	"~            * Dual screen modes: 120x40 (Modern) & 80x24 (Classic)",13,10
-	DB	"~            * Horizontal scrolling with continuation highlights",13,10
-	DB	"~            * Fast directory browser for Open and Save        ",13,10
-	DB	"~            * Search & Replace with case sensitivity toggle   ",13,10
-	DB	"~            * Block Copy, Move, and Delete with clipboard     ",13,10
-	DB	"~            * Auto-detects CP/M [CRLF] and Linux [LF] formats ",13,10
-	DB	"~",13,10
-	DB	"~          SE is open source and freely usable                 ",13,10
-	DB	"~                     Press any key to return to splash...     ",13,10
-	DB	"$"
+;------------------------------------------------------------------------------
+; About Screen Strings
+;------------------------------------------------------------------------------
+STR_ABOUT_TITLE:	DB	"SE - Screen Editor", "$"
+STR_ABOUT_VERSION:	DB	"version 0.9.6 (2026-09-23)", "$"
+STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
+STR_ABOUT_AI:		DB	"Google Antigravity 2.16.0 & Gemini FLASH 3.8 high", "$"
+STR_ABOUT_LICENSE:	DB	"Open source software under the MIT License", "$"
+STR_ABOUT_RETURN:	DB	"Press any key to return to splash...", "$"
 
 ;------------------------------------------------------------------------------
 ; Memory Information Screen Strings
@@ -21852,6 +21940,7 @@ CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=
 SCS_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
 SPLASH_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on splash screen
 MEM_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on memory screen
+ABOUT_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on about screen
 CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
 CFG_TAB_WIDTH:		DB	8		; Tab width: 4 or 8 (default 8)
 CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)
