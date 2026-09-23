@@ -8,6 +8,11 @@
 *.tmp
 *.bak
 *.COM
+*.bin
+*.PRL
+*.OVL
+*.prl
+*.ovl
 
 # Python virtual environment and bytecode cache
 .venv/
