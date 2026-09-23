@@ -16,7 +16,18 @@
 
 	ORG	0100H
 
+;------------------------------------------------------------------------------
+; Standard 3-Entry Jump Table
+;------------------------------------------------------------------------------
 ENTRY:
+	JP	DO_BEAUTIFY_EXECUTE	; +0: Action 0 (Main Execution)
+	JP	DO_BEAUTIFY_ABOUT	; +3: Action 1 (About Screen)
+	JP	DO_BEAUTIFY_CONFIG	; +6: Action 2 (Config Screen)
+
+;------------------------------------------------------------------------------
+; Action 0: Main Execution (Beautify Active Block or Document)
+;------------------------------------------------------------------------------
+DO_BEAUTIFY_EXECUTE:
 	; Verify Host API Magic "SE" (check IX or IY)
 	LD	A,(IX+0)
 	CP	'S'
@@ -191,6 +202,224 @@ FINISH_NO_CHANGE:
 INIT_ERR:
 	LD	A,0FFH
 	SCF
+	RET
+
+;------------------------------------------------------------------------------
+; Action 1: Modal About Screen
+;------------------------------------------------------------------------------
+DO_BEAUTIFY_ABOUT:
+	; Verify Host API Magic "SE" (check IX or IY)
+	LD	A,(IX+0)
+	CP	'S'
+	JR	Z,BT_ABT_API_OK
+	PUSH	IY
+	POP	IX
+	LD	A,(IX+0)
+	CP	'S'
+	JP	NZ,INIT_ERR
+BT_ABT_API_OK:
+	LD	A,(IX+1)
+	CP	'E'
+	JP	NZ,INIT_ERR
+
+	LD	(HOST_API_PTR),IX
+
+	LD	DE,STR_BEAUTIFY_ABOUT
+	CALL	CALL_HOST_PRINT
+	CALL	CALL_HOST_GETKEY
+
+	XOR	A			; A = 0: Clean, document unmodified
+	OR	A			; Clear Carry (CY=0)
+	RET
+
+;------------------------------------------------------------------------------
+; Action 2: Interactive Configuration Screen
+;------------------------------------------------------------------------------
+DO_BEAUTIFY_CONFIG:
+	; Verify Host API Magic "SE" (check IX or IY)
+	LD	A,(IX+0)
+	CP	'S'
+	JR	Z,BT_CFG_API_OK
+	PUSH	IY
+	POP	IX
+	LD	A,(IX+0)
+	CP	'S'
+	JP	NZ,INIT_ERR
+BT_CFG_API_OK:
+	LD	A,(IX+1)
+	CP	'E'
+	JP	NZ,INIT_ERR
+
+	LD	(HOST_API_PTR),IX
+
+	; Read BEAUTIFIER_CONFIG pointer from IX+44
+	LD	L,(IX+44)
+	LD	H,(IX+45)
+	LD	(HOST_CFG_PTR),HL
+
+	; Copy 24 bytes from host BEAUTIFIER_CONFIG to local FMT_ANIMATE
+	LD	DE,FMT_ANIMATE
+	LD	BC,24
+	LDIR
+
+BT_CFG_LOOP:
+	; 1. Format Preset
+	LD	A,(CFG_PRESET_IDX)
+	CP	1
+	JR	Z,SET_PRESET_1
+	CP	2
+	JR	Z,SET_PRESET_2
+	LD	HL,STR_PRESET_0
+	JR	COPY_PRESET_STR
+SET_PRESET_1:
+	LD	HL,STR_PRESET_1
+	JR	COPY_PRESET_STR
+SET_PRESET_2:
+	LD	HL,STR_PRESET_2
+COPY_PRESET_STR:
+	LD	DE,STR_CFG_COLS_VAL
+	LD	BC,15
+	LDIR
+
+	; 2. Format Mnemonic Case
+	LD	A,(FMT_CASE_MNEM)
+	CP	1
+	JR	Z,SET_MNEM_1
+	CP	2
+	JR	Z,SET_MNEM_2
+	LD	HL,STR_CASE_0
+	JR	COPY_MNEM_STR
+SET_MNEM_1:
+	LD	HL,STR_CASE_1
+	JR	COPY_MNEM_STR
+SET_MNEM_2:
+	LD	HL,STR_CASE_2
+COPY_MNEM_STR:
+	LD	DE,STR_CFG_MNEM_VAL
+	LD	BC,15
+	LDIR
+
+	; 3. Format Register Case
+	LD	A,(FMT_CASE_OPER)
+	CP	1
+	JR	Z,SET_OPER_1
+	CP	2
+	JR	Z,SET_OPER_2
+	LD	HL,STR_CASE_0
+	JR	COPY_OPER_STR
+SET_OPER_1:
+	LD	HL,STR_CASE_1
+	JR	COPY_OPER_STR
+SET_OPER_2:
+	LD	HL,STR_CASE_2
+COPY_OPER_STR:
+	LD	DE,STR_CFG_OPER_VAL
+	LD	BC,15
+	LDIR
+
+	; 4. Format Animation
+	LD	A,(FMT_ANIMATE)
+	OR	A
+	JR	Z,SET_ANIM_0
+	LD	HL,STR_ANIM_1
+	JR	COPY_ANIM_STR
+SET_ANIM_0:
+	LD	HL,STR_ANIM_0
+COPY_ANIM_STR:
+	LD	DE,STR_CFG_ANIM_VAL
+	LD	BC,15
+	LDIR
+
+	; Print Config Screen
+	LD	DE,STR_BEAUTIFY_CONFIG
+	CALL	CALL_HOST_PRINT
+
+	; Wait for input
+	CALL	CALL_HOST_GETKEY
+
+	CP	'1'
+	JR	Z,BT_TOGGLE_COLS
+	CP	'2'
+	JR	Z,BT_TOGGLE_MNEM
+	CP	'3'
+	JR	Z,BT_TOGGLE_OPER
+	CP	'4'
+	JR	Z,BT_TOGGLE_ANIM
+	CP	'Q'
+	JR	Z,BT_CFG_SAVE_EXIT
+	CP	'q'
+	JR	Z,BT_CFG_SAVE_EXIT
+	CP	13			; Enter
+	JR	Z,BT_CFG_SAVE_EXIT
+	CP	27			; ESC
+	JR	Z,BT_CFG_SAVE_EXIT
+	JP	BT_CFG_LOOP
+
+BT_TOGGLE_COLS:
+	LD	A,(CFG_PRESET_IDX)
+	INC	A
+	CP	3
+	JR	C,BT_COLS_OK
+	XOR	A
+BT_COLS_OK:
+	LD	(CFG_PRESET_IDX),A
+	; Apply preset columns
+	LD	HL,PRESET_COLUMNS
+	LD	C,A
+	LD	B,0
+	ADD	HL,BC
+	ADD	HL,BC
+	ADD	HL,BC			; HL = PRESET_COLUMNS + (A * 3)
+	LD	A,(HL)
+	LD	(FMT_STMT_MNEM_CNT),A
+	INC	HL
+	LD	A,(HL)
+	LD	(FMT_STMT_OP1_CNT),A
+	INC	HL
+	LD	A,(HL)
+	LD	(FMT_STMT_COMM_CNT),A
+	JP	BT_CFG_LOOP
+
+BT_TOGGLE_MNEM:
+	LD	A,(FMT_CASE_MNEM)
+	INC	A
+	CP	3
+	JR	C,BT_MNEM_OK
+	XOR	A
+BT_MNEM_OK:
+	LD	(FMT_CASE_MNEM),A
+	JP	BT_CFG_LOOP
+
+BT_TOGGLE_OPER:
+	LD	A,(FMT_CASE_OPER)
+	INC	A
+	CP	3
+	JR	C,BT_OPER_OK
+	XOR	A
+BT_OPER_OK:
+	LD	(FMT_CASE_OPER),A
+	JP	BT_CFG_LOOP
+
+BT_TOGGLE_ANIM:
+	LD	A,(FMT_ANIMATE)
+	XOR	1
+	LD	(FMT_ANIMATE),A
+	JP	BT_CFG_LOOP
+
+BT_CFG_SAVE_EXIT:
+	; Copy local 24 bytes FMT_ANIMATE back to host BEAUTIFIER_CONFIG
+	LD	HL,(HOST_CFG_PTR)
+	LD	A,H
+	OR	L
+	JR	Z,BT_CFG_DONE
+	EX	DE,HL			; DE = HOST_CFG_PTR
+	LD	HL,FMT_ANIMATE
+	LD	BC,24
+	LDIR
+
+BT_CFG_DONE:
+	XOR	A			; A = 0: Clean, document unmodified
+	OR	A			; Clear Carry
 	RET
 
 ;------------------------------------------------------------------------------
@@ -1221,6 +1450,17 @@ CALL_HOST_COMMIT:
 	POP	IX
 	RET
 
+CALL_HOST_PRINT:
+	PUSH	IX
+	LD	IX,(HOST_API_PTR)
+	PUSH	IX
+	POP	IY
+	LD	BC,27			; IX+27: Call PRINT_STR
+	ADD	IY,BC
+	CALL	CALL_IY_VEC
+	POP	IX
+	RET
+
 CALL_HOST_GETKEY:
 	PUSH	IX
 	LD	IX,(HOST_API_PTR)
@@ -1362,5 +1602,60 @@ BLB_QUOTE_TEMP:		DB	0
 PREV_WAS_ID_CHAR:	DB	0
 BLB_MNEM_CASE_TEMP:	DB	0
 
+HOST_CFG_PTR:		DW	0
+CFG_PRESET_IDX:		DB	0
+
+PRESET_COLUMNS:
+	DB	9, 17, 41		; Preset 0: Standard
+	DB	8, 16, 36		; Preset 1: Compact
+	DB	10, 20, 48		; Preset 2: Wide
+
+STR_PRESET_0:	DB	"Standard (9/17)"
+STR_PRESET_1:	DB	"Compact  (8/16)"
+STR_PRESET_2:	DB	"Wide    (10/20)"
+
+STR_CASE_0:	DB	"UPPERCASE      "
+STR_CASE_1:	DB	"lowercase      "
+STR_CASE_2:	DB	"As-Is Preserved"
+
+STR_ANIM_1:	DB	"ON (Real-Time) "
+STR_ANIM_0:	DB	"OFF (Fast)     "
+
+STR_BEAUTIFY_ABOUT:
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |    Z80 Code Beautifier Plugin      |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  | Version: 0.9.7 (CP/M 3 PRL Format) |"
+	DB	13,10,"  | Engine : Z80 Tokenizer & Lexer     |"
+	DB	13,10,"  | Feat   : Column Alignment          |"
+	DB	13,10,"  |        : Mnemonic/Register Casing  |"
+	DB	13,10,"  |        : Block or Full Document    |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |     [Press any key to return]      |"
+	DB	13,10,"  +------------------------------------+",13,10,"$"
+
+STR_BEAUTIFY_CONFIG:
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |    Z80 Beautifier Configuration    |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |  1. Columns   : ["
+STR_CFG_COLS_VAL:
+	DB	"Standard (9/17)] |"
+	DB	13,10,"  |  2. Mnemonics : ["
+STR_CFG_MNEM_VAL:
+	DB	"UPPERCASE      ] |"
+	DB	13,10,"  |  3. Registers : ["
+STR_CFG_OPER_VAL:
+	DB	"UPPERCASE      ] |"
+	DB	13,10,"  |  4. Animation : ["
+STR_CFG_ANIM_VAL:
+	DB	"ON (Real-Time) ] |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  | [1-4] Toggle  [Enter/Q] Save & Exit|"
+	DB	13,10,"  +------------------------------------+",13,10,"$"
+
+;------------------------------------------------------------------------------
+; Uninitialized Working Storage (BSS)
+;------------------------------------------------------------------------------
 STR_TICK_BUF:		DS	32
-LINE_OUTPUT_BUF:	DS	1024
+LINE_OUTPUT_BUF:	DS	512

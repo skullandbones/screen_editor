@@ -14,7 +14,20 @@
 
 	ORG	0100H
 
+;------------------------------------------------------------------------------
+; Standard 3-Entry Jump Table
+;------------------------------------------------------------------------------
 ENTRY:
+	JP	DO_ROT13_EXECUTE	; +0: Action 0 (Main Execution)
+	JP	DO_ROT13_ABOUT		; +3: Action 1 (About Screen)
+	SCF				; +6: Action 2 (Config - Not Supported)
+	RET
+	NOP
+
+;------------------------------------------------------------------------------
+; Action 0: Main ROT13 Cipher Execution
+;------------------------------------------------------------------------------
+DO_ROT13_EXECUTE:
 	; Verify Host API Magic "SE" (check IX or IY)
 	LD	A,(IX+0)
 	CP	'S'
@@ -100,14 +113,53 @@ INIT_ERR:
 	RET
 
 ;------------------------------------------------------------------------------
-; Helper: Call HOST_SET_STATUS_MSG at IX+31
-; In: DE = Pointer to '$'-terminated status message
+; Action 1: Modal About Screen
 ;------------------------------------------------------------------------------
+DO_ROT13_ABOUT:
+	; Verify Host API Magic "SE"
+	LD	A,(IX+0)
+	CP	'S'
+	JR	Z,ABT_API_OK
+	PUSH	IY
+	POP	IX
+	LD	A,(IX+0)
+	CP	'S'
+	JR	NZ,INIT_ERR
+ABT_API_OK:
+	LD	A,(IX+1)
+	CP	'E'
+	JR	NZ,INIT_ERR
+
+	LD	DE,STR_ROT13_ABOUT
+	CALL	CALL_HOST_PRINT
+	CALL	CALL_HOST_GETKEY
+
+	XOR	A			; A = 0: Clean, document unmodified
+	OR	A			; Clear Carry (CY=0)
+	RET
+
+;------------------------------------------------------------------------------
+; Host API Callback Helpers (via IX)
+;------------------------------------------------------------------------------
+CALL_HOST_PRINT:
+	PUSH	IX
+	POP	HL
+	LD	BC,27			; Offset +27: PRINT_STR
+	ADD	HL,BC
+	JP	(HL)
+
+CALL_HOST_GETKEY:
+	PUSH	IX
+	POP	HL
+	LD	BC,30			; Offset +30: GET_KEY
+	ADD	HL,BC
+	JP	(HL)
+
 CALL_HOST_STATUS:
 	PUSH	IX
 	POP	HL
-	LD	BC,33
-	ADD	HL,BC			; HL = &HOST_SET_STATUS_MSG vector
+	LD	BC,33			; Offset +33: SET_STATUS_MSG
+	ADD	HL,BC
 	JP	(HL)
 
 ;------------------------------------------------------------------------------
@@ -115,3 +167,15 @@ CALL_HOST_STATUS:
 ;------------------------------------------------------------------------------
 MSG_SUCCESS:
 	DB	"[ROT13 Applied]$", 0
+
+STR_ROT13_ABOUT:
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |       ROT13 Text Cipher Plugin     |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  | Version: 1.0.0 (CP/M 3 PRL Format) |"
+	DB	13,10,"  | Mode   : 4KB TPA Overlaid Slot     |"
+	DB	13,10,"  | Scope  : Current Editor Line       |"
+	DB	13,10,"  | Action : Reversible 13-Char Shift  |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |     [Press any key to return]      |"
+	DB	13,10,"  +------------------------------------+",13,10,"$"

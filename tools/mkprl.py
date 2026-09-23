@@ -41,6 +41,8 @@ CAP_TPA_EXEC   = 0x0001
 CAP_FAR_EXEC   = 0x0002
 CAP_DOC_MUTATE = 0x0004
 CAP_MODAL_UI   = 0x0008
+CAP_HAS_ABOUT  = 0x0010
+CAP_HAS_CONFIG = 0x0020
 
 def build_reloc_bitmap(code_100: bytes, code_200: bytes) -> bytes:
     """
@@ -121,6 +123,9 @@ def main():
     parser.add_argument("--far", action="store_true", default=False, help="Can run directly in Far RAM")
     parser.add_argument("--mutate", action="store_true", default=False, help="Modifies document lines")
     parser.add_argument("--modal", action="store_true", default=False, help="Draws modal dialog/screen")
+    parser.add_argument("--has-about", action="store_true", default=False, help="Implements embedded About screen")
+    parser.add_argument("--has-config", action="store_true", default=False, help="Implements embedded Configuration screen")
+    parser.add_argument("--caps", type=lambda x: int(x, 0), default=None, help="Explicit 16-bit capabilities bitmask override")
 
     args = parser.parse_args()
 
@@ -132,15 +137,22 @@ def main():
         with open(args.image_200, "rb") as f:
             code_200 = f.read()
 
-    caps = 0
-    if args.tpa:
-        caps |= CAP_TPA_EXEC
-    if args.far:
-        caps |= CAP_FAR_EXEC
-    if args.mutate:
-        caps |= CAP_DOC_MUTATE
-    if args.modal:
-        caps |= CAP_MODAL_UI
+    if args.caps is not None:
+        caps = args.caps
+    else:
+        caps = 0
+        if args.tpa:
+            caps |= CAP_TPA_EXEC
+        if args.far:
+            caps |= CAP_FAR_EXEC
+        if args.mutate:
+            caps |= CAP_DOC_MUTATE
+        if args.modal:
+            caps |= CAP_MODAL_UI
+        if args.has_about:
+            caps |= CAP_HAS_ABOUT
+        if args.has_config:
+            caps |= CAP_HAS_CONFIG
 
     result = make_prl(
         name=args.name,

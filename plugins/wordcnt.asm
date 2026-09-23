@@ -14,7 +14,18 @@
 
 	ORG	0100H
 
+;------------------------------------------------------------------------------
+; Standard 3-Entry Jump Table
+;------------------------------------------------------------------------------
 ENTRY:
+	JP	DO_WORDCNT_EXECUTE	; +0: Action 0 (Main Execution)
+	JP	DO_WORDCNT_ABOUT	; +3: Action 1 (About Screen)
+	JP	DO_WORDCNT_CONFIG	; +6: Action 2 (Config Screen)
+
+;------------------------------------------------------------------------------
+; Action 0: Main Execution (Document Statistics Summary)
+;------------------------------------------------------------------------------
+DO_WORDCNT_EXECUTE:
 	; Verify Host API Magic "SE" (check IX or IY)
 	LD	A,(IX+0)
 	CP	'S'
@@ -152,6 +163,110 @@ SHOW_DIALOG:
 	OR	A
 	RET
 
+;------------------------------------------------------------------------------
+; Action 1: Modal About Screen
+;------------------------------------------------------------------------------
+DO_WORDCNT_ABOUT:
+	; Verify Host API Magic "SE" (check IX or IY)
+	LD	A,(IX+0)
+	CP	'S'
+	JR	Z,ABT_API_OK
+	PUSH	IY
+	POP	IX
+	LD	A,(IX+0)
+	CP	'S'
+	JP	NZ,INIT_ERR
+ABT_API_OK:
+	LD	A,(IX+1)
+	CP	'E'
+	JP	NZ,INIT_ERR
+
+	LD	DE,STR_WORDCNT_ABOUT
+	CALL	CALL_HOST_PRINT
+	CALL	CALL_HOST_GETKEY
+
+	XOR	A			; A = 0: Clean, document unmodified
+	OR	A			; Clear Carry (CY=0)
+	RET
+
+;------------------------------------------------------------------------------
+; Action 2: Interactive Configuration Screen
+;------------------------------------------------------------------------------
+DO_WORDCNT_CONFIG:
+	; Verify Host API Magic "SE" (check IX or IY)
+	LD	A,(IX+0)
+	CP	'S'
+	JR	Z,CFG_API_OK
+	PUSH	IY
+	POP	IX
+	LD	A,(IX+0)
+	CP	'S'
+	JP	NZ,INIT_ERR
+CFG_API_OK:
+	LD	A,(IX+1)
+	CP	'E'
+	JP	NZ,INIT_ERR
+
+CFG_DISPLAY_LOOP:
+	LD	A,(CFG_COUNT_BLANK)
+	OR	A
+	JR	Z,SET_BLANK_NO
+	LD	HL,STR_VAL_YES
+	JR	PUT_BLANK_STR
+SET_BLANK_NO:
+	LD	HL,STR_VAL_NO
+PUT_BLANK_STR:
+	LD	DE,STR_CFG_BLANK_VAL
+	LD	BC,3
+	LDIR
+
+	LD	A,(CFG_COUNT_WS)
+	OR	A
+	JR	Z,SET_WS_NO
+	LD	HL,STR_VAL_YES
+	JR	PUT_WS_STR
+SET_WS_NO:
+	LD	HL,STR_VAL_NO
+PUT_WS_STR:
+	LD	DE,STR_CFG_WS_VAL
+	LD	BC,3
+	LDIR
+
+	LD	DE,STR_WORDCNT_CONFIG
+	CALL	CALL_HOST_PRINT
+	CALL	CALL_HOST_GETKEY
+
+	CP	'1'
+	JR	Z,TOGGLE_BLANK
+	CP	'2'
+	JR	Z,TOGGLE_WS
+	CP	'Q'
+	JR	Z,CFG_DONE
+	CP	'q'
+	JR	Z,CFG_DONE
+	CP	13			; CR
+	JR	Z,CFG_DONE
+	CP	27			; ESC
+	JR	Z,CFG_DONE
+	JR	CFG_DISPLAY_LOOP
+
+TOGGLE_BLANK:
+	LD	A,(CFG_COUNT_BLANK)
+	XOR	1
+	LD	(CFG_COUNT_BLANK),A
+	JR	CFG_DISPLAY_LOOP
+
+TOGGLE_WS:
+	LD	A,(CFG_COUNT_WS)
+	XOR	1
+	LD	(CFG_COUNT_WS),A
+	JR	CFG_DISPLAY_LOOP
+
+CFG_DONE:
+	XOR	A			; A = 0: Clean, document unmodified
+	OR	A			; Clear Carry
+	RET
+
 INIT_ERR:
 	LD	A,0FFH
 	SCF
@@ -271,3 +386,34 @@ STR_BOX_BOT:
 	DB	"  +------------------------------------+",13,10
 	DB	"  |     [Press any key to continue]    |",13,10
 	DB	"  +------------------------------------+",13,10,"$"
+
+STR_WORDCNT_ABOUT:
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |   Word & Character Count Plugin    |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  | Version: 1.0.0 (CP/M 3 Overlay/PRL)|"
+	DB	13,10,"  | Mode   : TPA Overlay / Far RAM     |"
+	DB	13,10,"  | Scope  : Full Document Scanner     |"
+	DB	13,10,"  | Metrics: Lines, Words, Characters  |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |     [Press any key to return]      |"
+	DB	13,10,"  +------------------------------------+",13,10,"$"
+
+STR_WORDCNT_CONFIG:
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |     Word Count Configuration       |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  |  1. Count Blank Lines  : ["
+STR_CFG_BLANK_VAL:
+	DB	"YES]       |"
+	DB	13,10,"  |  2. Count Whitespace   : ["
+STR_CFG_WS_VAL:
+	DB	"YES]       |"
+	DB	13,10,"  +------------------------------------+"
+	DB	13,10,"  | [1-2] Toggle  [Enter/Q] Save & Exit|"
+	DB	13,10,"  +------------------------------------+",13,10,"$"
+
+CFG_COUNT_BLANK:	DB	1
+CFG_COUNT_WS:		DB	1
+STR_VAL_YES:		DB	"YES"
+STR_VAL_NO:		DB	"NO "

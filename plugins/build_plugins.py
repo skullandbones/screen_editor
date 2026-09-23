@@ -39,7 +39,7 @@ def main():
     # Package into ROT13.PRL
     subprocess.run([sys.executable, mkprl_bin, "-n", "ROT13",
                     "-o", os.path.join(plugin_dir, "ROT13.PRL"),
-                    "--tpa", "--mutate",
+                    "--tpa", "--mutate", "--has-about",
                     os.path.join(plugin_dir, "rot13_100.bin"),
                     os.path.join(plugin_dir, "rot13_200.bin")], check=True)
 
@@ -49,7 +49,7 @@ def main():
 
     subprocess.run([sys.executable, mkprl_bin, "-n", "WORDCNT",
                     "-o", os.path.join(plugin_dir, "WORDCNT.OVL"),
-                    "--ovl", "--tpa", "--far", "--modal",
+                    "--ovl", "--tpa", "--far", "--modal", "--has-about", "--has-config",
                     os.path.join(plugin_dir, "wordcnt.bin")], check=True)
 
     # 3. Build BEAUTIFY.PRL (CP/M 3 Page-Relocatable, Far-RAM & TPA executable)
@@ -73,7 +73,7 @@ def main():
     # Package into BEAUTIFY.PRL
     subprocess.run([sys.executable, mkprl_bin, "-n", "BEAUTIFY",
                     "-o", os.path.join(plugin_dir, "BEAUTIFY.PRL"),
-                    "--tpa", "--far", "--mutate",
+                    "--tpa", "--mutate", "--has-about", "--has-config",
                     os.path.join(plugin_dir, "beautify_100.bin"),
                     os.path.join(plugin_dir, "beautify_200.bin")], check=True)
 
