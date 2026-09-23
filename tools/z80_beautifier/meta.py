@@ -51,6 +51,34 @@ def load_se_cfg(filepath: str) -> FormatterConfig:
     if 'FMT_CASE' in data:
         cfg.case_schema = CaseSchema.parse(data['FMT_CASE'])
 
+    # 1b. Parse BEAUTIFY.CFG keys if present
+    if 'COLUMNS' in data:
+        col = data['COLUMNS'].upper()
+        if col.startswith('C'):
+            cfg.opcode_col = 8
+            cfg.operand_col = 16
+            cfg.comment_col = 36
+        elif col.startswith('W'):
+            cfg.opcode_col = 10
+            cfg.operand_col = 20
+            cfg.comment_col = 48
+        else:
+            cfg.opcode_col = 9
+            cfg.operand_col = 17
+            cfg.comment_col = 41
+
+    if 'MNEMONICS' in data:
+        m = data['MNEMONICS'].lower()
+        if m.startswith('l'): cfg.instruction_case = 'lower'
+        elif m.startswith('a') or m.startswith('p'): cfg.instruction_case = 'preserve'
+        else: cfg.instruction_case = 'upper'
+
+    if 'REGISTERS' in data:
+        r = data['REGISTERS'].lower()
+        if r.startswith('l'): cfg.register_case = 'lower'
+        elif r.startswith('a') or r.startswith('p'): cfg.register_case = 'preserve'
+        else: cfg.register_case = 'upper'
+
     # 2. Legacy key-value overrides for backward compatibility
     if 'LABEL_COL' in data:
         try: cfg.label_col = int(data['LABEL_COL'])

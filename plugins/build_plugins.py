@@ -74,6 +74,7 @@ def main():
     subprocess.run([sys.executable, mkprl_bin, "-n", "BEAUTIFY",
                     "-o", os.path.join(plugin_dir, "BEAUTIFY.PRL"),
                     "--tpa", "--mutate", "--has-about", "--has-config",
+                    "--bss", "544",
                     os.path.join(plugin_dir, "beautify_100.bin"),
                     os.path.join(plugin_dir, "beautify_200.bin")], check=True)
 

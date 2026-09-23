@@ -2,19 +2,23 @@
 """
 Test Suite for SE.COM Z80 Assembly Beautifier Subsystem.
 Verifies:
-  1. Interactive Configuration Screen:
-     - Option '5' cycles Beautify Columns (Standard 1/9/17/41 -> Compact 1/5/9/25 -> Wide 1/13/21/49 -> Standard).
-     - Option '6' toggles Visual Progress (Real-Time Watch <-> Fast Batch).
-     - Option 's' persists ANIMATE, OPCODE_COL, OPERAND_COL, COMMENT_COL to SE.CFG.
+  1. Decoupled Configuration & BEAUTIFY.CFG Persistence:
+     - SE.COM config menu has only options 1..4 (Screen, RAM Drive, Max Lines, Tab Width).
+     - Beautifier settings removed from SE.COM and SE.CFG.
+     - Beautifier plugin provides its own interactive configuration menu (Action 'C' in Plugin Manager).
+     - Plugin settings (COLUMNS, MNEMONICS, REGISTERS, ANIMATE) persist to BEAUTIFY.CFG on disk.
+     - Subsequent editor runs reload settings from BEAUTIFY.CFG.
   2. Whole-File Beautification via Ctrl+Y:
      - When BLOCK_ACTIVE == 0, Ctrl+Y formats all lines in the document.
      - Preserves full-line comments and indents instructions, operands, and comments to target columns.
-     - Normalizes instruction mnemonics to uppercase.
+     - Normalizes instruction mnemonics according to configuration.
   3. Block-Scoped Beautification via Ctrl+Y:
      - When BLOCK_ACTIVE != 0, Ctrl+Y formats only lines inside [BLOCK_START_ROW .. BLOCK_END_ROW].
      - Lines outside the block remain unmodified.
-  4. Cross-Platform Parity:
-     - CP/M SE.COM output and Linux tools/z80_beautifier output match 100% byte-for-byte.
+  4. Cross-Platform Parity with Default Settings:
+     - CP/M BEAUTIFY.PRL output and Linux tools/z80_beautifier output match 100% byte-for-byte.
+  5. Custom Configuration & Cross-Platform Parity:
+     - Custom BEAUTIFY.CFG (Compact columns, lowercase mnemonics/registers) formats identically on CP/M and Linux.
 """
 
 import os
@@ -131,11 +135,13 @@ def get_file_from_image(cpmcp_bin, img_file, cpm_filename):
     return data
 
 def test_config_screen_beautifier_options():
-    print("\n[*] TEST 1: Config Screen Options 5 (Columns) & 6 (Visual Progress)...", flush=True)
+    print("\n[*] TEST 1: Beautifier Plugin Configuration & SE.COM Options Decoupling...", flush=True)
     emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
 
-    # Remove existing SE.CFG to ensure defaults
+    # Remove existing SE.CFG and BEAUTIFY.CFG to ensure defaults
     subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BEAUTIFY.CFG"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     proc, master = boot_cpm(emu_bin, rom_file, img_file)
@@ -146,61 +152,88 @@ def test_config_screen_beautifier_options():
         out = read_until(master, b"Col 0", timeout=25.0)
         assert b"Col 0" in out or b"to configure" in out, f"Failed launching SE.COM: {out}"
 
-        # Enter Config Screen ('c')
+        # 1. Enter SE.COM Config Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
         out = read_until(master, b"return to splash screen", timeout=15.0)
 
-        # Check default display of Option 5 and Option 6
-        assert b"5. Beautify Columns: [Standard (1/9/17/41)]" in out, f"Option 5 missing or wrong: {out}"
-        assert b"6. Visual Progress : [Real-Time Watch]" in out, f"Option 6 missing or wrong: {out}"
-        assert b"cycle Beautify cols" in out
-        assert b"toggle Visual Progress" in out
-        print("    [+] Verified default Option 5 [Standard] and Option 6 [Real-Time Watch]")
+        # Verify Options 5 and 6 are stripped from SE.COM config screen
+        assert b"5. Beautify Columns" not in out, f"Option 5 should not be in SE.COM menu: {out}"
+        assert b"6. Visual Progress" not in out, f"Option 6 should not be in SE.COM menu: {out}"
+        assert b"cycle Beautify cols" not in out
+        assert b"toggle Visual Progress" not in out
+        assert b"4. Tab Width" in out, "Option 4 (Tab Width) missing"
+        print("    [+] Verified Beautifier options (5 & 6) are removed from SE.COM configuration menu")
 
-        # Press '5' -> Should cycle to Tabbed (1t 1s 0s ;32tA)
-        time.sleep(0.3)
-        os.write(master, b"5")
-        out = read_until(master, b"Tabbed (1t 1s 0s ;32tA)", timeout=10.0)
-        assert b"Tabbed (1t 1s 0s ;32tA)" in out, f"Failed cycling to Tabbed: {out}"
-        print("    [+] Pressed '5': Successfully cycled to [Tabbed (1t 1s 0s ;32tA)]")
-
-        # Press '5' -> Should cycle to Compact (1/5/9/25)
-        time.sleep(0.3)
-        os.write(master, b"5")
-        out = read_until(master, b"Compact (1/5/9/25)", timeout=10.0)
-        assert b"Compact (1/5/9/25)" in out, f"Failed cycling to Compact: {out}"
-        print("    [+] Pressed '5': Successfully cycled to [Compact (1/5/9/25)]")
-
-        # Press '5' -> Should cycle to Wide (1/13/21/49)
-        time.sleep(0.3)
-        os.write(master, b"5")
-        out = read_until(master, b"Wide (1/13/21/49)", timeout=10.0)
-        assert b"Wide (1/13/21/49)" in out, f"Failed cycling to Wide: {out}"
-        print("    [+] Pressed '5': Successfully cycled to [Wide (1/13/21/49)]")
-
-        # Press '5' -> Should cycle back to Standard (1/9/17/41)
-        time.sleep(0.3)
-        os.write(master, b"5")
-        out = read_until(master, b"Standard (1/9/17/41)", timeout=10.0)
-        assert b"Standard (1/9/17/41)" in out, f"Failed cycling back to Standard: {out}"
-        print("    [+] Pressed '5': Successfully cycled back to [Standard (1/9/17/41)]")
-
-        # Press '6' -> Should toggle to Fast Batch (Silent)
-        time.sleep(0.3)
-        os.write(master, b"6")
-        out = read_until(master, b"Fast Batch (Silent)", timeout=10.0)
-        assert b"Fast Batch (Silent)" in out, f"Failed toggling to Fast Batch: {out}"
-        print("    [+] Pressed '6': Successfully toggled to [Fast Batch (Silent)]")
-
-        # Save config ('s')
+        # Save config ('s') -> generates SE.CFG
         time.sleep(0.3)
         os.write(master, b"s")
         out = read_until(master, b"Saved to local drive", timeout=10.0)
         assert b"Saved to local drive" in out, f"Failed saving config: {out}"
-        print("    [+] Pressed 's': Config saved successfully")
+        print("    [+] Saved editor configuration to SE.CFG")
 
-        # Return to splash ('q') and exit to CP/M ('q')
+        # Return to splash ('q')
+        time.sleep(0.3)
+        os.write(master, b"q")
+        read_until(master, b"Col 0", timeout=10.0)
+
+        # 2. Enter Plugin Manager ('p')
+        time.sleep(0.3)
+        os.write(master, b"p")
+        out = read_until(master, b"type 0..7 to run", timeout=10.0)
+        assert b"type 0..7 to run" in out, f"Failed entering Plugin Manager: {out}"
+
+        # Select BEAUTIFY slot: navigate down twice to BEAUTIFY (slot 2)
+        time.sleep(0.3)
+        os.write(master, b"\x1b[B\x1b[B")
+        time.sleep(0.3)
+        # Open embedded configuration menu for BEAUTIFY ('c')
+        os.write(master, b"c")
+        out = read_until(master, b"Save & Exit", timeout=10.0)
+        assert b"Z80 Beautifier Configuration" in out, f"Failed opening BEAUTIFY config: {out}"
+
+        # Check default settings
+        assert b"1. Columns   : [Standard (9/17)]" in out, f"Default columns missing: {out}"
+        assert b"2. Mnemonics : [UPPERCASE      ]" in out, f"Default mnemonics missing: {out}"
+        assert b"3. Registers : [UPPERCASE      ]" in out, f"Default registers missing: {out}"
+        assert b"4. Animation : [ON (Real-Time) ]" in out, f"Default animation missing: {out}"
+        print("    [+] Verified BEAUTIFY embedded config menu default values")
+
+        # Toggle Option 1 (Columns) -> Compact (8/16)
+        time.sleep(0.3)
+        os.write(master, b"1")
+        out = read_until(master, b"Compact  (8/16)", timeout=10.0)
+        assert b"Compact  (8/16)" in out, f"Failed toggling columns: {out}"
+        print("    [+] Option 1 toggled to [Compact (8/16)]")
+
+        # Toggle Option 2 (Mnemonics) -> lowercase
+        time.sleep(0.3)
+        os.write(master, b"2")
+        out = read_until(master, b"lowercase      ", timeout=10.0)
+        assert b"lowercase      " in out, f"Failed toggling mnemonics: {out}"
+        print("    [+] Option 2 toggled to [lowercase]")
+
+        # Toggle Option 3 (Registers) -> lowercase
+        time.sleep(0.3)
+        os.write(master, b"3")
+        out = read_until(master, b"lowercase      ", timeout=10.0)
+        assert b"lowercase      " in out, f"Failed toggling registers: {out}"
+        print("    [+] Option 3 toggled to [lowercase]")
+
+        # Toggle Option 4 (Animation) -> OFF (Fast)
+        time.sleep(0.3)
+        os.write(master, b"4")
+        out = read_until(master, b"OFF (Fast)     ", timeout=10.0)
+        assert b"OFF (Fast)     " in out, f"Failed toggling animation: {out}"
+        print("    [+] Option 4 toggled to [OFF (Fast)]")
+
+        # Save & Exit ('q')
+        time.sleep(0.3)
+        os.write(master, b"q")
+        read_until(master, b"type 0..7 to run", timeout=10.0)
+        print("    [+] Exited BEAUTIFY config menu with 'q' (persisted to BEAUTIFY.CFG)")
+
+        # Exit Plugin Manager ('q') and exit SE.COM ('q')
         time.sleep(0.3)
         os.write(master, b"q")
         read_until(master, b"Col 0", timeout=10.0)
@@ -212,23 +245,71 @@ def test_config_screen_beautifier_options():
         proc.wait(timeout=1.0)
         os.close(master)
 
-    # Verify SE.CFG on disk has ANIMATE=0, FMT_STMT, FMT_LABEL, FMT_COMMENT, FMT_CASE
+    # 3. Verify SE.CFG has NO beautifier settings
     cfg_data = get_file_from_image(cpmcp_bin, img_file, "SE.CFG")
     assert cfg_data is not None, "SE.CFG not found on disk image"
     cfg_str = cfg_data.decode("latin1", errors="ignore")
-    assert "ANIMATE=0" in cfg_str, f"ANIMATE=0 not found in SE.CFG: {cfg_str}"
-    assert "FMT_STMT=9sA 17sA 0s ;41sA" in cfg_str, f"FMT_STMT not found in SE.CFG: {cfg_str}"
-    assert "FMT_LABEL=1sA : S" in cfg_str, f"FMT_LABEL not found in SE.CFG: {cfg_str}"
-    assert "FMT_COMMENT=1sA M" in cfg_str, f"FMT_COMMENT not found in SE.CFG: {cfg_str}"
-    assert "FMT_CASE=mU oU lP cU" in cfg_str, f"FMT_CASE not found in SE.CFG: {cfg_str}"
-    assert "OPCODE_COL=9" in cfg_str, f"OPCODE_COL=9 not found in SE.CFG: {cfg_str}"
-    assert "OPERAND_COL=17" in cfg_str, f"OPERAND_COL=17 not found in SE.CFG: {cfg_str}"
-    assert "COMMENT_COL=41" in cfg_str, f"COMMENT_COL=41 not found in SE.CFG: {cfg_str}"
-    print("    [+] Verified SE.CFG on disk contains persisted beautifier settings & schemas:")
-    for line in cfg_str.strip().split("\r\n"):
-        if any(k in line for k in ["ANIMATE", "FMT_", "OPCODE", "OPERAND", "COMMENT"]):
+    assert "ANIMATE" not in cfg_str, f"ANIMATE found in SE.CFG: {cfg_str}"
+    assert "FMT_" not in cfg_str, f"FMT_ found in SE.CFG: {cfg_str}"
+    assert "OPCODE" not in cfg_str, f"OPCODE found in SE.CFG: {cfg_str}"
+    assert "OPERAND" not in cfg_str, f"OPERAND found in SE.CFG: {cfg_str}"
+    assert "COMMENT" not in cfg_str, f"COMMENT found in SE.CFG: {cfg_str}"
+    assert "SCREEN=" in cfg_str, f"SCREEN= missing from SE.CFG: {cfg_str}"
+    assert "TAB=" in cfg_str, f"TAB= missing from SE.CFG: {cfg_str}"
+    print("    [+] Verified SE.CFG is clean of beautifier configuration")
+
+    # 4. Verify BEAUTIFY.CFG exists on disk and contains saved settings
+    bcfg_data = get_file_from_image(cpmcp_bin, img_file, "BEAUTIFY.CFG")
+    assert bcfg_data is not None, "BEAUTIFY.CFG not found on disk image"
+    bcfg_str = bcfg_data.decode("latin1", errors="ignore")
+    assert "COLUMNS=COMPACT" in bcfg_str, f"COLUMNS=COMPACT not in BEAUTIFY.CFG: {bcfg_str}"
+    assert "MNEMONICS=LOWER" in bcfg_str, f"MNEMONICS=LOWER not in BEAUTIFY.CFG: {bcfg_str}"
+    assert "REGISTERS=LOWER" in bcfg_str, f"REGISTERS=LOWER not in BEAUTIFY.CFG: {bcfg_str}"
+    assert "ANIMATE=0" in bcfg_str, f"ANIMATE=0 not in BEAUTIFY.CFG: {bcfg_str}"
+    print("    [+] Verified BEAUTIFY.CFG on disk contains persisted plugin settings:")
+    for line in bcfg_str.strip().split("\r\n"):
+        if line and not line.startswith("#"):
             print(f"        {line}")
-    print("[+] Test 1 PASSED: Config screen toggles and persistence verified.")
+
+    # 5. Relaunch SE.COM and verify BEAUTIFY loads settings from BEAUTIFY.CFG
+    proc2, master2 = boot_cpm(emu_bin, rom_file, img_file)
+    try:
+        time.sleep(0.4)
+        os.write(master2, b"se\r")
+        read_until(master2, b"Col 0", timeout=25.0)
+
+        # Enter Plugin Manager ('p')
+        time.sleep(0.3)
+        os.write(master2, b"p")
+        read_until(master2, b"type 0..7 to run", timeout=10.0)
+
+        # Navigate down twice to BEAUTIFY
+        time.sleep(0.3)
+        os.write(master2, b"\x1b[B\x1b[B")
+        time.sleep(0.3)
+        os.write(master2, b"c")
+        out = read_until(master2, b"Save & Exit", timeout=10.0)
+        assert b"Compact  (8/16)" in out, f"Persisted columns not loaded: {out}"
+        assert b"lowercase      " in out, f"Persisted case not loaded: {out}"
+        assert b"OFF (Fast)     " in out, f"Persisted animation not loaded: {out}"
+        print("    [+] Verified BEAUTIFY plugin reloaded persisted settings from BEAUTIFY.CFG successfully")
+
+        # Exit
+        time.sleep(0.3)
+        os.write(master2, b"q")
+        read_until(master2, b"type 0..7 to run", timeout=10.0)
+        time.sleep(0.3)
+        os.write(master2, b"q")
+        read_until(master2, b"Col 0", timeout=10.0)
+        time.sleep(0.3)
+        os.write(master2, b"q")
+        read_until(master2, b"C>", timeout=10.0)
+    finally:
+        proc2.terminate()
+        proc2.wait(timeout=1.0)
+        os.close(master2)
+
+    print("[+] Test 1 PASSED: Config screen decoupling and BEAUTIFY.CFG persistence verified.")
 
 def test_ctrl_y_whole_file_beautify():
     print("\n[*] TEST 2: Whole-File Beautification via Ctrl+Y...", flush=True)
@@ -245,8 +326,12 @@ def test_ctrl_y_whole_file_beautify():
     )
     put_file_to_image(cpmcp_bin, cpmrm_bin, img_file, raw_asm, "RAW.ASM")
 
-    # Set SE.CFG with ANIMATE=1 and standard columns
-    cfg_content = "SCREEN=80x24\r\nANIMATE=1\r\nOPCODE_COL=9\r\nOPERAND_COL=17\r\nCOMMENT_COL=41\r\n"
+    # Remove existing BEAUTIFY.CFG to ensure default standard columns (9/17/41)
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BEAUTIFY.CFG"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Set SE.CFG with only editor settings
+    cfg_content = "SCREEN=80x24\r\n"
     put_file_to_image(cpmcp_bin, cpmrm_bin, img_file, cfg_content, "SE.CFG")
 
     proc, master = boot_cpm(emu_bin, rom_file, img_file)
@@ -494,11 +579,11 @@ def test_cross_platform_parity():
 
     print("[+] Test 4 PASSED: 100% byte-for-byte cross-platform parity confirmed!")
 
-def test_tabbed_beautification():
-    print("\n[*] TEST 5: Tabbed Schema (1t 1s 0s ;32tA) & Cross-Platform Parity...", flush=True)
+def test_compact_beautification():
+    print("\n[*] TEST 5: Custom Plugin Config (BEAUTIFY.CFG) & Cross-Platform Parity...", flush=True)
     emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
 
-    # Raw assembly to format with tabbed schema
+    # Raw assembly to format with compact schema
     raw_asm = (
         "; Header comment\r\n"
         "start: ld a,10 ; initial counter\r\n"
@@ -507,24 +592,26 @@ def test_tabbed_beautification():
         " jr nz,loop ; repeat\r\n"
         " ret\r\n"
     )
-    put_file_to_image(cpmcp_bin, cpmrm_bin, img_file, raw_asm, "TAB.ASM")
+    put_file_to_image(cpmcp_bin, cpmrm_bin, img_file, raw_asm, "COMPACT.ASM")
 
-    # Set SE.CFG with the User's Tabbed Schema: 1t 1s 0s ;32tA
-    cfg_content = (
-        "SCREEN=80x24\r\n"
+    # Set BEAUTIFY.CFG with Compact columns and lowercase mnemonics/registers
+    bcfg_content = (
+        "# BEAUTIFY.CFG - Custom Test Configuration\r\n"
+        "COLUMNS=COMPACT\r\n"
+        "MNEMONICS=LOWER\r\n"
+        "REGISTERS=LOWER\r\n"
         "ANIMATE=0\r\n"
-        "TAB=8\r\n"
-        "FMT_STMT=1t 1s 0s ;32tA\r\n"
-        "FMT_LABEL=1sA : S\r\n"
-        "FMT_COMMENT=1sA M\r\n"
-        "FMT_CASE=mU oU lP cU\r\n"
     )
+    put_file_to_image(cpmcp_bin, cpmrm_bin, img_file, bcfg_content, "BEAUTIFY.CFG")
+
+    # Set SE.CFG with only editor settings
+    cfg_content = "SCREEN=80x24\r\nTAB=8\r\n"
     put_file_to_image(cpmcp_bin, cpmrm_bin, img_file, cfg_content, "SE.CFG")
 
     proc, master = boot_cpm(emu_bin, rom_file, img_file)
     try:
         time.sleep(0.4)
-        os.write(master, b"se tab.asm\r")
+        os.write(master, b"se compact.asm\r")
         out = read_until(master, b"^K: Editor keys", timeout=25.0)
         assert b"^K: Editor keys" in out
         drain_all(master, 0.2)
@@ -561,30 +648,29 @@ def test_tabbed_beautification():
         os.close(master)
 
     # 1. Read CP/M output
-    cpm_data = get_file_from_image(cpmcp_bin, img_file, "TAB.ASM")
+    cpm_data = get_file_from_image(cpmcp_bin, img_file, "COMPACT.ASM")
     assert cpm_data is not None
     cpm_str = cpm_data.split(b"\x1a")[0].decode("latin1").replace("\r\n", "\n")
 
-    # 2. Format with Linux Python toolchain using same config
-    from tools.z80_beautifier.config import FormatterConfig, StmtSchema, LabelSchema, CommentSchema, CaseSchema
+    # 2. Format with Linux Python toolchain using same BEAUTIFY.CFG
+    from tools.z80_beautifier.meta import load_se_cfg
     from tools.z80_beautifier.parser import Parser
     from tools.z80_beautifier.formatter import Formatter
 
-    linux_cfg = FormatterConfig(
-        stmt_schema=StmtSchema.parse("1t 1s 0s ;32tA"),
-        label_schema=LabelSchema.parse("1sA : S"),
-        comment_schema=CommentSchema.parse("1sA M"),
-        case_schema=CaseSchema.parse("mU oU lP cU"),
-        tab_width=8,
-    )
+    bcfg_tmp = "/tmp/PARITY_BEAUTIFY.CFG"
+    with open(bcfg_tmp, "w") as f:
+        f.write(bcfg_content)
+    linux_cfg = load_se_cfg(bcfg_tmp)
+    os.remove(bcfg_tmp)
+
     ast = Parser().parse_source(raw_asm.replace("\r\n", "\n"))
     linux_output = Formatter(linux_cfg).format_program(ast)
 
-    print(f"    Linux Tabbed output:\n{linux_output}")
-    print(f"    CP/M Tabbed output:\n{cpm_str}")
+    print(f"    Linux Compact output:\n{linux_output}")
+    print(f"    CP/M Compact output:\n{cpm_str}")
 
-    # Check tab characters are present in CP/M output
-    assert "\t" in cpm_str, "Tab characters missing from CP/M tabbed output!"
+    # Verify lowercase mnemonics and registers are present
+    assert "ld" in cpm_str and "inc" in cpm_str and "ret" in cpm_str, "Lowercase mnemonics missing from CP/M output!"
 
     # Verify line-by-line parity
     linux_lines = [l for l in linux_output.strip().split("\n") if l]
@@ -594,7 +680,7 @@ def test_tabbed_beautification():
     for idx, (ll, cl) in enumerate(zip(linux_lines, cpm_lines)):
         assert ll == cl, f"Line {idx} mismatch:\n  Linux: {repr(ll)}\n  CP/M : {repr(cl)}"
 
-    print("[+] Test 5 PASSED: Tabbed schema cross-platform parity 100% confirmed!")
+    print("[+] Test 5 PASSED: Custom BEAUTIFY.CFG cross-platform parity 100% confirmed!")
 
 def main():
     print("=" * 65)
@@ -605,7 +691,7 @@ def main():
     test_ctrl_y_whole_file_beautify()
     test_ctrl_y_block_beautify()
     test_cross_platform_parity()
-    test_tabbed_beautification()
+    test_compact_beautification()
 
     print("\n" + "=" * 65)
     print("  ALL BEAUTIFIER TESTS PASSED SUCCESSFULLY!")

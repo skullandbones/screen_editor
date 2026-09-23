@@ -31,8 +31,9 @@ def find_paths():
     rom_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom")
     img_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img")
     se_bin = os.path.join(repo_root, "SE.COM")
+    cpmrm_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm")
 
-    return emu_bin, rom_file, img_file, se_bin
+    return emu_bin, rom_file, img_file, se_bin, cpmrm_bin
 
 def read_until(master_fd, match_bytes, timeout=8.0):
     buf = b""
@@ -66,7 +67,11 @@ def drain_all(master_fd, quiet_time=0.1):
 
 def main():
     print("[*] Launching emulator for Interactive Plugin Manager Test...", flush=True)
-    emu_bin, rom_file, img_file, se_bin = find_paths()
+    emu_bin, rom_file, img_file, se_bin, cpmrm_bin = find_paths()
+
+    # Remove existing BEAUTIFY.CFG to ensure default standard columns
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BEAUTIFY.CFG"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     master, slave = os.openpty()
     tty.setraw(slave)

@@ -73,12 +73,9 @@ API_OK:
 	DEC	A			; Mask: 3 or 7
 	LD	(CFG_TAB_MASK),A
 
-	; Read BEAUTIFIER_CONFIG from IX+44 and copy 24 bytes
-	LD	L,(IX+44)
-	LD	H,(IX+45)
-	LD	DE,FMT_ANIMATE
-	LD	BC,24
-	LDIR
+	; Load configuration from BEAUTIFY.CFG (or defaults)
+	CALL	LOAD_PLUGIN_CFG
+	LD	IX,(HOST_API_PTR)
 
 	; Check if a block is active (BLOCK_ACTIVE at IX+36)
 	LD	L,(IX+36)
@@ -252,15 +249,9 @@ BT_CFG_API_OK:
 
 	LD	(HOST_API_PTR),IX
 
-	; Read BEAUTIFIER_CONFIG pointer from IX+44
-	LD	L,(IX+44)
-	LD	H,(IX+45)
-	LD	(HOST_CFG_PTR),HL
-
-	; Copy 24 bytes from host BEAUTIFIER_CONFIG to local FMT_ANIMATE
-	LD	DE,FMT_ANIMATE
-	LD	BC,24
-	LDIR
+	; Load configuration from BEAUTIFY.CFG (or defaults)
+	CALL	LOAD_PLUGIN_CFG
+	LD	IX,(HOST_API_PTR)
 
 BT_CFG_LOOP:
 	; 1. Format Preset
@@ -352,7 +343,7 @@ COPY_ANIM_STR:
 	CP	13			; Enter
 	JR	Z,BT_CFG_SAVE_EXIT
 	CP	27			; ESC
-	JR	Z,BT_CFG_SAVE_EXIT
+	JR	Z,BT_CFG_DONE
 	JP	BT_CFG_LOOP
 
 BT_TOGGLE_COLS:
@@ -362,22 +353,7 @@ BT_TOGGLE_COLS:
 	JR	C,BT_COLS_OK
 	XOR	A
 BT_COLS_OK:
-	LD	(CFG_PRESET_IDX),A
-	; Apply preset columns
-	LD	HL,PRESET_COLUMNS
-	LD	C,A
-	LD	B,0
-	ADD	HL,BC
-	ADD	HL,BC
-	ADD	HL,BC			; HL = PRESET_COLUMNS + (A * 3)
-	LD	A,(HL)
-	LD	(FMT_STMT_MNEM_CNT),A
-	INC	HL
-	LD	A,(HL)
-	LD	(FMT_STMT_OP1_CNT),A
-	INC	HL
-	LD	A,(HL)
-	LD	(FMT_STMT_COMM_CNT),A
+	CALL	APPLY_COL_PRESET
 	JP	BT_CFG_LOOP
 
 BT_TOGGLE_MNEM:
@@ -407,15 +383,7 @@ BT_TOGGLE_ANIM:
 	JP	BT_CFG_LOOP
 
 BT_CFG_SAVE_EXIT:
-	; Copy local 24 bytes FMT_ANIMATE back to host BEAUTIFIER_CONFIG
-	LD	HL,(HOST_CFG_PTR)
-	LD	A,H
-	OR	L
-	JR	Z,BT_CFG_DONE
-	EX	DE,HL			; DE = HOST_CFG_PTR
-	LD	HL,FMT_ANIMATE
-	LD	BC,24
-	LDIR
+	CALL	SAVE_PLUGIN_CFG
 
 BT_CFG_DONE:
 	XOR	A			; A = 0: Clean, document unmodified
@@ -1602,7 +1570,6 @@ BLB_QUOTE_TEMP:		DB	0
 PREV_WAS_ID_CHAR:	DB	0
 BLB_MNEM_CASE_TEMP:	DB	0
 
-HOST_CFG_PTR:		DW	0
 CFG_PRESET_IDX:		DB	0
 
 PRESET_COLUMNS:
@@ -1654,8 +1621,507 @@ STR_CFG_ANIM_VAL:
 	DB	13,10,"  | [1-4] Toggle  [Enter/Q] Save & Exit|"
 	DB	13,10,"  +------------------------------------+",13,10,"$"
 
+;==============================================================================
+; Plugin Configuration File Subsystem (BEAUTIFY.CFG)
+;==============================================================================
+
+;------------------------------------------------------------------------------
+; APPLY_COL_PRESET: Applies column preset in A (0=Standard, 1=Compact, 2=Wide)
+;------------------------------------------------------------------------------
+APPLY_COL_PRESET:
+	PUSH	BC
+	PUSH	HL
+	LD	(CFG_PRESET_IDX),A
+	LD	HL,PRESET_COLUMNS
+	LD	C,A
+	LD	B,0
+	ADD	HL,BC
+	ADD	HL,BC
+	ADD	HL,BC			; HL = PRESET_COLUMNS + (A * 3)
+	LD	A,(HL)
+	LD	(FMT_STMT_MNEM_CNT),A
+	INC	HL
+	LD	A,(HL)
+	LD	(FMT_STMT_OP1_CNT),A
+	INC	HL
+	LD	A,(HL)
+	LD	(FMT_STMT_COMM_CNT),A
+	POP	HL
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; INIT_PLUGIN_FCB: Sets up PLUGIN_CFG_FCB for BEAUTIFY.CFG on default drive
+;------------------------------------------------------------------------------
+INIT_PLUGIN_FCB:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	HL,PLUGIN_CFG_FCB
+	LD	(HL),0			; 0 = Default drive
+	INC	HL
+	EX	DE,HL			; DE = PLUGIN_CFG_FCB + 1 (destination)
+	LD	HL,STR_PLUGIN_CFG_NAME	; HL = STR_PLUGIN_CFG_NAME (source)
+	LD	BC,11
+	LDIR				; Copies 11 bytes to PLUGIN_CFG_FCB+1, DE ends at PLUGIN_CFG_FCB+12
+	EX	DE,HL			; HL = PLUGIN_CFG_FCB + 12
+	XOR	A
+	LD	B,24			; Zero bytes 12..35
+IPF_ZERO:
+	LD	(HL),A
+	INC	HL
+	DJNZ	IPF_ZERO
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; RESTORE_DEFAULT_DMA: Restores standard CP/M DMA at 0080H
+;------------------------------------------------------------------------------
+RESTORE_DEFAULT_DMA:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	DE,0080H
+	LD	C,26			; BDOS 26: Set DMA
+	CALL	0005H
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
+;------------------------------------------------------------------------------
+; LOAD_PLUGIN_CFG: Loads BEAUTIFY.CFG from default drive if present
+;------------------------------------------------------------------------------
+LOAD_PLUGIN_CFG:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	PUSH	IX
+
+	; Clear buffer to 1AH (EOF)
+	LD	HL,PLUGIN_CFG_BUF
+	LD	(HL),1AH
+	LD	DE,PLUGIN_CFG_BUF+1
+	LD	BC,255
+	LDIR
+
+	; Set DMA to PLUGIN_CFG_BUF
+	LD	DE,PLUGIN_CFG_BUF
+	LD	C,26
+	CALL	0005H
+
+	; Initialize FCB
+	CALL	INIT_PLUGIN_FCB
+
+	; Open BEAUTIFY.CFG (BDOS 15)
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,15
+	CALL	0005H
+	CP	0FFH
+	JR	Z,LPC_EXIT_NOFILE
+
+	; Read record 0 (BDOS 20)
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,20
+	CALL	0005H
+	OR	A
+	JR	NZ,LPC_CLOSE_EXIT
+
+	; Set DMA to PLUGIN_CFG_BUF + 128
+	LD	DE,PLUGIN_CFG_BUF + 128
+	LD	C,26
+	CALL	0005H
+
+	; Read record 1 (BDOS 20)
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,20
+	CALL	0005H
+
+LPC_CLOSE_EXIT:
+	; Close file (BDOS 16)
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,16
+	CALL	0005H
+
+	CALL	PARSE_PLUGIN_CFG_BUFFER
+
+LPC_EXIT_NOFILE:
+	CALL	RESTORE_DEFAULT_DMA
+	POP	IX
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; PARSE_PLUGIN_CFG_BUFFER: Parses text in PLUGIN_CFG_BUF (up to 256 bytes)
+;------------------------------------------------------------------------------
+PARSE_PLUGIN_CFG_BUFFER:
+	LD	HL,PLUGIN_CFG_BUF
+	LD	DE,PLUGIN_CFG_BUF + 256
+
+PPC_LINE_START:
+	LD	A,H
+	CP	D
+	JR	NZ,PPC_NOT_BUF_END
+	LD	A,L
+	CP	E
+	RET	Z
+PPC_NOT_BUF_END:
+	LD	A,(HL)
+	CP	1AH			; Ctrl-Z (EOF)
+	RET	Z
+	OR	A			; Null (EOF)
+	RET	Z
+	CP	'#'
+	JP	Z,PPC_SKIP_LINE
+	CP	';'
+	JP	Z,PPC_SKIP_LINE
+	CP	13			; CR
+	JP	Z,PPC_SKIP_LINE
+	CP	10			; LF
+	JP	Z,PPC_NEXT_CHAR
+	CP	' '
+	JP	Z,PPC_NEXT_CHAR
+	CP	9
+	JP	Z,PPC_NEXT_CHAR
+
+	; Match Key Prefix
+	CALL	TO_UPPER
+	CP	'C'			; COLUMNS
+	JR	Z,PPC_CHECK_COL
+	CP	'M'			; MNEMONICS
+	JR	Z,PPC_CHECK_MNEM
+	CP	'R'			; REGISTERS
+	JR	Z,PPC_CHECK_REG
+	CP	'A'			; ANIMATE
+	JR	Z,PPC_CHECK_ANIM
+	JP	PPC_SKIP_LINE
+
+PPC_CHECK_COL:
+	CALL	PPC_FIND_VALUE
+	JP	C,PPC_SKIP_LINE
+	CALL	TO_UPPER
+	CP	'C'			; COMPACT
+	JR	Z,PPC_SET_COL_1
+	CP	'W'			; WIDE
+	JR	Z,PPC_SET_COL_2
+	XOR	A			; STANDARD (0)
+	JR	PPC_SET_COL_A
+PPC_SET_COL_1:
+	LD	A,1
+	JR	PPC_SET_COL_A
+PPC_SET_COL_2:
+	LD	A,2
+PPC_SET_COL_A:
+	CALL	APPLY_COL_PRESET
+	JP	PPC_SKIP_LINE
+
+PPC_CHECK_MNEM:
+	CALL	PPC_FIND_VALUE
+	JP	C,PPC_SKIP_LINE
+	CALL	PARSE_CASE_TOKEN
+	LD	(FMT_CASE_MNEM),A
+	JP	PPC_SKIP_LINE
+
+PPC_CHECK_REG:
+	CALL	PPC_FIND_VALUE
+	JP	C,PPC_SKIP_LINE
+	CALL	PARSE_CASE_TOKEN
+	LD	(FMT_CASE_OPER),A
+	JP	PPC_SKIP_LINE
+
+PPC_CHECK_ANIM:
+	CALL	PPC_FIND_VALUE
+	JP	C,PPC_SKIP_LINE
+	LD	A,(HL)
+	CP	'0'
+	JR	Z,PPC_SET_ANIM_0
+	CALL	TO_UPPER
+	CP	'F'			; FAST
+	JR	Z,PPC_SET_ANIM_0
+	CP	'N'			; NO
+	JR	Z,PPC_SET_ANIM_0
+	CP	'O'
+	JR	NZ,PPC_SET_ANIM_1
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'F'			; OF(F)
+	JR	Z,PPC_SET_ANIM_0
+PPC_SET_ANIM_1:
+	LD	A,1
+	LD	(FMT_ANIMATE),A
+	JP	PPC_SKIP_LINE
+PPC_SET_ANIM_0:
+	XOR	A
+	LD	(FMT_ANIMATE),A
+	JP	PPC_SKIP_LINE
+
+PPC_NEXT_CHAR:
+	INC	HL
+	JP	PPC_LINE_START
+
+PPC_SKIP_LINE:
+	LD	A,H
+	CP	D
+	JR	NZ,PPC_SL_NOT_END
+	LD	A,L
+	CP	E
+	RET	Z
+PPC_SL_NOT_END:
+	LD	A,(HL)
+	INC	HL
+	CP	1AH
+	RET	Z
+	OR	A
+	RET	Z
+	CP	10			; LF
+	JP	Z,PPC_LINE_START
+	JR	PPC_SKIP_LINE
+
+; PPC_FIND_VALUE: Advances HL to '=' and skips spaces
+PPC_FIND_VALUE:
+	LD	A,(HL)
+	OR	A
+	SCF
+	RET	Z
+	CP	1AH
+	SCF
+	RET	Z
+	CP	10
+	SCF
+	RET	Z
+	CP	13
+	SCF
+	RET	Z
+	CP	'='
+	JR	Z,PPC_GOT_EQ
+	INC	HL
+	JR	PPC_FIND_VALUE
+PPC_GOT_EQ:
+	INC	HL			; skip '='
+PPC_SKIP_VAL_WS:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,PPC_SVW_INC
+	CP	9
+	JR	Z,PPC_SVW_INC
+	OR	A			; Carry = 0
+	RET
+PPC_SVW_INC:
+	INC	HL
+	JR	PPC_SKIP_VAL_WS
+
+; PARSE_CASE_TOKEN: Checks char at (HL)
+PARSE_CASE_TOKEN:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'L'
+	JR	Z,PCT_LOWER
+	CP	'A'
+	JR	Z,PCT_ASIS
+	CP	'P'
+	JR	Z,PCT_ASIS
+	XOR	A			; 0 = UPPER
+	RET
+PCT_LOWER:
+	LD	A,1
+	RET
+PCT_ASIS:
+	LD	A,2
+	RET
+
+;------------------------------------------------------------------------------
+; SAVE_PLUGIN_CFG: Writes BEAUTIFY.CFG to current default drive
+;------------------------------------------------------------------------------
+SAVE_PLUGIN_CFG:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	PUSH	IX
+
+	; Fill buffer with 1AH (EOF)
+	LD	HL,PLUGIN_CFG_BUF
+	LD	(HL),1AH
+	LD	DE,PLUGIN_CFG_BUF+1
+	LD	BC,255
+	LDIR
+
+	; Pointer to write into buffer
+	LD	DE,PLUGIN_CFG_BUF
+
+	; 1. Header: "# BEAUTIFY.CFG - Z80 Beautifier Config\r\n"
+	LD	HL,STR_P_CFG_HDR
+	CALL	APPEND_P_STR
+
+	; 2. "COLUMNS="
+	LD	HL,STR_P_KEY_COL
+	CALL	APPEND_P_STR
+
+	LD	A,(CFG_PRESET_IDX)
+	CP	1
+	JR	Z,SPC_COL_CMP
+	CP	2
+	JR	Z,SPC_COL_WIDE
+	LD	HL,STR_P_VAL_STD
+	JR	SPC_PUT_COL
+SPC_COL_CMP:
+	LD	HL,STR_P_VAL_CMP
+	JR	SPC_PUT_COL
+SPC_COL_WIDE:
+	LD	HL,STR_P_VAL_WIDE
+SPC_PUT_COL:
+	CALL	APPEND_P_STR
+
+	; 3. "MNEMONICS="
+	LD	HL,STR_P_KEY_MNEM
+	CALL	APPEND_P_STR
+
+	LD	A,(FMT_CASE_MNEM)
+	CALL	GET_CASE_STR_HL
+	CALL	APPEND_P_STR
+
+	; 4. "REGISTERS="
+	LD	HL,STR_P_KEY_REG
+	CALL	APPEND_P_STR
+
+	LD	A,(FMT_CASE_OPER)
+	CALL	GET_CASE_STR_HL
+	CALL	APPEND_P_STR
+
+	; 5. "ANIMATE="
+	LD	HL,STR_P_KEY_ANIM
+	CALL	APPEND_P_STR
+
+	LD	A,(FMT_ANIMATE)
+	OR	A
+	JR	Z,SPC_ANIM_0
+	LD	HL,STR_P_VAL_1
+	JR	SPC_PUT_ANIM
+SPC_ANIM_0:
+	LD	HL,STR_P_VAL_0
+SPC_PUT_ANIM:
+	CALL	APPEND_P_STR
+
+	; Save buffer end pointer
+	PUSH	DE
+
+	; Set DMA to record 0
+	LD	DE,PLUGIN_CFG_BUF
+	LD	C,26
+	CALL	0005H
+
+	; Delete existing file (BDOS 19)
+	CALL	INIT_PLUGIN_FCB
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,19
+	CALL	0005H
+
+	; Make new file (BDOS 22)
+	CALL	INIT_PLUGIN_FCB
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,22
+	CALL	0005H
+	CP	0FFH
+	JR	Z,SPC_EXIT_POP
+
+	; Write record 0 (BDOS 21)
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,21
+	CALL	0005H
+	OR	A
+	JR	NZ,SPC_CLOSE_EXIT
+
+	POP	DE			; Restore buffer end pointer
+	PUSH	DE
+	LD	HL,PLUGIN_CFG_BUF + 128
+	LD	A,D
+	CP	H
+	JR	C,SPC_CLOSE_EXIT
+	JR	NZ,SPC_WRITE_REC1
+	LD	A,E
+	CP	L
+	JR	C,SPC_CLOSE_EXIT
+
+SPC_WRITE_REC1:
+	LD	DE,PLUGIN_CFG_BUF + 128
+	LD	C,26
+	CALL	0005H
+
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,21
+	CALL	0005H
+
+SPC_CLOSE_EXIT:
+	POP	DE
+	LD	DE,PLUGIN_CFG_FCB
+	LD	C,16			; Close
+	CALL	0005H
+
+SPC_EXIT:
+	CALL	RESTORE_DEFAULT_DMA
+	POP	IX
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+SPC_EXIT_POP:
+	POP	DE
+	JR	SPC_EXIT
+
+; APPEND_P_STR: Copies null-terminated string at HL to DE, advances DE
+APPEND_P_STR:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	APPEND_P_STR
+
+; GET_CASE_STR_HL: A = 0..2, returns HL pointing to case value string
+GET_CASE_STR_HL:
+	CP	1
+	JR	Z,GCS_LOWER
+	CP	2
+	JR	Z,GCS_ASIS
+	LD	HL,STR_P_VAL_UPPER
+	RET
+GCS_LOWER:
+	LD	HL,STR_P_VAL_LOWER
+	RET
+GCS_ASIS:
+	LD	HL,STR_P_VAL_ASIS
+	RET
+
+STR_PLUGIN_CFG_NAME:	DB	"BEAUTIFYCFG"
+STR_P_CFG_HDR:		DB	"# BEAUTIFY.CFG - Z80 Beautifier Config",13,10,0
+STR_P_KEY_COL:		DB	"COLUMNS=",0
+STR_P_VAL_STD:		DB	"STANDARD",13,10,0
+STR_P_VAL_CMP:		DB	"COMPACT",13,10,0
+STR_P_VAL_WIDE:		DB	"WIDE",13,10,0
+
+STR_P_KEY_MNEM:		DB	"MNEMONICS=",0
+STR_P_KEY_REG:		DB	"REGISTERS=",0
+STR_P_VAL_UPPER:	DB	"UPPER",13,10,0
+STR_P_VAL_LOWER:	DB	"LOWER",13,10,0
+STR_P_VAL_ASIS:		DB	"ASIS",13,10,0
+
+STR_P_KEY_ANIM:		DB	"ANIMATE=",0
+STR_P_VAL_1:		DB	"1",13,10,0
+STR_P_VAL_0:		DB	"0",13,10,0
+
 ;------------------------------------------------------------------------------
 ; Uninitialized Working Storage (BSS)
 ;------------------------------------------------------------------------------
-STR_TICK_BUF:		DS	32
-LINE_OUTPUT_BUF:	DS	512
+BSS_START:
+STR_TICK_BUF		EQU	BSS_START
+LINE_OUTPUT_BUF		EQU	BSS_START + 32
+PLUGIN_CFG_BUF		EQU	LINE_OUTPUT_BUF
+PLUGIN_CFG_FCB		EQU	LINE_OUTPUT_BUF + 256
