@@ -1,0 +1,30 @@
+# Dialect Definition: sjasmplus
+NAME = SJASMPLUS
+HEX_PREFIX = $
+HEX_SUFFIX =
+BIN_PREFIX = %
+BIN_SUFFIX =
+OCT_PREFIX = 0o
+OCT_SUFFIX =
+LOCAL_PREFIX = .
+LABEL_COLON = 1
+LOCATION_COUNTER = $
+
+# Expression Operators
+OP_AND = &
+OP_OR = |
+OP_XOR = ^
+OP_NOT = ~
+OP_SHL = <<
+OP_SHR = >>
+OP_MOD = %
+
+# Directives
+DIR_ORG = ORG
+DIR_EQU = EQU
+DIR_VAR = EQU
+DIR_BYTE = DB
+DIR_WORD = DW
+DIR_BLOCK = DS
+DIR_ALIGN = ALIGN
+DIR_END = END
