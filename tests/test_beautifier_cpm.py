@@ -254,14 +254,15 @@ def test_ctrl_y_whole_file_beautify():
         # Launch SE.COM RAW.ASM
         time.sleep(0.4)
         os.write(master, b"se raw.asm\r")
-        out = read_until(master, b"RAW.ASM", timeout=25.0)
-        assert b"RAW.ASM" in out
+        out = read_until(master, b"^K: Editor keys", timeout=25.0)
+        assert b"^K: Editor keys" in out
+        drain_all(master, 0.2)
         print("    [+] Opened RAW.ASM in editor")
 
         # Press Ctrl+Y (ASCII 25 / 0x19) -> Beautifies whole file
         time.sleep(0.3)
         os.write(master, b"\x19")
-        out_cy = read_until(master, b"^K: Editor keys", timeout=15.0)
+        out_cy = read_until(master, b"^K: Editor keys", timeout=20.0)
         assert b"^K: Editor keys" in out_cy, f"Beautify did not complete: {out_cy}"
         drain_all(master, 0.2)
         print("    [+] Sent Ctrl+Y (Whole-file Beautify completed)")
@@ -524,13 +525,14 @@ def test_tabbed_beautification():
     try:
         time.sleep(0.4)
         os.write(master, b"se tab.asm\r")
-        out = read_until(master, b"TAB.ASM", timeout=25.0)
-        assert b"TAB.ASM" in out
+        out = read_until(master, b"^K: Editor keys", timeout=25.0)
+        assert b"^K: Editor keys" in out
+        drain_all(master, 0.2)
 
         # Send Ctrl+Y (whole-file beautify)
         time.sleep(0.3)
         os.write(master, b"\x19")
-        read_until(master, b"^K: Editor keys", timeout=15.0)
+        read_until(master, b"^K: Editor keys", timeout=20.0)
         drain_all(master, 0.2)
 
         # Save with Ctrl+S

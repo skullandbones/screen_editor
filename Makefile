@@ -21,7 +21,7 @@ $(TARGET): $(ASM_SRC)
 	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
 
 plugins:
-	@echo "==> Building reference plugins (ROT13.PRL, WORDCNT.OVL)..."
+	@echo "==> Building plugins (ROT13.PRL, WORDCNT.OVL, BEAUTIFY.PRL)..."
 	python3 plugins/build_plugins.py
 
 image: $(TARGET) plugins
@@ -32,12 +32,16 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/ROT13.PRL 0:ROT13.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:WORDCNT.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/WORDCNT.OVL 0:WORDCNT.OVL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:BEAUTIFY.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/BEAUTIFY.PRL 0:BEAUTIFY.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:ROT13.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/ROT13.PRL 0:ROT13.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:WORDCNT.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/WORDCNT.OVL 0:WORDCNT.OVL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:BEAUTIFY.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/BEAUTIFY.PRL 0:BEAUTIFY.PRL
 
 test: test-sanity
 
@@ -69,7 +73,11 @@ test-plugins: image
 	@echo "==> Running CP/M 3 PRL & OVL plugin subsystem test suite..."
 	python3 tests/test_plugin_subsystem.py
 
-test-full: test-config test-32k test-cpm3 test-conformity test-plugins test-paging
+test-beautifier: image
+	@echo "==> Running SE.COM Z80 beautifier plugin test suite..."
+	python3 tests/test_beautifier_cpm.py
+
+test-full: test-config test-32k test-cpm3 test-conformity test-plugins test-beautifier test-paging
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \

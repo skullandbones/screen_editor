@@ -52,9 +52,42 @@ def main():
                     "--ovl", "--tpa", "--far", "--modal",
                     os.path.join(plugin_dir, "wordcnt.bin")], check=True)
 
+    # 3. Build BEAUTIFY.PRL (CP/M 3 Page-Relocatable, Far-RAM & TPA executable)
+    # Assemble at 0100h
+    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'beautify_100.bin')}",
+                    os.path.join(plugin_dir, "beautify.asm")], check=True)
+
+    # Prepare temporary source at 0200h for relocation bitmap computation
+    beautify_200_asm = os.path.join(plugin_dir, "beautify_200.asm")
+    with open(os.path.join(plugin_dir, "beautify.asm"), "r") as f:
+        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
+    with open(beautify_200_asm, "w") as f:
+        f.write(src)
+
+    # Assemble at 0200h
+    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'beautify_200.bin')}",
+                    beautify_200_asm], check=True)
+    if os.path.exists(beautify_200_asm):
+        os.remove(beautify_200_asm)
+
+    # Package into BEAUTIFY.PRL
+    subprocess.run([sys.executable, mkprl_bin, "-n", "BEAUTIFY",
+                    "-o", os.path.join(plugin_dir, "BEAUTIFY.PRL"),
+                    "--tpa", "--far", "--mutate",
+                    os.path.join(plugin_dir, "beautify_100.bin"),
+                    os.path.join(plugin_dir, "beautify_200.bin")], check=True)
+
+    # Clean up temporary binaries
+    for tmp in ["rot13_100.bin", "rot13_200.bin", "wordcnt.bin",
+                "beautify_100.bin", "beautify_200.bin"]:
+        p = os.path.join(plugin_dir, tmp)
+        if os.path.exists(p):
+            os.remove(p)
+
     print("[+] Plugins built successfully:")
     print(f"    - {os.path.join(plugin_dir, 'ROT13.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'WORDCNT.OVL')}")
+    print(f"    - {os.path.join(plugin_dir, 'BEAUTIFY.PRL')}")
 
 if __name__ == "__main__":
     main()

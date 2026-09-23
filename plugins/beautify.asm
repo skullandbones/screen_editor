@@ -1,0 +1,1366 @@
+;==============================================================================
+; BEAUTIFY.ASM - Z80 Source Code Beautifier Plugin for SE.COM
+; Digital Research CP/M 3 Page-Relocatable (.PRL) & Overlay (.OVL) Format
+;
+; Formats labels, mnemonics, operands, and comments into aligned columns.
+; If BLOCK_ACTIVE != 0: beautifies only lines in selected block.
+; If BLOCK_ACTIVE == 0: beautifies entire open document.
+; If FMT_ANIMATE != 0: provides animated progress tracking on status bar.
+;
+; Entry:
+;   IX = Pointer to PLUGIN_HOST_API vector
+; Returns:
+;   A  = 2 (Document modified / redraw screen)
+;   CY = 0 (Success)
+;==============================================================================
+
+	ORG	0100H
+
+ENTRY:
+	; Verify Host API Magic "SE" (check IX or IY)
+	LD	A,(IX+0)
+	CP	'S'
+	JR	Z,API_OK
+	PUSH	IY
+	POP	IX
+	LD	A,(IX+0)
+	CP	'S'
+	JP	NZ,INIT_ERR
+API_OK:
+	LD	A,(IX+1)
+	CP	'E'
+	JP	NZ,INIT_ERR
+
+	; Save Host API vector pointer
+	LD	(HOST_API_PTR),IX
+
+	; Save ACTIVE_LINE_BUF pointer from IX+4
+	LD	L,(IX+4)
+	LD	H,(IX+5)
+	LD	(HOST_ACTIVE_LINE_BUF),HL
+
+	; Save ACTIVE_LINE_LEN pointer from IX+6
+	LD	L,(IX+6)
+	LD	H,(IX+7)
+	LD	(HOST_ACTIVE_LINE_LEN),HL
+
+	; Check if document is empty (DOC_TOTAL_LINES at IX+10)
+	LD	L,(IX+10)
+	LD	H,(IX+11)
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)			; DE = DOC_TOTAL_LINES
+	LD	(TOTAL_LINES_VAL),DE
+	LD	A,D
+	OR	E
+	JP	Z,FINISH_NO_CHANGE
+
+	; Read Tab Width from IX+42 and calculate CFG_TAB_MASK
+	LD	L,(IX+42)
+	LD	H,(IX+43)
+	LD	A,(HL)			; Tab width: 4 or 8
+	DEC	A			; Mask: 3 or 7
+	LD	(CFG_TAB_MASK),A
+
+	; Read BEAUTIFIER_CONFIG from IX+44 and copy 24 bytes
+	LD	L,(IX+44)
+	LD	H,(IX+45)
+	LD	DE,FMT_ANIMATE
+	LD	BC,24
+	LDIR
+
+	; Check if a block is active (BLOCK_ACTIVE at IX+36)
+	LD	L,(IX+36)
+	LD	H,(IX+37)
+	LD	A,(HL)
+	OR	A
+	JR	Z,DO_WHOLE_FILE
+
+	; Block is active: read BLOCK_START_ROW (IX+38) and BLOCK_END_ROW (IX+40)
+	LD	L,(IX+38)
+	LD	H,(IX+39)
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)			; DE = BLOCK_START_ROW
+
+	LD	L,(IX+40)
+	LD	H,(IX+41)
+	LD	C,(HL)
+	INC	HL
+	LD	B,(HL)			; BC = BLOCK_END_ROW
+
+	; Ensure StartRow (DE) <= EndRow (BC)
+	LD	A,D
+	CP	B
+	JR	C,BLOCK_SORTED
+	JR	NZ,BLOCK_SWAP
+	LD	A,E
+	CP	C
+	JR	C,BLOCK_SORTED
+	JR	Z,BLOCK_SORTED
+BLOCK_SWAP:
+	EX	DE,HL
+	LD	D,B
+	LD	E,C
+	LD	B,H
+	LD	C,L			; Now DE = min(Start, End), BC = max(Start, End)
+BLOCK_SORTED:
+	LD	(BEAUTIFY_START_ROW),DE
+
+	; Ensure EndRow (BC) < DOC_TOTAL_LINES
+	LD	HL,(TOTAL_LINES_VAL)
+	LD	A,B
+	CP	H
+	JR	C,BLOCK_END_OK
+	JR	NZ,BLOCK_CLIP
+	LD	A,C
+	CP	L
+	JR	C,BLOCK_END_OK
+BLOCK_CLIP:
+	LD	BC,(TOTAL_LINES_VAL)
+	DEC	BC
+BLOCK_END_OK:
+	LD	(BEAUTIFY_END_ROW),BC
+	JR	START_LINE_LOOP
+
+DO_WHOLE_FILE:
+	LD	HL,0
+	LD	(BEAUTIFY_START_ROW),HL
+	LD	HL,(TOTAL_LINES_VAL)
+	DEC	HL
+	LD	(BEAUTIFY_END_ROW),HL
+
+START_LINE_LOOP:
+	XOR	A
+	LD	(ANY_LINE_MODIFIED),A
+	LD	HL,(BEAUTIFY_START_ROW)
+
+BEAUTIFY_ROW_LOOP:
+	LD	(CUR_ROW_VAL),HL
+	PUSH	HL
+	CALL	CALL_HOST_CHECKOUT
+	POP	HL
+
+	CALL	BEAUTIFY_LINE_BUFFER
+
+	; Check animation
+	LD	A,(FMT_ANIMATE)
+	OR	A
+	JR	Z,CHECK_ROW_END
+	CALL	DO_ANIM_STEP
+	JR	C,BEAUTIFY_CANCELLED
+
+CHECK_ROW_END:
+	LD	HL,(CUR_ROW_VAL)
+	LD	DE,(BEAUTIFY_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,BEAUTIFY_ROW_INC
+	LD	A,L
+	CP	E
+	JR	Z,BEAUTIFY_FINISHED
+
+BEAUTIFY_ROW_INC:
+	INC	HL
+	JR	BEAUTIFY_ROW_LOOP
+
+BEAUTIFY_CANCELLED:
+	LD	DE,STR_MSG_CANCEL
+	CALL	CALL_HOST_STATUS
+	LD	A,(ANY_LINE_MODIFIED)
+	OR	A
+	JR	NZ,FINISH_MODIFIED
+	JR	FINISH_NO_CHANGE
+
+BEAUTIFY_FINISHED:
+	LD	DE,STR_MSG_DONE
+	CALL	CALL_HOST_STATUS
+	LD	A,2			; A = 2: Document modified / redraw screen
+	OR	A			; Clear carry (CY=0)
+	RET
+
+FINISH_MODIFIED:
+	LD	A,2
+	OR	A
+	RET
+
+FINISH_NO_CHANGE:
+	XOR	A			; A = 0: No changes
+	RET
+
+INIT_ERR:
+	LD	A,0FFH
+	SCF
+	RET
+
+;------------------------------------------------------------------------------
+; DO_ANIM_STEP: Check ESC cancel & update status bar ticker
+; Returns Carry = 1 if ESC was pressed (abort), Carry = 0 otherwise
+;------------------------------------------------------------------------------
+DO_ANIM_STEP:
+	; Check if key pressed via HOST_CHECK_KEY (IX+46)
+	CALL	CALL_HOST_CHECKKEY
+	JR	Z,ANIM_TICK_PROGRESS
+	CALL	CALL_HOST_GETKEY
+	CP	27			; ESC
+	JR	Z,ANIM_ESC_HIT
+
+ANIM_TICK_PROGRESS:
+	; Check if tick threshold (every 32 lines or first line)
+	LD	HL,(CUR_ROW_VAL)
+	LD	A,L
+	AND	1FH
+	JR	NZ,ANIM_DONE
+
+	; Format status ticker: "[Beautify: X/Y]"
+	LD	DE,STR_TICK_BUF
+	LD	HL,STR_TICK_PRE
+	CALL	COPY_STR_Z_LOCAL
+	LD	HL,(CUR_ROW_VAL)
+	INC	HL
+	CALL	FORMAT_DEC_5_DE
+	LD	A,'/'
+	LD	(DE),A
+	INC	DE
+	LD	HL,(BEAUTIFY_END_ROW)
+	INC	HL
+	CALL	FORMAT_DEC_5_DE
+	LD	A,']'
+	LD	(DE),A
+	INC	DE
+	XOR	A
+	LD	(DE),A
+
+	LD	DE,STR_TICK_BUF
+	CALL	CALL_HOST_STATUS
+
+ANIM_DONE:
+	OR	A			; Carry = 0
+	RET
+
+ANIM_ESC_HIT:
+	SCF				; Carry = 1
+	RET
+
+;==============================================================================
+; BEAUTIFY_LINE_BUFFER: Realigns columns and normalizes case in ACTIVE_LINE_BUF
+; Uses local LINE_OUTPUT_BUF
+;==============================================================================
+BEAUTIFY_LINE_BUFFER:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	HL,(HOST_ACTIVE_LINE_BUF)
+	LD	DE,LINE_OUTPUT_BUF
+	LD	C,1			; C = current 1-based column
+
+	; 1. Check if line starts with whitespace
+	LD	A,(HL)
+	CP	' '
+	JP	Z,BLB_NO_LABEL
+	CP	9
+	JP	Z,BLB_NO_LABEL
+	CP	';'
+	JP	Z,BLB_COL1_COMMENT
+	OR	A
+	JP	Z,BLB_BLANK_LINE
+
+	; Line has a LABEL starting at col 1!
+	LD	A,(FMT_LABEL_COL_CNT)
+	CP	1
+	JR	NZ,BLB_PAD_LABEL_COL
+	LD	A,(FMT_LABEL_COL_MOD)
+	CP	1
+	JR	Z,BLB_LABEL_LOOP
+BLB_PAD_LABEL_COL:
+	PUSH	HL
+	LD	IX,FMT_LABEL_COL_CNT
+	CALL	EMIT_FIELD_SEP
+	POP	HL
+
+BLB_LABEL_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,BLB_LABEL_END
+	CP	':'
+	JR	Z,BLB_LABEL_END
+	CP	' '
+	JR	Z,BLB_LABEL_END
+	CP	9
+	JR	Z,BLB_LABEL_END
+	CP	';'
+	JR	Z,BLB_LABEL_END
+	; Apply label casing
+	LD	A,(FMT_CASE_LABL)
+	LD	B,A
+	LD	A,(HL)
+	CALL	APPLY_CASE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	INC	C
+	JR	BLB_LABEL_LOOP
+
+BLB_LABEL_END:
+	; Check if original label had a colon
+	LD	A,(HL)
+	CP	':'
+	JR	NZ,BLB_LBL_NO_COLON
+	INC	HL			; skip original colon
+	LD	B,1			; original_has_colon = 1
+	JR	BLB_LBL_CHECK_COLON_RULE
+BLB_LBL_NO_COLON:
+	LD	B,0			; original_has_colon = 0
+
+BLB_LBL_CHECK_COLON_RULE:
+	LD	A,(FMT_LABEL_COLON)
+	CP	':'
+	JR	Z,BLB_LBL_EMIT_COLON
+	CP	'-'
+	JR	Z,BLB_LBL_SKIP_COLON
+	CP	'?'
+	JR	NZ,BLB_LBL_EMIT_COLON
+	; '?' rule: preserve original colon
+	LD	A,B
+	OR	A
+	JR	Z,BLB_LBL_SKIP_COLON
+BLB_LBL_EMIT_COLON:
+	LD	A,':'
+	LD	(DE),A
+	INC	DE
+	INC	C
+BLB_LBL_SKIP_COLON:
+
+	; Label is done. Skip any whitespace after label
+BLB_SKIP_WS_AFTER_LABEL:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,BLB_SWAL_INC
+	CP	9
+	JR	NZ,BLB_CHECK_AFTER_LABEL
+BLB_SWAL_INC:
+	INC	HL
+	JR	BLB_SKIP_WS_AFTER_LABEL
+
+BLB_CHECK_AFTER_LABEL:
+	LD	A,(HL)
+	OR	A
+	JP	Z,BLB_FINISH_LINE
+	CP	';'
+	JP	Z,BLB_DO_COMMENT
+
+	; Mnemonic follows label: Emit Sep_Mnem
+	PUSH	HL
+	LD	IX,FMT_STMT_MNEM_CNT
+	CALL	EMIT_FIELD_SEP
+	POP	HL
+	JR	BLB_DO_OPCODE_TOKEN
+
+BLB_NO_LABEL:
+	; Skip leading whitespace
+BLB_SKIP_LEADING_WS:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,BLB_SLW_INC
+	CP	9
+	JR	NZ,BLB_CHECK_NO_LABEL
+BLB_SLW_INC:
+	INC	HL
+	JR	BLB_SKIP_LEADING_WS
+
+BLB_CHECK_NO_LABEL:
+	LD	A,(HL)
+	OR	A
+	JP	Z,BLB_BLANK_LINE
+	CP	';'
+	JR	Z,BLB_INDENTED_COMMENT
+	; Has mnemonic, no label:
+	PUSH	HL
+	LD	IX,FMT_STMT_MNEM_CNT
+	CALL	EMIT_FIELD_SEP
+	POP	HL
+	JR	BLB_DO_OPCODE_TOKEN
+
+BLB_COL1_COMMENT:
+	LD	A,(FMT_COMM_COL1_MOD)
+	OR	A
+	JR	Z,BLB_COPY_ORIG_LINE
+	; 1 = align to mnemonic column
+	PUSH	HL
+	LD	IX,FMT_STMT_MNEM_CNT
+	CALL	EMIT_FIELD_SEP
+	POP	HL
+	JP	BLB_COMMENT_LOOP
+
+BLB_INDENTED_COMMENT:
+	LD	A,(FMT_COMM_IND_MOD)
+	CP	'P'
+	JR	Z,BLB_COPY_ORIG_LINE	; 'P' = preserve original
+	; 'M' = align to mnemonic column
+	PUSH	HL
+	LD	IX,FMT_STMT_MNEM_CNT
+	CALL	EMIT_FIELD_SEP
+	POP	HL
+	JP	BLB_COMMENT_LOOP
+
+BLB_COPY_ORIG_LINE:
+	LD	HL,(HOST_ACTIVE_LINE_BUF)
+	LD	DE,LINE_OUTPUT_BUF
+BLB_COPY_ORIG_LOOP:
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,BLB_COPY_ORIG_LOOP
+	JP	BLB_COMPARE_AND_RETURN
+
+BLB_BLANK_LINE:
+	XOR	A
+	LD	(DE),A
+	JP	BLB_COMPARE_AND_RETURN
+
+BLB_DO_OPCODE_TOKEN:
+	; Measure mnemonic length to check if directive
+	PUSH	HL
+	LD	B,0
+BLB_MNEM_LEN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,BLB_GOT_MNEM_LEN
+	CP	' '
+	JR	Z,BLB_GOT_MNEM_LEN
+	CP	9
+	JR	Z,BLB_GOT_MNEM_LEN
+	CP	';'
+	JR	Z,BLB_GOT_MNEM_LEN
+	INC	HL
+	INC	B
+	JR	BLB_MNEM_LEN_LOOP
+
+BLB_GOT_MNEM_LEN:
+	POP	HL
+	CALL	CHECK_IS_DIRECTIVE
+	JR	C,BLB_IS_DIR
+	LD	A,(FMT_CASE_MNEM)
+	LD	(BLB_MNEM_CASE_TEMP),A
+	JR	BLB_OPCODE_LOOP
+BLB_IS_DIR:
+	LD	A,(FMT_CASE_CNST)
+	LD	(BLB_MNEM_CASE_TEMP),A
+
+BLB_OPCODE_LOOP:
+	LD	A,(HL)
+	OR	A
+	JP	Z,BLB_FINISH_LINE
+	CP	';'
+	JP	Z,BLB_DO_COMMENT
+	CP	' '
+	JR	Z,BLB_OPCODE_END
+	CP	9
+	JR	Z,BLB_OPCODE_END
+	CALL	APPLY_CASE_CHAR
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	INC	C
+	JR	BLB_OPCODE_LOOP
+
+BLB_OPCODE_END:
+	; Skip whitespace between opcode and operands
+BLB_SKIP_WS_AFTER_OPCODE:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,BLB_SWAO_INC
+	CP	9
+	JR	NZ,BLB_CHECK_AFTER_OPCODE
+BLB_SWAO_INC:
+	INC	HL
+	JR	BLB_SKIP_WS_AFTER_OPCODE
+
+BLB_CHECK_AFTER_OPCODE:
+	LD	A,(HL)
+	OR	A
+	JP	Z,BLB_FINISH_LINE
+	CP	';'
+	JP	Z,BLB_DO_COMMENT
+
+	; Operands follow! Emit Sep_Op1
+	PUSH	HL
+	LD	IX,FMT_STMT_OP1_CNT
+	CALL	EMIT_FIELD_SEP
+	POP	HL
+
+	; Copy operands with quote tracking and comma separator
+	LD	B,0			; B = quote char (0 = none)
+	XOR	A
+	LD	(PREV_WAS_ID_CHAR),A
+BLB_OPERAND_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,BLB_OPERAND_TRIM
+	; Check if ';' outside quotes
+	LD	A,B
+	OR	A
+	LD	A,(HL)
+	JR	NZ,BLB_OP_INSIDE_QUOTE
+	CP	';'
+	JR	Z,BLB_OPERAND_TRIM
+	; Check for quote start
+	CP	27H			; '\''
+	JR	Z,BLB_OP_START_QUOTE
+	CP	22H			; '\"'
+	JR	Z,BLB_OP_START_QUOTE
+
+	; Check for comma ','
+	CP	','
+	JR	Z,BLB_OP_COMMA
+
+	; Outside quotes: check if register casing applies
+	LD	A,(PREV_WAS_ID_CHAR)
+	OR	A
+	JR	NZ,BLB_OP_CHECK_CHAR_CASE
+	LD	A,B
+	LD	(BLB_QUOTE_TEMP),A
+	CALL	BLB_UPPERCASE_REG
+	JR	NC,BLB_OP_NOT_REG
+	LD	A,(BLB_QUOTE_TEMP)
+	LD	B,A
+	LD	A,1
+	LD	(PREV_WAS_ID_CHAR),A
+	JR	BLB_OPERAND_LOOP
+
+BLB_OP_NOT_REG:
+	LD	A,(BLB_QUOTE_TEMP)
+	LD	B,A
+BLB_OP_CHECK_CHAR_CASE:
+	LD	A,(HL)
+	JR	BLB_OP_COPY_CHAR
+
+BLB_OP_COMMA:
+	CALL	BLB_TRIM_TRAILING_SPACES
+	LD	A,','
+	LD	(DE),A
+	INC	DE
+	INC	C
+	INC	HL
+	; Skip whitespace after comma in (HL)
+BLB_SKIP_WS_AFTER_COMMA:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,BLB_SWAC_INC
+	CP	9
+	JR	NZ,BLB_COMMA_EMIT_SEP
+BLB_SWAC_INC:
+	INC	HL
+	JR	BLB_SKIP_WS_AFTER_COMMA
+BLB_COMMA_EMIT_SEP:
+	; Emit Sep_Op2
+	PUSH	BC
+	PUSH	HL
+	LD	IX,FMT_STMT_OP2_CNT
+	CALL	EMIT_FIELD_SEP
+	POP	HL
+	POP	BC
+	XOR	A
+	LD	(PREV_WAS_ID_CHAR),A
+	JR	BLB_OPERAND_LOOP
+
+BLB_OP_START_QUOTE:
+	LD	B,A			; Record quote char
+	JR	BLB_OP_COPY_CHAR
+
+BLB_OP_INSIDE_QUOTE:
+	CP	B
+	JR	NZ,BLB_OP_COPY_CHAR
+	LD	B,0			; Quote closed
+
+BLB_OP_COPY_CHAR:
+	LD	(DE),A
+	PUSH	AF
+	CALL	IS_ID_CHAR_P
+	LD	A,0
+	JR	NC,BOC_NOT_ID
+	INC	A
+BOC_NOT_ID:
+	LD	(PREV_WAS_ID_CHAR),A
+	POP	AF
+	INC	HL
+	INC	DE
+	INC	C
+	JR	BLB_OPERAND_LOOP
+
+BLB_OPERAND_TRIM:
+	CALL	BLB_TRIM_TRAILING_SPACES
+
+BLB_CHECK_AFTER_OPERAND:
+	; Skip whitespace in HL to see if comment follows
+BLB_SKIP_WS_AFTER_OPERAND:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,BLB_SWAOP_INC
+	CP	9
+	JR	NZ,BLB_CHECK_COMM_AFTER_OP
+BLB_SWAOP_INC:
+	INC	HL
+	JR	BLB_SKIP_WS_AFTER_OPERAND
+
+BLB_CHECK_COMM_AFTER_OP:
+	LD	A,(HL)
+	OR	A
+	JP	Z,BLB_FINISH_LINE
+	CP	';'
+	JP	NZ,BLB_FINISH_LINE
+
+BLB_DO_COMMENT:
+	CALL	BLB_TRIM_TRAILING_SPACES
+	; Pad to comment separator
+	PUSH	HL
+	LD	IX,FMT_STMT_COMM_CNT
+	CALL	EMIT_FIELD_SEP
+	POP	HL
+
+	; Copy entire comment from (HL) to (DE)
+BLB_COMMENT_LOOP:
+	LD	A,(HL)
+	OR	A
+	JP	Z,BLB_FINISH_LINE
+	CP	13
+	JP	Z,BLB_FINISH_LINE
+	CP	10
+	JP	Z,BLB_FINISH_LINE
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	BLB_COMMENT_LOOP
+
+BLB_FINISH_LINE:
+	XOR	A
+	LD	(DE),A
+
+BLB_COMPARE_AND_RETURN:
+	LD	HL,(HOST_ACTIVE_LINE_BUF)
+	LD	DE,LINE_OUTPUT_BUF
+BLB_CMP_LOOP:
+	LD	A,(HL)
+	LD	B,A
+	LD	A,(DE)
+	CP	B
+	JR	NZ,BLB_IS_DIFFERENT
+	OR	A
+	JR	Z,BLB_IDENTICAL
+	INC	HL
+	INC	DE
+	JR	BLB_CMP_LOOP
+
+BLB_IS_DIFFERENT:
+	; Copy formatted line back to ACTIVE_LINE_BUF
+	LD	HL,LINE_OUTPUT_BUF
+	LD	DE,(HOST_ACTIVE_LINE_BUF)
+BLB_COPY_BACK:
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,BLB_COPY_BACK
+
+	; Update line length in HOST_ACTIVE_LINE_LEN
+	DEC	DE
+	LD	HL,(HOST_ACTIVE_LINE_BUF)
+	EX	DE,HL
+	AND	A
+	SBC	HL,DE			; HL = line byte length
+	LD	DE,(HOST_ACTIVE_LINE_LEN)
+	LD	A,L
+	LD	(DE),A
+	INC	DE
+	LD	A,H
+	LD	(DE),A
+
+	; Commit line back to document via HOST_COMMIT_LINE (IX+21)
+	CALL	CALL_HOST_COMMIT
+
+	LD	A,1
+	LD	(ANY_LINE_MODIFIED),A
+	SCF				; Carry = 1 (modified)
+	JR	BLB_EXIT
+
+BLB_IDENTICAL:
+	OR	A			; Carry = 0 (unmodified)
+
+BLB_EXIT:
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+; BLB_TRIM_TRAILING_SPACES: Trims any trailing spaces or tabs before DE in LINE_OUTPUT_BUF
+BLB_TRIM_TRAILING_SPACES:
+BLB_TRIM_LOOP:
+	LD	A,C
+	CP	2
+	RET	C
+	DEC	DE
+	LD	A,(DE)
+	CP	' '
+	JR	Z,BLB_TRIM_DEC
+	CP	9
+	JR	Z,BLB_TRIM_DEC
+	INC	DE
+	RET
+BLB_TRIM_DEC:
+	DEC	C
+	JR	BLB_TRIM_LOOP
+
+; GET_NEXT_TAB_STOP: Input C = col (1-based), Output A = next tab stop
+GET_NEXT_TAB_STOP:
+	LD	A,C
+	DEC	A
+	LD	HL,CFG_TAB_MASK
+	OR	(HL)
+	ADD	A,2
+	RET
+
+; EMIT_FIELD_SEP: Emits separator according to 3-byte FieldSep (Count, Unit, Mode)
+EMIT_FIELD_SEP:
+	LD	A,(IX+2)		; Mode (0=Relative, 1=Absolute)
+	OR	A
+	JR	NZ,EFS_ABSOLUTE
+	; Relative Mode:
+	LD	B,(IX+0)		; Count
+	LD	A,B
+	OR	A
+	RET	Z			; Count = 0 -> nothing to emit
+	LD	A,(IX+1)		; Unit (0=space, 1=tab)
+	OR	A
+	JR	NZ,EFS_REL_TAB
+EFS_REL_SPACE:
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
+	INC	C
+	DJNZ	EFS_REL_SPACE
+	RET
+EFS_REL_TAB:
+	LD	A,9			; '\t'
+	LD	(DE),A
+	INC	DE
+	CALL	GET_NEXT_TAB_STOP
+	LD	C,A
+	DJNZ	EFS_REL_TAB
+	RET
+
+EFS_ABSOLUTE:
+	; Absolute Mode:
+	LD	B,(IX+0)		; B = TargetCol
+	LD	A,C
+	CP	B
+	JR	NC,EFS_ABS_OVERFLOW	; CurrentCol >= TargetCol -> Overflow!
+	; CurrentCol < TargetCol
+	LD	A,(IX+1)		; Unit (0=space, 1=tab)
+	OR	A
+	JR	NZ,EFS_ABS_TAB
+EFS_ABS_SPACE:
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
+	INC	C
+	LD	A,C
+	CP	B
+	JR	C,EFS_ABS_SPACE
+	RET
+EFS_ABS_TAB:
+EFS_TAB_LOOP:
+	LD	A,C
+	CP	B
+	RET	NC			; If C >= TargetCol (B), done
+	LD	A,9			; '\t'
+	LD	(DE),A
+	INC	DE
+	CALL	GET_NEXT_TAB_STOP
+	LD	C,A
+	JR	EFS_TAB_LOOP
+
+EFS_ABS_OVERFLOW:
+	LD	A,(IX+1)		; Unit (0=space, 1=tab)
+	OR	A
+	JR	NZ,EFS_OVR_TAB
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
+	INC	C
+	RET
+EFS_OVR_TAB:
+	LD	A,9
+	LD	(DE),A
+	INC	DE
+	CALL	GET_NEXT_TAB_STOP
+	LD	C,A
+	RET
+
+; CHECK_IS_DIRECTIVE: Checks if mnemonic at (HL), length B, is an assembler directive
+CHECK_IS_DIRECTIVE:
+	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	A,B
+	CP	2
+	JR	Z,CID_LEN2
+	CP	3
+	JR	Z,CID_LEN3
+	CP	4
+	JR	Z,CID_LEN4
+	JR	CID_NO
+
+CID_LEN2:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'D'
+	JR	NZ,CID_NO
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'B'
+	JR	Z,CID_YES
+	CP	'W'
+	JR	Z,CID_YES
+	CP	'S'
+	JR	Z,CID_YES
+	JR	CID_NO
+
+CID_LEN3:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	D,A
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	E,A
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'G'
+	JR	NZ,CID_L3_CHK_EQU
+	LD	A,D
+	CP	'O'
+	JR	NZ,CID_NO
+	LD	A,E
+	CP	'R'
+	JR	Z,CID_YES
+	JR	CID_NO
+
+CID_L3_CHK_EQU:
+	CP	'U'
+	JR	NZ,CID_L3_CHK_SET
+	LD	A,D
+	CP	'E'
+	JR	NZ,CID_NO
+	LD	A,E
+	CP	'Q'
+	JR	Z,CID_YES
+	JR	CID_NO
+
+CID_L3_CHK_SET:
+	CP	'T'
+	JR	NZ,CID_L3_CHK_END
+	LD	A,D
+	CP	'S'
+	JR	NZ,CID_NO
+	LD	A,E
+	CP	'E'
+	JR	Z,CID_YES
+	JR	CID_NO
+
+CID_L3_CHK_END:
+	CP	'D'
+	JR	NZ,CID_NO
+	LD	A,D
+	CP	'E'
+	JR	NZ,CID_NO
+	LD	A,E
+	CP	'N'
+	JR	Z,CID_YES
+
+CID_NO:
+	POP	BC
+	POP	DE
+	POP	HL
+	OR	A
+	RET
+
+CID_YES:
+	POP	BC
+	POP	DE
+	POP	HL
+	SCF
+	RET
+
+CID_LEN4:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'D'
+	JR	NZ,CID_NO
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'E'
+	JR	NZ,CID_NO
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'F'
+	JR	NZ,CID_NO
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'B'
+	JR	Z,CID_YES
+	CP	'W'
+	JR	Z,CID_YES
+	CP	'S'
+	JR	Z,CID_YES
+	CP	'L'
+	JR	Z,CID_YES
+	JR	CID_NO
+
+; BUR_EMIT_CHAR: Emits register char with FMT_CASE_OPER
+BUR_EMIT_CHAR:
+	LD	A,(FMT_CASE_OPER)
+	OR	A
+	JR	Z,BEC_UPPER
+	DEC	A
+	JR	Z,BEC_LOWER
+	LD	A,(HL)
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	C
+	RET
+BEC_UPPER:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	C
+	RET
+BEC_LOWER:
+	LD	A,(HL)
+	CALL	TO_LOWER
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	C
+	RET
+
+; APPLY_CASE_CHAR: Converts char in A using case in BLB_MNEM_CASE_TEMP
+APPLY_CASE_CHAR:
+	PUSH	BC
+	LD	B,A
+	LD	A,(BLB_MNEM_CASE_TEMP)
+	OR	A
+	JR	Z,ACC_UPPER
+	DEC	A
+	JR	Z,ACC_LOWER
+	LD	A,B
+	POP	BC
+	RET
+ACC_UPPER:
+	LD	A,B
+	CALL	TO_UPPER
+	POP	BC
+	RET
+ACC_LOWER:
+	LD	A,B
+	CALL	TO_LOWER
+	POP	BC
+	RET
+
+; APPLY_CASE: Converts char in A using CaseOption in B (0=UPPER, 1=LOWER, 2=PRESERVE)
+APPLY_CASE:
+	PUSH	BC
+	LD	C,A
+	LD	A,B
+	OR	A
+	JR	Z,AC_UPPER
+	DEC	A
+	JR	Z,AC_LOWER
+	LD	A,C
+	POP	BC
+	RET
+AC_UPPER:
+	LD	A,C
+	CALL	TO_UPPER
+	POP	BC
+	RET
+AC_LOWER:
+	LD	A,C
+	CALL	TO_LOWER
+	POP	BC
+	RET
+
+TO_UPPER:
+	CP	'a'
+	RET	C
+	CP	'z'+1
+	RET	NC
+	SUB	20H
+	RET
+
+TO_LOWER:
+	CP	'A'
+	RET	C
+	CP	'Z'+1
+	RET	NC
+	ADD	A,20H
+	RET
+
+; BLB_UPPERCASE_REG: Checks if (HL) points to a register/condition identifier
+BLB_UPPERCASE_REG:
+	LD	A,(HL)
+	CP	'A'
+	JR	C,BUR_NOT_ALPHA
+	CP	'Z'+1
+	JR	C,BUR_IS_ALPHA
+	CP	'a'
+	JR	C,BUR_NOT_ALPHA
+	CP	'z'+1
+	JR	C,BUR_IS_ALPHA
+BUR_NOT_ALPHA:
+	OR	A
+	RET
+
+BUR_IS_ALPHA:
+	PUSH	HL
+	PUSH	BC
+	LD	B,0
+BUR_LEN_LOOP:
+	INC	HL
+	INC	B
+	LD	A,(HL)
+	CALL	IS_ID_CHAR_P
+	JR	C,BUR_LEN_LOOP
+	LD	A,B
+	POP	BC
+	POP	HL
+
+	CP	1
+	JR	Z,BUR_CHECK_LEN1
+	CP	2
+	JR	Z,BUR_CHECK_LEN2
+	CP	3
+	JR	Z,BUR_CHECK_LEN3
+	OR	A
+	RET
+
+BUR_CHECK_LEN1:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	(BUR_TEMP1),A
+	PUSH	HL
+	PUSH	BC
+	LD	HL,TBL_BUR_REG1
+	LD	B,13
+BUR_L1_LOOP:
+	LD	A,(BUR_TEMP1)
+	CP	(HL)
+	JR	Z,BUR_L1_MATCH
+	INC	HL
+	DJNZ	BUR_L1_LOOP
+	POP	BC
+	POP	HL
+	OR	A
+	RET
+
+BUR_L1_MATCH:
+	POP	BC
+	POP	HL
+	CALL	BUR_EMIT_CHAR
+	SCF
+	RET
+
+BUR_CHECK_LEN2:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	(BUR_TEMP1),A
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	(BUR_TEMP2),A
+	DEC	HL
+
+	PUSH	HL
+	PUSH	BC
+	LD	HL,TBL_BUR_REG2
+	LD	B,11
+BUR_L2_LOOP:
+	LD	A,(BUR_TEMP1)
+	CP	(HL)
+	JR	NZ,BUR_L2_NEXT
+	INC	HL
+	LD	A,(BUR_TEMP2)
+	CP	(HL)
+	JR	Z,BUR_L2_MATCH
+	DEC	HL
+BUR_L2_NEXT:
+	INC	HL
+	INC	HL
+	DJNZ	BUR_L2_LOOP
+	POP	BC
+	POP	HL
+	OR	A
+	RET
+
+BUR_L2_MATCH:
+	POP	BC
+	POP	HL
+	CALL	BUR_EMIT_CHAR
+	CALL	BUR_EMIT_CHAR
+	SCF
+	RET
+
+BUR_CHECK_LEN3:
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	(BUR_TEMP1),A
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	(BUR_TEMP2),A
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	LD	(BUR_TEMP3),A
+	DEC	HL
+	DEC	HL
+
+	PUSH	HL
+	PUSH	BC
+	LD	HL,TBL_BUR_REG3
+	LD	B,4
+BUR_L3_LOOP:
+	LD	A,(BUR_TEMP1)
+	CP	(HL)
+	JR	NZ,BUR_L3_NEXT
+	INC	HL
+	LD	A,(BUR_TEMP2)
+	CP	(HL)
+	JR	NZ,BUR_L3_NEXT1
+	INC	HL
+	LD	A,(BUR_TEMP3)
+	CP	(HL)
+	JR	Z,BUR_L3_MATCH
+	DEC	HL
+BUR_L3_NEXT1:
+	DEC	HL
+BUR_L3_NEXT:
+	INC	HL
+	INC	HL
+	INC	HL
+	DJNZ	BUR_L3_LOOP
+	POP	BC
+	POP	HL
+	OR	A
+	RET
+
+BUR_L3_MATCH:
+	POP	BC
+	POP	HL
+	CALL	BUR_EMIT_CHAR
+	CALL	BUR_EMIT_CHAR
+	CALL	BUR_EMIT_CHAR
+	SCF
+	RET
+
+IS_ID_CHAR_P:
+	CP	'_'
+	JR	Z,IICP_YES
+	CP	'0'
+	JR	C,IICP_NO
+	CP	'9'+1
+	JR	C,IICP_YES
+	CP	'A'
+	JR	C,IICP_NO
+	CP	'Z'+1
+	JR	C,IICP_YES
+	CP	'a'
+	JR	C,IICP_NO
+	CP	'z'+1
+	JR	C,IICP_YES
+IICP_NO:
+	OR	A
+	RET
+IICP_YES:
+	SCF
+	RET
+
+;------------------------------------------------------------------------------
+; Host API Trampoline Wrappers (Vectors at HOST_API_PTR)
+;------------------------------------------------------------------------------
+CALL_HOST_CHECKOUT:
+	PUSH	IX
+	LD	IX,(HOST_API_PTR)
+	PUSH	IX
+	POP	IY
+	LD	BC,18			; IX+18: Call HOST_CHECKOUT_LINE
+	ADD	IY,BC
+	CALL	CALL_IY_VEC
+	POP	IX
+	RET
+
+CALL_HOST_COMMIT:
+	PUSH	IX
+	LD	IX,(HOST_API_PTR)
+	PUSH	IX
+	POP	IY
+	LD	BC,21			; IX+21: Call HOST_COMMIT_LINE
+	ADD	IY,BC
+	CALL	CALL_IY_VEC
+	POP	IX
+	RET
+
+CALL_HOST_GETKEY:
+	PUSH	IX
+	LD	IX,(HOST_API_PTR)
+	PUSH	IX
+	POP	IY
+	LD	BC,30			; IX+30: Call GET_KEY
+	ADD	IY,BC
+	CALL	CALL_IY_VEC
+	POP	IX
+	RET
+
+CALL_HOST_STATUS:
+	PUSH	IX
+	LD	IX,(HOST_API_PTR)
+	PUSH	IX
+	POP	IY
+	LD	BC,33			; IX+33: Call SET_STATUS_MSG
+	ADD	IY,BC
+	CALL	CALL_IY_VEC
+	POP	IX
+	RET
+
+CALL_HOST_CHECKKEY:
+	PUSH	IX
+	LD	IX,(HOST_API_PTR)
+	PUSH	IX
+	POP	IY
+	LD	BC,46			; IX+46: Call CHECK_KEY_READY
+	ADD	IY,BC
+	CALL	CALL_IY_VEC
+	POP	IX
+	RET
+
+CALL_IY_VEC:
+	JP	(IY)
+
+; Local String Copy helper
+COPY_STR_Z_LOCAL:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	JR	COPY_STR_Z_LOCAL
+
+FORMAT_DEC_5_DE:
+	PUSH	BC
+	LD	BC,-10000
+	CALL	FMT_DIGIT
+	LD	BC,-1000
+	CALL	FMT_DIGIT
+	LD	BC,-100
+	CALL	FMT_DIGIT
+	LD	BC,-10
+	CALL	FMT_DIGIT
+	LD	A,L
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+	POP	BC
+	RET
+
+FMT_DIGIT:
+	LD	A,'0'-1
+FMT_D_LOOP:
+	INC	A
+	ADD	HL,BC
+	JR	C,FMT_D_LOOP
+	SBC	HL,BC
+	LD	(DE),A
+	INC	DE
+	RET
+
+;------------------------------------------------------------------------------
+; Static Tables & Strings
+;------------------------------------------------------------------------------
+TBL_BUR_REG1:
+	DB	"ABCDEHLIRZCPM"
+TBL_BUR_REG2:
+	DB	"AF","BC","DE","HL","IX","IY","SP","NZ","NC","PO","PE"
+TBL_BUR_REG3:
+	DB	"IXH","IXL","IYH","IYL"
+
+STR_MSG_DONE:
+	DB	"[Beautify Done]$", 0
+STR_MSG_CANCEL:
+	DB	"[Beautify Cancel]$", 0
+
+STR_TICK_PRE:
+	DB	"[Beautify: ", 0
+
+;------------------------------------------------------------------------------
+; Working Storage & Schemas
+;------------------------------------------------------------------------------
+HOST_API_PTR:		DW	0
+HOST_ACTIVE_LINE_BUF:	DW	0
+HOST_ACTIVE_LINE_LEN:	DW	0
+TOTAL_LINES_VAL:	DW	0
+BEAUTIFY_START_ROW:	DW	0
+BEAUTIFY_END_ROW:	DW	0
+CUR_ROW_VAL:		DW	0
+ANY_LINE_MODIFIED:	DB	0
+CFG_TAB_MASK:		DB	7
+
+; Schemas (24 bytes copied from host BEAUTIFIER_CONFIG)
+FMT_ANIMATE:		DB	1
+FMT_STMT_MNEM_CNT:	DB	9
+FMT_STMT_MNEM_UNT:	DB	0
+FMT_STMT_MNEM_MOD:	DB	1
+FMT_STMT_OP1_CNT:	DB	17
+FMT_STMT_OP1_UNT:	DB	0
+FMT_STMT_OP1_MOD:	DB	1
+FMT_STMT_OP2_CNT:	DB	0
+FMT_STMT_OP2_UNT:	DB	0
+FMT_STMT_OP2_MOD:	DB	0
+FMT_STMT_COMM_CNT:	DB	41
+FMT_STMT_COMM_UNT:	DB	0
+FMT_STMT_COMM_MOD:	DB	1
+
+FMT_LABEL_COL_CNT:	DB	1
+FMT_LABEL_COL_UNT:	DB	0
+FMT_LABEL_COL_MOD:	DB	1
+FMT_LABEL_COLON:	DB	':'
+FMT_LABEL_PLACE:	DB	'S'
+
+FMT_COMM_COL1_MOD:	DB	0
+FMT_COMM_IND_MOD:	DB	'M'
+
+FMT_CASE_MNEM:		DB	0
+FMT_CASE_OPER:		DB	0
+FMT_CASE_LABL:		DB	2
+FMT_CASE_CNST:		DB	0
+
+BUR_TEMP1:		DB	0
+BUR_TEMP2:		DB	0
+BUR_TEMP3:		DB	0
+BLB_QUOTE_TEMP:		DB	0
+PREV_WAS_ID_CHAR:	DB	0
+BLB_MNEM_CASE_TEMP:	DB	0
+
+STR_TICK_BUF:		DS	32
+LINE_OUTPUT_BUF:	DS	1024
