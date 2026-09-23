@@ -5,11 +5,7 @@ test_32k_lines.py - Automated validation of 32K Document Line Capacity Subsystem
 Verifies that SE.COM:
 1. Allocates 2 Far RAM banks for line slots when LINES=32K in SE.CFG.
 2. Memory Information screen ('m') displays both Bank 0 (0..16K) and Bank 1 (16K..32K).
-3. Extended Memory self-test ('t') runs TEST 6, validating in-memory 32K line table access:
-   - Far RAM slot read/write across 16K boundary (indices 0, 16383, 16384, 16385, 32767).
-   - Boundary-crossing downward shift (SHIFT_LINE_SLOTS_DOWN across 16384).
-   - Boundary-crossing upward shift (SHIFT_LINE_SLOTS_UP across 16384).
-   - Boundary-crossing bulk slot write (WRITE_LINE_SLOTS_FROM_RAM across 16384).
+3. Extended Memory self-test ('t') was removed to conserve TPA memory; verifies 't' is ignored on splash.
 4. Interactive Configuration screen ('c') displays Option 3 (Max Doc Lines: 32K),
    allows toggling between 16K and 32K, and persists to SE.CFG.
 5. End-to-end document editing, navigation, line insertion/deletion, saving, and 100% byte fidelity.
@@ -168,33 +164,20 @@ def test_32k_lines():
         read_until(master, b"to configure", timeout=10.0)
 
         # -------------------------------------------------------------
-        # Part 2: Verify Extended Memory Self-Test (TEST 6)
+        # Part 2: Verify Memory Test Removal ('t' ignored on Splash)
         # -------------------------------------------------------------
-        print("\n[*] Part 2: Running Extended Memory Self-Test ('t')...")
+        print("\n[*] Part 2: Verifying Memory Test Removal ('t' ignored on Splash)...")
+        if b"for mem test" in out_splash:
+            print("    [-] Memory test option unexpectedly found on splash screen.")
+            return False
+        print("    [+] 'for mem test' correctly absent from splash screen.")
+
+        # Verify pressing 't' on splash screen is ignored
         time.sleep(0.3)
         os.write(master, b"t")
-        out_test = read_until(master, b"return to Splash Screen", timeout=20.0)
-        out_test += drain_all(master, quiet_time=0.2)
-
-        if b"Test 6: 32K Line Slots & Boundary Shift Engine" in out_test and b"32K Line Slots & Boundary Shift Engine verified" in out_test:
-            print("    [+] TEST 6: Far RAM slot R/W across 16K boundary (indices 0..32767) PASSED")
-            print("    [+] TEST 6: SHIFT_LINE_SLOTS_DOWN boundary crossing (16380..16389) PASSED")
-            print("    [+] TEST 6: SHIFT_LINE_SLOTS_UP boundary crossing (16381..16390) PASSED")
-            print("    [+] TEST 6: WRITE_LINE_SLOTS_FROM_RAM boundary crossing PASSED")
-        else:
-            print(f"[-] FAILED: Test 6 did not report pass. Buffer:\n{out_test.decode(errors='replace')}")
-            return False
-
-        if b"ALL 512KB EXTENDED MEMORY TESTS PASSED SUCCESSFULLY" in out_test:
-            print("    [+] ALL Extended Memory tests (Tests 1 through 6) PASSED 100%!")
-        else:
-            print(f"[-] FAILED: Extended memory suite failed. Buffer:\n{out_test.decode(errors='replace')}")
-            return False
-
-        # Return to splash
         time.sleep(0.3)
-        os.write(master, b" ")
-        read_until(master, b"to configure", timeout=10.0)
+        drain_all(master, quiet_time=0.2)
+        print("    [+] Pressing 't' on splash screen is ignored.")
 
         # -------------------------------------------------------------
         # Part 3: Verify Configuration Screen (Option 3)

@@ -177,31 +177,26 @@ def test_se_execution():
             return False
         print("[+] SE.COM splash screen successfully displayed with Free memory status bar.", flush=True)
 
-        # 5. Verify splash screen does not show removed file test option ('f')
+        # 5. Verify splash screen does not show removed test options ('f' and 't')
         if b"for file test" in out:
             print("[-] File test option ('for file test') unexpectedly "
                   "found on splash screen.", flush=True)
             return False
-        print("[+] Verified file test ('f') cleanly removed from splash screen.",
+        if b"for mem test" in out:
+            print("[-] Memory test option ('for mem test') unexpectedly "
+                  "found on splash screen.", flush=True)
+            return False
+        print("[+] Verified file test ('f') and mem test ('t') cleanly removed from splash screen.",
               flush=True)
 
-        # 6. Trigger Memory Diagnostic ('t')
+        # 6. Verify pressing 't' does not trigger removed diagnostic
         time.sleep(0.5)
         os.write(master, b"t")
-        out_mem = read_until(master, b"ALL 512KB EXTENDED MEMORY TESTS PASSED", timeout=8.0)
-        if b"ALL 512KB EXTENDED MEMORY TESTS PASSED" not in out_mem:
-            print("[-] 512KB extended memory banking diagnostic FAILED. Buffer captured:\n", out_mem.decode("latin1", errors="replace"), flush=True)
-            return False
-        if b"Test 5:" not in out_mem or b"[PASS] Far RAM OOM" not in out_mem:
-            print(f"[-] Test 5 not found in memory diagnostic! Buffer: {repr(out_mem)}", flush=True)
-            return False
-        print("[+] 512KB Extended Memory Diagnostic Suite (Tests 1, 2, 3, 4, 5) ALL PASSED!", flush=True)
-
-        # 7. Return to Splash, verify only 'e'/Enter enter editor mode, and enter editor ('e')
-        read_until(master, b"Press any key to return", timeout=5.0)
         time.sleep(0.3)
-        os.write(master, b"\r")
-        read_until(master, b"for about", timeout=6.0)
+        drain_all(master)
+        print("[+] Verified pressing 't' ignored on splash screen.", flush=True)
+
+        # 7. Verify only 'e'/Enter enter editor mode, and enter editor ('e')
         drain_all(master)
         time.sleep(0.3)
 
@@ -2712,18 +2707,12 @@ def test_se_execution():
             print(f"[-] Step 56 failed: Splash status bar does not show 'Free: 384 KB'. Buffer: {repr(out_s56)}", flush=True)
             return False
 
-        # Run memory diagnostics ('t')
+        # View memory info map ('m')
         time.sleep(0.5)
-        os.write(master, b"t")
-        out_diag = read_until(master, b"Press any key to return", timeout=12.0)
-        if b"8C 8B 8A 89 88 87 86 85 84 83 82 81" not in out_diag:
-            print(f"[-] Step 56 failed: Did not discover text slot Far RAM banks. Buffer: {repr(out_diag)}", flush=True)
-            return False
-        if b"16,384 Lines" not in out_diag and b"3,328 Lines" not in out_diag:
-            print(f"[-] Step 56 failed: Far document storage does not indicate 16,384 Lines. Buffer: {repr(out_diag)}", flush=True)
-            return False
-        if b"ALL 512KB EXTENDED MEMORY TESTS PASSED SUCCESSFULLY!" not in out_diag:
-            print(f"[-] Step 56 failed: Extended memory diagnostic tests failed. Buffer: {repr(out_diag)}", flush=True)
+        os.write(master, b"m")
+        out_diag = read_until(master, b"return to splash screen", timeout=12.0)
+        if b"80h" not in out_diag or b"Protected HBIOS" not in out_diag or b"Line Slot Table" not in out_diag:
+            print(f"[-] Step 56 failed: Memory map did not display. Buffer: {repr(out_diag)}", flush=True)
             return False
 
         # Return to splash screen

@@ -131,9 +131,9 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ~                         type   s                to save file  
 ~                         type   w  or  ^W        to close file 
 ~                         type   l  or  ^L        to goto line  
-~                         type   t                for mem test  
-~                         type   f                for file test 
 ~                         type   a                for about     
+~                         type   m                for memory info
+~                         type   c                to configure  
 ~                         type   1                set 120x40    
 ~                         type   2                set 80x24     
 ~                         type   q  or  ^Q        to exit       
@@ -148,9 +148,9 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 * Press **`w`**, **`W`**, or <kbd>Ctrl+W</kbd> to close the current file to splash screen.
 * Press **`o`** or **`O`** to open the interactive **Open File** directory browser.
 * Press **`s`** or **`S`** to open the interactive **Save File** screen.
-* Press **`t`** or **`T`** to run the live **512KB Extended Memory Diagnostic**.
-* Press **`f`** or **`F`** to run the **Multi-Sector File I/O Diagnostic**.
 * Press **`a`** or **`A`** to view the **About** screen (architecture, features, license).
+* Press **`m`** or **`M`** to view the interactive **Memory Info** table.
+* Press **`c`** or **`C`** to open the interactive **Configuration** screen.
 * Press **`1`** to set modern **120 columns x 40 rows** mode (Default).
 * Press **`2`** to set classic **80 columns x 24 rows** terminal mode.
 * Press **`q`**, **`Q`**, or <kbd>Ctrl+Q</kbd> to return cleanly to CP/M.
