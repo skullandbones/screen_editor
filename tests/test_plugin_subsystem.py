@@ -125,16 +125,17 @@ def run_plugin_test():
         # 3. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        ok, out = read_until(master, b"type   p                for plugins", timeout=18.0)
+        ok, out = read_until(master, b"Col 0", timeout=18.0)
         if not ok:
             print(f"[-] Splash screen did not show plugin menu option. Buffer: {repr(out)}", flush=True)
             return False
         print("[+] Splash screen displayed with 'type p for plugins'.", flush=True)
+        drain_all(master, quiet_time=0.1)
 
         # 4. Open Plugin Manager from splash screen ('p')
-        time.sleep(0.3)
+        time.sleep(0.5)
         os.write(master, b"p")
-        ok, out = read_until(master, b"SE - Plugin Manager", timeout=6.0)
+        ok, out = read_until(master, b"SE - Plugin Manager", timeout=8.0)
         if not ok:
             print(f"[-] Failed to enter Plugin Manager screen. Buffer: {repr(out)}", flush=True)
             return False

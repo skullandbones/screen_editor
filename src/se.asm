@@ -21062,9 +21062,6 @@ FORMAT_PLUGIN_SLOT_ROW:
 	PUSH	HL
 
 	LD	DE,STR_PLUG_ROW_BUF
-	LD	A,' '
-	LD	(DE),A
-	INC	DE
 	LD	A,'['
 	LD	(DE),A
 	INC	DE
@@ -21119,9 +21116,6 @@ FPSR_NAME_DONE:
 	LD	A,' '
 	LD	(DE),A
 	INC	DE
-	LD	A,' '
-	LD	(DE),A
-	INC	DE
 
 	; Type
 	POP	HL
@@ -21139,6 +21133,9 @@ FPSR_TYPE_OVL:
 	LD	HL,STR_PLUG_TYPE_OVL
 	CALL	COPY_STR_Z
 FPSR_TYPE_DONE:
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
 
 	; Size
 	POP	HL
@@ -21152,6 +21149,9 @@ FPSR_TYPE_DONE:
 	LD	H,B
 	CALL	FORMAT_DEC_WORD_BUF
 	LD	A,'B'
+	LD	(DE),A
+	INC	DE
+	LD	A,' '
 	LD	(DE),A
 	INC	DE
 	LD	A,' '
@@ -21176,6 +21176,9 @@ FPSR_MODE_FAR:
 	LD	HL,STR_PLUG_MODE_FAR
 	CALL	COPY_STR_Z
 FPSR_MODE_DONE:
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
 
 	; Capabilities
 	POP	HL
@@ -21198,6 +21201,9 @@ FPSR_NOT_MUTATE:
 	LD	HL,STR_CAP_DEFAULT
 	CALL	COPY_STR_Z
 FPSR_CAPS_DONE:
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
 
 	LD	HL,STR_PLUG_STAT_READY
 	CALL	COPY_STR_Z
@@ -21300,7 +21306,7 @@ STR_PLUG_SYS_DYN:	DB	"Dynamic On-Demand]    ", 0
 STR_PLUG_SYS_BNK:	DB	"Bank ", 0
 STR_PLUG_SYS_MID:	DB	"h (32KB)]    Loaded: [", 0
 STR_PLUG_SYS_POST:	DB	"/8]    TPA Slot: [4KB Overlaid]", 0
-STR_PLUG_HDR:		DB	"Slot  Plugin Name      Type   Size    Exec Mode  Capabilities    Status", 0
+STR_PLUG_HDR:		DB	"Slot Plugin Name      Type   Size    Exec Mode  Capabilities     Status ", 0
 STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+---------------+--------", 0
 STR_PLUG_CMDS:		DB	"type 0..7 to run | L to load | U to unload | Q or ESC to exit", 0
 STR_PLUG_PROMPT_L:	DB	"Load Plugin (.PRL/.OVL): [$"
@@ -21310,7 +21316,7 @@ STR_DEF_ROT13:		DB	"ROT13.PRL", 0
 STR_DEF_BEAUTIFY:	DB	"BEAUTIFY.PRL", 0
 STR_NAME_BEAUTIFY:	DB	"BEAUTIFY", 0
 STR_MSG_PLUG_MISSING:	DB	"[Plugin Missing]$", 0
-STR_PLUG_EMPTY_ROW:	DB	"(empty slot)       --        --   --         --              [Free]", 0
+STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0
 STR_PLUG_TYPE_PRL:	DB	"PRL   ", 0
 STR_PLUG_TYPE_OVL:	DB	"OVL   ", 0
 STR_PLUG_MODE_TPA:	DB	"TPA SLOT  ", 0
@@ -21318,7 +21324,7 @@ STR_PLUG_MODE_FAR:	DB	"FAR RAM   ", 0
 STR_CAP_MODAL_FAR:	DB	"Modal, Far     ", 0
 STR_CAP_MUTATE_TPA:	DB	"Mutate, TPA    ", 0
 STR_CAP_DEFAULT:	DB	"Standard       ", 0
-STR_PLUG_STAT_READY:	DB	"[Ready]", 0
+STR_PLUG_STAT_READY:	DB	"[Ready] ", 0
 
 ;------------------------------------------------------------------------------
 ; String Constants & Data
