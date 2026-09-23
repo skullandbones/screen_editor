@@ -21478,7 +21478,7 @@ STR_MSG_REST_ERR:	DB	13,10,"[Error] RAM drive restoration incomplete.",13,10,"$"
 ; About Screen Strings
 ;------------------------------------------------------------------------------
 STR_ABOUT_TITLE:	DB	"SE - Screen Editor", "$"
-STR_ABOUT_VERSION:	DB	"version 0.9.6 (2026-09-23)", "$"
+STR_ABOUT_VERSION:	DB	"version 0.9.7 (2026-09-23)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
 STR_ABOUT_AI:		DB	"Google Antigravity 2.16.0 & Gemini FLASH 3.8 high", "$"
 STR_ABOUT_LICENSE:	DB	"Open source software under the MIT License", "$"
@@ -21551,7 +21551,7 @@ STR_MEM_SPACES_2:	DB	"  ","$"
 STR_MEM_ROW_PREFIX:	DB	"~   ","$"
 
 
-STR_STATUS_PREFIX:	DB	" SE v0.9.6 | ","$"
+STR_STATUS_PREFIX:	DB	" SE v0.9.7 | ","$"
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 
