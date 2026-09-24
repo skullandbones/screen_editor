@@ -156,7 +156,7 @@ SHOW_DIALOG:
 	LD	DE,STR_BOX_BOT
 	CALL	CALL_HOST_PRINT
 
-	; Wait for any keypress via HOST_GET_KEY (IX+28)
+	; Wait for any keypress via HOST_GET_KEY (IX+30)
 	CALL	CALL_HOST_GETKEY
 
 	LD	A,0			; A = 0: Clean, document unmodified
