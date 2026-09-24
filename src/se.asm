@@ -1048,68 +1048,157 @@ DO_SPLASH_OPEN_DIRECT:
 	JP	SHOW_SPLASH_SCREEN
 
 SHOW_EXIT_PROMPT:
+	CALL	DO_SAVE_CHANGES_POPUP
+	JP	C,EXIT_CANCEL
+	CP	'y'
+	JP	Z,EXIT_SAVE_AND_QUIT
+	CP	'Y'
+	JP	Z,EXIT_SAVE_AND_QUIT
+	JP	EXEC_CONFIRM_ACTION
+
+;------------------------------------------------------------------------------
+; DO_SAVE_CHANGES_POPUP:
+; Display centered modal pop-up dialog querying user whether to save changes.
+; Dimensions: 50 columns wide x 7 rows high.
+; Returns:
+;   Carry = 0, A = 'Y': User confirmed save
+;   Carry = 0, A = 'N': User chose discard / proceed without saving
+;   Carry = 1: User cancelled (ESC / Ctrl-C)
+;------------------------------------------------------------------------------
+DO_SAVE_CHANGES_POPUP:
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_SAVE_START_ROW),A
+
+	; 3. Render 7-line Pop-Up Box
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_SAVE_TITLE
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_SAVE_MSG1
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_SAVE_MSG2
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_SAVE_KEYS
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Position cursor inside popup on prompt line after "Save changes? "
+	; Row = POPUP_SAVE_START_ROW + 3, Col = POPUP_COL + 16
+	LD	A,(POPUP_SAVE_START_ROW)
+	ADD	A,3
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,16
+	LD	L,A
+	CALL	LOCATE_RC
 	LD	DE,STR_SHOW_CURSOR
 	CALL	PRINT_STR
-	LD	A,1
-	LD	(IS_EXIT_PROMPT),A
-	CALL	RENDER_STATUS_BAR
 
-EXIT_PROMPT_KEY:
+DSCP_KEY_LOOP:
 	CALL	GET_KEY
 	CP	'y'
-	JR	Z,EXIT_SAVE_AND_QUIT
+	JR	Z,DSCP_CHOSE_Y
 	CP	'Y'
-	JR	Z,EXIT_SAVE_AND_QUIT
+	JR	Z,DSCP_CHOSE_Y
 
 	CP	'n'
-	JP	Z,EXEC_CONFIRM_ACTION
+	JR	Z,DSCP_CHOSE_N
 	CP	'N'
-	JP	Z,EXEC_CONFIRM_ACTION
+	JR	Z,DSCP_CHOSE_N
 
 	CP	KEY_ESC
-	JR	Z,EXIT_PROMPT_CHECK_ESC
+	JR	Z,DSCP_CHECK_ESC
 	CP	KEY_CTRL_C
-	JR	Z,EXIT_CANCEL
+	JR	Z,DSCP_CANCEL
 
-	JR	EXIT_PROMPT_KEY
+	JR	DSCP_KEY_LOOP
 
-EXIT_PROMPT_CHECK_ESC:
+DSCP_CHECK_ESC:
 	; Check if a character follows ESC within a short timeout
 	LD	BC,1000
-EXIT_WAIT_ESC:
+DSCP_WAIT_ESC:
 	CALL	CHECK_KEY_READY
-	JR	NZ,EXIT_DRAIN_ESC
+	JR	NZ,DSCP_DRAIN_ESC
 	DEC	BC
 	LD	A,B
 	OR	C
-	JR	NZ,EXIT_WAIT_ESC
-	; Standalone ESC key: cancel exit prompt
-	JR	EXIT_CANCEL
+	JR	NZ,DSCP_WAIT_ESC
+	; Standalone ESC key: cancel
+	JR	DSCP_CANCEL
 
-EXIT_DRAIN_ESC:
-	; Escape sequence detected (cursor keys, etc.): drain and ignore
-	CALL	GET_KEY			; Consume byte following ESC ('[' or 'O')
-EXIT_DRAIN_MORE:
+DSCP_DRAIN_ESC:
+	CALL	GET_KEY			; Consume '[' or 'O'
+DSCP_DRAIN_MORE:
 	LD	BC,500
-EXIT_DRAIN_WAIT:
+DSCP_DRAIN_WAIT:
 	CALL	CHECK_KEY_READY
-	JR	NZ,EXIT_DRAIN_BYTE
+	JR	NZ,DSCP_DRAIN_BYTE
 	DEC	BC
 	LD	A,B
 	OR	C
-	JR	NZ,EXIT_DRAIN_WAIT
-	; Sequence drained: ignore and keep exit prompt active
-	CALL	LOCATE_EXIT_PROMPT_CURSOR
-	JR	EXIT_PROMPT_KEY
+	JR	NZ,DSCP_DRAIN_WAIT
+	; Sequence drained: reposition cursor and resume key loop
+	LD	A,(POPUP_SAVE_START_ROW)
+	ADD	A,3
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,16
+	LD	L,A
+	CALL	LOCATE_RC
+	JR	DSCP_KEY_LOOP
 
-EXIT_DRAIN_BYTE:
+DSCP_DRAIN_BYTE:
 	CALL	GET_KEY
-	JR	EXIT_DRAIN_MORE
+	JR	DSCP_DRAIN_MORE
+
+DSCP_CHOSE_Y:
+	LD	A,'Y'
+	OR	A			; Carry = 0
+	RET
+
+DSCP_CHOSE_N:
+	LD	A,'N'
+	OR	A			; Carry = 0
+	RET
+
+DSCP_CANCEL:
+	SCF				; Carry = 1
+	RET
 
 EXIT_CANCEL:
 	XOR	A
 	LD	(IS_EXIT_PROMPT),A
 	LD	SP,LOCAL_STACK
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
 	CALL	LOCATE_CURSOR
 	XOR	A
@@ -5272,10 +5361,6 @@ SHOW_LINUX_FMT:
 
 SHOW_STATUS_REST:
 	; Field 4: Print Mode / Keys / Selection / OOM / Memory (18 chars)
-	LD	A,(IS_EXIT_PROMPT)
-	OR	A
-	JP	NZ,SHOW_STATUS_EXIT_PROMPT
-
 	LD	A,(IS_REPLACE_PROMPT)
 	OR	A
 	JP	NZ,SHOW_STATUS_REPLACE_PROMPT
@@ -5504,17 +5589,6 @@ SHOW_STATUS_TRUNC:
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
-SHOW_STATUS_EXIT_PROMPT:
-	; Fields 4 & 5 (combined 40 chars): Print exit prompt followed by 15 spaces
-	; STR_SAVE_CHANGES_PROMPT is 25 visible characters
-	LD	DE,STR_SAVE_CHANGES_PROMPT
-	CALL	PRINT_STR
-	LD	B,15
-SSEP_PAD_LOOP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	SSEP_PAD_LOOP
-	JP	SSRC_POS_DONE
 
 SHOW_STATUS_REPLACE_PROMPT:
 	; Fields 4 & 5 (combined 40 chars): Print replace prompt followed by 5 spaces
@@ -5672,52 +5746,14 @@ SSRC_RIGHT_PAD:
 SSRC_RIGHT_PAD_DONE:
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
-	LD	A,(IS_EXIT_PROMPT)
-	OR	A
-	JR	NZ,STATUS_LOCATE_PROMPT_CURSOR
 	LD	A,(IS_REPLACE_PROMPT)
 	OR	A
 	JR	NZ,STATUS_LOCATE_REP_CURSOR
 	CALL	LOCATE_CURSOR
 	RET
 
-STATUS_LOCATE_PROMPT_CURSOR:
-	CALL	LOCATE_EXIT_PROMPT_CURSOR
-	RET
-
 STATUS_LOCATE_REP_CURSOR:
 	CALL	LOCATE_REPLACE_PROMPT_CURSOR
-	RET
-
-;------------------------------------------------------------------------------
-; LOCATE_EXIT_PROMPT_CURSOR:
-; Position cursor on status row immediately after "Save changes? Yes/No/ESC:"
-; Column = ((ACTIVE_COLS - 78) / 2) + 63
-; (Col 63 in 80x24, Col 83 in 120x40)
-; Preserves: BC, DE, HL
-;------------------------------------------------------------------------------
-LOCATE_EXIT_PROMPT_CURSOR:
-	PUSH	BC
-	PUSH	DE
-	PUSH	HL
-	LD	A,27
-	CALL	PUTC
-	LD	A,'['
-	CALL	PUTC
-	LD	A,(ACTIVE_ROWS)
-	CALL	PRINT_DEC_BYTE
-	LD	A,';'
-	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	STATUS_ENCLOSED_WIDTH	; 80 - 78 = 2,  120 - 78 = 42
-	SRL	A			; 1 or 21
-	ADD	A,62			; Col 63 (80x24) or Col 83 (120x40)
-	CALL	PRINT_DEC_BYTE
-	LD	A,'H'
-	CALL	PUTC
-	POP	HL
-	POP	DE
-	POP	BC
 	RET
 
 ;------------------------------------------------------------------------------
@@ -21340,6 +21376,16 @@ PDR_NOT_ABOUT:
 
 ; Context Plugin Pop-up String Constants
 STR_POPUP_BORDER:		DB	"+------------------------------------------------+", 0
+
+; Save Changes Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_SAVE_TITLE:
+	DB	"|             Unsaved Modifications              |", 0
+STR_POPUP_SAVE_MSG1:
+	DB	"| Save changes?                                  |", 0
+STR_POPUP_SAVE_MSG2:
+	DB	"| Any unsaved edits will be lost if discarded.   |", 0
+STR_POPUP_SAVE_KEYS:
+	DB	"|    [Y] Yes       [N] No       ESC: Cancel      |", 0
 STR_TITLE_EDITOR:		DB	"        Plugins for Editor (Run Plugin)         ", 0
 STR_TITLE_SPLASH:		DB	"          All Available Installed Plugins       ", 0
 STR_TITLE_CONFIG:		DB	"       Plugins with Configurable Settings       ", 0
@@ -22053,6 +22099,7 @@ POPUP_MATCH_SLOTS:	DS	8
 POPUP_ROW:		DB	0
 POPUP_COL:		DB	0
 POPUP_KEY_SAVED:	DB	0
+POPUP_SAVE_START_ROW:	DB	0
 POPUP_LINE_BUF:		DS	64
 
 ;==============================================================================
