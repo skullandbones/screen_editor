@@ -20,6 +20,7 @@ unsigned char host_check_key(void);
 unsigned int host_get_total_lines(void);
 unsigned int host_checkout_line(unsigned int line_num, char *buf);
 void host_commit_line(unsigned int line_num, const char *buf, unsigned int len);
+void host_clear_document(void);
 void host_set_status_raw(const char *msg);
 
 /* HBIOS disk unit access in diskio.c */
