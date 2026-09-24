@@ -2350,14 +2350,17 @@ def test_se_execution():
         # 1. Document was modified in Step 47. Send Ctrl+Q and verify prompt
         time.sleep(0.3)
         os.write(master, b"\x11")
-        out_s52_prompt = read_until(master, b"\x1b[40;83H", timeout=4.0)
+        out_s52_prompt = read_until(master, b"ESC: Cancel", timeout=4.0)
         if b"Save changes?" not in out_s52_prompt or b"ESC:" not in out_s52_prompt:
             print(f"[-] Step 52 failed: Save changes prompt missing. Buffer: {repr(out_s52_prompt)}", flush=True)
             return False
 
-        # Verify status bar contains the Save changes? prompt inside the status enclosure
-        if b"| Save changes?" not in out_s52_prompt:
-            print(f"[-] Step 52 failed: Save changes prompt not embedded in status bar. Buffer: {repr(out_s52_prompt)}", flush=True)
+        # Verify modal pop-up contains title and Save changes? prompt
+        # inside the box enclosure
+        if b"Unsaved Modifications" not in out_s52_prompt or \
+           b"| Save changes?" not in out_s52_prompt:
+            print(f"[-] Step 52 failed: Save changes prompt not embedded in "
+                  f"modal popup. Buffer: {repr(out_s52_prompt)}", flush=True)
             return False
 
         # 2. Send cursor keys (escape sequences) and verify they are ignored (prompt remains active)
@@ -2367,8 +2370,8 @@ def test_se_execution():
 
         # 3. Press standalone ESC to cancel exit and resume editor
         os.write(master, b"\x1b")
-        out_s52_cancel = read_until(master, b"Line    1/30", timeout=4.0)
-        if b"Line    1/30" not in out_s52_cancel:
+        out_s52_cancel = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"^K: Editor keys" not in out_s52_cancel:
             print(f"[-] Step 52 failed: ESC did not restore editor. Buffer: {repr(out_s52_cancel)}", flush=True)
             return False
         print("[+] Cursor keys ignored and standalone ESC cancelled exit, restoring editor.", flush=True)
