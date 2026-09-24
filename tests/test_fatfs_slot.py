@@ -338,12 +338,19 @@ def run_fatfs_slot_test():
             return False
         print("[+] FATFS slot successfully unloaded and 32KB Far RAM bank deallocated.", flush=True)
 
-        # 11. Clean Exit to Editor and CP/M
-        time.sleep(0.2)
+        # 11. Clean Exit to Splash and CP/M
+        time.sleep(0.3)
+        drain_all(master)
         os.write(master, b"q")
-        read_until(master, b"Col 0", timeout=5.0)
+        ok, out_sp = read_until(master,
+                                b"type   e  or  <Enter>   to edit",
+                                timeout=5.0)
+        if not ok:
+            print(f"[-] Exit to splash failed. Buffer: {repr(out_sp)}",
+                  flush=True)
+            return False
         time.sleep(0.2)
-        os.write(master, b"q")
+        os.write(master, b"\x11")  # Ctrl+Q
         ok, out_cpm = read_until(master, b"C>", timeout=6.0)
         if not ok:
             print("[-] Failed to return to CP/M prompt.", flush=True)
