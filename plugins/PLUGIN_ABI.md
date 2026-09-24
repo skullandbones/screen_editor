@@ -279,6 +279,7 @@ PLUGIN_HOST_API (+0):
 | `+42` | Word | `PTR_TAB_WIDTH` | Pointer to tab width byte (`4` or `8`).|
 | `+44` | Word | `PTR_BEAUTIFY_CFG` | Pointer to 24B beautifier config. |
 | `+46` | Vector | `CALL_CHECK_KEY` | Non-blocking key check (`Z`/`NZ`). |
+| `+49` | Vector | `CALL_CLEAR_DOCUMENT`| Reset document slots & clear editor buffer.|
 
 ---
 
@@ -332,6 +333,12 @@ Polls console for keyboard readiness without blocking.
 Updates the status bar notification area with a custom message.
 - **Input**:
   - `DE` = Pointer to null-terminated ASCII string (max 32 chars).
+- **Preserves**: `IX`, `IY`.
+
+### 8. `CLEAR_DOCUMENT` (`IX + 49`)
+Resets the document slot allocator, sets `DOC_TOTAL_LINES` to 0, resets cursor,
+clears dirty flags and line cache, preparing the host editor for streaming a
+fresh document into Far RAM (e.g. via `COMMIT_LINE`).
 - **Preserves**: `IX`, `IY`.
 
 ---

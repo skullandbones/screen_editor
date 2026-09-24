@@ -68,6 +68,37 @@ def drain_all(master_fd, quiet_time=0.1):
             break
 
 
+def ensure_fat_test_image(img_file):
+    target_size = 1837056 * 512
+    if os.path.getsize(img_file) < target_size:
+        with open(img_file, "a") as f:
+            f.truncate(target_size)
+        subprocess.run(["/usr/sbin/mkfs.vfat", "-F", "16", "--offset=1050624", img_file, "393216"],
+                       check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    part_offset = 1050624 * 512
+    slices_content = (
+        b"Slice 0: CP/M 2.2 System\r\n"
+        b"Slice 1: Z-System / ZSDOS\r\n"
+        b"Slice 2: NZ-COM Operating Environment\r\n"
+        b"Slice 3: CP/M Plus (CP/M 3.0)\r\n"
+        b"Slice 4: ZPM3 System\r\n"
+        b"Slice 5: WordStar & Utilities\r\n"
+    )
+    import struct
+    with open(img_file, "r+b") as f:
+        fat_entry_2 = struct.pack("<H", 0xFFFF)
+        f.seek(part_offset + 16 * 512 + 4)
+        f.write(fat_entry_2)
+        f.seek(part_offset + (16 + 192) * 512 + 4)
+        f.write(fat_entry_2)
+        dirent = struct.pack("<11sBBBHHHHHHHI",
+            b"SLICES  TXT", 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 2, len(slices_content))
+        f.seek(part_offset + 400 * 512)
+        f.write(dirent)
+        f.seek(part_offset + 432 * 512)
+        f.write(slices_content)
+
+
 def run_fatfs_slot_test():
     emu_bin, rom_file, img_file, se_bin, fatfs_prl = find_paths()
 
@@ -76,6 +107,8 @@ def run_fatfs_slot_test():
         if not os.path.isfile(p):
             print(f"[-] Required file not found: {name} ({p})")
             return False
+
+    ensure_fat_test_image(img_file)
 
     print("[*] Launching RomWBW on RC2014 emulator (FATFS 32KB Slot Test)...", flush=True)
     master, slave = os.openpty()
@@ -240,9 +273,49 @@ def run_fatfs_slot_test():
         print("[+] Editor screen cleanly restored after exiting FATFS.", flush=True)
         drain_all(master)
 
-        # Return to Splash screen via Ctrl+W
+        # 10. Test Action 0: Import FAT text file into SE.COM editor
+        print("[*] Testing FAT text file import into SE.COM editor buffer...", flush=True)
+        time.sleep(0.3)
+        os.write(master, b"\x10")  # Ctrl+P
+        read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        time.sleep(0.2)
+        os.write(master, b"3")  # Launch Slot 3 (FATFS)
+        ok, out_footer = read_until(master, b"[ENTER/O] Open", timeout=12.0)
+        if not ok:
+            print(f"[-] FAT browser failed to open or mount: {repr(out_footer)}", flush=True)
+            return False
+        drain_all(master)
+
+        # SLICES.TXT is selected at index 0
+        time.sleep(0.3)
+        os.write(master, b"o")  # Open
+        ok, out_load_prompt = read_until(master, b"Load '", timeout=6.0)
+        if not ok:
+            print(f"[-] Open confirmation prompt did not appear. Buffer: {repr(out_load_prompt)}", flush=True)
+            return False
+        print(f"[+] Open prompt displayed: {repr(out_load_prompt)}", flush=True)
+
+        time.sleep(0.3)
+        os.write(master, b"y")  # Confirm load
+        ok, out_editor = read_until(master, b"^K: Editor keys", timeout=12.0)
+        if not ok:
+            print(f"[-] Editor screen failed to redraw after loading FAT file. Buffer: {repr(out_editor)}", flush=True)
+            return False
+
+        if b"Line    1/1 " in out_editor or b"Line    1/0" in out_editor:
+            print(f"[-] Editor failed to populate document line count: {repr(out_editor)}", flush=True)
+            return False
+        if b"Slice 0: CP/M 2.2 System" not in out_editor:
+            print(f"[-] Document content missing from screen: {repr(out_editor)}", flush=True)
+            return False
+        print("[+] FAT text file successfully streamed into editor! Status bar and text displayed.", flush=True)
+        drain_all(master)
+
+        # Return to Splash screen via Ctrl+W (document was modified, so answer 'n' to discard prompt)
         time.sleep(0.3)
         os.write(master, b"\x17")  # Ctrl+W
+        time.sleep(0.3)
+        os.write(master, b"n")     # 'N' to discard changes and close
         read_until(master, b"Col 0", timeout=5.0)
         drain_all(master)
 
@@ -253,7 +326,7 @@ def run_fatfs_slot_test():
         read_until(master, b"type 0..7 to run", timeout=5.0)
         drain_all(master)
 
-        # 10. Unload Slot 3 ('u' then '3')
+        # 11. Unload Slot 3 ('u' then '3')
         time.sleep(0.3)
         os.write(master, b"u")
         read_until(master, b"Unload Slot", timeout=4.0)

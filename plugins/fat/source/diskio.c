@@ -19,7 +19,9 @@ PARTITION VolToPart[FF_VOLUMES] = {
 #endif
 
 static unsigned char s_hbios_bank = 0;
-static unsigned char s_hbios_unit = 1; /* Default: unit 1 (RomWBW SD Card) */
+static unsigned char s_hbios_unit = 2; /* Default: unit 2 (RomWBW SC131 / Secondary IDE) */
+static unsigned char s_unit_configured = 0;
+static unsigned char s_probe_unit = 0;
 static unsigned long s_hbios_lba  = 0;
 static void*         s_hbios_buf  = 0;
 static unsigned char s_hbios_count= 1;
@@ -38,8 +40,9 @@ static unsigned char hbios_get_current_bank(void) {
 
 /* Query disk unit readiness (BF_DIOSTATUS) */
 static unsigned char hbios_dio_status(unsigned char unit) {
+    s_probe_unit = unit;
 #asm
-    ld   a, (_s_hbios_unit)
+    ld   a, (_s_probe_unit)
     ld   c, a
     ld   b, 10h       ; BF_DIOSTATUS
     call 0fff0h
@@ -127,6 +130,7 @@ unsigned char get_hbios_disk_unit(void) {
 
 void set_hbios_disk_unit(unsigned char unit) {
     s_hbios_unit = unit;
+    s_unit_configured = 1;
 }
 
 /*-----------------------------------------------------------------------*/
@@ -136,6 +140,16 @@ void set_hbios_disk_unit(unsigned char unit) {
 DSTATUS disk_initialize (BYTE pdrv) {
     if (pdrv != 0) return STA_NOINIT;
     s_hbios_bank = hbios_get_current_bank();
+    if (!s_unit_configured && hbios_dio_status(s_hbios_unit) != 0) {
+        /* Default unit (2) not ready; probe other physical units (e.g. unit 4 on RC2014) */
+        unsigned char u;
+        for (u = 2; u < 8; u++) {
+            if (hbios_dio_status(u) == 0) {
+                s_hbios_unit = u;
+                break;
+            }
+        }
+    }
     if (hbios_dio_status(s_hbios_unit) != 0) {
         return STA_NOINIT;
     }
