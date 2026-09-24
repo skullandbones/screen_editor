@@ -28,10 +28,11 @@ static unsigned char s_hbios_count= 1;
 static unsigned char hbios_get_current_bank(void) {
 #asm
     ld   b, 0f3h      ; BF_SYSGETBNK
-    rst  08h
+    call 0fff0h
     ld   a, c         ; Bank ID returned in C
     ld   l, a
     ld   h, 0
+    ret
 #endasm
 }
 
@@ -41,7 +42,7 @@ static unsigned char hbios_dio_status(unsigned char unit) {
     ld   a, (_s_hbios_unit)
     ld   c, a
     ld   b, 10h       ; BF_DIOSTATUS
-    rst  08h
+    call 0fff0h
     jr   nz, hb_stat_fail
     ld   hl, 0        ; Ready (success)
     ret
@@ -61,7 +62,7 @@ static unsigned char hbios_do_read(void) {
     ld   a, (_s_hbios_unit)
     ld   c, a                      ; Disk unit
     ld   b, 12h                    ; BF_DIOSEEK
-    rst  08h
+    call 0fff0h
     jr   nz, hb_rd_error
 
     ; 2. Read sector(s) into buffer in target bank
@@ -73,7 +74,7 @@ static unsigned char hbios_do_read(void) {
     ld   a, (_s_hbios_unit)
     ld   c, a                      ; Disk unit
     ld   b, 13h                    ; BF_DIOREAD
-    rst  08h
+    call 0fff0h
     jr   nz, hb_rd_error
 
     ld   hl, 0                     ; Success
@@ -95,7 +96,7 @@ static unsigned char hbios_do_write(void) {
     ld   a, (_s_hbios_unit)
     ld   c, a                      ; Disk unit
     ld   b, 12h                    ; BF_DIOSEEK
-    rst  08h
+    call 0fff0h
     jr   nz, hb_wr_error
 
     ; 2. Write sector(s) from buffer in target bank
@@ -107,7 +108,7 @@ static unsigned char hbios_do_write(void) {
     ld   a, (_s_hbios_unit)
     ld   c, a                      ; Disk unit
     ld   b, 14h                    ; BF_DIOWRITE
-    rst  08h
+    call 0fff0h
     jr   nz, hb_wr_error
 
     ld   hl, 0                     ; Success
