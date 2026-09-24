@@ -54,6 +54,31 @@ static void host_print_num(unsigned int n) {
     }
 }
 
+static int num_digits(unsigned long n) {
+    int d = 1;
+    while (n >= 10) {
+        d++;
+        n /= 10;
+    }
+    return d;
+}
+
+static void host_print_ulong(unsigned long n) {
+    char buf[11];
+    int i = 0;
+    if (n == 0) {
+        host_putc('0');
+        return;
+    }
+    while (n > 0) {
+        buf[i++] = (char)('0' + (n % 10));
+        n /= 10;
+    }
+    while (i > 0) {
+        host_putc(buf[--i]);
+    }
+}
+
 static void host_print_spaces(int count) {
     while (count-- > 0) {
         host_putc(' ');
@@ -106,38 +131,40 @@ static int get_nav_key(void) {
 /---------------------------------------------------------------------------*/
 
 int fat_plugin_about(void) {
+    vt_clear_screen();
     vt_cursor(5, 16);
-    host_print("~ +------------------------------------------------+");
+    host_print("+------------------------------------------------+");
     vt_cursor(6, 16);
-    host_print("~ |          FAT Filesystem Plugin v0.1.0          |");
+    host_print("|          FAT Filesystem Plugin v0.1.0          |");
     vt_cursor(7, 16);
-    host_print("~ |        Compatible with SE.COM >= v0.9.7        |");
+    host_print("|        Compatible with SE.COM >= v0.9.7        |");
     vt_cursor(8, 16);
-    host_print("~ +------------------------------------------------+");
+    host_print("+------------------------------------------------+");
     vt_cursor(9, 16);
-    host_print("~ | Features:                                      |");
+    host_print("| Features:                                      |");
     vt_cursor(10, 16);
-    host_print("~ |  - FAT12 / FAT16 / FAT32 Filesystem Support    |");
+    host_print("|  - FAT12 / FAT16 / FAT32 Filesystem Support    |");
     vt_cursor(11, 16);
-    host_print("~ |  - Direct SD Card & CF Access via RomWBW HBIOS |");
+    host_print("|  - Direct SD Card & CF Access via RomWBW HBIOS |");
     vt_cursor(12, 16);
-    host_print("~ |  - MBR Partition Auto-Detection                |");
+    host_print("|  - MBR Partition Auto-Detection                |");
     vt_cursor(13, 16);
-    host_print("~ |  - Seamless Editor Text Import and Export      |");
+    host_print("|  - Seamless Editor Text Import and Export      |");
     vt_cursor(14, 16);
-    host_print("~ |                                                |");
+    host_print("|                                                |");
     vt_cursor(15, 16);
-    host_print("~ | Engine: Elm-Chan FatFs R0.15 (1-Clause BSD)    |");
+    host_print("| Engine: Elm-Chan FatFs R0.15 (1-Clause BSD)    |");
     vt_cursor(16, 16);
-    host_print("~ | Driver: RomWBW RST 08H by Dean Jenkins         |");
+    host_print("| Driver: RomWBW HBIOS by Dean Jenkins           |");
     vt_cursor(17, 16);
-    host_print("~ +------------------------------------------------+");
+    host_print("+------------------------------------------------+");
     vt_cursor(18, 16);
-    host_print("~ |            Press any key to close...           |");
+    host_print("|            Press any key to close...           |");
     vt_cursor(19, 16);
-    host_print("~ +------------------------------------------------+");
+    host_print("+------------------------------------------------+");
 
     host_get_key();
+    vt_clear_screen();
     return PLUG_RET_CLEAN;
 }
 
@@ -146,34 +173,35 @@ int fat_plugin_about(void) {
 /---------------------------------------------------------------------------*/
 
 int fat_plugin_config(void) {
+    vt_clear_screen();
     while (1) {
         unsigned char cur_unit = get_hbios_disk_unit();
         int key;
 
         vt_cursor(6, 16);
-        host_print("~ +------------------------------------------------+");
+        host_print("+------------------------------------------------+");
         vt_cursor(7, 16);
-        host_print("~ |           FAT Plugin Configuration             |");
+        host_print("|           FAT Plugin Configuration             |");
         vt_cursor(8, 16);
-        host_print("~ +------------------------------------------------+");
+        host_print("+------------------------------------------------+");
         vt_cursor(9, 16);
-        host_print("~ | Current HBIOS Disk Unit: [ Unit ");
+        host_print("| Current HBIOS Disk Unit: [ Unit ");
         host_print_num(cur_unit);
-        host_print(" ]              |");
+        host_print(" ]             |");
         vt_cursor(10, 16);
-        host_print("~ |                                                |");
+        host_print("|                                                |");
         vt_cursor(11, 16);
-        host_print("~ |  [0] Unit 0 (Primary CF/IDE)  [1] Unit 1 (SD)  |");
+        host_print("|  [0] Unit 0 (Primary CF/IDE)  [1] Unit 1 (SD)  |");
         vt_cursor(12, 16);
-        host_print("~ |  [2] Unit 2 (Secondary IDE)   [3] Unit 3 (Ext) |");
+        host_print("|  [2] Unit 2 (Secondary IDE)   [3] Unit 3 (Ext) |");
         vt_cursor(13, 16);
-        host_print("~ |  [4] Unit 4 (RC2014 SD0)      [5..7] Extended  |");
+        host_print("|  [4] Unit 4 (RC2014 SD0)      [5..7] Extended  |");
         vt_cursor(14, 16);
-        host_print("~ |                                                |");
+        host_print("|                                                |");
         vt_cursor(15, 16);
-        host_print("~ | Select (0-7) to change, or [ESC]/[Q] to exit:  |");
+        host_print("| Select (0-7) to change, or [ESC]/[Q] to exit:  |");
         vt_cursor(16, 16);
-        host_print("~ +------------------------------------------------+");
+        host_print("+------------------------------------------------+");
 
         key = host_get_key();
         if (key >= '0' && key <= '7') {
@@ -182,6 +210,7 @@ int fat_plugin_config(void) {
             break;
         }
     }
+    vt_clear_screen();
     return PLUG_RET_CLEAN;
 }
 
@@ -297,33 +326,35 @@ int fat_plugin_run(void) {
     int top_row  = 0;
     int doc_mutated = 0;
 
+    vt_clear_screen();
+
     /* Mount volume on configured HBIOS unit */
     fr = f_mount(&s_fs, "", 1);
     if (fr != FR_OK) {
         /* Mount failure dialog */
         vt_cursor(7, 14);
-        host_print("~ +----------------------------------------------------+");
+        host_print("+----------------------------------------------------+");
         vt_cursor(8, 14);
-        host_print("~ |             FAT Filesystem Mount Error             |");
+        host_print("|             FAT Filesystem Mount Error             |");
         vt_cursor(9, 14);
-        host_print("~ +----------------------------------------------------+");
+        host_print("+----------------------------------------------------+");
         vt_cursor(10, 14);
-        host_print("~ | Could not mount FAT volume on RomWBW Unit ");
+        host_print("| Could not mount FAT volume on RomWBW Unit ");
         host_print_num(get_hbios_disk_unit());
-        host_print("!        |");
+        host_print("!      |");
         vt_cursor(11, 14);
-        host_print("~ | FatFs Error Code: ");
+        host_print("| FatFs Error Code: ");
         host_print_num((unsigned int)fr);
-        host_print_spaces(30);
+        host_print_spaces(52 - 19 - ((fr >= 10) ? 2 : 1));
         host_print("|");
         vt_cursor(12, 14);
-        host_print("~ |                                                    |");
+        host_print("|                                                    |");
         vt_cursor(13, 14);
-        host_print("~ |  [C] Configure HBIOS Disk Unit                     |");
+        host_print("|  [C] Configure HBIOS Disk Unit                     |");
         vt_cursor(14, 14);
-        host_print("~ |  [Q] Exit to Editor                                |");
+        host_print("|  [Q] Exit to Editor                                |");
         vt_cursor(15, 14);
-        host_print("~ +----------------------------------------------------+");
+        host_print("+----------------------------------------------------+");
 
         while (1) {
             int k = host_get_key();
@@ -332,6 +363,7 @@ int fat_plugin_run(void) {
                 return fat_plugin_run(); /* Retry */
             }
             if (k == 'q' || k == 'Q' || k == 0x1B) {
+                vt_clear_screen();
                 return PLUG_RET_CLEAN;
             }
         }
@@ -344,24 +376,24 @@ int fat_plugin_run(void) {
 
         /* Header Box */
         vt_cursor(2, 12);
-        host_print("~ +--------------------------------------------------------+");
+        host_print("+--------------------------------------------------------+");
         vt_cursor(3, 12);
-        host_print("~ |             FAT Filesystem Manager v0.1.0              |");
+        host_print("|             FAT Filesystem Manager v0.1.0              |");
         vt_cursor(4, 12);
-        host_print("~ | Drive: RomWBW Unit ");
+        host_print("| Drive: RomWBW Unit ");
         host_print_num(get_hbios_disk_unit());
         host_print(" | Files: ");
         host_print_num(s_entry_count);
-        host_print_spaces(25);
+        host_print_spaces(24 - num_digits(s_entry_count));
         host_print("|");
         vt_cursor(5, 12);
-        host_print("~ +--------------------------------------------------------+");
+        host_print("+--------------------------------------------------------+");
 
         /* File List Rows */
         for (r = 0; r < VISIBLE_ROWS; r++) {
             int idx = top_row + r;
             vt_cursor(6 + r, 12);
-            host_print("~ | ");
+            host_putc('|');
 
             if (idx < s_entry_count) {
                 int is_sel = (idx == selected);
@@ -370,6 +402,7 @@ int fat_plugin_run(void) {
                 while (*p++) name_len++;
 
                 if (is_sel) vt_reverse(1);
+                host_putc(' ');
 
                 if (s_entries[idx].is_dir) {
                     host_print("[DIR] ");
@@ -378,31 +411,33 @@ int fat_plugin_run(void) {
                 }
 
                 host_print(s_entries[idx].name);
-                host_print_spaces(14 - name_len);
+                host_print_spaces(13 - name_len);
 
                 if (!s_entries[idx].is_dir) {
-                    host_print_num((unsigned int)s_entries[idx].size);
+                    unsigned long sz = s_entries[idx].size;
+                    int sz_len = num_digits(sz) + 2;
+                    if (sz_len < 12) host_print_spaces(12 - sz_len);
+                    host_print_ulong(sz);
                     host_print(" B");
-                    host_print_spaces(12);
                 } else {
-                    host_print_spaces(16);
+                    host_print_spaces(12);
                 }
 
+                host_print_spaces(24);
                 if (is_sel) vt_reverse(0);
-                host_print_spaces(18);
             } else {
-                host_print_spaces(52);
+                host_print_spaces(56);
             }
-            host_print(" |");
+            host_putc('|');
         }
 
         /* Controls Footer */
         vt_cursor(16, 12);
-        host_print("~ +--------------------------------------------------------+");
+        host_print("+--------------------------------------------------------+");
         vt_cursor(17, 12);
-        host_print("~ | [ENTER/O] Open  [S] Save Buffer  [U] Unit  [Q/ESC] Quit |");
+        host_print("| [ENTER/O] Open  [S] Save Buffer  [U] Unit  [Q/ESC] Quit |");
         vt_cursor(18, 12);
-        host_print("~ +--------------------------------------------------------+");
+        host_print("+--------------------------------------------------------+");
 
         key = get_nav_key();
 
@@ -420,10 +455,12 @@ int fat_plugin_run(void) {
             if (s_entry_count > 0 && !s_entries[selected].is_dir) {
                 /* Confirm Open Dialog */
                 vt_cursor(19, 12);
-                host_print("~ | Load '");
+                host_print("Load '");
                 host_print(s_entries[selected].name);
                 host_print("' into editor? [Y/N]: ");
                 key = host_get_key();
+                vt_cursor(19, 12);
+                host_print_spaces(58);
                 if (key == 'y' || key == 'Y' || key == '\r' || key == '\n') {
                     int lines = import_fat_file(s_entries[selected].name);
                     if (lines > 0) {
@@ -438,7 +475,7 @@ int fat_plugin_run(void) {
             int s_idx = 0;
 
             vt_cursor(19, 12);
-            host_print("~ | Save as FAT file [EXPORT.TXT]: ");
+            host_print("Save as FAT file [EXPORT.TXT]: ");
             while (s_idx < 12) {
                 char ch = host_get_key();
                 if (ch == '\r' || ch == '\n') break;
@@ -464,9 +501,12 @@ int fat_plugin_run(void) {
 
             export_fat_file(save_name);
             scan_directory(); /* Refresh file list */
+            vt_cursor(19, 12);
+            host_print_spaces(58);
         } else if (key == 'u' || key == 'U') {
             f_unmount("");
             fat_plugin_config();
+            vt_clear_screen();
             fr = f_mount(&s_fs, "", 1);
             if (fr == FR_OK) {
                 scan_directory();
@@ -479,5 +519,6 @@ int fat_plugin_run(void) {
     }
 
     f_unmount("");
+    vt_clear_screen();
     return doc_mutated ? PLUG_RET_DOC_MOD : PLUG_RET_CLEAN;
 }
