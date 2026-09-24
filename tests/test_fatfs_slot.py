@@ -199,7 +199,61 @@ def run_fatfs_slot_test():
         read_until(master, b"type 0..7 to run", timeout=5.0)
         drain_all(master)
 
-        # 9. Unload Slot 3 ('u' then '3')
+        # 9. Test Action 0 from Editor Context-Aware Popup (Ctrl+P -> 3)
+        print("[*] Testing FATFS execution via Ctrl+P popup in Editor mode...", flush=True)
+        time.sleep(0.3)
+        os.write(master, b"q")  # Exit Plugin Manager to Splash
+        read_until(master, b"Col 0", timeout=5.0)
+        drain_all(master)
+
+        time.sleep(0.3)
+        os.write(master, b"\r")  # Enter Editor mode
+        read_until(master, b"Line    1/1", timeout=5.0)
+        drain_all(master)
+
+        time.sleep(0.3)
+        os.write(master, b"\x10")  # Ctrl+P
+        ok, out_popup = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        if not ok or b"FATFS" not in out_popup:
+            print(f"[-] FATFS not found in Editor Ctrl+P popup. Buffer: {repr(out_popup)}", flush=True)
+            return False
+        print("[+] FATFS successfully listed in Editor Ctrl+P context popup.", flush=True)
+
+        time.sleep(0.3)
+        os.write(master, b"3")  # Launch Slot 3 (FATFS)
+        ok, out_fat_popup = read_until(master, b"FAT Filesystem", timeout=8.0)
+        if not ok:
+            print(f"[-] Failed to launch FATFS from Ctrl+P popup. Buffer: {repr(out_fat_popup)}", flush=True)
+            return False
+        if b"~ +" in out_fat_popup or b"~ |" in out_fat_popup:
+            print(f"[-] Visual regression detected: spurious '~ ' prefix found in buffer: {repr(out_fat_popup)}", flush=True)
+            return False
+        print("[+] FATFS launched cleanly from Editor Ctrl+P popup without visual corruption.", flush=True)
+
+        # Exit FATFS back to Editor
+        time.sleep(0.3)
+        os.write(master, b"q")
+        ok, _ = read_until(master, b"Line    1/1", timeout=6.0)
+        if not ok:
+            print("[-] Failed to restore Editor screen after exiting FATFS.", flush=True)
+            return False
+        print("[+] Editor screen cleanly restored after exiting FATFS.", flush=True)
+        drain_all(master)
+
+        # Return to Splash screen via Ctrl+W
+        time.sleep(0.3)
+        os.write(master, b"\x17")  # Ctrl+W
+        read_until(master, b"Col 0", timeout=5.0)
+        drain_all(master)
+
+        # Re-enter Plugin Manager ('p')
+        time.sleep(0.3)
+        os.write(master, b"p")
+        ok, _ = read_until(master, b"SE - Plugin Manager", timeout=6.0)
+        read_until(master, b"type 0..7 to run", timeout=5.0)
+        drain_all(master)
+
+        # 10. Unload Slot 3 ('u' then '3')
         time.sleep(0.3)
         os.write(master, b"u")
         read_until(master, b"Unload Slot", timeout=4.0)
@@ -211,7 +265,7 @@ def run_fatfs_slot_test():
             return False
         print("[+] FATFS slot successfully unloaded and 32KB Far RAM bank deallocated.", flush=True)
 
-        # 10. Clean Exit to Editor and CP/M
+        # 11. Clean Exit to Editor and CP/M
         time.sleep(0.2)
         os.write(master, b"q")
         read_until(master, b"Col 0", timeout=5.0)
