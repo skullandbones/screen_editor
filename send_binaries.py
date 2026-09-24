@@ -5,7 +5,7 @@ Specifically designed for SC131 / RC2014 systems communicating over serial UART.
 
 Strategy:
   1. Ping CP/M console with CR / drive switch command to confirm prompt is at J:
-  2. For each binary (SE.COM and plugins/*.{OVL,PRL}):
+  2. For each binary (*.COM in the repo and plugins/*.{OVL,PRL}):
      - Send command: A:XM R <FILENAME>
      - Consume the command echo and XM.COM banner text for 3 seconds
      - Start Python XMODEM-1K transfer over serial with hardware flow control (RTS/CTS)
@@ -28,16 +28,12 @@ if os.path.isfile(venv_python) and sys.prefix == sys.base_prefix:
 try:
     import serial
 except ImportError:
-    print("[-] Error: 'pyserial' is not installed.")
-    print("    Please run: source .venv/bin/activate && pip install pyserial xmodem")
-    sys.exit(1)
+    serial = None
 
 try:
     from xmodem import XMODEM
 except ImportError:
-    print("[-] Error: 'xmodem' is not installed.")
-    print("    Please run: source .venv/bin/activate && pip install pyserial xmodem")
-    sys.exit(1)
+    XMODEM = None
 
 
 def progress_callback(total_packets, success_count, error_count):
@@ -47,30 +43,32 @@ def progress_callback(total_packets, success_count, error_count):
     sys.stdout.flush()
 
 
-def discover_binaries(base_dir):
+def discover_binaries(base_dir, com_only=False):
     """
-    Discovers SE.COM and all available binary plugins (.OVL and .PRL)
-    in base_dir and plugins/ subdirectory.
+    Discovers all *.COM files and binary plugins (.OVL and .PRL)
+    across the git repository (excluding .git and .venv).
+    Deduplicates by filename so each binary is transferred once.
     """
-    binaries = []
+    excluded_dirs = {".git", ".venv", "__pycache__"}
+    target_exts = {".COM"} if com_only else {".COM", ".OVL", ".PRL"}
 
-    # 1. Main editor binary: SE.COM
-    se_com = os.path.join(base_dir, "SE.COM")
-    if os.path.isfile(se_com):
-        binaries.append(se_com)
+    found_files = {}  # uppercase basename -> filepath
 
-    # 2. Plugins in plugins/ directory (.OVL and .PRL, case-insensitive)
-    plugins_dir = os.path.join(base_dir, "plugins")
-    if os.path.isdir(plugins_dir):
-        patterns = ["*.OVL", "*.ovl", "*.PRL", "*.prl"]
-        found = set()
-        for pat in patterns:
-            for p in glob.glob(os.path.join(plugins_dir, pat)):
-                if os.path.isfile(p):
-                    found.add(os.path.abspath(p))
-        binaries.extend(sorted(found))
+    for root, dirs, files in os.walk(base_dir):
+        # Prune excluded directories in-place
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
 
-    return binaries
+        for fname in files:
+            _, ext = os.path.splitext(fname)
+            if ext.upper() in target_exts:
+                full_path = os.path.abspath(os.path.join(root, fname))
+                key = fname.upper()
+                # If duplicate found, prefer shallower path (e.g. plugins/ over plugins/fat/)
+                if key not in found_files or full_path.count(os.sep) < found_files[key].count(os.sep):
+                    found_files[key] = full_path
+
+    # Return sorted by filename for deterministic transfer order
+    return [found_files[k] for k in sorted(found_files.keys())]
 
 
 def ping_cpm_drive(ser, target_drive="J:", max_retries=3, timeout=3.0):
@@ -196,6 +194,11 @@ def erase_cpm_file(ser, filename, target_drive="J:", timeout=3.0):
 
 def send_batch(port="/dev/ttyUSB0", baudrate=115200, target_drive="J:",
                xm_drive="A:", files=None, erase=True):
+    if serial is None or XMODEM is None:
+        print("[-] Error: 'pyserial' and/or 'xmodem' are not installed.")
+        print("    Please run: source .venv/bin/activate && pip install pyserial xmodem")
+        return False
+
     if not files:
         print("[-] No files specified for transfer.")
         return False
@@ -338,12 +341,17 @@ def send_batch(port="/dev/ttyUSB0", baudrate=115200, target_drive="J:",
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Transfer SE.COM and all binary plugins (.OVL/.PRL) to CP/M drive J: over serial."
+        description="Transfer all *.COM files and binary plugins (.OVL/.PRL) from repo to CP/M drive J: over serial."
     )
     parser.add_argument(
         "files",
         nargs="*",
-        help="Optional specific files to transfer (default: auto-discover SE.COM and plugins/*.{OVL,PRL})"
+        help="Optional specific files to transfer (default: auto-discover all *.COM and plugins in git repo)"
+    )
+    parser.add_argument(
+        "--com-only",
+        action="store_true",
+        help="Only transfer *.COM files (skip .OVL and .PRL plugins)"
     )
     parser.add_argument(
         "-p", "--port",
@@ -385,12 +393,11 @@ def main():
     if args.files:
         target_files = [os.path.abspath(f) for f in args.files]
     else:
-        target_files = discover_binaries(script_dir)
+        target_files = discover_binaries(script_dir, com_only=args.com_only)
 
     if not target_files:
         print("[-] No binary files found to transfer!")
-        print(f"    Looked for SE.COM in: {script_dir}")
-        print(f"    Looked for *.OVL and *.PRL in: {os.path.join(script_dir, 'plugins')}")
+        print(f"    Searched for *.COM and plugins under: {script_dir}")
         sys.exit(1)
 
     if args.dry_run:
