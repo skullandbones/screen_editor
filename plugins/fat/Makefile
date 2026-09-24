@@ -14,7 +14,7 @@ ZCC_FLAGS = +cpm -Isource -SO3 --opt-code-size
 
 SOURCES = source/ff.c source/diskio.c fat_plugin.c
 
-all: FATFS.PRL
+all: FATFS.PRL FATTEST.COM
 
 fat_100.bin: fat_entry.asm $(SOURCES) source/ffconf.h fat_plugin.h
 	@export PATH="$(TOOLS_BIN):$$PATH"; \
@@ -26,14 +26,15 @@ fat_200.bin: fat_entry_200.asm $(SOURCES) source/ffconf.h fat_plugin.h
 	export ZCCCFG="$(TOOLS_CFG)"; \
 	$(ZCC) $(ZCC_FLAGS) -zorg=0x0200 -crt0=fat_entry_200.asm $(SOURCES) -o $@
 
-FATFS.PRL: fat_100.bin fat_200.bin
-	$(PYTHON) $(MKPRL) fat_100.bin fat_200.bin \
-		-o $@ \
-		-n FATFS \
-		--far --mutate --modal --has-about --has-config \
-		--size 32k
+FATFS.PRL: fat_100.bin fat_200.bin mkfatprl.py
+	$(PYTHON) mkfatprl.py fat_100.bin fat_200.bin $@
+
+FATTEST.COM: fattest.c source/ff.c source/diskio.c source/ffconf.h
+	@export PATH="$(TOOLS_BIN):$$PATH"; \
+	export ZCCCFG="$(TOOLS_CFG)"; \
+	$(ZCC) $(ZCC_FLAGS) source/ff.c source/diskio.c $< -o $@
 
 clean:
-	rm -f *.bin *.o *.PRL source/*.o
+	rm -f *.bin *.o *.PRL *.COM source/*.o
 
 .PHONY: all clean
