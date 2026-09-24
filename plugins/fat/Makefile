@@ -32,7 +32,7 @@ FATFS.PRL: fat_100.bin fat_200.bin mkfatprl.py
 FATTEST.COM: fattest.c source/ff.c source/diskio.c source/ffconf.h
 	@export PATH="$(TOOLS_BIN):$$PATH"; \
 	export ZCCCFG="$(TOOLS_CFG)"; \
-	$(ZCC) $(ZCC_FLAGS) source/ff.c source/diskio.c $< -o $@
+	$(ZCC) $(ZCC_FLAGS) -DFATTEST_APP source/ff.c source/diskio.c $< -o $@
 
 clean:
 	rm -f *.bin *.o *.PRL *.COM source/*.o

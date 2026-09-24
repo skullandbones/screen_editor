@@ -7,7 +7,11 @@
 
 /* Function Configurations */
 #define FF_FS_READONLY    0   /* 0: Read/Write enabled */
-#define FF_FS_MINIMIZE    1   /* 1: Removes f_stat, f_mkdir, f_rename, f_truncate */
+#ifdef FATTEST_APP
+#define FF_FS_MINIMIZE    0   /* 0: Full API for test harness: f_stat, f_mkdir, f_unlink, f_rename, f_truncate */
+#else
+#define FF_FS_MINIMIZE    1   /* 1: Removes f_stat, f_mkdir, etc. to fit in 32KB Far RAM slot */
+#endif
 #define FF_USE_FIND       0   /* Disable filtered find */
 #define FF_USE_MKFS       0   /* Disable format (not needed) */
 #define FF_USE_FASTSEEK   0
@@ -27,7 +31,11 @@
 #define FF_LFN_UNICODE    0
 #define FF_LFN_BUF        255
 #define FF_SFN_BUF        12
-#define FF_FS_RPATH       0   /* No relative paths */
+#ifdef FATTEST_APP
+#define FF_FS_RPATH       2   /* 2: Enable f_chdir, f_chdrive, f_getcwd in test harness */
+#else
+#define FF_FS_RPATH       0   /* 0: Full paths from root */
+#endif
 
 /* Drive/Volume Configurations */
 #define FF_VOLUMES        1   /* Single SD card volume */
