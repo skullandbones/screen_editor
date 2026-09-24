@@ -12,7 +12,7 @@ TARGET = SE.COM
 ASM_SRC = src/se.asm
 
 .PHONY: all plugins image test test-sanity test-conformity test-paging \
-	test-config test-32k test-cpm3 test-plugins test-beautifier test-popup test-full clean
+	test-config test-32k test-cpm3 test-plugins test-beautifier test-popup test-slots test-full clean
 
 all: $(TARGET) plugins
 
@@ -34,6 +34,10 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/WORDCNT.OVL 0:WORDCNT.OVL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:BEAUTIFY.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/BEAUTIFY.PRL 0:BEAUTIFY.PRL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HALFPLUG.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HALFPLUG.PRL 0:HALFPLUG.PRL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:BIGPLUG.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/BIGPLUG.PRL 0:BIGPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:ROT13.PRL 2>/dev/null || true
@@ -42,6 +46,10 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/WORDCNT.OVL 0:WORDCNT.OVL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:BEAUTIFY.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/BEAUTIFY.PRL 0:BEAUTIFY.PRL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:HALFPLUG.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HALFPLUG.PRL 0:HALFPLUG.PRL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:BIGPLUG.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/BIGPLUG.PRL 0:BIGPLUG.PRL
 
 test: test-sanity
 
@@ -81,7 +89,11 @@ test-popup: image
 	@echo "==> Running SE.COM context-aware plugin popup test suite..."
 	python3 tests/test_ctrl_p_popup.py
 
-test-full: test-config test-32k test-cpm3 test-conformity test-plugins test-beautifier test-popup test-paging
+test-slots: image
+	@echo "==> Running SE.COM modular plugin slots (4K/16K/32K) test suite..."
+	python3 tests/test_plugin_slots.py
+
+test-full: test-config test-32k test-cpm3 test-conformity test-plugins test-beautifier test-popup test-slots test-paging
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \
