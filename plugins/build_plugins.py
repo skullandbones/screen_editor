@@ -78,9 +78,53 @@ def main():
                     os.path.join(plugin_dir, "beautify_100.bin"),
                     os.path.join(plugin_dir, "beautify_200.bin")], check=True)
 
+    # 4. Build HALFPLUG.PRL (16KB Slot Class)
+    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'halfplug_100.bin')}",
+                    os.path.join(plugin_dir, "halfplug.asm")], check=True)
+
+    halfplug_200_asm = os.path.join(plugin_dir, "halfplug_200.asm")
+    with open(os.path.join(plugin_dir, "halfplug.asm"), "r") as f:
+        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
+    with open(halfplug_200_asm, "w") as f:
+        f.write(src)
+
+    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'halfplug_200.bin')}",
+                    halfplug_200_asm], check=True)
+    if os.path.exists(halfplug_200_asm):
+        os.remove(halfplug_200_asm)
+
+    subprocess.run([sys.executable, mkprl_bin, "-n", "HALFPLUG",
+                    "-o", os.path.join(plugin_dir, "HALFPLUG.PRL"),
+                    "--size", "16k", "--far", "--modal", "--has-about",
+                    os.path.join(plugin_dir, "halfplug_100.bin"),
+                    os.path.join(plugin_dir, "halfplug_200.bin")], check=True)
+
+    # 5. Build BIGPLUG.PRL (32KB Slot Class)
+    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'bigplug_100.bin')}",
+                    os.path.join(plugin_dir, "bigplug.asm")], check=True)
+
+    bigplug_200_asm = os.path.join(plugin_dir, "bigplug_200.asm")
+    with open(os.path.join(plugin_dir, "bigplug.asm"), "r") as f:
+        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
+    with open(bigplug_200_asm, "w") as f:
+        f.write(src)
+
+    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'bigplug_200.bin')}",
+                    bigplug_200_asm], check=True)
+    if os.path.exists(bigplug_200_asm):
+        os.remove(bigplug_200_asm)
+
+    subprocess.run([sys.executable, mkprl_bin, "-n", "BIGPLUG",
+                    "-o", os.path.join(plugin_dir, "BIGPLUG.PRL"),
+                    "--size", "32k", "--far", "--modal", "--has-about",
+                    os.path.join(plugin_dir, "bigplug_100.bin"),
+                    os.path.join(plugin_dir, "bigplug_200.bin")], check=True)
+
     # Clean up temporary binaries
     for tmp in ["rot13_100.bin", "rot13_200.bin", "wordcnt.bin",
-                "beautify_100.bin", "beautify_200.bin"]:
+                "beautify_100.bin", "beautify_200.bin",
+                "halfplug_100.bin", "halfplug_200.bin",
+                "bigplug_100.bin", "bigplug_200.bin"]:
         p = os.path.join(plugin_dir, tmp)
         if os.path.exists(p):
             os.remove(p)
@@ -89,6 +133,8 @@ def main():
     print(f"    - {os.path.join(plugin_dir, 'ROT13.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'WORDCNT.OVL')}")
     print(f"    - {os.path.join(plugin_dir, 'BEAUTIFY.PRL')}")
+    print(f"    - {os.path.join(plugin_dir, 'HALFPLUG.PRL')}")
+    print(f"    - {os.path.join(plugin_dir, 'BIGPLUG.PRL')}")
 
 if __name__ == "__main__":
     main()
