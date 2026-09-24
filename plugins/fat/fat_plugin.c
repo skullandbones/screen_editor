@@ -163,22 +163,20 @@ int fat_plugin_config(void) {
         vt_cursor(10, 16);
         host_print("~ |                                                |");
         vt_cursor(11, 16);
-        host_print("~ |  [0] Unit 0 (Primary CF / IDE Drive)           |");
+        host_print("~ |  [0] Unit 0 (Primary CF/IDE)  [1] Unit 1 (SD)  |");
         vt_cursor(12, 16);
-        host_print("~ |  [1] Unit 1 (Secondary SD Card - Default)      |");
+        host_print("~ |  [2] Unit 2 (Secondary IDE)   [3] Unit 3 (Ext) |");
         vt_cursor(13, 16);
-        host_print("~ |  [2] Unit 2 (Secondary CF / IDE Drive)         |");
+        host_print("~ |  [4] Unit 4 (RC2014 SD0)      [5..7] Extended  |");
         vt_cursor(14, 16);
-        host_print("~ |  [3] Unit 3 (External / Extended Storage)      |");
-        vt_cursor(15, 16);
         host_print("~ |                                                |");
+        vt_cursor(15, 16);
+        host_print("~ | Select (0-7) to change, or [ESC]/[Q] to exit:  |");
         vt_cursor(16, 16);
-        host_print("~ | Select (0-3) to change, or [ESC]/[Q] to exit:  |");
-        vt_cursor(17, 16);
         host_print("~ +------------------------------------------------+");
 
         key = host_get_key();
-        if (key >= '0' && key <= '3') {
+        if (key >= '0' && key <= '7') {
             set_hbios_disk_unit((unsigned char)(key - '0'));
         } else if (key == 0x1B || key == 'q' || key == 'Q' || key == '\r' || key == '\n') {
             break;
