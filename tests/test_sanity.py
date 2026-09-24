@@ -164,13 +164,16 @@ def run_sanity_test():
         # 8. Clean exit to CP/M with Ctrl+Q (prompts for unsaved changes since buffer was modified)
         time.sleep(0.1)
         os.write(master, b"\x11")
-        out_prompt = read_until(master, b"\x1b[40;83H", timeout=3.0)
+        out_prompt = read_until(master, b"ESC: Cancel", timeout=3.0)
         if b"Save changes?" not in out_prompt or b"ESC:" not in out_prompt:
             print(f"[-] Save changes prompt failed. Buffer: {repr(out_prompt)}", flush=True)
             return False
-        # Verify status bar contains the Save changes? prompt inside the status enclosure
-        if b"| Save changes?" not in out_prompt:
-            print(f"[-] Save changes prompt not embedded in status bar. Buffer: {repr(out_prompt)}", flush=True)
+        # Verify modal pop-up contains title and Save changes? prompt
+        # inside the box enclosure
+        if b"Unsaved Modifications" not in out_prompt or \
+           b"| Save changes?" not in out_prompt:
+            print(f"[-] Save changes prompt not embedded in modal popup. "
+                  f"Buffer: {repr(out_prompt)}", flush=True)
             return False
 
         # Answer 'n' to discard changes and return to CP/M
