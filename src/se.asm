@@ -14750,6 +14750,11 @@ DO_PARSE_AND_LOAD:
 	OR	A
 	JP	NZ,DO_PARSE_AND_INSERT
 
+	; Check if this is Plugin Load UI!
+	LD	A,(IS_PLUGIN_LOAD_UI)
+	OR	A
+	JP	NZ,DO_PARSE_AND_LOAD_PLUGIN
+
 	; Parse optional line number from INPUT_FILENAME_BUF
 	CALL	PARSE_OPEN_LINE_NUM
 
@@ -14910,10 +14915,12 @@ CHECK_PAGING_OR_CANCEL:
 	JR	Z,DO_NEXT_PAGE
 	CP	3
 	JR	Z,DO_PREV_PAGE
+	XOR	A
+	LD	(IS_PLUGIN_LOAD_UI),A
 	CALL	RESTORE_DOC_USER
 	LD	HL,0FFFFH
 	LD	(CACHE_START_ROW),HL
-	RET				; Cancelled -> return to splash
+	RET				; Cancelled -> return to caller
 
 DO_PREV_PAGE:
 	LD	A,(DIR_PAGE_INDEX)
@@ -14936,6 +14943,31 @@ DO_NEXT_PAGE:
 SET_NEXT_PAGE:
 	LD	(DIR_PAGE_INDEX),A
 	JP	RENDER_OPEN_PAGE
+
+;------------------------------------------------------------------------------
+; DO_PARSE_AND_LOAD_PLUGIN:
+; Load plugin from INPUT_FILENAME_BUF into next available plugin slot.
+; Returns to Plugin Manager on success, or displays inline error on failure.
+;------------------------------------------------------------------------------
+DO_PARSE_AND_LOAD_PLUGIN:
+	LD	DE,INPUT_FILENAME_BUF
+	CALL	LOAD_PLUGIN_BY_NAME
+	JR	C,OPEN_PLUGIN_FAIL
+
+	; Success: clear flags, restore user area, and return to caller
+	XOR	A
+	LD	(IS_PLUGIN_LOAD_UI),A
+	LD	(IS_SPLASH_SCREEN),A
+	CALL	RESTORE_DOC_USER
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
+	RET
+
+OPEN_PLUGIN_FAIL:
+	CALL	RESTORE_DOC_USER
+	LD	DE,STR_FNF_INLINE
+	LD	C,16			; length of message
+	JP	SHOW_INLINE_OPEN_ERROR
 
 ;------------------------------------------------------------------------------
 ; Block Insert File UI & Execution Subsystem
@@ -16174,12 +16206,19 @@ PHD_LOOP:
 RENDER_DIR_TITLE:
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
-	JR	Z,RDT_NORMAL
+	JR	NZ,RDT_IS_INSERT
+	LD	A,(IS_PLUGIN_LOAD_UI)
+	OR	A
+	JR	NZ,RDT_IS_PLUGIN
+	LD	DE,STR_TITLE_OPEN_PRE
+	LD	A,(STR_DIR_DRIVE_CHAR)
+	JR	RENDER_TITLE_COMMON
+RDT_IS_INSERT:
 	LD	DE,STR_TITLE_INSERT_PRE
 	LD	A,(STR_DIR_DRIVE_CHAR)
 	JR	RENDER_TITLE_COMMON
-RDT_NORMAL:
-	LD	DE,STR_TITLE_OPEN_PRE
+RDT_IS_PLUGIN:
+	LD	DE,STR_TITLE_PLUG_LOAD_PRE
 	LD	A,(STR_DIR_DRIVE_CHAR)
 	JR	RENDER_TITLE_COMMON
 
@@ -16206,8 +16245,13 @@ RENDER_TITLE_COMMON:
 	CALL	PRINT_HR_EQUAL
 
 	; 3. Row 2: Centered Title
-	; Title length: 43 if IS_BLOCK_INSERT_UI, 42 if IS_BLOCK_SAVE_UI, 41 otherwise
+	; Title length: 43 if IS_BLOCK_INSERT_UI or IS_PLUGIN_LOAD_UI,
+	; 42 if IS_BLOCK_SAVE_UI, 41 otherwise
 	LD	A,(IS_BLOCK_INSERT_UI)
+	OR	A
+	LD	A,43
+	JR	NZ,RTC_BASE_LEN_OK
+	LD	A,(IS_PLUGIN_LOAD_UI)
 	OR	A
 	LD	A,43
 	JR	NZ,RTC_BASE_LEN_OK
@@ -17252,6 +17296,18 @@ COPY_EXT_TEMP:
 	CALL	CHECK_DIR_SWAP_FILE
 	JR	C,DIR_NEXT_ENTRY	; Swap file -> skip
 
+	; In Plugin Load UI, filter for .PRL and .OVL files
+	; unless a custom wildcard filter is active
+	LD	A,(IS_PLUGIN_LOAD_UI)
+	OR	A
+	JR	Z,CDE_NOT_PLUGIN_UI
+	LD	A,(DIR_FILTER_ACTIVE)
+	OR	A
+	JR	NZ,CDE_NOT_PLUGIN_UI
+	CALL	CHECK_PLUGIN_EXT
+	JR	NC,DIR_NEXT_ENTRY	; Not a plugin file -> skip
+CDE_NOT_PLUGIN_UI:
+
 	; Check if this filename is already in DIR_NAMES_BUF (duplicate extent filter)
 	CALL	CHECK_DIR_DUPLICATE
 	JR	C,DIR_NEXT_ENTRY	; Already collected -> skip duplicate
@@ -17292,7 +17348,7 @@ DIR_NEXT_ENTRY:
 	CALL	BDOS_ENTRY
 	CP	0FFH
 	RET	Z
-	JR	DIR_COLLECT_LOOP
+	JP	DIR_COLLECT_LOOP
 
 ;------------------------------------------------------------------------------
 ; Check if DIR_TEMP_ENTRY matches any already collected entry in DIR_NAMES_BUF
@@ -17401,6 +17457,42 @@ CDSF_DONE:
 
 STR_SWAP_FILE_MATCH:
 	DB	"$$$SE$$$.SWP",0
+
+;------------------------------------------------------------------------------
+; CHECK_PLUGIN_EXT: Check if DIR_TEMP_ENTRY extension is "PRL" or "OVL"
+; Returns: Carry = 1 if match, Carry = 0 if not match
+;------------------------------------------------------------------------------
+CHECK_PLUGIN_EXT:
+	LD	HL,DIR_TEMP_ENTRY + 9
+	LD	A,(HL)
+	CP	'P'
+	JR	NZ,CPE_CHECK_OVL
+	INC	HL
+	LD	A,(HL)
+	CP	'R'
+	JR	NZ,CPE_FAIL
+	INC	HL
+	LD	A,(HL)
+	CP	'L'
+	JR	NZ,CPE_FAIL
+	SCF
+	RET
+CPE_CHECK_OVL:
+	CP	'O'
+	JR	NZ,CPE_FAIL
+	INC	HL
+	LD	A,(HL)
+	CP	'V'
+	JR	NZ,CPE_FAIL
+	INC	HL
+	LD	A,(HL)
+	CP	'L'
+	JR	NZ,CPE_FAIL
+	SCF
+	RET
+CPE_FAIL:
+	OR	A
+	RET
 
 ;------------------------------------------------------------------------------
 ; Sort Directory Entries Alphabetically (Bubble Sort)
@@ -17733,9 +17825,17 @@ DISP_OPEN_PROMPT_BODY:
 	CALL	PRINT_STR
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
+	JR	NZ,DOP_SHOW_INSERT
+	LD	A,(IS_PLUGIN_LOAD_UI)
+	OR	A
+	JR	NZ,DOP_SHOW_PLUGIN
 	LD	DE,STR_OPEN_PROMPT_TXT	; "Enter filename to open:"
-	JR	Z,DOP_SHOW_TXT
+	JR	DOP_SHOW_TXT
+DOP_SHOW_INSERT:
 	LD	DE,STR_INSERT_PROMPT_TXT ; "Enter filename to insert:"
+	JR	DOP_SHOW_TXT
+DOP_SHOW_PLUGIN:
+	LD	DE,STR_PLUG_LOAD_PROMPT_TXT ; "Load Plugin (.PRL/.OVL):"
 DOP_SHOW_TXT:
 	CALL	PRINT_STR
 	LD	DE,STR_INVERSE_OFF
@@ -17828,12 +17928,16 @@ FUPS_STATUS:
 	CALL	RENDER_STATUS_BAR
 
 	; Reposition cursor inside filename input box on UI_CUR_ROW
-	; Row = UI_CUR_ROW, Col = 29 + INPUT_BUF_LEN (or 31 + INPUT_BUF_LEN for insert UI)
+	; Col = Base + INPUT_BUF_LEN (31 insert, 30 plugin, 29 open)
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
-	LD	A,29
-	JR	Z,FUPS_BOX_COL
 	LD	A,31
+	JR	NZ,FUPS_BOX_COL
+	LD	A,(IS_PLUGIN_LOAD_UI)
+	OR	A
+	LD	A,30
+	JR	NZ,FUPS_BOX_COL
+	LD	A,29
 FUPS_BOX_COL:
 	LD	HL,INPUT_BUF_LEN
 	ADD	A,(HL)
@@ -19591,12 +19695,65 @@ LPBN_FOUND_FREE:
 	POP	HL			; HL = filename string pointer
 	CALL	PARSE_STRING_TO_PLUGIN_FCB
 
-	; Open file via BDOS 15
+	; Query current BDOS user area (BDOS 32, E=0xFF) into PLUGIN_ORIG_USER
+	LD	E,0FFH
+	LD	C,32
+	CALL	BDOS_ENTRY
+	LD	(PLUGIN_ORIG_USER),A
+
+	; Switch BDOS user area to target user area (PLUGIN_USER_AREA)
+	LD	A,(PLUGIN_USER_AREA)
+	LD	E,A
+	LD	C,32
+	CALL	BDOS_ENTRY
+
+	; Check if extension in PLUGIN_FCB is blank ("   ")
+	LD	A,(PLUGIN_FCB+9)
+	CP	' '
+	JR	NZ,LPBN_DO_OPEN_DIRECT
+
+	; Auto-try .PRL extension first
+	LD	HL,PLUGIN_FCB+9
+	LD	(HL),'P'
+	INC	HL
+	LD	(HL),'R'
+	INC	HL
+	LD	(HL),'L'
 	LD	DE,PLUGIN_FCB
-	LD	C,15
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	NZ,LPBN_OPEN_OK
+
+	; .PRL not found -> try .OVL extension
+	LD	HL,PLUGIN_FCB+9
+	LD	(HL),'O'
+	INC	HL
+	LD	(HL),'V'
+	INC	HL
+	LD	(HL),'L'
+	; Reset extent/record fields before re-open
+	XOR	A
+	LD	(PLUGIN_FCB+12),A	; EX = 0
+	LD	(PLUGIN_FCB+13),A	; S1 = 0
+	LD	(PLUGIN_FCB+14),A	; S2 = 0
+	LD	(PLUGIN_FCB+15),A	; RC = 0
+	LD	(PLUGIN_FCB+32),A	; CR = 0
+	LD	DE,PLUGIN_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	NZ,LPBN_OPEN_OK
+	JP	LPBN_NOT_FOUND
+
+LPBN_DO_OPEN_DIRECT:
+	LD	DE,PLUGIN_FCB
+	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
 	CP	0FFH
 	JP	Z,LPBN_NOT_FOUND
+
+LPBN_OPEN_OK:
 
 	; Set BDOS DMA to scratch buffer at LINE_STORAGE + 4096
 	LD	DE,LINE_STORAGE + 4096
@@ -19796,6 +19953,12 @@ LPBN_SECTORS_DONE:
 	LD	C,16
 	CALL	BDOS_ENTRY
 
+	; Restore BDOS user area to PLUGIN_ORIG_USER
+	LD	A,(PLUGIN_ORIG_USER)
+	LD	E,A
+	LD	C,32
+	CALL	BDOS_ENTRY
+
 	LD	DE,0080H
 	LD	C,26
 	CALL	BDOS_ENTRY
@@ -19809,6 +19972,12 @@ LPBN_READ_ERR:
 LPBN_NOT_FOUND:
 LPBN_TOO_LARGE:
 LPBN_ALLOC_FAIL:
+	; Restore BDOS user area to PLUGIN_ORIG_USER
+	LD	A,(PLUGIN_ORIG_USER)
+	LD	E,A
+	LD	C,32
+	CALL	BDOS_ENTRY
+
 	LD	DE,0080H
 	LD	C,26
 	CALL	BDOS_ENTRY
@@ -20213,6 +20382,10 @@ PARSE_STRING_TO_PLUGIN_FCB:
 	POP	HL
 	PUSH	HL
 	CALL	PARSE_STRING_TO_FCB
+	LD	A,(WORK_FCB_USER)
+	LD	(PLUGIN_USER_AREA),A
+	LD	A,(DOC_USER_NUM)
+	LD	(WORK_FCB_USER),A
 	LD	HL,PLUGIN_FCB
 	LD	DE,WORK_FCB
 	LD	B,36
@@ -20865,14 +21038,12 @@ COPY_STR_Z:
 	JR	COPY_STR_Z
 
 PROMPT_LOAD_PLUGIN:
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_PLUG_PROMPT_L
-	CALL	PRINT_STR
-	CALL	READ_FILENAME_INPUT
-	JR	C,PLP_DONE
-	LD	DE,INPUT_FILENAME_BUF
-	CALL	LOAD_PLUGIN_BY_NAME
-PLP_DONE:
+	LD	A,1
+	LD	(IS_PLUGIN_LOAD_UI),A
+	CALL	DO_OPEN_FILE_UI
+	XOR	A
+	LD	(IS_PLUGIN_LOAD_UI),A
+	LD	(IS_SPLASH_SCREEN),A
 	RET
 
 PROMPT_UNLOAD_PLUGIN:
@@ -21737,6 +21908,8 @@ STR_TITLE_FILTER_SUF:	DB	"])",13,10,"$"
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
 STR_TITLE_INSERT_PRE:	DB	"SE.COM - INSERT FILE (DIRECTORY - DRIVE ","$"
 STR_INSERT_PROMPT_TXT:	DB	"Enter filename to insert:","$"
+STR_TITLE_PLUG_LOAD_PRE: DB	"SE.COM - LOAD PLUGIN (DIRECTORY - DRIVE ","$"
+STR_PLUG_LOAD_PROMPT_TXT: DB	"Load Plugin (.PRL/.OVL):","$"
 
 STR_PAGE_PREFIX:	DB	"~  [Page ","$"
 
@@ -21863,6 +22036,7 @@ SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
 IS_SAVE_UI:		DB	0		; 1 if currently in Save File Screen
 IS_BLOCK_INSERT_UI:	DB	0		; 1 if currently in Block Insert File Screen
 IS_BLOCK_SAVE_UI:	DB	0		; 1 if currently in Block Save File Screen
+IS_PLUGIN_LOAD_UI:	DB	0	; 1 if in Plugin Load Screen
 IS_LOADING_FILE:	DB	0		; 1 if currently loading file
 IS_SAVING_FILE:		DB	0		; 1 if currently saving file
 LOAD_PROGRESS_COUNT:	DB	100		; Progress interval down-counter (100 lines)
@@ -22077,6 +22251,8 @@ PLUGIN_ACTION_INDEX:	DB	0
 PLUGIN_IS_FAR_EXEC:	DB	0
 PLUGIN_STATUS_MSG_PTR:	DW	0
 PLUGIN_STATUS_MSG_BUF:	DS	16
+PLUGIN_ORIG_USER:	DB	0
+PLUGIN_USER_AREA:	DB	0
 PLUGIN_FCB:		DS	36
 FAR_SLOT_BASE_ADDR:	DW	0
 FAR_SECT_DEST:		DW	0
