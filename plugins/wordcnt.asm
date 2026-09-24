@@ -360,59 +360,59 @@ STR_NUM_WORDS:		DB	"     ", 0
 STR_NUM_CHARS:		DB	"     ", 0
 
 STR_BOX_TOP:
-	DB	13,10,"  +------------------------------------+",13,10
-	DB	"  |       Document Statistics          |",13,10
-	DB	"  +------------------------------------+",13,10,"$"
+	DB	13,10,"~ +------------------------------------+",13,10
+	DB	"~ |       Document Statistics          |",13,10
+	DB	"~ +------------------------------------+",13,10,"$"
 
 STR_BOX_LINES:
-	DB	"  |  Total Lines      : "
+	DB	"~ |  Total Lines      : "
 STR_BOX_LINES_VAL:
 	DB	"     "
 	DB	"          |",13,10,"$"
 
 STR_BOX_WORDS:
-	DB	"  |  Total Words      : "
+	DB	"~ |  Total Words      : "
 STR_BOX_WORDS_VAL:
 	DB	"     "
 	DB	"          |",13,10,"$"
 
 STR_BOX_CHARS:
-	DB	"  |  Total Characters : "
+	DB	"~ |  Total Characters : "
 STR_BOX_CHARS_VAL:
 	DB	"     "
 	DB	"          |",13,10,"$"
 
 STR_BOX_BOT:
-	DB	"  +------------------------------------+",13,10
-	DB	"  |     [Press any key to continue]    |",13,10
-	DB	"  +------------------------------------+",13,10,"$"
+	DB	"~ +------------------------------------+",13,10
+	DB	"~ |     [Press any key to continue]    |",13,10
+	DB	"~ +------------------------------------+",13,10,"$"
 
 STR_WORDCNT_ABOUT:
-	DB	13,10,"  +------------------------------------+"
-	DB	13,10,"  |   Word & Character Count Plugin    |"
-	DB	13,10,"  +------------------------------------+"
-	DB	13,10,"  | Version: v0.1.0 (2026-09-23)       |"
-	DB	13,10,"  | Compatible with SE.COM >= v0.9.7   |"
-	DB	13,10,"  | Mode   : TPA Overlay / Far RAM     |"
-	DB	13,10,"  | Scope  : Full Document Scanner     |"
-	DB	13,10,"  | Metrics: Lines, Words, Characters  |"
-	DB	13,10,"  +------------------------------------+"
-	DB	13,10,"  |     [Press any key to return]      |"
-	DB	13,10,"  +------------------------------------+",13,10,"$"
+	DB	13,10,"~ +------------------------------------+"
+	DB	13,10,"~ |   Word & Character Count Plugin    |"
+	DB	13,10,"~ +------------------------------------+"
+	DB	13,10,"~ | Version: v0.1.0 (2026-09-23)       |"
+	DB	13,10,"~ | Compatible with SE.COM >= v0.9.7   |"
+	DB	13,10,"~ | Mode   : TPA Overlay / Far RAM     |"
+	DB	13,10,"~ | Scope  : Full Document Scanner     |"
+	DB	13,10,"~ | Metrics: Lines, Words, Characters  |"
+	DB	13,10,"~ +------------------------------------+"
+	DB	13,10,"~ |     [Press any key to return]      |"
+	DB	13,10,"~ +------------------------------------+",13,10,"$"
 
 STR_WORDCNT_CONFIG:
-	DB	13,10,"  +------------------------------------+"
-	DB	13,10,"  |     Word Count Configuration       |"
-	DB	13,10,"  +------------------------------------+"
-	DB	13,10,"  |  1. Count Blank Lines  : ["
+	DB	13,10,"~ +------------------------------------+"
+	DB	13,10,"~ |     Word Count Configuration       |"
+	DB	13,10,"~ +------------------------------------+"
+	DB	13,10,"~ |  1. Count Blank Lines  : ["
 STR_CFG_BLANK_VAL:
 	DB	"YES]       |"
-	DB	13,10,"  |  2. Count Whitespace   : ["
+	DB	13,10,"~ |  2. Count Whitespace   : ["
 STR_CFG_WS_VAL:
 	DB	"YES]       |"
-	DB	13,10,"  +------------------------------------+"
-	DB	13,10,"  | [1-2] Toggle  [Enter/Q] Save & Exit|"
-	DB	13,10,"  +------------------------------------+",13,10,"$"
+	DB	13,10,"~ +------------------------------------+"
+	DB	13,10,"~ | [1-2] Toggle  [Enter/Q] Save & Exit|"
+	DB	13,10,"~ +------------------------------------+",13,10,"$"
 
 CFG_COUNT_BLANK:	DB	1
 CFG_COUNT_WS:		DB	1
