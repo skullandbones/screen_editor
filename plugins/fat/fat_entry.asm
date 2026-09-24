@@ -15,6 +15,7 @@
     PUBLIC _host_get_total_lines
     PUBLIC _host_checkout_line
     PUBLIC _host_commit_line
+    PUBLIC _host_clear_document
     PUBLIC _host_set_status_raw
     PUBLIC _host_check_key
 
@@ -58,6 +59,7 @@ _entry_run:
     CALL _save_host_api
     CALL _fat_plugin_run
     LD  SP,(_saved_sp)
+    LD  A,L             ; Return code in A (0 = Clean, 1 = Line dirty, 2 = Doc dirty)
     OR  A               ; CY = 0 (Success)
     RET
 
@@ -66,6 +68,7 @@ _entry_about:
     CALL _save_host_api
     CALL _fat_plugin_about
     LD  SP,(_saved_sp)
+    LD  A,L
     OR  A               ; CY = 0 (Success)
     RET
 
@@ -74,6 +77,7 @@ _entry_config:
     CALL _save_host_api
     CALL _fat_plugin_config
     LD  SP,(_saved_sp)
+    LD  A,L
     OR  A               ; CY = 0 (Success)
     RET
 
@@ -128,25 +132,43 @@ _host_get_total_lines:
 
 ; unsigned int host_checkout_line(unsigned int line_num, char *buf)
 _host_checkout_line:
-    POP  BC             ; Return address
-    POP  DE             ; DE = buf
-    POP  HL             ; HL = line_num
+    POP  AF             ; Return address
+    POP  DE             ; DE = buf (2nd arg)
+    POP  HL             ; HL = line_num (1st arg)
     PUSH HL
     PUSH DE
-    PUSH BC
-    ; CALL_CHECKOUT_LINE (IX+18): HL = line_num, DE = buf -> BC = length
+    PUSH AF
+
     PUSH IX
     LD   IX,(_host_api_ptr)
-    PUSH HL
-    LD   HL,(_host_api_ptr)
-    LD   BC,18
-    ADD  HL,BC
-    LD   (_call_ptr),HL
-    POP  HL
-    CALL _do_indirect_call
+    PUSH DE             ; Save destination buffer (buf)
+
+    ; CALL_CHECKOUT_LINE (IX+18): HL = line_num -> BC = length
+    PUSH IX
+    POP  IY
+    LD   DE,18
+    ADD  IY,DE
+    CALL _call_iy       ; Returns BC = length
+
+    POP  DE             ; DE = destination buffer (buf)
+
+    ; Source: ACTIVE_LINE_BUF (offset +4 in host API)
+    LD   L,(IX+4)
+    LD   H,(IX+5)       ; HL = ACTIVE_LINE_BUF
+
+    ; Copy BC bytes from HL (ACTIVE_LINE_BUF) to DE (buf)
+    PUSH BC             ; Save length
+    LD   A,B
+    OR   C
+    JR   Z,_hco_null_term
+    LDIR
+
+_hco_null_term:
+    XOR  A
+    LD   (DE),A         ; Null-terminate destination buffer
+
+    POP  HL             ; HL = length returned
     POP  IX
-    LD   H,B
-    LD   L,C            ; HL = length returned
     RET
 
 ; void host_commit_line(unsigned int line_num, const char *buf, unsigned int len)
@@ -159,18 +181,57 @@ _host_commit_line:
     PUSH DE
     PUSH BC
     PUSH AF
-    ; CALL_COMMIT_LINE (IX+21): HL = line_num, DE = buf, BC = len
+
     PUSH IX
     LD   IX,(_host_api_ptr)
-    LD   (_save_hl),HL
-    LD   HL,(_host_api_ptr)
-    PUSH DE
-    LD   DE,21
-    ADD  HL,DE
-    LD   (_call_ptr),HL
-    POP  DE
+
+    LD   (_save_hl),HL  ; Save line_num
+    PUSH BC             ; Save len
+
+    LD   L,(IX+4)
+    LD   H,(IX+5)       ; HL = ACTIVE_LINE_BUF
+    PUSH HL             ; Save ACTIVE_LINE_BUF
+
+    ; Copy BC bytes from DE (buf) to HL (ACTIVE_LINE_BUF)
+    EX   DE,HL          ; HL = buf (src), DE = ACTIVE_LINE_BUF (dst)
+    LD   A,B
+    OR   C
+    JR   Z,_hcl_null_term
+    LDIR
+
+_hcl_null_term:
+    XOR  A
+    LD   (DE),A         ; Null-terminate ACTIVE_LINE_BUF
+
+    POP  DE             ; DE = ACTIVE_LINE_BUF
+    POP  BC             ; BC = len
+    LD   L,(IX+6)
+    LD   H,(IX+7)       ; HL = ACTIVE_LINE_LEN ptr
+    LD   (HL),C
+    INC  HL
+    LD   (HL),B
+
+    ; CALL_COMMIT_LINE (IX+21): HL = line_num, DE = ACTIVE_LINE_BUF, BC = len
     LD   HL,(_save_hl)
-    CALL _do_indirect_call
+    PUSH DE
+    PUSH IX
+    POP  IY
+    LD   DE,21
+    ADD  IY,DE
+    POP  DE             ; DE = ACTIVE_LINE_BUF
+    CALL _call_iy
+    POP  IX
+    RET
+
+; void host_clear_document(void)
+_host_clear_document:
+    PUSH IX
+    LD   IX,(_host_api_ptr)
+    PUSH IX
+    POP  IY
+    LD   DE,49          ; Offset to CALL_CLEAR_DOCUMENT
+    ADD  IY,DE
+    CALL _call_iy
     POP  IX
     RET
 
@@ -196,6 +257,9 @@ _host_check_key:
     LD   L,A
     LD   H,0
     RET
+
+_call_iy:
+    JP   (IY)
 
 _do_indirect_call:
     LD   IY,(_call_ptr)

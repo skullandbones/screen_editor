@@ -258,6 +258,9 @@ static int import_fat_file(const char *filename) {
     fr = f_open(&s_fil, filename, FA_READ);
     if (fr != FR_OK) return 0;
 
+    /* Reset host editor buffer before streaming lines */
+    host_clear_document();
+
     while (1) {
         fr = f_read(&s_fil, s_read_chunk, sizeof(s_read_chunk), &br);
         if (fr != FR_OK || br == 0) break;
