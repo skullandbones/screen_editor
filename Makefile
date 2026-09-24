@@ -12,7 +12,7 @@ TARGET = SE.COM
 ASM_SRC = src/se.asm
 
 .PHONY: all plugins image test test-sanity test-conformity test-paging \
-	test-config test-32k test-cpm3 test-plugins test-full clean
+	test-config test-32k test-cpm3 test-plugins test-beautifier test-popup test-full clean
 
 all: $(TARGET) plugins
 
@@ -77,7 +77,11 @@ test-beautifier: image
 	@echo "==> Running SE.COM Z80 beautifier plugin test suite..."
 	python3 tests/test_beautifier_cpm.py
 
-test-full: test-config test-32k test-cpm3 test-conformity test-plugins test-beautifier test-paging
+test-popup: image
+	@echo "==> Running SE.COM context-aware plugin popup test suite..."
+	python3 tests/test_ctrl_p_popup.py
+
+test-full: test-config test-32k test-cpm3 test-conformity test-plugins test-beautifier test-popup test-paging
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \

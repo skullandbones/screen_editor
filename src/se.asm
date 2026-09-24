@@ -53,13 +53,22 @@ KEY_CTRL_K	EQU	11		; Show Editor Mode Keys Screen
 KEY_CTRL_F	EQU	6		; Find in editor / Toggle endings in save
 KEY_CTRL_R	EQU	18		; Search & Replace
 KEY_CTRL_N	EQU	14		; Find Next
-KEY_CTRL_P	EQU	16		; Find Previous (Reverse search)
+KEY_CTRL_P	EQU	16		; Context-Aware Plugin Pop-up
 KEY_CTRL_I	EQU	9		; Tab / Toggle case sensitivity in prompt
 KEY_CTRL_U	EQU	21		; Page Up
 KEY_CTRL_V	EQU	22		; Page Down
 KEY_CTRL_L	EQU	12		; Goto Line Number
 KEY_CTRL_Y	EQU	25		; Beautify Block (if active) or Whole File
 KEY_CTRL_Z	EQU	26		; Open Plugin Manager Screen
+
+; Context-Aware Plugin Screen IDs
+PLUG_CTX_EDITOR		EQU	0
+PLUG_CTX_SPLASH		EQU	1
+PLUG_CTX_CONFIG		EQU	2
+PLUG_CTX_MEM_INFO	EQU	3
+PLUG_CTX_PLUGIN_MGR	EQU	4
+PLUG_CTX_HELP		EQU	5
+PLUG_CTX_ABOUT		EQU	6
 KEY_BACKSPACE	EQU	8
 KEY_TAB		EQU	9
 KEY_ENTER	EQU	13
@@ -266,6 +275,13 @@ SPLASH_LOOP:
 	CALL	DRAIN_ESC_SEQUENCE
 	JR	SPLASH_LOOP
 SPLASH_NOT_ESC:
+	; Command: Ctrl+P -> Context-Aware Plugin Pop-up (Splash)
+	CP	KEY_CTRL_P
+	JR	NZ,SPLASH_NOT_CTRL_P
+	LD	A,PLUG_CTX_SPLASH
+	CALL	DO_CONTEXT_PLUGIN_POPUP
+	JP	SPLASH_LOOP
+SPLASH_NOT_CTRL_P:
 
 	; Option: 'Q' or 'q' or Ctrl+Q -> Exit
 	CP	'q'
@@ -365,14 +381,28 @@ DO_SET_80X24:
 
 DO_ABOUT_SCREEN:
 	CALL	SHOW_ABOUT_SCREEN
+ABT_LOOP:
 	CALL	GET_KEY
+	CP	KEY_CTRL_P
+	JR	NZ,ABT_NOT_CTRL_P
+	LD	A,PLUG_CTX_ABOUT
+	CALL	DO_CONTEXT_PLUGIN_POPUP
+	JR	ABT_LOOP
+ABT_NOT_CTRL_P:
 	CP	KEY_ESC
 	CALL	Z,DRAIN_ESC_SEQUENCE
 	JP	SHOW_SPLASH_SCREEN
 
 DO_MEM_INFO_SCREEN:
 	CALL	SHOW_MEM_INFO_SCREEN
+MIS_LOOP:
 	CALL	GET_KEY
+	CP	KEY_CTRL_P
+	JR	NZ,MIS_NOT_CTRL_P
+	LD	A,PLUG_CTX_MEM_INFO
+	CALL	DO_CONTEXT_PLUGIN_POPUP
+	JR	MIS_LOOP
+MIS_NOT_CTRL_P:
 	CP	KEY_ESC
 	CALL	Z,DRAIN_ESC_SEQUENCE
 	JP	SHOW_SPLASH_SCREEN
@@ -381,6 +411,14 @@ DO_CONFIG_SCREEN:
 	CALL	SHOW_CONFIG_SCREEN
 CONFIG_LOOP:
 	CALL	GET_KEY
+
+	; Command: Ctrl+P -> Context-Aware Plugin Pop-up (Configuration)
+	CP	KEY_CTRL_P
+	JR	NZ,CONFIG_NOT_CTRL_P
+	LD	A,PLUG_CTX_CONFIG
+	CALL	DO_CONTEXT_PLUGIN_POPUP
+	JR	CONFIG_LOOP
+CONFIG_NOT_CTRL_P:
 
 	; Standalone ESC or escape sequence -> return to splash
 	CP	KEY_ESC
@@ -575,11 +613,12 @@ CHECK_CTRL_N:
 	JP	MAIN_LOOP
 
 CHECK_CTRL_P:
-	; Command: Ctrl+P -> Find Previous (Reverse search)
+	; Command: Ctrl+P -> Context-Aware Plugin Pop-up (Editor)
 	CP	KEY_CTRL_P
 	JR	NZ,CHECK_CTRL_S
 	CALL	FLUSH_DEFERRED_RENDER
-	CALL	DO_FIND_PREV
+	LD	A,PLUG_CTX_EDITOR
+	CALL	DO_CONTEXT_PLUGIN_POPUP
 	JP	MAIN_LOOP
 
 CHECK_CTRL_S:
@@ -15499,6 +15538,22 @@ HELP_LINES	EQU	22
 SHOW_HELP_KEYS_UI:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
+	CALL	RENDER_HELP_SCREEN_STATIC
+HELP_KEY_LOOP:
+	CALL	GET_KEY
+	CP	KEY_CTRL_P
+	JR	NZ,HELP_NOT_CTRL_P
+	LD	A,PLUG_CTX_HELP
+	CALL	DO_CONTEXT_PLUGIN_POPUP
+	JR	HELP_KEY_LOOP
+HELP_NOT_CTRL_P:
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
+	RET
+
+RENDER_HELP_SCREEN_STATIC:
 	LD	DE,STR_HIDE_CURSOR
 	CALL	PRINT_STR
 	LD	DE,STR_CLEAR_SCREEN
@@ -15545,11 +15600,6 @@ HELP_TILDE_DONE:
 	CALL	PRINT_STR
 	LD	DE,STR_HIDE_CURSOR
 	CALL	PRINT_STR
-	CALL	GET_KEY
-	CP	KEY_ESC
-	CALL	Z,DRAIN_ESC_SEQUENCE
-	XOR	A
-	LD	(IS_SPLASH_SCREEN),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -19732,6 +19782,20 @@ PLUG_KEY_LOOP:
 	CP	KEY_ESC
 	JP	Z,PLUG_HANDLE_ESC
 
+	; Command: Ctrl+P -> Context-Aware Plugin Pop-up (Plugin Manager)
+	CP	KEY_CTRL_P
+	JR	NZ,PKL_NOT_CTRL_P
+	LD	A,PLUG_CTX_PLUGIN_MGR
+	CALL	DO_CONTEXT_PLUGIN_POPUP
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JP	Z,PLUG_KEY_LOOP
+	LD	A,(DOC_MODIFIED)
+	OR	A
+	JP	NZ,PKL_EXIT
+	JP	PLUG_KEY_LOOP
+PKL_NOT_CTRL_P:
+
 	; Up navigation: Ctrl+E (5), 'k', 'K'
 	CP	5
 	JP	Z,PLUG_PREV_SLOT
@@ -20354,6 +20418,500 @@ PROMPT_UNLOAD_PLUGIN:
 	CALL	UNLOAD_PLUGIN_SLOT
 	RET
 
+;==============================================================================
+; Context-Aware Plugin Pop-up Modal Subsystem
+;==============================================================================
+
+DO_CONTEXT_PLUGIN_POPUP:
+	LD	(POPUP_CONTEXT_ID),A
+
+	; If in editor mode, flush dirty cache lines to Far RAM
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JR	Z,DCPP_PROBE
+	CALL	FLUSH_DIRTY_CACHE
+
+DCPP_PROBE:
+	CALL	AUTO_PROBE_PLUGINS
+
+	; Reset match count
+	XOR	A
+	LD	(POPUP_MATCH_COUNT),A
+
+	; Scan PLUGIN_REGISTRY slots 0..7
+	LD	B,0
+DCPP_SCAN_LOOP:
+	CALL	GET_REGISTRY_ENTRY_PTR	; HL = entry address for slot B
+	LD	DE,22
+	ADD	HL,DE
+	LD	A,(HL)			; Offset +22: SLOT_STATE (0=free, 1=loaded)
+	OR	A
+	JR	Z,DCPP_NEXT_SLOT
+
+	DEC	HL
+	DEC	HL
+	LD	C,(HL)			; C = Capabilities low byte (Offset +20)
+
+	LD	A,(POPUP_CONTEXT_ID)
+	CP	PLUG_CTX_EDITOR
+	JR	NZ,DCPP_CHK_CONFIG
+	; Editor screen: CAP_DOC_MUTATE (04h) or CAP_MODAL_UI (08h)
+	LD	A,C
+	AND	0CH
+	JR	Z,DCPP_NEXT_SLOT
+	JR	DCPP_RECORD_SLOT
+
+DCPP_CHK_CONFIG:
+	CP	PLUG_CTX_CONFIG
+	JR	NZ,DCPP_CHK_MEM
+	; Config screen: CAP_HAS_CONFIG (20h)
+	LD	A,C
+	AND	20H
+	JR	Z,DCPP_NEXT_SLOT
+	JR	DCPP_RECORD_SLOT
+
+DCPP_CHK_MEM:
+	CP	PLUG_CTX_MEM_INFO
+	JR	NZ,DCPP_CHK_HELP
+	; Mem Info screen: CAP_FAR_EXEC (02h)
+	LD	A,C
+	AND	02H
+	JR	Z,DCPP_NEXT_SLOT
+	JR	DCPP_RECORD_SLOT
+
+DCPP_CHK_HELP:
+	CP	PLUG_CTX_HELP
+	JR	Z,DCPP_IS_HELP
+	CP	PLUG_CTX_ABOUT
+	JR	NZ,DCPP_RECORD_SLOT	; Splash / Plugin Mgr -> matches all
+DCPP_IS_HELP:
+	; Help / About screen: CAP_HAS_ABOUT (10h)
+	LD	A,C
+	AND	10H
+	JR	Z,DCPP_NEXT_SLOT
+
+DCPP_RECORD_SLOT:
+	LD	A,(POPUP_MATCH_COUNT)
+	LD	E,A
+	LD	D,0
+	LD	HL,POPUP_MATCH_SLOTS
+	ADD	HL,DE
+	LD	(HL),B			; Store slot number B in POPUP_MATCH_SLOTS
+	INC	A
+	LD	(POPUP_MATCH_COUNT),A
+
+DCPP_NEXT_SLOT:
+	INC	B
+	LD	A,B
+	CP	8
+	JR	C,DCPP_SCAN_LOOP
+
+	; Calculate layout coordinates
+	; 1. POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Total Lines:
+	; If MATCH_COUNT == 0 -> 6 lines
+	; Else -> 6 + MATCH_COUNT lines
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JR	NZ,DCPP_HAS_LINES
+	LD	A,6
+	JR	DCPP_CALC_ROW
+DCPP_HAS_LINES:
+	ADD	A,6
+DCPP_CALC_ROW:
+	; POPUP_ROW = ((ACTIVE_ROWS - TotalLines) / 2) + 1
+	LD	B,A
+	LD	A,(ACTIVE_ROWS)
+	SUB	B
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+
+	; Render Box
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+
+	; Line 1: Top Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 2: Title Line
+	CALL	POPUP_LOCATE_NEXT
+	LD	A,'|'
+	CALL	PUTC
+	CALL	GET_POPUP_TITLE_PTR
+	CALL	PRINT_STR
+	LD	A,'|'
+	CALL	PUTC
+
+	; Line 3: Top Separator
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Lines 4..: Items or No Match Message
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JR	NZ,DCPP_RENDER_ITEMS
+
+	; No matches found
+	CALL	POPUP_LOCATE_NEXT
+	LD	A,'|'
+	CALL	PUTC
+	LD	DE,STR_POPUP_NO_MATCH
+	CALL	PRINT_STR
+	LD	A,'|'
+	CALL	PUTC
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	A,'|'
+	CALL	PUTC
+	LD	DE,STR_POPUP_PROMPT_NOMATCH
+	CALL	PRINT_STR
+	LD	A,'|'
+	CALL	PUTC
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+	JR	CPK_KEY_LOOP
+
+DCPP_RENDER_ITEMS:
+	LD	C,0			; Match index 0..MATCH_COUNT-1
+DCPP_ITEM_LOOP:
+	LD	E,C
+	LD	D,0
+	LD	HL,POPUP_MATCH_SLOTS
+	ADD	HL,DE
+	LD	A,(HL)			; A = slot number
+	PUSH	BC
+	CALL	RENDER_POPUP_ITEM_LINE
+	POP	BC
+	INC	C
+	LD	A,(POPUP_MATCH_COUNT)
+	CP	C
+	JR	NZ,DCPP_ITEM_LOOP
+
+	; Separator after items
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Prompt Line
+	CALL	POPUP_LOCATE_NEXT
+	LD	A,'|'
+	CALL	PUTC
+	LD	DE,STR_POPUP_PROMPT_MATCH
+	CALL	PRINT_STR
+	LD	A,'|'
+	CALL	PUTC
+
+	; Bottom Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+CPK_KEY_LOOP:
+	CALL	GET_KEY
+	CP	KEY_ESC
+	JR	NZ,CPKL_NOT_ESC
+	CALL	DRAIN_ESC_SEQUENCE
+	JP	POPUP_DISMISS
+CPKL_NOT_ESC:
+	CP	KEY_CTRL_P
+	JP	Z,POPUP_DISMISS
+	CP	'q'
+	JP	Z,POPUP_DISMISS
+	CP	'Q'
+	JP	Z,POPUP_DISMISS
+
+	; Check digit '0'..'7'
+	CP	'0'
+	JR	C,CPK_KEY_LOOP
+	CP	'8'
+	JR	NC,CPK_KEY_LOOP
+
+	; Check if digit is in POPUP_MATCH_SLOTS
+	SUB	'0'
+	LD	C,A			; C = slot number
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JR	Z,CPK_KEY_LOOP
+	LD	B,A
+	LD	HL,POPUP_MATCH_SLOTS
+CPKL_CHK_SLOT:
+	LD	A,(HL)
+	CP	C
+	JR	Z,CPKL_FOUND_MATCH
+	INC	HL
+	DJNZ	CPKL_CHK_SLOT
+	JR	CPK_KEY_LOOP
+
+CPKL_FOUND_MATCH:
+	; Slot C selected! Determine Action Index (0, 1, or 2)
+	LD	A,C
+	PUSH	AF			; Save slot number
+	LD	A,(POPUP_CONTEXT_ID)
+	CP	PLUG_CTX_CONFIG
+	JR	NZ,CPEF_NOT_CONFIG
+	LD	C,2			; Action 2: Config
+	JR	CPEF_CALL_ACTION
+CPEF_NOT_CONFIG:
+	CP	PLUG_CTX_HELP
+	JR	Z,CPEF_DO_ABOUT
+	CP	PLUG_CTX_ABOUT
+	JR	NZ,CPEF_NOT_ABOUT
+CPEF_DO_ABOUT:
+	LD	C,1			; Action 1: About
+	JR	CPEF_CALL_ACTION
+CPEF_NOT_ABOUT:
+	LD	C,0			; Action 0: Main Execution
+CPEF_CALL_ACTION:
+	POP	AF			; A = slot number
+	CALL	EXEC_PLUGIN_SLOT_ACTION
+	JP	POPUP_DISMISS
+
+POPUP_LOCATE_NEXT:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	A,(POPUP_ROW)
+	LD	H,A
+	LD	A,(POPUP_COL)
+	LD	L,A
+	CALL	LOCATE_RC
+	LD	HL,POPUP_ROW
+	INC	(HL)
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+GET_POPUP_TITLE_PTR:
+	LD	A,(POPUP_CONTEXT_ID)
+	CP	PLUG_CTX_EDITOR
+	JR	NZ,GPTP_NOT_EDITOR
+	LD	DE,STR_TITLE_EDITOR
+	RET
+GPTP_NOT_EDITOR:
+	CP	PLUG_CTX_SPLASH
+	JR	NZ,GPTP_NOT_SPLASH
+	LD	DE,STR_TITLE_SPLASH
+	RET
+GPTP_NOT_SPLASH:
+	CP	PLUG_CTX_CONFIG
+	JR	NZ,GPTP_NOT_CONFIG
+	LD	DE,STR_TITLE_CONFIG
+	RET
+GPTP_NOT_CONFIG:
+	CP	PLUG_CTX_MEM_INFO
+	JR	NZ,GPTP_NOT_MEM
+	LD	DE,STR_TITLE_MEM_INFO
+	RET
+GPTP_NOT_MEM:
+	CP	PLUG_CTX_HELP
+	JR	Z,GPTP_HELP
+	CP	PLUG_CTX_ABOUT
+	JR	Z,GPTP_HELP
+	LD	DE,STR_TITLE_PLUGIN_MGR
+	RET
+GPTP_HELP:
+	LD	DE,STR_TITLE_HELP
+	RET
+
+RENDER_POPUP_ITEM_LINE:
+	LD	(POPUP_KEY_SAVED),A	; Slot number (0..7)
+	LD	B,A
+	CALL	GET_REGISTRY_ENTRY_PTR	; HL = entry address (name at HL+0)
+	PUSH	HL			; Save registry entry pointer
+
+	LD	DE,POPUP_LINE_BUF
+
+	; 1. Write "| ["
+	LD	A,'|'
+	LD	(DE),A
+	INC	DE
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
+	LD	A,'['
+	LD	(DE),A
+	INC	DE
+
+	; 2. Write slot digit
+	LD	A,(POPUP_KEY_SAVED)
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+
+	; 3. Write "] "
+	LD	A,']'
+	LD	(DE),A
+	INC	DE
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
+
+	; 4. Copy Plugin Name (12 characters, padded with spaces)
+	POP	HL			; HL = entry address (name at HL+0)
+	PUSH	HL			; Keep on stack for description lookup
+	LD	B,12
+RPIL_NAME_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,RPIL_NAME_PAD
+	CP	' '
+	JR	Z,RPIL_NAME_PAD
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	RPIL_NAME_LOOP
+	JR	RPIL_NAME_DONE
+RPIL_NAME_PAD:
+	LD	A,' '
+RPIL_PAD_L:
+	LD	(DE),A
+	INC	DE
+	DJNZ	RPIL_PAD_L
+RPIL_NAME_DONE:
+	; 5. Space separator
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
+
+	; 6. Description (29 characters)
+	POP	IX			; IX = registry entry pointer
+	CALL	GET_ITEM_DESC_PTR	; Returns HL = pointer to 29-char string
+	LD	B,29
+RPIL_DESC_LOOP:
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	DJNZ	RPIL_DESC_LOOP
+
+	; 7. Write " |"
+	LD	A,' '
+	LD	(DE),A
+	INC	DE
+	LD	A,'|'
+	LD	(DE),A
+	INC	DE
+
+	; 8. Terminate string with 0
+	XOR	A
+	LD	(DE),A
+
+	; 9. Print formatted line
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,POPUP_LINE_BUF
+	CALL	PRINT_STR
+	RET
+
+GET_ITEM_DESC_PTR:
+	LD	A,(POPUP_CONTEXT_ID)
+	CP	PLUG_CTX_CONFIG
+	JR	NZ,GIDP_NOT_CONFIG
+	LD	HL,STR_DESC_CONFIG
+	RET
+GIDP_NOT_CONFIG:
+	CP	PLUG_CTX_HELP
+	JR	Z,GIDP_ABOUT
+	CP	PLUG_CTX_ABOUT
+	JR	NZ,GIDP_NOT_ABOUT
+GIDP_ABOUT:
+	LD	HL,STR_DESC_ABOUT
+	RET
+GIDP_NOT_ABOUT:
+	CP	PLUG_CTX_MEM_INFO
+	JR	NZ,GIDP_NOT_MEM
+	LD	HL,STR_DESC_FAR
+	RET
+GIDP_NOT_MEM:
+	; For Editor, Splash, and Plugin Mgr, choose description based on capabilities
+	LD	A,(IX+20)		; Capabilities low byte
+	AND	04H			; CAP_DOC_MUTATE
+	JR	Z,GIDP_CHECK_MODAL
+	LD	HL,STR_DESC_MUTATE
+	RET
+GIDP_CHECK_MODAL:
+	LD	A,(IX+20)
+	AND	08H			; CAP_MODAL_UI
+	JR	Z,GIDP_CHECK_FAR
+	LD	HL,STR_DESC_MODAL
+	RET
+GIDP_CHECK_FAR:
+	LD	A,(IX+20)
+	AND	02H			; CAP_FAR_EXEC
+	JR	Z,GIDP_TOOL
+	LD	HL,STR_DESC_FAR
+	RET
+GIDP_TOOL:
+	LD	HL,STR_DESC_TOOL
+	RET
+
+POPUP_DISMISS:
+	LD	A,(POPUP_CONTEXT_ID)
+	CP	PLUG_CTX_EDITOR
+	JR	NZ,PDR_NOT_EDITOR
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	CALL	RENDER_SCREEN
+	RET
+PDR_NOT_EDITOR:
+	CP	PLUG_CTX_SPLASH
+	JR	NZ,PDR_NOT_SPLASH
+	CALL	RENDER_SPLASH
+	RET
+PDR_NOT_SPLASH:
+	CP	PLUG_CTX_CONFIG
+	JR	NZ,PDR_NOT_CONFIG
+	CALL	SHOW_CONFIG_SCREEN
+	RET
+PDR_NOT_CONFIG:
+	CP	PLUG_CTX_MEM_INFO
+	JR	NZ,PDR_NOT_MEM_INFO
+	CALL	SHOW_MEM_INFO_SCREEN
+	RET
+PDR_NOT_MEM_INFO:
+	CP	PLUG_CTX_HELP
+	JR	NZ,PDR_NOT_HELP
+	CALL	RENDER_HELP_SCREEN_STATIC
+	RET
+PDR_NOT_HELP:
+	CP	PLUG_CTX_ABOUT
+	JR	NZ,PDR_NOT_ABOUT
+	CALL	SHOW_ABOUT_SCREEN
+	RET
+PDR_NOT_ABOUT:
+	; Context is PLUG_CTX_PLUGIN_MGR
+	CALL	SHOW_PLUGIN_SCREEN
+	RET
+
+; Context Plugin Pop-up String Constants
+STR_POPUP_BORDER:		DB	"+------------------------------------------------+", 0
+STR_TITLE_EDITOR:		DB	"        Plugins for Editor (Run Plugin)         ", 0
+STR_TITLE_SPLASH:		DB	"          All Available Installed Plugins       ", 0
+STR_TITLE_CONFIG:		DB	"       Plugins with Configurable Settings       ", 0
+STR_TITLE_MEM_INFO:		DB	"        Plugins with Far RAM Memory Usage       ", 0
+STR_TITLE_PLUGIN_MGR:		DB	"            Installed Plugin Catalog            ", 0
+STR_TITLE_HELP:			DB	"       Plugins with Embedded Documentation      ", 0
+STR_POPUP_NO_MATCH:		DB	"    No plugins found for this screen context    ", 0
+STR_POPUP_PROMPT_NOMATCH:	DB	"   Press [Esc], [q], or [Ctrl+P] to Dismiss     ", 0
+STR_POPUP_PROMPT_MATCH:		DB	" Select [0-7] to Execute, [Esc]/[Ctrl+P] to Exit", 0
+STR_DESC_CONFIG:		DB	"Embedded Plugin Settings     ", 0
+STR_DESC_ABOUT:			DB	"Modal About & Info Dialog    ", 0
+STR_DESC_FAR:			DB	"Far RAM Resident (Bank 89h)  ", 0
+STR_DESC_MODAL:			DB	"Modal Dialog Summary         ", 0
+STR_DESC_MUTATE:		DB	"Mutates Active Document      ", 0
+STR_DESC_TOOL:			DB	"Standalone Plugin Tool       ", 0
+
 ; Plugin UI String Constants
 STR_PLUG_TITLE:		DB	"SE - Plugin Manager (CP/M 3 PRL & OVL 4KB Slots)", 0
 STR_PLUG_SYS_PRE:	DB	"Far RAM: [", 0
@@ -20654,13 +21212,13 @@ STR_HELP_BODY:
 	DB	"~  FILE & SYSTEM:",13,10
 	DB	"~    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
 	DB	"~    Ctrl+W           Close file to splash    Ctrl+Q          Quit to CP/M",13,10
-	DB	"~    Ctrl+K           Help / Solidify block   ESC             Splash / Clear",13,10
+	DB	"~    Ctrl+K           Help / Solidify block   Ctrl+P          Plugins pop-up",13,10
 	DB	"~  NAVIGATION & SEARCH:",13,10
 	DB	"~    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
 	DB	"~    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
 	DB	"~    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
 	DB	"~    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10
-	DB	"~    Ctrl+F           Find text               Ctrl+N / Ctrl+P Find next / prev",13,10
+	DB	"~    Ctrl+F           Find text               Ctrl+N          Find next",13,10
 	DB	"~    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle find case",13,10
 	DB	"~  EDITING & BLOCK:",13,10
 	DB	"~    Insert           Toggle Insert/Overwrite Enter           New line",13,10
@@ -21028,6 +21586,13 @@ RELOC_CUR_BYTE:		DB	0
 PLUGIN_REGISTRY:	DS	8 * 24
 STR_PLUG_SYS_BUF:	DS	80
 STR_PLUG_ROW_BUF:	DS	80
+POPUP_CONTEXT_ID:	DB	0
+POPUP_MATCH_COUNT:	DB	0
+POPUP_MATCH_SLOTS:	DS	8
+POPUP_ROW:		DB	0
+POPUP_COL:		DB	0
+POPUP_KEY_SAVED:	DB	0
+POPUP_LINE_BUF:		DS	64
 
 ;==============================================================================
 ; Upper Memory Host API Trampoline & Vector Table
