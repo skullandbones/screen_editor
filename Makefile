@@ -11,10 +11,10 @@ CPMRM ?= $(TOOLS_DIR)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all plugins image check-tpa test test-sanity test-conformity \
-	test-paging test-config test-32k test-cpm3 test-plugins \
-	test-beautifier test-popup test-slots test-fatfs test-fatfs-slot \
-	test-fatfs-vfs test-fatfs-hook test-full clean
+.PHONY: all plugins image check-tpa check-plugins test test-sanity \
+	test-conformity test-paging test-config test-32k test-cpm3 \
+	test-plugins test-beautifier test-popup test-slots test-fatfs \
+	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full clean
 
 all: $(TARGET) plugins
 
@@ -25,6 +25,10 @@ $(TARGET): $(ASM_SRC)
 check-tpa: $(TARGET)
 	@echo "==> Checking $(TARGET) memory footprint against TPA..."
 	python3 check_tpa.py $(TARGET)
+
+check-plugins:
+	@echo "==> Checking plugin binaries and ABI conformance..."
+	python3 check_plugin.py --all
 
 plugins:
 	@echo "==> Building plugins (ROT13, WORDCNT, BEAUTIFY, HALFPLUG, BIGPLUG)..."
