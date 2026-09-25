@@ -42,14 +42,10 @@ API_OK:
 	JR	NZ,INIT_ERR
 
 	; Print modal 32KB execution banner
-	LD	DE,STR_BOX_TOP
-	CALL	CALL_HOST_PRINT
-	LD	DE,STR_BOX_BODY1
-	CALL	CALL_HOST_PRINT
-	LD	DE,STR_BOX_BODY2
-	CALL	CALL_HOST_PRINT
-	LD	DE,STR_BOX_BOT
-	CALL	CALL_HOST_PRINT
+	LD	HL,BIG_EXEC_TABLE
+	LD	B,8
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
 
 	; Wait for keypress
 	CALL	CALL_HOST_GETKEY
@@ -79,12 +75,56 @@ ABT_API_OK:
 	CP	'E'
 	JR	NZ,INIT_ERR
 
-	LD	DE,STR_BIG_ABOUT
-	CALL	CALL_HOST_PRINT
+	LD	HL,BIG_ABT_TABLE
+	LD	B,9
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
 	CALL	CALL_HOST_GETKEY
 
 	XOR	A			; A = 0: Clean
 	OR	A			; CY = 0
+	RET
+
+;------------------------------------------------------------------------------
+; Centered Modal Box Renderer
+;------------------------------------------------------------------------------
+RENDER_CENTERED_BOX:
+	; B = line count, C = box width, HL = table of line string addresses
+	LD	A,(IX+16)
+	SUB	B
+	SRL	A
+	INC	A
+	LD	D,A			; D = StartRow
+
+	LD	A,(IX+14)
+	SUB	C
+	SRL	A
+	INC	A
+	LD	E,A			; E = StartCol
+
+RCB_LOOP:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	H,D
+	LD	L,E
+	CALL	CALL_HOST_LOCATE
+
+	POP	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	PUSH	HL
+
+	CALL	CALL_HOST_PRINT
+
+	POP	HL
+	POP	DE
+	INC	D
+	POP	BC
+	DJNZ	RCB_LOOP
 	RET
 
 ;------------------------------------------------------------------------------
@@ -104,35 +144,54 @@ CALL_HOST_GETKEY:
 	ADD	HL,BC
 	JP	(HL)
 
+CALL_HOST_LOCATE:
+	PUSH	IX
+	EX	(SP),HL
+	PUSH	BC
+	LD	BC,52			; Offset +52: LOCATE_RC (H=Row, L=Col)
+	ADD	HL,BC
+	POP	BC
+	EX	(SP),HL
+	RET
+
 ;------------------------------------------------------------------------------
 ; UI Strings & Dialog Boxes
 ;------------------------------------------------------------------------------
-STR_BOX_TOP:
-	DB	13,10,"~ +------------------------------------+",13,10
-	DB	"~ |       BIGPLUG (32KB Far RAM Plugin)|",13,10
-	DB	"~ +------------------------------------+",13,10,"$"
+STR_BIG_BORDER:		DB	"+------------------------------------+", 0
 
-STR_BOX_BODY1:
-	DB	"~ | Mode   : Far RAM Direct Execution  |",13,10,"$"
+; Execution Dialog Table
+BIG_EXEC_TABLE:
+	DW	STR_BIG_BORDER
+	DW	STR_BIG_EXEC_L2
+	DW	STR_BIG_BORDER
+	DW	STR_BIG_EXEC_L4
+	DW	STR_BIG_EXEC_L5
+	DW	STR_BIG_BORDER
+	DW	STR_BIG_EXEC_L7
+	DW	STR_BIG_BORDER
 
-STR_BOX_BODY2:
-	DB	"~ | Size   : 32KB Modular Slot Class   |",13,10,"$"
+STR_BIG_EXEC_L2:	DB	"|       BIGPLUG (32KB Far RAM Plugin)|", 0
+STR_BIG_EXEC_L4:	DB	"| Mode   : Far RAM Direct Execution  |", 0
+STR_BIG_EXEC_L5:	DB	"| Size   : 32KB Modular Slot Class   |", 0
+STR_BIG_EXEC_L7:	DB	"|     [Press any key to continue]    |", 0
 
-STR_BOX_BOT:
-	DB	"~ +------------------------------------+",13,10
-	DB	"~ |     [Press any key to continue]    |",13,10
-	DB	"~ +------------------------------------+",13,10,"$"
+; About Dialog Table
+BIG_ABT_TABLE:
+	DW	STR_BIG_BORDER
+	DW	STR_BIG_ABT_L2
+	DW	STR_BIG_BORDER
+	DW	STR_BIG_ABT_L4
+	DW	STR_BIG_ABT_L5
+	DW	STR_BIG_ABT_L6
+	DW	STR_BIG_BORDER
+	DW	STR_BIG_ABT_L8
+	DW	STR_BIG_BORDER
 
-STR_BIG_ABOUT:
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |    BIGPLUG 32KB Reference Plugin   |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ | Version: v0.1.0 (2026-09-24)       |"
-	DB	13,10,"~ | Size   : 32KB Far RAM Slot Class   |"
-	DB	13,10,"~ | Mode   : Far RAM Direct Execution  |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |     [Press any key to return]      |"
-	DB	13,10,"~ +------------------------------------+",13,10,"$"
+STR_BIG_ABT_L2:		DB	"|    BIGPLUG 32KB Reference Plugin   |", 0
+STR_BIG_ABT_L4:		DB	"| Version: v0.1.0 (2026-09-24)       |", 0
+STR_BIG_ABT_L5:		DB	"| Size   : 32KB Far RAM Slot Class   |", 0
+STR_BIG_ABT_L6:		DB	"| Mode   : Far RAM Direct Execution  |", 0
+STR_BIG_ABT_L8:		DB	"|     [Press any key to return]      |", 0
 
 ;------------------------------------------------------------------------------
 ; 32KB Slot Padding Payload (> 16384 bytes and <= 32768 bytes)

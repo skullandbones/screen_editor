@@ -130,12 +130,56 @@ ABT_API_OK:
 	CP	'E'
 	JR	NZ,INIT_ERR
 
-	LD	DE,STR_ROT13_ABOUT
-	CALL	CALL_HOST_PRINT
+	LD	HL,ROT13_ABT_TABLE
+	LD	B,11
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
 	CALL	CALL_HOST_GETKEY
 
 	XOR	A			; A = 0: Clean, document unmodified
 	OR	A			; Clear Carry (CY=0)
+	RET
+
+;------------------------------------------------------------------------------
+; Centered Modal Box Renderer
+;------------------------------------------------------------------------------
+RENDER_CENTERED_BOX:
+	; B = line count, C = box width, HL = table of line string addresses
+	LD	A,(IX+16)
+	SUB	B
+	SRL	A
+	INC	A
+	LD	D,A			; D = StartRow
+
+	LD	A,(IX+14)
+	SUB	C
+	SRL	A
+	INC	A
+	LD	E,A			; E = StartCol
+
+RCB_LOOP:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	H,D
+	LD	L,E
+	CALL	CALL_HOST_LOCATE
+
+	POP	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	PUSH	HL
+
+	CALL	CALL_HOST_PRINT
+
+	POP	HL
+	POP	DE
+	INC	D
+	POP	BC
+	DJNZ	RCB_LOOP
 	RET
 
 ;------------------------------------------------------------------------------
@@ -162,21 +206,40 @@ CALL_HOST_STATUS:
 	ADD	HL,BC
 	JP	(HL)
 
+CALL_HOST_LOCATE:
+	PUSH	IX
+	EX	(SP),HL
+	PUSH	BC
+	LD	BC,52			; Offset +52: LOCATE_RC (H=Row, L=Col)
+	ADD	HL,BC
+	POP	BC
+	EX	(SP),HL
+	RET
+
 ;------------------------------------------------------------------------------
 ; Relocatable Data
 ;------------------------------------------------------------------------------
 MSG_SUCCESS:
 	DB	"[ROT13 Applied]$", 0
 
-STR_ROT13_ABOUT:
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |       ROT13 Text Cipher Plugin     |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ | Version: v0.1.0 (2026-09-23)       |"
-	DB	13,10,"~ | Compatible with SE.COM >= v0.9.7   |"
-	DB	13,10,"~ | Mode   : 4KB TPA Overlaid Slot     |"
-	DB	13,10,"~ | Scope  : Current Editor Line       |"
-	DB	13,10,"~ | Action : Reversible 13-Char Shift  |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |     [Press any key to return]      |"
-	DB	13,10,"~ +------------------------------------+",13,10,"$"
+ROT13_ABT_TABLE:
+	DW	STR_ROT13_BORDER
+	DW	STR_ROT13_L2
+	DW	STR_ROT13_BORDER
+	DW	STR_ROT13_L4
+	DW	STR_ROT13_L5
+	DW	STR_ROT13_L6
+	DW	STR_ROT13_L7
+	DW	STR_ROT13_L8
+	DW	STR_ROT13_BORDER
+	DW	STR_ROT13_L10
+	DW	STR_ROT13_BORDER
+
+STR_ROT13_BORDER: DB	"+------------------------------------+", 0
+STR_ROT13_L2:	DB	"|       ROT13 Text Cipher Plugin     |", 0
+STR_ROT13_L4:	DB	"| Version: v0.1.0 (2026-09-23)       |", 0
+STR_ROT13_L5:	DB	"| Compatible with SE.COM >= v0.9.7   |", 0
+STR_ROT13_L6:	DB	"| Mode   : 4KB TPA Overlaid Slot     |", 0
+STR_ROT13_L7:	DB	"| Scope  : Current Editor Line       |", 0
+STR_ROT13_L8:	DB	"| Action : Reversible 13-Char Shift  |", 0
+STR_ROT13_L10:	DB	"|     [Press any key to return]      |", 0
