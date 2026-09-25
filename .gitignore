@@ -19,3 +19,6 @@
 __pycache__/
 *.pyc
 
+# Distribution and release packages
+dist/
+
