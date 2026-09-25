@@ -78,8 +78,32 @@ def main():
                     os.path.join(plugin_dir, "beautify_100.bin"),
                     os.path.join(plugin_dir, "beautify_200.bin")], check=True)
 
-    # 4. Build HALFPLUG.PRL (16KB Slot Class)
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'halfplug_100.bin')}",
+    # 4. Build MIDPLUG.PRL (8KB Slot Class)
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'midplug_100.bin')}",
+                    os.path.join(plugin_dir, "midplug.asm")], check=True)
+
+    midplug_200_asm = os.path.join(plugin_dir, "midplug_200.asm")
+    with open(os.path.join(plugin_dir, "midplug.asm"), "r") as f:
+        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
+    with open(midplug_200_asm, "w") as f:
+        f.write(src)
+
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'midplug_200.bin')}",
+                    midplug_200_asm], check=True)
+    if os.path.exists(midplug_200_asm):
+        os.remove(midplug_200_asm)
+
+    subprocess.run([sys.executable, mkprl_bin, "-n", "MIDPLUG",
+                    "-o", os.path.join(plugin_dir, "MIDPLUG.PRL"),
+                    "--size", "8k", "--far", "--modal", "--has-about",
+                    os.path.join(plugin_dir, "midplug_100.bin"),
+                    os.path.join(plugin_dir, "midplug_200.bin")], check=True)
+
+    # 5. Build HALFPLUG.PRL (16KB Slot Class)
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'halfplug_100.bin')}",
                     os.path.join(plugin_dir, "halfplug.asm")], check=True)
 
     halfplug_200_asm = os.path.join(plugin_dir, "halfplug_200.asm")
@@ -88,7 +112,8 @@ def main():
     with open(halfplug_200_asm, "w") as f:
         f.write(src)
 
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'halfplug_200.bin')}",
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'halfplug_200.bin')}",
                     halfplug_200_asm], check=True)
     if os.path.exists(halfplug_200_asm):
         os.remove(halfplug_200_asm)
@@ -99,8 +124,9 @@ def main():
                     os.path.join(plugin_dir, "halfplug_100.bin"),
                     os.path.join(plugin_dir, "halfplug_200.bin")], check=True)
 
-    # 5. Build BIGPLUG.PRL (32KB Slot Class)
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'bigplug_100.bin')}",
+    # 6. Build BIGPLUG.PRL (32KB Slot Class)
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'bigplug_100.bin')}",
                     os.path.join(plugin_dir, "bigplug.asm")], check=True)
 
     bigplug_200_asm = os.path.join(plugin_dir, "bigplug_200.asm")
@@ -109,7 +135,8 @@ def main():
     with open(bigplug_200_asm, "w") as f:
         f.write(src)
 
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'bigplug_200.bin')}",
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'bigplug_200.bin')}",
                     bigplug_200_asm], check=True)
     if os.path.exists(bigplug_200_asm):
         os.remove(bigplug_200_asm)
@@ -120,8 +147,9 @@ def main():
                     os.path.join(plugin_dir, "bigplug_100.bin"),
                     os.path.join(plugin_dir, "bigplug_200.bin")], check=True)
 
-    # 6. Build PLUGIN.PRL (4KB Far RAM Plugin Manager & Context Pop-up)
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'plugin_100.bin')}",
+    # 7. Build PLUGIN.PRL (8KB Far RAM Plugin Manager & Context Pop-up)
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'plugin_100.bin')}",
                     os.path.join(plugin_dir, "plugin.asm")], check=True)
 
     plugin_200_asm = os.path.join(plugin_dir, "plugin_200.asm")
@@ -130,20 +158,23 @@ def main():
     with open(plugin_200_asm, "w") as f:
         f.write(src)
 
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'plugin_200.bin')}",
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'plugin_200.bin')}",
                     plugin_200_asm], check=True)
     if os.path.exists(plugin_200_asm):
         os.remove(plugin_200_asm)
 
     subprocess.run([sys.executable, mkprl_bin, "-n", "PLUGIN",
                     "-o", os.path.join(plugin_dir, "PLUGIN.PRL"),
-                    "--size", "16k", "--far", "--modal", "--has-about", "--bss", "128",
+                    "--size", "8k", "--far", "--modal", "--has-about",
+                    "--bss", "128",
                     os.path.join(plugin_dir, "plugin_100.bin"),
                     os.path.join(plugin_dir, "plugin_200.bin")], check=True)
 
     # Clean up temporary binaries
     for tmp in ["rot13_100.bin", "rot13_200.bin", "wordcnt.bin",
                 "beautify_100.bin", "beautify_200.bin",
+                "midplug_100.bin", "midplug_200.bin",
                 "halfplug_100.bin", "halfplug_200.bin",
                 "bigplug_100.bin", "bigplug_200.bin",
                 "plugin_100.bin", "plugin_200.bin"]:
@@ -155,6 +186,7 @@ def main():
     print(f"    - {os.path.join(plugin_dir, 'ROT13.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'WORDCNT.OVL')}")
     print(f"    - {os.path.join(plugin_dir, 'BEAUTIFY.PRL')}")
+    print(f"    - {os.path.join(plugin_dir, 'MIDPLUG.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'HALFPLUG.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'BIGPLUG.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'PLUGIN.PRL')}")

@@ -1,6 +1,6 @@
 # SE.COM Plugin Architecture & Application Binary Interface (ABI) Specification
 **Version 1.3 (2026-09-25)**
-*Modular Far RAM Slots (4K, 16K, 32K), CP/M 3 Standard & Headless VFS ABI*
+*Modular Far RAM Slots (4K, 8K, 16K, 32K), CP/M 3 Standard & Headless VFS ABI*
 
 This document specifies the technical architecture, binary packaging standards,
 execution lifecycles, and Application Binary Interface (ABI) for modular plugins
@@ -30,7 +30,7 @@ format standards.
 | 0x0000 .. 0x7FFF: TPA Slot (4KB)   |   | 0x0000 .. 0x7FFF: Far RAM Banks    |
 | - Overlays LINE_STORAGE (5,120 B)  |   | - Borrowed on-demand (32KB Banks)  |
 | - Strictly restricted to 4KB size  |   | - 4K: Sub-allocated 8 x 4KB slots  |
-| - Zero extra bytes of TPA RAM      |   | - 16K / 32K: Dedicated 32KB bank   |
+| - Zero extra bytes of TPA RAM      |   | - 8K/16K/32K: Dedicated 32KB bank  |
 | - On-the-fly PRL page relocation   |   | - Direct execution via RomWBW      |
 | - Relocates to high_byte(TPA_SLOT) |   |   HB_BNKCALL proxy (0xFFF9)        |
 +------------------------------------+   +------------------------------------+
@@ -39,15 +39,19 @@ format standards.
 ### Execution Models & Size Classes
 
 Plugins declare their size class in header metadata (`CAPABILITIES` bits 7..6):
-- **4KB Plugins (`CAP_SIZE_4K = 0x0000`)**: Payload <= 4096 bytes.
+- **4KB Plugins (`CAP_SIZE_4K = 0x0000`, `00b`)**: Payload <= 4096 bytes.
   Can execute either in the 4KB TPA overlay slot (`CAP_TPA_EXEC`) or in Far RAM
   (`CAP_FAR_EXEC`). Multiple 4KB plugins share a single 32KB Far RAM bank,
   sub-allocated into 4KB slots (`0x0000, 0x1000, 0x2000, ...`).
-- **16KB Plugins (`CAP_SIZE_16K = 0x0040`)**: Payload <= 16384 bytes.
+- **8KB Plugins (`CAP_SIZE_8K = 0x0040`, `01b`)**: Payload <= 8192 bytes.
   Strictly restricted from TPA overlay execution. Dynamically allocated a
   dedicated 32KB Far RAM bank borrowed on-demand from `EXT_BANK_TABLE`. Always
   executes at base page `0x00` (entry point `0x0100`).
-- **32KB Plugins (`CAP_SIZE_32K = 0x0080`)**: Payload <= 32768 bytes.
+- **16KB Plugins (`CAP_SIZE_16K = 0x0080`, `10b`)**: Payload <= 16384 bytes.
+  Strictly restricted from TPA overlay execution. Dynamically allocated a
+  dedicated 32KB Far RAM bank borrowed on-demand from `EXT_BANK_TABLE`. Always
+  executes at base page `0x00` (entry point `0x0100`).
+- **32KB Plugins (`CAP_SIZE_32K = 0x00C0`, `11b`)**: Payload <= 32768 bytes.
   Heavyweight plugins (such as FAT filesystem drivers) requiring full 32KB
   Far RAM banks. Strictly restricted from TPA overlay execution. Dynamically
   allocated a dedicated 32KB Far RAM bank borrowed on-demand. Always executes
@@ -96,9 +100,10 @@ Bit: 15..9   8    7..6   5     4     3     2     1     0
 | `CAP_MODAL_UI` | `0x0008` | Renders modal UI dialog or summary box. |
 | `CAP_HAS_ABOUT`| `0x0010` | Implements modal About Screen (`ENTRY+3`).|
 | `CAP_HAS_CONFIG`| `0x0020`| Implements Config Screen (`ENTRY+6`). |
-| `CAP_SIZE_4K`  | `0x0000` | 4KB size class (<= 4096B payload). |
-| `CAP_SIZE_16K` | `0x0040` | 16KB size class (<= 16384B payload). |
-| `CAP_SIZE_32K` | `0x0080` | 32KB size class (<= 32768B payload). |
+| `CAP_SIZE_4K`  | `0x0000` | 4KB size class (<= 4096B payload, 00b). |
+| `CAP_SIZE_8K`  | `0x0040` | 8KB size class (<= 8192B payload, 01b). |
+| `CAP_SIZE_16K` | `0x0080` | 16KB size class (<= 16384B payload, 10b). |
+| `CAP_SIZE_32K` | `0x00C0` | 32KB size class (<= 32768B payload, 11b). |
 | `CAP_SIZE_MASK`| `0x00C0` | Mask for size class bits 7..6. |
 | `CAP_HAS_VFS`  | `0x0100` | Implements Headless VFS Vector (`ENTRY+9`). |
 
@@ -132,8 +137,8 @@ simultaneously (`PLUGIN_MAX_SLOTS = 8`), each described by a 32-byte descriptor.
 | `EXEC_MODE` | `+23` | Byte | `0` = TPA Overlay, `1` = Far RAM |
 | `FAR_BANK` | `+24` | Byte | Assigned RomWBW Far RAM Bank ID |
 | `BASE_PAGE` | `+25` | Byte | Base page in bank (`00h`, `10h`, etc.) |
-| `SIZE_CLASS` | `+26` | Byte | `0` = 4KB, `1` = 16KB, `2` = 32KB |
-| `PAGE_COUNT` | `+27` | Byte | Allocated 256B pages (16, 64, or 128) |
+| `SIZE_CLASS` | `+26` | Byte | `0` = 4KB, `1` = 8KB, `2` = 16KB, `3` = 32KB |
+| `PAGE_COUNT` | `+27` | Byte | Allocated 256B pages (16, 32, 64, or 128) |
 | `RESERVED` | `+28` | 4B | Reserved padding (zero-filled) |
 
 ### Dynamic Multi-Bank Allocation Algorithm
@@ -141,8 +146,9 @@ simultaneously (`PLUGIN_MAX_SLOTS = 8`), each described by a 32-byte descriptor.
 When a plugin is loaded (`LOAD_PLUGIN_BY_NAME` / `ALLOC_FAR_PLUGIN_SLOT`):
 1. **Determine Page Requirement**:
    - 4KB class (`SIZE_CLASS 0`): 16 pages (4,096 bytes).
-   - 16KB class (`SIZE_CLASS 1`): 64 pages (16,384 bytes).
-   - 32KB class (`SIZE_CLASS 2`): 128 pages (32,768 bytes).
+   - 8KB class (`SIZE_CLASS 1`): 32 pages (8,192 bytes).
+   - 16KB class (`SIZE_CLASS 2`): 64 pages (16,384 bytes).
+   - 32KB class (`SIZE_CLASS 3`): 128 pages (32,768 bytes).
 2. **Sub-Allocation for 4KB Plugins**:
    - The editor scans all currently borrowed Far RAM banks recorded in
      `BORROWED_BANKS_TBL`.
@@ -153,8 +159,8 @@ When a plugin is loaded (`LOAD_PLUGIN_BY_NAME` / `ALLOC_FAR_PLUGIN_SLOT`):
    - If all borrowed banks are full (or none borrowed yet), a new 32KB bank is
      borrowed via `BORROW_NEW_FAR_BANK` from RomWBW `EXT_BANK_TABLE` and base
      page `0x00` is allocated.
-3. **Dedicated Bank Allocation for 16KB & 32KB Plugins**:
-   - Heavyweight plugins require dedicated 32KB banks to avoid address
+3. **Dedicated Bank Allocation for 8KB, 16KB & 32KB Plugins**:
+   - Dedicated plugins require dedicated 32KB banks to avoid address
      conflicts and eliminate the need for run-time code relocation.
    - The editor checks if any borrowed bank is completely free (`C=0, E=128`).
    - If not, a new 32KB bank is borrowed from `EXT_BANK_TABLE`.
@@ -570,33 +576,39 @@ When executing `VFS_CMD_LIST_DIR`, entries are written sequentially into
 
 To maximize available TPA RAM for text editing and reduce core binary footprint,
 the full-screen interactive **Plugin Manager UI** and the **Context-Aware `Ctrl+P`
-Modal Subsystem** are extracted from `SE.COM` into a standalone 16KB Far RAM
+Modal Subsystem** are extracted from `SE.COM` into a standalone 8KB Far RAM
 modular plugin: **`PLUGIN.PRL`**.
 
 ### Architecture & Capabilities
 
-`PLUGIN.PRL` is packaged as a 16KB Far RAM modular plugin:
+`PLUGIN.PRL` is packaged as an 8KB Far RAM modular plugin:
 ```bash
 python3 tools/mkprl.py -n PLUGIN -o plugins/PLUGIN.PRL \
-    --size 16k --far --modal --has-about --bss 128 \
+    --size 8k --far --modal --has-about --bss 128 \
     plugins/plugin_100.bin plugins/plugin_200.bin
 ```
-- **Capabilities Word**: `0x005A` (`CAP_FAR_EXEC | CAP_MODAL_UI | CAP_HAS_ABOUT | CAP_SIZE_16K`).
-- **Memory Allocation**: Resident in a dedicated 32KB Far RAM bank (`PLUGIN_MGR_BANK`),
-  borrowed on-demand via `BORROW_PLUGIN_MGR_BANK` from RomWBW's `EXT_BANK_TABLE`.
-- **Bank Isolation**: `PLUGIN_MGR_BANK` is strictly isolated from `BORROWED_BANKS_TBL`
-  and protected by an explicit guard in `IS_RANGE_FREE_IN_BANK`. User plugin slots
-  (`0`..`7`) never allocate within `PLUGIN_MGR_BANK`, preventing bank collisions and
-  in-place corruption during concurrent plugin loading.
-- **Dynamic Bank Stealing Policy**: RomWBW systems provide up to 4 application banks.
-  `BORROW_NEW_FAR_BANK` allows borrowing down to 0 extra document banks when no document
-  is actively being edited (`IN_EDITOR_MODE == 0`). When actively editing (`IN_EDITOR_MODE != 0`),
-  Bank 0 (`EXT_BANK_TABLE[0]`) is strictly preserved for resident text storage.
+- **Capabilities Word**: `0x005A`
+  (`CAP_FAR_EXEC | CAP_MODAL_UI | CAP_HAS_ABOUT | CAP_SIZE_8K`).
+- **Memory Allocation**: Resident in a dedicated 32KB Far RAM bank
+  (`PLUGIN_MGR_BANK`), borrowed on-demand via `BORROW_PLUGIN_MGR_BANK`
+  from RomWBW's `EXT_BANK_TABLE`.
+- **Bank Isolation**: `PLUGIN_MGR_BANK` is strictly isolated from
+  `BORROWED_BANKS_TBL` and protected by an explicit guard in
+  `IS_RANGE_FREE_IN_BANK`. User plugin slots (`0`..`7`) never allocate within
+  `PLUGIN_MGR_BANK`, preventing bank collisions and in-place corruption during
+  concurrent plugin loading.
+- **Dynamic Bank Stealing Policy**: RomWBW systems provide up to 4 application
+  banks. `BORROW_NEW_FAR_BANK` allows borrowing down to 0 extra document banks
+  when no document is actively being edited (`IN_EDITOR_MODE == 0`). When
+  actively editing (`IN_EDITOR_MODE != 0`), Bank 0 (`EXT_BANK_TABLE[0]`) is
+  strictly preserved for resident text storage.
 - **Entry Jump Table**:
-  - `ENTRY + 0`: Action 0 — Full-Screen Interactive Plugin Manager (`DO_PLUGIN_MANAGER`).
+  - `ENTRY + 0`: Action 0 — Full-Screen Interactive Plugin Manager
+    (`DO_PLUGIN_MANAGER`).
   - `ENTRY + 3`: Action 1 — Context-Aware Modal Dialog (`DO_CONTEXT_POPUP`).
   - `ENTRY + 6`: Action 2 — Modal About Dialog (`DO_PLUGIN_ABOUT`).
-- **Trampoline Context Switching**: Host trampolines (`TRAMP_LOAD_PLUGIN`, `TRAMP_UNLOAD_SLOT`,
-  `TRAMP_REDRAW_BASE`) preserve caller Far RAM banks across inter-bank transitions to
-  guarantee re-entrant execution between `PLUGIN.PRL` and user plugin slots.
+- **Trampoline Context Switching**: Host trampolines (`TRAMP_LOAD_PLUGIN`,
+  `TRAMP_UNLOAD_SLOT`, `TRAMP_REDRAW_BASE`) preserve caller Far RAM banks
+  across inter-bank transitions to guarantee re-entrant execution between
+  `PLUGIN.PRL` and user plugin slots.
 

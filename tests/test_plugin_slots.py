@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Automated Test Suite for SE.COM Modular Plugin Slots (4K, 16K, 32K).
+Automated Test Suite for SE.COM Modular Plugin Slots (4K, 8K, 16K, 32K).
 Verifies:
   1. Tooling & Packaging Validation:
      - mkprl.py enforces 4KB restriction for TPA execution.
-     - mkprl.py enforces maximum payload sizes for 4K (4096B), 16K (16384B), 32K (32768B).
+     - mkprl.py enforces maximum payload sizes for 4K, 8K, 16K, 32K.
      - Capability bitflags encode size class in bits 7..6.
   2. Multi-Bank & Multi-Size Runtime Lifecycle:
      - Boots RomWBW on RC2014 emulator.
      - Opens Plugin Manager from Splash Screen.
      - Verifies auto-probed 4KB plugins display "FAR (4KB)" and "TPA (4KB)".
+     - Dynamically loads 8KB plugin (MIDPLUG.PRL) into Slot 3 ("FAR (8KB)").
+     - Executes MIDPLUG in Far RAM and verifies modal dialog display & return.
+     - Unloads MIDPLUG, verifying automatic Far RAM bank release.
      - Dynamically loads 16KB plugin (HALFPLUG.PRL) into Slot 3 ("FAR (16KB)").
      - Dynamically loads 32KB plugin (BIGPLUG.PRL) into Slot 4 ("FAR (32KB)"),
        triggering multi-bank Far RAM dynamic borrowing.
@@ -45,25 +48,41 @@ def test_tooling_validations(mkprl_bin):
     """Verify mkprl.py constraints on sizes and TPA execution."""
     print("[*] Running mkprl.py packaging and validation tests...", flush=True)
 
-    # 1. 16KB / 32KB rejection of --tpa
-    proc = subprocess.run([sys.executable, mkprl_bin, "-n", "FAIL16", "-o", "/dev/null",
-                           "--size", "16k", "--tpa", "/dev/null"],
+    # 1. 8KB / 16KB / 32KB rejection of --tpa
+    proc = subprocess.run([sys.executable, mkprl_bin, "-n", "FAIL8",
+                           "-o", "/dev/null", "--size", "8k",
+                           "--tpa", "/dev/null"],
+                          capture_output=True, text=True)
+    if proc.returncode == 0:
+        print("[-] mkprl.py failed to reject --size 8k with --tpa", flush=True)
+        return False
+    if "cannot use --tpa" not in proc.stderr:
+        print(f"[-] Unexpected error message for 8K --tpa: {proc.stderr}",
+              flush=True)
+        return False
+
+    proc = subprocess.run([sys.executable, mkprl_bin, "-n", "FAIL16",
+                           "-o", "/dev/null", "--size", "16k",
+                           "--tpa", "/dev/null"],
                           capture_output=True, text=True)
     if proc.returncode == 0:
         print("[-] mkprl.py failed to reject --size 16k with --tpa", flush=True)
         return False
     if "cannot use --tpa" not in proc.stderr:
-        print(f"[-] Unexpected error message for 16K --tpa: {proc.stderr}", flush=True)
+        print(f"[-] Unexpected error message for 16K --tpa: {proc.stderr}",
+              flush=True)
         return False
 
-    proc = subprocess.run([sys.executable, mkprl_bin, "-n", "FAIL32", "-o", "/dev/null",
-                           "--size", "32k", "--tpa", "/dev/null"],
+    proc = subprocess.run([sys.executable, mkprl_bin, "-n", "FAIL32",
+                           "-o", "/dev/null", "--size", "32k",
+                           "--tpa", "/dev/null"],
                           capture_output=True, text=True)
     if proc.returncode == 0:
         print("[-] mkprl.py failed to reject --size 32k with --tpa", flush=True)
         return False
 
-    print("[+] Verified mkprl.py rejects --tpa for 16KB and 32KB plugins.", flush=True)
+    print("[+] Verified mkprl.py rejects --tpa for 8K, 16K, 32K plugins.",
+          flush=True)
     return True
 
 
@@ -173,7 +192,54 @@ def run_slots_test():
             return False
         print("[+] Plugin Manager displayed 4KB slot mode identifiers.", flush=True)
 
-        # 4. Load 16KB Plugin (HALFPLUG.PRL)
+        # 4. Load 8KB Plugin (MIDPLUG.PRL)
+        time.sleep(0.3)
+        drain_all(master)
+        os.write(master, b"l")
+        read_until(master, b"Load Plugin", timeout=4.0)
+        time.sleep(0.1)
+        os.write(master, b"MIDPLUG.PRL\r")
+        ok, out_mp = read_until(master, b"FAR (8KB)", timeout=8.0)
+        if not ok or b"MIDPLUG" not in out_mp:
+            print(f"[-] Failed to load MIDPLUG.PRL as 8KB Far RAM slot. "
+                  f"Buffer: {repr(out_mp)}", flush=True)
+            return False
+        print("[+] MIDPLUG.PRL successfully loaded into Slot 3 as 'FAR (8KB)'.",
+              flush=True)
+
+        # 5. Execute MIDPLUG (Slot 3)
+        time.sleep(0.3)
+        drain_all(master)
+        os.write(master, b"3")
+        ok, out_run_mp = read_until(master, b"[Press any key to continue]",
+                                    timeout=8.0)
+        if not ok or b"MIDPLUG (8KB Far RAM Plugin)" not in out_run_mp:
+            print(f"[-] MIDPLUG modal dialog failed to execute. "
+                  f"Buffer: {repr(out_run_mp)}", flush=True)
+            return False
+        print("[+] MIDPLUG executed in 8KB Far RAM slot; dialog displayed.",
+              flush=True)
+
+        # Dismiss dialog
+        time.sleep(0.2)
+        os.write(master, b" ")
+        read_until(master, b"SE - Plugin Manager", timeout=5.0)
+
+        # 6. Unload MIDPLUG (Slot 3) - releases Far RAM bank
+        time.sleep(0.3)
+        drain_all(master)
+        os.write(master, b"u")
+        read_until(master, b"Unload Slot", timeout=4.0)
+        os.write(master, b"3")
+        ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
+        if not ok:
+            print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u3)}",
+                  flush=True)
+            return False
+        print("[+] Slot 3 (MIDPLUG 8KB) unloaded and bank released.",
+              flush=True)
+
+        # 7. Load 16KB Plugin (HALFPLUG.PRL)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"l")
@@ -182,11 +248,13 @@ def run_slots_test():
         os.write(master, b"HALFPLUG.PRL\r")
         ok, out_hp = read_until(master, b"FAR (16KB)", timeout=8.0)
         if not ok or b"HALFPLUG" not in out_hp:
-            print(f"[-] Failed to load HALFPLUG.PRL as 16KB Far RAM slot. Buffer: {repr(out_hp)}", flush=True)
+            print(f"[-] Failed to load HALFPLUG.PRL as 16KB Far RAM slot. "
+                  f"Buffer: {repr(out_hp)}", flush=True)
             return False
-        print("[+] HALFPLUG.PRL successfully loaded into Slot 3 as 'FAR (16KB)'.", flush=True)
+        print("[+] HALFPLUG.PRL loaded into Slot 3 as 'FAR (16KB)'.",
+              flush=True)
 
-        # 5. Load 32KB Plugin (BIGPLUG.PRL)
+        # 8. Load 32KB Plugin (BIGPLUG.PRL)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"l")
@@ -195,41 +263,49 @@ def run_slots_test():
         os.write(master, b"BIGPLUG.PRL\r")
         ok, out_bp = read_until(master, b"FAR (32KB)", timeout=8.0)
         if not ok or b"BIGPLUG" not in out_bp:
-            print(f"[-] Failed to load BIGPLUG.PRL as 32KB Far RAM slot. Buffer: {repr(out_bp)}", flush=True)
+            print(f"[-] Failed to load BIGPLUG.PRL as 32KB Far RAM slot. "
+                  f"Buffer: {repr(out_bp)}", flush=True)
             return False
-        print("[+] BIGPLUG.PRL successfully loaded into Slot 4 as 'FAR (32KB)' (Multi-Bank Far RAM allocation).", flush=True)
+        print("[+] BIGPLUG.PRL loaded into Slot 4 as 'FAR (32KB)' "
+              "(Multi-Bank Far RAM allocation).", flush=True)
 
-        # 6. Execute HALFPLUG (Slot 3)
+        # 9. Execute HALFPLUG (Slot 3)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"3")
-        ok, out_run_hp = read_until(master, b"[Press any key to continue]", timeout=8.0)
+        ok, out_run_hp = read_until(master, b"[Press any key to continue]",
+                                    timeout=8.0)
         if not ok or b"HALFPLUG (16KB Far RAM Plugin)" not in out_run_hp:
-            print(f"[-] HALFPLUG modal dialog failed to execute. Buffer: {repr(out_run_hp)}", flush=True)
+            print(f"[-] HALFPLUG modal dialog failed to execute. "
+                  f"Buffer: {repr(out_run_hp)}", flush=True)
             return False
-        print("[+] HALFPLUG executed in 16KB Far RAM slot; modal dialog displayed.", flush=True)
+        print("[+] HALFPLUG executed in 16KB Far RAM slot; dialog displayed.",
+              flush=True)
 
         # Dismiss dialog
         time.sleep(0.2)
         os.write(master, b" ")
         read_until(master, b"SE - Plugin Manager", timeout=5.0)
 
-        # 7. Execute BIGPLUG (Slot 4)
+        # 10. Execute BIGPLUG (Slot 4)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"4")
-        ok, out_run_bp = read_until(master, b"[Press any key to continue]", timeout=8.0)
+        ok, out_run_bp = read_until(master, b"[Press any key to continue]",
+                                    timeout=8.0)
         if not ok or b"BIGPLUG (32KB Far RAM Plugin)" not in out_run_bp:
-            print(f"[-] BIGPLUG modal dialog failed to execute. Buffer: {repr(out_run_bp)}", flush=True)
+            print(f"[-] BIGPLUG modal dialog failed to execute. "
+                  f"Buffer: {repr(out_run_bp)}", flush=True)
             return False
-        print("[+] BIGPLUG executed in 32KB Far RAM slot; modal dialog displayed.", flush=True)
+        print("[+] BIGPLUG executed in 32KB Far RAM slot; dialog displayed.",
+              flush=True)
 
         # Dismiss dialog
         time.sleep(0.2)
         os.write(master, b" ")
         read_until(master, b"SE - Plugin Manager", timeout=5.0)
 
-        # 8. Unload BIGPLUG (Slot 4)
+        # 11. Unload BIGPLUG (Slot 4)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"u")
@@ -237,11 +313,13 @@ def run_slots_test():
         os.write(master, b"4")
         ok, out_u4 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
-            print(f"[-] Unload slot 4 failed. Buffer: {repr(out_u4)}", flush=True)
+            print(f"[-] Unload slot 4 failed. Buffer: {repr(out_u4)}",
+                  flush=True)
             return False
-        print("[+] Slot 4 (BIGPLUG 32KB) successfully unloaded and Far RAM bank released.", flush=True)
+        print("[+] Slot 4 (BIGPLUG 32KB) successfully unloaded and Far RAM "
+              "bank released.", flush=True)
 
-        # 9. Unload HALFPLUG (Slot 3)
+        # 12. Unload HALFPLUG (Slot 3)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"u")
@@ -249,29 +327,35 @@ def run_slots_test():
         os.write(master, b"3")
         ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
-            print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u3)}", flush=True)
+            print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u3)}",
+                  flush=True)
             return False
         print("[+] Slot 3 (HALFPLUG 16KB) successfully unloaded.", flush=True)
 
-        # 10. Exit Plugin Manager back to Splash Screen
+        # 13. Exit Plugin Manager back to Splash Screen
         time.sleep(0.2)
         os.write(master, b"q")
-        ok, out_splash = read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
+        ok, out_splash = read_until(master,
+                                    b"type   e  or  <Enter>   to edit",
+                                    timeout=5.0)
         if not ok:
-            print(f"[-] Exit to splash screen failed. Buffer: {repr(out_splash)}", flush=True)
+            print(f"[-] Exit to splash screen failed. "
+                  f"Buffer: {repr(out_splash)}", flush=True)
             return False
 
-        # 11. Exit SE.COM (Ctrl+Q)
+        # 14. Exit SE.COM (Ctrl+Q)
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl+Q
         ok, out_exit = read_until(master, b"C>", timeout=5.0)
         if not ok:
-            print(f"[-] Clean exit to CP/M prompt failed. Buffer: {repr(out_exit)}", flush=True)
+            print(f"[-] Clean exit to CP/M prompt failed. "
+                  f"Buffer: {repr(out_exit)}", flush=True)
             return False
         print("[+] Clean exit to CP/M prompt verified.", flush=True)
 
         elapsed = time.time() - t_start
-        print(f"[+] All Modular Plugin Slot (4K/16K/32K) tests PASSED in {elapsed:.2f}s!", flush=True)
+        print(f"[+] All Modular Plugin Slot (4K/8K/16K/32K) tests "
+              f"PASSED in {elapsed:.2f}s!", flush=True)
         return True
 
     finally:
