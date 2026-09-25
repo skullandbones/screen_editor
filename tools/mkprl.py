@@ -44,18 +44,21 @@ CAP_MODAL_UI   = 0x0008
 CAP_HAS_ABOUT  = 0x0010
 CAP_HAS_CONFIG = 0x0020
 CAP_SIZE_4K    = 0x0000
-CAP_SIZE_16K   = 0x0040
-CAP_SIZE_32K   = 0x0080
+CAP_SIZE_8K    = 0x0040
+CAP_SIZE_16K   = 0x0080
+CAP_SIZE_32K   = 0x00C0
 CAP_SIZE_MASK  = 0x00C0
 
 SIZE_MAP = {
     "4k": CAP_SIZE_4K,
+    "8k": CAP_SIZE_8K,
     "16k": CAP_SIZE_16K,
     "32k": CAP_SIZE_32K,
 }
 
 SIZE_MAX_BYTES = {
     "4k": 4096,
+    "8k": 8192,
     "16k": 16384,
     "32k": 32768,
 }
@@ -111,18 +114,23 @@ def make_prl(name: str, code_100: bytes, code_200: bytes = None,
              capabilities: int = CAP_TPA_EXEC, size: str = "4k") -> bytes:
     size = size.lower()
     if size not in SIZE_MAP:
-        raise ValueError(f"Invalid size '{size}', must be '4k', '16k', or '32k'")
+        raise ValueError(
+            f"Invalid size '{size}', must be '4k', '8k', '16k', or '32k'")
     max_slot = SIZE_MAX_BYTES[size]
     prog_size = len(code_100)
     if prog_size > max_slot:
-        raise ValueError(f"Plugin code size {prog_size} exceeds {size.upper()} slot limit ({max_slot} bytes)")
+        raise ValueError(
+            f"Plugin code size {prog_size} exceeds {size.upper()} "
+            f"slot limit ({max_slot} bytes)")
 
     size_flag = SIZE_MAP[size]
     capabilities = (capabilities & ~CAP_SIZE_MASK) | size_flag
 
-    if size in ("16k", "32k"):
+    if size in ("8k", "16k", "32k"):
         if capabilities & CAP_TPA_EXEC:
-            raise ValueError(f"{size.upper()} plugins cannot execute in TPA overlay slot (restricted to 4KB plugins)")
+            raise ValueError(
+                f"{size.upper()} plugins cannot execute in TPA overlay slot "
+                f"(restricted to 4KB plugins)")
         capabilities |= CAP_FAR_EXEC
 
     if is_ovl:
@@ -147,24 +155,39 @@ def main():
     parser.add_argument("--load-addr", type=lambda x: int(x, 0), default=0,
                         help="Target execution address (e.g. 0xA84F for TPA slot overlay, 0x1000 for Far RAM slot)")
     parser.add_argument("--bss", type=lambda x: int(x, 0), default=0, help="BSS uninitialized size in bytes")
-    parser.add_argument("--size", choices=["4k", "16k", "32k"], default=None,
-                        help="Slot size class: 4k (default), 16k, or 32k")
-    parser.add_argument("--size-4k", dest="size_4k", action="store_true", help="Alias for --size 4k")
-    parser.add_argument("--size-16k", dest="size_16k", action="store_true", help="Alias for --size 16k")
-    parser.add_argument("--size-32k", dest="size_32k", action="store_true", help="Alias for --size 32k")
-    parser.add_argument("--tpa", action="store_true", default=None, help="Can run in TPA slot (4KB plugins only)")
-    parser.add_argument("--far", action="store_true", default=False, help="Can run directly in Far RAM")
-    parser.add_argument("--mutate", action="store_true", default=False, help="Modifies document lines")
-    parser.add_argument("--modal", action="store_true", default=False, help="Draws modal dialog/screen")
-    parser.add_argument("--has-about", action="store_true", default=False, help="Implements embedded About screen")
-    parser.add_argument("--has-config", action="store_true", default=False, help="Implements embedded Configuration screen")
-    parser.add_argument("--caps", type=lambda x: int(x, 0), default=None, help="Explicit 16-bit capabilities bitmask override")
+    parser.add_argument("--size", choices=["4k", "8k", "16k", "32k"],
+                        default=None,
+                        help="Slot size class: 4k (default), 8k, 16k, or 32k")
+    parser.add_argument("--size-4k", dest="size_4k", action="store_true",
+                        help="Alias for --size 4k")
+    parser.add_argument("--size-8k", dest="size_8k", action="store_true",
+                        help="Alias for --size 8k")
+    parser.add_argument("--size-16k", dest="size_16k", action="store_true",
+                        help="Alias for --size 16k")
+    parser.add_argument("--size-32k", dest="size_32k", action="store_true",
+                        help="Alias for --size 32k")
+    parser.add_argument("--tpa", action="store_true", default=None,
+                        help="Can run in TPA slot (4KB plugins only)")
+    parser.add_argument("--far", action="store_true", default=False,
+                        help="Can run directly in Far RAM")
+    parser.add_argument("--mutate", action="store_true", default=False,
+                        help="Modifies document lines")
+    parser.add_argument("--modal", action="store_true", default=False,
+                        help="Draws modal dialog/screen")
+    parser.add_argument("--has-about", action="store_true", default=False,
+                        help="Implements embedded About screen")
+    parser.add_argument("--has-config", action="store_true", default=False,
+                        help="Implements embedded Configuration screen")
+    parser.add_argument("--caps", type=lambda x: int(x, 0), default=None,
+                        help="Explicit 16-bit capabilities bitmask override")
 
     args = parser.parse_args()
 
     size = "4k"
     if args.size:
         size = args.size.lower()
+    elif args.size_8k:
+        size = "8k"
     elif args.size_16k:
         size = "16k"
     elif args.size_32k:
@@ -182,9 +205,12 @@ def main():
 
     if args.caps is not None:
         caps = args.caps
-        if not args.size and not args.size_16k and not args.size_32k:
+        if (not args.size and not args.size_4k and not args.size_8k
+                and not args.size_16k and not args.size_32k):
             sz_bits = caps & CAP_SIZE_MASK
-            if sz_bits == CAP_SIZE_16K:
+            if sz_bits == CAP_SIZE_8K:
+                size = "8k"
+            elif sz_bits == CAP_SIZE_16K:
                 size = "16k"
             elif sz_bits == CAP_SIZE_32K:
                 size = "32k"
@@ -192,9 +218,11 @@ def main():
                 size = "4k"
     else:
         caps = 0
-        if size in ("16k", "32k"):
+        if size in ("8k", "16k", "32k"):
             if args.tpa:
-                parser.error(f"{size.upper()} plugins cannot use --tpa (TPA overlay execution is strictly restricted to 4KB plugins)")
+                parser.error(
+                    f"{size.upper()} plugins cannot use --tpa (TPA overlay "
+                    f"execution is strictly restricted to 4KB plugins)")
             caps |= CAP_FAR_EXEC
         else:
             if args.tpa is not None:

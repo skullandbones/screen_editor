@@ -47,8 +47,9 @@ CAP_MODAL_UI = 0x0008    # Renders modal UI dialog or summary box
 CAP_HAS_ABOUT = 0x0010   # Implements modal About screen (ENTRY+3)
 CAP_HAS_CONFIG = 0x0020  # Implements Config screen (ENTRY+6)
 CAP_SIZE_4K = 0x0000     # 4KB size class (<= 4096B payload)
-CAP_SIZE_16K = 0x0040    # 16KB size class (<= 16384B payload)
-CAP_SIZE_32K = 0x0080    # 32KB size class (<= 32768B payload)
+CAP_SIZE_8K = 0x0040     # 8KB size class (<= 8192B payload)
+CAP_SIZE_16K = 0x0080    # 16KB size class (<= 16384B payload)
+CAP_SIZE_32K = 0x00C0    # 32KB size class (<= 32768B payload)
 CAP_SIZE_MASK = 0x00C0   # Mask for size class bits 7..6
 CAP_HAS_VFS = 0x0100     # Implements Headless VFS Vector (ENTRY+9)
 CAP_RESERVED_MASK = 0xFE00  # Reserved upper bits (must be 0)
@@ -61,6 +62,13 @@ SIZE_CLASSES = {
         "limit": 4096,
         "far_pages": 16,
         "tpa_allowed": True,
+    },
+    CAP_SIZE_8K: {
+        "name": "8K",
+        "desc": "Dedicated 32KB Far RAM bank",
+        "limit": 8192,
+        "far_pages": 32,
+        "tpa_allowed": False,
     },
     CAP_SIZE_16K: {
         "name": "16K",
@@ -125,12 +133,12 @@ def decode_capability_flags(caps):
     sz = caps & CAP_SIZE_MASK
     if sz == CAP_SIZE_4K:
         flags.append("SIZE_4K")
+    elif sz == CAP_SIZE_8K:
+        flags.append("SIZE_8K")
     elif sz == CAP_SIZE_16K:
         flags.append("SIZE_16K")
     elif sz == CAP_SIZE_32K:
         flags.append("SIZE_32K")
-    else:
-        flags.append("SIZE_RESERVED")
 
     if caps & CAP_HAS_VFS:
         flags.append("HAS_VFS")

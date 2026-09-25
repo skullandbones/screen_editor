@@ -5,7 +5,7 @@ test_fatfs_plugin.py - Automated Test Suite for FATFS.PRL Plugin
 Validates:
 1. Compilation of FATFS.PRL via Makefile using z88dk and mkprl.py.
 2. CP/M 3 PRL Header Structure (256 bytes) and Field Alignment.
-3. 32KB Far RAM Slot Class (CAP_SIZE_32K = 0x0080) and Capability Flags.
+3. 32KB Far RAM Slot Class (CAP_SIZE_32K = 0x00C0) and Capability Flags.
 4. Relocation Bitmap Integrity and Address Offset Calculation.
 5. Standard 3-Entry Jump Table at Origin 0100H:
    - Action 0: Main Execution (JP 01xxh)
@@ -29,7 +29,7 @@ CAP_DOC_MUTATE = 0x0004
 CAP_MODAL_UI   = 0x0008
 CAP_HAS_ABOUT  = 0x0010
 CAP_HAS_CONFIG = 0x0020
-CAP_SIZE_32K   = 0x0080
+CAP_SIZE_32K   = 0x00C0
 CAP_HAS_VFS    = 0x0100
 
 

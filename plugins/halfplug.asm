@@ -194,7 +194,7 @@ STR_HALF_ABT_L6:	DB	"| Mode   : Far RAM Direct Execution  |", 0
 STR_HALF_ABT_L8:	DB	"|     [Press any key to return]      |", 0
 
 ;------------------------------------------------------------------------------
-; 16KB Slot Padding Payload (> 4096 bytes and <= 16384 bytes)
+; 16KB Slot Padding Payload (> 8192 bytes and <= 16384 bytes)
 ;------------------------------------------------------------------------------
 HALFPLUG_PAYLOAD:
-	DS	6000
+	DS	10000

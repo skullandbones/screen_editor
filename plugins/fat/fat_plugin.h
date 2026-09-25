@@ -14,7 +14,9 @@
 #define CAP_MODAL_UI       0x0008
 #define CAP_HAS_ABOUT      0x0010
 #define CAP_HAS_CONFIG     0x0020
-#define CAP_SIZE_32K       0x0080
+#define CAP_SIZE_8K        0x0040
+#define CAP_SIZE_16K       0x0080
+#define CAP_SIZE_32K       0x00C0
 #define CAP_HAS_VFS        0x0100
 
 /* Return status codes for SE.COM Actions 0..2 */

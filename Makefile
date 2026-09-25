@@ -31,7 +31,7 @@ check-plugins:
 	python3 check_plugin.py --all
 
 plugins:
-	@echo "==> Building plugins (ROT13, WORDCNT, BEAUTIFY, HALFPLUG, BIGPLUG, PLUGIN)..."
+	@echo "==> Building plugins (4K, 8K, 16K, 32K)..."
 	python3 plugins/build_plugins.py
 	@echo "==> Building FAT plugin (FATFS.PRL, FATTEST.COM)..."
 	$(MAKE) -C plugins/fat all
@@ -49,6 +49,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/WORDCNT.OVL 0:WORDCNT.OVL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:BEAUTIFY.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/BEAUTIFY.PRL 0:BEAUTIFY.PRL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:MIDPLUG.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/MIDPLUG.PRL 0:MIDPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HALFPLUG.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HALFPLUG.PRL 0:HALFPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:BIGPLUG.PRL 2>/dev/null || true
@@ -69,6 +71,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/WORDCNT.OVL 0:WORDCNT.OVL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:BEAUTIFY.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/BEAUTIFY.PRL 0:BEAUTIFY.PRL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:MIDPLUG.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/MIDPLUG.PRL 0:MIDPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:HALFPLUG.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HALFPLUG.PRL 0:HALFPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:BIGPLUG.PRL 2>/dev/null || true
