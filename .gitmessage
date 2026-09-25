@@ -1,0 +1,12 @@
+<type>(<scope>): <summary>
+
+Why:
+- 
+
+How:
+- 
+
+# --- SE.COM Commit Standards (Strict Maximum 80 Chars / Line) ---
+# Format: <type>(<scope>): <summary> (<= 72 chars)
+# Types: feat, fix, refactor, perf, docs, test, chore
+# 'Why:' and 'How:' sections are mandatory and enforced by git hook.
