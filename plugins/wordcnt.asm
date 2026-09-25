@@ -145,16 +145,10 @@ SHOW_DIALOG:
 	CALL	FORMAT_DEC_5
 
 	; Print modal statistics box
-	LD	DE,STR_BOX_TOP
-	CALL	CALL_HOST_PRINT
-	LD	DE,STR_BOX_LINES
-	CALL	CALL_HOST_PRINT
-	LD	DE,STR_BOX_WORDS
-	CALL	CALL_HOST_PRINT
-	LD	DE,STR_BOX_CHARS
-	CALL	CALL_HOST_PRINT
-	LD	DE,STR_BOX_BOT
-	CALL	CALL_HOST_PRINT
+	LD	HL,WORDCNT_STAT_TABLE
+	LD	B,9
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
 
 	; Wait for any keypress via HOST_GET_KEY (IX+30)
 	CALL	CALL_HOST_GETKEY
@@ -181,8 +175,10 @@ ABT_API_OK:
 	CP	'E'
 	JP	NZ,INIT_ERR
 
-	LD	DE,STR_WORDCNT_ABOUT
-	CALL	CALL_HOST_PRINT
+	LD	HL,WORDCNT_ABT_TABLE
+	LD	B,11
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
 	CALL	CALL_HOST_GETKEY
 
 	XOR	A			; A = 0: Clean, document unmodified
@@ -232,8 +228,10 @@ PUT_WS_STR:
 	LD	BC,3
 	LDIR
 
-	LD	DE,STR_WORDCNT_CONFIG
-	CALL	CALL_HOST_PRINT
+	LD	HL,WORDCNT_CFG_TABLE
+	LD	B,8
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
 	CALL	CALL_HOST_GETKEY
 
 	CP	'1'
@@ -346,6 +344,58 @@ CALL_HOST_GETKEY:
 	ADD	HL,BC
 	JP	(HL)
 
+CALL_HOST_LOCATE:
+	PUSH	IX
+	EX	(SP),HL
+	PUSH	BC
+	LD	BC,52			; Offset +52: LOCATE_RC (H=Row, L=Col)
+	ADD	HL,BC
+	POP	BC
+	EX	(SP),HL
+	RET
+
+;------------------------------------------------------------------------------
+; Centered Modal Box Renderer
+;------------------------------------------------------------------------------
+RENDER_CENTERED_BOX:
+	; B = line count, C = box width, HL = table of line string addresses
+	LD	A,(IX+16)
+	SUB	B
+	SRL	A
+	INC	A
+	LD	D,A			; D = StartRow
+
+	LD	A,(IX+14)
+	SUB	C
+	SRL	A
+	INC	A
+	LD	E,A			; E = StartCol
+
+RCB_LOOP:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	H,D
+	LD	L,E
+	CALL	CALL_HOST_LOCATE
+
+	POP	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	PUSH	HL
+
+	CALL	CALL_HOST_PRINT
+
+	POP	HL
+	POP	DE
+	INC	D
+	POP	BC
+	DJNZ	RCB_LOOP
+	RET
+
 ;------------------------------------------------------------------------------
 ; Data Variables
 ;------------------------------------------------------------------------------
@@ -359,60 +409,71 @@ STR_NUM_LINES:		DB	"     ", 0
 STR_NUM_WORDS:		DB	"     ", 0
 STR_NUM_CHARS:		DB	"     ", 0
 
-STR_BOX_TOP:
-	DB	13,10,"~ +------------------------------------+",13,10
-	DB	"~ |       Document Statistics          |",13,10
-	DB	"~ +------------------------------------+",13,10,"$"
+STR_WORDCNT_BORDER:	DB	"+------------------------------------+", 0
 
-STR_BOX_LINES:
-	DB	"~ |  Total Lines      : "
-STR_BOX_LINES_VAL:
-	DB	"     "
-	DB	"          |",13,10,"$"
+; Statistics Dialog Table
+WORDCNT_STAT_TABLE:
+	DW	STR_WORDCNT_BORDER
+	DW	STR_BOX_TITLE
+	DW	STR_WORDCNT_BORDER
+	DW	STR_BOX_LINES
+	DW	STR_BOX_WORDS
+	DW	STR_BOX_CHARS
+	DW	STR_WORDCNT_BORDER
+	DW	STR_BOX_CONT
+	DW	STR_WORDCNT_BORDER
 
-STR_BOX_WORDS:
-	DB	"~ |  Total Words      : "
-STR_BOX_WORDS_VAL:
-	DB	"     "
-	DB	"          |",13,10,"$"
+STR_BOX_TITLE:		DB	"|       Document Statistics          |", 0
+STR_BOX_LINES:		DB	"|  Total Lines      : "
+STR_BOX_LINES_VAL:	DB	"     "
+			DB	"          |", 0
+STR_BOX_WORDS:		DB	"|  Total Words      : "
+STR_BOX_WORDS_VAL:	DB	"     "
+			DB	"          |", 0
+STR_BOX_CHARS:		DB	"|  Total Characters : "
+STR_BOX_CHARS_VAL:	DB	"     "
+			DB	"          |", 0
+STR_BOX_CONT:		DB	"|     [Press any key to continue]    |", 0
 
-STR_BOX_CHARS:
-	DB	"~ |  Total Characters : "
-STR_BOX_CHARS_VAL:
-	DB	"     "
-	DB	"          |",13,10,"$"
+; About Dialog Table
+WORDCNT_ABT_TABLE:
+	DW	STR_WORDCNT_BORDER
+	DW	STR_WCA_L2
+	DW	STR_WORDCNT_BORDER
+	DW	STR_WCA_L4
+	DW	STR_WCA_L5
+	DW	STR_WCA_L6
+	DW	STR_WCA_L7
+	DW	STR_WCA_L8
+	DW	STR_WORDCNT_BORDER
+	DW	STR_WCA_L10
+	DW	STR_WORDCNT_BORDER
 
-STR_BOX_BOT:
-	DB	"~ +------------------------------------+",13,10
-	DB	"~ |     [Press any key to continue]    |",13,10
-	DB	"~ +------------------------------------+",13,10,"$"
+STR_WCA_L2:		DB	"|   Word & Character Count Plugin    |", 0
+STR_WCA_L4:		DB	"| Version: v0.1.0 (2026-09-23)       |", 0
+STR_WCA_L5:		DB	"| Compatible with SE.COM >= v0.9.7   |", 0
+STR_WCA_L6:		DB	"| Mode   : TPA Overlay / Far RAM     |", 0
+STR_WCA_L7:		DB	"| Scope  : Full Document Scanner     |", 0
+STR_WCA_L8:		DB	"| Metrics: Lines, Words, Characters  |", 0
+STR_WCA_L10:		DB	"|     [Press any key to return]      |", 0
 
-STR_WORDCNT_ABOUT:
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |   Word & Character Count Plugin    |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ | Version: v0.1.0 (2026-09-23)       |"
-	DB	13,10,"~ | Compatible with SE.COM >= v0.9.7   |"
-	DB	13,10,"~ | Mode   : TPA Overlay / Far RAM     |"
-	DB	13,10,"~ | Scope  : Full Document Scanner     |"
-	DB	13,10,"~ | Metrics: Lines, Words, Characters  |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |     [Press any key to return]      |"
-	DB	13,10,"~ +------------------------------------+",13,10,"$"
+; Configuration Dialog Table
+WORDCNT_CFG_TABLE:
+	DW	STR_WORDCNT_BORDER
+	DW	STR_WCC_L2
+	DW	STR_WORDCNT_BORDER
+	DW	STR_WCC_L4
+	DW	STR_WCC_L5
+	DW	STR_WORDCNT_BORDER
+	DW	STR_WCC_L7
+	DW	STR_WORDCNT_BORDER
 
-STR_WORDCNT_CONFIG:
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |     Word Count Configuration       |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |  1. Count Blank Lines  : ["
-STR_CFG_BLANK_VAL:
-	DB	"YES]       |"
-	DB	13,10,"~ |  2. Count Whitespace   : ["
-STR_CFG_WS_VAL:
-	DB	"YES]       |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ | [1-2] Toggle  [Enter/Q] Save & Exit|"
-	DB	13,10,"~ +------------------------------------+",13,10,"$"
+STR_WCC_L2:		DB	"|     Word Count Configuration       |", 0
+STR_WCC_L4:		DB	"|  1. Count Blank Lines  : ["
+STR_CFG_BLANK_VAL:	DB	"YES]     |", 0
+STR_WCC_L5:		DB	"|  2. Count Whitespace   : ["
+STR_CFG_WS_VAL:		DB	"YES]       |", 0
+STR_WCC_L7:		DB	"| [1-2] Toggle  [Enter/Q] Save & Exit|", 0
 
 CFG_COUNT_BLANK:	DB	1
 CFG_COUNT_WS:		DB	1
