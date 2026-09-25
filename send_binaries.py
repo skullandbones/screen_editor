@@ -17,12 +17,36 @@ import sys
 import time
 import argparse
 import glob
+import re
 
 # Auto re-exec with virtual environment python if available and not already in venv
 script_dir = os.path.dirname(os.path.abspath(__file__))
 venv_python = os.path.join(script_dir, ".venv", "bin", "python3")
-if os.path.isfile(venv_python) and sys.prefix == sys.base_prefix:
+if __name__ == "__main__" and os.path.isfile(venv_python) and sys.prefix == sys.base_prefix:
     os.execv(venv_python, [venv_python] + sys.argv)
+
+
+# CP/M 8:3 naming pattern:
+# - Base name: 1 to 8 uppercase characters (A-Z, 0-9, and allowed symbols)
+# - Optional extension: dot followed by 1 to 3 uppercase characters
+CPM_83_PATTERN = re.compile(r"^[A-Z0-9_$#@!%&'()~^-]{1,8}(\.[A-Z0-9_$#@!%&'()~^-]{1,3})?$")
+
+
+def is_cpm_83_compliant(filepath_or_name):
+    """
+    Validates if a filename complies with standard CP/M 8:3 uppercase naming conventions:
+      - Strictly uppercase (no lowercase characters allowed)
+      - Base filename: 1 to 8 characters
+      - Optional extension: 1 to 3 characters
+      - Valid characters: uppercase letters (A-Z), digits (0-9), and legal CP/M symbols
+      - No spaces, wildcards (*, ?), control characters, or invalid delimiters
+    """
+    basename = os.path.basename(filepath_or_name)
+    if not basename:
+        return False
+    if any(c.islower() for c in basename):
+        return False
+    return bool(CPM_83_PATTERN.match(basename))
 
 
 try:
@@ -47,6 +71,7 @@ def discover_binaries(base_dir, com_only=False):
     """
     Discovers all *.COM files and binary plugins (.OVL and .PRL)
     across the git repository (excluding .git and .venv).
+    Only considers uppercase binaries that comply with CP/M 8:3 naming conventions.
     Deduplicates by filename so each binary is transferred once.
     """
     excluded_dirs = {".git", ".venv", "__pycache__"}
@@ -60,12 +85,19 @@ def discover_binaries(base_dir, com_only=False):
 
         for fname in files:
             _, ext = os.path.splitext(fname)
-            if ext.upper() in target_exts:
-                full_path = os.path.abspath(os.path.join(root, fname))
-                key = fname.upper()
-                # If duplicate found, prefer shallower path (e.g. plugins/ over plugins/fat/)
-                if key not in found_files or full_path.count(os.sep) < found_files[key].count(os.sep):
-                    found_files[key] = full_path
+            # Only consider uppercase target extensions (case-sensitive)
+            if ext not in target_exts:
+                continue
+
+            # Must be strictly compliant with CP/M 8:3 uppercase naming conventions
+            if not is_cpm_83_compliant(fname):
+                continue
+
+            full_path = os.path.abspath(os.path.join(root, fname))
+            key = fname
+            # If duplicate found, prefer shallower path (e.g. plugins/ over plugins/fat/)
+            if key not in found_files or full_path.count(os.sep) < found_files[key].count(os.sep):
+                found_files[key] = full_path
 
     # Return sorted by filename for deterministic transfer order
     return [found_files[k] for k in sorted(found_files.keys())]
@@ -207,6 +239,10 @@ def send_batch(port="/dev/ttyUSB0", baudrate=115200, target_drive="J:",
         if not os.path.isfile(f):
             print(f"[-] File not found: {f}")
             return False
+        bname = os.path.basename(f)
+        if not is_cpm_83_compliant(bname):
+            print(f"[-] Refusing to XMODEM non-compliant CP/M 8:3 file: {bname}")
+            return False
 
     print("============================================================")
     print("   SC131 / RomWBW CP/M 2.2 Serial Binary Batch Uploader")
@@ -255,7 +291,10 @@ def send_batch(port="/dev/ttyUSB0", baudrate=115200, target_drive="J:",
 
     # Step 2: Transfer each file sequentially
     for idx, filepath in enumerate(files, 1):
-        filename = os.path.basename(filepath).upper()
+        filename = os.path.basename(filepath)
+        if not is_cpm_83_compliant(filename):
+            print(f"[-] Refusing to XMODEM non-compliant CP/M 8:3 file: {filename}")
+            continue
         filesize = os.path.getsize(filepath)
 
         print(f"\n[{idx}/{len(files)}] Transferring {filename} ({filesize} bytes)...")
@@ -391,13 +430,20 @@ def main():
 
     # Determine files to send
     if args.files:
-        target_files = [os.path.abspath(f) for f in args.files]
+        raw_files = [os.path.abspath(f) for f in args.files]
+        target_files = []
+        for f in raw_files:
+            bname = os.path.basename(f)
+            if not is_cpm_83_compliant(bname):
+                print(f"[-] Refusing non-compliant CP/M 8:3 file: {bname} ({f})")
+            else:
+                target_files.append(f)
     else:
         target_files = discover_binaries(script_dir, com_only=args.com_only)
 
     if not target_files:
-        print("[-] No binary files found to transfer!")
-        print(f"    Searched for *.COM and plugins under: {script_dir}")
+        print("[-] No valid CP/M 8:3 binary files found to transfer!")
+        print(f"    Searched for uppercase *.COM and plugins under: {script_dir}")
         sys.exit(1)
 
     if args.dry_run:
