@@ -1,6 +1,6 @@
 # SE.COM Plugin Architecture & Application Binary Interface (ABI) Specification
-**Version 1.2 (2026-09-24)**
-*Modular Far RAM Slots (4K, 16K, 32K) & CP/M 3 Standard*
+**Version 1.3 (2026-09-25)**
+*Modular Far RAM Slots (4K, 16K, 32K), CP/M 3 Standard & Headless VFS ABI*
 
 This document specifies the technical architecture, binary packaging standards,
 execution lifecycles, and Application Binary Interface (ABI) for modular plugins
@@ -82,10 +82,10 @@ All plugins are standard Digital Research CP/M 3 binary files consisting of:
 ### Capabilities Bitflags (`1Ch..1Dh`)
 
 ```
-Bit:   15 ... 8   7   6     5       4       3       2       1       0
-     +----------+-------+-------+-------+-------+-------+-------+-------+
-     | Reserved | SIZE  | CONF  | ABOUT | MODAL | MUTAT | FAR   |  TPA  |
-     +----------+-------+-------+-------+-------+-------+-------+-------+
+Bit: 15..9   8    7..6   5     4     3     2     1     0
+    +------+----+------+-----+-----+-----+-----+-----+-----+
+    | Rsvd |VFS | SIZE |CONF |ABOUT|MODAL|MUTAT| FAR | TPA |
+    +------+----+------+-----+-----+-----+-----+-----+-----+
 ```
 
 | Flag | Value | Description |
@@ -100,6 +100,7 @@ Bit:   15 ... 8   7   6     5       4       3       2       1       0
 | `CAP_SIZE_16K` | `0x0040` | 16KB size class (<= 16384B payload). |
 | `CAP_SIZE_32K` | `0x0080` | 32KB size class (<= 32768B payload). |
 | `CAP_SIZE_MASK`| `0x00C0` | Mask for size class bits 7..6. |
+| `CAP_HAS_VFS`  | `0x0100` | Implements Headless VFS Vector (`ENTRY+9`). |
 
 ### Relocation Bitmap (`.PRL` Only)
 
@@ -178,8 +179,8 @@ When a plugin is unloaded (`UNLOAD_PLUGIN_SLOT`):
 
 ## 4. Plugin Calling Convention & Entry Jump Table
 
-Plugins export entry points through a standard 3-entry jump table located at
-the beginning of the code image (`base + 0x0100`):
+Plugins export entry points through a standard 3-entry or 4-entry jump table
+located at the beginning of the code image (`base + 0x0100`):
 
 ```z80
     ORG 0100H
@@ -188,6 +189,7 @@ ENTRY:
     JP  PLUGIN_EXECUTE      ; +0: Main execution (Action 0)
     JP  PLUGIN_ABOUT        ; +3: Display About Screen (Action 1)
     JP  PLUGIN_CONFIG       ; +6: Display Configuration Screen (Action 2)
+    JP  PLUGIN_VFS          ; +9: Headless VFS Operations (Action 3, Optional)
 ```
 
 ### Jump Table Offsets
@@ -197,21 +199,21 @@ ENTRY:
 | `+0` | `0` | `PLUGIN_EXECUTE` | Default action | **Yes** |
 | `+3` | `1` | `PLUGIN_ABOUT` | Modal About dialog | Optional |
 | `+6` | `2` | `PLUGIN_CONFIG` | Interactive configuration screen | Optional |
+| `+9` | `3` | `PLUGIN_VFS` | Headless VFS operations dispatcher | Optional |
 
-If a plugin does not implement `PLUGIN_ABOUT` or `PLUGIN_CONFIG`, its jump
-slot must contain:
+If a plugin does not implement an optional action, its jump slot must contain:
 ```z80
     SCF                     ; Carry = 1 (Not implemented)
     RET
 ```
-and the corresponding capability bit (`CAP_HAS_ABOUT` or `CAP_HAS_CONFIG`)
-must be left cleared (`0`) in the header.
+and the corresponding capability bit (`CAP_HAS_ABOUT`, `CAP_HAS_CONFIG`, or
+`CAP_HAS_VFS`) must be left cleared (`0`) in the header.
 
 ---
 
 ## 5. Register State on Entry & Exit
 
-### Entry Register State
+### Entry Register State (Actions 0, 1, 2: Interactive / Modal)
 
 | Register | State on Entry |
 | :---: | :--- |
@@ -220,15 +222,23 @@ must be left cleared (`0`) in the header.
 | `SP` | Valid host stack pointer in Upper Common RAM. |
 | `AF`, `BC`, `DE`, `HL` | Undefined (may be used without preserving). |
 
-### Exit Register State
+### Entry Register State (Action 3: Headless VFS Dispatcher)
+
+| Register | State on Entry |
+| :---: | :--- |
+| `DE` | Pointer to 16-byte `FatVfsRequest` packet in Upper Common RAM. |
+| `IX` | Entry address in Far RAM (`base + 0x0109`). |
+| `IY` | Pointer to `PLUGIN_HOST_API` vector table. |
+| `A` | Assigned Far RAM Bank ID (used by `HB_BNKCALL`). |
+| `SP` | Valid host stack pointer in Upper Common RAM. |
+
+### Exit Register State (All Actions)
 
 | Register | Expected Return State |
 | :---: | :--- |
-| `A` | **Buffer Modification Status Code**: |
-| | `0x00`: Clean. Document buffer was not modified. |
-| | `0x01`: Single Line Modified. Active line in `ACTIVE_LINE_BUF` changed. |
-| | `0x02`: Document Modified. Multiple lines changed; triggers full redraw. |
-| | `0xFF`: Error / Aborted by user. |
+| `A` | **Status / Buffer Modification Code**: |
+| | Actions 0..2: `0x00`=Clean, `0x01`=Line, `0x02`=Doc, `0xFF`=Err. |
+| | Action 3: `VFS_STAT_OK` (`0x00`), or error code (`0x01`..`0xFF`). |
 | `CY` | **Carry Flag (Success/Failure)**: |
 | | `CY = 0`: Successful execution. |
 | | `CY = 1`: Error occurred (`A` contains error code). |
@@ -279,7 +289,7 @@ PLUGIN_HOST_API (+0):
 | `+42` | Word | `PTR_TAB_WIDTH` | Pointer to tab width byte (`4` or `8`).|
 | `+44` | Word | `PTR_BEAUTIFY_CFG` | Pointer to 24B beautifier config. |
 | `+46` | Vector | `CALL_CHECK_KEY` | Non-blocking key check (`Z`/`NZ`). |
-| `+49` | Vector | `CALL_CLEAR_DOCUMENT`| Reset document slots & clear editor buffer.|
+| `+49` | Vector | `CALL_CLEAR_DOCUMENT`| Reset document slots & buffer. |
 
 ---
 
@@ -486,3 +496,66 @@ python3 tools/mkprl.py \
     --size 16k \
     --caps 0x0077
 ```
+
+---
+
+## 10. Headless VFS Application Binary Interface (Action 3)
+
+Heavyweight storage drivers (such as `FATFS.PRL`) export a headless Virtual
+File System (VFS) interface at `ENTRY + 9` (Action 3). This enables `SE.COM`
+to perform background filesystem operations (directory enumeration, file load,
+file save, block insert, and block save) without lower TPA RAM consumption.
+
+### 16-Byte `FatVfsRequest` Packet Map
+
+| Offset | Type | Field | Description |
+| :---: | :---: | :--- | :--- |
+| `+0` | Byte | `cmd` | Command opcode (`VFS_CMD_*`). |
+| `+1` | Byte | `unit` | HBIOS disk unit (`0`..`7`, or `0xFF` for default). |
+| `+2` | Byte | `status` | Output return status code (`VFS_STAT_*`). |
+| `+3` | Byte | `flags` | Option flags (`VFS_FLAG_*`). |
+| `+4` | Word | `path` | Pointer to null-terminated DOS path in Upper RAM. |
+| `+6` | Word | `buffer` | Pointer to data buffer in Upper RAM (`> 0x8000`). |
+| `+8` | Word | `buffer_size` | Maximum capacity (in bytes or entry count). |
+| `+10` | Word | `count` | Output count (entries read, lines read/written). |
+| `+12` | Word | `start_line` | Range start line (0-indexed) for block save. |
+| `+14` | Word | `end_line` | Range end line (inclusive) for block save. |
+
+### VFS Command Opcodes (`cmd`)
+
+| Code | Constant | Description |
+| :---: | :--- | :--- |
+| `0` | `VFS_CMD_PROBE_MOUNT` | Probe/mount filesystem on requested unit. |
+| `1` | `VFS_CMD_LIST_DIR` | Enumerate directory entries into 13B records. |
+| `2` | `VFS_CMD_LOAD_FILE` | Stream text file lines into host document. |
+| `3` | `VFS_CMD_SAVE_FILE` | Export entire host document to text file. |
+| `4` | `VFS_CMD_SAVE_RANGE` | Export line range start_line..end_line. |
+| `5` | `VFS_CMD_OPEN_FILE` | Open file for sector/chunk streaming. |
+| `6` | `VFS_CMD_READ_CHUNK` | Read up to buffer_size bytes into buffer. |
+| `7` | `VFS_CMD_CLOSE_FILE` | Close active streaming file handle. |
+| `8` | `VFS_CMD_GET_DEF_UNIT` | Query default HBIOS unit into unit field. |
+| `9` | `VFS_CMD_SET_DEF_UNIT` | Set default HBIOS unit from unit field. |
+
+### VFS Return Status Codes (`status`)
+
+| Code | Constant | Description |
+| :---: | :--- | :--- |
+| `0` | `VFS_STAT_OK` | Operation completed successfully. |
+| `1` | `VFS_STAT_NOT_FOUND` | Specified file or directory path was not found. |
+| `2` | `VFS_STAT_DISK_ERR` | Physical media error or FatFs error. |
+| `3` | `VFS_STAT_BUFFER_FULL`| Output buffer capacity reached. |
+| `4` | `VFS_STAT_INV_UNIT` | Specified HBIOS unit index is invalid. |
+| `5` | `VFS_STAT_READ_ONLY` | Volume or file is write-protected. |
+| `6` | `VFS_STAT_EOF` | End of file reached during chunk streaming. |
+| `255` | `VFS_STAT_UNSUPPORTED`| Unrecognized command opcode. |
+
+### 13-Byte Directory Record Format
+
+When executing `VFS_CMD_LIST_DIR`, entries are written sequentially into
+`buffer` as 13-byte fixed records:
+- **Files**: 8 characters name (space-padded), `.` at offset 8, 3 characters
+  extension (space-padded), null (`\0`) at offset 12.
+- **Directories**: 8 characters name (space-padded), `/` at offset 8, 3 spaces,
+  null (`\0`) at offset 12.
+- **Parent Directory**: If not in the root directory, `"..      /   \0"` is
+  provided for navigating up the directory tree.

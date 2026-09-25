@@ -22,16 +22,18 @@
     EXTERN _fat_plugin_run
     EXTERN _fat_plugin_about
     EXTERN _fat_plugin_config
+    EXTERN _fat_vfs_dispatch
 
     ORG 0100H
 
 ;------------------------------------------------------------------------------
-; Standard 3-Entry Jump Table
+; Standard 4-Entry Jump Table
 ;------------------------------------------------------------------------------
 ENTRY:
     JP  _entry_run      ; +0: Action 0 (Main Execution / Browser)
     JP  _entry_about    ; +3: Action 1 (About Screen)
     JP  _entry_config   ; +6: Action 2 (Configuration Screen)
+    JP  _entry_vfs      ; +9: Action 3 (Headless VFS Operations)
 
 ;------------------------------------------------------------------------------
 ; Host API Resolution
@@ -59,7 +61,7 @@ _entry_run:
     CALL _save_host_api
     CALL _fat_plugin_run
     LD  SP,(_saved_sp)
-    LD  A,L             ; Return code in A (0 = Clean, 1 = Line dirty, 2 = Doc dirty)
+    LD  A,L             ; Return code in A (0=Clean, 1=Line, 2=Doc dirty)
     OR  A               ; CY = 0 (Success)
     RET
 
@@ -79,6 +81,19 @@ _entry_config:
     LD  SP,(_saved_sp)
     LD  A,L
     OR  A               ; CY = 0 (Success)
+    RET
+
+_entry_vfs:
+    LD  (_saved_sp),SP
+    CALL _save_host_api
+    PUSH DE             ; Pass request packet pointer (in DE) to C handler
+    CALL _fat_vfs_dispatch
+    POP  DE             ; Balance stack
+    LD   SP,(_saved_sp)
+    LD   A,L            ; L = status code (0 = OK, non-zero = error)
+    OR   A              ; Sets Z/NZ; CY = 0
+    RET  Z              ; Success (CY = 0)
+    SCF                 ; Error (CY = 1)
     RET
 
 l_dcal:
@@ -171,7 +186,8 @@ _hco_null_term:
     POP  IX
     RET
 
-; void host_commit_line(unsigned int line_num, const char *buf, unsigned int len)
+; void host_commit_line(unsigned int line_num, const char *buf,
+;                       unsigned int len)
 _host_commit_line:
     POP  AF             ; Return address
     POP  BC             ; BC = len

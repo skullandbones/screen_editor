@@ -23,10 +23,12 @@ static FIL       s_fil;
 static DIR       s_dir;
 static FILINFO   s_fno;
 
-static FileEntry s_entries[MAX_ENTRIES];
-static int       s_entry_count = 0;
-static char      s_line_buf[1024];
-static char      s_read_chunk[512];
+static FileEntry     s_entries[MAX_ENTRIES];
+static int           s_entry_count = 0;
+static char          s_line_buf[1024];
+static char          s_read_chunk[512];
+static FIL           s_vfs_stream_fil;
+static unsigned char s_vfs_stream_open = 0;
 
 /*---------------------------------------------------------------------------/
 / Terminal & VT100 Utility Routines
@@ -206,7 +208,8 @@ int fat_plugin_config(void) {
         key = host_get_key();
         if (key >= '0' && key <= '7') {
             set_hbios_disk_unit((unsigned char)(key - '0'));
-        } else if (key == 0x1B || key == 'q' || key == 'Q' || key == '\r' || key == '\n') {
+        } else if (key == 0x1B || key == 'q' || key == 'Q' ||
+                   key == '\r' || key == '\n') {
             break;
         }
     }
@@ -248,15 +251,20 @@ static FRESULT scan_directory(void) {
 / File Importer: Streams FAT file lines into SE.COM document
 /---------------------------------------------------------------------------*/
 
-static int import_fat_file(const char *filename) {
+static int vfs_load_file(FatVfsRequest *req) {
     FRESULT fr;
     UINT    br;
     unsigned int line_num = 0;
     unsigned int line_pos = 0;
     UINT i;
 
-    fr = f_open(&s_fil, filename, FA_READ);
-    if (fr != FR_OK) return 0;
+    fr = f_open(&s_fil, req->path, FA_READ);
+    if (fr != FR_OK) {
+        req->count = 0;
+        req->status = (fr == FR_NO_FILE || fr == FR_NO_PATH) ?
+                      VFS_STAT_NOT_FOUND : VFS_STAT_DISK_ERR;
+        return (int)req->status;
+    }
 
     /* Reset host editor buffer before streaming lines */
     host_clear_document();
@@ -281,6 +289,7 @@ static int import_fat_file(const char *filename) {
                 }
             }
         }
+        if (i < br && s_read_chunk[i] == 0x1A) break;
     }
 
     /* Commit final line if file ended without trailing newline */
@@ -289,34 +298,74 @@ static int import_fat_file(const char *filename) {
     }
 
     f_close(&s_fil);
-    return line_num;
+    req->count = line_num;
+    req->status = VFS_STAT_OK;
+    return VFS_STAT_OK;
+}
+
+static int import_fat_file(const char *filename) {
+    FatVfsRequest req;
+    req.path = filename;
+    if (vfs_load_file(&req) == VFS_STAT_OK) {
+        return (int)req.count;
+    }
+    return 0;
 }
 
 /*---------------------------------------------------------------------------/
 / File Exporter: Writes SE.COM document lines out to FAT file
 /---------------------------------------------------------------------------*/
 
-static int export_fat_file(const char *filename) {
+static int vfs_save_range(FatVfsRequest *req, unsigned int start,
+                          unsigned int end) {
     FRESULT fr;
     UINT    bw;
     unsigned int total = host_get_total_lines();
     unsigned int i;
+    unsigned int count = 0;
 
-    fr = f_open(&s_fil, filename, FA_CREATE_ALWAYS | FA_WRITE);
-    if (fr != FR_OK) return 0;
+    fr = f_open(&s_fil, req->path, FA_CREATE_ALWAYS | FA_WRITE);
+    if (fr != FR_OK) {
+        req->count = 0;
+        req->status = (fr == FR_WRITE_PROTECTED) ?
+                      VFS_STAT_READ_ONLY : VFS_STAT_DISK_ERR;
+        return (int)req->status;
+    }
 
-    for (i = 0; i < total; i++) {
-        unsigned int len = host_checkout_line(i, s_line_buf);
-        if (len > 0) {
-            fr = f_write(&s_fil, s_line_buf, len, &bw);
+    if (total > 0) {
+        if (start >= total) start = total - 1;
+        if (end >= total) end = total - 1;
+        if (start > end) start = end;
+
+        for (i = start; i <= end; i++) {
+            unsigned int len = host_checkout_line(i, s_line_buf);
+            if (len > 0) {
+                fr = f_write(&s_fil, s_line_buf, len, &bw);
+                if (fr != FR_OK) break;
+            }
+            fr = f_write(&s_fil, "\r\n", 2, &bw);
             if (fr != FR_OK) break;
+            count++;
         }
-        fr = f_write(&s_fil, "\r\n", 2, &bw);
-        if (fr != FR_OK) break;
     }
 
     f_close(&s_fil);
-    return (fr == FR_OK) ? (int)total : 0;
+    req->count = count;
+    if (fr != FR_OK) {
+        req->status = VFS_STAT_DISK_ERR;
+        return VFS_STAT_DISK_ERR;
+    }
+    req->status = VFS_STAT_OK;
+    return VFS_STAT_OK;
+}
+
+static int export_fat_file(const char *filename) {
+    FatVfsRequest req;
+    req.path = filename;
+    if (vfs_save_range(&req, 0, 0xFFFF) == VFS_STAT_OK) {
+        return (int)req.count;
+    }
+    return 0;
 }
 
 /*---------------------------------------------------------------------------/
@@ -379,9 +428,11 @@ int fat_plugin_run(void) {
 
         /* Header Box */
         vt_cursor(2, 12);
-        host_print("+--------------------------------------------------------+");
+        host_print(
+            "+--------------------------------------------------------+");
         vt_cursor(3, 12);
-        host_print("|             FAT Filesystem Manager v0.1.0              |");
+        host_print(
+            "|             FAT Filesystem Manager v0.1.0              |");
         vt_cursor(4, 12);
         host_print("| Drive: RomWBW Unit ");
         host_print_num(get_hbios_disk_unit());
@@ -390,7 +441,8 @@ int fat_plugin_run(void) {
         host_print_spaces(24 - num_digits(s_entry_count));
         host_print("|");
         vt_cursor(5, 12);
-        host_print("+--------------------------------------------------------+");
+        host_print(
+            "+--------------------------------------------------------+");
 
         /* File List Rows */
         for (r = 0; r < VISIBLE_ROWS; r++) {
@@ -436,11 +488,14 @@ int fat_plugin_run(void) {
 
         /* Controls Footer */
         vt_cursor(16, 12);
-        host_print("+--------------------------------------------------------+");
+        host_print(
+            "+--------------------------------------------------------+");
         vt_cursor(17, 12);
-        host_print("| [ENTER/O] Open  [S] Save Buffer  [U] Unit  [Q/ESC] Quit |");
+        host_print(
+            "| [ENTER/O] Open  [S] Save Buffer  [U] Unit  [Q/ESC] Quit |");
         vt_cursor(18, 12);
-        host_print("+--------------------------------------------------------+");
+        host_print(
+            "+--------------------------------------------------------+");
 
         key = get_nav_key();
 
@@ -452,7 +507,8 @@ int fat_plugin_run(void) {
         } else if (key == NAV_KEY_DOWN) {
             if (selected < s_entry_count - 1) {
                 selected++;
-                if (selected >= top_row + VISIBLE_ROWS) top_row = selected - VISIBLE_ROWS + 1;
+                if (selected >= top_row + VISIBLE_ROWS)
+                    top_row = selected - VISIBLE_ROWS + 1;
             }
         } else if (key == '\r' || key == '\n' || key == 'o' || key == 'O') {
             if (s_entry_count > 0 && !s_entries[selected].is_dir) {
@@ -524,4 +580,241 @@ int fat_plugin_run(void) {
     f_unmount("");
     vt_clear_screen();
     return doc_mutated ? PLUG_RET_DOC_MOD : PLUG_RET_CLEAN;
+}
+
+/*---------------------------------------------------------------------------/
+/ Action 3: Headless VFS Dispatcher (CAP_HAS_VFS)
+/---------------------------------------------------------------------------*/
+
+/* Format entry into 13-byte SE.COM record (8 name + '.'/'/' + 3 ext + null) */
+static void vfs_format_entry(char *dest, const char *fname,
+                             unsigned char is_dir) {
+    int i = 0;
+    int j;
+    const char *dot;
+
+    for (j = 0; j < 12; j++) {
+        dest[j] = ' ';
+    }
+    dest[12] = 0;
+
+    if (is_dir) {
+        dest[8] = '/';
+        while (*fname && i < 8) {
+            char c = *fname++;
+            if (c >= 'a' && c <= 'z') c -= 32;
+            dest[i++] = c;
+        }
+        return;
+    }
+
+    dest[8] = '.';
+    dot = fname;
+    while (*dot && *dot != '.') {
+        dot++;
+    }
+
+    while (*fname && fname < dot && i < 8) {
+        char c = *fname++;
+        if (c >= 'a' && c <= 'z') c -= 32;
+        dest[i++] = c;
+    }
+
+    if (*dot == '.') {
+        dot++;
+        i = 9;
+        while (*dot && i < 12) {
+            char c = *dot++;
+            if (c >= 'a' && c <= 'z') c -= 32;
+            dest[i++] = c;
+        }
+    }
+}
+
+static int vfs_list_dir(FatVfsRequest *req) {
+    FRESULT fr;
+    DIR dir;
+    FILINFO fno;
+    char *out_buf = (char *)req->buffer;
+    unsigned int max_entries;
+    unsigned int count = 0;
+    const char *dir_path = req->path;
+
+    if (!dir_path || !dir_path[0]) {
+        dir_path = "/";
+    }
+
+    if (req->buffer_size == 0) {
+        max_entries = 255;
+    } else if (req->buffer_size > 255) {
+        max_entries = req->buffer_size / 13;
+        if (max_entries > 255) max_entries = 255;
+    } else {
+        max_entries = req->buffer_size;
+    }
+
+    fr = f_opendir(&dir, dir_path);
+    if (fr != FR_OK) {
+        req->count = 0;
+        req->status = (fr == FR_NO_PATH || fr == FR_NO_FILE) ?
+                      VFS_STAT_NOT_FOUND : VFS_STAT_DISK_ERR;
+        return (int)req->status;
+    }
+
+    while (count < max_entries) {
+        fr = f_readdir(&dir, &fno);
+        if (fr != FR_OK || fno.fname[0] == 0) {
+            break;
+        }
+
+        /* Skip "." current directory entry */
+        if (fno.fname[0] == '.' && fno.fname[1] == 0) {
+            continue;
+        }
+
+        /* Skip hidden and system files */
+        if (fno.fattrib & (AM_HID | AM_SYS)) {
+            continue;
+        }
+
+        vfs_format_entry(out_buf + (count * 13), fno.fname,
+                         (fno.fattrib & AM_DIR) ? 1 : 0);
+        count++;
+    }
+
+    f_closedir(&dir);
+    req->count = count;
+    req->status = VFS_STAT_OK;
+    return VFS_STAT_OK;
+}
+
+static int vfs_open_stream(FatVfsRequest *req) {
+    FRESULT fr;
+    if (s_vfs_stream_open) {
+        f_close(&s_vfs_stream_fil);
+        s_vfs_stream_open = 0;
+    }
+    fr = f_open(&s_vfs_stream_fil, req->path, FA_READ);
+    if (fr != FR_OK) {
+        req->status = (fr == FR_NO_FILE || fr == FR_NO_PATH) ?
+                      VFS_STAT_NOT_FOUND : VFS_STAT_DISK_ERR;
+        return (int)req->status;
+    }
+    s_vfs_stream_open = 1;
+    req->status = VFS_STAT_OK;
+    return VFS_STAT_OK;
+}
+
+static int vfs_read_chunk(FatVfsRequest *req) {
+    FRESULT fr;
+    UINT br = 0;
+    if (!s_vfs_stream_open) {
+        req->count = 0;
+        req->status = VFS_STAT_DISK_ERR;
+        return VFS_STAT_DISK_ERR;
+    }
+    fr = f_read(&s_vfs_stream_fil, req->buffer, req->buffer_size, &br);
+    req->count = br;
+    if (fr != FR_OK) {
+        req->status = VFS_STAT_DISK_ERR;
+        return VFS_STAT_DISK_ERR;
+    }
+    if (br == 0) {
+        req->status = VFS_STAT_EOF;
+        return VFS_STAT_EOF;
+    }
+    req->status = VFS_STAT_OK;
+    return VFS_STAT_OK;
+}
+
+static int vfs_close_stream(FatVfsRequest *req) {
+    if (s_vfs_stream_open) {
+        f_close(&s_vfs_stream_fil);
+        s_vfs_stream_open = 0;
+    }
+    req->status = VFS_STAT_OK;
+    return VFS_STAT_OK;
+}
+
+static int vfs_ensure_mounted(unsigned char unit) {
+    if (unit != 0xFF) {
+        if (unit > 7) {
+            return VFS_STAT_INV_UNIT;
+        }
+        if (unit != get_hbios_disk_unit()) {
+            set_hbios_disk_unit(unit);
+            s_fs.fs_type = 0;
+        }
+    }
+    if (s_fs.fs_type == 0) {
+        FRESULT fr = f_mount(&s_fs, "", 1);
+        if (fr != FR_OK) {
+            return VFS_STAT_DISK_ERR;
+        }
+    }
+    return VFS_STAT_OK;
+}
+
+int fat_vfs_dispatch(FatVfsRequest *req) {
+    int ret;
+
+    if (!req) return VFS_STAT_UNSUPPORTED;
+
+    if (req->cmd != VFS_CMD_GET_DEF_UNIT &&
+        req->cmd != VFS_CMD_SET_DEF_UNIT &&
+        req->cmd != VFS_CMD_READ_CHUNK &&
+        req->cmd != VFS_CMD_CLOSE_FILE) {
+        ret = vfs_ensure_mounted(req->unit);
+        if (ret != VFS_STAT_OK) {
+            req->status = (unsigned char)ret;
+            return ret;
+        }
+    }
+
+    switch (req->cmd) {
+    case VFS_CMD_PROBE_MOUNT:
+        req->unit = get_hbios_disk_unit();
+        req->status = VFS_STAT_OK;
+        return VFS_STAT_OK;
+
+    case VFS_CMD_LIST_DIR:
+        return vfs_list_dir(req);
+
+    case VFS_CMD_LOAD_FILE:
+        return vfs_load_file(req);
+
+    case VFS_CMD_SAVE_FILE:
+        return vfs_save_range(req, 0, 0xFFFF);
+
+    case VFS_CMD_SAVE_RANGE:
+        return vfs_save_range(req, req->start_line, req->end_line);
+
+    case VFS_CMD_OPEN_FILE:
+        return vfs_open_stream(req);
+
+    case VFS_CMD_READ_CHUNK:
+        return vfs_read_chunk(req);
+
+    case VFS_CMD_CLOSE_FILE:
+        return vfs_close_stream(req);
+
+    case VFS_CMD_GET_DEF_UNIT:
+        req->unit = get_hbios_disk_unit();
+        req->status = VFS_STAT_OK;
+        return VFS_STAT_OK;
+
+    case VFS_CMD_SET_DEF_UNIT:
+        if (req->unit <= 7) {
+            set_hbios_disk_unit(req->unit);
+            s_fs.fs_type = 0;
+            req->status = VFS_STAT_OK;
+            return VFS_STAT_OK;
+        }
+        req->status = VFS_STAT_INV_UNIT;
+        return VFS_STAT_INV_UNIT;
+
+    default:
+        req->status = VFS_STAT_UNSUPPORTED;
+        return VFS_STAT_UNSUPPORTED;
+    }
 }

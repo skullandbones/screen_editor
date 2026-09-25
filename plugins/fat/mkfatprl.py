@@ -15,11 +15,14 @@ CAP_MODAL_UI   = 0x0008
 CAP_HAS_ABOUT  = 0x0010
 CAP_HAS_CONFIG = 0x0020
 CAP_SIZE_32K   = 0x0080
+CAP_HAS_VFS    = 0x0100
 
 
 def build_reloc_bitmap(code_100: bytes, code_200: bytes) -> bytes:
     if len(code_100) != len(code_200):
-        raise ValueError(f"Image lengths differ: {len(code_100)} vs {len(code_200)}")
+        raise ValueError(
+            f"Image lengths differ: {len(code_100)} vs {len(code_200)}"
+        )
 
     prog_len = len(code_100)
     bitmap_len = (prog_len + 7) // 8
@@ -55,7 +58,7 @@ def main():
         raise ValueError(f"Code size {prog_size} exceeds 32KB slot limit")
 
     caps = (CAP_FAR_EXEC | CAP_DOC_MUTATE | CAP_MODAL_UI |
-            CAP_HAS_ABOUT | CAP_HAS_CONFIG | CAP_SIZE_32K)
+            CAP_HAS_ABOUT | CAP_HAS_CONFIG | CAP_SIZE_32K | CAP_HAS_VFS)
 
     # 256-byte CP/M 3 PRL Header
     header = bytearray(256)
@@ -78,7 +81,8 @@ def main():
 
     reloc_count = sum(bin(b).count("1") for b in bitmap)
     print(f"[+] Successfully wrote {len(result)} bytes to {output_path}")
-    print(f"    Name: FATFS, ProgSize: {prog_size}B, Caps: 0x{caps:04X}, Relocs: {reloc_count}")
+    print(f"    Name: FATFS, ProgSize: {prog_size}B, Caps: 0x{caps:04X}, "
+          f"Relocs: {reloc_count}")
 
 
 if __name__ == "__main__":
