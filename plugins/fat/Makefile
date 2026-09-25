@@ -14,7 +14,7 @@ ZCC_FLAGS = +cpm -Isource -SO3 --opt-code-size
 
 SOURCES = source/ff.c source/diskio.c fat_plugin.c
 
-all: FATFS.PRL FATTEST.COM
+all: FATFS.PRL FATTEST.COM VFSTEST.COM
 
 fat_100.bin: fat_entry.asm $(SOURCES) source/ffconf.h fat_plugin.h
 	@export PATH="$(TOOLS_BIN):$$PATH"; \
@@ -33,6 +33,11 @@ FATTEST.COM: fattest.c source/ff.c source/diskio.c source/ffconf.h
 	@export PATH="$(TOOLS_BIN):$$PATH"; \
 	export ZCCCFG="$(TOOLS_CFG)"; \
 	$(ZCC) $(ZCC_FLAGS) -DFATTEST_APP source/ff.c source/diskio.c $< -o $@
+
+VFSTEST.COM: vfstest.c $(SOURCES) source/ffconf.h fat_plugin.h
+	@export PATH="$(TOOLS_BIN):$$PATH"; \
+	export ZCCCFG="$(TOOLS_CFG)"; \
+	$(ZCC) $(ZCC_FLAGS) $(SOURCES) $< -o $@
 
 clean:
 	rm -f *.bin *.o *.PRL *.COM source/*.o
