@@ -1258,6 +1258,13 @@ IHA_OK:
 
 	LD	(HOST_API_PTR),IX
 
+	; Calculate vector for HOST_LOCATE_RC trampoline (IX + 52)
+	PUSH	IX
+	POP	HL
+	LD	BC,52
+	ADD	HL,BC
+	LD	(VEC_LOCATE_RC),HL
+
 	; Pointer to PLUGIN_REGISTRY (256 bytes) at IX+44
 	LD	L,(IX+44)
 	LD	H,(IX+45)
@@ -1481,12 +1488,10 @@ HOST_CHECK_KEY:
 	JP	(HL)
 
 HOST_LOCATE_RC:
-	PUSH	BC
-	LD	HL,(HOST_API_PTR)
-	LD	BC,52			; Offset +52: LOCATE_RC (H=Row, L=Col)
-	ADD	HL,BC
-	POP	BC
-	JP	(HL)
+	PUSH	HL
+	LD	HL,(VEC_LOCATE_RC)
+	EX	(SP),HL
+	RET
 
 HOST_LOAD_PLUGIN:
 	PUSH	BC
@@ -1594,6 +1599,7 @@ POPUP_SLOT_SAVED	EQU	BSS_START + 13
 FPSL_BANK_FOUND		EQU	BSS_START + 14
 FPSL_LOADED_CNT		EQU	BSS_START + 15
 POPUP_MATCH_SLOTS	EQU	BSS_START + 16	; 8 bytes
-SCRATCH_BUF		EQU	BSS_START + 24	; 80 bytes (shared: sys line, row buffer, popup item, prompt input)
+VEC_LOCATE_RC		EQU	BSS_START + 24	; 2 bytes: Vector for LOCATE_RC trampoline
+SCRATCH_BUF		EQU	BSS_START + 26	; 80 bytes (shared: sys line, row buffer, popup item, prompt input)
 BSS_END			EQU	SCRATCH_BUF + 80
 BSS_SIZE		EQU	BSS_END - BSS_START
