@@ -14816,7 +14816,7 @@ RENDER_OPEN_PAGE:
 	; Check if user typed a FAT specification (U: or U<unit>:)
 	CALL	CHECK_FAT_INPUT_OPEN
 	JP	C,SHOW_INLINE_OPEN_ERROR
-	JP	NZ,HANDLE_OPEN_FAT_FILE
+	JP	NZ,HANDLE_OPEN_FAT_DISPATCH
 
 	; Check if user typed a drive specification (e.g. "A:")
 	CALL	CHECK_DRIVE_SWITCH
@@ -14906,6 +14906,8 @@ HODS_OK:
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_DIR_DRIVE_CHAR),A
+	XOR	A
+	LD	(CURRENT_DIR_IS_FAT),A
 
 HODS_DRIVE_DONE:
 	POP	BC			; C = target user
@@ -14992,7 +14994,7 @@ FNF_FWD_DONE:
 	; Check if user edited input to a FAT specification (U: or U<unit>:)
 	CALL	CHECK_FAT_INPUT_OPEN
 	JP	C,SHOW_INLINE_OPEN_ERROR
-	JP	NZ,HANDLE_OPEN_FAT_FILE
+	JP	NZ,HANDLE_OPEN_FAT_DISPATCH
 
 	; Check if user edited input to a drive specification (e.g. "B:")
 	CALL	CHECK_DRIVE_SWITCH
@@ -15147,6 +15149,7 @@ DPAI_PROBE_OK:
 	; Perform Block Insert
 	CALL	DO_PERFORM_BLOCK_INSERT
 
+DPAI_CLEANUP:
 	; Restore original document WORK_FCB from DIR_TEMP_FCB
 	LD	HL,DIR_TEMP_FCB
 	LD	DE,WORK_FCB
@@ -15159,6 +15162,7 @@ DPAI_PROBE_OK:
 
 	; Insertion complete: clear insert flag, loading flag, and splash flag
 	XOR	A
+	LD	(BLOCK_INSERT_IS_FAT),A
 	LD	(IS_BLOCK_INSERT_UI),A
 	LD	(IS_LOADING_FILE),A
 	LD	(IS_SPLASH_SCREEN),A
@@ -15334,8 +15338,12 @@ DPBI_SPLIT_LOOP:
 	XOR	A
 	LD	(SEEN_CR),A
 
-	; Stream sectors from INSERT_FCB
+	; Stream sectors from INSERT_FCB (or FAT stream)
 DPBI_READ_SECTOR:
+	LD	A,(BLOCK_INSERT_IS_FAT)
+	OR	A
+	JR	NZ,DPBI_READ_FAT_CHUNK
+
 	LD	DE,DEFAULT_DMA
 	LD	C,26			; BDOS Set DMA (0080H)
 	CALL	BDOS_ENTRY
@@ -15344,10 +15352,42 @@ DPBI_READ_SECTOR:
 	LD	C,20			; BDOS Read Next Record
 	CALL	BDOS_ENTRY
 	OR	A
-	JR	NZ,DPBI_HIT_EOF		; EOF or read error
+	JP	NZ,DPBI_HIT_EOF		; EOF or read error
 
 	LD	HL,DEFAULT_DMA
 	LD	B,128			; 128 bytes per sector
+	JR	DPBI_BYTE_LOOP
+
+DPBI_READ_FAT_CHUNK:
+	LD	A,6			; VFS_CMD_READ_CHUNK
+	LD	(VFS_REQ_CMD),A
+	XOR	A
+	LD	(VFS_REQ_STATUS),A
+	LD	HL,DEFAULT_DMA
+	LD	(VFS_REQ_BUFFER),HL
+	LD	HL,128
+	LD	(VFS_REQ_BUFSIZE),HL
+	CALL	VFS_EXEC_REQUEST
+	JR	C,DPBI_FAT_EOF
+	LD	A,(VFS_REQ_STATUS)
+	CP	6			; VFS_STAT_EOF
+	JR	Z,DPBI_FAT_EOF
+	OR	A
+	JR	NZ,DPBI_FAT_EOF		; Error -> EOF
+	LD	HL,(VFS_REQ_COUNT)
+	LD	A,L
+	OR	H
+	JR	Z,DPBI_FAT_EOF
+	LD	B,L			; B = bytes read (1..128)
+	LD	HL,DEFAULT_DMA
+	JR	DPBI_BYTE_LOOP
+
+DPBI_FAT_EOF:
+	; Close FAT stream
+	LD	A,7			; VFS_CMD_CLOSE_FILE
+	LD	(VFS_REQ_CMD),A
+	CALL	VFS_EXEC_REQUEST
+	JP	DPBI_HIT_EOF
 DPBI_BYTE_LOOP:
 	PUSH	BC
 	PUSH	HL
@@ -15388,14 +15428,14 @@ DPBI_NEXT_BYTE:
 	POP	BC
 	INC	HL
 	DJNZ	DPBI_BYTE_LOOP
-	JR	DPBI_READ_SECTOR
+	JP	DPBI_READ_SECTOR
 
 DPBI_POP2_AND_EOF:
 	POP	AF
 DPBI_POP_AND_EOF:
 	POP	HL
 	POP	BC
-	JR	DPBI_HIT_EOF
+	JP	DPBI_HIT_EOF
 
 DPBI_HANDLE_CR:
 	LD	A,(SEEN_CR)
@@ -15460,10 +15500,14 @@ DPBI_SUFFIX_DONE:
 	LD	(CUR_COL),HL
 	LD	(TARGET_COL),HL
 
-	; Close INSERT_FCB
+	; Close INSERT_FCB (CP/M only)
+	LD	A,(BLOCK_INSERT_IS_FAT)
+	OR	A
+	JR	NZ,DPBI_SKIP_FCB_CLOSE
 	LD	DE,INSERT_FCB
 	LD	C,16			; BDOS Close File
 	CALL	BDOS_ENTRY
+DPBI_SKIP_FCB_CLOSE:
 
 	; Mark document modified
 	LD	A,1
@@ -15974,7 +16018,7 @@ RENDER_SAVE_PAGE:
 	; Check if user typed a FAT specification (U: or U<unit>:)
 	CALL	CHECK_FAT_INPUT_SAVE
 	JP	C,SHOW_INLINE_SAVE_ERROR
-	JP	NZ,HANDLE_SAVE_FAT_FILE
+	JP	NZ,HANDLE_SAVE_FAT_DISPATCH
 
 	; Check if user typed a drive specification (e.g. "A:")
 	CALL	CHECK_DRIVE_SWITCH
@@ -16106,7 +16150,7 @@ SRU_FWD_DONE:
 	; Check if user typed a FAT specification (U: or U<unit>:)
 	CALL	CHECK_FAT_INPUT_SAVE
 	JP	C,SHOW_INLINE_SAVE_ERROR
-	JP	NZ,HANDLE_SAVE_FAT_FILE
+	JP	NZ,HANDLE_SAVE_FAT_DISPATCH
 
 	; Check if user edited input to a drive specification (e.g. "B:")
 	CALL	CHECK_DRIVE_SWITCH
@@ -16135,6 +16179,8 @@ HSDS_DRIVE_OK:
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
 	LD	(STR_SAVE_DRIVE_CHAR),A
+	XOR	A
+	LD	(CURRENT_DIR_IS_FAT),A
 
 HSDS_DRIVE_DONE:
 	POP	BC			; C = target user
@@ -16379,6 +16425,17 @@ RENDER_TITLE_COMMON:
 RTC_BASE_LEN_OK:
 	LD	B,A
 
+	; Check if CURRENT_DIR_IS_FAT == 1
+	LD	A,(CURRENT_DIR_IS_FAT)
+	OR	A
+	JR	Z,RTC_CALC_CPM_USER_LEN
+	LD	A,(CURRENT_DIR_FAT_UNIT)
+	CP	0FFH
+	JR	Z,RTC_CHECK_FILTER_LEN
+	INC	B			; 1 digit for unit 0..7
+	JR	RTC_CHECK_FILTER_LEN
+
+RTC_CALC_CPM_USER_LEN:
 	; Check if CURRENT_DIR_USER > 0: add 1 or 2 to title length
 	LD	A,(CURRENT_DIR_USER)
 	OR	A
@@ -16430,7 +16487,11 @@ RTC_PAD_LOOP:
 	POP	AF
 	CALL	PUTC
 
-	; If CURRENT_DIR_USER > 0, print user digits
+	; If FAT mode, print unit digit; if CP/M mode and user > 0, print user digits
+	LD	A,(CURRENT_DIR_IS_FAT)
+	OR	A
+	JR	NZ,RTC_PRINT_FAT_UNIT
+
 	LD	A,(CURRENT_DIR_USER)
 	OR	A
 	JR	Z,RTC_USER_DONE
@@ -16444,6 +16505,15 @@ RTC_PAD_LOOP:
 RTC_PRINT_U_1DIGIT:
 	ADD	A,'0'
 	CALL	PUTC
+	JR	RTC_USER_DONE
+
+RTC_PRINT_FAT_UNIT:
+	LD	A,(CURRENT_DIR_FAT_UNIT)
+	CP	0FFH
+	JR	Z,RTC_USER_DONE
+	ADD	A,'0'
+	CALL	PUTC
+
 RTC_USER_DONE:
 
 	LD	A,(DIR_FILTER_ACTIVE)
@@ -16481,6 +16551,25 @@ RTC_TITLE_DONE:
 ; If WORK_FCB has an explicit drive, uses it; otherwise queries BDOS 25.
 ;------------------------------------------------------------------------------
 INIT_DIR_DRIVE:
+	LD	A,(DOC_IS_FAT)
+	OR	A
+	JR	Z,IDD_NOT_FAT
+	LD	A,1
+	LD	(CURRENT_DIR_IS_FAT),A
+	LD	A,(FAT_DOC_UNIT)
+	LD	(CURRENT_DIR_FAT_UNIT),A
+	LD	HL,STR_SLASH
+	LD	DE,CURRENT_DIR_FAT_PATH
+	LD	BC,2
+	LDIR
+	LD	A,'U'
+	LD	(STR_DIR_DRIVE_CHAR),A
+	LD	(STR_SAVE_DRIVE_CHAR),A
+	RET
+
+IDD_NOT_FAT:
+	XOR	A
+	LD	(CURRENT_DIR_IS_FAT),A
 	LD	A,(WORK_FCB)
 	OR	A
 	JR	NZ,IDD_USE_FCB
@@ -16529,11 +16618,15 @@ RDF_LOOP:
 
 ;------------------------------------------------------------------------------
 ; Preload INPUT_FILENAME_BUF with current drive and document user area characters
-; (e.g. "J0:", "A4:", "C0:", "C1:", "B15:")
+; (e.g. "J0:", "A4:", "C0:", "C1:", "B15:", "U4:")
 ; Sets INPUT_BUF_LEN and null-terminates the buffer.
 ; Outputs: INPUT_FILENAME_BUF populated, INPUT_BUF_LEN set
 ;------------------------------------------------------------------------------
 PRELOAD_DRIVE_USER_PREFIX:
+	LD	A,(CURRENT_DIR_IS_FAT)
+	OR	A
+	JR	NZ,PDUP_FAT
+
 	LD	DE,INPUT_FILENAME_BUF
 	LD	C,0			; Length counter
 
@@ -16572,6 +16665,30 @@ PDUP_U_1DIGIT:
 	INC	C
 
 	; Null-terminate buffer
+	XOR	A
+	LD	(DE),A
+	LD	A,C
+	LD	(INPUT_BUF_LEN),A
+	RET
+
+PDUP_FAT:
+	LD	DE,INPUT_FILENAME_BUF
+	LD	A,'U'
+	LD	(DE),A
+	INC	DE
+	LD	C,1
+	LD	A,(CURRENT_DIR_FAT_UNIT)
+	CP	0FFH
+	JR	Z,PDUP_FAT_NO_UNIT
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+	INC	C
+PDUP_FAT_NO_UNIT:
+	LD	A,':'
+	LD	(DE),A
+	INC	DE
+	INC	C
 	XOR	A
 	LD	(DE),A
 	LD	A,C
@@ -17303,6 +17420,11 @@ COLLECT_DIR_ENTRIES:
 	XOR	A
 	LD	(DIR_FILE_COUNT),A
 
+	; Check if active directory mode is FAT volume
+	LD	A,(CURRENT_DIR_IS_FAT)
+	OR	A
+	JP	NZ,COLLECT_FAT_DIR_ENTRIES
+
 	; Guard: if RAM drive is hibernated and CURRENT_DIR_DRIVE matches, return empty directory
 	LD	A,(RAMDRIVE_IS_HIBERNATED)
 	OR	A
@@ -17781,6 +17903,20 @@ SKIP_NAME_SPACE:
 	INC	HL
 	DJNZ	COPY_DISP_NAME
 
+	; Check if byte 8 is '/' (subdirectory indicator from VFS_CMD_LIST_DIR)
+	LD	A,(HL)
+	CP	'/'
+	JR	NZ,DPL_NOT_SUBDIR
+	; Subdirectory: emit '/' and pad column
+	LD	(DE),A
+	INC	DE
+	INC	HL			; skip byte 8 ('/')
+	INC	HL			; skip byte 9
+	INC	HL			; skip byte 10
+	INC	HL			; skip byte 11
+	JR	PAD_COLUMN
+
+DPL_NOT_SUBDIR:
 	; Check extension (3 chars) at HL+1
 	INC	HL			; Skip '.'
 	LD	A,(HL)
@@ -21804,6 +21940,7 @@ VFS_EXEC_REQUEST:
 	POP	IX			; IX = Action 3 entry vector
 
 	LD	IY,PLUGIN_HOST_API	; IY = Host API table pointer
+	LD	DE,VFS_REQ_PKT		; DE = Request packet pointer
 	LD	A,1
 	LD	(PLUGIN_IS_FAR_EXEC),A
 	LD	A,(PLUGIN_FAR_BANK)	; A = Target Bank for HB_BNKCALL
@@ -22034,6 +22171,129 @@ CFIS_NO_PLUGIN:
 	RET
 
 ;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+; HANDLE_OPEN_FAT_DISPATCH:
+; Dispatches confirmed FAT input in Open dialog to:
+; 1. Drive switch (if path is empty or just '/')
+; 2. Block insert (if IS_BLOCK_INSERT_UI == 1)
+; 3. Whole file open (standard document load)
+;------------------------------------------------------------------------------
+HANDLE_OPEN_FAT_DISPATCH:
+	LD	HL,INPUT_FILENAME_BUF
+	CALL	PARSE_FAT_PATH		; A = unit, HL = path after ':'
+	LD	(VFS_REQ_UNIT),A
+
+	; Check if remainder after ':' is empty or just '/' or spaces
+HOFD_CHECK_EMPTY:
+	LD	A,(HL)
+	OR	A
+	JR	Z,HANDLE_OPEN_FAT_DRIVE_SWITCH
+	CP	' '
+	JR	Z,HOFD_NEXT_CHAR
+	CP	'/'
+	JR	NZ,HOFD_HAS_FILENAME
+HOFD_NEXT_CHAR:
+	INC	HL
+	JR	HOFD_CHECK_EMPTY
+
+HOFD_HAS_FILENAME:
+	; Check if this is Block Insert UI
+	LD	A,(IS_BLOCK_INSERT_UI)
+	OR	A
+	JP	NZ,HANDLE_BLOCK_INSERT_FAT_FILE
+	JP	HANDLE_OPEN_FAT_FILE
+
+;------------------------------------------------------------------------------
+; HANDLE_OPEN_FAT_DRIVE_SWITCH:
+; Switches active directory view to target FAT unit and reloads directory.
+;------------------------------------------------------------------------------
+HANDLE_OPEN_FAT_DRIVE_SWITCH:
+	LD	A,1
+	LD	(CURRENT_DIR_IS_FAT),A
+	LD	A,(VFS_REQ_UNIT)
+	LD	(CURRENT_DIR_FAT_UNIT),A
+	LD	HL,STR_SLASH
+	LD	DE,CURRENT_DIR_FAT_PATH
+	LD	BC,2
+	LDIR
+	LD	A,'U'
+	LD	(STR_DIR_DRIVE_CHAR),A
+	LD	(STR_SAVE_DRIVE_CHAR),A
+	CALL	RESET_DIR_FILTER
+	XOR	A
+	LD	(SHOWING_FNF_MSG),A
+	JP	REFRESH_OPEN_DIR
+
+;------------------------------------------------------------------------------
+; HANDLE_BLOCK_INSERT_FAT_FILE:
+; Invoked when user confirms a FAT file during Block Insert (Ctrl+K R).
+; Streams file chunks via VFS into document at block insertion point.
+;------------------------------------------------------------------------------
+HANDLE_BLOCK_INSERT_FAT_FILE:
+	LD	HL,INPUT_FILENAME_BUF
+	CALL	PARSE_FAT_PATH		; A = unit, HL = path after ':'
+	LD	(VFS_REQ_UNIT),A
+
+	; Copy path after ':' into FAT_INSERT_PATH (prepending '/' if needed)
+	LD	DE,FAT_INSERT_PATH
+	LD	A,(HL)
+	CP	'/'
+	JR	Z,HBIF_COPY_PATH
+	LD	A,'/'
+	LD	(DE),A
+	INC	DE
+HBIF_COPY_PATH:
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,HBIF_COPY_PATH
+
+	; Open file stream via VFS_CMD_OPEN_FILE (5)
+	LD	A,5			; VFS_CMD_OPEN_FILE
+	LD	(VFS_REQ_CMD),A
+	XOR	A
+	LD	(VFS_REQ_FLAGS),A
+	LD	(VFS_REQ_STATUS),A
+	LD	HL,FAT_INSERT_PATH
+	LD	(VFS_REQ_PATH),HL
+	CALL	VFS_EXEC_REQUEST
+	JR	C,HBIF_FAIL
+	LD	A,(VFS_REQ_STATUS)
+	OR	A
+	JR	NZ,HBIF_FAIL
+
+	; File opened! Set BLOCK_INSERT_IS_FAT = 1
+	LD	A,1
+	LD	(BLOCK_INSERT_IS_FAT),A
+
+	; Setup loading UI for block insert
+	LD	A,(HAS_FILE_ARG)
+	LD	(SAVED_HAS_FILE_ARG),A
+	LD	A,1
+	LD	(HAS_FILE_ARG),A
+	LD	(IS_LOADING_FILE),A
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
+	LD	(INSERT_LINE_HAD_CHARS),A
+	LD	HL,0
+	LD	(LOAD_PROGRESS_LINES),HL
+	LD	A,100
+	LD	(LOAD_PROGRESS_COUNT),A
+
+	CALL	DRAW_LOADING_SCREEN
+
+	; Perform Block Insert
+	CALL	DO_PERFORM_BLOCK_INSERT
+
+	; Finish block insert and return to editor
+	JP	DPAI_CLEANUP
+
+HBIF_FAIL:
+	JP	OPEN_FILE_NOT_FOUND
+
+;------------------------------------------------------------------------------
 ; HANDLE_OPEN_FAT_FILE:
 ; Invoked when user confirms a valid FAT file in Open dialog.
 ;------------------------------------------------------------------------------
@@ -22096,6 +22356,52 @@ HOFF_LOAD_FAIL:
 	JP	SHOW_INLINE_OPEN_ERROR
 
 ;------------------------------------------------------------------------------
+; HANDLE_SAVE_FAT_DISPATCH:
+; Dispatches confirmed FAT input in Save dialog to:
+; 1. Drive switch (if path is empty or just '/')
+; 2. Whole file / block save
+;------------------------------------------------------------------------------
+HANDLE_SAVE_FAT_DISPATCH:
+	LD	HL,INPUT_FILENAME_BUF
+	CALL	PARSE_FAT_PATH		; A = unit, HL = path after ':'
+	LD	(VFS_REQ_UNIT),A
+HSFD_CHECK_EMPTY:
+	LD	A,(HL)
+	OR	A
+	JR	Z,HANDLE_SAVE_FAT_DRIVE_SWITCH
+	CP	' '
+	JR	Z,HSFD_NEXT_CHAR
+	CP	'/'
+	JR	NZ,HSFD_HAS_FILENAME
+HSFD_NEXT_CHAR:
+	INC	HL
+	JR	HSFD_CHECK_EMPTY
+
+HSFD_HAS_FILENAME:
+	JP	HANDLE_SAVE_FAT_FILE
+
+;------------------------------------------------------------------------------
+; HANDLE_SAVE_FAT_DRIVE_SWITCH:
+; Switches active directory view to target FAT unit in Save dialog.
+;------------------------------------------------------------------------------
+HANDLE_SAVE_FAT_DRIVE_SWITCH:
+	LD	A,1
+	LD	(CURRENT_DIR_IS_FAT),A
+	LD	A,(VFS_REQ_UNIT)
+	LD	(CURRENT_DIR_FAT_UNIT),A
+	LD	HL,STR_SLASH
+	LD	DE,CURRENT_DIR_FAT_PATH
+	LD	BC,2
+	LDIR
+	LD	A,'U'
+	LD	(STR_SAVE_DRIVE_CHAR),A
+	LD	(STR_DIR_DRIVE_CHAR),A
+	CALL	RESET_DIR_FILTER
+	XOR	A
+	LD	(SHOWING_FNF_MSG),A
+	JP	REFRESH_SAVE_DIR
+
+;------------------------------------------------------------------------------
 ; HANDLE_SAVE_FAT_FILE:
 ; Invoked when user confirms a valid FAT file in Save dialog.
 ;------------------------------------------------------------------------------
@@ -22139,6 +22445,40 @@ HSFF_COPY_PATH:
 	LD	(HAS_FILE_ARG),A
 	XOR	A
 	LD	(DOC_MODIFIED),A
+	RET
+
+;------------------------------------------------------------------------------
+; COLLECT_FAT_DIR_ENTRIES:
+; Collect directory entries from active FAT volume via VFS_CMD_LIST_DIR (1)
+; Populates DIR_NAMES_BUF with 13-byte formatted records.
+;------------------------------------------------------------------------------
+COLLECT_FAT_DIR_ENTRIES:
+	LD	A,1			; VFS_CMD_LIST_DIR
+	LD	(VFS_REQ_CMD),A
+	LD	A,(CURRENT_DIR_FAT_UNIT)
+	LD	(VFS_REQ_UNIT),A
+	XOR	A
+	LD	(VFS_REQ_FLAGS),A
+	LD	(VFS_REQ_STATUS),A
+	LD	HL,CURRENT_DIR_FAT_PATH
+	LD	(VFS_REQ_PATH),HL
+	LD	HL,DIR_NAMES_BUF
+	LD	(VFS_REQ_BUFFER),HL
+	LD	HL,255			; Buffer capacity (max entries)
+	LD	(VFS_REQ_BUFSIZE),HL
+	CALL	VFS_EXEC_REQUEST
+	JR	C,CFDE_EMPTY
+	LD	A,(VFS_REQ_STATUS)
+	OR	A
+	JR	NZ,CFDE_EMPTY
+	LD	HL,(VFS_REQ_COUNT)
+	LD	A,L
+	LD	(DIR_FILE_COUNT),A
+	RET
+
+CFDE_EMPTY:
+	XOR	A
+	LD	(DIR_FILE_COUNT),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -23016,6 +23356,12 @@ FAT_DOC_FNAME:		DS	13		; Base 8.3 fname + null
 FAT_ACTIVE_UNIT:	DB	0FFH		; Active browsing unit
 FAT_ACTIVE_DIR:		DS	128		; Active directory path
 FAT_INPUT_MATCHED:	DB	0		; Match flag during input check
+CURRENT_DIR_IS_FAT:	DB	0		; 0=CP/M drive, 1=FAT volume
+CURRENT_DIR_FAT_UNIT:	DB	0FFH		; FAT browsing unit (0..7, 0xFF=default)
+CURRENT_DIR_FAT_PATH:	DS	64		; Active directory path (e.g. "/")
+BLOCK_INSERT_IS_FAT:	DB	0		; 1 during FAT block insertion
+FAT_INSERT_PATH:	DS	64		; Buffer for block insertion path
+STR_SLASH:		DB	"/",0
 
 ALIGN 2
 VFS_REQ_PKT:

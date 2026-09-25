@@ -106,6 +106,12 @@ def ensure_fat_test_image(img_file):
         )
         f.seek(part_offset + 400 * 512)
         f.write(dirent)
+        dirent_dir = struct.pack(
+            "<11sBBBHHHHHHHI",
+            b"TURBOPAS   ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0
+        )
+        f.seek(part_offset + 400 * 512 + 32)
+        f.write(dirent_dir)
         f.seek(part_offset + 432 * 512)
         f.write(slices_content)
 
@@ -250,8 +256,8 @@ def main():
         read_until(master, b"Col 0", timeout=8.0)
         drain_all(master, quiet_time=0.1)
 
-        # --- Test 4: Open File via VFS (U4:SLICES.TXT) ---
-        print("[*] Opening FAT file via VFS (U4:SLICES.TXT)...")
+        # --- Test 4: FAT Drive Switch & Directory Enumeration ---
+        print("[*] Testing FAT drive switch in Open dialog (U4:)...")
         time.sleep(0.5)
         os.write(master, b"o")
         ok, buf = read_until(master, b"Enter filename to open:", timeout=8.0)
@@ -259,6 +265,40 @@ def main():
             print("[-] Open File dialog not reached. Buffer:\n", buf)
             sys.exit(1)
 
+        time.sleep(0.2)
+        send_str(master, "\x08" * 20 + "U4:\r")
+        ok, buf = read_until(master, b"TURBOPAS/", timeout=8.0)
+        if not ok:
+            print("[-] Subdirectory 'TURBOPAS/' not found in listing. "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        if b"SLICES.TXT" not in buf:
+            print("[-] File 'SLICES.TXT' not found in listing. Buffer:\n",
+                  buf)
+            sys.exit(1)
+        if b"DRIVE U4:)" not in buf:
+            print("[-] Directory title does not contain 'DRIVE U4:)'. "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] FAT directory enumeration and 'TURBOPAS/' verified.")
+
+        # --- Test 5: CP/M Drive Switch in Open Dialog ---
+        print("[*] Testing CP/M drive switch back to C0:...")
+        time.sleep(0.2)
+        send_str(master, "\x08" * 20 + "C0:\r")
+        ok, buf = read_until(master, b"DRIVE C:)", timeout=8.0)
+        if not ok:
+            print("[-] CP/M directory listing not restored. Buffer:\n", buf)
+            sys.exit(1)
+        ok, buf_extra = read_until(master, b"SE.COM", timeout=8.0)
+        buf += buf_extra
+        if not ok:
+            print("[-] 'SE.COM' not found in listing. Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] CP/M directory switch restored successfully.")
+
+        # --- Test 6: Open File via VFS (U4:SLICES.TXT) ---
+        print("[*] Opening FAT file via VFS (U4:SLICES.TXT)...")
         time.sleep(0.2)
         send_str(master, "\x08" * 20 + "U4:SLICES.TXT\r")
 
@@ -281,7 +321,7 @@ def main():
             sys.exit(1)
         print("[+] Status bar correctly displays 'U4:SLICES.TXT'.")
 
-        # --- Test 5: Status Bar Dirty Indicator ---
+        # --- Test 7: Status Bar Dirty Indicator ---
         print("[*] Testing status bar dirty indicator (U4:SLICES.TXT*)...")
         time.sleep(0.3)
         # Type 'X' to dirty the document
@@ -293,7 +333,7 @@ def main():
             sys.exit(1)
         print("[+] Status bar dirty indicator verified: 'U4:SLICES.TXT*'.")
 
-        # --- Test 6: Save Dialog Path Prefill ---
+        # --- Test 8: Save Dialog Path Prefill ---
         print("[*] Testing Save dialog prefill with full FAT path...")
         time.sleep(0.3)
         # Trigger Save from editor with Ctrl+S (\x13)
@@ -326,21 +366,54 @@ def main():
         drain_all(master, 0.2)
         print("[+] Save completed, clean status bar restored.")
 
-        # --- Test 7: Clean Exit to CP/M Prompt ---
+        # --- Test 9: Block Insert File from FAT Volume ---
+        print("[*] Testing Block Insert file from FAT volume...")
+        time.sleep(0.3)
+        # Activate block selection mode (Ctrl+B = \x02)
+        os.write(master, b"\x02")
+        time.sleep(0.2)
+        # Open Block Insert file screen (Ctrl+O = \x0f)
+        os.write(master, b"\x0f")
+        ok, buf = read_until(
+            master, b"Enter filename to insert:", timeout=6.0
+        )
+        if not ok:
+            print("[-] Block Insert dialog not reached. Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Block Insert dialog reached: "
+              "'Enter filename to insert:'.")
+
+        # Confirm insertion of U4:SLICES.TXT
+        time.sleep(0.2)
+        send_str(master, "\x08" * 20 + "U4:SLICES.TXT\r")
+        ok, buf = read_until(master, b"U4:SLICES.TXT*", timeout=10.0)
+        if not ok:
+            print("[-] Editor did not return with dirty status after "
+                  "block insert! Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Block insert completed, dirty status verified: "
+              "'U4:SLICES.TXT*'.")
+
+        # --- Test 10: Clean Exit to CP/M Prompt ---
         print("[*] Exiting SE.COM to CP/M prompt...")
-        # Exit clean editor with Ctrl+Q (\x11)
+        # Exit dirty editor with Ctrl+Q (\x11)
         os.write(master, b"\x11")
-        ok, buf = read_until(master, b"C>", timeout=8.0)
+        ok, buf = read_until(master, b"Unsaved Modifications", timeout=6.0)
         if not ok:
-            # Try 'n' if dirty prompt appeared unexpectedly
+            # If already at prompt or no prompt shown, try fallback
             send_str(master, "n")
-            ok, buf = read_until(master, b"C>", timeout=6.0)
+            ok, buf = read_until(master, b"C>", timeout=8.0)
+        else:
+            # Confirm discard with 'n'
+            send_str(master, "n")
+            ok, buf = read_until(master, b"C>", timeout=8.0)
         if not ok:
-            print("[-] Clean exit to CP/M prompt failed. Buffer:\n", buf)
+            print("[-] Return to CP/M prompt failed after exit. "
+                  "Buffer:\n", buf)
             sys.exit(1)
         print("[+] Clean return to CP/M prompt verified: 'C>'.")
 
-        print("\n[+] ALL SE.COM PHASE 2 FAT VFS HOOK TESTS PASSED!\n")
+        print("\n[+] ALL SE.COM PHASE 3 FAT VFS HOOK TESTS PASSED!\n")
 
     finally:
         try:
