@@ -221,8 +221,10 @@ BT_ABT_API_OK:
 
 	LD	(HOST_API_PTR),IX
 
-	LD	DE,STR_BEAUTIFY_ABOUT
-	CALL	CALL_HOST_PRINT
+	LD	HL,BEAUTIFY_ABT_TABLE
+	LD	B,12
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
 	CALL	CALL_HOST_GETKEY
 
 	XOR	A			; A = 0: Clean, document unmodified
@@ -322,8 +324,10 @@ COPY_ANIM_STR:
 	LDIR
 
 	; Print Config Screen
-	LD	DE,STR_BEAUTIFY_CONFIG
-	CALL	CALL_HOST_PRINT
+	LD	HL,BEAUTIFY_CFG_TABLE
+	LD	B,10
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
 
 	; Wait for input
 	CALL	CALL_HOST_GETKEY
@@ -1462,6 +1466,59 @@ CALL_HOST_CHECKKEY:
 	POP	IX
 	RET
 
+CALL_HOST_LOCATE:
+	PUSH	IX
+	EX	(SP),HL
+	PUSH	BC
+	LD	BC,52			; Offset +52: LOCATE_RC (H=Row, L=Col)
+	ADD	HL,BC
+	POP	BC
+	EX	(SP),HL
+	RET
+
+;------------------------------------------------------------------------------
+; Centered Modal Box Renderer
+;------------------------------------------------------------------------------
+RENDER_CENTERED_BOX:
+	; B = line count, C = box width, HL = table of line string addresses
+	LD	IX,(HOST_API_PTR)
+	LD	A,(IX+16)
+	SUB	B
+	SRL	A
+	INC	A
+	LD	D,A			; D = StartRow
+
+	LD	A,(IX+14)
+	SUB	C
+	SRL	A
+	INC	A
+	LD	E,A			; E = StartCol
+
+RCB_LOOP:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	LD	H,D
+	LD	L,E
+	CALL	CALL_HOST_LOCATE
+
+	POP	HL
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	PUSH	HL
+
+	CALL	CALL_HOST_PRINT
+
+	POP	HL
+	POP	DE
+	INC	D
+	POP	BC
+	DJNZ	RCB_LOOP
+	RET
+
 CALL_IY_VEC:
 	JP	(IY)
 
@@ -1588,39 +1645,59 @@ STR_CASE_2:	DB	"As-Is Preserved"
 STR_ANIM_1:	DB	"ON (Real-Time) "
 STR_ANIM_0:	DB	"OFF (Fast)     "
 
-STR_BEAUTIFY_ABOUT:
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |    Z80 Code Beautifier Plugin      |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ | Version: v0.1.0 (2026-09-23)       |"
-	DB	13,10,"~ | Compatible with SE.COM >= v0.9.7   |"
-	DB	13,10,"~ | Engine : Z80 Tokenizer & Lexer     |"
-	DB	13,10,"~ | Feat   : Column Alignment          |"
-	DB	13,10,"~ |        : Mnemonic/Register Casing  |"
-	DB	13,10,"~ |        : Block or Full Document    |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |     [Press any key to return]      |"
-	DB	13,10,"~ +------------------------------------+",13,10,"$"
+STR_BT_BORDER:		DB	"+------------------------------------+", 0
 
-STR_BEAUTIFY_CONFIG:
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |    Z80 Beautifier Configuration    |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ |  1. Columns   : ["
-STR_CFG_COLS_VAL:
-	DB	"Standard (9/17)] |"
-	DB	13,10,"~ |  2. Mnemonics : ["
-STR_CFG_MNEM_VAL:
-	DB	"UPPERCASE      ] |"
-	DB	13,10,"~ |  3. Registers : ["
-STR_CFG_OPER_VAL:
-	DB	"UPPERCASE      ] |"
-	DB	13,10,"~ |  4. Animation : ["
-STR_CFG_ANIM_VAL:
-	DB	"ON (Real-Time) ] |"
-	DB	13,10,"~ +------------------------------------+"
-	DB	13,10,"~ | [1-4] Toggle  [Enter/Q] Save & Exit|"
-	DB	13,10,"~ +------------------------------------+",13,10,"$"
+; About Dialog Table
+BEAUTIFY_ABT_TABLE:
+	DW	STR_BT_BORDER
+	DW	STR_BTA_L2
+	DW	STR_BT_BORDER
+	DW	STR_BTA_L4
+	DW	STR_BTA_L5
+	DW	STR_BTA_L6
+	DW	STR_BTA_L7
+	DW	STR_BTA_L8
+	DW	STR_BTA_L9
+	DW	STR_BT_BORDER
+	DW	STR_BTA_L11
+	DW	STR_BT_BORDER
+
+STR_BTA_L2:		DB	"|    Z80 Code Beautifier Plugin      |", 0
+STR_BTA_L4:		DB	"| Version: v0.1.0 (2026-09-23)       |", 0
+STR_BTA_L5:		DB	"| Compatible with SE.COM >= v0.9.7   |", 0
+STR_BTA_L6:		DB	"| Engine : Z80 Tokenizer & Lexer     |", 0
+STR_BTA_L7:		DB	"| Feat   : Column Alignment          |", 0
+STR_BTA_L8:		DB	"|        : Mnemonic/Register Casing  |", 0
+STR_BTA_L9:		DB	"|        : Block or Full Document    |", 0
+STR_BTA_L11:		DB	"|     [Press any key to return]      |", 0
+
+; Configuration Dialog Table
+BEAUTIFY_CFG_TABLE:
+	DW	STR_BT_BORDER
+	DW	STR_BTC_L2
+	DW	STR_BT_BORDER
+	DW	STR_BTC_L4
+	DW	STR_BTC_L5
+	DW	STR_BTC_L6
+	DW	STR_BTC_L7
+	DW	STR_BT_BORDER
+	DW	STR_BTC_L9
+	DW	STR_BT_BORDER
+
+STR_BTC_L2:		DB	"|    Z80 Beautifier Configuration    |", 0
+STR_BTC_L4:		DB	"|  1. Columns   : ["
+STR_CFG_COLS_VAL:	DB	"Standard (9/17)"
+			DB	"]  |", 0
+STR_BTC_L5:		DB	"|  2. Mnemonics : ["
+STR_CFG_MNEM_VAL:	DB	"UPPERCASE      "
+			DB	"]  |", 0
+STR_BTC_L6:		DB	"|  3. Registers : ["
+STR_CFG_OPER_VAL:	DB	"UPPERCASE      "
+			DB	"]  |", 0
+STR_BTC_L7:		DB	"|  4. Animation : ["
+STR_CFG_ANIM_VAL:	DB	"ON (Real-Time) "
+			DB	"]  |", 0
+STR_BTC_L9:		DB	"| [1-4] Toggle  [Enter/Q] Save & Exit|", 0
 
 ;==============================================================================
 ; Plugin Configuration File Subsystem (BEAUTIFY.CFG)

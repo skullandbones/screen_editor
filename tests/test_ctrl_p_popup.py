@@ -190,12 +190,21 @@ def main():
             return 1
         print("    [+] Action 2 invoked: Embedded Beautifier Configuration menu opened")
 
-        # Exit Beautifier config with 'q'
+        # Exit Beautifier config with 'q' -> returns to Ctrl+P pop-up menu
+        time.sleep(0.2)
+        os.write(master, b"q")
+        out = read_until(master, b"Plugins with Configurable Settings", timeout=6.0)
+        if b"Plugins with Configurable Settings" not in out:
+            print(f"[-] Test 2 failed: Return from Beautifier config did not restore Ctrl+P menu. Buffer: {repr(out)}")
+            return 1
+        print("    [+] Modal hierarchy verified: Returned cleanly to Ctrl+P Config pop-up menu")
+
+        # Dismiss Ctrl+P pop-up menu with 'q'
         time.sleep(0.2)
         os.write(master, b"q")
         out = read_until(master, b"Screen Editor Configuration", timeout=6.0)
         if b"Screen Editor Configuration" not in out:
-            print(f"[-] Test 2 failed: Return from Beautifier config did not restore Host Config screen. Buffer: {repr(out)}")
+            print(f"[-] Test 2 failed: Return from Ctrl+P menu did not restore Host Config screen. Buffer: {repr(out)}")
             return 1
         print("    [+] Returned cleanly to Host Configuration Screen")
 
@@ -285,12 +294,21 @@ def main():
             return 1
         print("    [+] Action 1 invoked: ROT13 Modal About dialog displayed")
 
-        # Dismiss About dialog with space
+        # Dismiss About dialog with space -> returns to Ctrl+P pop-up menu
         time.sleep(0.2)
         os.write(master, b" ")
+        out = read_until(master, b"Plugins with Embedded Documentation", timeout=6.0)
+        if b"Plugins with Embedded Documentation" not in out:
+            print(f"[-] Test 4 failed: Return from About dialog did not restore Ctrl+P menu. Buffer: {repr(out)}")
+            return 1
+        print("    [+] Modal hierarchy verified: Returned cleanly to Ctrl+P pop-up menu")
+
+        # Dismiss Ctrl+P pop-up menu with ESC
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
         out = read_until(master, b"SE - Screen Editor", timeout=6.0)
         if b"SE - Screen Editor" not in out:
-            print(f"[-] Test 4 failed: Return from About dialog did not restore Host About screen. Buffer: {repr(out)}")
+            print(f"[-] Test 4 failed: Dismissing Ctrl+P menu did not restore Host About screen. Buffer: {repr(out)}")
             return 1
         print("    [+] Cleanly restored Host About screen")
 

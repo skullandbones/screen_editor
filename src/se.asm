@@ -20627,19 +20627,23 @@ DCPP_LOOP:
 	JR	C,DCPP_DISMISS		; Carry = 1: dismissed (ESC, Ctrl+P, Q)
 
 	; Carry = 0: user selected slot A with action C
-	; If C != 0 (About or Config), clear screen first so modal pop-up is clean
+	; If C != 0 (About or Config), clean base screen first so previous popup is cleared
 	LD	B,A			; Save slot number in B
 	LD	A,C
 	OR	A
 	JR	Z,DCPP_EXEC
 	PUSH	BC
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	REDRAW_BASE_SCREEN
 	POP	BC
 DCPP_EXEC:
 	LD	A,B			; A = slot number
 	CALL	EXEC_PLUGIN_SLOT_ACTION
-	JP	DCPP_DISMISS
+	LD	A,(PLUGIN_ACTION_INDEX)
+	OR	A
+	JR	Z,DCPP_DISMISS		; Action 0 (main run): dismiss back to caller
+	; Action 1 (About) or Action 2 (Config): Redraw base screen & return to Ctrl+P menu
+	CALL	REDRAW_BASE_SCREEN
+	JR	DCPP_LOOP
 
 DCPP_DISMISS:
 	LD	A,(PLUGIN_RET_CODE)
