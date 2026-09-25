@@ -19907,6 +19907,12 @@ LPBN_SIZE_OK:
 	LD	A,D
 	OR	E
 	JR	NZ,LPBN_PAYLOAD_OVL
+
+	; 16K/32K Far plugins strictly run in Far RAM; skip trailing bitmap
+	LD	A,(LOAD_SIZE_CLASS)
+	OR	A
+	JR	NZ,LPBN_PAYLOAD_OVL
+
 	; PRL bitmap size: (PROG_SIZE + 7) / 8
 	PUSH	HL
 	LD	DE,7
@@ -19981,6 +19987,11 @@ LPBN_SECTOR_LOOP:
 	LD	DE,128
 	ADD	HL,DE
 	LD	(FAR_SECT_DEST),HL
+
+	; Guard: prevent Far RAM writes crossing into Common RAM (>= 8000h)
+	LD	A,H
+	CP	080H
+	JR	NC,LPBN_SECTORS_DONE
 
 	JR	LPBN_SECTOR_LOOP
 
