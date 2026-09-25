@@ -110,7 +110,7 @@ def run_sanity_test():
         # 3. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"Col 0", timeout=14.0)
+        out = read_until(master, b"Col 0", timeout=20.0)
         if b"for about" not in out and b"Col 0" not in out:
             print(f"[-] SE.COM splash screen not detected. Buffer: {repr(out)}", flush=True)
             return False

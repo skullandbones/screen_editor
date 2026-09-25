@@ -169,7 +169,7 @@ START:
 	LD	HL,0
 	LD	(PLUGIN_STATUS_MSG_PTR),HL
 	CALL	INIT_PLUGIN_REGISTRY
-	; CALL	AUTO_LOAD_PLUGIN_MGR
+	CALL	AUTO_LOAD_PLUGIN_MGR
 
 	; Initialize directory drive from default disk or FCB
 	CALL	INIT_DIR_DRIVE
@@ -1655,9 +1655,9 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ; Dynamically centered both horizontally and vertically for active screen geometry.
-;; Total menu lines: 18
+;; Total menu lines: 19
 ;------------------------------------------------------------------------------
-SPLASH_MENU_LINES	EQU	18
+SPLASH_MENU_LINES	EQU	19
 
 ;------------------------------------------------------------------------------
 ; PRINT_TILDE_CRLF: Print '~' followed by CRLF
@@ -1788,20 +1788,54 @@ RENDER_SPLASH_RAM_STATUS:
 
 	LD	DE,STR_SPLASH_RAM_PRESERV
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
+	JR	RENDER_SPLASH_PLUG_STATUS
 
 SPLASH_RAM_HIB:
 	LD	DE,STR_SPLASH_RAM_HIBERN
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
+	JR	RENDER_SPLASH_PLUG_STATUS
 
 SPLASH_RAM_OVW:
 	LD	DE,STR_SPLASH_RAM_OVERWR
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
+	JR	RENDER_SPLASH_PLUG_STATUS
 
 SPLASH_RAM_NONE:
 	LD	DE,STR_SPLASH_RAM_NONE
+	CALL	PRINT_STR
+
+RENDER_SPLASH_PLUG_STATUS:
+	; Row 19: Plugin System Status
+	CALL	PRINT_SPLASH_PREFIX
+	LD	DE,STR_SPLASH_PLUG_PRE
+	CALL	PRINT_STR
+
+	LD	A,(PLUGIN_MGR_LOADED)
+	OR	A
+	JR	Z,SPLASH_PLUG_NOT_LOADED
+
+	; Loaded in Far RAM: print "Far RAM (Bank " + hex + "h, 16K)]"
+	LD	DE,STR_SPLASH_PLUG_FAR
+	CALL	PRINT_STR
+	LD	A,(PLUGIN_MGR_BANK)
+	CALL	PRINT_HEX_BYTE
+	LD	DE,STR_SPLASH_PLUG_POST
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_PLUG_NOT_LOADED:
+	; Check if Far RAM is available (EXT_BANK_COUNT >= 2)
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,SPLASH_PLUG_NO_FAR
+
+	; Far RAM available, but PLUGIN.PRL missing/not loaded
+	LD	DE,STR_SPLASH_PLUG_MISSING
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_PLUG_NO_FAR:
+	LD	DE,STR_SPLASH_PLUG_NOFAR
 	CALL	PRINT_STR
 
 RENDER_SPLASH_BOTTOM_PAD:
@@ -20760,6 +20794,11 @@ STR_SPLASH_RAM_NONE:	DB	"RAM Drive     : [None Detected]",13,10,"$"
 STR_SPLASH_RAM_PRESERV:	DB	"Preserved (Active)]",13,10,"$"
 STR_SPLASH_RAM_OVERWR:	DB	"Overwritten (Max RAM)]",13,10,"$"
 STR_SPLASH_RAM_HIBERN:	DB	"Hibernated (Temp Image)]",13,10,"$"
+STR_SPLASH_PLUG_PRE:	DB	"Plugin System : [", "$"
+STR_SPLASH_PLUG_FAR:	DB	"Far RAM (Bank ", "$"
+STR_SPLASH_PLUG_POST:	DB	"h, 16K)]", 13, 10, "$"
+STR_SPLASH_PLUG_MISSING: DB	"Missing (PLUGIN.PRL)]", 13, 10, "$"
+STR_SPLASH_PLUG_NOFAR:	DB	"Disabled (No Far RAM)]", 13, 10, "$"
 
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
