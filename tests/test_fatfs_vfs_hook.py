@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """
-test_fatfs_vfs_hook.py - Validation of SE.COM Phase 2 FAT VFS Integration
+test_fatfs_vfs_hook.py - Validation of SE.COM Phase 4 FAT VFS Integration
 
 Validates:
-  1. Missing plugin guard: entering U: or U<unit>: in Open and Save screens
-     displays "feature requires FATFS.PRL" when FATFS.PRL is not loaded.
-  2. Plugin detection: loading FATFS.PRL into a slot enables VFS dispatch.
-  3. Loading FAT files: entering U4:SLICES.TXT streams file into editor.
-  4. Status bar display: status bar displays U4:SLICES.TXT (stripping path).
-  5. Dirty indicator: editing document updates status bar to U4:SLICES.TXT*.
-  6. Save prefill: Save dialog prefills edit box with full path U4:/SLICES.TXT.
-  7. Saving FAT files: saving clears dirty flag and restores clean status bar.
-  8. Clean exit back to CP/M prompt.
+  1. Missing plugin guard in Open and Save screens without FATFS.PRL.
+  2. Plugin detection and loading into Far RAM.
+  3. FAT drive switch & directory enumeration (U4:).
+  4. Subdirectory navigation: descent (TURBOPAS/) and ascent (..).
+  5. FAT directory wildcard filtering (*.PAS preserving subdirectories).
+  6. CP/M drive switch and return to FAT volume.
+  7. Implied FAT volume context: opening bare filename (SLICES.TXT).
+  8. Status bar display (U4:SLICES.TXT) and dirty indicator (*).
+  9. Save dialog prefill with full path (U4:/SLICES.TXT).
+  10. Block file insertion from FAT volume.
+  11. Clean exit back to CP/M prompt (C>).
+  12. Command-line FAT auto-load (se U4:SLICES.TXT).
+  13. Command-line FAT subdirectory auto-load (se U4:/TURBOPAS/HELLO.PAS).
 """
 
 import os
@@ -38,8 +42,9 @@ def find_paths():
     return emu_bin, rom_file, img_file
 
 
-def read_until(master_fd, match_bytes, timeout=6.0):
-    buf = b""
+def read_until(master_fd, match_bytes, timeout=6.0, buf=b""):
+    if match_bytes in buf:
+        return True, buf
     t0 = time.time()
     while time.time() - t0 < timeout:
         r, _, _ = select.select([master_fd], [], [], 0.03)
@@ -93,12 +98,21 @@ def ensure_fat_test_image(img_file):
         b"Slice 2: NZ-COM Operating Environment\r\n"
         b"Slice 3: CP/M Plus (CP/M 3.0)\r\n"
     )
+    hello_content = (
+        b"PROGRAM Hello;\r\n"
+        b"BEGIN\r\n"
+        b"  WriteLn('Hello from FAT!');\r\n"
+        b"END.\r\n"
+    )
     with open(img_file, "r+b") as f:
-        fat_entry_2 = struct.pack("<H", 0xFFFF)
-        f.seek(part_offset + 16 * 512 + 4)
-        f.write(fat_entry_2)
-        f.seek(part_offset + (16 + 192) * 512 + 4)
-        f.write(fat_entry_2)
+        fat_eof = struct.pack("<H", 0xFFFF)
+        for clus in (2, 3, 4):
+            f.seek(part_offset + 16 * 512 + clus * 2)
+            f.write(fat_eof)
+            f.seek(part_offset + (16 + 192) * 512 + clus * 2)
+            f.write(fat_eof)
+
+        # Root directory entries: SLICES.TXT and TURBOPAS/
         dirent = struct.pack(
             "<11sBBBHHHHHHHI",
             b"SLICES  TXT", 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 2,
@@ -112,8 +126,33 @@ def ensure_fat_test_image(img_file):
         )
         f.seek(part_offset + 400 * 512 + 32)
         f.write(dirent_dir)
+
+        # Cluster 2: SLICES.TXT
         f.seek(part_offset + 432 * 512)
         f.write(slices_content)
+
+        # Cluster 3: TURBOPAS/ directory (., .., HELLO.PAS)
+        dot_ent = struct.pack(
+            "<11sBBBHHHHHHHI",
+            b".          ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0
+        )
+        dotdot_ent = struct.pack(
+            "<11sBBBHHHHHHHI",
+            b"..         ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        )
+        hello_ent = struct.pack(
+            "<11sBBBHHHHHHHI",
+            b"HELLO   PAS", 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 4,
+            len(hello_content)
+        )
+        f.seek(part_offset + 448 * 512)
+        f.write(dot_ent)
+        f.write(dotdot_ent)
+        f.write(hello_ent)
+
+        # Cluster 4: HELLO.PAS
+        f.seek(part_offset + 464 * 512)
+        f.write(hello_content)
 
 
 def main():
@@ -276,11 +315,80 @@ def main():
             print("[-] File 'SLICES.TXT' not found in listing. Buffer:\n",
                   buf)
             sys.exit(1)
-        if b"DRIVE U4:)" not in buf:
-            print("[-] Directory title does not contain 'DRIVE U4:)'. "
+        if b"DRIVE U4:/)" not in buf:
+            print("[-] Directory title does not contain 'DRIVE U4:/)'. "
                   "Buffer:\n", buf)
             sys.exit(1)
         print("[+] FAT directory enumeration and 'TURBOPAS/' verified.")
+
+        # --- Test 4b: Subdirectory Navigation (Descent & Ascent) ---
+        print("[*] Testing subdirectory descent into TURBOPAS/...")
+        time.sleep(0.2)
+        send_str(master, "\x08" * 20 + "TURBOPAS/\r")
+        ok, buf = read_until(master, b"DRIVE U4:/TURBOPAS/)", timeout=8.0)
+        if not ok:
+            print("[-] Title does not contain 'DRIVE U4:/TURBOPAS/)'. "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        ok, buf = read_until(master, b"../", timeout=6.0, buf=buf)
+        if not ok:
+            print("[-] Parent link '../' not found in TURBOPAS/. Buffer:\n",
+                  buf)
+            sys.exit(1)
+        ok, buf = read_until(master, b"HELLO.PAS", timeout=6.0, buf=buf)
+        if not ok:
+            print("[-] 'HELLO.PAS' not found in TURBOPAS/. Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Subdirectory descent verified: 'DRIVE U4:/TURBOPAS/)'.")
+
+        # --- Test 4c: Subdirectory Ascent via '..' ---
+        print("[*] Testing subdirectory ascent via '..'...")
+        time.sleep(0.2)
+        send_str(master, "\x08" * 20 + "..\r")
+        ok, buf = read_until(master, b"DRIVE U4:/)", timeout=8.0)
+        if not ok:
+            print("[-] Directory title does not restore 'DRIVE U4:/)'. "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        ok, buf = read_until(master, b"TURBOPAS/", timeout=6.0, buf=buf)
+        if not ok:
+            print("[-] 'TURBOPAS/' not found after '..'. Buffer:\n", buf)
+            sys.exit(1)
+        ok, buf = read_until(master, b"SLICES.TXT", timeout=6.0, buf=buf)
+        if not ok:
+            print("[-] 'SLICES.TXT' not found after '..'. Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Subdirectory ascent verified: 'DRIVE U4:/)' restored.")
+
+        # --- Test 4d: FAT Directory Wildcard Filtering ---
+        print("[*] Testing FAT directory wildcard filter (*.PAS)...")
+        time.sleep(0.2)
+        send_str(master, "\x08" * 20 + "*.PAS\r")
+        ok, buf = read_until(master, b"[*.PAS]", timeout=8.0)
+        if not ok:
+            print("[-] Filter indicator '[*.PAS]' not in title. Buffer:\n",
+                  buf)
+            sys.exit(1)
+        ok, buf = read_until(master, b"TURBOPAS/", timeout=6.0, buf=buf)
+        if not ok:
+            print("[-] Subdirectory 'TURBOPAS/' filtered out! Buffer:\n", buf)
+            sys.exit(1)
+        drain_all(master, quiet_time=0.2)
+        if b"SLICES.TXT" in buf:
+            print("[-] 'SLICES.TXT' was not filtered by '*.PAS'. Buffer:\n",
+                  buf)
+            sys.exit(1)
+        print("[+] Wildcard filter (*.PAS) verified (directory preserved).")
+
+        # Reset filter with *.*
+        time.sleep(0.2)
+        send_str(master, "\x08" * 20 + "*.*\r")
+        ok, buf = read_until(master, b"SLICES.TXT", timeout=8.0)
+        if not ok:
+            print("[-] 'SLICES.TXT' not restored after filter reset. "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Wildcard filter reset (*.*) verified.")
 
         # --- Test 5: CP/M Drive Switch in Open Dialog ---
         print("[*] Testing CP/M drive switch back to C0:...")
@@ -290,31 +398,46 @@ def main():
         if not ok:
             print("[-] CP/M directory listing not restored. Buffer:\n", buf)
             sys.exit(1)
-        ok, buf_extra = read_until(master, b"SE.COM", timeout=8.0)
-        buf += buf_extra
+        ok, buf = read_until(master, b"SE.COM", timeout=8.0, buf=buf)
         if not ok:
             print("[-] 'SE.COM' not found in listing. Buffer:\n", buf)
             sys.exit(1)
         print("[+] CP/M directory switch restored successfully.")
 
-        # --- Test 6: Open File via VFS (U4:SLICES.TXT) ---
-        print("[*] Opening FAT file via VFS (U4:SLICES.TXT)...")
+        # --- Test 5b: Switch back to FAT Drive U4: ---
+        print("[*] Switching back to FAT volume U4:...")
         time.sleep(0.2)
-        send_str(master, "\x08" * 20 + "U4:SLICES.TXT\r")
+        send_str(master, "\x08" * 20 + "U4:\r")
+        ok, buf = read_until(master, b"DRIVE U4:/)", timeout=8.0)
+        if not ok:
+            print("[-] Switch back to U4: failed. Buffer:\n", buf)
+            sys.exit(1)
+        ok, buf = read_until(master, b"SLICES.TXT", timeout=6.0, buf=buf)
+        if not ok:
+            print("[-] 'SLICES.TXT' not found on U4:. Buffer:\n", buf)
+            sys.exit(1)
+        ok, buf = read_until(
+            master, b"Enter filename to open:", timeout=6.0, buf=buf
+        )
+        if not ok:
+            print("[-] Prompt not reached on U4:. Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Active FAT volume U4: restored.")
+
+        # --- Test 6: Implied FAT File Open (Bare Filename SLICES.TXT) ---
+        print("[*] Opening bare FAT filename (SLICES.TXT)...")
+        time.sleep(0.3)
+        send_str(master, "\x08" * 20 + "SLICES.TXT\r")
 
         # Expect file text to load and status bar to show U4:SLICES.TXT
         ok, buf = read_until(master, b"Slice 0: CP/M 2.2 System", timeout=10.0)
         if not ok:
             print("[-] File content not loaded into editor! Buffer:\n", buf)
             sys.exit(1)
-        print("[+] File content loaded successfully via VFS.")
+        print("[+] File content loaded successfully via implied FAT context.")
 
         # Check status bar for U4:SLICES.TXT
-        if b"U4:SLICES.TXT" not in buf:
-            # Drain and re-read screen buffer if needed
-            time.sleep(0.2)
-            ok, extra = read_until(master, b"U4:SLICES.TXT", timeout=3.0)
-            buf += extra
+        ok, buf = read_until(master, b"U4:SLICES.TXT", timeout=3.0, buf=buf)
         if b"U4:SLICES.TXT" not in buf:
             print("[-] Status bar does not contain 'U4:SLICES.TXT'! Buffer:\n",
                   buf)
@@ -324,7 +447,6 @@ def main():
         # --- Test 7: Status Bar Dirty Indicator ---
         print("[*] Testing status bar dirty indicator (U4:SLICES.TXT*)...")
         time.sleep(0.3)
-        # Type 'X' to dirty the document
         send_str(master, "X")
         ok, buf = read_until(master, b"U4:SLICES.TXT*", timeout=4.0)
         if not ok:
@@ -336,18 +458,13 @@ def main():
         # --- Test 8: Save Dialog Path Prefill ---
         print("[*] Testing Save dialog prefill with full FAT path...")
         time.sleep(0.3)
-        # Trigger Save from editor with Ctrl+S (\x13)
         os.write(master, b"\x13")
         ok, buf = read_until(master, b"Enter filename to save:", timeout=6.0)
         if not ok:
             print("[-] Save File dialog not reached. Buffer:\n", buf)
             sys.exit(1)
 
-        # Verify prefilled path contains U4:/SLICES.TXT
-        if b"U4:/SLICES.TXT" not in buf:
-            time.sleep(0.2)
-            ok, extra = read_until(master, b"U4:/SLICES.TXT", timeout=3.0)
-            buf += extra
+        ok, buf = read_until(master, b"U4:/SLICES.TXT", timeout=3.0, buf=buf)
         if b"U4:/SLICES.TXT" not in buf:
             print("[-] Save dialog did not prefill 'U4:/SLICES.TXT'! "
                   "Buffer:\n", buf)
@@ -361,7 +478,6 @@ def main():
             print("[-] Editor did not restore after save. Buffer:\n", buf)
             sys.exit(1)
 
-        # Verify status bar is clean (no asterisk)
         time.sleep(0.3)
         drain_all(master, 0.2)
         print("[+] Save completed, clean status bar restored.")
@@ -369,10 +485,8 @@ def main():
         # --- Test 9: Block Insert File from FAT Volume ---
         print("[*] Testing Block Insert file from FAT volume...")
         time.sleep(0.3)
-        # Activate block selection mode (Ctrl+B = \x02)
         os.write(master, b"\x02")
         time.sleep(0.2)
-        # Open Block Insert file screen (Ctrl+O = \x0f)
         os.write(master, b"\x0f")
         ok, buf = read_until(
             master, b"Enter filename to insert:", timeout=6.0
@@ -380,12 +494,11 @@ def main():
         if not ok:
             print("[-] Block Insert dialog not reached. Buffer:\n", buf)
             sys.exit(1)
-        print("[+] Block Insert dialog reached: "
-              "'Enter filename to insert:'.")
+        print("[+] Block Insert dialog reached: 'Enter filename to insert:'.")
 
-        # Confirm insertion of U4:SLICES.TXT
+        # Confirm insertion of bare SLICES.TXT (implied context)
         time.sleep(0.2)
-        send_str(master, "\x08" * 20 + "U4:SLICES.TXT\r")
+        send_str(master, "\x08" * 20 + "SLICES.TXT\r")
         ok, buf = read_until(master, b"U4:SLICES.TXT*", timeout=10.0)
         if not ok:
             print("[-] Editor did not return with dirty status after "
@@ -396,24 +509,76 @@ def main():
 
         # --- Test 10: Clean Exit to CP/M Prompt ---
         print("[*] Exiting SE.COM to CP/M prompt...")
-        # Exit dirty editor with Ctrl+Q (\x11)
+        time.sleep(0.2)
         os.write(master, b"\x11")
-        ok, buf = read_until(master, b"Unsaved Modifications", timeout=6.0)
+        ok, buf = read_until(master, b"ESC: Cancel", timeout=6.0)
         if not ok:
-            # If already at prompt or no prompt shown, try fallback
-            send_str(master, "n")
-            ok, buf = read_until(master, b"C>", timeout=8.0)
-        else:
-            # Confirm discard with 'n'
-            send_str(master, "n")
-            ok, buf = read_until(master, b"C>", timeout=8.0)
+            print("[-] 'Save changes?' dialog not reached. Buffer:\n", buf)
+            sys.exit(1)
+        os.write(master, b"n")
+        ok, buf = read_until(master, b"C>", timeout=6.0)
         if not ok:
             print("[-] Return to CP/M prompt failed after exit. "
                   "Buffer:\n", buf)
             sys.exit(1)
         print("[+] Clean return to CP/M prompt verified: 'C>'.")
+        drain_all(master, 0.2)
 
-        print("\n[+] ALL SE.COM PHASE 3 FAT VFS HOOK TESTS PASSED!\n")
+        # --- Test 11: Command-Line FAT Auto-Load ---
+        print("[*] Testing command-line FAT auto-load (se U4:SLICES.TXT)...")
+        time.sleep(0.5)
+        send_str(master, "se U4:SLICES.TXT\r")
+        ok, buf = read_until(
+            master, b"Slice 0: CP/M 2.2 System", timeout=30.0
+        )
+        if not ok:
+            print("[-] Command-line FAT auto-load failed. Buffer:\n", buf)
+            sys.exit(1)
+        ok, buf = read_until(master, b"U4:SLICES.TXT", timeout=4.0, buf=buf)
+        if b"U4:SLICES.TXT" not in buf:
+            print("[-] Status bar does not contain 'U4:SLICES.TXT'! "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Command-line FAT auto-load verified: 'se U4:SLICES.TXT'.")
+
+        # Exit clean editor with Ctrl+Q
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        ok, buf = read_until(master, b"C>", timeout=6.0)
+        if not ok:
+            print("[-] Exit to CP/M failed after CLI test. Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Clean exit from CLI session back to 'C>'.")
+        drain_all(master, 0.2)
+
+        # --- Test 12: Command-Line FAT Subdirectory Auto-Load ---
+        print("[*] Testing command-line FAT subdir auto-load "
+              "(se U4:/TURBOPAS/HELLO.PAS)...")
+        time.sleep(0.5)
+        send_str(master, "se U4:/TURBOPAS/HELLO.PAS\r")
+        ok, buf = read_until(master, b"Hello from FAT!", timeout=30.0)
+        if not ok:
+            print("[-] CLI FAT subdir auto-load failed. Buffer:\n", buf)
+            sys.exit(1)
+        ok, buf = read_until(master, b"U4:HELLO.PAS", timeout=4.0, buf=buf)
+        if b"U4:HELLO.PAS" not in buf:
+            print("[-] Status bar does not contain 'U4:HELLO.PAS'! "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Subdirectory auto-load verified: "
+              "'se U4:/TURBOPAS/HELLO.PAS'.")
+
+        # Exit clean editor with Ctrl+Q
+        time.sleep(0.2)
+        os.write(master, b"\x11")
+        ok, buf = read_until(master, b"C>", timeout=6.0)
+        if not ok:
+            print("[-] Exit to CP/M failed after CLI subdir test. "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Clean exit from subdir CLI session back to 'C>'.")
+
+        print("\n[+] ALL SE.COM PHASE 4 FAT VFS TESTS PASSED!\n")
 
     finally:
         try:
