@@ -11,15 +11,20 @@ CPMRM ?= $(TOOLS_DIR)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all plugins image test test-sanity test-conformity test-paging \
-	test-config test-32k test-cpm3 test-plugins test-beautifier test-popup \
-	test-slots test-fatfs test-fatfs-slot test-fatfs-vfs test-full clean
+.PHONY: all plugins image check-tpa test test-sanity test-conformity \
+	test-paging test-config test-32k test-cpm3 test-plugins \
+	test-beautifier test-popup test-slots test-fatfs test-fatfs-slot \
+	test-fatfs-vfs test-fatfs-hook test-full clean
 
 all: $(TARGET) plugins
 
 $(TARGET): $(ASM_SRC)
 	@echo "==> Assembling $(TARGET) with z88dk-z80asm..."
 	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
+
+check-tpa: $(TARGET)
+	@echo "==> Checking $(TARGET) memory footprint against TPA..."
+	python3 check_tpa.py $(TARGET)
 
 plugins:
 	@echo "==> Building plugins (ROT13, WORDCNT, BEAUTIFY, HALFPLUG, BIGPLUG)..."
@@ -121,9 +126,13 @@ test-fatfs-vfs: image
 	@echo "==> Running FATFS headless VFS integration test suite..."
 	python3 tests/test_fatfs_vfs.py
 
+test-fatfs-hook: image
+	@echo "==> Running FATFS Phase 2 VFS hook & status bar test suite..."
+	python3 tests/test_fatfs_vfs_hook.py
+
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-fatfs test-fatfs-slot \
-	test-fatfs-vfs test-paging
+	test-fatfs-vfs test-fatfs-hook test-paging
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \
