@@ -534,6 +534,10 @@ CONFIG_NOT_ESC:
 	CP	'4'
 	JR	Z,CONFIG_TOGGLE_TAB
 
+	; Option: '5' -> Toggle Plugin Manager (Auto <-> Disabled)
+	CP	'5'
+	JP	Z,CONFIG_TOGGLE_PLUGIN
+
 	; Option: 'S' or 's' -> Save Configuration to local SE.CFG
 	CP	's'
 	JP	Z,CONFIG_DO_SAVE
@@ -622,6 +626,53 @@ CONFIG_TOGGLE_LINES:
 	XOR	1			; Toggle 0 <-> 1
 	LD	(CFG_LINES_MODE),A
 	CALL	BUFFER_INIT		; Reallocate Far RAM banks
+	CALL	SHOW_CONFIG_SCREEN
+	JP	CONFIG_LOOP
+
+CONFIG_TOGGLE_PLUGIN:
+	; If currently loaded, always allow toggling to disabled
+	LD	A,(PLUGIN_MGR_LOADED)
+	OR	A
+	JR	NZ,CTP_DISABLE
+
+	; Currently not loaded: check if Far RAM is available (>= 2 banks)
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	NC,CTP_FAR_OK
+
+	; Insufficient Far RAM: autoload is not selectable!
+	; User requested: No beeps. Silently keep disabled and ignore.
+	XOR	A
+	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
+	JP	CONFIG_LOOP
+
+CTP_FAR_OK:
+	; Far RAM available. Check current config setting.
+	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
+	OR	A
+	JR	NZ,CTP_DISABLE
+
+	; Toggle to Autoload (1)
+	LD	A,1
+	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
+	CALL	ENSURE_PLUGIN_MGR_LOADED
+	JR	CTP_DONE
+
+CTP_DISABLE:
+	; Toggle to Disabled (0)
+	XOR	A
+	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
+	LD	A,(PLUGIN_MGR_LOADED)
+	OR	A
+	JR	Z,CTP_DONE
+	; Unload and release Far RAM bank back to available pool
+	LD	A,(PLUGIN_MGR_BANK)
+	CALL	RELEASE_FAR_BANK
+	XOR	A
+	LD	(PLUGIN_MGR_LOADED),A
+	LD	(PLUGIN_MGR_BANK),A
+
+CTP_DONE:
 	CALL	SHOW_CONFIG_SCREEN
 	JP	CONFIG_LOOP
 
@@ -1928,6 +1979,15 @@ SPLASH_PLUG_NOT_LOADED:
 	CP	2
 	JR	C,SPLASH_PLUG_NO_FAR
 
+	; Check if disabled by configuration
+	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
+	OR	A
+	JR	NZ,SPLASH_PLUG_IS_MISSING
+	LD	DE,STR_SPLASH_PLUG_DIS_CFG
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_PLUG_IS_MISSING:
 	; Far RAM available, but PLUGIN.PRL missing/not loaded
 	LD	DE,STR_SPLASH_PLUG_MISSING
 	CALL	PRINT_STR
@@ -2115,9 +2175,10 @@ ABOUT_BOTTOM_DONE:
 ;   2. RAM Drive
 ;   3. Max Doc Lines
 ;   4. Tab Width
-; Total menu lines: 16
+;   5. Plugin Manager
+; Total menu lines: 18
 ;------------------------------------------------------------------------------
-CONFIG_MENU_LINES	EQU	16
+CONFIG_MENU_LINES	EQU	18
 
 ;------------------------------------------------------------------------------
 ; PRINT_CONFIG_PREFIX: Print '~' followed by geometry-dependent left padding
@@ -2325,9 +2386,44 @@ SCS_TAB_MODE:
 	JR	Z,SCS_TAB_4
 	LD	DE,STR_TAB_8_LBL
 	CALL	PRINT_STR
-	JR	SCS_CMDS_BLOCK
+	JR	SCS_PLUG_MODE
 SCS_TAB_4:
 	LD	DE,STR_TAB_4_LBL
+	CALL	PRINT_STR
+
+SCS_PLUG_MODE:
+	; Row 9: 5. Plugin Manager
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CONFIG_PLUG_LBL
+	CALL	PRINT_STR
+
+	; If currently loaded, we know Far RAM is present and Autoload is active
+	LD	A,(PLUGIN_MGR_LOADED)
+	OR	A
+	JR	NZ,SCS_PLUG_AUTOLOAD
+
+	; Not loaded: check if Far RAM is insufficient (< 2 banks)
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,SCS_PLUG_NO_FAR
+
+	; Far RAM is available (>= 2 banks)
+	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
+	OR	A
+	JR	NZ,SCS_PLUG_AUTOLOAD
+
+	; Disabled by configuration
+	LD	DE,STR_PLUG_DIS_LBL
+	CALL	PRINT_STR
+	JR	SCS_CMDS_BLOCK
+
+SCS_PLUG_NO_FAR:
+	LD	DE,STR_PLUG_NO_FAR_LBL
+	CALL	PRINT_STR
+	JR	SCS_CMDS_BLOCK
+
+SCS_PLUG_AUTOLOAD:
+	LD	DE,STR_PLUG_AUTO_LBL
 	CALL	PRINT_STR
 
 SCS_CMDS_BLOCK:
@@ -2353,6 +2449,10 @@ SCS_CMDS_BLOCK:
 
 	CALL	PRINT_CONFIG_PREFIX
 	LD	DE,STR_CMD_4
+	CALL	PRINT_STR
+
+	CALL	PRINT_CONFIG_PREFIX
+	LD	DE,STR_CMD_5
 	CALL	PRINT_STR
 
 	CALL	PRINT_CONFIG_PREFIX
@@ -12815,6 +12915,10 @@ PCB_CHECK_KEYS:
 	CALL	MATCH_KEY_MAXLINES
 	JP	NC,PCB_LINES_VAL
 
+	; Check for "PLUGIN" or "PLUGINS"
+	CALL	MATCH_KEY_PLUGIN
+	JP	NC,PCB_PLUGIN_VAL
+
 	JP	PCB_SKIP_LINE
 
 PCB_SCREEN_VAL:
@@ -12955,6 +13059,53 @@ PCB_LV_SET_32K:
 PCB_LV_SET_16K:
 	XOR	A
 	LD	(CFG_LINES_MODE),A
+	JP	PCB_SKIP_LINE
+
+PCB_PLUGIN_VAL:
+	; HL now points to value after '='
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'A'			; AUTOLOAD / AUTO
+	JR	Z,PCB_PLUG_SET_ON
+	CP	'Y'			; YES
+	JR	Z,PCB_PLUG_SET_ON
+	CP	'1'			; 1
+	JR	Z,PCB_PLUG_SET_ON
+	CP	'E'			; ENABLE / ENABLED
+	JR	Z,PCB_PLUG_SET_ON
+	CP	'T'			; TRUE
+	JR	Z,PCB_PLUG_SET_ON
+
+	CP	'D'			; DISABLED / DISABLE
+	JR	Z,PCB_PLUG_SET_OFF
+	CP	'N'			; NO / NONE
+	JR	Z,PCB_PLUG_SET_OFF
+	CP	'0'			; 0
+	JR	Z,PCB_PLUG_SET_OFF
+	CP	'F'			; FALSE
+	JR	Z,PCB_PLUG_SET_OFF
+
+	CP	'O'			; ON or OFF?
+	JR	NZ,PCB_PLUG_IGNORE
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'N'			; ON
+	JR	Z,PCB_PLUG_SET_ON
+	CP	'F'			; OFF
+	JR	Z,PCB_PLUG_SET_OFF
+
+PCB_PLUG_IGNORE:
+	JP	PCB_SKIP_LINE
+
+PCB_PLUG_SET_ON:
+	LD	A,1
+	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
+	JP	PCB_SKIP_LINE
+
+PCB_PLUG_SET_OFF:
+	XOR	A
+	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
 	JP	PCB_SKIP_LINE
 
 
@@ -13172,6 +13323,14 @@ MATCH_KEY_MAXLINES:
 	PUSH	HL
 	LD	DE,STR_KEY_MAXLINES_NAME
 	LD	B,7
+	JR	MKL_SHARED_LOOP
+
+; MATCH_KEY_PLUGIN: Compare text at (HL) with "PLUGIN" (case-insensitive)
+MATCH_KEY_PLUGIN:
+	PUSH	HL
+	LD	DE,STR_KEY_PLUGIN_NAME
+	LD	B,6
+	JR	MKL_SHARED_LOOP
 MKL_SHARED_LOOP:
 MKL_LOOP:
 	LD	A,(HL)
@@ -13316,6 +13475,21 @@ SC_PUT_TAB:
 SC_LINES_VAL_32K:
 	LD	HL,STR_VAL_LINES_32K
 SC_PUT_LINES:
+	CALL	SC_APPEND_STRING
+
+	; Write "PLUGIN="
+	LD	HL,STR_KEY_PLUGIN_FULL
+	CALL	SC_APPEND_STRING
+
+	; Write value: "AUTOLOAD\r\n" or "DISABLED\r\n"
+	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
+	OR	A
+	JR	NZ,SC_PLUG_VAL_AUTO
+	LD	HL,STR_VAL_PLUG_DIS
+	JR	SC_PUT_PLUG
+SC_PLUG_VAL_AUTO:
+	LD	HL,STR_VAL_PLUG_AUTO
+SC_PUT_PLUG:
 	CALL	SC_APPEND_STRING
 
 	; Set BDOS DMA to CFG_IO_BUF (record 0)
@@ -21003,8 +21177,7 @@ DPS_MISSING:
 	LD	A,(IN_EDITOR_MODE)
 	OR	A
 	JR	NZ,DPS_M_ED
-	CALL	RENDER_SPLASH
-	RET
+	JP	SHOW_SPLASH_SCREEN
 DPS_M_ED:
 	CALL	RENDER_STATUS_BAR
 	RET
@@ -22915,6 +23088,7 @@ STR_SPLASH_PLUG_FAR:	DB	"Far RAM (Bank ", "$"
 STR_SPLASH_PLUG_POST:	DB	"h, 8K)]", 13, 10, "$"
 STR_SPLASH_PLUG_MISSING: DB	"Missing (PLUGIN.PRL)]", 13, 10, "$"
 STR_SPLASH_PLUG_NOFAR:	DB	"Disabled (No Far RAM)]", 13, 10, "$"
+STR_SPLASH_PLUG_DIS_CFG: DB	"Disabled (Config)]", 13, 10, "$"
 
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
@@ -22940,6 +23114,10 @@ STR_LINES_32K_LBL:	DB	"32K (32,768 Lines)]                ",13,10,"$"
 STR_CONFIG_TAB_LBL:	DB	"4. Tab Width       : [", "$"
 STR_TAB_8_LBL:		DB	"8 Spaces (Default)]                ",13,10,"$"
 STR_TAB_4_LBL:		DB	"4 Spaces]                          ",13,10,"$"
+STR_CONFIG_PLUG_LBL:	DB	"5. Plugin Manager  : [", "$"
+STR_PLUG_AUTO_LBL:	DB	"Autoload (Far RAM Bank)]           ",13,10,"$"
+STR_PLUG_DIS_LBL:	DB	"Disabled (Do Not Load)]            ",13,10,"$"
+STR_PLUG_NO_FAR_LBL:	DB	"Disabled (No Far RAM)]             ",13,10,"$"
 
 
 STR_CFG_STAT_NONE:	DB	"Default (No SE.CFG found)]         ",13,10,"$"
@@ -22954,6 +23132,9 @@ STR_CMD_1:		DB	"  type   1                toggle 80x24 <-> 120x40           ",13
 STR_CMD_2:		DB	"  type   2                toggle RAM drive memory blocks    ",13,10,"$"
 STR_CMD_3:		DB	"  type   3                toggle Max lines (16K <-> 32K)    ",13,10,"$"
 STR_CMD_4:		DB	"  type   4                toggle Tab width (4 <-> 8)        ",13,10,"$"
+STR_CMD_5:
+	DB	"  type   5                toggle Plugin Mgr (Auto <-> Dis) "
+	DB	13,10,"$"
 STR_CMD_S:		DB	"  type   s                save config to local SE.CFG       ",13,10,"$"
 STR_CMD_Q:		DB	"  type   q  or  <ESC>     return to splash screen           ",13,10,"$"
 
@@ -22976,6 +23157,10 @@ STR_KEY_MAXLINES_NAME:	DB	"MAXLINE",0
 STR_KEY_LINES_FULL:	DB	"LINES=",0
 STR_VAL_LINES_16K:	DB	"16K",13,10,0
 STR_VAL_LINES_32K:	DB	"32K",13,10,0
+STR_KEY_PLUGIN_NAME:	DB	"PLUGIN",0
+STR_KEY_PLUGIN_FULL:	DB	"PLUGIN=",0
+STR_VAL_PLUG_AUTO:	DB	"AUTOLOAD",13,10,0
+STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 
 
 STR_RAMDRV_FILENAME:	DB	"RAMDRV  IMG"
@@ -23885,6 +24070,11 @@ ENSURE_PLUGIN_MGR_LOADED:
 	OR	A
 	RET	NZ			; Already loaded! Carry = 0
 
+	; Check if plugin manager autoload is disabled in config
+	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
+	OR	A
+	JP	Z,EPML_FAIL
+
 	; Check if Far RAM is available (at least 2 banks: 1 for doc, 1 for plugin mgr)
 	LD	A,(EXT_BANK_COUNT)
 	CP	2
@@ -24073,6 +24263,13 @@ EPML_FAIL:
 	RET
 
 AUTO_LOAD_PLUGIN_MGR:
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	NC,ALPM_CHK_CFG
+	XOR	A
+	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
+	RET
+ALPM_CHK_CFG:
 	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
 	OR	A
 	RET	Z
