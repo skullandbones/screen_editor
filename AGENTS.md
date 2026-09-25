@@ -53,3 +53,20 @@ How:
 5. **Hardware & Emulator Dual Compatibility**:
    * All changes must maintain compatibility with the RomWBW RC2014 emulator
      and SC131 real hardware (Z80 / Z180).
+
+---
+
+## 3. Protected Branches (ENFORCED ON COLOSSUS & LOCAL HOOKS)
+
+The following branches are strictly protected from deletion and history
+rewriting (force pushes):
+* `master`
+* `agy1_dev_branch`
+* `agy2_dev_branch`
+
+Enforced by:
+1. Server-side `pre-receive` hook on Colossus (`/git_repos/screen_editor.git`).
+2. Client-side `pre-push` hook (`.githooks/pre-push`).
+
+All updates to these branches must be fast-forward or standard merge commits.
+Never attempt `git push --force` or `git push --delete` on these branches.

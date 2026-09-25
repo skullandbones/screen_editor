@@ -1,0 +1,34 @@
+#!/bin/bash
+# .githooks/pre-push - Local pre-push hook preventing deletion or force-push
+# of protected branches (master, agy1_dev_branch, agy2_dev_branch).
+
+remote="$1"
+url="$2"
+zero_oid="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+    branch_name="${remote_ref#refs/heads/}"
+    case "$branch_name" in
+        master|agy1_dev_branch|agy2_dev_branch)
+            # 1. Prevent branch deletion
+            if [ "$local_oid" = "$zero_oid" ] || [ -z "$local_ref" ]; then
+                echo "[-] Hook Error: Deletion of '$branch_name' is " \
+                     "forbidden." >&2
+                exit 1
+            fi
+
+            # 2. Prevent force-push / history rewrite
+            if [ "$remote_oid" != "$zero_oid" ]; then
+                if ! git merge-base --is-ancestor "$remote_oid" "$local_oid"
+                then
+                    echo "[-] Hook Error: Force-push / history rewrite on " \
+                         "'$branch_name' is forbidden." >&2
+                    echo "    Must be a fast-forward or merge commit." >&2
+                    exit 1
+                fi
+            fi
+            ;;
+    esac
+done
+
+exit 0
