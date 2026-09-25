@@ -22,7 +22,7 @@ $(TARGET): $(ASM_SRC)
 	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
 
 plugins:
-	@echo "==> Building plugins (ROT13, WORDCNT, BEAUTIFY, HALFPLUG, BIGPLUG)..."
+	@echo "==> Building plugins (ROT13, WORDCNT, BEAUTIFY, HALFPLUG, BIGPLUG, PLUGIN)..."
 	python3 plugins/build_plugins.py
 	@echo "==> Building FAT plugin (FATFS.PRL, FATTEST.COM)..."
 	$(MAKE) -C plugins/fat all
@@ -32,6 +32,8 @@ image: $(TARGET) plugins
 	@echo "==> Injecting $(TARGET) and plugins into hd1k image (0 & 3)..."
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:ROT13.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/ROT13.PRL 0:ROT13.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:WORDCNT.OVL 2>/dev/null || true
@@ -50,6 +52,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/fat/VFSTEST.COM 0:VFSTEST.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:ROT13.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/ROT13.PRL 0:ROT13.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:WORDCNT.OVL 2>/dev/null || true

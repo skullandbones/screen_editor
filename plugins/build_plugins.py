@@ -120,11 +120,33 @@ def main():
                     os.path.join(plugin_dir, "bigplug_100.bin"),
                     os.path.join(plugin_dir, "bigplug_200.bin")], check=True)
 
+    # 6. Build PLUGIN.PRL (4KB Far RAM Plugin Manager & Context Pop-up)
+    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'plugin_100.bin')}",
+                    os.path.join(plugin_dir, "plugin.asm")], check=True)
+
+    plugin_200_asm = os.path.join(plugin_dir, "plugin_200.asm")
+    with open(os.path.join(plugin_dir, "plugin.asm"), "r") as f:
+        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
+    with open(plugin_200_asm, "w") as f:
+        f.write(src)
+
+    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'plugin_200.bin')}",
+                    plugin_200_asm], check=True)
+    if os.path.exists(plugin_200_asm):
+        os.remove(plugin_200_asm)
+
+    subprocess.run([sys.executable, mkprl_bin, "-n", "PLUGIN",
+                    "-o", os.path.join(plugin_dir, "PLUGIN.PRL"),
+                    "--size", "16k", "--far", "--modal", "--has-about", "--bss", "128",
+                    os.path.join(plugin_dir, "plugin_100.bin"),
+                    os.path.join(plugin_dir, "plugin_200.bin")], check=True)
+
     # Clean up temporary binaries
     for tmp in ["rot13_100.bin", "rot13_200.bin", "wordcnt.bin",
                 "beautify_100.bin", "beautify_200.bin",
                 "halfplug_100.bin", "halfplug_200.bin",
-                "bigplug_100.bin", "bigplug_200.bin"]:
+                "bigplug_100.bin", "bigplug_200.bin",
+                "plugin_100.bin", "plugin_200.bin"]:
         p = os.path.join(plugin_dir, tmp)
         if os.path.exists(p):
             os.remove(p)
@@ -135,6 +157,7 @@ def main():
     print(f"    - {os.path.join(plugin_dir, 'BEAUTIFY.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'HALFPLUG.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'BIGPLUG.PRL')}")
+    print(f"    - {os.path.join(plugin_dir, 'PLUGIN.PRL')}")
 
 if __name__ == "__main__":
     main()

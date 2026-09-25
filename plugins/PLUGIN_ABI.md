@@ -274,9 +274,9 @@ PLUGIN_HOST_API (+0):
 | `+10` | Word | `PTR_TOTAL_LINES` | Pointer to total line count word. |
 | `+12` | Word | `PTR_CUR_COL` | Pointer to cursor column word. |
 | `+14` | Byte | `ACTIVE_COLS` | Screen width (`80` or `120`). |
-| `+15` | Byte | `RESERVED` | Zero padding. |
+| `+15` | Byte | `ACTIVE_CONTEXT` | Screen context ID (`0`..`6`: Editor, Splash, Config, Mem, Mgr, Help, About). |
 | `+16` | Byte | `ACTIVE_ROWS` | Screen height (`24` or `40`). |
-| `+17` | Byte | `RESERVED` | Zero padding. |
+| `+17` | Byte | `PLUGIN_MGR_SLOT`| Plugin manager slot index (`0`..`7`, or `0xFF` if dedicated). |
 | `+18` | Vector | `CALL_CHECKOUT_LINE` | Checkout document line `HL` to `DE`. |
 | `+21` | Vector | `CALL_COMMIT_LINE` | Commit line `HL` from `DE` (len `BC`).|
 | `+24` | Vector | `CALL_PUTC` | Output character in `A` to console. |
@@ -287,9 +287,13 @@ PLUGIN_HOST_API (+0):
 | `+38` | Word | `PTR_BLOCK_START` | Pointer to block start line word. |
 | `+40` | Word | `PTR_BLOCK_END` | Pointer to block end line word. |
 | `+42` | Word | `PTR_TAB_WIDTH` | Pointer to tab width byte (`4` or `8`).|
-| `+44` | Word | `PTR_BEAUTIFY_CFG` | Pointer to 24B beautifier config. |
+| `+44` | Word | `PTR_REGISTRY` | Pointer to 256B `PLUGIN_REGISTRY` table. |
 | `+46` | Vector | `CALL_CHECK_KEY` | Non-blocking key check (`Z`/`NZ`). |
 | `+49` | Vector | `CALL_CLEAR_DOCUMENT`| Reset document slots & buffer. |
+| `+52` | Vector | `CALL_LOCATE_RC` | Move hardware cursor to Row `H`, Col `L`. |
+| `+55` | Vector | `CALL_LOAD_PLUGIN` | Load plugin from disk (`DE` = filename). |
+| `+58` | Vector | `CALL_UNLOAD_SLOT` | Unload plugin in slot `A` (`0`..`7`). |
+| `+61` | Vector | `CALL_REDRAW_BASE` | Redraw host screen for context in `A`. |
 
 ---
 
@@ -559,3 +563,40 @@ When executing `VFS_CMD_LIST_DIR`, entries are written sequentially into
   null (`\0`) at offset 12.
 - **Parent Directory**: If not in the root directory, `"..      /   \0"` is
   provided for navigating up the directory tree.
+
+---
+
+## 11. Standalone Far RAM Modular Subsystem: Plugin Manager (`PLUGIN.PRL`)
+
+To maximize available TPA RAM for text editing and reduce core binary footprint,
+the full-screen interactive **Plugin Manager UI** and the **Context-Aware `Ctrl+P`
+Modal Subsystem** are extracted from `SE.COM` into a standalone 16KB Far RAM
+modular plugin: **`PLUGIN.PRL`**.
+
+### Architecture & Capabilities
+
+`PLUGIN.PRL` is packaged as a 16KB Far RAM modular plugin:
+```bash
+python3 tools/mkprl.py -n PLUGIN -o plugins/PLUGIN.PRL \
+    --size 16k --far --modal --has-about --bss 128 \
+    plugins/plugin_100.bin plugins/plugin_200.bin
+```
+- **Capabilities Word**: `0x005A` (`CAP_FAR_EXEC | CAP_MODAL_UI | CAP_HAS_ABOUT | CAP_SIZE_16K`).
+- **Memory Allocation**: Resident in a dedicated 32KB Far RAM bank (`PLUGIN_MGR_BANK`),
+  borrowed on-demand via `BORROW_PLUGIN_MGR_BANK` from RomWBW's `EXT_BANK_TABLE`.
+- **Bank Isolation**: `PLUGIN_MGR_BANK` is strictly isolated from `BORROWED_BANKS_TBL`
+  and protected by an explicit guard in `IS_RANGE_FREE_IN_BANK`. User plugin slots
+  (`0`..`7`) never allocate within `PLUGIN_MGR_BANK`, preventing bank collisions and
+  in-place corruption during concurrent plugin loading.
+- **Dynamic Bank Stealing Policy**: RomWBW systems provide up to 4 application banks.
+  `BORROW_NEW_FAR_BANK` allows borrowing down to 0 extra document banks when no document
+  is actively being edited (`IN_EDITOR_MODE == 0`). When actively editing (`IN_EDITOR_MODE != 0`),
+  Bank 0 (`EXT_BANK_TABLE[0]`) is strictly preserved for resident text storage.
+- **Entry Jump Table**:
+  - `ENTRY + 0`: Action 0 — Full-Screen Interactive Plugin Manager (`DO_PLUGIN_MANAGER`).
+  - `ENTRY + 3`: Action 1 — Context-Aware Modal Dialog (`DO_CONTEXT_POPUP`).
+  - `ENTRY + 6`: Action 2 — Modal About Dialog (`DO_PLUGIN_ABOUT`).
+- **Trampoline Context Switching**: Host trampolines (`TRAMP_LOAD_PLUGIN`, `TRAMP_UNLOAD_SLOT`,
+  `TRAMP_REDRAW_BASE`) preserve caller Far RAM banks across inter-bank transitions to
+  guarantee re-entrant execution between `PLUGIN.PRL` and user plugin slots.
+
