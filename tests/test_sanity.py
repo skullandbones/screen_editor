@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fast Sanity Test Runner for SE.COM (Screen Editor).
-Verifies the core lifecycle of SE.COM in ~4 seconds:
+Verifies the core lifecycle of SE.COM:
   1. Boot RomWBW and start SE.COM from CP/M
   2. Verify Splash Screen rendering
   3. Enter Editor Mode and verify Status Bar
@@ -10,6 +10,7 @@ Verifies the core lifecycle of SE.COM in ~4 seconds:
   6. Cancel Block Selection (Ctrl+B)
   7. Open Editor Mode Keys Help (Ctrl+K) and return to editor
   8. Clean exit (Ctrl+Q) back to CP/M prompt (C>)
+  9. Open CP/M file (se 2.TXT) and verify clean status bar (no U: suffix)
 """
 
 import os
@@ -183,6 +184,33 @@ def run_sanity_test():
             print(f"[-] Clean exit with Ctrl+Q failed. Buffer: {repr(out_exit)}", flush=True)
             return False
         print("[+] Clean exit to CP/M prompt with unsaved changes prompt verified.", flush=True)
+
+        # 9. Verify CLI file load & clean status bar filename: 'se 2.TXT'
+        drain_all(master)
+        time.sleep(0.5)
+        os.write(master, b"se 2.TXT\r")
+        out_load = read_until(master, b"Line    1/2", timeout=30.0)
+        if b"| C:2.TXT        |" not in out_load:
+            print(f"[-] Status bar filename malformed (expected "
+                  f"'| C:2.TXT        |'). Buffer: {repr(out_load[-400:])}",
+                  flush=True)
+            return False
+        if b"2.TXTU:" in out_load or b".TXTU:" in out_load:
+            print(f"[-] Status bar corrupted with erroneous 'U:' suffix! "
+                  f"Buffer: {repr(out_load[-400:])}", flush=True)
+            return False
+        print("[+] Verified clean status bar for CP/M file (se 2.TXT): "
+              "'| C:2.TXT        |'.", flush=True)
+
+        # Clean exit to CP/M
+        time.sleep(0.3)
+        os.write(master, b"\x11")
+        out_exit2 = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_exit2:
+            print(f"[-] Exit from 2.TXT session failed. "
+                  f"Buffer: {repr(out_exit2)}", flush=True)
+            return False
+        print("[+] Clean exit back to CP/M prompt.", flush=True)
 
         elapsed = time.time() - t_start
         print(f"[+] All SE.COM sanity tests PASSED in {elapsed:.2f}s!", flush=True)
