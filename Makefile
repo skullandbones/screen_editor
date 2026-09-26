@@ -147,9 +147,18 @@ test-fatfs-hook: image
 	@echo "==> Running FATFS Phase 2 VFS hook & status bar test suite..."
 	python3 tests/test_fatfs_vfs_hook.py
 
+test-monkey: image
+	@echo "==> Running SE.COM drunken monkey chaos test suite..."
+	python3 tests/test_drunken_monkey.py --steps $(or $(STEPS),50)
+
+view-monkey:
+	@echo "==> Launching interactive drunken monkey session viewer..."
+	python3 tools/monkey_viewer.py \
+		$(or $(SESSION),tests/monkey_session_sample.json)
+
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-fatfs test-fatfs-slot \
-	test-fatfs-vfs test-fatfs-hook test-paging
+	test-fatfs-vfs test-fatfs-hook test-paging test-monkey
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \

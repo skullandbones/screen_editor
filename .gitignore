@@ -22,3 +22,6 @@ __pycache__/
 # Distribution and release packages
 dist/
 
+# Test output sessions (except sample)
+tests/monkey_session.json
+
