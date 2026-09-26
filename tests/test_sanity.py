@@ -29,8 +29,10 @@ def find_paths():
     rom_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom")
     img_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img")
     se_bin = os.path.join(repo_root, "SE.COM")
+    cpmrm_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools",
+                             "Linux", "cpmrm")
 
-    return emu_bin, rom_file, img_file, se_bin
+    return emu_bin, rom_file, img_file, se_bin, cpmrm_bin
 
 def read_until(master_fd, match_bytes, timeout=5.0):
     buf = b""
@@ -64,7 +66,7 @@ def drain_all(master_fd, quiet_time=0.1):
 
 def run_sanity_test():
     t_start = time.time()
-    emu_bin, rom_file, img_file, se_bin = find_paths()
+    emu_bin, rom_file, img_file, se_bin, cpmrm_bin = find_paths()
 
     if not os.path.isfile(emu_bin):
         print(f"[-] Emulator binary not found: {emu_bin}", flush=True)
@@ -75,6 +77,15 @@ def run_sanity_test():
     if not os.path.isfile(img_file):
         print(f"[-] Disk image not found: {img_file}", flush=True)
         return False
+
+    if os.path.isfile(cpmrm_bin):
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file,
+                        "0:RAMDRV.IMG"],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
 
     print("[*] Launching RomWBW on RC2014 emulator (Sanity Suite)...", flush=True)
     master, slave = os.openpty()

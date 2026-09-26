@@ -77,6 +77,7 @@ ESC_TIMEOUT_LOOPS EQU	5000		; VT100 escape debounce timeout loops (~15-20ms)
 KEY_DEL		EQU	127
 
 SEARCH_BUF_MAX	EQU	64
+FIND_POPUP_FIELD_LEN	EQU	29
 
 ; Line ending modes
 FMT_CPM		EQU	0		; CR/LF (0x0D, 0x0A)
@@ -10543,17 +10544,20 @@ GOTO_UI_CANCEL:
 ;------------------------------------------------------------------------------
 
 ;------------------------------------------------------------------------------
-; DO_FIND_UI: Display status bar prompt for Find, read pattern, execute search
+; DO_FIND_UI: Display centered Tier 2 modal pop-up for Find, read pattern,
+; and execute search.
+; Dimensions: 50 columns wide x 7 rows high.
 ; Returns: Carry=0 on match found, Carry=1 on cancel or not found
 ;------------------------------------------------------------------------------
 DO_FIND_UI:
 	; Check if starting from an active block
 	CALL	CHECK_START_FROM_BLOCK
-	; B = character count in SEARCH_INPUT_BUF (0..64)
-	; If B > 0, SEARCH_INPUT_BUF has block text, and (CUR_DOC_ROW, CUR_COL) set to block start
+	; B = character count in SEARCH_INPUT_BUF (0..FIND_POPUP_FIELD_LEN)
+	; If B > 0, SEARCH_INPUT_BUF has block text, and (CUR_DOC_ROW, CUR_COL)
+	; set to block start
 
 	; Setup prompt and edit box
-	CALL	DRAW_FIND_UI_FULL
+	CALL	DRAW_FIND_POPUP_FULL
 
 FIND_UI_KEY_LOOP:
 	CALL	GET_KEY
@@ -10586,10 +10590,10 @@ FIND_UI_KEY_LOOP:
 	CP	127
 	JR	NC,FIND_UI_KEY_LOOP
 
-	; Check buffer capacity (SEARCH_BUF_MAX = 64)
+	; Check buffer capacity (FIND_POPUP_FIELD_LEN = 29)
 	LD	C,A			; Save character
 	LD	A,B
-	CP	SEARCH_BUF_MAX
+	CP	FIND_POPUP_FIELD_LEN
 	JR	NC,FIND_UI_KEY_LOOP
 
 	; Append to SEARCH_INPUT_BUF
@@ -10634,69 +10638,112 @@ FIND_UI_TOGGLE_CASE:
 	XOR	1
 	LD	(SEARCH_CASE_SENSITIVE),A
 
-	; Redraw prompt and edit box
-	CALL	DRAW_FIND_UI_FULL
+	; Redraw popup dialog
+	LD	A,(POPUP_START_ROW)
+	LD	(POPUP_ROW),A
+	CALL	DRAW_FIND_POPUP_BODY
 	JR	FIND_UI_KEY_LOOP
 
-DRAW_FIND_UI_FULL:
-	; Input: B = length of text in SEARCH_INPUT_BUF (0..64)
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
+DRAW_FIND_POPUP_FULL:
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
+
+DRAW_FIND_POPUP_BODY:
+	LD	DE,STR_HIDE_CURSOR
 	CALL	PRINT_STR
+
+	; Line 1: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_FIND_POPUP_TITLE
+	CALL	PRINT_STR
+
+	; Line 3: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 4: Prompt and input field
+	CALL	POPUP_LOCATE_NEXT
 	LD	A,(SEARCH_CASE_SENSITIVE)
 	OR	A
-	JR	Z,DRAW_FIND_INSENS_UI
-	LD	DE,STR_FIND_EXACT	; "Find (Exact):" (12 chars)
+	JR	Z,DFP_INSENS
+	LD	DE,STR_FIND_POPUP_PROMPT_EXACT
+	JR	DFP_PRINT_PFX
+DFP_INSENS:
+	LD	DE,STR_FIND_POPUP_PROMPT_INSENS
+DFP_PRINT_PFX:
 	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
-	LD	DE,STR_FIND_EXACT_BOX_PFX ; "  [" (3 chars)
-	CALL	PRINT_STR
-	JR	DRAW_FIND_BOX_BODY
-
-DRAW_FIND_INSENS_UI:
-	LD	DE,STR_FIND_INSENS	; "Find (Insens):" (13 chars)
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
-	LD	DE,STR_FIND_INSENS_BOX_PFX ; " [" (2 chars)
-	CALL	PRINT_STR
-
-DRAW_FIND_BOX_BODY:
 	; Echo prefilled / current SEARCH_INPUT_BUF if B > 0
 	LD	A,B
 	OR	A
-	JR	Z,DRAW_FIND_PAD_SPACES
+	JR	Z,DFP_PAD_SPACES
 	LD	DE,SEARCH_INPUT_BUF
 	CALL	PRINT_STR
-
-DRAW_FIND_PAD_SPACES:
-	; Pad (64 - B) spaces
-	LD	A,64
+DFP_PAD_SPACES:
+	LD	A,FIND_POPUP_FIELD_LEN
 	SUB	B
-	JR	Z,DRAW_FIND_BOX_CLOSE
+	JR	Z,DFP_BOX_CLOSE
 	LD	C,A
-DRAW_FIND_SP_LOOP:
+DFP_PAD_LOOP:
 	LD	A,' '
 	CALL	PUTC
 	DEC	C
-	JR	NZ,DRAW_FIND_SP_LOOP
-
-DRAW_FIND_BOX_CLOSE:
-	LD	A,']'
-	CALL	PUTC
-	LD	DE,STR_CLEAR_EOL
+	JR	NZ,DFP_PAD_LOOP
+DFP_BOX_CLOSE:
+	LD	DE,STR_FIND_POPUP_BOX_CLOSE
 	CALL	PRINT_STR
 
-	; Position cursor at (B + 1): emit (65 - B) backspaces
-	LD	A,65
-	SUB	B
-	LD	C,A
-DRAW_FIND_BS_LOOP:
-	LD	A,008H
-	CALL	PUTC
-	DEC	C
-	JR	NZ,DRAW_FIND_BS_LOOP
+	; Line 5: Match mode
+	CALL	POPUP_LOCATE_NEXT
+	LD	A,(SEARCH_CASE_SENSITIVE)
+	OR	A
+	JR	Z,DFP_MODE_INSENS
+	LD	DE,STR_FIND_POPUP_MODE_EXACT
+	JR	DFP_PRINT_MODE
+DFP_MODE_INSENS:
+	LD	DE,STR_FIND_POPUP_MODE_INSENS
+DFP_PRINT_MODE:
+	CALL	PRINT_STR
+
+	; Line 6: Keys
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_FIND_POPUP_KEYS
+	CALL	PRINT_STR
+
+	; Line 7: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Position cursor inside popup box at
+	; (POPUP_START_ROW + 3, POPUP_COL + 18 + B)
+	LD	A,(POPUP_START_ROW)
+	ADD	A,3
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,18
+	ADD	A,B
+	LD	L,A
+	CALL	LOCATE_RC
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
 	RET
 
 FIND_UI_CHECK_ESC:
@@ -10712,25 +10759,21 @@ FIND_WAIT_ESC:
 	JR	FIND_UI_CANCEL
 
 FIND_GOT_ESC_SEQ:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
 	CALL	GOT_ESC_BYTE
-	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
 	SCF
 	RET
 
 FIND_UI_CANCEL:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
 	SCF
 	RET
 
 FIND_UI_ENTER:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
-
 	; If B > 0, copy SEARCH_INPUT_BUF into SEARCH_BUF
 	LD	A,B
 	OR	A
@@ -10758,7 +10801,20 @@ FIND_CHECK_PREV:
 
 FIND_EXEC_SEARCH:
 	CALL	FIND_STRING_FORWARD
+	RET	NC			; Match found: defer render to MAIN_LOOP
+
+	; Search failed: erase popup dialog by redrawing screen
+	CALL	RENDER_SCREEN
+	LD	A,(SEARCH_EVER_FOUND)
+	OR	A
+	LD	DE,STR_PATTERN_NOT_FOUND
+	JR	Z,FES_PRINT_MSG
+	LD	DE,STR_SEARCH_COMPLETED
+FES_PRINT_MSG:
+	CALL	S_PRINT_MSG
+	SCF
 	RET
+
 
 ;------------------------------------------------------------------------------
 ; CHECK_START_FROM_BLOCK: Check if block selection active; if so, populate
@@ -10861,14 +10917,14 @@ CSFB_EXTRACT:
 	JR	CSFB_GOT_LEN
 
 CSFB_DIFF_ROW:
-	; Spans multiple lines: take up to 64 chars from start line
-	LD	A,SEARCH_BUF_MAX
+	; Spans multiple lines: take up to 29 chars from start line
+	LD	A,FIND_POPUP_FIELD_LEN
 
 CSFB_GOT_LEN:
-	; A = max chars to copy from block. Limit to SEARCH_BUF_MAX (64)
-	CP	SEARCH_BUF_MAX+1
+	; A = max chars to copy from block. Limit to FIND_POPUP_FIELD_LEN (29)
+	CP	FIND_POPUP_FIELD_LEN+1
 	JR	C,CSFB_LEN_OK
-	LD	A,SEARCH_BUF_MAX
+	LD	A,FIND_POPUP_FIELD_LEN
 CSFB_LEN_OK:
 	LD	C,A			; C = max chars
 	OR	A
@@ -11540,7 +11596,8 @@ TO_UPPER_CHAR:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_REPLACE_UI: Prompt for Find and Replace strings, then execute replace loop
+; DO_REPLACE_UI: Prompt for Find and Replace strings via Tier 2 modal popups,
+; then execute replace loop.
 ;------------------------------------------------------------------------------
 DO_REPLACE_UI:
 	; 1. First get search pattern via DO_FIND_UI
@@ -11549,49 +11606,20 @@ DO_REPLACE_UI:
 
 	; Note: DO_FIND_UI already executed first search and positioned at first match!
 
-	; 2. Prompt for replacement string
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	LD	DE,STR_REPLACE_PROMPT	; "Replace with:" (13 chars)
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
-	LD	DE,STR_REPLACE_BOX_PFX	; " [" (2 chars)
-	CALL	PRINT_STR
-
-	; Draw 64 spaces for empty edit box
-	LD	C,64
-REPLACE_INIT_BOX_LOOP:
-	LD	A,' '
-	CALL	PUTC
-	DEC	C
-	JR	NZ,REPLACE_INIT_BOX_LOOP
-
-	LD	A,']'
-	CALL	PUTC
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
-
-	; Move cursor back 65 positions to first space inside box
-	LD	C,65
-REPLACE_INIT_BS_LOOP:
-	LD	A,008H
-	CALL	PUTC
-	DEC	C
-	JR	NZ,REPLACE_INIT_BS_LOOP
+	; 2. Prompt for replacement string via Tier 2 centered modal popup
+	CALL	DRAW_REPLACE_POPUP_FULL
 
 	; Clear replace buffer
 	LD	HL,REPLACE_BUF
 	LD	(HL),0
-	LD	B,0			; B = character count (0..SEARCH_BUF_MAX)
+	LD	B,0			; B = character count (0..FIND_POPUP_FIELD_LEN)
 
 REPLACE_INPUT_LOOP:
 	CALL	GET_KEY
 
 	; ESC / Ctrl+C -> Cancel replace
 	CP	KEY_ESC
-	JR	Z,REPLACE_INPUT_CANCEL
+	JR	Z,REPLACE_INPUT_CHECK_ESC
 	CP	KEY_CTRL_C
 	JR	Z,REPLACE_INPUT_CANCEL
 
@@ -11614,7 +11642,7 @@ REPLACE_INPUT_LOOP:
 	; Check max length
 	LD	C,A
 	LD	A,B
-	CP	SEARCH_BUF_MAX
+	CP	FIND_POPUP_FIELD_LEN
 	JR	NC,REPLACE_INPUT_LOOP
 
 	LD	HL,REPLACE_BUF
@@ -11650,17 +11678,38 @@ REPLACE_INPUT_BS:
 	CALL	PUTC
 	JR	REPLACE_INPUT_LOOP
 
-REPLACE_INPUT_CANCEL:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+REPLACE_INPUT_CHECK_ESC:
+	LD	BC,ESC_TIMEOUT_LOOPS
+REP_WAIT_ESC:
+	CALL	CHECK_KEY_READY
+	JR	NZ,REP_GOT_ESC_SEQ
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,REP_WAIT_ESC
+	JR	REPLACE_INPUT_CANCEL
+
+REP_GOT_ESC_SEQ:
+	CALL	GOT_ESC_BYTE
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
+	RET
+
+REPLACE_INPUT_CANCEL:
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
 	RET
 
 REPLACE_INPUT_CONFIRM:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
 	LD	A,B
 	LD	(REPLACE_LEN),A
+
+	; Clear replace popup by restoring base screen
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
 
 	; 3. Initialize replace execution
 	XOR	A
@@ -11670,7 +11719,6 @@ REPLACE_INPUT_CONFIRM:
 	LD	HL,0
 	LD	(REPLACE_COUNT),HL
 
-	; We already found the first match during DO_FIND_UI!
 	; Lock search wrap origin for this replace session:
 	LD	HL,(BLOCK_START_ROW)
 	LD	(SEARCH_START_ROW),HL
@@ -11680,7 +11728,82 @@ REPLACE_INPUT_CONFIRM:
 	LD	(SEARCH_WRAPPED),A
 
 	; Enter the replace loop directly for the current match:
-	JR	REPLACE_PROCESS_MATCH
+	JP	REPLACE_PROCESS_MATCH
+
+DRAW_REPLACE_POPUP_FULL:
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
+
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+
+	; Line 1: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REPLACE_POPUP_TITLE
+	CALL	PRINT_STR
+
+	; Line 3: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 4: Prompt and empty input box
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REPLACE_POPUP_PROMPT
+	CALL	PRINT_STR
+	; Pad 29 spaces for empty box
+	LD	C,FIND_POPUP_FIELD_LEN
+DRP_PAD_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DEC	C
+	JR	NZ,DRP_PAD_LOOP
+	LD	DE,STR_FIND_POPUP_BOX_CLOSE
+	CALL	PRINT_STR
+
+	; Line 5: Instructions
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REPLACE_POPUP_MSG
+	CALL	PRINT_STR
+
+	; Line 6: Keys
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REPLACE_POPUP_KEYS
+	CALL	PRINT_STR
+
+	; Line 7: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Position cursor inside replace box at (POPUP_START_ROW + 3, POPUP_COL + 18)
+	LD	A,(POPUP_START_ROW)
+	ADD	A,3
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,18
+	LD	L,A
+	CALL	LOCATE_RC
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
+	RET
 
 REPLACE_SEARCH_NEXT:
 	; Check current search direction
@@ -23148,6 +23271,32 @@ STR_POPUP_SAVE_MSG2:
 	DB	"| Save changes?                                  |", 0
 STR_POPUP_SAVE_KEYS:
 	DB	"|    [Y] Yes       [N] No       ESC: Cancel      |", 0
+
+; Find Modal Pop-up Strings (50 cols x 7 rows)
+STR_FIND_POPUP_TITLE:
+	DB	"|                   Find Text                    |", 0
+STR_FIND_POPUP_PROMPT_EXACT:
+	DB	"| Find (Exact):  [", 0
+STR_FIND_POPUP_PROMPT_INSENS:
+	DB	"| Find (Insens): [", 0
+STR_FIND_POPUP_BOX_CLOSE:
+	DB	"] |", 0
+STR_FIND_POPUP_MODE_EXACT:
+	DB	"| Match:   [Case Sensitive  ]                    |", 0
+STR_FIND_POPUP_MODE_INSENS:
+	DB	"| Match:   [Case Insensitive]                    |", 0
+STR_FIND_POPUP_KEYS:
+	DB	"| Enter:Find       Tab:Toggle Case    ESC:Cancel |", 0
+
+; Replace Modal Pop-up Strings (50 cols x 7 rows)
+STR_REPLACE_POPUP_TITLE:
+	DB	"|                  Replace Text                  |", 0
+STR_REPLACE_POPUP_PROMPT:
+	DB	"| Replace with:  [", 0
+STR_REPLACE_POPUP_MSG:
+	DB	"| Enter replacement text to substitute for match |", 0
+STR_REPLACE_POPUP_KEYS:
+	DB	"| Enter:Confirm                       ESC:Cancel |", 0
 STR_DEF_WORDCNT:	DB	"WORDCNT.OVL", 0
 STR_DEF_ROT13:		DB	"ROT13.PRL", 0
 STR_DEF_BEAUTIFY:	DB	"BEAUTIFY.PRL", 0
@@ -23522,12 +23671,6 @@ STR_FAT_NO_PLUGIN_INLINE:	DB	"  feature requires FATFS.PRL","$"
 STR_GOTO_LINE_PROMPT:	DB	"Goto line:","$"
 STR_GOTO_LINE_BOX:	DB	" [     ]","$"
 STR_BS_6:		DB	8,8,8,8,8,8,"$"
-STR_FIND_EXACT:		DB	"Find (Exact):","$"
-STR_FIND_INSENS:	DB	"Find (Insens):","$"
-STR_FIND_EXACT_BOX_PFX:	DB	"  [","$"
-STR_FIND_INSENS_BOX_PFX:DB	" [","$"
-STR_REPLACE_PROMPT:	DB	"Replace with:","$"
-STR_REPLACE_BOX_PFX:	DB	" [","$"
 STR_REPLACE_CONFIRM:	DB	"Replace (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/",27,"[4m","A",27,"[24m","ll/",27,"[4m","Q",27,"[24m","uit/",27,"[4m","R",27,"[24m","everse)? ","$"
 STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
 STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
@@ -23835,6 +23978,7 @@ PLUGIN_REGISTRY:	DS	8 * 32
 POPUP_CONTEXT_ID:	DB	0
 POPUP_ROW:		DB	0
 POPUP_COL:		DB	0
+POPUP_START_ROW:	DB	0
 POPUP_SAVE_START_ROW:	DB	0
 PLUGIN_MGR_SLOT:	DB	0FFH
 PLUGIN_MGR_BANK:	DB	0
@@ -24604,11 +24748,13 @@ DIR_NAMES_BUF	EQU	LINE_STORAGE
 PLUGIN_TPA_SLOT	EQU	LINE_STORAGE
 
 ; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
+; Overlaid on upper half of SPLIT_LINE_TEMP to keep BSS strictly below CCP
 LINE_SHIFT_BUF_SIZE EQU	256
-LINE_SHIFT_BUF	EQU	LINE_STORAGE + LINE_STORAGE_SIZE
+LINE_SHIFT_BUF	EQU	SPLIT_LINE_TEMP + 512
 
 ; Dedicated bounce buffer for swap file BDOS random I/O (128 bytes)
+; Overlaid on upper half of SPLIT_LINE_TEMP to keep BSS strictly below CCP
 SWAP_IO_BUF_SIZE EQU	128
-SWAP_IO_BUF	EQU	LINE_SHIFT_BUF + LINE_SHIFT_BUF_SIZE
+SWAP_IO_BUF	EQU	SPLIT_LINE_TEMP + 768
 
-BSS_END		EQU	SWAP_IO_BUF + SWAP_IO_BUF_SIZE
+BSS_END		EQU	LINE_STORAGE + LINE_STORAGE_SIZE
