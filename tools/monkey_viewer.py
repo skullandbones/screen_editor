@@ -34,7 +34,7 @@ def get_local_ip():
     return ip
 
 
-def serve_html_viewer(html_file, port=8000):
+def serve_html_viewer(html_file, port=8000, launch_browser=True):
     """
     Serves the HTML viewer directory over local Wi-Fi for mobile phone access.
     """
@@ -71,6 +71,9 @@ def serve_html_viewer(html_file, port=8000):
           flush=True)
     print("  Press Ctrl+C to stop the server.", flush=True)
     print("=" * 76, flush=True)
+
+    if launch_browser:
+        open_in_browser(url_local)
 
     try:
         server.serve_forever()
@@ -401,16 +404,21 @@ def dump_step(session_data, step_index):
     print("+" + "-" * cols + "+")
 
 
-def open_in_browser(html_path):
-    """Opens the generated HTML viewer in the default browser."""
-    file_uri = f"file://{os.path.abspath(html_path)}"
-    print(f"[+] Launching default browser: {file_uri}", flush=True)
+def open_in_browser(target):
+    """Opens the generated HTML viewer or URL in the default browser."""
+    if target.startswith("http://") or target.startswith("https://"):
+        target_url = target
+    else:
+        abs_path = os.path.abspath(target)
+        target_url = f"file://{abs_path}"
+
+    print(f"[+] Launching default browser: {target_url}", flush=True)
     try:
-        webbrowser.open(file_uri)
+        webbrowser.open(target_url)
     except Exception as exc:
         print(f"[!] Could not launch browser automatically: {exc}",
               flush=True)
-        print(f"[*] Please open this URL manually:\n    {file_uri}",
+        print(f"[*] Please open this URL manually:\n    {target_url}",
               flush=True)
 
 
@@ -489,12 +497,9 @@ def main():
     )
 
     if args.serve is not None:
-        if not args.no_browse:
-            local_url = (
-                f"http://localhost:{args.serve}/{os.path.basename(out_file)}"
-            )
-            open_in_browser(local_url)
-        serve_html_viewer(out_file, port=args.serve)
+        serve_html_viewer(
+            out_file, port=args.serve, launch_browser=not args.no_browse
+        )
         return
 
     print("=" * 76, flush=True)
