@@ -167,7 +167,7 @@ def main():
     subprocess.run([sys.executable, mkprl_bin, "-n", "PLUGIN",
                     "-o", os.path.join(plugin_dir, "PLUGIN.PRL"),
                     "--size", "8k", "--far", "--modal", "--has-about",
-                    "--bss", "128",
+                    "--bss", "512",
                     os.path.join(plugin_dir, "plugin_100.bin"),
                     os.path.join(plugin_dir, "plugin_200.bin")], check=True)
 
@@ -181,6 +181,13 @@ def main():
         p = os.path.join(plugin_dir, tmp)
         if os.path.exists(p):
             os.remove(p)
+
+    cfg_path = os.path.join(plugin_dir, "PLUGIN.CFG")
+    if not os.path.exists(cfg_path):
+        cfg_data = b"WORDCNT.OVL\r\nROT13.PRL\r\nBEAUTIFY.PRL\r\n"
+        cfg_data += b"\x1a" * (128 - len(cfg_data))
+        with open(cfg_path, "wb") as f:
+            f.write(cfg_data)
 
     print("[+] Plugins built successfully:")
     print(f"    - {os.path.join(plugin_dir, 'ROT13.PRL')}")

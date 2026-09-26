@@ -28,12 +28,156 @@ PLUG_CTX_HELP		EQU	5
 PLUG_CTX_ABOUT		EQU	6
 
 ;------------------------------------------------------------------------------
-; Standard 3-Entry Jump Table
+; Standard Jump Table
 ;------------------------------------------------------------------------------
 ENTRY:
 	JP	DO_PLUGIN_MANAGER	; +0: Action 0 (Full-Screen Plugin Manager)
 	JP	DO_CONTEXT_POPUP	; +3: Action 1 (Context-Aware Pop-up Modal)
 	JP	DO_PLUGIN_ABOUT		; +6: Action 2 (Plugin Manager About Dialog)
+	JP	DO_AUTOLOAD_PLUGINS	; +9: Action 3 (Autoload from PLUGIN.CFG)
+
+DO_AUTOLOAD_PLUGINS:
+	CALL	INIT_HOST_API
+	RET	C
+
+	; Guarantee null sentinel at end of buffer
+	XOR	A
+	LD	(CFG_BUF_SENTINEL),A
+
+	; Call HOST_LOAD_PLUGIN_CFG with DE = PLUGIN_CFG_BUF
+	LD	DE,PLUGIN_CFG_BUF
+	CALL	HOST_LOAD_PLUGIN_CFG
+	RET
+
+DO_SAVE_PLUGIN_CFG:
+	; Clear local PLUGIN_CFG_BUF (128 bytes) with 1AH (EOF)
+	LD	HL,PLUGIN_CFG_BUF
+	LD	(HL),1AH
+	LD	DE,PLUGIN_CFG_BUF+1
+	LD	BC,127
+	LDIR
+	LD	DE,PLUGIN_CFG_BUF	; DE = destination write pointer
+
+	; Get pointer to PLUGIN_REGISTRY (HOST_API + 44)
+	LD	HL,(HOST_API_PTR)
+	LD	BC,44
+	ADD	HL,BC
+	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A			; HL = PLUGIN_REGISTRY
+	LD	(PLUG_REG_PTR),HL
+
+	; Loop over slots 0..7
+	LD	B,0			; B = slot 0..7
+DSP_SLOT_LOOP:
+	PUSH	BC
+	PUSH	DE
+	; Calculate slot ptr: PLUG_REG_PTR + B * 32
+	LD	HL,(PLUG_REG_PTR)
+	LD	A,B
+	ADD	A,A			; * 2
+	ADD	A,A			; * 4
+	ADD	A,A			; * 8
+	ADD	A,A			; * 16
+	ADD	A,A			; * 32
+	LD	C,A
+	LD	B,0
+	ADD	HL,BC			; HL = slot entry ptr
+	POP	DE
+
+	; Check if slot is loaded: offset 22 (SLOT_STATE != 0)
+	PUSH	HL
+	LD	BC,22
+	ADD	HL,BC
+	LD	A,(HL)
+	POP	HL
+	OR	A
+	JR	Z,DSP_NEXT_SLOT
+
+	; Copy plugin name (up to 8 chars or until null/space)
+	LD	B,8
+DSP_NAME_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,DSP_NAME_END
+	CP	' '
+	JR	Z,DSP_NAME_END
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DJNZ	DSP_NAME_LOOP
+DSP_NAME_END:
+	LD	A,'.'
+	LD	(DE),A
+	INC	DE
+
+	; Determine extension (.OVL or .PRL)
+	POP	BC			; Restore B = slot
+	PUSH	BC
+	LD	HL,(PLUG_REG_PTR)
+	LD	A,B
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	LD	C,A
+	LD	B,0
+	ADD	HL,BC			; HL = slot entry ptr
+
+	PUSH	HL
+	LD	BC,28
+	ADD	HL,BC
+	LD	A,(HL)			; Extension char at +28
+	CP	'O'
+	JR	Z,DSP_EXT_OVL
+	POP	HL
+	PUSH	HL
+	LD	BC,18
+	ADD	HL,BC
+	LD	A,(HL)
+	INC	HL
+	OR	(HL)
+	JR	NZ,DSP_EXT_OVL
+	POP	HL
+	LD	A,'P'
+	LD	(DE),A
+	INC	DE
+	LD	A,'R'
+	LD	(DE),A
+	INC	DE
+	JR	DSP_EXT_COMMON
+DSP_EXT_OVL:
+	POP	HL
+	LD	A,'O'
+	LD	(DE),A
+	INC	DE
+	LD	A,'V'
+	LD	(DE),A
+	INC	DE
+DSP_EXT_COMMON:
+	LD	A,'L'
+	LD	(DE),A
+	INC	DE
+	LD	A,13
+	LD	(DE),A
+	INC	DE
+	LD	A,10
+	LD	(DE),A
+	INC	DE
+
+DSP_NEXT_SLOT:
+	POP	BC
+	INC	B
+	LD	A,B
+	CP	8
+	JR	NZ,DSP_SLOT_LOOP
+
+	; Call HOST_SAVE_PLUGIN_CFG with DE = PLUGIN_CFG_BUF
+	LD	DE,PLUGIN_CFG_BUF
+	CALL	HOST_SAVE_PLUGIN_CFG
+	RET
 
 ;==============================================================================
 ; Action 0: Full-Screen Interactive Plugin Manager
@@ -100,6 +244,8 @@ PKL_NOT_LOWER:
 	JP	Z,PKL_DO_L
 	CP	'U'
 	JP	Z,PKL_DO_U
+	CP	'S'
+	JP	Z,PKL_DO_S
 
 	; Slot selection: '0'..'7'
 	CP	'0'
@@ -126,6 +272,20 @@ PKL_DO_L_OPEN:
 PKL_DO_U:
 	CALL	PROMPT_UNLOAD_PLUGIN
 	JP	DO_PLUG_REDRAW
+
+PKL_DO_S:
+	CALL	DO_SAVE_PLUGIN_CFG
+	PUSH	AF
+	CALL	LOCATE_STATUS_ROW
+	POP	AF
+	JR	C,PKL_S_ERR
+	LD	DE,STR_MSG_CFG_SAVED
+	CALL	HOST_PRINT_STR
+	JP	PLUG_KEY_LOOP
+PKL_S_ERR:
+	LD	DE,STR_MSG_CFG_ERR
+	CALL	HOST_PRINT_STR
+	JP	PLUG_KEY_LOOP
 
 PLUG_PREV_SLOT:
 	LD	A,(SELECTED_SLOT)
@@ -519,6 +679,8 @@ FPSR_SLOT_DONE:
 	POP	HL
 	LD	HL,STR_PLUG_EMPTY_ROW
 	CALL	COPY_STR_Z
+	XOR	A
+	LD	(DE),A
 	RET
 
 FPSR_LOADED:
@@ -1497,36 +1659,44 @@ DES_DONE:
 ; Host API Trampoline Wrappers (via HOST_API_PTR in Upper Common RAM)
 ;------------------------------------------------------------------------------
 HOST_PUTC:
-	PUSH	BC
+	PUSH	HL
 	LD	HL,(HOST_API_PTR)
+	PUSH	BC
 	LD	BC,24			; Offset +24: PUTC
 	ADD	HL,BC
 	POP	BC
-	JP	(HL)
+	EX	(SP),HL
+	RET
 
 HOST_PRINT_STR:
-	PUSH	BC
+	PUSH	HL
 	LD	HL,(HOST_API_PTR)
+	PUSH	BC
 	LD	BC,27			; Offset +27: PRINT_STR
 	ADD	HL,BC
 	POP	BC
-	JP	(HL)
+	EX	(SP),HL
+	RET
 
 HOST_GET_KEY:
-	PUSH	BC
+	PUSH	HL
 	LD	HL,(HOST_API_PTR)
+	PUSH	BC
 	LD	BC,30			; Offset +30: GET_KEY
 	ADD	HL,BC
 	POP	BC
-	JP	(HL)
+	EX	(SP),HL
+	RET
 
 HOST_CHECK_KEY:
-	PUSH	BC
+	PUSH	HL
 	LD	HL,(HOST_API_PTR)
+	PUSH	BC
 	LD	BC,46			; Offset +46: CHECK_KEY_READY
 	ADD	HL,BC
 	POP	BC
-	JP	(HL)
+	EX	(SP),HL
+	RET
 
 HOST_LOCATE_RC:
 	PUSH	HL
@@ -1535,36 +1705,64 @@ HOST_LOCATE_RC:
 	RET
 
 HOST_LOAD_PLUGIN:
-	PUSH	BC
+	PUSH	HL
 	LD	HL,(HOST_API_PTR)
+	PUSH	BC
 	LD	BC,55			; Offset +55: LOAD_PLUGIN_BY_NAME
 	ADD	HL,BC
 	POP	BC
-	JP	(HL)
+	EX	(SP),HL
+	RET
 
 HOST_UNLOAD_SLOT:
-	PUSH	BC
+	PUSH	HL
 	LD	HL,(HOST_API_PTR)
+	PUSH	BC
 	LD	BC,58			; Offset +58: UNLOAD_PLUGIN_SLOT
 	ADD	HL,BC
 	POP	BC
-	JP	(HL)
+	EX	(SP),HL
+	RET
 
 HOST_REDRAW_BASE:
-	PUSH	BC
+	PUSH	HL
 	LD	HL,(HOST_API_PTR)
+	PUSH	BC
 	LD	BC,61			; Offset +61: REDRAW_BASE_SCREEN
 	ADD	HL,BC
 	POP	BC
-	JP	(HL)
+	EX	(SP),HL
+	RET
 
 HOST_OPEN_PLUGIN_UI:
-	PUSH	BC
+	PUSH	HL
 	LD	HL,(HOST_API_PTR)
+	PUSH	BC
 	LD	BC,64			; Offset +64: OPEN_PLUGIN_UI
 	ADD	HL,BC
 	POP	BC
-	JP	(HL)
+	EX	(SP),HL
+	RET
+
+HOST_SAVE_PLUGIN_CFG:
+	PUSH	HL
+	LD	HL,(HOST_API_PTR)
+	PUSH	BC
+	LD	BC,67			; Offset +67: SAVE_PLUGIN_CFG
+	ADD	HL,BC
+	POP	BC
+	EX	(SP),HL
+	RET
+
+HOST_LOAD_PLUGIN_CFG:
+	PUSH	HL
+	LD	HL,(HOST_API_PTR)
+	PUSH	BC
+	LD	BC,70			; Offset +70: LOAD_PLUGIN_CFG
+	ADD	HL,BC
+	POP	BC
+	EX	(SP),HL
+	RET
 
 ;==============================================================================
 ; Static Strings & Data
@@ -1606,18 +1804,21 @@ STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+-------------
 
 STR_PLUG_CMDS_PRE:	DB	"0..7:select | ", 0
 STR_PLUG_CMDS_BOTH:
-	DB	"Enter:run | A:about | C:config | L:load | U:unload | Q:exit", 0
+	DB	"Enter:run | A:about | C:cfg | L:load | U:unload | S:save | Q:exit", 0
 STR_PLUG_CMDS_ABOUT:
-	DB	"Enter:run | A:about | L:load | U:unload | Up/Dn | Q:exit", 0
+	DB	"Enter:run | A:about | L:load | U:unload | S:save | Up/Dn | Q:exit", 0
 STR_PLUG_CMDS_CONFIG:
-	DB	"Enter:run | C:config | L:load | U:unload | Up/Dn | Q:exit", 0
+	DB	"Enter:run | C:cfg | L:load | U:unload | S:save | Up/Dn | Q:exit", 0
 STR_PLUG_CMDS_PLAIN:
-	DB	"Enter:run | L:load | U:unload | Up/Dn:select | Q/ESC:exit", 0
-STR_PLUG_CMDS_EMPTY:	DB	"L:load plugin | Up/Dn:select slot | Q or ESC to exit", 0
+	DB	"Enter:run | L:load | U:unload | S:save cfg | Up/Dn | Q/ESC:exit", 0
+STR_PLUG_CMDS_EMPTY:
+	DB	"L:load plugin | S:save cfg | Up/Dn:select | Q/ESC to exit", 0
 
 STR_MSG_NO_ABOUT:	DB	"[No About]$", 0
 STR_MSG_NO_CONFIG:	DB	"[No Config]$", 0
 STR_MSG_SLOTS_FULL:	DB	"[All Slots Full]$", 0
+STR_MSG_CFG_SAVED:	DB	"[Saved to PLUGIN.CFG]$", 0
+STR_MSG_CFG_ERR:	DB	"[Error saving PLUGIN.CFG]$", 0
 STR_PLUG_PROMPT_U:	DB	"Unload Slot (0..7): ", 0
 
 STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0
@@ -1658,5 +1859,8 @@ VEC_LOCATE_RC		EQU	BSS_START + 24	; 2 bytes: LOCATE_RC vector
 POPUP_TOP_ROW		EQU	BSS_START + 26	; 1 byte: Top row for redraw
 POPUP_SELECTED_INDEX	EQU	BSS_START + 27	; 1 byte: Selected item index
 SCRATCH_BUF		EQU	BSS_START + 28	; 128 bytes scratch buffer
-BSS_END			EQU	SCRATCH_BUF + 128
+PLUG_REG_PTR		EQU	SCRATCH_BUF + 128 ; 2 bytes: pointer to registry
+PLUGIN_CFG_BUF		EQU	PLUG_REG_PTR + 2 ; 128 bytes: cfg I/O buffer
+CFG_BUF_SENTINEL	EQU	PLUGIN_CFG_BUF + 128 ; 1 byte: null sentinel
+BSS_END			EQU	CFG_BUF_SENTINEL + 1
 BSS_SIZE		EQU	BSS_END - BSS_START

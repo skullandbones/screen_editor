@@ -48,6 +48,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.CFG 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/PLUGIN.CFG 0:PLUGIN.CFG
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:ROT13.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/ROT13.PRL 0:ROT13.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:WORDCNT.OVL 2>/dev/null || true
@@ -70,6 +72,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.CFG 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/PLUGIN.CFG 0:PLUGIN.CFG
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:ROT13.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/ROT13.PRL 0:ROT13.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:WORDCNT.OVL 2>/dev/null || true
