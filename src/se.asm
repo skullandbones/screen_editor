@@ -15789,7 +15789,7 @@ DPBI_READ_FAT_CHUNK:
 	LD	(VFS_REQ_CMD),A
 	XOR	A
 	LD	(VFS_REQ_STATUS),A
-	LD	HL,DEFAULT_DMA
+	LD	HL,FAT_CHUNK_BUF
 	LD	(VFS_REQ_BUFFER),HL
 	LD	HL,128
 	LD	(VFS_REQ_BUFSIZE),HL
@@ -15805,7 +15805,7 @@ DPBI_READ_FAT_CHUNK:
 	OR	H
 	JR	Z,DPBI_FAT_EOF
 	LD	B,L			; B = bytes read (1..128)
-	LD	HL,DEFAULT_DMA
+	LD	HL,FAT_CHUNK_BUF
 	JR	DPBI_BYTE_LOOP
 
 DPBI_FAT_EOF:
@@ -15926,13 +15926,18 @@ DPBI_SUFFIX_DONE:
 	LD	(CUR_COL),HL
 	LD	(TARGET_COL),HL
 
-	; Close INSERT_FCB (CP/M only)
+	; Close INSERT_FCB (or FAT stream)
 	LD	A,(BLOCK_INSERT_IS_FAT)
 	OR	A
-	JR	NZ,DPBI_SKIP_FCB_CLOSE
+	JR	NZ,DPBI_CLOSE_FAT
 	LD	DE,INSERT_FCB
 	LD	C,16			; BDOS Close File
 	CALL	BDOS_ENTRY
+	JR	DPBI_SKIP_FCB_CLOSE
+DPBI_CLOSE_FAT:
+	LD	A,7			; VFS_CMD_CLOSE_FILE
+	LD	(VFS_REQ_CMD),A
+	CALL	VFS_EXEC_REQUEST
 DPBI_SKIP_FCB_CLOSE:
 
 	; Mark document modified
@@ -23869,6 +23874,7 @@ VFS_REQ_BUFSIZE:	DW	0		; +8: Buffer capacity
 VFS_REQ_COUNT:		DW	0		; +10: Output count
 VFS_REQ_START_LINE:	DW	0		; +12: Start line for block save
 VFS_REQ_END_LINE:	DW	0		; +14: End line for block save
+FAT_CHUNK_BUF:		DS	128		; FAT stream buffer (Common RAM)
 
 ;==============================================================================
 ; Upper Memory Host API Trampoline & Vector Table
