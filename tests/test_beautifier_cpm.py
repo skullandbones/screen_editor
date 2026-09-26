@@ -139,10 +139,9 @@ def test_config_screen_beautifier_options():
     emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
 
     # Remove existing SE.CFG and BEAUTIFY.CFG to ensure defaults
-    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BEAUTIFY.CFG"],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for cfg in ["0:SE.CFG", "0:se.cfg", "0:BEAUTIFY.CFG", "0:beautify.cfg"]:
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, cfg],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     proc, master = boot_cpm(emu_bin, rom_file, img_file)
     try:
@@ -327,8 +326,9 @@ def test_ctrl_y_whole_file_beautify():
     put_file_to_image(cpmcp_bin, cpmrm_bin, img_file, raw_asm, "RAW.ASM")
 
     # Remove existing BEAUTIFY.CFG to ensure default standard columns (9/17/41)
-    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BEAUTIFY.CFG"],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for cfg in ["0:BEAUTIFY.CFG", "0:beautify.cfg"]:
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, cfg],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Set SE.CFG with only editor settings
     cfg_content = "SCREEN=80x24\r\n"
