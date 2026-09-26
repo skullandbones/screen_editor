@@ -18,7 +18,7 @@ import termios
 import argparse
 import webbrowser
 import socket
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 
 def get_local_ip():
@@ -43,20 +43,30 @@ def serve_html_viewer(html_file, port=8000, launch_browser=True):
     local_ip = get_local_ip()
 
     class QuietHandler(SimpleHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=serve_dir, **kwargs)
 
+        def do_GET(self):
+            if self.path in ("/", ""):
+                self.send_response(302)
+                self.send_header("Location", f"/{html_name}")
+                self.end_headers()
+                return
+            super().do_GET()
+
         def log_message(self, fmt, *args):
-            if len(args) >= 2 and str(args[1]) not in ("200", "304"):
+            if len(args) >= 2 and str(args[1]) not in ("200", "304", "302"):
                 super().log_message(fmt, *args)
 
     try:
-        server = HTTPServer(("0.0.0.0", port), QuietHandler)
+        server = ThreadingHTTPServer(("0.0.0.0", port), QuietHandler)
     except OSError as err:
         print(f"[-] Failed to bind port {port}: {err}", file=sys.stderr)
         return
 
-    url_lan = f"http://{local_ip}:{port}/{html_name}"
+    url_lan = f"http://{local_ip}:{port}/"
     url_local = f"http://localhost:{port}/{html_name}"
 
     print("=" * 76, flush=True)
