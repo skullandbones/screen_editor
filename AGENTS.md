@@ -73,13 +73,69 @@ How:
 
 ---
 
-## 3. Protected Branches (ENFORCED ON COLOSSUS & LOCAL HOOKS)
+## 3. Multi-Agent Workspace Architecture & On-boarding
+
+To allow multiple autonomous agents (e.g. `agy1`, `agy2`, `agy3`) to work
+concurrently without colliding, the project uses isolated git worktrees
+and dedicated development branches.
+
+### Repository & Worktree Topology
+- **Master Worktree (Main Clone)**:
+  `projects/experiment/src/screen_editor`
+  Dedicated solely to the `master` branch. Agents must never perform active
+  feature development directly inside this directory.
+- **Agent Worktrees**:
+  `projects/experiment/src/se.com_dev/agy<N>_dev`
+  Each agent operates within its own dedicated directory checked out to its
+  corresponding dev branch: `agy<N>_dev_branch`.
+  - `agy1` -> `src/se.com_dev/agy1_dev` on `agy1_dev_branch`
+  - `agy2` -> `src/se.com_dev/agy2_dev` on `agy2_dev_branch`
+  - `agy3` -> `src/se.com_dev/agy3_dev` on `agy3_dev_branch`
+
+### Agent On-boarding Procedure (e.g. for `agy3`)
+When initializing a new agent instance (e.g. `agy3`):
+1. **Create the dedicated worktree and branch**:
+   From the main repo (`projects/experiment/src/screen_editor`):
+   ```bash
+   git worktree add ../se.com_dev/agy3_dev -b agy3_dev_branch master
+   ```
+2. **Switch to agent workspace**:
+   Ensure all file edits, builds, and test commands are executed strictly
+   within `projects/experiment/src/se.com_dev/agy3_dev`.
+3. **Configure local git hooks**:
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+4. **Publish initial branch to remote**:
+   ```bash
+   git push -u colossus agy3_dev_branch
+   ```
+
+### Daily Agent Workflow & Synchronization
+1. **Always verify identity & branch**:
+   Run `git status` at startup to confirm working tree is clean and on the
+   correct `agy<N>_dev_branch`.
+2. **Syncing latest changes from master**:
+   Fetch from colossus and merge master into the agent's dev branch:
+   ```bash
+   git fetch colossus
+   git merge colossus/master
+   ```
+3. **Promoting changes to master**:
+   Only when explicitly requested by the user:
+   - Commit all work cleanly to `agy<N>_dev_branch`.
+   - Merge `agy<N>_dev_branch` into `master` (in `src/screen_editor`).
+   - Push both `master` and `agy<N>_dev_branch` to `colossus`.
+
+---
+
+## 4. Protected Branches (ENFORCED ON COLOSSUS & LOCAL HOOKS)
 
 The following branches are strictly protected from deletion and history
 rewriting (force pushes):
 * `master`
-* `agy1_dev_branch`
-* `agy2_dev_branch`
+* `agy*_dev_branch` (e.g. `agy1_dev_branch`, `agy2_dev_branch`,
+  `agy3_dev_branch`)
 
 Enforced by:
 1. Server-side `pre-receive` hook on Colossus (`/git_repos/screen_editor.git`).
