@@ -22,7 +22,8 @@ DEFAULT_MAX_LEN = 80
 
 BINARY_OR_IGNORED_EXTENSIONS = {
     ".img", ".rom", ".com", ".prl", ".ovl", ".bin", ".o", ".obj",
-    ".map", ".sym", ".lst", ".lis", ".def", ".png", ".jpg", ".ico"
+    ".map", ".sym", ".lst", ".lis", ".def", ".png", ".jpg", ".ico",
+    ".json"
 }
 
 IGNORED_DIRECTORIES = {
