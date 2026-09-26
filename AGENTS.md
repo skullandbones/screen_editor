@@ -38,9 +38,26 @@ How:
 
 ## 2. Hard House Rules
 
-1. **Line Length**:
+1. **Line Length (MANDATORY & ENFORCED)**:
    * All files (Assembly `.asm`, C `.c`, `.h`, Python `.py`, Markdown `.md`)
-     MUST strictly maintain lines $\le 80$ characters.
+     and git diffs MUST strictly maintain lines $\le 80$ characters.
+   * **NEVER run inline python snippets** (`python3 -c "..."`) to check line
+     lengths! Running arbitrary one-liner snippets triggers user approval
+     prompts each time.
+   * **ALWAYS run the project audit script instead**:
+     ```bash
+     python3 check_line_length.py
+     ```
+     or:
+     ```bash
+     make check-lines
+     ```
+     Command options:
+     - `python3 check_line_length.py`: Audits added lines in git diff
+       (both unstaged and staged) and latest commit.
+     - `python3 check_line_length.py --diff`: Audits unstaged diff added lines.
+     - `python3 check_line_length.py --staged`: Audits staged diff added lines.
+     - `python3 check_line_length.py <file1> <file2>`: Audits specific files.
 2. **Line Endings**:
    * Strictly Unix `LF` (`\n`). Never commit `CRLF`.
 3. **CP/M TPA Headroom**:

@@ -11,10 +11,11 @@ CPMRM ?= $(TOOLS_DIR)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all plugins image check-tpa check-plugins test test-sanity \
-	test-conformity test-paging test-config test-32k test-cpm3 \
-	test-plugins test-beautifier test-popup test-slots test-fatfs \
-	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full clean
+.PHONY: all plugins image check-tpa check-plugins check-lines test \
+	test-sanity test-conformity test-paging test-config test-32k \
+	test-cpm3 test-plugins test-beautifier test-popup test-slots \
+	test-fatfs test-fatfs-slot test-fatfs-vfs test-fatfs-hook \
+	test-full clean
 
 all: $(TARGET) plugins
 
@@ -29,6 +30,10 @@ check-tpa: $(TARGET)
 check-plugins:
 	@echo "==> Checking plugin binaries and ABI conformance..."
 	python3 check_plugin.py --all
+
+check-lines:
+	@echo "==> Checking for lines exceeding 80 characters..."
+	python3 check_line_length.py
 
 plugins:
 	@echo "==> Building plugins (4K, 8K, 16K, 32K)..."
