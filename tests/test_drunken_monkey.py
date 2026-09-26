@@ -298,6 +298,19 @@ class VT100QualityMonitor:
             elif line.startswith("|") and line.endswith("|") and len(line) > 10:
                 pass  # Enclosed row
 
+        # 4. Splash / Editor mixed screen detection:
+        # When splash screen menu is visible, row 0 and 1 must be splash padding
+        # (starting with '~' or spaces). If row 0 contains document text without
+        # '~', a mixed screen corruption occurred.
+        full_text = "\n".join("".join(row) for row in self.buffer)
+        if "SE - Screen Editor" in full_text and "type   e" in full_text:
+            row0_str = "".join(self.buffer[0]).strip()
+            if row0_str and not row0_str.startswith("~"):
+                raise CrispLayoutError(
+                    "Mixed screen corruption detected: Splash screen menu "
+                    f"active but row 0 contains editor text: '{row0_str[:40]}'"
+                )
+
     def detect_screen_state(self):
         """
         Inspects the screen buffer to identify the active UI context/prompt.
@@ -407,7 +420,7 @@ class DrunkenMonkeyInputGenerator:
         """Queues a sequence of characters to be typed 1 at a time."""
         for ch in text:
             desc = f"{prefix_desc} '{repr(ch)}'" if prefix_desc else repr(ch)
-            self.pending_chars.append((ch, desc))
+            self.pending_chars.append((ch, None, desc))
 
     def queue_input_string(self, text, prefix_desc=""):
         """
@@ -421,15 +434,37 @@ class DrunkenMonkeyInputGenerator:
                 desc = f"{prefix_desc} Ctrl+C"
             else:
                 desc = f"{prefix_desc} Ctrl+F"
-            self.pending_chars.append((text, desc))
+            self.pending_chars.append((text, None, desc))
             return
 
         clear_seq = "\x08" * 16
         for ch in clear_seq:
-            self.pending_chars.append((ch, f"{prefix_desc} <BS>"))
+            self.pending_chars.append((ch, None, f"{prefix_desc} <BS>"))
         for ch in text:
             desc = f"{prefix_desc} '{repr(ch)}'" if prefix_desc else repr(ch)
-            self.pending_chars.append((ch, desc))
+            self.pending_chars.append((ch, None, desc))
+
+    def queue_arrow_sequence(self, seq, name):
+        """
+        Queues a VT100 arrow sequence (e.g. \\x1b[A). The first byte has
+        normal delay, while subsequent bytes are sent with a burst delay (1ms)
+        to prevent SE.COM's WAIT_ESC_BYTE loop (LD BC, 1000) from timing out.
+        """
+        for idx, ch in enumerate(seq):
+            d = None if idx == 0 else 0.001
+            self.pending_chars.append((ch, d, f"{name} {repr(ch)}"))
+
+    def _pop_pending(self, default_delay):
+        """Pops next pending character and resolves delay."""
+        ch, custom_delay, desc = self.pending_chars.pop(0)
+        if custom_delay is not None:
+            return ch, custom_delay, desc
+        d = (
+            max(default_delay, 0.15)
+            if ch in ("\x1b", "\r", "\x03")
+            else default_delay
+        )
+        return ch, d, desc
 
     def next_character(self, screen_state):
         """
@@ -464,10 +499,7 @@ class DrunkenMonkeyInputGenerator:
 
         # 1. If we have queued prompt characters, pop the next character
         if self.pending_chars:
-            ch, desc = self.pending_chars.pop(0)
-            if ch in ("\x1b", "\r", "\x03"):
-                delay = max(delay, 0.15)
-            return ch, delay, desc
+            return self._pop_pending(delay)
 
         # 2. Smart prompt handling when an input box is observed
         if screen_state == "splash_screen":
@@ -498,9 +530,7 @@ class DrunkenMonkeyInputGenerator:
             if candidate == "\x1b":
                 return "\x1b", 0.15, "Open file: ESC (Cancel)"
             self.queue_input_string(candidate, "Open file:")
-            ch, desc = self.pending_chars.pop(0)
-            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
-            return ch, d, desc
+            return self._pop_pending(delay)
 
         elif screen_state == "save_file_prompt":
             candidate = self.rng.choice([
@@ -512,18 +542,14 @@ class DrunkenMonkeyInputGenerator:
             if candidate == "\x1b":
                 return "\x1b", 0.15, "Save file: ESC (Cancel)"
             self.queue_input_string(candidate, "Save file:")
-            ch, desc = self.pending_chars.pop(0)
-            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
-            return ch, d, desc
+            return self._pop_pending(delay)
 
         elif screen_state == "insert_file_prompt":
             candidate = self.rng.choice(["2.TXT\r", "30.TXT\r", "\x1b"])
             if candidate == "\x1b":
                 return "\x1b", 0.15, "Insert file: ESC (Cancel)"
             self.queue_input_string(candidate, "Insert file:")
-            ch, desc = self.pending_chars.pop(0)
-            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
-            return ch, d, desc
+            return self._pop_pending(delay)
 
         elif screen_state == "load_plugin_prompt":
             candidate = self.rng.choice([
@@ -533,32 +559,24 @@ class DrunkenMonkeyInputGenerator:
                 "\x1b",
             ])
             self.queue_input_string(candidate, "Load plugin:")
-            ch, desc = self.pending_chars.pop(0)
-            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
-            return ch, d, desc
+            return self._pop_pending(delay)
 
         elif screen_state == "goto_line_prompt":
             candidate = self.rng.choice([
                 "1\r", "10\r", "25\r", "999\r", "\x1b"
             ])
             self.queue_input_string(candidate, "Goto line:")
-            ch, desc = self.pending_chars.pop(0)
-            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
-            return ch, d, desc
+            return self._pop_pending(delay)
 
         elif screen_state == "find_prompt":
             candidate = self.rng.choice(["SE\r", "the\r", "test\r", "\x1b"])
             self.queue_input_string(candidate, "Find:")
-            ch, desc = self.pending_chars.pop(0)
-            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
-            return ch, d, desc
+            return self._pop_pending(delay)
 
         elif screen_state == "replace_prompt":
             candidate = self.rng.choice(["REPLACE\r", "NEW\r", "\x1b"])
             self.queue_input_string(candidate, "Replace with:")
-            ch, desc = self.pending_chars.pop(0)
-            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
-            return ch, d, desc
+            return self._pop_pending(delay)
 
         elif screen_state == "save_changes_prompt":
             choice = self.rng.choice([
@@ -606,9 +624,8 @@ class DrunkenMonkeyInputGenerator:
                 ("\x1b[C", "Arrow Right"),
                 ("\x1b[D", "Arrow Left"),
             ])
-            self.queue_string(arrow[0], arrow[1])
-            ch, desc = self.pending_chars.pop(0)
-            return ch, delay, desc
+            self.queue_arrow_sequence(arrow[0], arrow[1])
+            return self._pop_pending(delay)
 
 
 class SessionRecorder:
@@ -879,7 +896,7 @@ def run_drunken_monkey_test(
             os.write(master, char.encode("latin1"))
 
             # Observe effect on output (Criterion 1 watchdog & 2/3 validation)
-            if char == "\x1b":
+            if char == "\x1b" and not (desc and "Arrow" in desc):
                 # Let SE.COM's VT100 ESC sequence debounce timer expire
                 time.sleep(0.12)
 

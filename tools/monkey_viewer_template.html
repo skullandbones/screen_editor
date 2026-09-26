@@ -46,6 +46,8 @@
       color: #09110d;
       text-shadow: none;
       font-weight: bold;
+      width: fit-content;
+      max-width: fit-content;
     }
     .glow-box {
       box-shadow: 0 0 20px rgba(51, 255, 102, 0.15);
@@ -77,6 +79,7 @@
       line-height: 1.25em;
       box-sizing: border-box;
       white-space: pre;
+      width: fit-content;
     }
   </style>
 </head>
@@ -468,13 +471,17 @@
       termScreen.innerHTML = "";
       if (ev.screen && Array.isArray(ev.screen)) {
         const rowCount = ev.screen.length;
+        const screenCols = metadata.screen_mode === "120x40" ? 120 : 80;
         ev.screen.forEach((line, rIdx) => {
           const lineDiv = document.createElement("div");
           if (rIdx === rowCount - 1 &&
               (line.includes("| ") || line.includes("^K:"))) {
             lineDiv.className = "status-inverted";
+            lineDiv.textContent =
+              (line || "").padEnd(screenCols, " ").slice(0, screenCols);
+          } else {
+            lineDiv.textContent = line || " ";
           }
-          lineDiv.textContent = line || " ";
           termScreen.appendChild(lineDiv);
         });
       } else {
