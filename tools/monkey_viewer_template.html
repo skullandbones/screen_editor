@@ -25,7 +25,6 @@
       font-size: 13.5px;
       letter-spacing: 0.5px;
       white-space: pre;
-      overflow-x: auto;
     }
     .crt-display::before {
       content: " ";
@@ -177,15 +176,30 @@
     </div>
 
     <!-- Retro Terminal CRT Screen -->
-    <div class="relative rounded-xl overflow-hidden border-2
+    <div id="crt-container" class="relative rounded-xl overflow-hidden border-2
       border-[#1c3325] glow-box bg-[#09110d]">
-      <div class="bg-[#101f16] px-4 py-2 flex items-center justify-between
-        text-xs font-mono text-[#44aa66] border-b border-[#1c3325]">
-        <span>RC2014 RomWBW CP/M 2.2 — SE.COM Virtual Terminal</span>
-        <span id="meta-res">Resolution: 80 &times; 24</span>
+      <div class="bg-[#101f16] px-3 sm:px-4 py-2 flex items-center
+        justify-between text-xs font-mono text-[#44aa66] border-b
+        border-[#1c3325]">
+        <span class="truncate mr-2">
+          RC2014 RomWBW CP/M 2.2 — SE.COM Virtual Terminal
+        </span>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <span id="meta-res">80 &times; 24</span>
+          <button id="btn-fit"
+            class="px-2 py-0.5 rounded bg-emerald-800/80 hover:bg-emerald-700
+            text-[11px] font-sans font-bold text-white border border-emerald-500
+            transition cursor-pointer"
+            title="Toggle Auto-Fit zoom to fit screen width">
+            Fit: Auto
+          </button>
+        </div>
       </div>
-      <div id="terminal-screen"
-        class="crt-display p-4 select-all min-h-[460px]">
+      <div id="crt-viewport" class="overflow-x-auto p-2 sm:p-4 min-h-[300px]
+        sm:min-h-[460px] bg-[#09110d]">
+        <div id="terminal-screen"
+          class="crt-display select-all" style="width: fit-content;">
+        </div>
       </div>
     </div>
 
@@ -501,6 +515,69 @@
       } else {
         termScreen.textContent = "No screen data recorded for this step.";
       }
+      autoFitTerminal();
+    }
+
+    let autoFitEnabled = true;
+
+    function autoFitTerminal() {
+      const viewport = document.getElementById("crt-viewport");
+      const screen = document.getElementById("terminal-screen");
+      const btnFit = document.getElementById("btn-fit");
+      if (!viewport || !screen) return;
+
+      if (!autoFitEnabled) {
+        screen.style.zoom = "";
+        screen.style.transform = "";
+        viewport.style.height = "";
+        if (btnFit) {
+          btnFit.textContent = "Fit: Off (100%)";
+          btnFit.className =
+            "px-2 py-0.5 rounded bg-[#1e293b] hover:bg-[#334155] " +
+            "text-[11px] font-sans text-slate-300 border border-[#334155] " +
+            "cursor-pointer";
+        }
+        return;
+      }
+
+      // Temporarily reset zoom to measure unscaled dimensions
+      screen.style.zoom = "1";
+      screen.style.transform = "";
+      viewport.style.height = "";
+
+      const availWidth = viewport.clientWidth;
+      const screenWidth = screen.scrollWidth;
+
+      if (screenWidth > 0 && availWidth > 0 && screenWidth > availWidth) {
+        const scale = availWidth / screenWidth;
+        const scaleFixed = scale.toFixed(4);
+        if (CSS.supports && CSS.supports("zoom", "1")) {
+          screen.style.zoom = scaleFixed;
+        } else {
+          screen.style.transform = `scale(${scaleFixed})`;
+          screen.style.transformOrigin = "top left";
+          viewport.style.height = `${screen.scrollHeight * scale}px`;
+        }
+        if (btnFit) {
+          const pct = Math.round(scale * 100);
+          btnFit.textContent = `Fit: ${pct}%`;
+          btnFit.className =
+            "px-2 py-0.5 rounded bg-emerald-800/80 hover:bg-emerald-700 " +
+            "text-[11px] font-sans font-bold text-white border " +
+            "border-emerald-500 cursor-pointer";
+        }
+      } else {
+        screen.style.zoom = "";
+        screen.style.transform = "";
+        viewport.style.height = "";
+        if (btnFit) {
+          btnFit.textContent = "Fit: 100%";
+          btnFit.className =
+            "px-2 py-0.5 rounded bg-emerald-800/80 hover:bg-emerald-700 " +
+            "text-[11px] font-sans font-bold text-white border " +
+            "border-emerald-500 cursor-pointer";
+        }
+      }
     }
 
     function nextStep() {
@@ -617,6 +694,19 @@
         pause();
         renderStep(total - 1);
       }
+    });
+
+    const btnFit = document.getElementById("btn-fit");
+    if (btnFit) {
+      btnFit.addEventListener("click", () => {
+        autoFitEnabled = !autoFitEnabled;
+        autoFitTerminal();
+      });
+    }
+
+    window.addEventListener("resize", autoFitTerminal);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(autoFitTerminal, 150);
     });
 
     initSession(sessionData);
