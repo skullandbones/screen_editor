@@ -13,6 +13,8 @@
       color: #e2e8f0;
       font-family: ui-sans-serif, system-ui, -apple-system,
         BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 1rem;
     }
     .crt-display {
       font-family: "Courier New", Courier, "Liberation Mono", monospace;
@@ -76,7 +78,18 @@
           </p>
         </div>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
+        <!-- Open Session JSON button -->
+        <label for="file-input"
+          class="cursor-pointer px-3.5 py-1.5 text-xs font-semibold rounded-lg
+          bg-emerald-600 hover:bg-emerald-500 text-white shadow
+          flex items-center gap-1.5 transition border border-emerald-400"
+          title="Open a recorded monkey session JSON file">
+          <span>📁</span>
+          <span>Open Session JSON...</span>
+        </label>
+        <input type="file" id="file-input" accept=".json" class="hidden">
+
         <div class="text-right hidden sm:block">
           <div class="text-xs font-semibold text-emerald-400">
             QUALITY CRITERIA
@@ -243,26 +256,14 @@
   </footer>
 
   <script>
-    const sessionData = /* __SESSION_DATA_JSON__ */ {};
-    const metadata = sessionData.metadata || {};
-    const events = sessionData.events || [];
-    const total = events.length;
+    let sessionData = /* __SESSION_DATA_JSON__ */ {};
+    let metadata = {};
+    let events = [];
+    let total = 0;
     let currentIdx = 0;
     let isPlaying = false;
     let playTimer = null;
     let playSpeed = 1.0;
-
-    // Header metadata
-    document.getElementById("meta-file").textContent =
-      sessionData.filename || "monkey_session.json";
-    document.getElementById("meta-mode").textContent =
-      metadata.screen_mode || "80x24";
-    document.getElementById("meta-seed").textContent =
-      metadata.seed !== undefined ? metadata.seed : "N/A";
-    const cols = metadata.screen_mode === "120x40" ? 120 : 80;
-    const rows = metadata.screen_mode === "120x40" ? 40 : 24;
-    document.getElementById("meta-res").innerHTML =
-      `Resolution: ${cols} &times; ${rows}`;
 
     const termScreen = document.getElementById("terminal-screen");
     const stepLabel = document.getElementById("step-label");
@@ -276,26 +277,125 @@
     const playText = document.getElementById("play-text");
     const timelineDiv = document.getElementById("event-timeline");
     const timelineSummary = document.getElementById("timeline-summary");
+    const fileInput = document.getElementById("file-input");
 
-    timelineSummary.textContent =
-      `Click to view recorded step timeline (${total} events)`;
-    scrubber.max = total;
-
-    events.forEach((ev, i) => {
-      const row = document.createElement("div");
-      row.className = "flex items-center justify-between p-1 rounded " +
-        "hover:bg-[#1e293b] cursor-pointer transition";
-      row.id = `tl-item-${i}`;
-      row.innerHTML =
-        `<span><strong>Step ${ev.step}</strong>: ` +
-        `${ev.hex} (${ev.desc})</span>` +
-        `<span class="text-slate-400">${ev.state} | ` +
-        `${ev.delay.toFixed(3)}s</span>`;
-      row.addEventListener("click", () => {
-        pause();
-        renderStep(i);
+    function renderEmptyScreen() {
+      termScreen.innerHTML = "";
+      const banner = [
+        "=".repeat(78),
+        "  SE.COM Drunken Monkey Chaos Player - Virtual Terminal Display",
+        "=".repeat(78),
+        "",
+        "  No session data currently loaded.",
+        "",
+        "  [1] Click [Open Session JSON...] in the header above, or",
+        "  [2] Drag and drop any session JSON file onto this window.",
+        "",
+        "  Session files: tests/monkey_session.json, " +
+        "tests/monkey_session_sample.json",
+        "=".repeat(78)
+      ];
+      banner.forEach(line => {
+        const d = document.createElement("div");
+        d.textContent = line;
+        termScreen.appendChild(d);
       });
-      timelineDiv.appendChild(row);
+    }
+
+    function initSession(data) {
+      pause();
+      sessionData = data || {};
+      metadata = sessionData.metadata || {};
+      events = sessionData.events || [];
+      total = events.length;
+      currentIdx = 0;
+
+      document.getElementById("meta-file").textContent =
+        sessionData.filename || "monkey_session.json";
+      document.getElementById("meta-mode").textContent =
+        metadata.screen_mode || "80x24";
+      document.getElementById("meta-seed").textContent =
+        metadata.seed !== undefined ? metadata.seed : "N/A";
+      const cols = metadata.screen_mode === "120x40" ? 120 : 80;
+      const rows = metadata.screen_mode === "120x40" ? 40 : 24;
+      document.getElementById("meta-res").innerHTML =
+        `Resolution: ${cols} &times; ${rows}`;
+
+      timelineDiv.innerHTML = "";
+      if (total === 0) {
+        timelineSummary.textContent = "No recorded events loaded.";
+        stepLabel.textContent = "Step 0 / 0";
+        keyLabel.textContent = "None";
+        stateLabel.textContent = "idle";
+        delayLabel.textContent = "0.000s";
+        scrubber.min = 1;
+        scrubber.max = 1;
+        scrubber.value = 1;
+        scrubberPct.textContent = "0%";
+        renderEmptyScreen();
+        return;
+      }
+
+      timelineSummary.textContent =
+        `Click to view recorded step timeline (${total} events)`;
+      scrubber.min = 1;
+      scrubber.max = total;
+      scrubber.value = 1;
+
+      events.forEach((ev, i) => {
+        const row = document.createElement("div");
+        row.className = "flex items-center justify-between p-1 rounded " +
+          "hover:bg-[#1e293b] cursor-pointer transition";
+        row.id = `tl-item-${i}`;
+        const delayVal =
+          ev.delay !== undefined ? ev.delay.toFixed(3) : "0.000";
+        row.innerHTML =
+          `<span><strong>Step ${ev.step || (i + 1)}</strong>: ` +
+          `${ev.hex || "0x00"} (${ev.desc || "N/A"})</span>` +
+          `<span class="text-slate-400">${ev.state || "unknown"} | ` +
+          `${delayVal}s</span>`;
+        row.addEventListener("click", () => {
+          pause();
+          renderStep(i);
+        });
+        timelineDiv.appendChild(row);
+      });
+
+      renderStep(0);
+    }
+
+    function loadFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          parsed.filename = file.name;
+          initSession(parsed);
+        } catch (err) {
+          alert("Error parsing JSON session: " + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    if (fileInput) {
+      fileInput.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          loadFile(e.target.files[0]);
+        }
+      });
+    }
+
+    window.addEventListener("dragover", (e) => {
+      e.preventDefault();
+    });
+
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        loadFile(e.dataTransfer.files[0]);
+      }
     });
 
     function renderStep(idx) {
@@ -303,10 +403,12 @@
       currentIdx = idx;
       const ev = events[idx];
 
-      stepLabel.textContent = `Step ${ev.step} / ${total}`;
-      keyLabel.textContent = `${ev.hex} (${ev.desc})`;
-      stateLabel.textContent = ev.state;
-      delayLabel.textContent = `${ev.delay.toFixed(3)}s`;
+      stepLabel.textContent = `Step ${ev.step || (idx + 1)} / ${total}`;
+      keyLabel.textContent = `${ev.hex || "0x00"} (${ev.desc || "N/A"})`;
+      stateLabel.textContent = ev.state || "unknown";
+      const delayVal =
+        ev.delay !== undefined ? ev.delay.toFixed(3) : "0.000";
+      delayLabel.textContent = `${delayVal}s`;
       scrubber.value = idx + 1;
       scrubberPct.textContent =
         `${Math.round(((idx + 1) / total) * 100)}%`;
@@ -352,6 +454,7 @@
     }
 
     function play() {
+      if (total <= 0) return;
       isPlaying = true;
       playIcon.innerHTML = "&#10074;&#10074;";
       playText.textContent = "Pause";
@@ -362,7 +465,9 @@
         if (!isPlaying) return;
         if (currentIdx < total - 1) {
           nextStep();
-          const baseDelay = events[currentIdx].delay || 0.05;
+          const baseDelay =
+            (events[currentIdx] && events[currentIdx].delay !== undefined)
+              ? events[currentIdx].delay : 0.05;
           const delayMs = Math.max(20, (baseDelay * 1000) / playSpeed);
           playTimer = setTimeout(tick, delayMs);
         } else {
@@ -431,7 +536,7 @@
         e.preventDefault();
         if (isPlaying) pause();
         else play();
-      }} else if (e.code === "ArrowRight" || e.key === "l") {
+      } else if (e.code === "ArrowRight" || e.key === "l") {
         e.preventDefault();
         pause();
         nextStep();
@@ -450,7 +555,7 @@
       }
     });
 
-    renderStep(0);
+    initSession(sessionData);
   </script>
 </body>
 </html>
