@@ -17,6 +17,67 @@ import tty
 import termios
 import argparse
 import webbrowser
+import socket
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+
+
+def get_local_ip():
+    """Attempts to determine the local network IP of this workstation."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("1.1.1.1", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+
+
+def serve_html_viewer(html_file, port=8000):
+    """
+    Serves the HTML viewer directory over local Wi-Fi for mobile phone access.
+    """
+    serve_dir = os.path.dirname(os.path.abspath(html_file))
+    html_name = os.path.basename(html_file)
+    local_ip = get_local_ip()
+
+    class QuietHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=serve_dir, **kwargs)
+
+        def log_message(self, fmt, *args):
+            if len(args) >= 2 and str(args[1]) not in ("200", "304"):
+                super().log_message(fmt, *args)
+
+    try:
+        server = HTTPServer(("0.0.0.0", port), QuietHandler)
+    except OSError as err:
+        print(f"[-] Failed to bind port {port}: {err}", file=sys.stderr)
+        return
+
+    url_lan = f"http://{local_ip}:{port}/{html_name}"
+    url_local = f"http://localhost:{port}/{html_name}"
+
+    print("=" * 76, flush=True)
+    print("📱 Smartphone / Mobile Wi-Fi Server Running", flush=True)
+    print("=" * 76, flush=True)
+    print(f"[*] Local Workstation URL : {url_local}", flush=True)
+    print(f"[+] Smartphone Wi-Fi URL  : {url_lan}", flush=True)
+    print("", flush=True)
+    print("  👉 On your phone (connected to same Wi-Fi), open the URL above.",
+          flush=True)
+    print("  💡 Tip: Rotate phone to landscape mode for full 80x24 view.",
+          flush=True)
+    print("  Press Ctrl+C to stop the server.", flush=True)
+    print("=" * 76, flush=True)
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[*] Stopping mobile web server...", flush=True)
+    finally:
+        server.server_close()
 
 
 def load_session(filepath):
@@ -382,6 +443,12 @@ def main():
         "--all", action="store_true",
         help="Dump all steps non-interactively and exit"
     )
+    parser.add_argument(
+        "--serve", nargs="?", const=8000, type=int, default=None,
+        metavar="PORT",
+        help="Serve HTML viewer over Wi-Fi for mobile / phone access "
+             "(default port: 8000)"
+    )
 
     args = parser.parse_args()
 
@@ -420,6 +487,15 @@ def main():
     out_file = generate_html_viewer(
         data, html_target, session_filename=os.path.basename(session_file)
     )
+
+    if args.serve is not None:
+        if not args.no_browse:
+            local_url = (
+                f"http://localhost:{args.serve}/{os.path.basename(out_file)}"
+            )
+            open_in_browser(local_url)
+        serve_html_viewer(out_file, port=args.serve)
+        return
 
     print("=" * 76, flush=True)
     print("🐒 SE.COM Drunken Monkey — Visual HTML Session Player", flush=True)
