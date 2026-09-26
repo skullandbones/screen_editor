@@ -11,9 +11,10 @@ CPMRM ?= $(TOOLS_DIR)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all plugins image test test-sanity test-conformity test-paging \
-	test-config test-32k test-cpm3 test-plugins test-beautifier test-popup \
-	test-slots test-fatfs test-fatfs-slot test-fatfs-vfs test-full clean
+.PHONY: all plugins image check-tpa check-plugins test test-sanity \
+	test-conformity test-paging test-config test-32k test-cpm3 \
+	test-plugins test-beautifier test-popup test-slots test-fatfs \
+	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full clean
 
 all: $(TARGET) plugins
 
@@ -21,8 +22,16 @@ $(TARGET): $(ASM_SRC)
 	@echo "==> Assembling $(TARGET) with z88dk-z80asm..."
 	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
 
+check-tpa: $(TARGET)
+	@echo "==> Checking $(TARGET) memory footprint against TPA..."
+	python3 check_tpa.py $(TARGET)
+
+check-plugins:
+	@echo "==> Checking plugin binaries and ABI conformance..."
+	python3 check_plugin.py --all
+
 plugins:
-	@echo "==> Building plugins (ROT13, WORDCNT, BEAUTIFY, HALFPLUG, BIGPLUG, PLUGIN)..."
+	@echo "==> Building plugins (4K, 8K, 16K, 32K)..."
 	python3 plugins/build_plugins.py
 	@echo "==> Building FAT plugin (FATFS.PRL, FATTEST.COM)..."
 	$(MAKE) -C plugins/fat all
@@ -40,6 +49,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/WORDCNT.OVL 0:WORDCNT.OVL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:BEAUTIFY.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/BEAUTIFY.PRL 0:BEAUTIFY.PRL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:MIDPLUG.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/MIDPLUG.PRL 0:MIDPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HALFPLUG.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HALFPLUG.PRL 0:HALFPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:BIGPLUG.PRL 2>/dev/null || true
@@ -60,6 +71,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/WORDCNT.OVL 0:WORDCNT.OVL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:BEAUTIFY.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/BEAUTIFY.PRL 0:BEAUTIFY.PRL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:MIDPLUG.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/MIDPLUG.PRL 0:MIDPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:HALFPLUG.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HALFPLUG.PRL 0:HALFPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:BIGPLUG.PRL 2>/dev/null || true
@@ -125,9 +138,13 @@ test-fatfs-vfs: image
 	@echo "==> Running FATFS headless VFS integration test suite..."
 	python3 tests/test_fatfs_vfs.py
 
+test-fatfs-hook: image
+	@echo "==> Running FATFS Phase 2 VFS hook & status bar test suite..."
+	python3 tests/test_fatfs_vfs_hook.py
+
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-fatfs test-fatfs-slot \
-	test-fatfs-vfs test-paging
+	test-fatfs-vfs test-fatfs-hook test-paging
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \

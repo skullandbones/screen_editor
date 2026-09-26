@@ -281,6 +281,7 @@ static int vfs_load_file(FatVfsRequest *req) {
                 continue; /* Skip CR, handle on LF */
             } else if (ch == '\n') {
                 /* Commit accumulated line */
+                s_line_buf[line_pos] = '\0';
                 host_commit_line(line_num++, s_line_buf, line_pos);
                 line_pos = 0;
             } else {
@@ -294,6 +295,7 @@ static int vfs_load_file(FatVfsRequest *req) {
 
     /* Commit final line if file ended without trailing newline */
     if (line_pos > 0 || line_num == 0) {
+        s_line_buf[line_pos] = '\0';
         host_commit_line(line_num++, s_line_buf, line_pos);
     }
 
@@ -659,6 +661,12 @@ static int vfs_list_dir(FatVfsRequest *req) {
         req->status = (fr == FR_NO_PATH || fr == FR_NO_FILE) ?
                       VFS_STAT_NOT_FOUND : VFS_STAT_DISK_ERR;
         return (int)req->status;
+    }
+
+    /* Synthesize ".." entry if listing a subdirectory */
+    if (dir_path[0] != 0 && (dir_path[0] != '/' || dir_path[1] != 0)) {
+        vfs_format_entry(out_buf + (count * 13), "..", 1);
+        count++;
     }
 
     while (count < max_entries) {
