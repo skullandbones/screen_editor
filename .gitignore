@@ -23,5 +23,6 @@ __pycache__/
 dist/
 
 # Test output sessions (except sample)
-tests/monkey_session.json
+tests/monkey_session*.json
+!tests/monkey_session_sample.json
 
