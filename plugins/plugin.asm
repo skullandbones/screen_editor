@@ -101,14 +101,14 @@ PKL_NOT_LOWER:
 	CP	'U'
 	JP	Z,PKL_DO_U
 
-	; Direct slot run: '0'..'7'
+	; Slot selection: '0'..'7'
 	CP	'0'
 	JR	C,PLUG_KEY_LOOP
 	CP	'8'
 	JR	NC,PLUG_KEY_LOOP
 	SUB	'0'
 	LD	(SELECTED_SLOT),A
-	JP	PLUG_RUN_SELECTED
+	JP	DO_PLUG_REDRAW
 
 PKL_DO_L:
 	LD	A,(FPSL_LOADED_CNT)
@@ -804,8 +804,13 @@ DCPP_CALC_ROW:
 	SUB	B
 	SRL	A
 	INC	A
+	LD	(POPUP_TOP_ROW),A
 	LD	(POPUP_ROW),A
 
+	XOR	A
+	LD	(POPUP_SELECTED_INDEX),A
+
+DCPP_DRAW_BOX:
 	; Render Modal Box
 	LD	DE,STR_HIDE_CURSOR
 	CALL	HOST_PRINT_STR
@@ -874,44 +879,136 @@ DCPP_ITEM_LOOP:
 CPK_KEY_LOOP:
 	CALL	HOST_GET_KEY
 	CP	27			; ESC
-	JR	NZ,CPKL_NOT_ESC
-	CALL	DRAIN_ESC_SEQUENCE
-	SCF				; Carry = 1 (dismissed)
-	RET
+	JP	Z,CPK_HANDLE_ESC
 
-CPKL_NOT_ESC:
 	CP	16			; Ctrl+P
-	JR	Z,CPKL_DISMISS
-	CP	'q'
-	JR	Z,CPKL_DISMISS
-	CP	'Q'
-	JR	Z,CPKL_DISMISS
+	JP	Z,CPKL_DISMISS
+	CP	5			; Ctrl+E (Up)
+	JP	Z,CPK_PREV_ITEM
+	CP	24			; Ctrl+X (Down)
+	JP	Z,CPK_NEXT_ITEM
+	CP	13			; Enter (Execute selected)
+	JP	Z,CPK_EXECUTE_CURRENT
 
-	; Check digit '0'..'7'
+	; Lowercase to uppercase
+	CP	'a'
+	JR	C,CPKL_NOT_LOWER
+	CP	'z'+1
+	JR	NC,CPKL_NOT_LOWER
+	SUB	32
+CPKL_NOT_LOWER:
+	CP	'Q'
+	JP	Z,CPKL_DISMISS
+	CP	'K'			; Vi Up
+	JP	Z,CPK_PREV_ITEM
+	CP	'J'			; Vi Down
+	JP	Z,CPK_NEXT_ITEM
+
+	; Digit '0'..'7' selection
 	CP	'0'
 	JR	C,CPK_KEY_LOOP
 	CP	'8'
 	JR	NC,CPK_KEY_LOOP
 
-	; Check if digit is in POPUP_MATCH_SLOTS
 	SUB	'0'
 	LD	C,A			; C = slot number
 	LD	A,(POPUP_MATCH_COUNT)
 	OR	A
-	JR	Z,CPK_KEY_LOOP
+	JP	Z,CPK_KEY_LOOP
 	LD	B,A
 	LD	HL,POPUP_MATCH_SLOTS
+	LD	E,0			; E = match index
 CPKL_CHK_SLOT:
 	LD	A,(HL)
 	CP	C
-	JR	Z,CPKL_FOUND_MATCH
+	JR	Z,CPKL_FOUND_SLOT_DIGIT
 	INC	HL
+	INC	E
 	DJNZ	CPKL_CHK_SLOT
-	JR	CPK_KEY_LOOP
+	JP	CPK_KEY_LOOP		; Digit not in match list -> ignore
+
+CPKL_FOUND_SLOT_DIGIT:
+	LD	A,E
+	LD	(POPUP_SELECTED_INDEX),A
+	JP	CPK_REDRAW
+
+CPK_PREV_ITEM:
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JP	Z,CPK_KEY_LOOP
+	LD	B,A			; B = MATCH_COUNT
+	LD	A,(POPUP_SELECTED_INDEX)
+	OR	A
+	JR	NZ,CPI_DEC
+	LD	A,B			; Wrap to MATCH_COUNT
+CPI_DEC:
+	DEC	A
+	LD	(POPUP_SELECTED_INDEX),A
+	JP	CPK_REDRAW
+
+CPK_NEXT_ITEM:
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JP	Z,CPK_KEY_LOOP
+	LD	B,A			; B = MATCH_COUNT
+	LD	A,(POPUP_SELECTED_INDEX)
+	INC	A
+	CP	B
+	JR	C,CPI_SET_NEXT
+	XOR	A			; Wrap to 0
+CPI_SET_NEXT:
+	LD	(POPUP_SELECTED_INDEX),A
+	JP	CPK_REDRAW
+
+CPK_REDRAW:
+	LD	A,(POPUP_TOP_ROW)
+	LD	(POPUP_ROW),A
+	JP	DCPP_DRAW_BOX
+
+CPK_EXECUTE_CURRENT:
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JP	Z,CPK_KEY_LOOP
+	LD	A,(POPUP_SELECTED_INDEX)
+	LD	E,A
+	LD	D,0
+	LD	HL,POPUP_MATCH_SLOTS
+	ADD	HL,DE
+	LD	C,(HL)			; C = slot number
+	JP	CPKL_FOUND_MATCH
 
 CPKL_DISMISS:
 	SCF				; Carry = 1 (dismissed)
 	RET
+
+CPK_HANDLE_ESC:
+	LD	BC,1000
+CPHE_WAIT:
+	CALL	HOST_CHECK_KEY
+	JR	NZ,CPHE_GOT_BYTE
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,CPHE_WAIT
+	JP	CPKL_DISMISS
+
+CPHE_GOT_BYTE:
+	CALL	HOST_GET_KEY
+	CP	'['
+	JR	Z,CPHE_CSI
+	CP	'O'
+	JR	Z,CPHE_CSI
+	CALL	DRAIN_ESC_SEQUENCE
+	JP	CPK_KEY_LOOP
+
+CPHE_CSI:
+	CALL	HOST_GET_KEY
+	CP	'A'			; Up Arrow
+	JP	Z,CPK_PREV_ITEM
+	CP	'B'			; Down Arrow
+	JP	Z,CPK_NEXT_ITEM
+	CALL	DRAIN_ESC_SEQUENCE
+	JP	CPK_KEY_LOOP
 
 CPKL_FOUND_MATCH:
 	; Slot C selected! Determine Action Index (0, 1, or 2)
@@ -1000,8 +1097,13 @@ RENDER_POPUP_ITEM_LINE:
 
 	LD	DE,SCRATCH_BUF
 
-	; 1. Write " ["
+	; 1. Write selection cursor or space: '>' or ' '
+	LD	A,(POPUP_SELECTED_INDEX)
+	CP	C
 	LD	A,' '
+	JR	NZ,RPIL_NOT_SEL
+	LD	A,'>'
+RPIL_NOT_SEL:
 	LD	(DE),A
 	INC	DE
 	LD	A,'['
@@ -1483,7 +1585,8 @@ STR_TITLE_HELP:		DB	"       Plugins with Embedded Documentation      ", 0
 
 STR_POPUP_NO_MATCH:	DB	"    No plugins found for this screen context    ", 0
 STR_POPUP_PROMPT_NOMATCH: DB	"   Press [Esc], [q], or [Ctrl+P] to Dismiss     ", 0
-STR_POPUP_PROMPT_MATCH:	DB	" Select [0-7] to Execute, [Esc]/[Ctrl+P] to Exit", 0
+STR_POPUP_PROMPT_MATCH:
+	DB	" [Up/Dn/0-7] Select  [Enter] Execute  [ESC/Q] Exit ", 0
 
 STR_DESC_CONFIG:	DB	"Embedded Plugin Settings     ", 0
 STR_DESC_ABOUT:		DB	"Modal About & Info Dialog    ", 0
@@ -1501,7 +1604,7 @@ STR_PLUG_SYS_POST:	DB	"/8]    TPA Slot: [4KB Overlaid]", 0
 STR_PLUG_HDR:		DB	"Slot Plugin Name      Type   Size    Exec Mode  Capabilities     Status ", 0
 STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+---------------+--------", 0
 
-STR_PLUG_CMDS_PRE:	DB	"type 0..7 to run | ", 0
+STR_PLUG_CMDS_PRE:	DB	"0..7:select | ", 0
 STR_PLUG_CMDS_BOTH:
 	DB	"Enter:run | A:about | C:config | L:load | U:unload | Q:exit", 0
 STR_PLUG_CMDS_ABOUT:
@@ -1551,7 +1654,9 @@ POPUP_SLOT_SAVED	EQU	BSS_START + 13
 FPSL_BANK_FOUND		EQU	BSS_START + 14
 FPSL_LOADED_CNT		EQU	BSS_START + 15
 POPUP_MATCH_SLOTS	EQU	BSS_START + 16	; 8 bytes
-VEC_LOCATE_RC		EQU	BSS_START + 24	; 2 bytes: Vector for LOCATE_RC trampoline
-SCRATCH_BUF		EQU	BSS_START + 26	; 128 bytes (shared scratch buffer)
+VEC_LOCATE_RC		EQU	BSS_START + 24	; 2 bytes: LOCATE_RC vector
+POPUP_TOP_ROW		EQU	BSS_START + 26	; 1 byte: Top row for redraw
+POPUP_SELECTED_INDEX	EQU	BSS_START + 27	; 1 byte: Selected item index
+SCRATCH_BUF		EQU	BSS_START + 28	; 128 bytes scratch buffer
 BSS_END			EQU	SCRATCH_BUF + 128
 BSS_SIZE		EQU	BSS_END - BSS_START
