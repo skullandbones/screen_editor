@@ -880,6 +880,13 @@ BLB_COPY_BACK:
 	LD	A,H
 	LD	(DE),A
 
+	; Setup args for HOST_COMMIT_LINE:
+	; HL = line number, DE = buffer pointer, BC = line length
+	LD	B,H
+	LD	C,L			; BC = line length
+	LD	HL,(CUR_ROW_VAL)	; HL = line number
+	LD	DE,(HOST_ACTIVE_LINE_BUF) ; DE = buffer pointer
+
 	; Commit line back to document via HOST_COMMIT_LINE (IX+21)
 	CALL	CALL_HOST_COMMIT
 
@@ -1416,8 +1423,10 @@ CALL_HOST_COMMIT:
 	LD	IX,(HOST_API_PTR)
 	PUSH	IX
 	POP	IY
+	PUSH	BC
 	LD	BC,21			; IX+21: Call HOST_COMMIT_LINE
 	ADD	IY,BC
+	POP	BC
 	CALL	CALL_IY_VEC
 	POP	IX
 	RET
