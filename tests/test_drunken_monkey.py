@@ -543,15 +543,18 @@ class SessionRecorder:
         }
         self.events = []
 
-    def record_step(self, step, ch, delay, desc, state):
-        self.events.append({
+    def record_step(self, step, ch, delay, desc, state, screen=None):
+        entry = {
             "step": step,
             "char": ch,
             "hex": f"0x{ord(ch):02x}",
             "delay": round(delay, 4),
             "desc": desc,
             "state": state,
-        })
+        }
+        if screen is not None:
+            entry["screen"] = screen
+        self.events.append(entry)
         self.metadata["total_steps"] = len(self.events)
 
     def save(self, filepath):
@@ -653,6 +656,8 @@ def run_drunken_monkey_test(
     mode="80x24",
     speed=1.0,
     verbose=False,
+    show_grabs=True,
+    grab_interval=10,
 ):
     """
     Main runner for the Drunken Monkey Test.
@@ -763,6 +768,11 @@ def run_drunken_monkey_test(
         print(f"[+] Boot and SE.COM launch complete ({mode}). "
               f"Beginning step loop...", flush=True)
 
+        if show_grabs:
+            print(f"\n>>> [SCREEN GRAB: Initial Editor Screen ({mode})]",
+                  flush=True)
+            print(monitor.render(), flush=True)
+
         # 3. Main Monkey Step Loop
         for step in range(1, steps + 1):
             # Check Criterion 1: Process responsiveness
@@ -771,7 +781,7 @@ def run_drunken_monkey_test(
                     f"Emulator process terminated prematurely at step {step}!"
                 )
 
-            # Detect current UI state
+            # Detect current UI state before action
             state = monitor.detect_screen_state()
 
             # Select character and delay
@@ -779,16 +789,6 @@ def run_drunken_monkey_test(
                 char, delay, desc = replayer.get_event(step - 1)
             else:
                 char, delay, desc = generator.next_character(state)
-                if recorder:
-                    recorder.record_step(step, char, delay, desc, state)
-
-            # Log step
-            hex_code = f"0x{ord(char):02x}"
-            if verbose or step % 25 == 0 or step == steps:
-                print(f"  [Step {step:4d}/{steps:4d}] "
-                      f"Char: {hex_code} ({desc:<26}) "
-                      f"State: {state:<18} Delay: {delay:.3f}s",
-                      flush=True)
 
             # Apply measured time gap before sending character
             if delay > 0:
@@ -806,6 +806,38 @@ def run_drunken_monkey_test(
                 # Feed new output to monitor -> automatically runs Assertions
                 # Criterion 1 (alive), 2 (expected behaviour), 3 (crisp layout)
                 monitor.feed(chunk.decode("latin1", errors="replace"))
+
+            new_state = monitor.detect_screen_state()
+
+            if recorder:
+                recorder.record_step(
+                    step, char, delay, desc, new_state,
+                    screen=["".join(r) for r in monitor.buffer]
+                )
+
+            # Log step
+            hex_code = f"0x{ord(char):02x}"
+            if verbose or step % 25 == 0 or step == steps:
+                print(f"  [Step {step:4d}/{steps:4d}] "
+                      f"Char: {hex_code} ({desc:<26}) "
+                      f"State: {new_state:<18} Delay: {delay:.3f}s",
+                      flush=True)
+
+            # Display live screen grab if enabled
+            if show_grabs:
+                should_grab = (
+                    step == 1 or
+                    step % grab_interval == 0 or
+                    new_state != state or
+                    step == steps
+                )
+                if should_grab:
+                    print(
+                        f"\n>>> [SCREEN GRAB: Step {step:3d}/{steps:3d} | "
+                        f"Key: {hex_code} ({desc}) | State: {new_state}]",
+                        flush=True
+                    )
+                    print(monitor.render(), flush=True)
 
         print("\n" + "=" * 76, flush=True)
         print(f"[+] Completed all {steps} characters successfully!",
@@ -898,6 +930,18 @@ def main():
         "--verbose", "-v", action="store_true",
         help="Verbose per-step logging"
     )
+    parser.add_argument(
+        "--show-grabs", action="store_true", default=True,
+        help="Show live screen grabs during test (default: True)"
+    )
+    parser.add_argument(
+        "--no-grabs", dest="show_grabs", action="store_false",
+        help="Disable live screen grabs"
+    )
+    parser.add_argument(
+        "--grab-interval", type=int, default=10,
+        help="Interval in steps between screen grabs (default: 10)"
+    )
 
     args = parser.parse_args()
 
@@ -912,6 +956,8 @@ def main():
         mode=args.mode,
         speed=args.speed,
         verbose=args.verbose,
+        show_grabs=args.show_grabs,
+        grab_interval=args.grab_interval,
     )
 
     sys.exit(0 if success else 1)
