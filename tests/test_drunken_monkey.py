@@ -305,13 +305,16 @@ class VT100QualityMonitor:
         """
         full_text = "\n".join("".join(row) for row in self.buffer)
 
-        if "Save changes?" in full_text:
+        if "Save changes?" in full_text or "Unsaved Modifications" in full_text:
             return "save_changes_prompt"
-        if "Enter filename to open:" in full_text:
+        if ("Enter filename to open:" in full_text or
+                "OPEN FILE (DIRECTORY" in full_text):
             return "open_file_prompt"
-        if "Enter filename to save:" in full_text:
+        if ("Enter filename to save:" in full_text or
+                "SAVE FILE (DIRECTORY" in full_text):
             return "save_file_prompt"
-        if "Enter filename to insert:" in full_text:
+        if ("Enter filename to insert:" in full_text or
+                "INSERT FILE" in full_text):
             return "insert_file_prompt"
         if "Load Plugin (.PRL/.OVL):" in full_text:
             return "load_plugin_prompt"
@@ -323,12 +326,14 @@ class VT100QualityMonitor:
             return "find_prompt"
         if "File already exists. Overwrite?" in full_text:
             return "overwrite_prompt"
+        if "Replace (" in full_text and "uit/" in full_text:
+            return "replace_confirm_prompt"
         if "Select [0-7] to Execute" in full_text:
             return "plugin_popup"
         if "Press any key" in full_text:
             return "press_any_key"
         if ("SE - Screen Editor" in full_text and
-                "Active Screen Mode:" in full_text):
+                ("Active Screen:" in full_text or "type   e" in full_text)):
             return "splash_screen"
         if "^K: Editor keys" in full_text:
             return "editor"
@@ -351,11 +356,15 @@ class DrunkenMonkeyInputGenerator:
     Selects random characters (printable, control keys, arrows), with smart
     awareness of input prompts so that proper filename strings can be tested.
     """
-    def __init__(self, seed=None, min_delay=0.02, max_delay=0.08):
+    def __init__(self, mode="80x24", seed=None, min_delay=0.02,
+                 max_delay=0.08):
+        self.mode = mode
         self.rng = random.Random(seed)
         self.min_delay = min_delay
         self.max_delay = max_delay
         self.pending_chars = []  # Queue of (char, desc) tuples
+        self.prompt_repeat_count = 0
+        self.last_prompt_state = None
 
         # Printable character pool
         self.printable_chars = (
@@ -400,34 +409,84 @@ class DrunkenMonkeyInputGenerator:
             desc = f"{prefix_desc} '{repr(ch)}'" if prefix_desc else repr(ch)
             self.pending_chars.append((ch, desc))
 
+    def queue_input_string(self, text, prefix_desc=""):
+        """
+        Clears existing input box text with backspaces, then types text.
+        For standalone ESC or control keys, queues without clearing.
+        """
+        if text in ("\x1b", "\x03", "\x06"):
+            if text == "\x1b":
+                desc = f"{prefix_desc} ESC (Cancel)"
+            elif text == "\x03":
+                desc = f"{prefix_desc} Ctrl+C"
+            else:
+                desc = f"{prefix_desc} Ctrl+F"
+            self.pending_chars.append((text, desc))
+            return
+
+        clear_seq = "\x08" * 16
+        for ch in clear_seq:
+            self.pending_chars.append((ch, f"{prefix_desc} <BS>"))
+        for ch in text:
+            desc = f"{prefix_desc} '{repr(ch)}'" if prefix_desc else repr(ch)
+            self.pending_chars.append((ch, desc))
+
     def next_character(self, screen_state):
         """
         Returns the next (char, delay, desc) tuple based on screen state.
         """
         delay = self.rng.uniform(self.min_delay, self.max_delay)
 
+        # Track prompt persistence when no characters are pending
+        if screen_state != "editor" and not self.pending_chars:
+            if screen_state == self.last_prompt_state:
+                self.prompt_repeat_count += 1
+            else:
+                self.prompt_repeat_count = 1
+                self.last_prompt_state = screen_state
+        elif screen_state == "editor":
+            self.prompt_repeat_count = 0
+            self.last_prompt_state = None
+
+        # Watchdog: if a prompt dialog persists for > 3 steps without progress,
+        # force an emergency breakout to resume editor testing
+        if self.prompt_repeat_count > 3:
+            self.pending_chars.clear()
+            self.prompt_repeat_count = 0
+            if screen_state == "save_changes_prompt":
+                return "\x03", 0.15, "Watchdog Breakout: Ctrl+C"
+            elif screen_state == "splash_screen":
+                return "e", 0.15, "Watchdog Breakout: 'e' (Editor)"
+            elif screen_state == "press_any_key":
+                return " ", 0.15, "Watchdog Breakout: Space"
+            else:
+                return "\x1b", 0.15, f"Watchdog Breakout: ESC ({screen_state})"
+
         # 1. If we have queued prompt characters, pop the next character
         if self.pending_chars:
             ch, desc = self.pending_chars.pop(0)
+            if ch in ("\x1b", "\r", "\x03"):
+                delay = max(delay, 0.15)
             return ch, delay, desc
 
         # 2. Smart prompt handling when an input box is observed
         if screen_state == "splash_screen":
-            # From splash screen, pick an action
+            # Primary action is (E)ditor Mode to resume editing;
+            # stay within the active test terminal geometry
+            mode_key = "2" if self.mode == "80x24" else "1"
             action = self.rng.choice([
+                ("e", "Splash: (E)ditor Mode"),
+                ("e", "Splash: (E)ditor Mode"),
                 ("e", "Splash: (E)ditor Mode"),
                 ("o", "Splash: (O)pen File"),
                 ("a", "Splash: (A)bout Screen"),
                 ("m", "Splash: (M)emory Info"),
                 ("p", "Splash: (P)lugin Manager"),
-                ("c", "Splash: (C)onfiguration"),
-                ("2", "Splash: 80x24 Mode"),
-                ("1", "Splash: 120x40 Mode"),
+                (mode_key, f"Splash: Refresh {self.mode}"),
             ])
             return action[0], delay, action[1]
 
         elif screen_state == "open_file_prompt":
-            # Proper filenames to open or ESC to cancel
             candidate = self.rng.choice([
                 "README.TXT\r",
                 "30.TXT\r",
@@ -436,27 +495,35 @@ class DrunkenMonkeyInputGenerator:
                 "C:*.TXT\r",
                 "\x1b",
             ])
-            self.queue_string(candidate, "Open file:")
+            if candidate == "\x1b":
+                return "\x1b", 0.15, "Open file: ESC (Cancel)"
+            self.queue_input_string(candidate, "Open file:")
             ch, desc = self.pending_chars.pop(0)
-            return ch, delay, desc
+            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
+            return ch, d, desc
 
         elif screen_state == "save_file_prompt":
-            # Proper filenames to save, format toggle, or ESC
             candidate = self.rng.choice([
                 "MONKEY.TXT\r",
                 "TEST.TXT\r",
                 "\x06",  # Ctrl+F format toggle
                 "\x1b",  # Cancel
             ])
-            self.queue_string(candidate, "Save file:")
+            if candidate == "\x1b":
+                return "\x1b", 0.15, "Save file: ESC (Cancel)"
+            self.queue_input_string(candidate, "Save file:")
             ch, desc = self.pending_chars.pop(0)
-            return ch, delay, desc
+            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
+            return ch, d, desc
 
         elif screen_state == "insert_file_prompt":
             candidate = self.rng.choice(["2.TXT\r", "30.TXT\r", "\x1b"])
-            self.queue_string(candidate, "Insert file:")
+            if candidate == "\x1b":
+                return "\x1b", 0.15, "Insert file: ESC (Cancel)"
+            self.queue_input_string(candidate, "Insert file:")
             ch, desc = self.pending_chars.pop(0)
-            return ch, delay, desc
+            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
+            return ch, d, desc
 
         elif screen_state == "load_plugin_prompt":
             candidate = self.rng.choice([
@@ -465,43 +532,57 @@ class DrunkenMonkeyInputGenerator:
                 "NO.PRL\r",
                 "\x1b",
             ])
-            self.queue_string(candidate, "Load plugin:")
+            self.queue_input_string(candidate, "Load plugin:")
             ch, desc = self.pending_chars.pop(0)
-            return ch, delay, desc
+            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
+            return ch, d, desc
 
         elif screen_state == "goto_line_prompt":
             candidate = self.rng.choice([
                 "1\r", "10\r", "25\r", "999\r", "\x1b"
             ])
-            self.queue_string(candidate, "Goto line:")
+            self.queue_input_string(candidate, "Goto line:")
             ch, desc = self.pending_chars.pop(0)
-            return ch, delay, desc
+            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
+            return ch, d, desc
 
         elif screen_state == "find_prompt":
             candidate = self.rng.choice(["SE\r", "the\r", "test\r", "\x1b"])
-            self.queue_string(candidate, "Find:")
+            self.queue_input_string(candidate, "Find:")
             ch, desc = self.pending_chars.pop(0)
-            return ch, delay, desc
+            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
+            return ch, d, desc
 
         elif screen_state == "replace_prompt":
             candidate = self.rng.choice(["REPLACE\r", "NEW\r", "\x1b"])
-            self.queue_string(candidate, "Replace with:")
+            self.queue_input_string(candidate, "Replace with:")
             ch, desc = self.pending_chars.pop(0)
-            return ch, delay, desc
+            d = max(delay, 0.15) if ch in ("\x1b", "\r", "\x03") else delay
+            return ch, d, desc
 
         elif screen_state == "save_changes_prompt":
-            # Cancel back to editor with ESC to maintain test session
-            return "\x1b", delay, "Save changes: ESC (Cancel)"
+            choice = self.rng.choice([
+                ("\x03", "Save changes: Ctrl+C (Cancel)"),
+                ("n", "Save changes: 'n' (Discard)"),
+                ("\x1b", "Save changes: ESC (Cancel)"),
+            ])
+            ch, desc = choice
+            d = max(delay, 0.15) if ch in ("\x1b", "\x03") else delay
+            return ch, d, desc
 
         elif screen_state == "overwrite_prompt":
-            # Answer 'y' or 'n'
             choice = self.rng.choice(["y", "n"])
             return choice, delay, f"Overwrite: {choice}"
 
+        elif screen_state == "replace_confirm_prompt":
+            choice = self.rng.choice(["y", "n", "a", "q", "\x1b"])
+            d = max(delay, 0.15) if choice == "\x1b" else delay
+            return choice, d, f"Replace confirm: {choice}"
+
         elif screen_state == "plugin_popup":
-            # Select slot 0..7 or ESC
             slot = self.rng.choice(["0", "1", "2", "\x1b"])
-            return slot, delay, f"Plugin popup: {slot}"
+            d = max(delay, 0.15) if slot == "\x1b" else delay
+            return slot, d, f"Plugin popup: {slot}"
 
         elif screen_state == "press_any_key":
             return " ", delay, "Dismiss Help/Info: Space"
@@ -623,7 +704,7 @@ def read_available(master_fd, timeout=0.05):
             if not chunk:
                 break
             buf += chunk
-            timeout = 0.01  # Once reading, drain quickly
+            timeout = 0.035  # Keep draining incoming screen burst
         except (BlockingIOError, OSError):
             break
     return buf
@@ -710,7 +791,7 @@ def run_drunken_monkey_test(
     else:
         if record_file:
             recorder = SessionRecorder(mode=mode, seed=seed)
-        generator = DrunkenMonkeyInputGenerator(seed=seed)
+        generator = DrunkenMonkeyInputGenerator(mode=mode, seed=seed)
 
     # Spawn emulator process over PTY
     master, slave = os.openpty()
@@ -798,8 +879,18 @@ def run_drunken_monkey_test(
             os.write(master, char.encode("latin1"))
 
             # Observe effect on output (Criterion 1 watchdog & 2/3 validation)
-            # Enter (\r) may trigger file load/save or dialog render
-            read_timeout = 0.20 if char == "\r" else 0.04
+            if char == "\x1b":
+                # Let SE.COM's VT100 ESC sequence debounce timer expire
+                time.sleep(0.12)
+
+            # Major keys or modal/splash states trigger full screen redraws
+            major_keys = (
+                "\r", "\x1b", "\x03", "\x06", "\x0b", "\x0c",
+                "\x0f", "\x10", "\x12", "\x13", "\x17", "\x1a",
+                "e", "E", "1", "2"
+            )
+            needs_wait = char in major_keys or state != "editor"
+            read_timeout = 0.30 if needs_wait else 0.04
             chunk = read_available(master, timeout=read_timeout)
 
             if chunk:
@@ -852,7 +943,9 @@ def run_drunken_monkey_test(
         monitor.feed(exit_chunk.decode("latin1", errors="replace"))
 
         # If prompted with "Save changes?", answer 'n'
-        if "Save changes?" in "".join("".join(r) for r in monitor.buffer):
+        full_screen = "".join("".join(r) for r in monitor.buffer)
+        if ("Save changes?" in full_screen or
+                "Unsaved Modifications" in full_screen):
             os.write(master, b"n")
             time.sleep(0.2)
 
