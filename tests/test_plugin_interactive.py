@@ -127,7 +127,26 @@ def main():
         if not ok:
             print(f"[-] Slot 0 missing A:about. Out: {repr(out)}")
             return 1
+        # Slot 0 context help verified (Enter:run, A:about).
         print("[+] Slot 0 context help verified (Enter:run, A:about).")
+
+        # Test digit navigation: press '2' to jump directly to slot 2
+        time.sleep(0.3)
+        os.write(master, b"2")
+        ok, out = read_until(master, b">[2]", timeout=5.0)
+        if not ok:
+            print(f"[-] Digit '2' failed to select Slot 2. Out: {repr(out)}")
+            return 1
+        print("[+] Digit '2' successfully selected Slot 2 without executing.")
+
+        # Test digit navigation: press '0' to jump back to slot 0
+        time.sleep(0.3)
+        os.write(master, b"0")
+        ok, out = read_until(master, b">[0]", timeout=5.0)
+        if not ok:
+            print(f"[-] Digit '0' failed to select Slot 0. Out: {repr(out)}")
+            return 1
+        print("[+] Digit '0' successfully selected Slot 0 without executing.")
 
         # Test Down Arrow via ANSI escape: \x1b[B
         time.sleep(0.3)
@@ -198,7 +217,7 @@ def main():
         # Dismiss About screen with space
         time.sleep(0.3)
         os.write(master, b" ")
-        ok, out = read_until(master, b"type 0..7 to run", timeout=5.0)
+        ok, out = read_until(master, b"0..7:select", timeout=5.0)
         if not ok or b">[0]" not in out:
             print(f"[-] Return from WORDCNT About screen to Plugin Manager failed. out={repr(out)}")
             return 1
@@ -219,7 +238,7 @@ def main():
         # Dismiss About screen with Enter
         time.sleep(0.3)
         os.write(master, b"\r")
-        read_until(master, b"type 0..7 to run", timeout=5.0)
+        read_until(master, b"0..7:select", timeout=5.0)
         print("[+] Returned cleanly from ROT13 About screen.")
 
         # Navigate to Slot 2 (BEAUTIFY) and test embedded About screen
@@ -237,7 +256,7 @@ def main():
         # Dismiss About screen with space
         time.sleep(0.3)
         os.write(master, b" ")
-        read_until(master, b"type 0..7 to run", timeout=5.0)
+        read_until(master, b"0..7:select", timeout=5.0)
         print("[+] Returned cleanly from BEAUTIFY About screen.")
 
         # Test Action 2: Embedded Configuration Screen on Slot 2 (BEAUTIFY)
@@ -270,7 +289,7 @@ def main():
         # Exit config screen and return to Plugin Manager ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        ok, out = read_until(master, b"type 0..7 to run", timeout=5.0)
+        ok, out = read_until(master, b"0..7:select", timeout=5.0)
         if not ok or b">[2]" not in out:
             print(f"[-] Return from BEAUTIFY config screen to Plugin Manager failed. out={repr(out)}")
             return 1

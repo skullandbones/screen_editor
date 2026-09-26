@@ -157,8 +157,8 @@ def run_fatfs_slot_test():
         if not ok:
             print("[-] Failed to enter Plugin Manager.", flush=True)
             return False
-        if b"type 0..7 to run" not in out:
-            read_until(master, b"type 0..7 to run", timeout=5.0)
+        if b"0..7:select" not in out:
+            read_until(master, b"0..7:select", timeout=5.0)
         drain_all(master)
         print("[+] Entered SE.COM Plugin Manager.", flush=True)
 
@@ -181,7 +181,7 @@ def run_fatfs_slot_test():
         print("[+] Navigating selection to Slot 3...", flush=True)
         time.sleep(0.3)
         os.write(master, b"jjj")
-        read_until(master, b"type 0..7 to run", timeout=5.0)
+        read_until(master, b"0..7:select", timeout=5.0)
         drain_all(master)
 
         # 6. Test Action 1: About Dialog ('a')
@@ -197,7 +197,7 @@ def run_fatfs_slot_test():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b" ")
-        read_until(master, b"type 0..7 to run", timeout=5.0)
+        read_until(master, b"0..7:select", timeout=5.0)
         drain_all(master)
 
         # 7. Test Action 2: Configuration Dialog ('c')
@@ -214,12 +214,12 @@ def run_fatfs_slot_test():
         drain_all(master)
         os.write(master, b"q")
         ok, _ = read_until(master, b"SE - Plugin Manager", timeout=6.0)
-        read_until(master, b"type 0..7 to run", timeout=5.0)
+        read_until(master, b"0..7:select", timeout=5.0)
         drain_all(master)
 
-        # 8. Test Action 0: Main Execution / Browser ('3')
+        # 8. Test Action 0: Main Execution / Browser ('3' + Enter)
         time.sleep(0.5)
-        os.write(master, b"3")
+        os.write(master, b"3\r")
         ok, out_run = read_until(master, b"FAT Filesystem", timeout=8.0)
         if not ok:
             print(f"[-] FATFS execution failed. Buffer: {repr(out_run)}", flush=True)
@@ -229,7 +229,7 @@ def run_fatfs_slot_test():
         # Dismiss / exit browser back to Plugin Manager ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type 0..7 to run", timeout=5.0)
+        read_until(master, b"0..7:select", timeout=5.0)
         drain_all(master)
 
         # 9. Test Action 0 from Editor Context-Aware Popup (Ctrl+P -> 3)
@@ -246,14 +246,14 @@ def run_fatfs_slot_test():
 
         time.sleep(0.3)
         os.write(master, b"\x10")  # Ctrl+P
-        ok, out_popup = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        ok, out_popup = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         if not ok or b"FATFS" not in out_popup:
             print(f"[-] FATFS not found in Editor Ctrl+P popup. Buffer: {repr(out_popup)}", flush=True)
             return False
         print("[+] FATFS successfully listed in Editor Ctrl+P context popup.", flush=True)
 
         time.sleep(0.3)
-        os.write(master, b"3")  # Launch Slot 3 (FATFS)
+        os.write(master, b"3\r")  # Launch Slot 3 (FATFS) via '3' + Enter
         ok, out_fat_popup = read_until(master, b"FAT Filesystem", timeout=8.0)
         if not ok:
             print(f"[-] Failed to launch FATFS from Ctrl+P popup. Buffer: {repr(out_fat_popup)}", flush=True)
@@ -277,9 +277,9 @@ def run_fatfs_slot_test():
         print("[*] Testing FAT text file import into SE.COM editor buffer...", flush=True)
         time.sleep(0.3)
         os.write(master, b"\x10")  # Ctrl+P
-        read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         time.sleep(0.2)
-        os.write(master, b"3")  # Launch Slot 3 (FATFS)
+        os.write(master, b"3\r")  # Launch Slot 3 (FATFS) via '3' + Enter
         ok, out_footer = read_until(master, b"[ENTER/O] Open", timeout=12.0)
         if not ok:
             print(f"[-] FAT browser failed to open or mount: {repr(out_footer)}", flush=True)
@@ -323,7 +323,7 @@ def run_fatfs_slot_test():
         time.sleep(0.3)
         os.write(master, b"p")
         ok, _ = read_until(master, b"SE - Plugin Manager", timeout=6.0)
-        read_until(master, b"type 0..7 to run", timeout=5.0)
+        read_until(master, b"0..7:select", timeout=5.0)
         drain_all(master)
 
         # 11. Unload Slot 3 ('u' then '3')

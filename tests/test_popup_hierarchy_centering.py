@@ -114,16 +114,16 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         if b"Plugins with Embedded Documentation" not in out:
             print(f"[-] Failed to open Ctrl+P menu on About screen. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
         print("[+] Ctrl+P menu opened on About screen.")
 
-        # Select slot 1 (ROT13 About dialog)
+        # Select slot 1 and execute via Enter (ROT13 About dialog)
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"1")
+        os.write(master, b"1\r")
         out = read_until(master, b"ROT13 Text Cipher Plugin", timeout=6.0)
         if b"ROT13 Text Cipher Plugin" not in out:
             print(f"[-] Failed to open ROT13 About dialog. Output:\n{out.decode('latin1', errors='replace')}")
@@ -145,12 +145,12 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b" ")
-        # With the hierarchy fix, this MUST return to the Ctrl+P menu!
-        out = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
-        if b"Plugins with Embedded Documentation" not in out or b"Select [0-7] to Execute" not in out:
-            print(f"[-] HIERARCHY FAILURE: Expected Ctrl+P menu after dismissing About popup! Got:\n{out.decode('latin1', errors='replace')}")
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        if (b"Plugins with Embedded Documentation" not in out or
+                b"[Up/Dn/0-7] Select" not in out):
+            print("[-] HIERARCHY FAILURE: Expected Ctrl+P menu after popup!")
             return 1
-        print("[+] Modal hierarchy verified: Dismissing About dialog returned to Ctrl+P menu!")
+        print("[+] Modal hierarchy verified: About returned to Ctrl+P menu!")
 
         # Dismiss Ctrl+P menu with ESC
         time.sleep(0.3)

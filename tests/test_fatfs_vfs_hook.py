@@ -269,8 +269,8 @@ def main():
         if not ok:
             print("[-] Plugin Manager not reached. Buffer:\n", buf)
             sys.exit(1)
-        if b"type 0..7 to run" not in buf:
-            read_until(master, b"type 0..7 to run", timeout=5.0)
+        if b"0..7:select" not in buf:
+            read_until(master, b"0..7:select", timeout=5.0)
         drain_all(master, quiet_time=0.1)
         time.sleep(0.3)
         drain_all(master, quiet_time=0.1)

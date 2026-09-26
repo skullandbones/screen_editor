@@ -75,7 +75,7 @@ def main():
 
         time.sleep(0.5)
         os.write(master, b"p")
-        ok, out = read_until(master, b"type 0..7 to run", timeout=10.0)
+        ok, out = read_until(master, b"0..7:select", timeout=10.0)
         
         # Capture screen text
         text = out.decode("latin1", errors="replace")

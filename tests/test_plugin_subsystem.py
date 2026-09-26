@@ -142,7 +142,7 @@ def run_plugin_test():
 
         # Verify auto-probed plugins in registry
         if b"WORDCNT" not in out or b"ROT13" not in out:
-            ok, out_more = read_until(master, b"type 0..7 to run", timeout=5.0)
+            ok, out_more = read_until(master, b"0..7:select", timeout=5.0)
             out += out_more
         if b"WORDCNT" not in out or b"ROT13" not in out:
             print(f"[-] Auto-probed plugins (WORDCNT / ROT13) not found in registry. Buffer: {repr(out)}", flush=True)
@@ -155,9 +155,9 @@ def run_plugin_test():
             return False
         print("[+] Far RAM dynamic bank borrowing verified.", flush=True)
 
-        # 5. Execute WORDCNT.OVL in Far RAM by typing '0'
+        # 5. Execute WORDCNT.OVL in Far RAM by typing '0' + Enter
         time.sleep(0.3)
-        os.write(master, b"0")
+        os.write(master, b"0\r")
         ok, out_wc = read_until(master, b"[Press any key to continue]", timeout=8.0)
         if not ok or b"Total Lines" not in out_wc or b"Total Words" not in out_wc:
             print(f"[-] WORDCNT modal dialog failed to display. Buffer: {repr(out_wc)}", flush=True)
@@ -209,9 +209,9 @@ def run_plugin_test():
             return False
         print("[+] Ctrl+Z opened Plugin Manager from editor.", flush=True)
 
-        # 9. Execute ROT13.PRL in TPA slot by typing '1'
+        # 9. Execute ROT13.PRL in TPA slot by typing '1' + Enter
         time.sleep(0.2)
-        os.write(master, b"1")
+        os.write(master, b"1\r")
         ok, out_rot = read_until(master, b"[ROT13 Applied]", timeout=8.0)
         if not ok or b"URYYB JBEYQ" not in out_rot:
             print(f"[-] ROT13 transformation failed. Buffer: {repr(out_rot)}", flush=True)
@@ -228,13 +228,13 @@ def run_plugin_test():
             return False
         print("[+] Status bar message cleared on subsequent keypress.", flush=True)
 
-        # 10. Execute ROT13 a second time via Ctrl+Z + 1 to verify round-trip
+        # 10. Execute ROT13 a 2nd time via Ctrl+Z + 1 + Enter (round-trip)
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x1a")
         read_until(master, b"SE - Plugin Manager", timeout=6.0)
         time.sleep(0.2)
-        os.write(master, b"1")
+        os.write(master, b"1\r")
         ok, out_hw2 = read_until(master, b"[ROT13 Applied]", timeout=8.0)
         if not ok or b"HELLO WORLD!" not in out_hw2:
             print(f"[-] ROT13 second invocation round-trip failed. Buffer: {repr(out_hw2)}", flush=True)

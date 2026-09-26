@@ -185,7 +185,7 @@ def run_slots_test():
 
         # Verify 4KB mode display
         if b"FAR (4KB)" not in out or b"TPA (4KB)" not in out:
-            ok, out_more = read_until(master, b"type 0..7 to run", timeout=5.0)
+            ok, out_more = read_until(master, b"0..7:select", timeout=5.0)
             out += out_more
         if b"FAR (4KB)" not in out or b"TPA (4KB)" not in out:
             print(f"[-] Plugin Manager did not display 4KB slot modes. Buffer: {repr(out)}", flush=True)
@@ -207,10 +207,10 @@ def run_slots_test():
         print("[+] MIDPLUG.PRL successfully loaded into Slot 3 as 'FAR (8KB)'.",
               flush=True)
 
-        # 5. Execute MIDPLUG (Slot 3)
+        # 5. Execute MIDPLUG (Slot 3) via '3' + Enter
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"3")
+        os.write(master, b"3\r")
         ok, out_run_mp = read_until(master, b"[Press any key to continue]",
                                     timeout=8.0)
         if not ok or b"MIDPLUG (8KB Far RAM Plugin)" not in out_run_mp:
@@ -269,10 +269,10 @@ def run_slots_test():
         print("[+] BIGPLUG.PRL loaded into Slot 4 as 'FAR (32KB)' "
               "(Multi-Bank Far RAM allocation).", flush=True)
 
-        # 9. Execute HALFPLUG (Slot 3)
+        # 9. Execute HALFPLUG (Slot 3) via '3' + Enter
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"3")
+        os.write(master, b"3\r")
         ok, out_run_hp = read_until(master, b"[Press any key to continue]",
                                     timeout=8.0)
         if not ok or b"HALFPLUG (16KB Far RAM Plugin)" not in out_run_hp:
@@ -287,10 +287,10 @@ def run_slots_test():
         os.write(master, b" ")
         read_until(master, b"SE - Plugin Manager", timeout=5.0)
 
-        # 10. Execute BIGPLUG (Slot 4)
+        # 10. Execute BIGPLUG (Slot 4) via '4' + Enter
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"4")
+        os.write(master, b"4\r")
         ok, out_run_bp = read_until(master, b"[Press any key to continue]",
                                     timeout=8.0)
         if not ok or b"BIGPLUG (32KB Far RAM Plugin)" not in out_run_bp:

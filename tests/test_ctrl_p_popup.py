@@ -136,7 +136,7 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"Select [0-7] to Execute", timeout=14.0)
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=14.0)
         if b"All Available Installed Plugins" not in out:
             print(f"[-] Test 1 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -145,6 +145,24 @@ def main():
             return 1
         print("    [+] Splash pop-up listed all installed plugins (WORDCNT, ROT13, BEAUTIFY)")
 
+        # Test Arrow navigation in pop-up: Down Arrow moves to >[1] ROT13
+        time.sleep(0.2)
+        os.write(master, b"\x1b[B")
+        out = read_until(master, b">[1] ROT13", timeout=4.0)
+        if b">[1] ROT13" not in out:
+            print("[-] Test 1 failed: Down arrow did not select slot 1.")
+            return 1
+        print("    [+] Pop-up Down Arrow selected >[1] ROT13")
+
+        # Test Up Arrow in pop-up: Up Arrow moves back to >[0] WORDCNT
+        time.sleep(0.2)
+        os.write(master, b"\x1b[A")
+        out = read_until(master, b">[0] WORDCNT", timeout=4.0)
+        if b">[0] WORDCNT" not in out:
+            print("[-] Test 1 failed: Up arrow did not select slot 0.")
+            return 1
+        print("    [+] Pop-up Up Arrow selected >[0] WORDCNT")
+
         # Dismiss with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
@@ -152,7 +170,7 @@ def main():
         if b"for about" not in out:
             print(f"[-] Test 1 failed: ESC dismiss did not restore splash screen.")
             return 1
-        print("[+] Test 1 PASSED: Splash pop-up opened, listed all plugins, and dismissed cleanly.")
+        print("[+] Test 1 PASSED: Splash pop-up arrow navigation verified.")
 
         # -----------------------------------------------------------------
         # TEST 2: Configuration Screen Ctrl+P
@@ -169,7 +187,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         if b"Plugins with Configurable Settings" not in out:
             print(f"[-] Test 2 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -181,9 +199,9 @@ def main():
             return 1
         print("    [+] Config pop-up listed only configurable plugins (WORDCNT & BEAUTIFY; ROT13 filtered)")
 
-        # Execute Action 2 on slot 2 (BEAUTIFY config screen)
+        # Select slot 2 ('2') and Execute (Enter) Action 2 (BEAUTIFY config)
         time.sleep(0.2)
-        os.write(master, b"2")
+        os.write(master, b"2\r")
         out = read_until(master, b"Beautifier Configuration", timeout=4.0)
         if b"Beautifier Configuration" not in out:
             print(f"[-] Test 2 failed: Option 2 did not open Beautifier Configuration screen.")
@@ -232,7 +250,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         if b"Plugins with Far RAM Memory Usage" not in out:
             print(f"[-] Test 3 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -276,7 +294,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         if b"Plugins with Embedded Documentation" not in out:
             print(f"[-] Test 4 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -285,9 +303,9 @@ def main():
             return 1
         print("    [+] About pop-up listed all documented plugins (WORDCNT, ROT13, BEAUTIFY)")
 
-        # Execute Action 1 on slot 1 (ROT13 About dialog)
+        # Execute Action 1 on slot 1 (ROT13 About dialog) via '1' + Enter
         time.sleep(0.2)
-        os.write(master, b"1")
+        os.write(master, b"1\r")
         out = read_until(master, b"ROT13 Text Cipher Plugin", timeout=4.0)
         if b"ROT13 Text Cipher Plugin" not in out:
             print(f"[-] Test 4 failed: Action 1 did not open ROT13 About dialog.")
@@ -342,7 +360,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         if b"Plugins for Editor (Run Plugin)" not in out:
             print(f"[-] Test 5 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -351,9 +369,9 @@ def main():
             return 1
         print("    [+] Editor pop-up listed editor tools (WORDCNT, ROT13, BEAUTIFY)")
 
-        # Run Action 0 on slot 0 (WORDCNT modal dialog)
+        # Run Action 0 on slot 0 (WORDCNT modal dialog) via '0' + Enter
         time.sleep(0.2)
-        os.write(master, b"0")
+        os.write(master, b"0\r")
         out = read_until(master, b"Document Statistics", timeout=4.0)
         if b"Document Statistics" not in out:
             print(f"[-] Test 5 failed: WORDCNT modal dialog missing.")
@@ -386,7 +404,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         if b"Plugins with Embedded Documentation" not in out:
             print(f"[-] Test 5 failed: Title missing on Help screen pop-up.")
             return 1
@@ -424,7 +442,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"Select [0-7] to Execute", timeout=6.0)
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
         if b"Installed Plugin Catalog" not in out:
             print(f"[-] Test 6 failed: Title missing in Plugin Manager pop-up.")
             return 1
