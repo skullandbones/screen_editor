@@ -94,7 +94,72 @@ How:
 
 ---
 
-## 3. Multi-Agent Workspace Architecture & On-boarding
+## 3. Prohibited Linux Commands (STRICTLY FORBIDDEN)
+
+To safeguard user data, repository integrity, and the host operating system,
+agents are strictly forbidden from executing certain destructive or high-risk
+Linux commands. Any attempt to use these commands is a critical violation.
+
+### 1. Destructive File Deletion (`rm`)
+* **Prohibited**:
+  - `rm -rf *`, `rm -rf *.*`, `rm -rf ./*`, `rm -rf /`, `rm -rf ~`: Wildcard
+    or root/home recursive wipes.
+  - `rm -rf <dir>` without explicit user confirmation.
+  - `rm` without a specific, unambiguous filename or path (e.g. `rm -f ./-`
+    or `rm -f -` where the target resembles a flag or stdin).
+  - Blind batch deletions using globbing (e.g. `rm *.asm`, `rm *.py`).
+* **Permitted**:
+  - `rm <exact_single_filename>` for specific build artifacts or temporary files
+    known to be safe to delete (or use `make clean`).
+  - Target explicit files: `rm -f /full/path/to/specific_file.tmp`.
+
+### 2. Destructive Git Commands
+* **Prohibited**:
+  - `git clean -fd` or `git clean -fdx`: Permanently destroys untracked files
+    and work-in-progress.
+  - `git reset --hard` (unless explicitly instructed by the user).
+  - `git checkout .`, `git checkout -- .`, `git restore .`: Wipes unstaged
+    edits across the entire repository.
+  - `git push --force`, `git push -f`, or `git push --delete` on protected
+    branches (`master`, `agy*_dev_branch`).
+  - `git branch -D` on branches containing unmerged work.
+* **Permitted**:
+  - Scoped restores of individual files: `git restore <specific_file>`.
+  - Staging/unstaging: `git add`, `git restore --staged <specific_file>`.
+  - Inspecting status: `git status`, `git diff`, `git log`.
+
+### 3. Raw Disk & Filesystem Modification
+* **Prohibited**:
+  - `dd` targeting block devices (e.g. `dd if=... of=/dev/sd*`, `/dev/nvme*`,
+    `/dev/loop*`).
+  - `mkfs`, `fdisk`, `parted`, `gparted`, `sfdisk`, `mkswap`.
+  - `mount`, `umount` (unless operating within a sandboxed virtual image).
+
+### 4. Privilege Escalation & System Administration
+* **Prohibited**:
+  - `sudo` or `su`: Agents must never escalate privileges.
+  - Modifying `/etc`, `/usr`, `/var`, `/boot`, `/lib`, or system directories.
+  - Recursive permission changes on wide directories (`chmod -R 777 /`,
+    `chown -R ... /`).
+  - `shutdown`, `reboot`, `poweroff`, `init`.
+  - `killall`, `kill -9 -1`, or terminating processes outside the agent task.
+
+### 5. Blind Network & Execution Piping
+* **Prohibited**:
+  - Pipe-to-shell patterns: `curl ... | bash`, `wget ... | sh`, `fetch | zsh`.
+  - Installing system-wide packages (`apt-get install`, `rpm`, `dnf`, `pacman`).
+  - Executing untrusted remote scripts or downloading unverified binaries.
+
+### 6. Arbitrary One-Liners Over Project Tooling
+* **Prohibited**:
+  - `python3 -c "..."` to check line lengths or repository state.
+* **Required**:
+  - Always use audited repository scripts: `python3 check_line_length.py`,
+    `python3 check_tpa.py`, `python3 check_plugin.py`, `make check-lines`.
+
+---
+
+## 4. Multi-Agent Workspace Architecture & On-boarding
 
 To allow multiple autonomous agents (e.g. `agy1`, `agy2`, `agy3`) to work
 concurrently without colliding, the project uses isolated git worktrees
@@ -150,7 +215,7 @@ When initializing a new agent instance (e.g. `agy3`):
 
 ---
 
-## 4. Protected Branches (ENFORCED ON COLOSSUS & LOCAL HOOKS)
+## 5. Protected Branches (ENFORCED ON COLOSSUS & LOCAL HOOKS)
 
 The following branches are strictly protected from deletion and history
 rewriting (force pushes):
