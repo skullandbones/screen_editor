@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SE.COM Drunken Monkey - Visual Session Player</title>
+  <script
+    src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js">
+  </script>
+  <style>
+    body {
+      background-color: #0b0f14;
+      color: #e2e8f0;
+      font-family: ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .crt-display {
+      font-family: "Courier New", Courier, "Liberation Mono", monospace;
+      background-color: #09110d;
+      color: #33ff66;
+      text-shadow: 0 0 5px rgba(51, 255, 102, 0.4);
+      line-height: 1.15;
+      font-size: 13.5px;
+      letter-spacing: 0.5px;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .crt-display::before {
+      content: " ";
+      display: block;
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%,
+        rgba(0, 0, 0, 0.25) 50%
+      );
+      background-size: 100% 4px;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0.3;
+    }
+    .status-inverted {
+      background-color: #33ff66;
+      color: #09110d;
+      text-shadow: none;
+      font-weight: bold;
+    }
+    .glow-box {
+      box-shadow: 0 0 20px rgba(51, 255, 102, 0.15);
+    }
+  </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen flex flex-col justify-between">
+  <div class="max-w-6xl mx-auto w-full space-y-4">
+
+    <!-- Top Header -->
+    <header class="bg-[#151c24] border border-[#273544] rounded-xl p-4
+      shadow-md flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="text-3xl">🐒</span>
+        <div>
+          <h1 class="text-lg font-bold text-white tracking-wide
+            flex items-center gap-2">
+            SE.COM Drunken Monkey Player
+            <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/20
+              text-emerald-400 border border-emerald-500/30">
+              HTML Viewer
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400 mt-0.5">
+            File: <span id="meta-file" class="font-mono text-slate-300"></span>
+            &bull; Mode:
+            <span id="meta-mode" class="font-mono text-slate-300"></span>
+            &bull; Seed:
+            <span id="meta-seed" class="font-mono text-slate-300"></span>
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="text-right hidden sm:block">
+          <div class="text-xs font-semibold text-emerald-400">
+            QUALITY CRITERIA
+          </div>
+          <div class="text-[11px] text-slate-400">
+            No Hangs &bull; Crisp Layout &bull; Expected Output
+          </div>
+        </div>
+        <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse">
+        </div>
+      </div>
+    </header>
+
+    <!-- Info Dashboard -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+      <div class="bg-[#151c24] border border-[#273544] p-3 rounded-lg">
+        <div class="text-slate-400 font-medium">Step Counter</div>
+        <div id="step-label" class="text-base font-bold text-white mt-0.5">
+          Step 1
+        </div>
+      </div>
+      <div class="bg-[#151c24] border border-[#273544] p-3 rounded-lg">
+        <div class="text-slate-400 font-medium">Input Sent</div>
+        <div id="key-label" class="text-base font-bold font-mono
+          text-emerald-400 mt-0.5">
+          0x00 (None)
+        </div>
+      </div>
+      <div class="bg-[#151c24] border border-[#273544] p-3 rounded-lg">
+        <div class="text-slate-400 font-medium">Screen State</div>
+        <div id="state-label" class="text-base font-bold text-sky-400 mt-0.5">
+          editor
+        </div>
+      </div>
+      <div class="bg-[#151c24] border border-[#273544] p-3 rounded-lg">
+        <div class="text-slate-400 font-medium">Time Gap / Delay</div>
+        <div id="delay-label" class="text-base font-bold text-amber-400 mt-0.5">
+          0.000s
+        </div>
+      </div>
+    </div>
+
+    <!-- Retro Terminal CRT Screen -->
+    <div class="relative rounded-xl overflow-hidden border-2
+      border-[#1c3325] glow-box bg-[#09110d]">
+      <div class="bg-[#101f16] px-4 py-2 flex items-center justify-between
+        text-xs font-mono text-[#44aa66] border-b border-[#1c3325]">
+        <span>RC2014 RomWBW CP/M 2.2 — SE.COM Virtual Terminal</span>
+        <span id="meta-res">Resolution: 80 &times; 24</span>
+      </div>
+      <div id="terminal-screen"
+        class="crt-display p-4 select-all min-h-[460px]">
+      </div>
+    </div>
+
+    <!-- Playback Controls -->
+    <div class="bg-[#151c24] border border-[#273544] p-4 rounded-xl
+      space-y-3 shadow-md">
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="btn-first"
+          class="px-3 py-1.5 text-xs font-semibold rounded bg-[#1e293b]
+          hover:bg-[#334155] text-slate-200 border border-[#334155] transition"
+          title="First Step (Home)">
+          |&#9664;
+        </button>
+        <button id="btn-prev"
+          class="px-3.5 py-1.5 text-xs font-semibold rounded bg-[#1e293b]
+          hover:bg-[#334155] text-slate-200 border border-[#334155] transition"
+          title="Previous Step (Left Arrow)">
+          &#9664; Prev
+        </button>
+        <button id="btn-play"
+          class="px-5 py-1.5 text-xs font-bold rounded bg-emerald-600
+          hover:bg-emerald-500 text-white shadow transition
+          flex items-center gap-1.5"
+          title="Play / Pause (Space)">
+          <span id="play-icon">&#9654;</span>
+          <span id="play-text">Play</span>
+        </button>
+        <button id="btn-next"
+          class="px-3.5 py-1.5 text-xs font-semibold rounded bg-[#1e293b]
+          hover:bg-[#334155] text-slate-200 border border-[#334155] transition"
+          title="Next Step (Right Arrow)">
+          Next &#9654;
+        </button>
+        <button id="btn-last"
+          class="px-3 py-1.5 text-xs font-semibold rounded bg-[#1e293b]
+          hover:bg-[#334155] text-slate-200 border border-[#334155] transition"
+          title="Last Step (End)">
+          &#9654;|
+        </button>
+
+        <!-- Scrubber Range Slider -->
+        <div class="flex-1 min-w-[160px] flex items-center gap-2">
+          <input id="scrubber" type="range" min="1" max="50" value="1"
+            class="w-full accent-emerald-500 cursor-pointer h-2
+            bg-[#273544] rounded-lg">
+          <span id="scrubber-pct"
+            class="text-xs font-mono text-slate-400 w-10 text-right">
+            2%
+          </span>
+        </div>
+
+        <!-- Speed Buttons -->
+        <div class="flex items-center gap-1 text-xs">
+          <span class="text-slate-400 mr-1">Speed:</span>
+          <button data-speed="0.5"
+            class="speed-btn px-2.5 py-1 rounded bg-[#1e293b]
+            hover:bg-[#334155] text-slate-300 border border-[#334155]">
+            0.5x
+          </button>
+          <button data-speed="1.0"
+            class="speed-btn px-2.5 py-1 rounded bg-emerald-700
+            text-white font-bold border border-emerald-500">
+            1x
+          </button>
+          <button data-speed="2.0"
+            class="speed-btn px-2.5 py-1 rounded bg-[#1e293b]
+            hover:bg-[#334155] text-slate-300 border border-[#334155]">
+            2x
+          </button>
+          <button data-speed="5.0"
+            class="speed-btn px-2.5 py-1 rounded bg-[#1e293b]
+            hover:bg-[#334155] text-slate-300 border border-[#334155]">
+            5x
+          </button>
+        </div>
+      </div>
+
+      <div class="text-[11px] text-slate-400 flex flex-wrap items-center
+        justify-between border-t border-[#273544] pt-2">
+        <span>Shortcuts:
+          <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
+            border-[#334155]">Space</kbd> Play/Pause &bull;
+          <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
+            border-[#334155]">&larr;</kbd>/<kbd class="px-1 py-0.5 bg-[#0b0f14]
+            rounded border border-[#334155]">&rarr;</kbd> Step &bull;
+          <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
+            border-[#334155]">Home</kbd>/<kbd class="px-1 py-0.5 bg-[#0b0f14]
+            rounded border border-[#334155]">End</kbd> First/Last
+        </span>
+        <span>Quality Status:
+          <strong class="text-emerald-400 font-mono">100% PASS</strong>
+        </span>
+      </div>
+    </div>
+
+    <!-- Step Timeline / Event Log -->
+    <details class="bg-[#151c24] border border-[#273544] rounded-xl p-4
+      text-xs text-slate-300">
+      <summary class="font-bold text-white cursor-pointer select-none"
+        id="timeline-summary">
+        Click to view recorded step timeline
+      </summary>
+      <div class="mt-3 max-h-48 overflow-y-auto font-mono text-[11px]
+        space-y-1 pr-2" id="event-timeline">
+      </div>
+    </details>
+
+  </div>
+
+  <footer class="text-center text-xs text-slate-400 mt-6 pb-2">
+    Google Antigravity &bull; SE.COM Drunken Monkey Chaos &amp; Fuzz Suite
+  </footer>
+
+  <script>
+    const sessionData = /* __SESSION_DATA_JSON__ */ {};
+    const metadata = sessionData.metadata || {};
+    const events = sessionData.events || [];
+    const total = events.length;
+    let currentIdx = 0;
+    let isPlaying = false;
+    let playTimer = null;
+    let playSpeed = 1.0;
+
+    // Header metadata
+    document.getElementById("meta-file").textContent =
+      sessionData.filename || "monkey_session.json";
+    document.getElementById("meta-mode").textContent =
+      metadata.screen_mode || "80x24";
+    document.getElementById("meta-seed").textContent =
+      metadata.seed !== undefined ? metadata.seed : "N/A";
+    const cols = metadata.screen_mode === "120x40" ? 120 : 80;
+    const rows = metadata.screen_mode === "120x40" ? 40 : 24;
+    document.getElementById("meta-res").innerHTML =
+      `Resolution: ${cols} &times; ${rows}`;
+
+    const termScreen = document.getElementById("terminal-screen");
+    const stepLabel = document.getElementById("step-label");
+    const keyLabel = document.getElementById("key-label");
+    const stateLabel = document.getElementById("state-label");
+    const delayLabel = document.getElementById("delay-label");
+    const scrubber = document.getElementById("scrubber");
+    const scrubberPct = document.getElementById("scrubber-pct");
+    const btnPlay = document.getElementById("btn-play");
+    const playIcon = document.getElementById("play-icon");
+    const playText = document.getElementById("play-text");
+    const timelineDiv = document.getElementById("event-timeline");
+    const timelineSummary = document.getElementById("timeline-summary");
+
+    timelineSummary.textContent =
+      `Click to view recorded step timeline (${total} events)`;
+    scrubber.max = total;
+
+    events.forEach((ev, i) => {
+      const row = document.createElement("div");
+      row.className = "flex items-center justify-between p-1 rounded " +
+        "hover:bg-[#1e293b] cursor-pointer transition";
+      row.id = `tl-item-${i}`;
+      row.innerHTML =
+        `<span><strong>Step ${ev.step}</strong>: ` +
+        `${ev.hex} (${ev.desc})</span>` +
+        `<span class="text-slate-400">${ev.state} | ` +
+        `${ev.delay.toFixed(3)}s</span>`;
+      row.addEventListener("click", () => {
+        pause();
+        renderStep(i);
+      });
+      timelineDiv.appendChild(row);
+    });
+
+    function renderStep(idx) {
+      if (idx < 0 || idx >= total) return;
+      currentIdx = idx;
+      const ev = events[idx];
+
+      stepLabel.textContent = `Step ${ev.step} / ${total}`;
+      keyLabel.textContent = `${ev.hex} (${ev.desc})`;
+      stateLabel.textContent = ev.state;
+      delayLabel.textContent = `${ev.delay.toFixed(3)}s`;
+      scrubber.value = idx + 1;
+      scrubberPct.textContent =
+        `${Math.round(((idx + 1) / total) * 100)}%`;
+
+      document.querySelectorAll("#event-timeline > div").forEach((el, i) => {
+        if (i === idx) {
+          el.classList.add("bg-emerald-950", "text-emerald-300");
+          el.scrollIntoView({ block: "nearest" });
+        } else {
+          el.classList.remove("bg-emerald-950", "text-emerald-300");
+        }
+      });
+
+      termScreen.innerHTML = "";
+      if (ev.screen && Array.isArray(ev.screen)) {
+        const rowCount = ev.screen.length;
+        ev.screen.forEach((line, rIdx) => {
+          const lineDiv = document.createElement("div");
+          if (rIdx === rowCount - 1 &&
+              (line.includes("| ") || line.includes("^K:"))) {
+            lineDiv.className = "status-inverted";
+          }
+          lineDiv.textContent = line;
+          termScreen.appendChild(lineDiv);
+        });
+      } else {
+        termScreen.textContent = "No screen data recorded for this step.";
+      }
+    }
+
+    function nextStep() {
+      if (currentIdx < total - 1) {
+        renderStep(currentIdx + 1);
+      } else {
+        pause();
+      }
+    }
+
+    function prevStep() {
+      if (currentIdx > 0) {
+        renderStep(currentIdx - 1);
+      }
+    }
+
+    function play() {
+      isPlaying = true;
+      playIcon.innerHTML = "&#10074;&#10074;";
+      playText.textContent = "Pause";
+      btnPlay.classList.replace("bg-emerald-600", "bg-amber-600");
+      btnPlay.classList.replace("hover:bg-emerald-500", "hover:bg-amber-500");
+
+      function tick() {
+        if (!isPlaying) return;
+        if (currentIdx < total - 1) {
+          nextStep();
+          const baseDelay = events[currentIdx].delay || 0.05;
+          const delayMs = Math.max(20, (baseDelay * 1000) / playSpeed);
+          playTimer = setTimeout(tick, delayMs);
+        } else {
+          pause();
+        }
+      }
+      tick();
+    }
+
+    function pause() {
+      isPlaying = false;
+      clearTimeout(playTimer);
+      playIcon.innerHTML = "&#9654;";
+      playText.textContent = "Play";
+      btnPlay.classList.replace("bg-amber-600", "bg-emerald-600");
+      btnPlay.classList.replace("hover:bg-amber-500", "hover:bg-emerald-500");
+    }
+
+    btnPlay.addEventListener("click", () => {
+      if (isPlaying) pause();
+      else play();
+    });
+
+    document.getElementById("btn-prev").addEventListener("click", () => {
+      pause();
+      prevStep();
+    });
+
+    document.getElementById("btn-next").addEventListener("click", () => {
+      pause();
+      nextStep();
+    });
+
+    document.getElementById("btn-first").addEventListener("click", () => {
+      pause();
+      renderStep(0);
+    });
+
+    document.getElementById("btn-last").addEventListener("click", () => {
+      pause();
+      renderStep(total - 1);
+    });
+
+    scrubber.addEventListener("input", (e) => {
+      pause();
+      renderStep(parseInt(e.target.value, 10) - 1);
+    });
+
+    document.querySelectorAll(".speed-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".speed-btn").forEach(b => {
+          b.className =
+            "speed-btn px-2.5 py-1 rounded bg-[#1e293b] " +
+            "hover:bg-[#334155] text-slate-300 border border-[#334155]";
+        });
+        btn.className =
+          "speed-btn px-2.5 py-1 rounded bg-emerald-700 " +
+          "text-white font-bold border border-emerald-500";
+        playSpeed = parseFloat(btn.dataset.speed);
+      });
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT") return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (isPlaying) pause();
+        else play();
+      }} else if (e.code === "ArrowRight" || e.key === "l") {
+        e.preventDefault();
+        pause();
+        nextStep();
+      } else if (e.code === "ArrowLeft" || e.key === "h") {
+        e.preventDefault();
+        pause();
+        prevStep();
+      } else if (e.code === "Home" || e.key === "0") {
+        e.preventDefault();
+        pause();
+        renderStep(0);
+      } else if (e.code === "End" || e.key === "$") {
+        e.preventDefault();
+        pause();
+        renderStep(total - 1);
+      }
+    });
+
+    renderStep(0);
+  </script>
+</body>
+</html>

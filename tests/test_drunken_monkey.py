@@ -945,25 +945,31 @@ def main():
     parser.add_argument(
         "--view", nargs="?", const="tests/monkey_session_sample.json",
         default=None,
-        help="Launch interactive CLI session viewer (default: sample session)"
+        help="Launch interactive HTML session viewer (default: sample session)"
     )
 
     args = parser.parse_args()
 
-    # Direct launch of CLI viewer if requested
+    # Direct launch of session viewer if requested
     if args.view is not None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         repo_root = os.path.dirname(script_dir)
         sys.path.insert(0, repo_root)
-        from tools.monkey_viewer import load_session, TerminalViewer
+        from tools.monkey_viewer import (
+            load_session, generate_html_viewer, open_in_browser
+        )
         session_file = args.view
         if not os.path.isfile(session_file):
             alt = os.path.join(repo_root, session_file)
             if os.path.isfile(alt):
                 session_file = alt
         data = load_session(session_file)
-        viewer = TerminalViewer(data, filename=session_file)
-        viewer.run_interactive()
+        out_html = os.path.join(repo_root, "docs", "monkey_viewer.html")
+        out_file = generate_html_viewer(
+            data, out_html, session_filename=os.path.basename(session_file)
+        )
+        print(f"[+] Generated HTML viewer: {out_file}", flush=True)
+        open_in_browser(out_file)
         sys.exit(0)
 
     # Determine seed if not provided
