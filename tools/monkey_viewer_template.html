@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Monkey Viewer">
+  <meta name="theme-color" content="#0b0f14">
   <title>SE.COM Drunken Monkey - Visual Session Player</title>
   <script
     src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js">
@@ -80,6 +86,9 @@
       white-space: pre;
       width: fit-content;
     }
+    #crt-viewport {
+      min-height: 120px;
+    }
     @media (max-width: 640px) {
       body {
         padding: 0.5rem;
@@ -87,6 +96,48 @@
       .crt-display {
         font-size: 10px;
         line-height: 1.15;
+      }
+    }
+    @media (max-height: 560px) {
+      body {
+        padding: 0.25rem !important;
+      }
+      .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+        margin-top: 0.35rem !important;
+      }
+      header {
+        padding: 0.35rem 0.75rem !important;
+      }
+      header h1 {
+        font-size: 0.95rem !important;
+      }
+      .dash-card {
+        height: 38px !important;
+        min-height: 38px !important;
+        max-height: 38px !important;
+        padding: 0.2rem 0.5rem !important;
+      }
+      .dash-card > div:first-child {
+        font-size: 10px !important;
+        line-height: 1 !important;
+      }
+      .card-val {
+        font-size: 12px !important;
+        line-height: 1.2 !important;
+        margin-top: 0 !important;
+      }
+      #crt-viewport {
+        min-height: 80px !important;
+        padding: 0.25rem 0.5rem !important;
+      }
+      #controls-box {
+        padding: 0.35rem 0.75rem !important;
+      }
+      #controls-shortcuts {
+        display: none !important;
+      }
+      footer {
+        display: none !important;
       }
     }
   </style>
@@ -117,17 +168,28 @@
           </p>
         </div>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 sm:gap-3">
         <!-- Open Session JSON button -->
         <label for="file-input"
-          class="cursor-pointer px-3.5 py-1.5 text-xs font-semibold rounded-lg
+          class="cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg
           bg-emerald-600 hover:bg-emerald-500 text-white shadow
           flex items-center gap-1.5 transition border border-emerald-400"
           title="Open a recorded monkey session JSON file">
           <span>📁</span>
-          <span>Open Session JSON...</span>
+          <span class="hidden sm:inline">Open Session JSON...</span>
+          <span class="sm:hidden">Open...</span>
         </label>
         <input type="file" id="file-input" accept=".json" class="hidden">
+
+        <!-- Fullscreen toggle button -->
+        <button id="btn-fullscreen"
+          class="cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg
+          bg-[#1e293b] hover:bg-[#334155] text-slate-200 shadow
+          flex items-center gap-1.5 transition border border-[#334155]"
+          title="Toggle Fullscreen mode (hide browser bars)">
+          <span id="fs-icon">⛶</span>
+          <span id="fs-text" class="hidden sm:inline">Fullscreen</span>
+        </button>
 
         <div class="text-right hidden sm:block">
           <div class="text-xs font-semibold text-emerald-400">
@@ -190,13 +252,19 @@
             class="px-2 py-0.5 rounded bg-emerald-800/80 hover:bg-emerald-700
             text-[11px] font-sans font-bold text-white border border-emerald-500
             transition cursor-pointer"
-            title="Toggle Auto-Fit zoom to fit screen width">
+            title="Toggle Auto-Fit zoom to fit screen width and height">
             Fit: Auto
+          </button>
+          <button id="btn-fs-crt"
+            class="px-2 py-0.5 rounded bg-[#1e293b] hover:bg-[#334155]
+            text-[11px] font-sans font-bold text-slate-300 border
+            border-[#334155] transition cursor-pointer"
+            title="Toggle Fullscreen mode">
+            ⛶ FS
           </button>
         </div>
       </div>
-      <div id="crt-viewport" class="overflow-x-auto p-2 sm:p-4 min-h-[300px]
-        sm:min-h-[460px] bg-[#09110d]">
+      <div id="crt-viewport" class="overflow-x-auto p-2 sm:p-4 bg-[#09110d]">
         <div id="terminal-screen"
           class="crt-display select-all" style="width: fit-content;">
         </div>
@@ -204,8 +272,8 @@
     </div>
 
     <!-- Playback Controls -->
-    <div class="bg-[#151c24] border border-[#273544] p-4 rounded-xl
-      space-y-3 shadow-md">
+    <div id="controls-box" class="bg-[#151c24] border border-[#273544] p-4
+      rounded-xl space-y-3 shadow-md">
       <div class="flex flex-wrap items-center gap-3">
         <button id="btn-first"
           class="px-3 py-1.5 text-xs font-semibold rounded bg-[#1e293b]
@@ -282,8 +350,9 @@
         </div>
       </div>
 
-      <div class="text-[11px] text-slate-400 flex flex-wrap items-center
-        justify-between border-t border-[#273544] pt-2">
+      <div id="controls-shortcuts" class="text-[11px] text-slate-400
+        flex flex-wrap items-center justify-between border-t border-[#273544]
+        pt-2">
         <span>Shortcuts:
           <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
             border-[#334155]">Space</kbd> Play/Pause &bull;
@@ -292,7 +361,9 @@
             rounded border border-[#334155]">&rarr;</kbd> Step &bull;
           <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
             border-[#334155]">Home</kbd>/<kbd class="px-1 py-0.5 bg-[#0b0f14]
-            rounded border border-[#334155]">End</kbd> First/Last
+            rounded border border-[#334155]">End</kbd> First/Last &bull;
+          <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
+            border-[#334155]">F</kbd> Fullscreen
         </span>
         <span>Quality Status:
           <strong class="text-emerald-400 font-mono">100% PASS</strong>
@@ -520,6 +591,63 @@
 
     let autoFitEnabled = true;
 
+    function isFullscreen() {
+      return !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+    }
+
+    function updateFullscreenButtons(active) {
+      const fsText = document.getElementById("fs-text");
+      const fsIcon = document.getElementById("fs-icon");
+      const btnFsCrt = document.getElementById("btn-fs-crt");
+
+      if (active) {
+        if (fsText) fsText.textContent = "Exit Fullscreen";
+        if (fsIcon) fsIcon.textContent = "⤢";
+        if (btnFsCrt) btnFsCrt.textContent = "⤢ Exit";
+      } else {
+        if (fsText) fsText.textContent = "Fullscreen";
+        if (fsIcon) fsIcon.textContent = "⛶";
+        if (btnFsCrt) btnFsCrt.textContent = "⛶ FS";
+      }
+    }
+
+    function toggleFullscreen() {
+      const doc = document;
+      const docEl = doc.documentElement;
+      if (!isFullscreen()) {
+        const req = docEl.requestFullscreen ||
+          docEl.webkitRequestFullscreen ||
+          docEl.mozRequestFullScreen ||
+          docEl.msRequestFullscreen;
+        if (req) {
+          req.call(docEl).catch(err => {
+            console.warn("Fullscreen request:", err);
+          });
+        } else {
+          alert(
+            "Fullscreen API is restricted in this browser tab.\n\n" +
+            "On iPhone/iPad (Safari):\n" +
+            "Tap Share -> 'Add to Home Screen' to launch full screen."
+          );
+        }
+      } else {
+        const exit = doc.exitFullscreen ||
+          doc.webkitExitFullscreen ||
+          doc.mozCancelFullScreen ||
+          doc.msExitFullscreen;
+        if (exit) {
+          exit.call(doc).catch(err => {
+            console.warn("Exit fullscreen:", err);
+          });
+        }
+      }
+    }
+
     function autoFitTerminal() {
       const viewport = document.getElementById("crt-viewport");
       const screen = document.getElementById("terminal-screen");
@@ -548,15 +676,43 @@
       const availWidth = viewport.clientWidth;
       const screenWidth = screen.scrollWidth;
 
-      if (screenWidth > 0 && availWidth > 0 && screenWidth > availWidth) {
-        const scale = availWidth / screenWidth;
+      // Calculate vertical space so terminal + controls fit on screen
+      let availHeight = Infinity;
+      const winH = window.innerHeight;
+      if (crtContainer && controlsBox && winH < 950) {
+        const header = document.querySelector("header");
+        const dash = document.querySelector(".dash-card") ?
+          document.querySelector(".dash-card").parentElement : null;
+        const crtHeader = crtContainer.firstElementChild;
+
+        let overhead = 0;
+        if (header) overhead += header.offsetHeight;
+        if (dash) overhead += dash.offsetHeight;
+        if (crtHeader) overhead += crtHeader.offsetHeight;
+        if (controlsBox) overhead += controlsBox.offsetHeight;
+        overhead += 32;
+
+        const maxH = winH - overhead;
+        availHeight = Math.max(90, maxH);
+      }
+
+      const screenHeight = screen.scrollHeight;
+
+      const scaleW = (screenWidth > 0 && availWidth > 0)
+        ? (availWidth / screenWidth) : 1.0;
+      const scaleH = (screenHeight > 0 && availHeight < Infinity)
+        ? (availHeight / screenHeight) : 1.0;
+
+      const scale = Math.min(scaleW, scaleH, 1.0);
+
+      if (scale < 0.999) {
         const scaleFixed = scale.toFixed(4);
         if (CSS.supports && CSS.supports("zoom", "1")) {
           screen.style.zoom = scaleFixed;
         } else {
           screen.style.transform = `scale(${scaleFixed})`;
           screen.style.transformOrigin = "top left";
-          viewport.style.height = `${screen.scrollHeight * scale}px`;
+          viewport.style.height = `${screenHeight * scale}px`;
         }
         if (btnFit) {
           const pct = Math.round(scale * 100);
@@ -693,6 +849,9 @@
         e.preventDefault();
         pause();
         renderStep(total - 1);
+      } else if (e.code === "KeyF" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        toggleFullscreen();
       }
     });
 
@@ -703,6 +862,29 @@
         autoFitTerminal();
       });
     }
+
+    const btnFs = document.getElementById("btn-fullscreen");
+    if (btnFs) {
+      btnFs.addEventListener("click", toggleFullscreen);
+    }
+
+    const btnFsCrt = document.getElementById("btn-fs-crt");
+    if (btnFsCrt) {
+      btnFsCrt.addEventListener("click", toggleFullscreen);
+    }
+
+    [
+      "fullscreenchange",
+      "webkitfullscreenchange",
+      "mozfullscreenchange",
+      "MSFullscreenChange"
+    ].forEach(evt => {
+      document.addEventListener(evt, () => {
+        updateFullscreenButtons(isFullscreen());
+        setTimeout(autoFitTerminal, 100);
+        setTimeout(autoFitTerminal, 300);
+      });
+    });
 
     window.addEventListener("resize", autoFitTerminal);
     window.addEventListener("orientationchange", () => {
