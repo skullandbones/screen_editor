@@ -341,7 +341,8 @@ class VT100QualityMonitor:
             return "overwrite_prompt"
         if "Replace (" in full_text and "uit/" in full_text:
             return "replace_confirm_prompt"
-        if "Select [0-7] to Execute" in full_text:
+        if ("[Up/Dn/0-7] Select" in full_text or
+                "Select [0-7] to Execute" in full_text):
             return "plugin_popup"
         if "Press any key" in full_text:
             return "press_any_key"
