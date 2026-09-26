@@ -10531,6 +10531,7 @@ GOTO_UI_ENTER:
 
 	; Redraw editor and status bar smoothly without full screen clear flash
 	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
 	RET
 
 GOTO_UI_CANCEL:
