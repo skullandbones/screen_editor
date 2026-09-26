@@ -942,8 +942,29 @@ def main():
         "--grab-interval", type=int, default=10,
         help="Interval in steps between screen grabs (default: 10)"
     )
+    parser.add_argument(
+        "--view", nargs="?", const="tests/monkey_session_sample.json",
+        default=None,
+        help="Launch interactive CLI session viewer (default: sample session)"
+    )
 
     args = parser.parse_args()
+
+    # Direct launch of CLI viewer if requested
+    if args.view is not None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_root = os.path.dirname(script_dir)
+        sys.path.insert(0, repo_root)
+        from tools.monkey_viewer import load_session, TerminalViewer
+        session_file = args.view
+        if not os.path.isfile(session_file):
+            alt = os.path.join(repo_root, session_file)
+            if os.path.isfile(alt):
+                session_file = alt
+        data = load_session(session_file)
+        viewer = TerminalViewer(data, filename=session_file)
+        viewer.run_interactive()
+        sys.exit(0)
 
     # Determine seed if not provided
     seed = args.seed if args.seed is not None else random.randint(1000, 999999)

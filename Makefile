@@ -151,6 +151,10 @@ test-monkey: image
 	@echo "==> Running SE.COM drunken monkey chaos test suite..."
 	python3 tests/test_drunken_monkey.py --steps 50
 
+view-monkey:
+	@echo "==> Launching interactive drunken monkey session viewer..."
+	python3 tools/monkey_viewer.py tests/monkey_session_sample.json
+
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-fatfs test-fatfs-slot \
 	test-fatfs-vfs test-fatfs-hook test-paging test-monkey
