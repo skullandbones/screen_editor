@@ -331,6 +331,8 @@ class VT100QualityMonitor:
             return "insert_file_prompt"
         if "Load Plugin (.PRL/.OVL):" in full_text:
             return "load_plugin_prompt"
+        if "Unload Slot (0..7):" in full_text:
+            return "unload_plugin_prompt"
         if "Goto line:" in full_text:
             return "goto_line_prompt"
         if "Replace with:" in full_text:
@@ -344,13 +346,34 @@ class VT100QualityMonitor:
         if ("[Up/Dn/0-7] Select" in full_text or
                 "Select [0-7] to Execute" in full_text):
             return "plugin_popup"
+        if "Save & Exit" in full_text:
+            return "plugin_config"
         if "Press any key" in full_text:
             return "press_any_key"
+        if "SE - Screen Editor Configuration" in full_text:
+            return "configuration_screen"
         if ("SE - Screen Editor" in full_text and
                 ("Active Screen:" in full_text or "type   e" in full_text)):
             return "splash_screen"
-        if "^K: Editor keys" in full_text:
+        if ("SE - Plugin Manager" in full_text or
+                "0..7:select" in full_text):
+            return "plugin_manager"
+        if ("^K: Editor keys" in full_text or
+                "^V: Overwrite" in full_text or
+                "[SEL:" in full_text or
+                "[BLK:" in full_text or
+                ("[Pan +" in full_text and ("80x24 |" in full_text or
+                                            "120x40 |" in full_text)) or
+                ("| Line " in full_text and ("80x24 |" in full_text or
+                                             "120x40 |" in full_text)) or
+                "Pattern not found" in full_text or
+                "Search completed" in full_text or
+                "Replace done:" in full_text or
+                "Line > 120 chars" in full_text):
             return "editor"
+
+        if re.search(r"\b[A-P]>", full_text):
+            return "cpm_prompt"
 
         return "unknown"
 
@@ -495,6 +518,15 @@ class DrunkenMonkeyInputGenerator:
                 return "e", 0.15, "Watchdog Breakout: 'e' (Editor)"
             elif screen_state == "press_any_key":
                 return " ", 0.15, "Watchdog Breakout: Space"
+            elif screen_state == "plugin_manager":
+                return "q", 0.15, "Watchdog Breakout: 'q' (Plugin Mgr)"
+            elif screen_state == "plugin_config":
+                return "q", 0.15, "Watchdog Breakout: 'q' (Plugin Config)"
+            elif screen_state == "configuration_screen":
+                return "q", 0.15, "Watchdog Breakout: 'q' (Config)"
+            elif screen_state == "cpm_prompt":
+                self.queue_input_string("se\r", "Watchdog: Relaunch SE")
+                return self._pop_pending(0.15)
             else:
                 return "\x1b", 0.15, f"Watchdog Breakout: ESC ({screen_state})"
 
@@ -605,6 +637,45 @@ class DrunkenMonkeyInputGenerator:
 
         elif screen_state == "press_any_key":
             return " ", delay, "Dismiss Help/Info: Space"
+
+        elif screen_state == "plugin_manager":
+            action = self.rng.choice([
+                ("q", "Plugin Mgr: (Q)uit to Editor"),
+                ("\r", "Plugin Mgr: Enter (Run)"),
+                ("a", "Plugin Mgr: (A)bout"),
+                ("c", "Plugin Mgr: (C)onfig"),
+                ("l", "Plugin Mgr: (L)oad"),
+                ("u", "Plugin Mgr: (U)nload"),
+                (str(self.rng.randint(0, 7)), "Plugin Mgr: Select Slot"),
+            ])
+            d = max(delay, 0.15) if action[0] == "q" else delay
+            return action[0], d, action[1]
+
+        elif screen_state == "unload_plugin_prompt":
+            choice = self.rng.choice(["0", "1", "2", "\x1b"])
+            d = max(delay, 0.15) if choice == "\x1b" else delay
+            return choice, d, f"Unload plugin: {choice}"
+
+        elif screen_state == "plugin_config":
+            choice = self.rng.choice(["1", "2", "3", "4", "q", "\r"])
+            d = max(delay, 0.15) if choice in ("q", "\r") else delay
+            return choice, d, f"Plugin Config: {choice}"
+
+        elif screen_state == "configuration_screen":
+            action = self.rng.choice([
+                ("q", "Config: (Q)uit to Splash"),
+                ("\x1b", "Config: ESC (Return)"),
+                ("2", "Config: Toggle RAM Drive"),
+                ("3", "Config: Toggle Max Lines"),
+                ("4", "Config: Toggle Tab"),
+                ("5", "Config: Toggle Plugin Mgr"),
+            ])
+            d = max(delay, 0.15) if action[0] in ("q", "\x1b") else delay
+            return action[0], d, action[1]
+
+        elif screen_state == "cpm_prompt":
+            self.queue_input_string("se\r", "CP/M: Relaunch SE")
+            return self._pop_pending(delay)
 
         # 3. Default: Editor chaos input distribution
         # 50% printable character
