@@ -15145,8 +15145,15 @@ DO_OPEN_FILE_UI:
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL	INIT_DIR_DRIVE
 
-	; Initialize directory user area from current document user area
+	; Initialize directory user area from current document or plugin user area
+	LD	A,(IS_PLUGIN_LOAD_UI)
+	OR	A
+	JR	Z,IDU_DOC
+	LD	A,(PLUGIN_USER_AREA)
+	JR	IDU_SET
+IDU_DOC:
 	LD	A,(DOC_USER_NUM)
+IDU_SET:
 	LD	(CURRENT_DIR_USER),A
 
 	; Filter defaults to all files shown unless explicitly provided in edit box
@@ -15421,9 +15428,11 @@ CHECK_PAGING_OR_CANCEL:
 	JR	Z,DO_PREV_PAGE
 	XOR	A
 	LD	(IS_PLUGIN_LOAD_UI),A
+	LD	(IS_SPLASH_SCREEN),A
 	CALL	RESTORE_DOC_USER
 	LD	HL,0FFFFH
 	LD	(CACHE_START_ROW),HL
+	SCF				; Carry = 1 (Cancelled)
 	RET				; Cancelled -> return to caller
 
 DO_PREV_PAGE:
@@ -15459,12 +15468,14 @@ DO_PARSE_AND_LOAD_PLUGIN:
 	JR	C,OPEN_PLUGIN_FAIL
 
 	; Success: clear flags, restore user area, and return to caller
+	PUSH	AF			; Preserve return A (slot number) & Carry
 	XOR	A
 	LD	(IS_PLUGIN_LOAD_UI),A
 	LD	(IS_SPLASH_SCREEN),A
 	CALL	RESTORE_DOC_USER
 	LD	HL,0FFFFH
 	LD	(CACHE_START_ROW),HL
+	POP	AF			; Restore return A (slot number) & Carry
 	RET
 
 OPEN_PLUGIN_FAIL:
@@ -17061,9 +17072,13 @@ IDD_IS_FAT_ARG:
 IDD_NOT_FAT:
 	XOR	A
 	LD	(CURRENT_DIR_IS_FAT),A
+	LD	A,(IS_PLUGIN_LOAD_UI)
+	OR	A
+	JR	NZ,IDD_USE_BDOS
 	LD	A,(WORK_FCB)
 	OR	A
 	JR	NZ,IDD_USE_FCB
+IDD_USE_BDOS:
 	LD	C,25			; BDOS Return Current Disk
 	CALL	BDOS_ENTRY
 	INC	A			; 0..15 -> 1..16
@@ -17132,8 +17147,8 @@ PDUP_HAS_DRV:
 	INC	DE
 	INC	C
 
-	; Emit user area digits (DOC_USER_NUM)
-	LD	A,(DOC_USER_NUM)
+	; Emit user area digits (CURRENT_DIR_USER)
+	LD	A,(CURRENT_DIR_USER)
 	CP	10
 	JR	C,PDUP_U_1DIGIT
 	PUSH	AF
@@ -23879,6 +23894,7 @@ HOST_API_MGR_SLOT:
 	JP	TRAMP_LOAD_PLUGIN	; +55: Call LOAD_PLUGIN_BY_NAME (DE=filename)
 	JP	TRAMP_UNLOAD_SLOT	; +58: Call UNLOAD_PLUGIN_SLOT (A=slot 0..7)
 	JP	TRAMP_REDRAW_BASE	; +61: Call REDRAW_BASE_SCREEN (A=context 0..6)
+	JP	TRAMP_OPEN_PLUGIN_UI	; +64: Call DO_OPEN_FILE_UI (plugin mode)
 
 TRAMP_CHECKOUT_LINE:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
@@ -24097,6 +24113,36 @@ TRAMP_REDRAW_BASE:
 TRB_DIRECT:
 	LD	(POPUP_CONTEXT_ID),A
 	JP	REDRAW_BASE_SCREEN
+
+TRAMP_OPEN_PLUGIN_UI:
+	; Interactive file selector for plugin files (.PRL/.OVL)
+	; Returns Carry=0, A=slot on success; Carry=1 on cancel
+	LD	A,(PLUGIN_IS_FAR_EXEC)
+	OR	A
+	JR	Z,TOPU_DIRECT
+	PUSH	BC
+	LD	A,(PLUGIN_FAR_BANK)
+	PUSH	AF			; Preserve caller's Far bank
+	LD	A,(CPM_USER_BANK)
+	CALL	0FFF3H
+	EI
+	LD	A,1
+	LD	(IS_PLUGIN_LOAD_UI),A
+	CALL	DO_OPEN_FILE_UI
+	PUSH	AF			; Preserve return A & Carry
+	DI
+	POP	BC			; BC has return AF
+	POP	AF			; Restore caller's Far bank
+	LD	(PLUGIN_FAR_BANK),A
+	CALL	0FFF3H
+	PUSH	BC
+	POP	AF			; Restore return AF
+	POP	BC
+	RET
+TOPU_DIRECT:
+	LD	A,1
+	LD	(IS_PLUGIN_LOAD_UI),A
+	JP	DO_OPEN_FILE_UI
 
 EXEC_PLUGIN_MGR_ACTION:
 	; Input: C = Action index (0 = Plugin Manager, 1 = Context Popup, 2 = About)

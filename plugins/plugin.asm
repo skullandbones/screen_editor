@@ -111,6 +111,15 @@ PKL_NOT_LOWER:
 	JP	PLUG_RUN_SELECTED
 
 PKL_DO_L:
+	LD	A,(FPSL_LOADED_CNT)
+	CP	8
+	JR	NZ,PKL_DO_L_OPEN
+	CALL	LOCATE_STATUS_ROW
+	LD	DE,STR_MSG_SLOTS_FULL
+	CALL	HOST_PRINT_STR
+	JP	PLUG_KEY_LOOP
+
+PKL_DO_L_OPEN:
 	CALL	PROMPT_LOAD_PLUGIN
 	JP	DO_PLUG_REDRAW
 
@@ -651,96 +660,12 @@ FPSR_CAPS_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Prompt: Load Plugin
+; Prompt: Load Plugin via Host Open File UI
 ;------------------------------------------------------------------------------
 PROMPT_LOAD_PLUGIN:
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_SHOW_CURSOR
-	CALL	HOST_PRINT_STR
-	LD	DE,STR_PLUG_PROMPT_L
-	CALL	HOST_PRINT_STR
-
-	LD	B,0			; character count
-
-PLP_INPUT_LOOP:
-	CALL	HOST_GET_KEY
-	CP	27			; ESC
-	JR	Z,PLP_CANCEL
-	CP	13			; Enter
-	JR	Z,PLP_CONFIRM
-	CP	8			; Backspace
-	JR	Z,PLP_BACKSPACE
-	CP	127			; Delete / BS
-	JR	Z,PLP_BACKSPACE
-
-	; Printable char check
-	CP	' '
-	JR	C,PLP_INPUT_LOOP
-	CP	127
-	JR	NC,PLP_INPUT_LOOP
-	LD	C,A
-	LD	A,B
-	CP	14			; max 14 chars
-	JR	NC,PLP_INPUT_LOOP
-
-	LD	A,C
-	; Uppercase conversion
-	CP	'a'
-	JR	C,PLP_NOT_LOWER
-	CP	'z'+1
-	JR	NC,PLP_NOT_LOWER
-	SUB	32
-PLP_NOT_LOWER:
-	PUSH	BC
-	PUSH	AF
-	LD	HL,SCRATCH_BUF
-	LD	C,B
-	LD	B,0
-	ADD	HL,BC
-	POP	AF
-	LD	(HL),A
-	POP	BC
-	INC	B
-	CALL	HOST_PUTC
-	JR	PLP_INPUT_LOOP
-
-PLP_BACKSPACE:
-	LD	A,B
-	OR	A
-	JR	Z,PLP_INPUT_LOOP
-	DEC	B
-	LD	A,8
-	CALL	HOST_PUTC
-	LD	A,' '
-	CALL	HOST_PUTC
-	LD	A,8
-	CALL	HOST_PUTC
-	JR	PLP_INPUT_LOOP
-
-PLP_CONFIRM:
-	PUSH	BC
-	LD	HL,SCRATCH_BUF
-	LD	C,B
-	LD	B,0
-	ADD	HL,BC
-	LD	(HL),0			; Null terminate
-	POP	BC
-	LD	A,']'
-	CALL	HOST_PUTC
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
-
-	LD	A,B
-	OR	A
-	RET	Z			; Empty name -> ignore
-
-	LD	DE,SCRATCH_BUF
-	CALL	HOST_LOAD_PLUGIN
-	RET
-
-PLP_CANCEL:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_OPEN_PLUGIN_UI
+	RET	C			; Cancelled -> retain selection
+	LD	(SELECTED_SLOT),A	; Highlight newly loaded slot
 	RET
 
 ;------------------------------------------------------------------------------
@@ -1530,6 +1455,14 @@ HOST_REDRAW_BASE:
 	POP	BC
 	JP	(HL)
 
+HOST_OPEN_PLUGIN_UI:
+	PUSH	BC
+	LD	HL,(HOST_API_PTR)
+	LD	BC,64			; Offset +64: OPEN_PLUGIN_UI
+	ADD	HL,BC
+	POP	BC
+	JP	(HL)
+
 ;==============================================================================
 ; Static Strings & Data
 ;==============================================================================
@@ -1568,15 +1501,19 @@ STR_PLUG_HDR:		DB	"Slot Plugin Name      Type   Size    Exec Mode  Capabilities 
 STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+---------------+--------", 0
 
 STR_PLUG_CMDS_PRE:	DB	"type 0..7 to run | ", 0
-STR_PLUG_CMDS_BOTH:	DB	"A:about | C:config | U:unload | Up/Dn | Q:exit", 0
-STR_PLUG_CMDS_ABOUT:	DB	"A:about | U:unload | Up/Dn:select | Q or ESC:exit", 0
-STR_PLUG_CMDS_CONFIG:	DB	"C:config | U:unload | Up/Dn:select | Q or ESC:exit", 0
-STR_PLUG_CMDS_PLAIN:	DB	"Enter:run | U:unload | Up/Dn:select | Q or ESC:exit", 0
+STR_PLUG_CMDS_BOTH:
+	DB	"A:about | C:config | L:load | U:unload | Up/Dn | Q:exit", 0
+STR_PLUG_CMDS_ABOUT:
+	DB	"A:about | L:load | U:unload | Up/Dn:select | Q/ESC:exit", 0
+STR_PLUG_CMDS_CONFIG:
+	DB	"C:config | L:load | U:unload | Up/Dn:select | Q/ESC:exit", 0
+STR_PLUG_CMDS_PLAIN:
+	DB	"Enter:run | L:load | U:unload | Up/Dn:select | Q/ESC:exit", 0
 STR_PLUG_CMDS_EMPTY:	DB	"L:load plugin | Up/Dn:select slot | Q or ESC to exit", 0
 
 STR_MSG_NO_ABOUT:	DB	"[No About]$", 0
 STR_MSG_NO_CONFIG:	DB	"[No Config]$", 0
-STR_PLUG_PROMPT_L:	DB	"Load Plugin (.PRL/.OVL): [", 0
+STR_MSG_SLOTS_FULL:	DB	"[All Slots Full]$", 0
 STR_PLUG_PROMPT_U:	DB	"Unload Slot (0..7): ", 0
 
 STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0

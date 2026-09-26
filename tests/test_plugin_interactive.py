@@ -10,8 +10,8 @@ test_plugin_interactive.py - Automated verification of interactive Plugin Manage
   7. Dismiss About screen, move to Slot 2 ('j'), press 'A': Verify BEAUTIFY.PRL embedded About screen displays.
   8. Dismiss About screen, press 'C' on Slot 2: Verify BEAUTIFY.PRL embedded Configuration screen displays.
   9. Cycle preset ('1'), toggle animation ('4'), exit config screen ('q').
- 10. Press Enter / 'r' to execute BEAUTIFY.PRL.
- 11. Exit cleanly via 'q'.
+ 10. Press Enter / 'r' to execute BEAUTIFY.PRL (transitions to editor).
+ 11. Exit editor (Ctrl+Q -> 'n') to CP/M prompt.
 """
 
 import os
@@ -249,25 +249,27 @@ def main():
         print("[+] Successfully exited BEAUTIFY config and returned to Plugin Manager.")
 
         # Test Action 0: Run BEAUTIFY from Plugin Manager by pressing Enter
+        # BEAUTIFY mutates document, so it transitions to editor with status
         time.sleep(0.3)
         os.write(master, b"\r")
-        ok, out = read_until(master, b"type 0..7 to run", timeout=8.0)
+        ok, out = read_until(master, b"[Beautify Done]", timeout=8.0)
         if not ok:
-            print("[-] BEAUTIFY execution from Plugin Manager failed")
+            print(f"[-] BEAUTIFY execution failed. Out: {repr(out)}")
             return 1
-        print("[+] BEAUTIFY executed cleanly via Enter on Slot 2!")
         print("[+] BEAUTIFY executed cleanly via Enter on Slot 2!")
 
-        # Exit Plugin Manager cleanly via 'q'
+        # Exit Editor cleanly via Ctrl+Q -> 'n' (discard) back to CP/M
         time.sleep(0.3)
-        os.write(master, b"q")
-        ok, _ = read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
+        os.write(master, b"\x11")
+        ok, _ = read_until(master, b"Save changes?", timeout=5.0)
         if not ok:
-            print("[-] Return to splash screen failed")
+            print("[-] Save changes prompt failed")
             return 1
-        time.sleep(0.2)
-        os.write(master, b"q")
-        read_until(master, b"C>", timeout=5.0)
+        os.write(master, b"n")
+        ok, _ = read_until(master, b"C>", timeout=5.0)
+        if not ok:
+            print("[-] Return to CP/M prompt failed")
+            return 1
         print("[+] Clean exit to CP/M prompt verified.")
 
         print("\n=======================================================")
