@@ -73,6 +73,7 @@ KEY_BACKSPACE	EQU	8
 KEY_TAB		EQU	9
 KEY_ENTER	EQU	13
 KEY_ESC		EQU	27
+ESC_TIMEOUT_LOOPS EQU	5000		; VT100 escape debounce timeout loops (~15-20ms)
 KEY_DEL		EQU	127
 
 SEARCH_BUF_MAX	EQU	64
@@ -1303,7 +1304,7 @@ DSCP_KEY_LOOP:
 
 DSCP_CHECK_ESC:
 	; Check if a character follows ESC within a short timeout
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 DSCP_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,DSCP_DRAIN_ESC
@@ -9333,7 +9334,7 @@ CHECK_KEY_READY:
 ; Drain Escape Sequence: if characters follow ESC within timeout, drain them
 ;------------------------------------------------------------------------------
 DRAIN_ESC_SEQUENCE:
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 DES_WAIT:
 	CALL	CHECK_KEY_READY
 	JR	NZ,DES_DRAIN_FIRST
@@ -9362,7 +9363,7 @@ DES_DRAIN_BYTE:
 
 HANDLE_VT100_ESC:
 	; Check if a character follows ESC within a short timeout
-	LD	BC,1000			; Timeout loop count
+	LD	BC,ESC_TIMEOUT_LOOPS	; Timeout loop count
 WAIT_ESC_BYTE:
 	CALL	CHECK_KEY_READY
 	JR	NZ,GOT_ESC_BYTE
@@ -10486,7 +10487,7 @@ GOTO_UI_PGDN:
 
 GOTO_UI_CHECK_ESC:
 	; Check if a character follows ESC within a short timeout
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 GOTO_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,GOTO_GOT_ESC_SEQ
@@ -10699,7 +10700,7 @@ DRAW_FIND_BS_LOOP:
 
 FIND_UI_CHECK_ESC:
 	; Check if escape sequence
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 FIND_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,FIND_GOT_ESC_SEQ
@@ -18794,7 +18795,7 @@ CHECK_ESC_KEY:
 	JP	NZ,INPUT_CHECK_PAGE_KEYS
 
 	; Check if character follows ESC within a short timeout
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 INPUT_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,INPUT_GOT_ESC_BYTE
