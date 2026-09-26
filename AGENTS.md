@@ -30,6 +30,13 @@ How:
 * **Body line length**: Maximum **80 characters** strictly across all lines.
 * **Mandatory Sections**: Both `Why:` and `How:` sections must be present
   with non-empty descriptive content.
+* **Focused Sub-system Scope (MANDATORY)**:
+  - Commits must be strictly scoped to a single logical sub-system or concern.
+  - NEVER combine unrelated changes into one commit (e.g. do NOT bundle
+    core editor assembly changes with drunken monkey test scripts, or plugin
+    features with tooling documentation).
+  - Use accurate conventional commit scopes (e.g. `feat(plugin)`,
+    `fix(editor)`, `test(monkey)`, `docs(ui)`, `chore(tools)`).
 * **Merge commits**: Standard git merge messages (starting with `Merge `)
   are exempt from `Why:` / `How:` requirements but must still respect the
   $\le 80$ character line width limit.
@@ -70,6 +77,20 @@ How:
 5. **Hardware & Emulator Dual Compatibility**:
    * All changes must maintain compatibility with the RomWBW RC2014 emulator
      and SC131 real hardware (Z80 / Z180).
+6. **UI/UX Design System Conformance (MANDATORY)**:
+   * All visual surfaces, modal prompts, and command footers must adhere
+     strictly to `docs/UI_UX_DESIGN.md`.
+   * Agents must proactively audit screens against the **6 UI/UX
+     Anti-Patterns** detailed in `docs/UI_UX_DESIGN.md`:
+     1. *Status Bar Squatting* (drawing text input loops directly on Row 24).
+     2. *Blind / Static Footers* (displaying static keys that do not match
+        active item capabilities).
+     3. *Terminal Column Spill* (emitting strings > 78 chars causing wraps).
+     4. *Inverted Hierarchy* (asking questions before warning context).
+     5. *Missing Dual-Exit* (supporting ESC but ignoring Q/q).
+     6. *Buffer Pointer Clobber* (overwriting DE during string formatting).
+   * When touching legacy UI routines, agents must remediate existing
+     anti-patterns rather than perpetuating them.
 
 ---
 
