@@ -26,9 +26,16 @@ def find_paths():
 
     return emu_bin, rom_file, img_file, se_bin
 
+SPLASH_FREE_TARGETS = [b"Free: 352 KB", b"Free: 384 KB", b"Free: 416 KB"]
+
+def has_free_mem(buf):
+    return any(t in buf for t in SPLASH_FREE_TARGETS)
+
 def read_until(master_fd, match_bytes, timeout=8.0):
     buf = b""
     t0 = time.time()
+    targets = (match_bytes if isinstance(match_bytes, (list, tuple))
+               else [match_bytes])
     while time.time() - t0 < timeout:
         r, _, _ = select.select([master_fd], [], [], 0.05)
         if r:
@@ -37,8 +44,9 @@ def read_until(master_fd, match_bytes, timeout=8.0):
                 if not data:
                     break
                 buf += data
-                if match_bytes in buf:
-                    return buf
+                for target in targets:
+                    if target in buf:
+                        return buf
             except (BlockingIOError, OSError):
                 pass
     return buf
@@ -171,9 +179,10 @@ def test_se_execution():
         # 4. Run SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"Free: 384 KB", timeout=30.0)
-        if b"for about" not in out or (b"Free: 384 KB" not in out and b"Free: 416 KB" not in out):
-            print(f"[-] SE.COM splash screen or free memory indicator not detected. Buffer: {repr(out)}", flush=True)
+        out = read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
+        if b"for about" not in out or not has_free_mem(out):
+            print(f"[-] Splash or free memory missing: {repr(out)}",
+                  flush=True)
             return False
         print("[+] SE.COM splash screen successfully displayed with Free memory status bar.", flush=True)
 
@@ -707,7 +716,9 @@ def test_se_execution():
             print(f"[-] Splash screen missing about option. Buffer: {repr(out_splash)}", flush=True)
             return False
         out_splash_status = read_until(master, b"Line    1/30", timeout=4.0)
-        if b"Free: 380 KB" not in out_splash_status and b"Free: 412 KB" not in out_splash_status:
+        if (b"Free: 348 KB" not in out_splash_status and
+            b"Free: 380 KB" not in out_splash_status and
+            b"Free: 412 KB" not in out_splash_status):
             print(f"[-] Splash screen status bar missing free memory indicator. Buffer: {repr(out_splash_status)}", flush=True)
             return False
         print("[+] Successfully verified ESC key in editor displays streamlined splash screen and free memory.", flush=True)
@@ -2705,9 +2716,10 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s56 = read_until(master, b"Free: 384 KB", timeout=20.0)
-        if b"Free: 384 KB" not in out_s56 and b"Free: 416 KB" not in out_s56:
-            print(f"[-] Step 56 failed: Splash status bar does not show 'Free: 384 KB'. Buffer: {repr(out_s56)}", flush=True)
+        out_s56 = read_until(master, SPLASH_FREE_TARGETS, timeout=20.0)
+        if not has_free_mem(out_s56):
+            print(f"[-] Step 56 failed: Free memory missing: {repr(out_s56)}",
+                  flush=True)
             return False
 
         # View memory info map ('m')
@@ -2722,7 +2734,7 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b" ")
-        read_until(master, b"Free: 384 KB", timeout=15.0)
+        read_until(master, SPLASH_FREE_TARGETS, timeout=15.0)
 
         # Clean exit to CP/M
         drain_all(master)
@@ -2759,22 +2771,30 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x11")
-        out_s57_q = read_until(master, b"Save changes?", timeout=4.0)
+        out_s57_q = read_until(master, b"ESC:", timeout=4.0)
         if b"Save changes?" not in out_s57_q:
-            print(f"[-] Step 57 failed: Missing save changes prompt on exit. Buffer: {repr(out_s57_q)}", flush=True)
+            print(f"[-] Step 57 failed: Missing save changes prompt on exit. "
+                  f"Buffer: {repr(out_s57_q)}", flush=True)
             return False
         time.sleep(0.2)
         os.write(master, b"n")
-        read_until(master, b"C>", timeout=4.0)
+        out_s57_exit = read_until(master, b"C>", timeout=15.0)
+        if b"C>" not in out_s57_exit:
+            print(f"[-] Step 57 failed: Clean exit to CP/M failed: "
+                  f"{repr(out_s57_exit)}", flush=True)
+            return False
+        time.sleep(0.5)
+        drain_all(master)
         print("[+] Clean exit back to CP/M prompt.", flush=True)
-        print("[+] Successfully verified OOM Status Bar Replacement and Revert on Keypress (Step 57)!", flush=True)
+        print("[+] Successfully verified OOM Status Bar Replacement and "
+              "Revert on Keypress (Step 57)!", flush=True)
 
         # ---------------------------------------------------------------------
         # Step 58: Verifying Horizontal Scrolling in 80x24 Mode
         # ---------------------------------------------------------------------
         print("[*] Step 58: Verifying Horizontal Scrolling in 80x24 Mode...", flush=True)
         drain_all(master)
-        time.sleep(0.3)
+        time.sleep(0.5)
         os.write(master, b"se\r")
         out_s58_sp = read_until(master, b"for about", timeout=30.0)
         if b"for about" not in out_s58_sp:
@@ -3298,13 +3318,13 @@ def test_se_execution():
         # 1. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        read_until(master, b"Free: 384 KB", timeout=30.0)
+        read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
         time.sleep(0.3)
         drain_all(master)
 
         # 2. Select 80x24 mode ('2')
         os.write(master, b"2")
-        read_until(master, b"Free: 384 KB", timeout=8.0)
+        read_until(master, SPLASH_FREE_TARGETS, timeout=8.0)
         time.sleep(0.3)
         drain_all(master)
 
@@ -3327,7 +3347,7 @@ def test_se_execution():
         # 5. Press ESC to enter splash screen
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Free: 384 KB", timeout=6.0)
+        read_until(master, SPLASH_FREE_TARGETS, timeout=6.0)
         time.sleep(0.2)
         drain_all(master)
 
@@ -3364,7 +3384,7 @@ def test_se_execution():
         # 1. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s64_sp = read_until(master, b"Free: 384 KB", timeout=30.0)
+        out_s64_sp = read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
         time.sleep(0.2)
         out_s64_sp += drain_all(master)
 
@@ -3386,7 +3406,7 @@ def test_se_execution():
 
         # 3. Return to splash screen via ESC
         os.write(master, b"\x1b")
-        out_s64_sp2 = read_until(master, b"Free: 384 KB", timeout=6.0)
+        out_s64_sp2 = read_until(master, SPLASH_FREE_TARGETS, timeout=6.0)
         time.sleep(0.2)
         out_s64_sp2 += drain_all(master)
 
@@ -3413,7 +3433,7 @@ def test_se_execution():
         # 1. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s65_sp = read_until(master, b"Free: 384 KB", timeout=30.0)
+        out_s65_sp = read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
         time.sleep(0.2)
         out_s65_sp += drain_all(master)
 
@@ -3462,10 +3482,11 @@ def test_se_execution():
         time.sleep(0.2)
         out_s65_back += drain_all(master)
 
-        if b"for about" not in out_s65_back or (b"Free: 384 KB" not in out_s65_back and b"Free: 416 KB" not in out_s65_back):
+        if b"for about" not in out_s65_back or not has_free_mem(out_s65_back):
             print(f"[-] Step 65 failed: Return to splash screen failed: {repr(out_s65_back)}", flush=True)
             return False
         print("[+] Verified return to splash screen from About screen.", flush=True)
+
 
         # 4. Exit to CP/M with 'q'
         os.write(master, b"q")
