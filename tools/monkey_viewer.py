@@ -70,8 +70,8 @@ class TerminalViewer:
         self.idx = 0
         self.playing = False
         self.speed = 1.0
-        self.speeds = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
-        self.speed_idx = 2  # 1.0x
+        self.speeds = [0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
+        self.speed_idx = 3  # 1.0x
 
         mode = self.metadata.get("screen_mode", "80x24")
         if mode == "120x40":
