@@ -1,0 +1,412 @@
+{
+  "metadata": {
+    "version": 1,
+    "suite": "drunken_monkey",
+    "timestamp": "2026-09-26T06:44:10.012350+00:00",
+    "screen_mode": "80x24",
+    "seed": 42,
+    "total_steps": 50
+  },
+  "events": [
+    {
+      "step": 1,
+      "char": "J",
+      "hex": "0x4a",
+      "delay": 0.0584,
+      "desc": "Printable 'J'",
+      "state": "editor"
+    },
+    {
+      "step": 2,
+      "char": "n",
+      "hex": "0x6e",
+      "delay": 0.0347,
+      "desc": "Printable 'n'",
+      "state": "editor"
+    },
+    {
+      "step": 3,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0606,
+      "desc": "Arrow Up ''\\x1b''",
+      "state": "editor"
+    },
+    {
+      "step": 4,
+      "char": "[",
+      "hex": "0x5b",
+      "delay": 0.0554,
+      "desc": "Arrow Up ''[''",
+      "state": "editor"
+    },
+    {
+      "step": 5,
+      "char": "A",
+      "hex": "0x41",
+      "delay": 0.0219,
+      "desc": "Arrow Up ''A''",
+      "state": "editor"
+    },
+    {
+      "step": 6,
+      "char": "[",
+      "hex": "0x5b",
+      "delay": 0.0256,
+      "desc": "Printable '['",
+      "state": "editor"
+    },
+    {
+      "step": 7,
+      "char": "~",
+      "hex": "0x7e",
+      "delay": 0.0216,
+      "desc": "Printable '~'",
+      "state": "editor"
+    },
+    {
+      "step": 8,
+      "char": "5",
+      "hex": "0x35",
+      "delay": 0.0621,
+      "desc": "Printable '5'",
+      "state": "editor"
+    },
+    {
+      "step": 9,
+      "char": "\u0001",
+      "hex": "0x01",
+      "delay": 0.0554,
+      "desc": "Ctrl+A (Word Left)",
+      "state": "editor"
+    },
+    {
+      "step": 10,
+      "char": "2",
+      "hex": "0x32",
+      "delay": 0.0655,
+      "desc": "Printable '2'",
+      "state": "editor"
+    },
+    {
+      "step": 11,
+      "char": "R",
+      "hex": "0x52",
+      "delay": 0.0404,
+      "desc": "Printable 'R'",
+      "state": "editor"
+    },
+    {
+      "step": 12,
+      "char": "T",
+      "hex": "0x54",
+      "delay": 0.0261,
+      "desc": "Printable 'T'",
+      "state": "editor"
+    },
+    {
+      "step": 13,
+      "char": "\u0002",
+      "hex": "0x02",
+      "delay": 0.0708,
+      "desc": "Ctrl+B (Block Toggle)",
+      "state": "editor"
+    },
+    {
+      "step": 14,
+      "char": "\u000e",
+      "hex": "0x0e",
+      "delay": 0.0638,
+      "desc": "Ctrl+N (Insert Line)",
+      "state": "editor"
+    },
+    {
+      "step": 15,
+      "char": "t",
+      "hex": "0x74",
+      "delay": 0.0247,
+      "desc": "Find: ''t''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 16,
+      "char": "e",
+      "hex": "0x65",
+      "delay": 0.0698,
+      "desc": "Find: ''e''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 17,
+      "char": "s",
+      "hex": "0x73",
+      "delay": 0.0571,
+      "desc": "Find: ''s''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 18,
+      "char": "t",
+      "hex": "0x74",
+      "delay": 0.0717,
+      "desc": "Find: ''t''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 19,
+      "char": "\r",
+      "hex": "0x0d",
+      "delay": 0.0546,
+      "desc": "Find: ''\\r''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 20,
+      "char": "D",
+      "hex": "0x44",
+      "delay": 0.0623,
+      "desc": "Printable 'D'",
+      "state": "unknown"
+    },
+    {
+      "step": 21,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0664,
+      "desc": "Arrow Down ''\\x1b''",
+      "state": "editor"
+    },
+    {
+      "step": 22,
+      "char": "[",
+      "hex": "0x5b",
+      "delay": 0.072,
+      "desc": "Arrow Down ''[''",
+      "state": "editor"
+    },
+    {
+      "step": 23,
+      "char": "B",
+      "hex": "0x42",
+      "delay": 0.0428,
+      "desc": "Arrow Down ''B''",
+      "state": "editor"
+    },
+    {
+      "step": 24,
+      "char": "\u0006",
+      "hex": "0x06",
+      "delay": 0.0472,
+      "desc": "Ctrl+F (Find UI)",
+      "state": "editor"
+    },
+    {
+      "step": 25,
+      "char": "t",
+      "hex": "0x74",
+      "delay": 0.0422,
+      "desc": "Find: ''t''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 26,
+      "char": "h",
+      "hex": "0x68",
+      "delay": 0.0602,
+      "desc": "Find: ''h''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 27,
+      "char": "e",
+      "hex": "0x65",
+      "delay": 0.0621,
+      "desc": "Find: ''e''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 28,
+      "char": "\r",
+      "hex": "0x0d",
+      "delay": 0.061,
+      "desc": "Find: ''\\r''",
+      "state": "find_prompt"
+    },
+    {
+      "step": 29,
+      "char": "\u0014",
+      "hex": "0x14",
+      "delay": 0.0243,
+      "desc": "Ctrl+T (Delete Word)",
+      "state": "unknown"
+    },
+    {
+      "step": 30,
+      "char": "W",
+      "hex": "0x57",
+      "delay": 0.0637,
+      "desc": "Printable 'W'",
+      "state": "unknown"
+    },
+    {
+      "step": 31,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0362,
+      "desc": "Arrow Down ''\\x1b''",
+      "state": "editor"
+    },
+    {
+      "step": 32,
+      "char": "[",
+      "hex": "0x5b",
+      "delay": 0.0611,
+      "desc": "Arrow Down ''[''",
+      "state": "editor"
+    },
+    {
+      "step": 33,
+      "char": "B",
+      "hex": "0x42",
+      "delay": 0.0706,
+      "desc": "Arrow Down ''B''",
+      "state": "editor"
+    },
+    {
+      "step": 34,
+      "char": "e",
+      "hex": "0x65",
+      "delay": 0.0666,
+      "desc": "Printable 'e'",
+      "state": "editor"
+    },
+    {
+      "step": 35,
+      "char": "i",
+      "hex": "0x69",
+      "delay": 0.0683,
+      "desc": "Printable 'i'",
+      "state": "editor"
+    },
+    {
+      "step": 36,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0327,
+      "desc": "Arrow Right ''\\x1b''",
+      "state": "editor"
+    },
+    {
+      "step": 37,
+      "char": "[",
+      "hex": "0x5b",
+      "delay": 0.0328,
+      "desc": "Arrow Right ''[''",
+      "state": "editor"
+    },
+    {
+      "step": 38,
+      "char": "C",
+      "hex": "0x43",
+      "delay": 0.05,
+      "desc": "Arrow Right ''C''",
+      "state": "editor"
+    },
+    {
+      "step": 39,
+      "char": "\u0005",
+      "hex": "0x05",
+      "delay": 0.0731,
+      "desc": "Ctrl+E (Line Up)",
+      "state": "editor"
+    },
+    {
+      "step": 40,
+      "char": "=",
+      "hex": "0x3d",
+      "delay": 0.0359,
+      "desc": "Printable '='",
+      "state": "editor"
+    },
+    {
+      "step": 41,
+      "char": "\u000f",
+      "hex": "0x0f",
+      "delay": 0.0523,
+      "desc": "Ctrl+O (Open Screen)",
+      "state": "editor"
+    },
+    {
+      "step": 42,
+      "char": "C",
+      "hex": "0x43",
+      "delay": 0.0739,
+      "desc": "Printable 'C'",
+      "state": "editor"
+    },
+    {
+      "step": 43,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0798,
+      "desc": "Save changes: ESC (Cancel)",
+      "state": "save_changes_prompt"
+    },
+    {
+      "step": 44,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0283,
+      "desc": "Save changes: ESC (Cancel)",
+      "state": "save_changes_prompt"
+    },
+    {
+      "step": 45,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0496,
+      "desc": "Save changes: ESC (Cancel)",
+      "state": "save_changes_prompt"
+    },
+    {
+      "step": 46,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0653,
+      "desc": "Save changes: ESC (Cancel)",
+      "state": "save_changes_prompt"
+    },
+    {
+      "step": 47,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0717,
+      "desc": "Save changes: ESC (Cancel)",
+      "state": "save_changes_prompt"
+    },
+    {
+      "step": 48,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0292,
+      "desc": "Save changes: ESC (Cancel)",
+      "state": "save_changes_prompt"
+    },
+    {
+      "step": 49,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0296,
+      "desc": "Save changes: ESC (Cancel)",
+      "state": "save_changes_prompt"
+    },
+    {
+      "step": 50,
+      "char": "\u001b",
+      "hex": "0x1b",
+      "delay": 0.0608,
+      "desc": "Save changes: ESC (Cancel)",
+      "state": "save_changes_prompt"
+    }
+  ]
+}
