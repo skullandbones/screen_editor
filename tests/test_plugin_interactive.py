@@ -122,14 +122,21 @@ def main():
             return 1
         print("[+] Verified initial selection cursor on Slot 0: >[0] WORDCNT")
 
+        # Verify context help line on Slot 0 (WORDCNT: Enter:run, A:about)
+        ok, out = read_until(master, b"A:about", timeout=3.0)
+        if not ok:
+            print(f"[-] Slot 0 missing A:about. Out: {repr(out)}")
+            return 1
+        print("[+] Slot 0 context help verified (Enter:run, A:about).")
+
         # Test Down Arrow via ANSI escape: \x1b[B
         time.sleep(0.3)
         os.write(master, b"\x1b[B")
         ok, out = read_until(master, b">[1]", timeout=5.0)
         if not ok:
-            print(f"[-] Down Arrow failed to move selection to >[1]. Out: {repr(out)}")
+            print(f"[-] Down Arrow failed to move to >[1]. Out: {repr(out)}")
             return 1
-        print("[+] Down Arrow (ESC [ B) successfully moved selection to >[1] ROT13")
+        print("[+] Down Arrow (ESC [ B) moved selection to >[1] ROT13")
 
         # Test Vi key 'j' for down navigation to slot 2
         time.sleep(0.3)
@@ -139,6 +146,27 @@ def main():
             print(f"[-] 'j' key failed to move selection to >[2]. Out: {repr(out)}")
             return 1
         print("[+] Key 'j' successfully moved selection to >[2] BEAUTIFY")
+
+        # Verify context help on Slot 2 (BEAUTIFY: Enter:run, A:about, C:config)
+        ok, out = read_until(master, b"C:config", timeout=3.0)
+        if not ok:
+            print(f"[-] Slot 2 missing C:config. Out: {repr(out)}")
+            return 1
+        print("[+] Slot 2 context help verified (Run, About, Config).")
+
+        # Test navigation to empty slot (Slot 3) to verify empty context help
+        time.sleep(0.3)
+        os.write(master, b"j")
+        ok, out = read_until(master, b"L:load plugin", timeout=3.0)
+        if not ok:
+            print(f"[-] Slot 3 missing L:load plugin. Out: {repr(out)}")
+            return 1
+        print("[+] Slot 3 (empty) context help verified (L:load plugin).")
+
+        # Navigate back to Slot 2
+        time.sleep(0.3)
+        os.write(master, b"k")
+        read_until(master, b">[2]", timeout=3.0)
 
         # Test Up Arrow via ANSI escape: \x1b[A
         time.sleep(0.3)

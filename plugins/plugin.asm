@@ -352,14 +352,10 @@ LOCATE_STATUS_ROW:
 ; Format Footer Line for Selected Slot
 ;------------------------------------------------------------------------------
 FORMAT_PLUGIN_FOOTER:
-	LD	DE,SCRATCH_BUF
-	LD	HL,STR_PLUG_CMDS_PRE
-	CALL	COPY_STR_Z
-
 	LD	A,(SELECTED_SLOT)
 	CALL	GET_SLOT_ENTRY_PTR
-	LD	DE,22
-	ADD	HL,DE
+	LD	BC,22
+	ADD	HL,BC
 	LD	A,(HL)
 	OR	A
 	JR	NZ,FPF_LOADED
@@ -386,7 +382,7 @@ FPF_ABOUT_ONLY:
 	JR	FPF_FINISH
 
 FPF_NO_ABOUT:
-	BIT	5,A
+	BIT	5,A			; CAP_HAS_CONFIG
 	JR	Z,FPF_NEITHER
 	LD	HL,STR_PLUG_CMDS_CONFIG
 	JR	FPF_FINISH
@@ -395,6 +391,11 @@ FPF_NEITHER:
 	LD	HL,STR_PLUG_CMDS_PLAIN
 
 FPF_FINISH:
+	PUSH	HL			; Preserve selected context string
+	LD	DE,SCRATCH_BUF
+	LD	HL,STR_PLUG_CMDS_PRE
+	CALL	COPY_STR_Z
+	POP	HL			; Restore selected context string
 	CALL	COPY_STR_Z
 	XOR	A
 	LD	(DE),A
@@ -1502,11 +1503,11 @@ STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+-------------
 
 STR_PLUG_CMDS_PRE:	DB	"type 0..7 to run | ", 0
 STR_PLUG_CMDS_BOTH:
-	DB	"A:about | C:config | L:load | U:unload | Up/Dn | Q:exit", 0
+	DB	"Enter:run | A:about | C:config | L:load | U:unload | Q:exit", 0
 STR_PLUG_CMDS_ABOUT:
-	DB	"A:about | L:load | U:unload | Up/Dn:select | Q/ESC:exit", 0
+	DB	"Enter:run | A:about | L:load | U:unload | Up/Dn | Q:exit", 0
 STR_PLUG_CMDS_CONFIG:
-	DB	"C:config | L:load | U:unload | Up/Dn:select | Q/ESC:exit", 0
+	DB	"Enter:run | C:config | L:load | U:unload | Up/Dn | Q:exit", 0
 STR_PLUG_CMDS_PLAIN:
 	DB	"Enter:run | L:load | U:unload | Up/Dn:select | Q/ESC:exit", 0
 STR_PLUG_CMDS_EMPTY:	DB	"L:load plugin | Up/Dn:select slot | Q or ESC to exit", 0
@@ -1551,6 +1552,6 @@ FPSL_BANK_FOUND		EQU	BSS_START + 14
 FPSL_LOADED_CNT		EQU	BSS_START + 15
 POPUP_MATCH_SLOTS	EQU	BSS_START + 16	; 8 bytes
 VEC_LOCATE_RC		EQU	BSS_START + 24	; 2 bytes: Vector for LOCATE_RC trampoline
-SCRATCH_BUF		EQU	BSS_START + 26	; 80 bytes (shared: sys line, row buffer, popup item, prompt input)
-BSS_END			EQU	SCRATCH_BUF + 80
+SCRATCH_BUF		EQU	BSS_START + 26	; 128 bytes (shared scratch buffer)
+BSS_END			EQU	SCRATCH_BUF + 128
 BSS_SIZE		EQU	BSS_END - BSS_START
