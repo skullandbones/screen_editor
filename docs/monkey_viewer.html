@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Monkey Viewer">
+  <meta name="theme-color" content="#0b0f14">
   <title>SE.COM Drunken Monkey - Visual Session Player</title>
   <script
     src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js">
@@ -15,6 +21,8 @@
         BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       margin: 0;
       padding: 1rem;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
     }
     .crt-display {
       font-family: "Courier New", Courier, "Liberation Mono", monospace;
@@ -25,7 +33,8 @@
       font-size: 13.5px;
       letter-spacing: 0.5px;
       white-space: pre;
-      overflow-x: auto;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
     }
     .crt-display::before {
       content: " ";
@@ -81,6 +90,60 @@
       white-space: pre;
       width: fit-content;
     }
+    #crt-viewport {
+      min-height: 120px;
+    }
+    @media (max-width: 640px) {
+      body {
+        padding: 0.5rem;
+      }
+      .crt-display {
+        font-size: 10px;
+        line-height: 1.15;
+      }
+    }
+    @media (max-height: 560px) {
+      body {
+        padding: 0.25rem !important;
+      }
+      .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+        margin-top: 0.35rem !important;
+      }
+      header {
+        padding: 0.35rem 0.75rem !important;
+      }
+      header h1 {
+        font-size: 0.95rem !important;
+      }
+      .dash-card {
+        height: 38px !important;
+        min-height: 38px !important;
+        max-height: 38px !important;
+        padding: 0.2rem 0.5rem !important;
+      }
+      .dash-card > div:first-child {
+        font-size: 10px !important;
+        line-height: 1 !important;
+      }
+      .card-val {
+        font-size: 12px !important;
+        line-height: 1.2 !important;
+        margin-top: 0 !important;
+      }
+      #crt-viewport {
+        min-height: 80px !important;
+        padding: 0.25rem 0.5rem !important;
+      }
+      #controls-box {
+        padding: 0.35rem 0.75rem !important;
+      }
+      #controls-shortcuts {
+        display: none !important;
+      }
+      footer {
+        display: none !important;
+      }
+    }
   </style>
 </head>
 <body class="p-4 md:p-6 min-h-screen flex flex-col justify-between">
@@ -109,17 +172,28 @@
           </p>
         </div>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 sm:gap-3">
         <!-- Open Session JSON button -->
         <label for="file-input"
-          class="cursor-pointer px-3.5 py-1.5 text-xs font-semibold rounded-lg
+          class="cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg
           bg-emerald-600 hover:bg-emerald-500 text-white shadow
           flex items-center gap-1.5 transition border border-emerald-400"
           title="Open a recorded monkey session JSON file">
           <span>📁</span>
-          <span>Open Session JSON...</span>
+          <span class="hidden sm:inline">Open Session JSON...</span>
+          <span class="sm:hidden">Open...</span>
         </label>
         <input type="file" id="file-input" accept=".json" class="hidden">
+
+        <!-- Fullscreen toggle button -->
+        <button id="btn-fullscreen"
+          class="cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg
+          bg-[#1e293b] hover:bg-[#334155] text-slate-200 shadow
+          flex items-center gap-1.5 transition border border-[#334155]"
+          title="Toggle Fullscreen mode (hide browser bars)">
+          <span id="fs-icon">⛶</span>
+          <span id="fs-text" class="hidden sm:inline">Fullscreen</span>
+        </button>
 
         <div class="text-right hidden sm:block">
           <div class="text-xs font-semibold text-emerald-400">
@@ -168,21 +242,87 @@
     </div>
 
     <!-- Retro Terminal CRT Screen -->
-    <div class="relative rounded-xl overflow-hidden border-2
+    <div id="crt-container" class="relative rounded-xl overflow-hidden border-2
       border-[#1c3325] glow-box bg-[#09110d]">
-      <div class="bg-[#101f16] px-4 py-2 flex items-center justify-between
-        text-xs font-mono text-[#44aa66] border-b border-[#1c3325]">
-        <span>RC2014 RomWBW CP/M 2.2 — SE.COM Virtual Terminal</span>
-        <span id="meta-res">Resolution: 80 &times; 24</span>
+      <div class="bg-[#101f16] px-2.5 sm:px-4 py-2 flex flex-wrap
+        items-center justify-between gap-1.5 text-xs font-mono text-[#44aa66]
+        border-b border-[#1c3325]">
+        <span class="truncate mr-1 max-w-[180px] sm:max-w-none">
+          RC2014 RomWBW CP/M 2.2 — SE.COM Virtual Terminal
+        </span>
+        <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          <span id="meta-res" class="hidden md:inline">80 &times; 24</span>
+
+          <!-- Manual Zoom Controls: Out (-), Level, In (+) -->
+          <div class="flex items-center bg-[#15251b] rounded border
+            border-[#1c3325] p-0.5">
+            <button id="btn-zoom-out"
+              class="px-2 py-0.5 rounded hover:bg-[#1e3b2b] text-xs font-mono
+              font-bold text-emerald-300 transition cursor-pointer select-none"
+              title="Zoom Out (-)">
+              &minus;
+            </button>
+            <button id="btn-zoom-val"
+              class="px-1.5 py-0.5 text-[11px] font-mono font-semibold
+              text-emerald-200 hover:text-white transition cursor-pointer
+              min-w-[40px] text-center"
+              title="Click to cycle zoom presets (100%, 75%, 50%, 35%, 25%)">
+              100%
+            </button>
+            <button id="btn-zoom-in"
+              class="px-2 py-0.5 rounded hover:bg-[#1e3b2b] text-xs font-mono
+              font-bold text-emerald-300 transition cursor-pointer select-none"
+              title="Zoom In (+)">
+              +
+            </button>
+          </div>
+
+          <!-- Quick Preset Buttons -->
+          <div class="flex items-center gap-1 text-[11px]">
+            <button class="zoom-preset-btn px-1.5 py-0.5 rounded bg-[#1e293b]
+              hover:bg-[#334155] text-slate-300 border border-[#334155]
+              cursor-pointer" data-zoom="0.35"
+              title="Set Zoom to 35%">35%</button>
+            <button class="zoom-preset-btn px-1.5 py-0.5 rounded bg-[#1e293b]
+              hover:bg-[#334155] text-slate-300 border border-[#334155]
+              cursor-pointer" data-zoom="0.5"
+              title="Set Zoom to 50%">50%</button>
+            <button class="zoom-preset-btn px-1.5 py-0.5 rounded bg-[#1e293b]
+              hover:bg-[#334155] text-slate-300 border border-[#334155]
+              cursor-pointer hidden sm:inline-block" data-zoom="0.75"
+              title="Set Zoom to 75%">75%</button>
+            <button class="zoom-preset-btn px-1.5 py-0.5 rounded bg-[#1e293b]
+              hover:bg-[#334155] text-slate-300 border border-[#334155]
+              cursor-pointer hidden sm:inline-block" data-zoom="1.0"
+              title="Set Zoom to 100%">100%</button>
+          </div>
+
+          <button id="btn-fit"
+            class="px-2 py-0.5 rounded bg-emerald-800/80 hover:bg-emerald-700
+            text-[11px] font-sans font-bold text-white border border-emerald-500
+            transition cursor-pointer"
+            title="Auto-Fit zoom to window">
+            Auto
+          </button>
+          <button id="btn-fs-crt"
+            class="px-2 py-0.5 rounded bg-[#1e293b] hover:bg-[#334155]
+            text-[11px] font-sans font-bold text-slate-300 border
+            border-[#334155] transition cursor-pointer"
+            title="Toggle Fullscreen mode">
+            ⛶ FS
+          </button>
+        </div>
       </div>
-      <div id="terminal-screen"
-        class="crt-display p-4 select-all min-h-[460px]">
+      <div id="crt-viewport" class="overflow-x-auto p-2 sm:p-4 bg-[#09110d]">
+        <div id="terminal-screen"
+          class="crt-display select-all" style="width: fit-content;">
+        </div>
       </div>
     </div>
 
     <!-- Playback Controls -->
-    <div class="bg-[#151c24] border border-[#273544] p-4 rounded-xl
-      space-y-3 shadow-md">
+    <div id="controls-box" class="bg-[#151c24] border border-[#273544] p-4
+      rounded-xl space-y-3 shadow-md">
       <div class="flex flex-wrap items-center gap-3">
         <button id="btn-first"
           class="px-3 py-1.5 text-xs font-semibold rounded bg-[#1e293b]
@@ -231,6 +371,11 @@
         <!-- Speed Buttons -->
         <div class="flex items-center gap-1 text-xs">
           <span class="text-slate-400 mr-1">Speed:</span>
+          <button data-speed="0.1"
+            class="speed-btn px-2.5 py-1 rounded bg-[#1e293b]
+            hover:bg-[#334155] text-slate-300 border border-[#334155]">
+            0.1x
+          </button>
           <button data-speed="0.5"
             class="speed-btn px-2.5 py-1 rounded bg-[#1e293b]
             hover:bg-[#334155] text-slate-300 border border-[#334155]">
@@ -254,8 +399,9 @@
         </div>
       </div>
 
-      <div class="text-[11px] text-slate-400 flex flex-wrap items-center
-        justify-between border-t border-[#273544] pt-2">
+      <div id="controls-shortcuts" class="text-[11px] text-slate-400
+        flex flex-wrap items-center justify-between border-t border-[#273544]
+        pt-2">
         <span>Shortcuts:
           <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
             border-[#334155]">Space</kbd> Play/Pause &bull;
@@ -263,8 +409,13 @@
             border-[#334155]">&larr;</kbd>/<kbd class="px-1 py-0.5 bg-[#0b0f14]
             rounded border border-[#334155]">&rarr;</kbd> Step &bull;
           <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
+            border-[#334155]">&minus;</kbd>/<kbd class="px-1 py-0.5 bg-[#0b0f14]
+            rounded border border-[#334155]">+</kbd> Zoom &bull;
+          <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
             border-[#334155]">Home</kbd>/<kbd class="px-1 py-0.5 bg-[#0b0f14]
-            rounded border border-[#334155]">End</kbd> First/Last
+            rounded border border-[#334155]">End</kbd> First/Last &bull;
+          <kbd class="px-1 py-0.5 bg-[#0b0f14] rounded border
+            border-[#334155]">F</kbd> Fullscreen
         </span>
         <span>Quality Status:
           <strong class="text-emerald-400 font-mono">100% PASS</strong>
@@ -474,19 +625,246 @@
         const screenCols = metadata.screen_mode === "120x40" ? 120 : 80;
         ev.screen.forEach((line, rIdx) => {
           const lineDiv = document.createElement("div");
+          const padded =
+            (line || "").padEnd(screenCols, " ").slice(0, screenCols);
           if (rIdx === rowCount - 1 &&
               (line.includes("| ") || line.includes("^K:"))) {
             lineDiv.className = "status-inverted";
-            lineDiv.textContent =
-              (line || "").padEnd(screenCols, " ").slice(0, screenCols);
-          } else {
-            lineDiv.textContent = line || " ";
           }
+          lineDiv.textContent = padded;
           termScreen.appendChild(lineDiv);
         });
       } else {
         termScreen.textContent = "No screen data recorded for this step.";
       }
+      autoFitTerminal();
+    }
+
+    let currentZoom = 1.0;
+    let isAutoFit = true;
+
+    function isFullscreen() {
+      return !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+    }
+
+    function updateFullscreenButtons(active) {
+      const fsText = document.getElementById("fs-text");
+      const fsIcon = document.getElementById("fs-icon");
+      const btnFsCrt = document.getElementById("btn-fs-crt");
+
+      if (active) {
+        if (fsText) fsText.textContent = "Exit Fullscreen";
+        if (fsIcon) fsIcon.textContent = "⤢";
+        if (btnFsCrt) btnFsCrt.textContent = "⤢ Exit";
+      } else {
+        if (fsText) fsText.textContent = "Fullscreen";
+        if (fsIcon) fsIcon.textContent = "⛶";
+        if (btnFsCrt) btnFsCrt.textContent = "⛶ FS";
+      }
+    }
+
+    function toggleFullscreen() {
+      const doc = document;
+      const docEl = doc.documentElement;
+      if (!isFullscreen()) {
+        const req = docEl.requestFullscreen ||
+          docEl.webkitRequestFullscreen ||
+          docEl.mozRequestFullScreen ||
+          docEl.msRequestFullscreen;
+        if (req) {
+          req.call(docEl).catch(err => {
+            console.warn("Fullscreen request:", err);
+          });
+        } else {
+          alert(
+            "Fullscreen API is restricted in this browser tab.\n\n" +
+            "On iPhone/iPad (Safari):\n" +
+            "Tap Share -> 'Add to Home Screen' to launch full screen."
+          );
+        }
+      } else {
+        const exit = doc.exitFullscreen ||
+          doc.webkitExitFullscreen ||
+          doc.mozCancelFullScreen ||
+          doc.msExitFullscreen;
+        if (exit) {
+          exit.call(doc).catch(err => {
+            console.warn("Exit fullscreen:", err);
+          });
+        }
+      }
+    }
+
+    function applyZoom(scale, isAuto = false) {
+      isAutoFit = isAuto;
+      currentZoom = Math.max(0.20, Math.min(2.50, scale));
+
+      const viewport = document.getElementById("crt-viewport");
+      const screen = document.getElementById("terminal-screen");
+      const zoomValBtn = document.getElementById("btn-zoom-val");
+      const btnFit = document.getElementById("btn-fit");
+      if (!viewport || !screen) return;
+
+      const pct = Math.round(currentZoom * 100);
+      if (zoomValBtn) {
+        zoomValBtn.textContent = `${pct}%`;
+        zoomValBtn.title =
+          `Zoom: ${pct}%. Click to cycle presets (100%, 75%, 50%, 35%, 25%)`;
+      }
+
+      if (btnFit) {
+        if (isAutoFit) {
+          btnFit.textContent = `Fit: ${pct}%`;
+          btnFit.className =
+            "px-2 py-0.5 rounded bg-emerald-800/80 hover:bg-emerald-700 " +
+            "text-[11px] font-sans font-bold text-white border " +
+            "border-emerald-500 cursor-pointer";
+        } else {
+          btnFit.textContent = "Fit: Auto";
+          btnFit.className =
+            "px-2 py-0.5 rounded bg-[#1e293b] hover:bg-[#334155] " +
+            "text-[11px] font-sans text-slate-300 border border-[#334155] " +
+            "cursor-pointer";
+        }
+      }
+
+      document.querySelectorAll(".zoom-preset-btn").forEach(btn => {
+        const val = parseFloat(btn.dataset.zoom);
+        if (!isAutoFit && Math.abs(val - currentZoom) < 0.05) {
+          btn.className =
+            "zoom-preset-btn px-1.5 py-0.5 rounded bg-emerald-800/80 " +
+            "text-white font-bold border border-emerald-500 cursor-pointer";
+        } else {
+          btn.className =
+            "zoom-preset-btn px-1.5 py-0.5 rounded bg-[#1e293b] " +
+            "hover:bg-[#334155] text-slate-300 border border-[#334155] " +
+            "cursor-pointer";
+        }
+      });
+
+      const scaleFixed = currentZoom.toFixed(4);
+      if (CSS.supports && CSS.supports("zoom", "1")) {
+        screen.style.zoom = scaleFixed;
+        screen.style.transform = "";
+        viewport.style.height = "";
+        viewport.style.width = "";
+        viewport.style.overflow = currentZoom < 0.99 ? "hidden" : "auto";
+      } else {
+        screen.style.zoom = "";
+        screen.style.transform = `scale(${scaleFixed})`;
+        screen.style.transformOrigin = "top left";
+        const unscaledH = screen.scrollHeight;
+        const unscaledW = screen.scrollWidth;
+        viewport.style.height = `${unscaledH * currentZoom}px`;
+        viewport.style.width = `${unscaledW * currentZoom}px`;
+        viewport.style.overflow = "hidden";
+      }
+    }
+
+    function zoomOut() {
+      const base = currentZoom;
+      const presets = [
+        0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.65, 0.75, 0.85, 1.0, 1.25, 1.50
+      ];
+      let next = base - 0.10;
+      for (let i = presets.length - 1; i >= 0; i--) {
+        if (presets[i] < base - 0.03) {
+          next = presets[i];
+          break;
+        }
+      }
+      applyZoom(Math.max(0.20, next), false);
+    }
+
+    function zoomIn() {
+      const base = currentZoom;
+      const presets = [
+        0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.65, 0.75, 0.85, 1.0, 1.25, 1.50
+      ];
+      let next = base + 0.10;
+      for (let i = 0; i < presets.length; i++) {
+        if (presets[i] > base + 0.03) {
+          next = presets[i];
+          break;
+        }
+      }
+      applyZoom(Math.min(2.50, next), false);
+    }
+
+    function cycleZoomPresets() {
+      const cycle = [1.0, 0.75, 0.50, 0.35, 0.25];
+      if (isAutoFit) {
+        applyZoom(1.0, false);
+        return;
+      }
+      let nextIdx = 0;
+      for (let i = 0; i < cycle.length; i++) {
+        if (Math.abs(currentZoom - cycle[i]) < 0.05) {
+          nextIdx = (i + 1) % cycle.length;
+          break;
+        }
+        if (currentZoom > cycle[i]) {
+          nextIdx = i;
+          break;
+        }
+      }
+      applyZoom(cycle[nextIdx], false);
+    }
+
+    function autoFitTerminal() {
+      if (!isAutoFit) {
+        applyZoom(currentZoom, false);
+        return;
+      }
+
+      const viewport = document.getElementById("crt-viewport");
+      const screen = document.getElementById("terminal-screen");
+      const crtContainer = document.getElementById("crt-container");
+      const controlsBox = document.getElementById("controls-box");
+      if (!viewport || !screen) return;
+
+      // Temporarily reset zoom to measure unscaled dimensions
+      screen.style.zoom = "1";
+      screen.style.transform = "";
+      viewport.style.height = "";
+      viewport.style.width = "";
+
+      const availWidth = viewport.clientWidth;
+      const screenWidth = screen.scrollWidth;
+
+      let availHeight = Infinity;
+      const winH = window.innerHeight;
+      if (crtContainer && controlsBox && winH < 950) {
+        const header = document.querySelector("header");
+        const dash = document.querySelector(".dash-card") ?
+          document.querySelector(".dash-card").parentElement : null;
+        const crtHeader = crtContainer.firstElementChild;
+
+        let overhead = 0;
+        if (header) overhead += header.offsetHeight;
+        if (dash) overhead += dash.offsetHeight;
+        if (crtHeader) overhead += crtHeader.offsetHeight;
+        if (controlsBox) overhead += controlsBox.offsetHeight;
+        overhead += 32;
+
+        const maxH = winH - overhead;
+        availHeight = Math.max(90, maxH);
+      }
+
+      const screenHeight = screen.scrollHeight;
+
+      const scaleW = (screenWidth > 0 && availWidth > 0)
+        ? (availWidth / screenWidth) : 1.0;
+      const scaleH = (screenHeight > 0 && availHeight < Infinity)
+        ? (availHeight / screenHeight) : 1.0;
+
+      const autoScale = Math.min(scaleW, scaleH, 1.0);
+      applyZoom(autoScale, true);
     }
 
     function nextStep() {
@@ -602,7 +980,117 @@
         e.preventDefault();
         pause();
         renderStep(total - 1);
+      } else if (e.code === "KeyF" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        zoomOut();
+      } else if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        zoomIn();
       }
+    });
+
+    const btnFit = document.getElementById("btn-fit");
+    if (btnFit) {
+      btnFit.addEventListener("click", () => {
+        isAutoFit = !isAutoFit;
+        if (isAutoFit) {
+          autoFitTerminal();
+        } else {
+          applyZoom(1.0, false);
+        }
+      });
+    }
+
+    const btnZoomOut = document.getElementById("btn-zoom-out");
+    if (btnZoomOut) {
+      btnZoomOut.addEventListener("click", zoomOut);
+    }
+
+    const btnZoomIn = document.getElementById("btn-zoom-in");
+    if (btnZoomIn) {
+      btnZoomIn.addEventListener("click", zoomIn);
+    }
+
+    const btnZoomVal = document.getElementById("btn-zoom-val");
+    if (btnZoomVal) {
+      btnZoomVal.addEventListener("click", cycleZoomPresets);
+    }
+
+    document.querySelectorAll(".zoom-preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const val = parseFloat(btn.dataset.zoom);
+        applyZoom(val, false);
+      });
+    });
+
+    const crtViewport = document.getElementById("crt-viewport");
+    if (crtViewport) {
+      let initialDist = null;
+      let initialScale = 1.0;
+
+      crtViewport.addEventListener("touchstart", (e) => {
+        if (e.touches.length === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          initialDist = Math.hypot(dx, dy);
+          initialScale = currentZoom;
+        }
+      }, { passive: true });
+
+      crtViewport.addEventListener("touchmove", (e) => {
+        if (e.touches.length === 2 && initialDist) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.hypot(dx, dy);
+          const factor = dist / initialDist;
+          applyZoom(initialScale * factor, false);
+        }
+      }, { passive: true });
+
+      crtViewport.addEventListener("touchend", (e) => {
+        if (e.touches.length < 2) {
+          initialDist = null;
+        }
+      }, { passive: true });
+
+      crtViewport.addEventListener("wheel", (e) => {
+        if (e.ctrlKey) {
+          e.preventDefault();
+          if (e.deltaY < 0) zoomIn();
+          else zoomOut();
+        }
+      }, { passive: false });
+    }
+
+    const btnFs = document.getElementById("btn-fullscreen");
+    if (btnFs) {
+      btnFs.addEventListener("click", toggleFullscreen);
+    }
+
+    const btnFsCrt = document.getElementById("btn-fs-crt");
+    if (btnFsCrt) {
+      btnFsCrt.addEventListener("click", toggleFullscreen);
+    }
+
+    [
+      "fullscreenchange",
+      "webkitfullscreenchange",
+      "mozfullscreenchange",
+      "MSFullscreenChange"
+    ].forEach(evt => {
+      document.addEventListener(evt, () => {
+        updateFullscreenButtons(isFullscreen());
+        setTimeout(autoFitTerminal, 100);
+        setTimeout(autoFitTerminal, 300);
+      });
+    });
+
+    window.addEventListener("resize", autoFitTerminal);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(autoFitTerminal, 150);
     });
 
     initSession(sessionData);

@@ -17,6 +17,80 @@ import tty
 import termios
 import argparse
 import webbrowser
+import socket
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+
+def get_local_ip():
+    """Attempts to determine the local network IP of this workstation."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("1.1.1.1", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+
+
+def serve_html_viewer(html_file, port=8000, launch_browser=True):
+    """
+    Serves the HTML viewer directory over local Wi-Fi for mobile phone access.
+    """
+    serve_dir = os.path.dirname(os.path.abspath(html_file))
+    html_name = os.path.basename(html_file)
+    local_ip = get_local_ip()
+
+    class QuietHandler(SimpleHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=serve_dir, **kwargs)
+
+        def do_GET(self):
+            if self.path in ("/", ""):
+                self.send_response(302)
+                self.send_header("Location", f"/{html_name}")
+                self.end_headers()
+                return
+            super().do_GET()
+
+        def log_message(self, fmt, *args):
+            if len(args) >= 2 and str(args[1]) not in ("200", "304", "302"):
+                super().log_message(fmt, *args)
+
+    try:
+        server = ThreadingHTTPServer(("0.0.0.0", port), QuietHandler)
+    except OSError as err:
+        print(f"[-] Failed to bind port {port}: {err}", file=sys.stderr)
+        return
+
+    url_lan = f"http://{local_ip}:{port}/"
+    url_local = f"http://localhost:{port}/{html_name}"
+
+    print("=" * 76, flush=True)
+    print("📱 Smartphone / Mobile Wi-Fi Server Running", flush=True)
+    print("=" * 76, flush=True)
+    print(f"[*] Local Workstation URL : {url_local}", flush=True)
+    print(f"[+] Smartphone Wi-Fi URL  : {url_lan}", flush=True)
+    print("", flush=True)
+    print("  👉 On your phone (connected to same Wi-Fi), open the URL above.",
+          flush=True)
+    print("  💡 Tip: Rotate phone to landscape mode for full 80x24 view.",
+          flush=True)
+    print("  Press Ctrl+C to stop the server.", flush=True)
+    print("=" * 76, flush=True)
+
+    if launch_browser:
+        open_in_browser(url_local)
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[*] Stopping mobile web server...", flush=True)
+    finally:
+        server.server_close()
 
 
 def load_session(filepath):
@@ -70,8 +144,8 @@ class TerminalViewer:
         self.idx = 0
         self.playing = False
         self.speed = 1.0
-        self.speeds = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
-        self.speed_idx = 2  # 1.0x
+        self.speeds = [0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
+        self.speed_idx = 3  # 1.0x
 
         mode = self.metadata.get("screen_mode", "80x24")
         if mode == "120x40":
@@ -340,16 +414,21 @@ def dump_step(session_data, step_index):
     print("+" + "-" * cols + "+")
 
 
-def open_in_browser(html_path):
-    """Opens the generated HTML viewer in the default browser."""
-    file_uri = f"file://{os.path.abspath(html_path)}"
-    print(f"[+] Launching default browser: {file_uri}", flush=True)
+def open_in_browser(target):
+    """Opens the generated HTML viewer or URL in the default browser."""
+    if target.startswith("http://") or target.startswith("https://"):
+        target_url = target
+    else:
+        abs_path = os.path.abspath(target)
+        target_url = f"file://{abs_path}"
+
+    print(f"[+] Launching default browser: {target_url}", flush=True)
     try:
-        webbrowser.open(file_uri)
+        webbrowser.open(target_url)
     except Exception as exc:
         print(f"[!] Could not launch browser automatically: {exc}",
               flush=True)
-        print(f"[*] Please open this URL manually:\n    {file_uri}",
+        print(f"[*] Please open this URL manually:\n    {target_url}",
               flush=True)
 
 
@@ -381,6 +460,12 @@ def main():
     parser.add_argument(
         "--all", action="store_true",
         help="Dump all steps non-interactively and exit"
+    )
+    parser.add_argument(
+        "--serve", nargs="?", const=8000, type=int, default=None,
+        metavar="PORT",
+        help="Serve HTML viewer over Wi-Fi for mobile / phone access "
+             "(default port: 8000)"
     )
 
     args = parser.parse_args()
@@ -420,6 +505,12 @@ def main():
     out_file = generate_html_viewer(
         data, html_target, session_filename=os.path.basename(session_file)
     )
+
+    if args.serve is not None:
+        serve_html_viewer(
+            out_file, port=args.serve, launch_browser=not args.no_browse
+        )
+        return
 
     print("=" * 76, flush=True)
     print("🐒 SE.COM Drunken Monkey — Visual HTML Session Player", flush=True)
