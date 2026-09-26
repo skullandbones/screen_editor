@@ -559,11 +559,17 @@ def test_se_execution():
         if b"First line of two" not in out_load or b"Second line of two" not in out_load:
             print(f"[-] Multi-line file contents missing in SE.COM. Buffer: {repr(out_load)}", flush=True)
             return False
-        # Verify status bar shows full filename 'C:2.TXT'
-        if b"C:2.TXT" not in out_load:
-            print(f"[-] Status bar missing full filename 'C:2.TXT'. Buffer: {repr(out_load)}", flush=True)
+        # Verify status bar shows full filename 'C:2.TXT' without corruption
+        if b"| C:2.TXT        |" not in out_load:
+            print(f"[-] Status bar missing exact '| C:2.TXT        |'. "
+                  f"Buffer: {repr(out_load[-400:])}", flush=True)
             return False
-        print("[+] Successfully verified multi-line file loading (se 2.TXT) and Far RAM streaming!", flush=True)
+        if b"2.TXTU:" in out_load or b".TXTU:" in out_load:
+            print(f"[-] Status bar corrupted with erroneous 'U:' suffix! "
+                  f"Buffer: {repr(out_load[-400:])}", flush=True)
+            return False
+        print("[+] Successfully verified multi-line file loading (se 2.TXT) "
+              "and Far RAM streaming!", flush=True)
 
         # Exit editor again
         time.sleep(0.5)
@@ -585,9 +591,14 @@ def test_se_execution():
         if b"Line 20 of test file content" not in out_load_30:
             print(f"[-] 30.TXT Line 20 missing on editor screen. Buffer: {repr(out_load_30)}", flush=True)
             return False
-        # Verify status bar shows full filename 'C:30.TXT'
-        if b"C:30.TXT" not in out_load_30:
-            print(f"[-] Status bar missing full filename 'C:30.TXT'. Buffer: {repr(out_load_30)}", flush=True)
+        # Verify status bar shows full filename 'C:30.TXT' without corruption
+        if b"| C:30.TXT       |" not in out_load_30:
+            print(f"[-] Status bar missing exact '| C:30.TXT       |'. "
+                  f"Buffer: {repr(out_load_30[-400:])}", flush=True)
+            return False
+        if b"30.TXTU:" in out_load_30 or b".TXTU:" in out_load_30:
+            print(f"[-] Status bar corrupted with erroneous 'U:' suffix! "
+                  f"Buffer: {repr(out_load_30[-400:])}", flush=True)
             return False
         print("[+] Successfully verified 30-line multi-sector file loading (se 30.TXT) into editor Far RAM buffer!", flush=True)
 
@@ -1001,10 +1012,24 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"30.TXT\r")
         out_open_30 = read_until(master, b"Line    1/30", timeout=4.0)
-        if b"C:30.TXT" not in out_open_30 or b"Line 01 of test file content" not in out_open_30:
-            print(f"[-] Failed to open 30.TXT via Ctrl+O in editor mode. Buffer: {repr(out_open_30)}", flush=True)
+        if b"C:30.TXT" not in out_open_30 or \
+           b"Line 01 of test file content" not in out_open_30:
+            print(f"[-] Failed to open 30.TXT via Ctrl+O in editor mode. "
+                  f"Buffer: {repr(out_open_30)}", flush=True)
             return False
-        print("[+] Successfully verified Ctrl+O in editor mode opens file into editor.", flush=True)
+        # Verify clean status bar after Ctrl+O open without U: suffix corruption
+        if b"| C:30.TXT       |" not in out_open_30:
+            print(f"[-] Status bar missing exact '| C:30.TXT       |' "
+                  f"after Ctrl+O open. Buffer: {repr(out_open_30[-400:])}",
+                  flush=True)
+            return False
+        if b"30.TXTU:" in out_open_30 or b".TXTU:" in out_open_30:
+            print(f"[-] Status bar corrupted with 'U:' suffix after "
+                  f"Ctrl+O open! Buffer: {repr(out_open_30[-400:])}",
+                  flush=True)
+            return False
+        print("[+] Successfully verified Ctrl+O in editor mode opens file "
+              "into editor with clean status bar.", flush=True)
 
         # 30. Test Drive Switching in Open Screen ("B:" and "C:")
         time.sleep(0.2)
@@ -4919,6 +4944,10 @@ def test_se_execution():
                            stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file,
+                            "0:RAMDRV.IMG"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],

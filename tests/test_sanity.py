@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fast Sanity Test Runner for SE.COM (Screen Editor).
-Verifies the core lifecycle of SE.COM in ~4 seconds:
+Verifies the core lifecycle of SE.COM:
   1. Boot RomWBW and start SE.COM from CP/M
   2. Verify Splash Screen rendering
   3. Enter Editor Mode and verify Status Bar
@@ -10,6 +10,7 @@ Verifies the core lifecycle of SE.COM in ~4 seconds:
   6. Cancel Block Selection (Ctrl+B)
   7. Open Editor Mode Keys Help (Ctrl+K) and return to editor
   8. Clean exit (Ctrl+Q) back to CP/M prompt (C>)
+  9. Open CP/M file (se 2.TXT) and verify clean status bar (no U: suffix)
 """
 
 import os
@@ -28,8 +29,10 @@ def find_paths():
     rom_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom")
     img_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img")
     se_bin = os.path.join(repo_root, "SE.COM")
+    cpmrm_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools",
+                             "Linux", "cpmrm")
 
-    return emu_bin, rom_file, img_file, se_bin
+    return emu_bin, rom_file, img_file, se_bin, cpmrm_bin
 
 def read_until(master_fd, match_bytes, timeout=5.0):
     buf = b""
@@ -63,7 +66,7 @@ def drain_all(master_fd, quiet_time=0.1):
 
 def run_sanity_test():
     t_start = time.time()
-    emu_bin, rom_file, img_file, se_bin = find_paths()
+    emu_bin, rom_file, img_file, se_bin, cpmrm_bin = find_paths()
 
     if not os.path.isfile(emu_bin):
         print(f"[-] Emulator binary not found: {emu_bin}", flush=True)
@@ -74,6 +77,15 @@ def run_sanity_test():
     if not os.path.isfile(img_file):
         print(f"[-] Disk image not found: {img_file}", flush=True)
         return False
+
+    if os.path.isfile(cpmrm_bin):
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file,
+                        "0:RAMDRV.IMG"],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
 
     print("[*] Launching RomWBW on RC2014 emulator (Sanity Suite)...", flush=True)
     master, slave = os.openpty()
@@ -183,6 +195,33 @@ def run_sanity_test():
             print(f"[-] Clean exit with Ctrl+Q failed. Buffer: {repr(out_exit)}", flush=True)
             return False
         print("[+] Clean exit to CP/M prompt with unsaved changes prompt verified.", flush=True)
+
+        # 9. Verify CLI file load & clean status bar filename: 'se 2.TXT'
+        drain_all(master)
+        time.sleep(0.5)
+        os.write(master, b"se 2.TXT\r")
+        out_load = read_until(master, b"Line    1/2", timeout=30.0)
+        if b"| C:2.TXT        |" not in out_load:
+            print(f"[-] Status bar filename malformed (expected "
+                  f"'| C:2.TXT        |'). Buffer: {repr(out_load[-400:])}",
+                  flush=True)
+            return False
+        if b"2.TXTU:" in out_load or b".TXTU:" in out_load:
+            print(f"[-] Status bar corrupted with erroneous 'U:' suffix! "
+                  f"Buffer: {repr(out_load[-400:])}", flush=True)
+            return False
+        print("[+] Verified clean status bar for CP/M file (se 2.TXT): "
+              "'| C:2.TXT        |'.", flush=True)
+
+        # Clean exit to CP/M
+        time.sleep(0.3)
+        os.write(master, b"\x11")
+        out_exit2 = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_exit2:
+            print(f"[-] Exit from 2.TXT session failed. "
+                  f"Buffer: {repr(out_exit2)}", flush=True)
+            return False
+        print("[+] Clean exit back to CP/M prompt.", flush=True)
 
         elapsed = time.time() - t_start
         print(f"[+] All SE.COM sanity tests PASSED in {elapsed:.2f}s!", flush=True)

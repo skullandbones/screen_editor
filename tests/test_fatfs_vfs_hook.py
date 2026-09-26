@@ -506,6 +506,11 @@ def main():
             sys.exit(1)
         print("[+] Block insert completed, dirty status verified: "
               "'U4:SLICES.TXT*'.")
+        if b"Slice 1: Z-System / ZSDOS" not in buf:
+            print("[-] Inserted file content not found in editor buffer! "
+                  "Buffer:\n", buf)
+            sys.exit(1)
+        print("[+] Verified inserted FAT file content present in editor.")
 
         # --- Test 10: Clean Exit to CP/M Prompt ---
         print("[*] Exiting SE.COM to CP/M prompt...")

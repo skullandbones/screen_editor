@@ -311,6 +311,37 @@ class VT100QualityMonitor:
                     f"active but row 0 contains editor text: '{row0_str[:40]}'"
                 )
 
+        # 5. Premature CP/M exit detection:
+        # If SE.COM exits prematurely to CP/M, a console prompt ("C>") or
+        # "file not found" message appears on screen rows.
+        if " file not found" in full_text:
+            raise UnexpectedBehaviourError(
+                "Premature CP/M exit detected: 'file not found' on screen"
+            )
+        has_tildes = any(r[0] == "~" for r in self.buffer)
+        is_se_ui = ("SE - Screen Editor" in full_text or
+                    "SE - Plugin Manager" in full_text or
+                    "SE - Screen Editor Configuration" in full_text)
+        if not has_tildes and not is_se_ui:
+            for r_idx, row in enumerate(self.buffer):
+                row_str = "".join(row).strip()
+                if re.match(r"^[A-P]>", row_str):
+                    raise UnexpectedBehaviourError(
+                        f"Premature CP/M exit detected on row {r_idx}: "
+                        f"'{row_str[:40]}'"
+                    )
+        bottom_row = self.rows - 1
+        bottom_str = "".join(self.buffer[bottom_row])
+        editor_sigs = ("80x24 |", "120x40 |", "^K: Editor keys")
+        if any(sig in bottom_str for sig in editor_sigs):
+            for r_idx in range(bottom_row):
+                row_str = "".join(self.buffer[r_idx]).strip()
+                if re.match(r"^[A-P]>", row_str):
+                    raise UnexpectedBehaviourError(
+                        f"Premature CP/M exit detected on row {r_idx}: "
+                        f"'{row_str[:40]}'"
+                    )
+
     def detect_screen_state(self):
         """
         Inspects the screen buffer to identify the active UI context/prompt.
@@ -331,6 +362,8 @@ class VT100QualityMonitor:
             return "insert_file_prompt"
         if "Load Plugin (.PRL/.OVL):" in full_text:
             return "load_plugin_prompt"
+        if "Unload Slot (0..7):" in full_text:
+            return "unload_plugin_prompt"
         if "Goto line:" in full_text:
             return "goto_line_prompt"
         if "Replace with:" in full_text:
@@ -344,12 +377,30 @@ class VT100QualityMonitor:
         if ("[Up/Dn/0-7] Select" in full_text or
                 "Select [0-7] to Execute" in full_text):
             return "plugin_popup"
+        if "Save & Exit" in full_text:
+            return "plugin_config"
         if "Press any key" in full_text:
             return "press_any_key"
+        if "SE - Screen Editor Configuration" in full_text:
+            return "configuration_screen"
         if ("SE - Screen Editor" in full_text and
                 ("Active Screen:" in full_text or "type   e" in full_text)):
             return "splash_screen"
-        if "^K: Editor keys" in full_text:
+        if ("SE - Plugin Manager" in full_text or
+                "0..7:select" in full_text):
+            return "plugin_manager"
+        if ("^K: Editor keys" in full_text or
+                "^V: Overwrite" in full_text or
+                "[SEL:" in full_text or
+                "[BLK:" in full_text or
+                ("[Pan +" in full_text and ("80x24 |" in full_text or
+                                            "120x40 |" in full_text)) or
+                ("| Line " in full_text and ("80x24 |" in full_text or
+                                             "120x40 |" in full_text)) or
+                "Pattern not found" in full_text or
+                "Search completed" in full_text or
+                "Replace done:" in full_text or
+                "Line > 120 chars" in full_text):
             return "editor"
 
         return "unknown"
@@ -445,15 +496,6 @@ class DrunkenMonkeyInputGenerator:
             desc = f"{prefix_desc} '{repr(ch)}'" if prefix_desc else repr(ch)
             self.pending_chars.append((ch, None, desc))
 
-    def queue_arrow_sequence(self, seq, name):
-        """
-        Queues a VT100 arrow sequence (e.g. \\x1b[A). The first byte has
-        normal delay, while subsequent bytes are sent with a burst delay (1ms)
-        to prevent SE.COM's WAIT_ESC_BYTE loop (LD BC, 1000) from timing out.
-        """
-        for idx, ch in enumerate(seq):
-            d = None if idx == 0 else 0.001
-            self.pending_chars.append((ch, d, f"{name} {repr(ch)}"))
 
     def _pop_pending(self, default_delay):
         """Pops next pending character and resolves delay."""
@@ -495,6 +537,12 @@ class DrunkenMonkeyInputGenerator:
                 return "e", 0.15, "Watchdog Breakout: 'e' (Editor)"
             elif screen_state == "press_any_key":
                 return " ", 0.15, "Watchdog Breakout: Space"
+            elif screen_state == "plugin_manager":
+                return "q", 0.15, "Watchdog Breakout: 'q' (Plugin Mgr)"
+            elif screen_state == "plugin_config":
+                return "q", 0.15, "Watchdog Breakout: 'q' (Plugin Config)"
+            elif screen_state == "configuration_screen":
+                return "q", 0.15, "Watchdog Breakout: 'q' (Config)"
             else:
                 return "\x1b", 0.15, f"Watchdog Breakout: ESC ({screen_state})"
 
@@ -606,6 +654,41 @@ class DrunkenMonkeyInputGenerator:
         elif screen_state == "press_any_key":
             return " ", delay, "Dismiss Help/Info: Space"
 
+        elif screen_state == "plugin_manager":
+            action = self.rng.choice([
+                ("q", "Plugin Mgr: (Q)uit to Editor"),
+                ("\r", "Plugin Mgr: Enter (Run)"),
+                ("a", "Plugin Mgr: (A)bout"),
+                ("c", "Plugin Mgr: (C)onfig"),
+                ("l", "Plugin Mgr: (L)oad"),
+                ("u", "Plugin Mgr: (U)nload"),
+                (str(self.rng.randint(0, 7)), "Plugin Mgr: Select Slot"),
+            ])
+            d = max(delay, 0.15) if action[0] == "q" else delay
+            return action[0], d, action[1]
+
+        elif screen_state == "unload_plugin_prompt":
+            choice = self.rng.choice(["0", "1", "2", "\x1b"])
+            d = max(delay, 0.15) if choice == "\x1b" else delay
+            return choice, d, f"Unload plugin: {choice}"
+
+        elif screen_state == "plugin_config":
+            choice = self.rng.choice(["1", "2", "3", "4", "q", "\r"])
+            d = max(delay, 0.15) if choice in ("q", "\r") else delay
+            return choice, d, f"Plugin Config: {choice}"
+
+        elif screen_state == "configuration_screen":
+            action = self.rng.choice([
+                ("q", "Config: (Q)uit to Splash"),
+                ("\x1b", "Config: ESC (Return)"),
+                ("2", "Config: Toggle RAM Drive"),
+                ("3", "Config: Toggle Max Lines"),
+                ("4", "Config: Toggle Tab"),
+                ("5", "Config: Toggle Plugin Mgr"),
+            ])
+            d = max(delay, 0.15) if action[0] in ("q", "\x1b") else delay
+            return action[0], d, action[1]
+
         # 3. Default: Editor chaos input distribution
         # 50% printable character
         # 35% control key / navigation
@@ -618,15 +701,14 @@ class DrunkenMonkeyInputGenerator:
             ch, desc = self.rng.choice(self.control_keys)
             return ch, delay, desc
         else:
-            # VT100 arrow key escape sequence: send 1 char at a time!
+            # VT100 arrow key escape sequence: emit atomically as single burst
             arrow = self.rng.choice([
                 ("\x1b[A", "Arrow Up"),
                 ("\x1b[B", "Arrow Down"),
                 ("\x1b[C", "Arrow Right"),
                 ("\x1b[D", "Arrow Left"),
             ])
-            self.queue_arrow_sequence(arrow[0], arrow[1])
-            return self._pop_pending(delay)
+            return arrow[0], delay, arrow[1]
 
 
 class SessionRecorder:
@@ -643,10 +725,14 @@ class SessionRecorder:
         self.events = []
 
     def record_step(self, step, ch, delay, desc, state, screen=None):
+        if len(ch) == 1:
+            hex_str = f"0x{ord(ch):02x}"
+        else:
+            hex_str = " ".join(f"0x{ord(c):02x}" for c in ch)
         entry = {
             "step": step,
             "char": ch,
-            "hex": f"0x{ord(ch):02x}",
+            "hex": hex_str,
             "delay": round(delay, 4),
             "desc": desc,
             "state": state,
@@ -925,7 +1011,10 @@ def run_drunken_monkey_test(
                 )
 
             # Log step
-            hex_code = f"0x{ord(char):02x}"
+            if len(char) == 1:
+                hex_code = f"0x{ord(char):02x}"
+            else:
+                hex_code = " ".join(f"0x{ord(c):02x}" for c in char)
             if verbose or step % 25 == 0 or step == steps:
                 print(f"  [Step {step:4d}/{steps:4d}] "
                       f"Char: {hex_code} ({desc:<26}) "

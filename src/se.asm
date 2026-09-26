@@ -73,6 +73,7 @@ KEY_BACKSPACE	EQU	8
 KEY_TAB		EQU	9
 KEY_ENTER	EQU	13
 KEY_ESC		EQU	27
+ESC_TIMEOUT_LOOPS EQU	5000		; VT100 escape debounce timeout loops (~15-20ms)
 KEY_DEL		EQU	127
 
 SEARCH_BUF_MAX	EQU	64
@@ -1304,7 +1305,7 @@ DSCP_KEY_LOOP:
 
 DSCP_CHECK_ESC:
 	; Check if a character follows ESC within a short timeout
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 DSCP_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,DSCP_DRAIN_ESC
@@ -9335,7 +9336,7 @@ CHECK_KEY_READY:
 ; Drain Escape Sequence: if characters follow ESC within timeout, drain them
 ;------------------------------------------------------------------------------
 DRAIN_ESC_SEQUENCE:
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 DES_WAIT:
 	CALL	CHECK_KEY_READY
 	JR	NZ,DES_DRAIN_FIRST
@@ -9364,7 +9365,7 @@ DES_DRAIN_BYTE:
 
 HANDLE_VT100_ESC:
 	; Check if a character follows ESC within a short timeout
-	LD	BC,1000			; Timeout loop count
+	LD	BC,ESC_TIMEOUT_LOOPS	; Timeout loop count
 WAIT_ESC_BYTE:
 	CALL	CHECK_KEY_READY
 	JR	NZ,GOT_ESC_BYTE
@@ -10488,7 +10489,7 @@ GOTO_UI_PGDN:
 
 GOTO_UI_CHECK_ESC:
 	; Check if a character follows ESC within a short timeout
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 GOTO_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,GOTO_GOT_ESC_SEQ
@@ -10747,7 +10748,7 @@ DFP_PRINT_MODE:
 
 FIND_UI_CHECK_ESC:
 	; Check if escape sequence
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 FIND_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,FIND_GOT_ESC_SEQ
@@ -11678,7 +11679,7 @@ REPLACE_INPUT_BS:
 	JR	REPLACE_INPUT_LOOP
 
 REPLACE_INPUT_CHECK_ESC:
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 REP_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,REP_GOT_ESC_SEQ
@@ -15913,7 +15914,7 @@ DPBI_READ_FAT_CHUNK:
 	LD	(VFS_REQ_CMD),A
 	XOR	A
 	LD	(VFS_REQ_STATUS),A
-	LD	HL,DEFAULT_DMA
+	LD	HL,FAT_CHUNK_BUF
 	LD	(VFS_REQ_BUFFER),HL
 	LD	HL,128
 	LD	(VFS_REQ_BUFSIZE),HL
@@ -15929,7 +15930,7 @@ DPBI_READ_FAT_CHUNK:
 	OR	H
 	JR	Z,DPBI_FAT_EOF
 	LD	B,L			; B = bytes read (1..128)
-	LD	HL,DEFAULT_DMA
+	LD	HL,FAT_CHUNK_BUF
 	JR	DPBI_BYTE_LOOP
 
 DPBI_FAT_EOF:
@@ -16050,13 +16051,18 @@ DPBI_SUFFIX_DONE:
 	LD	(CUR_COL),HL
 	LD	(TARGET_COL),HL
 
-	; Close INSERT_FCB (CP/M only)
+	; Close INSERT_FCB (or FAT stream)
 	LD	A,(BLOCK_INSERT_IS_FAT)
 	OR	A
-	JR	NZ,DPBI_SKIP_FCB_CLOSE
+	JR	NZ,DPBI_CLOSE_FAT
 	LD	DE,INSERT_FCB
 	LD	C,16			; BDOS Close File
 	CALL	BDOS_ENTRY
+	JR	DPBI_SKIP_FCB_CLOSE
+DPBI_CLOSE_FAT:
+	LD	A,7			; VFS_CMD_CLOSE_FILE
+	LD	(VFS_REQ_CMD),A
+	CALL	VFS_EXEC_REQUEST
 DPBI_SKIP_FCB_CLOSE:
 
 	; Mark document modified
@@ -18913,7 +18919,7 @@ CHECK_ESC_KEY:
 	JP	NZ,INPUT_CHECK_PAGE_KEYS
 
 	; Check if character follows ESC within a short timeout
-	LD	BC,1000
+	LD	BC,ESC_TIMEOUT_LOOPS
 INPUT_WAIT_ESC:
 	CALL	CHECK_KEY_READY
 	JR	NZ,INPUT_GOT_ESC_BYTE
@@ -24014,6 +24020,7 @@ VFS_REQ_BUFSIZE:	DW	0		; +8: Buffer capacity
 VFS_REQ_COUNT:		DW	0		; +10: Output count
 VFS_REQ_START_LINE:	DW	0		; +12: Start line for block save
 VFS_REQ_END_LINE:	DW	0		; +14: End line for block save
+FAT_CHUNK_BUF:		DS	128		; FAT stream buffer (Common RAM)
 
 ;==============================================================================
 ; Upper Memory Host API Trampoline & Vector Table
