@@ -50,6 +50,34 @@
     .glow-box {
       box-shadow: 0 0 20px rgba(51, 255, 102, 0.15);
     }
+    .dash-card {
+      background-color: #151c24;
+      border: 1px solid #273544;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      height: 72px;
+      min-height: 72px;
+      max-height: 72px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .card-val {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+    }
+    .crt-display div {
+      height: 1.25em;
+      min-height: 1.25em;
+      max-height: 1.25em;
+      line-height: 1.25em;
+      box-sizing: border-box;
+      white-space: pre;
+    }
   </style>
 </head>
 <body class="p-4 md:p-6 min-h-screen flex flex-col justify-between">
@@ -105,28 +133,32 @@
 
     <!-- Info Dashboard -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-      <div class="bg-[#151c24] border border-[#273544] p-3 rounded-lg">
+      <div class="dash-card">
         <div class="text-slate-400 font-medium">Step Counter</div>
-        <div id="step-label" class="text-base font-bold text-white mt-0.5">
+        <div id="step-label"
+          class="card-val text-base font-bold text-white mt-0.5">
           Step 1
         </div>
       </div>
-      <div class="bg-[#151c24] border border-[#273544] p-3 rounded-lg">
+      <div class="dash-card">
         <div class="text-slate-400 font-medium">Input Sent</div>
-        <div id="key-label" class="text-base font-bold font-mono
-          text-emerald-400 mt-0.5">
+        <div id="key-label"
+          class="card-val text-base font-bold font-mono text-emerald-400 mt-0.5"
+          title="0x00 (None)">
           0x00 (None)
         </div>
       </div>
-      <div class="bg-[#151c24] border border-[#273544] p-3 rounded-lg">
+      <div class="dash-card">
         <div class="text-slate-400 font-medium">Screen State</div>
-        <div id="state-label" class="text-base font-bold text-sky-400 mt-0.5">
+        <div id="state-label"
+          class="card-val text-base font-bold text-sky-400 mt-0.5">
           editor
         </div>
       </div>
-      <div class="bg-[#151c24] border border-[#273544] p-3 rounded-lg">
+      <div class="dash-card">
         <div class="text-slate-400 font-medium">Time Gap / Delay</div>
-        <div id="delay-label" class="text-base font-bold text-amber-400 mt-0.5">
+        <div id="delay-label"
+          class="card-val text-base font-bold text-amber-400 mt-0.5">
           0.000s
         </div>
       </div>
@@ -404,8 +436,12 @@
       const ev = events[idx];
 
       stepLabel.textContent = `Step ${ev.step || (idx + 1)} / ${total}`;
-      keyLabel.textContent = `${ev.hex || "0x00"} (${ev.desc || "N/A"})`;
-      stateLabel.textContent = ev.state || "unknown";
+      const fullKey = `${ev.hex || "0x00"} (${ev.desc || "N/A"})`;
+      keyLabel.textContent = fullKey;
+      keyLabel.title = fullKey;
+      const st = ev.state || "unknown";
+      stateLabel.textContent = st;
+      stateLabel.title = st;
       const delayVal =
         ev.delay !== undefined ? ev.delay.toFixed(3) : "0.000";
       delayLabel.textContent = `${delayVal}s`;
@@ -416,7 +452,14 @@
       document.querySelectorAll("#event-timeline > div").forEach((el, i) => {
         if (i === idx) {
           el.classList.add("bg-emerald-950", "text-emerald-300");
-          el.scrollIntoView({ block: "nearest" });
+          const parent = timelineDiv;
+          if (parent && parent.offsetParent !== null) {
+            const elTop = el.offsetTop - parent.offsetTop;
+            if (elTop < parent.scrollTop ||
+                elTop > parent.scrollTop + parent.clientHeight - 30) {
+              parent.scrollTop = elTop - (parent.clientHeight / 2);
+            }
+          }
         } else {
           el.classList.remove("bg-emerald-950", "text-emerald-300");
         }
@@ -431,7 +474,7 @@
               (line.includes("| ") || line.includes("^K:"))) {
             lineDiv.className = "status-inverted";
           }
-          lineDiv.textContent = line;
+          lineDiv.textContent = line || " ";
           termScreen.appendChild(lineDiv);
         });
       } else {
