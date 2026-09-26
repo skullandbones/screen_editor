@@ -90,6 +90,11 @@ RAMDRV_MODE_PROTECTED	EQU	0	; Preserve RAM disk (banks 0x81..0x88 safe)
 RAMDRV_MODE_ENABLED	EQU	1	; Raw overwrite for maximum RAM buffer
 RAMDRV_MODE_HIBERNATE	EQU	2	; Automatic dump to RAMDRV.IMG & restore on exit
 
+; Plugin Subsystem Modes
+PLUGIN_MODE_DISABLED	EQU	0	; Never load (disabled by user / low RAM)
+PLUGIN_MODE_AUTOLOAD	EQU	1	; Autoload PLUGIN.PRL into Far RAM at boot
+PLUGIN_MODE_ONDEMAND	EQU	2	; Load PLUGIN.PRL on demand when used
+
 RAMDRV_START_BANK	EQU	081H	; RomWBW MD0:0 starts at bank 0x81
 RAMDRV_END_BANK		EQU	088H	; RomWBW MD0:0 ends at bank 0x88 (8 banks, 256KB)
 
@@ -630,47 +635,60 @@ CONFIG_TOGGLE_LINES:
 	JP	CONFIG_LOOP
 
 CONFIG_TOGGLE_PLUGIN:
-	; If currently loaded, always allow toggling to disabled
+	; If currently loaded, Far RAM is already verified
 	LD	A,(PLUGIN_MGR_LOADED)
 	OR	A
-	JR	NZ,CTP_DISABLE
+	JR	NZ,CTP_FAR_OK
 
-	; Currently not loaded: check if Far RAM is available (>= 2 banks)
+	; Not loaded: check Far RAM availability (>= 2 banks)
 	LD	A,(EXT_BANK_COUNT)
 	CP	2
 	JR	NC,CTP_FAR_OK
 
-	; Insufficient Far RAM: autoload is not selectable!
+	; Insufficient Far RAM: Autoload / On Demand not selectable.
 	; User requested: No beeps. Silently keep disabled and ignore.
 	XOR	A
 	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
 	JP	CONFIG_LOOP
 
 CTP_FAR_OK:
-	; Far RAM available. Check current config setting.
+	; Cycle: AUTOLOAD (1) -> ONDEMAND (2) -> DISABLED (0) -> AUTOLOAD (1)
 	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
-	OR	A
-	JR	NZ,CTP_DISABLE
+	CP	PLUGIN_MODE_AUTOLOAD
+	JR	Z,CTP_TO_ONDEMAND
+	CP	PLUGIN_MODE_ONDEMAND
+	JR	Z,CTP_TO_DISABLED
 
-	; Toggle to Autoload (1)
-	LD	A,1
+	; From DISABLED (0) -> AUTOLOAD (1)
+	LD	A,PLUGIN_MODE_AUTOLOAD
 	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
 	CALL	ENSURE_PLUGIN_MGR_LOADED
 	JR	CTP_DONE
 
-CTP_DISABLE:
-	; Toggle to Disabled (0)
+CTP_TO_ONDEMAND:
+	; From AUTOLOAD (1) -> ONDEMAND (2)
+	LD	A,PLUGIN_MODE_ONDEMAND
+	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
+	CALL	CTP_UNLOAD_IF_LOADED
+	JR	CTP_DONE
+
+CTP_TO_DISABLED:
+	; From ONDEMAND (2) -> DISABLED (0)
 	XOR	A
 	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
+	CALL	CTP_UNLOAD_IF_LOADED
+	JR	CTP_DONE
+
+CTP_UNLOAD_IF_LOADED:
 	LD	A,(PLUGIN_MGR_LOADED)
 	OR	A
-	JR	Z,CTP_DONE
-	; Unload and release Far RAM bank back to available pool
+	RET	Z
 	LD	A,(PLUGIN_MGR_BANK)
 	CALL	RELEASE_FAR_BANK
 	XOR	A
 	LD	(PLUGIN_MGR_LOADED),A
 	LD	(PLUGIN_MGR_BANK),A
+	RET
 
 CTP_DONE:
 	CALL	SHOW_CONFIG_SCREEN
@@ -1962,39 +1980,30 @@ RENDER_SPLASH_PLUG_STATUS:
 
 	LD	A,(PLUGIN_MGR_LOADED)
 	OR	A
-	JR	Z,SPLASH_PLUG_NOT_LOADED
+	JR	NZ,SPLASH_PLUG_OPERATIONAL
 
-	; Loaded in Far RAM: print "Far RAM (Bank " + hex + "h, 8K)]"
-	LD	DE,STR_SPLASH_PLUG_FAR
-	CALL	PRINT_STR
-	LD	A,(PLUGIN_MGR_BANK)
-	CALL	PRINT_HEX_BYTE
-	LD	DE,STR_SPLASH_PLUG_POST
-	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
-
-SPLASH_PLUG_NOT_LOADED:
-	; Check if Far RAM is available (EXT_BANK_COUNT >= 2)
+	; Not loaded: check Far RAM availability (EXT_BANK_COUNT >= 2)
 	LD	A,(EXT_BANK_COUNT)
 	CP	2
-	JR	C,SPLASH_PLUG_NO_FAR
+	JR	C,SPLASH_PLUG_DISABLED
 
-	; Check if disabled by configuration
+	; Far RAM is available: check if disabled in config
 	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
 	OR	A
-	JR	NZ,SPLASH_PLUG_IS_MISSING
-	LD	DE,STR_SPLASH_PLUG_DIS_CFG
+	JR	Z,SPLASH_PLUG_DISABLED
+
+	; Subsystem enabled (Autoload/On Demand), but not resident -> On Demand
+	LD	DE,STR_SPLASH_PLUG_ONDEMAND
 	CALL	PRINT_STR
 	JR	RENDER_SPLASH_BOTTOM_PAD
 
-SPLASH_PLUG_IS_MISSING:
-	; Far RAM available, but PLUGIN.PRL missing/not loaded
-	LD	DE,STR_SPLASH_PLUG_MISSING
+SPLASH_PLUG_OPERATIONAL:
+	LD	DE,STR_SPLASH_PLUG_OPERATIONAL
 	CALL	PRINT_STR
 	JR	RENDER_SPLASH_BOTTOM_PAD
 
-SPLASH_PLUG_NO_FAR:
-	LD	DE,STR_SPLASH_PLUG_NOFAR
+SPLASH_PLUG_DISABLED:
+	LD	DE,STR_SPLASH_PLUG_DISABLED
 	CALL	PRINT_STR
 
 RENDER_SPLASH_BOTTOM_PAD:
@@ -2397,23 +2406,30 @@ SCS_PLUG_MODE:
 	LD	DE,STR_CONFIG_PLUG_LBL
 	CALL	PRINT_STR
 
-	; If currently loaded, we know Far RAM is present and Autoload is active
+	; Check Far RAM: if currently loaded, Far RAM was already verified
 	LD	A,(PLUGIN_MGR_LOADED)
 	OR	A
-	JR	NZ,SCS_PLUG_AUTOLOAD
+	JR	NZ,SCS_PLUG_CHECK_MODE
 
 	; Not loaded: check if Far RAM is insufficient (< 2 banks)
 	LD	A,(EXT_BANK_COUNT)
 	CP	2
 	JR	C,SCS_PLUG_NO_FAR
 
-	; Far RAM is available (>= 2 banks)
+SCS_PLUG_CHECK_MODE:
 	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
-	OR	A
-	JR	NZ,SCS_PLUG_AUTOLOAD
+	CP	PLUGIN_MODE_AUTOLOAD
+	JR	Z,SCS_PLUG_AUTOLOAD
+	CP	PLUGIN_MODE_ONDEMAND
+	JR	Z,SCS_PLUG_ONDEMAND
 
 	; Disabled by configuration
 	LD	DE,STR_PLUG_DIS_LBL
+	CALL	PRINT_STR
+	JR	SCS_CMDS_BLOCK
+
+SCS_PLUG_ONDEMAND:
+	LD	DE,STR_PLUG_ONDEMAND_LBL
 	CALL	PRINT_STR
 	JR	SCS_CMDS_BLOCK
 
@@ -2801,6 +2817,13 @@ PMIS_NO_LINE_BANK_0:
 	JR	Z,PMIS_NO_LINE_BANK_1
 	INC	A			; A = 3
 PMIS_NO_LINE_BANK_1:
+	LD	HL,PLUGIN_MGR_LOADED
+	LD	B,(HL)
+	INC	B
+	DEC	B
+	JR	Z,PMIS_NO_PLUG_BANK
+	INC	A
+PMIS_NO_PLUG_BANK:
 	LD	HL,EXT_BANK_COUNT
 	ADD	A,(HL)			; A = total SE 32KB banks
 	LD	L,A
@@ -2923,10 +2946,37 @@ PMBR_EXT_PRINT_ROLE:
 	RET
 
 PMBR_NOT_IN_EXT:
-	; 2. Check if E == LINE_TABLE_BANK (and != 0)
+	; Check if bank is dedicated to PLUGIN.PRL
 	LD	A,(MEM_BANK_LOOP_IDX)
 	ADD	A,080H
 	LD	E,A
+	LD	A,(PLUGIN_MGR_LOADED)
+	OR	A
+	JR	Z,PMBR_CHK_LINE_0
+	LD	A,(PLUGIN_MGR_BANK)
+	CP	E
+	JR	NZ,PMBR_CHK_LINE_0
+
+	; Bank is active PLUGIN.PRL! Determine Role and Usage
+	LD	A,(HBIOS_APP_BANK)
+	CP	E
+	JR	C,PMBR_PLUG_ROLE_APP
+	JR	Z,PMBR_PLUG_ROLE_APP
+	LD	DE,STR_ROLE_RAMDISK
+	JR	PMBR_PLUG_PRINT_ROLE
+PMBR_PLUG_ROLE_APP:
+	LD	DE,STR_ROLE_APP
+PMBR_PLUG_PRINT_ROLE:
+	CALL	PRINT_STR
+	LD	DE,STR_MEM_SPACES_3
+	CALL	PRINT_STR
+	LD	DE,STR_USAGE_PLUGIN_MGR
+	CALL	PRINT_STR
+	CALL	PRINT_CRLF
+	RET
+
+PMBR_CHK_LINE_0:
+	; 2. Check if E == LINE_TABLE_BANK (and != 0)
 	LD	A,(LINE_TABLE_BANK)
 	OR	A
 	JR	Z,PMBR_CHK_LINE_1
@@ -13063,21 +13113,34 @@ PCB_LV_SET_16K:
 
 PCB_PLUGIN_VAL:
 	; HL now points to value after '='
+PCB_PV_WS:
+	LD	A,(HL)
+	CP	' '
+	JR	Z,PCB_PV_WS_INC
+	CP	9
+	JR	NZ,PCB_PV_CHECK
+PCB_PV_WS_INC:
+	INC	HL
+	JR	PCB_PV_WS
+PCB_PV_CHECK:
 	LD	A,(HL)
 	CALL	TO_UPPER
 	CP	'A'			; AUTOLOAD / AUTO
-	JR	Z,PCB_PLUG_SET_ON
+	JR	Z,PCB_PLUG_SET_AUTO
 	CP	'Y'			; YES
-	JR	Z,PCB_PLUG_SET_ON
+	JR	Z,PCB_PLUG_SET_AUTO
 	CP	'1'			; 1
-	JR	Z,PCB_PLUG_SET_ON
+	JR	Z,PCB_PLUG_SET_AUTO
 	CP	'E'			; ENABLE / ENABLED
-	JR	Z,PCB_PLUG_SET_ON
+	JR	Z,PCB_PLUG_SET_AUTO
 	CP	'T'			; TRUE
-	JR	Z,PCB_PLUG_SET_ON
+	JR	Z,PCB_PLUG_SET_AUTO
 
-	CP	'D'			; DISABLED / DISABLE
-	JR	Z,PCB_PLUG_SET_OFF
+	CP	'2'			; 2
+	JR	Z,PCB_PLUG_SET_ONDEMAND
+	CP	'M'			; MANUAL
+	JR	Z,PCB_PLUG_SET_ONDEMAND
+
 	CP	'N'			; NO / NONE
 	JR	Z,PCB_PLUG_SET_OFF
 	CP	'0'			; 0
@@ -13085,21 +13148,42 @@ PCB_PLUGIN_VAL:
 	CP	'F'			; FALSE
 	JR	Z,PCB_PLUG_SET_OFF
 
-	CP	'O'			; ON or OFF?
-	JR	NZ,PCB_PLUG_IGNORE
+	CP	'D'			; DEMAND vs DISABLED
+	JR	Z,PCB_PV_CHK_D
+	CP	'O'			; ONDEMAND vs ON vs OFF
+	JR	Z,PCB_PV_CHK_O
+	JP	PCB_SKIP_LINE
+
+PCB_PV_CHK_D:
 	INC	HL
 	LD	A,(HL)
 	CALL	TO_UPPER
-	CP	'N'			; ON
-	JR	Z,PCB_PLUG_SET_ON
+	CP	'E'			; DEMAND
+	JR	Z,PCB_PLUG_SET_ONDEMAND
+	JR	PCB_PLUG_SET_OFF	; DISABLED / DISABLE / other
+
+PCB_PV_CHK_O:
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
 	CP	'F'			; OFF
 	JR	Z,PCB_PLUG_SET_OFF
+	CP	'N'			; ON or ONDEMAND?
+	JP	NZ,PCB_SKIP_LINE
+	INC	HL
+	LD	A,(HL)
+	CALL	TO_UPPER
+	CP	'D'			; ONDEMAND
+	JR	Z,PCB_PLUG_SET_ONDEMAND
+	JR	PCB_PLUG_SET_AUTO	; ON
 
-PCB_PLUG_IGNORE:
+PCB_PLUG_SET_AUTO:
+	LD	A,PLUGIN_MODE_AUTOLOAD
+	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
 	JP	PCB_SKIP_LINE
 
-PCB_PLUG_SET_ON:
-	LD	A,1
+PCB_PLUG_SET_ONDEMAND:
+	LD	A,PLUGIN_MODE_ONDEMAND
 	LD	(CFG_AUTOLOAD_PLUGIN_MGR),A
 	JP	PCB_SKIP_LINE
 
@@ -13481,11 +13565,16 @@ SC_PUT_LINES:
 	LD	HL,STR_KEY_PLUGIN_FULL
 	CALL	SC_APPEND_STRING
 
-	; Write value: "AUTOLOAD\r\n" or "DISABLED\r\n"
+	; Write value: "AUTOLOAD\r\n", "ONDEMAND\r\n", or "DISABLED\r\n"
 	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
-	OR	A
-	JR	NZ,SC_PLUG_VAL_AUTO
+	CP	PLUGIN_MODE_AUTOLOAD
+	JR	Z,SC_PLUG_VAL_AUTO
+	CP	PLUGIN_MODE_ONDEMAND
+	JR	Z,SC_PLUG_VAL_ONDEMAND
 	LD	HL,STR_VAL_PLUG_DIS
+	JR	SC_PUT_PLUG
+SC_PLUG_VAL_ONDEMAND:
+	LD	HL,STR_VAL_PLUG_ONDEMAND
 	JR	SC_PUT_PLUG
 SC_PLUG_VAL_AUTO:
 	LD	HL,STR_VAL_PLUG_AUTO
@@ -23083,12 +23172,10 @@ STR_SPLASH_RAM_NONE:	DB	"RAM Drive     : [None Detected]",13,10,"$"
 STR_SPLASH_RAM_PRESERV:	DB	"Preserved (Active)]",13,10,"$"
 STR_SPLASH_RAM_OVERWR:	DB	"Overwritten (Max RAM)]",13,10,"$"
 STR_SPLASH_RAM_HIBERN:	DB	"Hibernated (Temp Image)]",13,10,"$"
-STR_SPLASH_PLUG_PRE:	DB	"Plugin System : [", "$"
-STR_SPLASH_PLUG_FAR:	DB	"Far RAM (Bank ", "$"
-STR_SPLASH_PLUG_POST:	DB	"h, 8K)]", 13, 10, "$"
-STR_SPLASH_PLUG_MISSING: DB	"Missing (PLUGIN.PRL)]", 13, 10, "$"
-STR_SPLASH_PLUG_NOFAR:	DB	"Disabled (No Far RAM)]", 13, 10, "$"
-STR_SPLASH_PLUG_DIS_CFG: DB	"Disabled (Config)]", 13, 10, "$"
+STR_SPLASH_PLUG_PRE:		DB	"Plugin System : [", "$"
+STR_SPLASH_PLUG_OPERATIONAL:	DB	"Operational]", 13, 10, "$"
+STR_SPLASH_PLUG_ONDEMAND:	DB	"On Demand]", 13, 10, "$"
+STR_SPLASH_PLUG_DISABLED:	DB	"Disabled]", 13, 10, "$"
 
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
@@ -23115,7 +23202,8 @@ STR_CONFIG_TAB_LBL:	DB	"4. Tab Width       : [", "$"
 STR_TAB_8_LBL:		DB	"8 Spaces (Default)]                ",13,10,"$"
 STR_TAB_4_LBL:		DB	"4 Spaces]                          ",13,10,"$"
 STR_CONFIG_PLUG_LBL:	DB	"5. Plugin Manager  : [", "$"
-STR_PLUG_AUTO_LBL:	DB	"Autoload (Far RAM Bank)]           ",13,10,"$"
+STR_PLUG_AUTO_LBL:	DB	"Autoload (Startup Load)]           ",13,10,"$"
+STR_PLUG_ONDEMAND_LBL:	DB	"On Demand (Load When Used)]        ",13,10,"$"
 STR_PLUG_DIS_LBL:	DB	"Disabled (Do Not Load)]            ",13,10,"$"
 STR_PLUG_NO_FAR_LBL:	DB	"Disabled (No Far RAM)]             ",13,10,"$"
 
@@ -23133,8 +23221,8 @@ STR_CMD_2:		DB	"  type   2                toggle RAM drive memory blocks    ",13
 STR_CMD_3:		DB	"  type   3                toggle Max lines (16K <-> 32K)    ",13,10,"$"
 STR_CMD_4:		DB	"  type   4                toggle Tab width (4 <-> 8)        ",13,10,"$"
 STR_CMD_5:
-	DB	"  type   5                toggle Plugin Mgr (Auto <-> Dis) "
-	DB	13,10,"$"
+	DB	"  type   5                "
+	DB	"toggle Plugin Mgr (Auto/Demand/Dis)",13,10,"$"
 STR_CMD_S:		DB	"  type   s                save config to local SE.CFG       ",13,10,"$"
 STR_CMD_Q:		DB	"  type   q  or  <ESC>     return to splash screen           ",13,10,"$"
 
@@ -23160,6 +23248,7 @@ STR_VAL_LINES_32K:	DB	"32K",13,10,0
 STR_KEY_PLUGIN_NAME:	DB	"PLUGIN",0
 STR_KEY_PLUGIN_FULL:	DB	"PLUGIN=",0
 STR_VAL_PLUG_AUTO:	DB	"AUTOLOAD",13,10,0
+STR_VAL_PLUG_ONDEMAND:	DB	"ONDEMAND",13,10,0
 STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 
 
@@ -23243,6 +23332,7 @@ STR_USAGE_SE_PROG:	DB	"Active: SE Program & Cache  ","$"
 STR_USAGE_LINE_TABLE:	DB	"Active: 16K Line Slot Table ","$"
 STR_USAGE_LINE_TABLE_0:	DB	"Active: Line Slots (0..16K) ","$"
 STR_USAGE_LINE_TABLE_1:	DB	"Active: Line Slots (16K..32K)","$"
+STR_USAGE_PLUGIN_MGR:	DB	"Active: PLUGIN.PRL Subsystem","$"
 STR_USAGE_DOC_PFX:	DB	"Active: Doc Buffer Bank ","$"
 STR_USAGE_DOC_SFX:	DB	"  ","$"
 STR_USAGE_OS:		DB	"Reserved: Operating System  ","$"
@@ -24271,8 +24361,8 @@ AUTO_LOAD_PLUGIN_MGR:
 	RET
 ALPM_CHK_CFG:
 	LD	A,(CFG_AUTOLOAD_PLUGIN_MGR)
-	OR	A
-	RET	Z
+	CP	PLUGIN_MODE_AUTOLOAD
+	RET	NZ
 	CALL	ENSURE_PLUGIN_MGR_LOADED
 	RET
 
