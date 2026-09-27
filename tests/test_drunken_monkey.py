@@ -68,6 +68,7 @@ class VT100QualityMonitor:
         self.c = 0  # 0-indexed col (0..cols-1)
         self.cursor_visible = True
         self.in_buffer = ""
+        self.exiting = False
 
     def feed(self, text):
         """
@@ -311,36 +312,35 @@ class VT100QualityMonitor:
                     f"active but row 0 contains editor text: '{row0_str[:40]}'"
                 )
 
-        # 5. Premature CP/M exit detection:
-        # If SE.COM exits prematurely to CP/M, a console prompt ("C>") or
-        # "file not found" message appears on screen rows.
-        if " file not found" in full_text:
-            raise UnexpectedBehaviourError(
-                "Premature CP/M exit detected: 'file not found' on screen"
-            )
-        has_tildes = any(r[0] == "~" for r in self.buffer)
-        is_se_ui = ("SE - Screen Editor" in full_text or
-                    "SE - Plugin Manager" in full_text or
-                    "SE - Screen Editor Configuration" in full_text)
-        if not has_tildes and not is_se_ui:
-            for r_idx, row in enumerate(self.buffer):
-                row_str = "".join(row).strip()
-                if re.match(r"^[A-P]>", row_str):
-                    raise UnexpectedBehaviourError(
-                        f"Premature CP/M exit detected on row {r_idx}: "
-                        f"'{row_str[:40]}'"
-                    )
-        bottom_row = self.rows - 1
-        bottom_str = "".join(self.buffer[bottom_row])
-        editor_sigs = ("80x24 |", "120x40 |", "^K: Editor keys")
-        if any(sig in bottom_str for sig in editor_sigs):
-            for r_idx in range(bottom_row):
-                row_str = "".join(self.buffer[r_idx]).strip()
-                if re.match(r"^[A-P]>", row_str):
-                    raise UnexpectedBehaviourError(
-                        f"Premature CP/M exit detected on row {r_idx}: "
-                        f"'{row_str[:40]}'"
-                    )
+        # 5. Premature CP/M exit detection (skipped during clean test teardown):
+        if not self.exiting:
+            if " file not found" in full_text:
+                raise UnexpectedBehaviourError(
+                    "Premature CP/M exit detected: 'file not found' on screen"
+                )
+            has_tildes = any(r[0] == "~" for r in self.buffer)
+            is_se_ui = ("SE - Screen Editor" in full_text or
+                        "SE - Plugin Manager" in full_text or
+                        "SE - Screen Editor Configuration" in full_text)
+            if not has_tildes and not is_se_ui:
+                for r_idx, row in enumerate(self.buffer):
+                    row_str = "".join(row).strip()
+                    if re.match(r"^[A-P]>", row_str):
+                        raise UnexpectedBehaviourError(
+                            f"Premature CP/M exit detected on row {r_idx}: "
+                            f"'{row_str[:40]}'"
+                        )
+            bottom_row = self.rows - 1
+            bottom_str = "".join(self.buffer[bottom_row])
+            editor_sigs = ("80x24 |", "120x40 |", "^K: Editor keys")
+            if any(sig in bottom_str for sig in editor_sigs):
+                for r_idx in range(bottom_row):
+                    row_str = "".join(self.buffer[r_idx]).strip()
+                    if re.match(r"^[A-P]>", row_str):
+                        raise UnexpectedBehaviourError(
+                            f"Premature CP/M exit detected on row {r_idx}: "
+                            f"'{row_str[:40]}'"
+                        )
 
     def detect_screen_state(self):
         """
@@ -1107,11 +1107,13 @@ def run_drunken_monkey_test(
 
         # 4. Clean exit back to CP/M
         print("[*] Performing clean exit with Ctrl+Q...", flush=True)
+        monitor.exiting = True
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl+Q
         time.sleep(0.2)
         exit_chunk = read_available(master, timeout=0.2)
-        monitor.feed(exit_chunk.decode("latin1", errors="replace"))
+        if exit_chunk:
+            monitor.feed(exit_chunk.decode("latin1", errors="replace"))
 
         # If prompted with "Save changes?", answer 'n'
         full_screen = "".join("".join(r) for r in monitor.buffer)
@@ -1121,7 +1123,7 @@ def run_drunken_monkey_test(
             time.sleep(0.2)
 
         final_chunk = read_until(master, b"C>", timeout=5.0)
-        if b"C>" in final_chunk:
+        if b"C>" in final_chunk or (exit_chunk and b"C>" in exit_chunk):
             print("[+] Clean exit to CP/M prompt (C>) verified.", flush=True)
         else:
             print("[*] Test concluded (CP/M prompt returned).", flush=True)
