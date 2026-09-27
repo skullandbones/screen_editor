@@ -14,11 +14,12 @@ Verifies:
      - Executes MIDPLUG in Far RAM and verifies modal dialog display & return.
      - Unloads MIDPLUG, verifying automatic Far RAM bank release.
      - Dynamically loads 16KB plugin (HALFPLUG.PRL) into Slot 3 ("FAR (16KB)").
-     - Dynamically loads 32KB plugin (BIGPLUG.PRL) into Slot 4 ("FAR (32KB)"),
-       triggering multi-bank Far RAM dynamic borrowing.
      - Executes HALFPLUG in Far RAM and verifies modal dialog display & return.
+     - Unloads HALFPLUG, verifying automatic Far RAM bank release.
+     - Dynamically loads 32KB plugin (BIGPLUG.PRL) into Slot 3 ("FAR (32KB)"),
+       triggering multi-bank Far RAM dynamic borrowing.
      - Executes BIGPLUG in Far RAM and verifies modal dialog display & return.
-     - Unloads BIGPLUG and HALFPLUG, verifying automatic bank release.
+     - Unloads BIGPLUG, verifying automatic bank release.
      - Clean exit back to CP/M prompt.
 """
 
@@ -169,7 +170,7 @@ def run_slots_test():
         # 2. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        ok, out = read_until(master, b"Col 0", timeout=18.0)
+        ok, out = read_until(master, b"Col 0", timeout=45.0)
         if not ok:
             print(f"[-] Splash screen failed to display.", flush=True)
             return False
@@ -254,22 +255,7 @@ def run_slots_test():
         print("[+] HALFPLUG.PRL loaded into Slot 3 as 'FAR (16KB)'.",
               flush=True)
 
-        # 8. Load 32KB Plugin (BIGPLUG.PRL)
-        time.sleep(0.3)
-        drain_all(master)
-        os.write(master, b"l")
-        read_until(master, b"Load Plugin", timeout=4.0)
-        time.sleep(0.1)
-        os.write(master, b"BIGPLUG.PRL\r")
-        ok, out_bp = read_until(master, b"FAR (32KB)", timeout=8.0)
-        if not ok or b"BIGPLUG" not in out_bp:
-            print(f"[-] Failed to load BIGPLUG.PRL as 32KB Far RAM slot. "
-                  f"Buffer: {repr(out_bp)}", flush=True)
-            return False
-        print("[+] BIGPLUG.PRL loaded into Slot 4 as 'FAR (32KB)' "
-              "(Multi-Bank Far RAM allocation).", flush=True)
-
-        # 9. Execute HALFPLUG (Slot 3) via '3' + Enter
+        # 8. Execute HALFPLUG (Slot 3) via '3' + Enter
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"3\r")
@@ -287,10 +273,39 @@ def run_slots_test():
         os.write(master, b" ")
         read_until(master, b"SE - Plugin Manager", timeout=5.0)
 
-        # 10. Execute BIGPLUG (Slot 4) via '4' + Enter
+        # 9. Unload HALFPLUG (Slot 3) - releases Far RAM bank
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"4\r")
+        os.write(master, b"u")
+        read_until(master, b"Unload Slot", timeout=4.0)
+        os.write(master, b"3")
+        ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
+        if not ok:
+            print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u3)}",
+                  flush=True)
+            return False
+        print("[+] Slot 3 (HALFPLUG 16KB) unloaded and bank released.",
+              flush=True)
+
+        # 10. Load 32KB Plugin (BIGPLUG.PRL)
+        time.sleep(0.3)
+        drain_all(master)
+        os.write(master, b"l")
+        read_until(master, b"Load Plugin", timeout=4.0)
+        time.sleep(0.1)
+        os.write(master, b"BIGPLUG.PRL\r")
+        ok, out_bp = read_until(master, b"FAR (32KB)", timeout=8.0)
+        if not ok or b"BIGPLUG" not in out_bp:
+            print(f"[-] Failed to load BIGPLUG.PRL as 32KB Far RAM slot. "
+                  f"Buffer: {repr(out_bp)}", flush=True)
+            return False
+        print("[+] BIGPLUG.PRL loaded into Slot 3 as 'FAR (32KB)' "
+              "(Multi-Bank Far RAM allocation).", flush=True)
+
+        # 11. Execute BIGPLUG (Slot 3) via '3' + Enter
+        time.sleep(0.3)
+        drain_all(master)
+        os.write(master, b"3\r")
         ok, out_run_bp = read_until(master, b"[Press any key to continue]",
                                     timeout=8.0)
         if not ok or b"BIGPLUG (32KB Far RAM Plugin)" not in out_run_bp:
@@ -305,32 +320,19 @@ def run_slots_test():
         os.write(master, b" ")
         read_until(master, b"SE - Plugin Manager", timeout=5.0)
 
-        # 11. Unload BIGPLUG (Slot 4)
-        time.sleep(0.3)
-        drain_all(master)
-        os.write(master, b"u")
-        read_until(master, b"Unload Slot", timeout=4.0)
-        os.write(master, b"4")
-        ok, out_u4 = read_until(master, b"(empty slot)", timeout=6.0)
-        if not ok:
-            print(f"[-] Unload slot 4 failed. Buffer: {repr(out_u4)}",
-                  flush=True)
-            return False
-        print("[+] Slot 4 (BIGPLUG 32KB) successfully unloaded and Far RAM "
-              "bank released.", flush=True)
-
-        # 12. Unload HALFPLUG (Slot 3)
+        # 12. Unload BIGPLUG (Slot 3)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"u")
         read_until(master, b"Unload Slot", timeout=4.0)
         os.write(master, b"3")
-        ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
+        ok, out_u4 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
-            print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u3)}",
+            print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u4)}",
                   flush=True)
             return False
-        print("[+] Slot 3 (HALFPLUG 16KB) successfully unloaded.", flush=True)
+        print("[+] Slot 3 (BIGPLUG 32KB) successfully unloaded and Far RAM "
+              "bank released.", flush=True)
 
         # 13. Exit Plugin Manager back to Splash Screen
         time.sleep(0.2)

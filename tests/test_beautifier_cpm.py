@@ -125,10 +125,16 @@ def get_file_from_image(cpmcp_bin, img_file, cpm_filename):
     tmp_path = f"/tmp/GET_{cpm_filename}"
     if os.path.exists(tmp_path):
         os.remove(tmp_path)
-    res = subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, f"0:{cpm_filename}", tmp_path],
+    res = subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                          f"0:{cpm_filename}", tmp_path],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if res.returncode != 0 or not os.path.exists(tmp_path):
-        return None
+        res = subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                              f"0:{cpm_filename.lower()}", tmp_path],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        if res.returncode != 0 or not os.path.exists(tmp_path):
+            return None
     with open(tmp_path, "rb") as f:
         data = f.read()
     os.remove(tmp_path)
