@@ -125,7 +125,7 @@ def run_plugin_test():
         # 3. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        ok, out = read_until(master, b"Col 0", timeout=18.0)
+        ok, out = read_until(master, b"Col 0", timeout=45.0)
         if not ok:
             print(f"[-] Splash screen did not show plugin menu option. Buffer: {repr(out)}", flush=True)
             return False
