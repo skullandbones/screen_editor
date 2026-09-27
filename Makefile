@@ -14,8 +14,8 @@ ASM_SRC = src/se.asm
 .PHONY: all plugins image check-tpa check-plugins check-lines test \
 	test-sanity test-conformity test-paging test-config test-32k \
 	test-cpm3 test-plugins test-beautifier test-popup test-slots \
-	test-fatfs test-fatfs-slot test-fatfs-vfs test-fatfs-hook \
-	test-full clean
+	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
+	test-fatfs-hook test-full clean
 
 all: $(TARGET) plugins
 
@@ -135,6 +135,10 @@ test-slots: image
 	@echo "==> Running SE.COM modular plugin slots (4K/16K/32K) test suite..."
 	python3 tests/test_plugin_slots.py
 
+test-plugin-cfg: image
+	@echo "==> Running SE.COM PLUGIN.CFG save & autoload test suite..."
+	python3 tests/test_plugin_cfg_save_reload.py
+
 test-fatfs:
 	@echo "==> Running FATFS plugin build and structure test suite..."
 	python3 tests/test_fatfs_plugin.py
@@ -161,8 +165,8 @@ view-monkey:
 		$(or $(SESSION),tests/monkey_session_sample.json)
 
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
-	test-beautifier test-popup test-slots test-fatfs test-fatfs-slot \
-	test-fatfs-vfs test-fatfs-hook test-paging test-monkey
+	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
+	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-paging test-monkey
 
 clean:
 	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \
