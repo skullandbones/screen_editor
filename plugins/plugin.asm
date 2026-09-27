@@ -40,6 +40,12 @@ DO_AUTOLOAD_PLUGINS:
 	CALL	INIT_HOST_API
 	RET	C
 
+	LD	A,(AUTOLOAD_DONE)
+	OR	A
+	RET	NZ
+	LD	A,1
+	LD	(AUTOLOAD_DONE),A
+
 	; Guarantee null sentinel at end of buffer
 	XOR	A
 	LD	(CFG_BUF_SENTINEL),A
@@ -47,7 +53,124 @@ DO_AUTOLOAD_PLUGINS:
 	; Call HOST_LOAD_PLUGIN_CFG with DE = PLUGIN_CFG_BUF
 	LD	DE,PLUGIN_CFG_BUF
 	CALL	HOST_LOAD_PLUGIN_CFG
-	RET
+	RET	C			; If file not found or read error, done
+
+	; Parse lines in PLUGIN_CFG_BUF
+	LD	HL,PLUGIN_CFG_BUF
+	JR	DAP_LINE_LOOP
+
+DAP_SKIP_CHAR:
+	INC	HL
+DAP_LINE_LOOP:
+	LD	A,(HL)
+	OR	A
+	RET	Z			; Null byte = end of buffer
+	CP	1AH
+	RET	Z			; CP/M EOF = end of buffer
+	CP	13			; CR
+	JR	Z,DAP_SKIP_CHAR
+	CP	10			; LF
+	JR	Z,DAP_SKIP_CHAR
+	CP	' '
+	JR	Z,DAP_SKIP_CHAR
+	CP	9			; Tab
+	JR	Z,DAP_SKIP_CHAR
+
+	; Check if line begins with "SLOT" or "slot"
+	CP	'S'
+	JR	Z,DAP_CHECK_SLOT
+	CP	's'
+	JR	NZ,DAP_PARSE_NAME
+
+DAP_CHECK_SLOT:
+	PUSH	HL			; Save line start
+	INC	HL
+	LD	A,(HL)
+	CP	'L'
+	JR	Z,DAP_CS_1
+	CP	'l'
+	JR	NZ,DAP_NOT_SLOT
+DAP_CS_1:
+	INC	HL
+	LD	A,(HL)
+	CP	'O'
+	JR	Z,DAP_CS_2
+	CP	'o'
+	JR	NZ,DAP_NOT_SLOT
+DAP_CS_2:
+	INC	HL
+	LD	A,(HL)
+	CP	'T'
+	JR	Z,DAP_CS_3
+	CP	't'
+	JR	NZ,DAP_NOT_SLOT
+DAP_CS_3:
+	INC	HL
+	; Optional slot digit '0'..'7'
+	LD	A,(HL)
+	CP	'0'
+	JR	C,DAP_CS_EQ
+	CP	'8'
+	JR	NC,DAP_CS_EQ
+	INC	HL
+DAP_CS_EQ:
+	LD	A,(HL)
+	CP	'='
+	JR	NZ,DAP_NOT_SLOT
+	INC	HL			; Skip '='
+	POP	AF			; Discard saved line start
+	JP	DAP_LINE_LOOP
+
+DAP_NOT_SLOT:
+	POP	HL			; Restore line start
+
+DAP_PARSE_NAME:
+	; HL points to start of plugin filename
+	LD	A,(HL)
+	CP	13
+	JR	Z,DAP_SKIP_CHAR
+	CP	10
+	JR	Z,DAP_SKIP_CHAR
+	CP	1AH
+	RET	Z
+	OR	A
+	RET	Z
+
+	; Non-empty filename found! DE = HL
+	LD	DE,HL
+DAP_SCAN_NAME_END:
+	LD	A,(HL)
+	OR	A
+	JR	Z,DAP_NAME_DELIM
+	CP	1AH
+	JR	Z,DAP_NAME_DELIM
+	CP	13
+	JR	Z,DAP_NAME_DELIM
+	CP	10
+	JR	Z,DAP_NAME_DELIM
+	CP	' '
+	JR	Z,DAP_NAME_DELIM
+	CP	9
+	JR	Z,DAP_NAME_DELIM
+	INC	HL
+	JR	DAP_SCAN_NAME_END
+
+DAP_NAME_DELIM:
+	LD	B,(HL)
+	XOR	A
+	LD	(HL),A			; Null-terminate filename
+	LD	A,B
+	OR	A
+	JR	Z,DAP_LOAD_ENTRY
+	CP	1AH
+	JR	Z,DAP_LOAD_ENTRY
+	INC	HL
+
+DAP_LOAD_ENTRY:
+	PUSH	HL			; Preserve buffer pointer
+	CALL	HOST_LOAD_PLUGIN	; DE = filename
+	POP	HL
+	JP	DAP_LINE_LOOP
 
 DO_SAVE_PLUGIN_CFG:
 	; Clear local PLUGIN_CFG_BUF (128 bytes) with 1AH (EOF)
@@ -1850,6 +1973,7 @@ STR_CAP_MODAL_FAR:	DB	"Modal, Far     ", 0
 STR_CAP_MUTATE_TPA:	DB	"Mutate, TPA    ", 0
 STR_CAP_DEFAULT:	DB	"Standard       ", 0
 STR_PLUG_STAT_READY:	DB	"[Ready] ", 0
+AUTOLOAD_DONE:		DB	0
 
 ;==============================================================================
 ; Uninitialized Variables (BSS - zero binary footprint, defined via EQU)
