@@ -713,13 +713,14 @@ class DrunkenMonkeyInputGenerator:
 
 class SessionRecorder:
     """Records key sequences and time gaps to JSON for deterministic replay."""
-    def __init__(self, mode="80x24", seed=None):
+    def __init__(self, mode="80x24", seed=None, base_image=None):
         self.metadata = {
             "version": 1,
             "suite": "drunken_monkey",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "screen_mode": mode,
             "seed": seed,
+            "base_image": base_image or "hd1k_golden.img",
             "total_steps": 0,
         }
         self.events = []
@@ -785,9 +786,13 @@ def find_paths():
     rom_file = os.path.join(
         workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
     )
-    img_file = os.path.join(
+    golden_img = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Binary", "hd1k_golden.img"
+    )
+    combo_img = os.path.join(
         workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
     )
+    img_file = golden_img if os.path.isfile(golden_img) else combo_img
     se_bin = os.path.join(repo_root, "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
@@ -843,6 +848,7 @@ def run_drunken_monkey_test(
     verbose=False,
     show_grabs=True,
     grab_interval=10,
+    keep_disk=False,
 ):
     """
     Main runner for the Drunken Monkey Test.
@@ -869,11 +875,34 @@ def run_drunken_monkey_test(
             print(f"[-] Required {name} not found: {p}", flush=True)
             return False
 
-    # Sync latest SE.COM onto disk image drive C:
+    # Create ephemeral isolated copy of the disk image to ensure
+    # 100% deterministic initial state and eliminate cross-agent race conditions
+    ephemeral_img = os.path.join(
+        "/tmp", f"monkey_disk_{os.getpid()}_{int(time.time() * 1000)}.img"
+    )
+    try:
+        subprocess.run(
+            ["cp", "--reflink=auto", "--sparse=always", img_file,
+             ephemeral_img],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        os.chmod(ephemeral_img, 0o644)
+    except Exception as e:
+        print(f"[-] Failed to create ephemeral disk image: {e}", flush=True)
+        return False
+
+    base_name = os.path.basename(img_file)
+    print(f"[*] Ephemeral disk initialized from {base_name}: {ephemeral_img}",
+          flush=True)
+
+    # Sync latest SE.COM onto ephemeral disk image drive C:
     if os.path.isfile(cpmcp_bin):
         try:
             subprocess.run(
-                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+                [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img, se_bin,
+                 "0:SE.COM"],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -894,7 +923,8 @@ def run_drunken_monkey_test(
         steps = replayer.total_steps
     else:
         if record_file:
-            recorder = SessionRecorder(mode=mode, seed=seed)
+            recorder = SessionRecorder(mode=mode, seed=seed,
+                                       base_image=base_name)
         generator = DrunkenMonkeyInputGenerator(mode=mode, seed=seed)
 
     # Spawn emulator process over PTY
@@ -902,7 +932,7 @@ def run_drunken_monkey_test(
     tty.setraw(slave)
     os.set_blocking(master, False)
 
-    cmd = [emu_bin, "-b", "-r", rom_file, "-1", "-S", img_file]
+    cmd = [emu_bin, "-b", "-r", rom_file, "-1", "-S", ephemeral_img]
     proc = subprocess.Popen(
         cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True
     )
@@ -1086,6 +1116,19 @@ def run_drunken_monkey_test(
             recorder.save(fail_file)
             print(f"[*] Partial session saved to {fail_file} for replay.",
                   flush=True)
+            fail_disk = record_file + ".failure.disk.img"
+            try:
+                subprocess.run(
+                    ["cp", "--reflink=auto", "--sparse=always", ephemeral_img,
+                     fail_disk],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                print(f"[*] Failure disk snapshot saved to {fail_disk}",
+                      flush=True)
+            except Exception as e:
+                print(f"[-] Could not archive failure disk: {e}", flush=True)
         return False
 
     finally:
@@ -1099,6 +1142,11 @@ def run_drunken_monkey_test(
                 proc.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
                 proc.kill()
+        if not keep_disk and os.path.isfile(ephemeral_img):
+            try:
+                os.remove(ephemeral_img)
+            except OSError:
+                pass
 
 
 def main():
@@ -1146,6 +1194,10 @@ def main():
         help="Interval in steps between screen grabs (default: 10)"
     )
     parser.add_argument(
+        "--keep-disk", action="store_true", default=False,
+        help="Preserve ephemeral virtual disk image after test completion"
+    )
+    parser.add_argument(
         "--view", nargs="?", const="tests/monkey_session_sample.json",
         default=None,
         help="Launch interactive HTML session viewer (default: sample session)"
@@ -1188,6 +1240,7 @@ def main():
         verbose=args.verbose,
         show_grabs=args.show_grabs,
         grab_interval=args.grab_interval,
+        keep_disk=args.keep_disk,
     )
 
     sys.exit(0 if success else 1)
