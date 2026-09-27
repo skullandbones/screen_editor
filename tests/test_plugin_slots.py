@@ -208,13 +208,13 @@ def run_slots_test():
         print("[+] MIDPLUG.PRL successfully loaded into Slot 3 as 'FAR (8KB)'.",
               flush=True)
 
-        # 5. Execute MIDPLUG (Slot 3) via '3' + Enter
+        # 5. View MIDPLUG About (Slot 3) via 'a'
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"3\r")
-        ok, out_run_mp = read_until(master, b"[Press any key to continue]",
+        os.write(master, b"a")
+        ok, out_run_mp = read_until(master, b"[Press any key to return]",
                                     timeout=8.0)
-        if not ok or b"MIDPLUG (8KB Far RAM Plugin)" not in out_run_mp:
+        if not ok or b"MIDPLUG 8KB Reference Plugin" not in out_run_mp:
             print(f"[-] MIDPLUG modal dialog failed to execute. "
                   f"Buffer: {repr(out_run_mp)}", flush=True)
             return False
@@ -229,13 +229,13 @@ def run_slots_test():
         # 6. Unload MIDPLUG (Slot 3) - releases Far RAM bank via modal pop-up
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"u")
-        ok, out_pop = read_until(master, b"Unload Slot (0..7):", timeout=4.0)
+        os.write(master, b"\r")
+        ok, out_pop = read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
         assert ok, "Unload modal popup prompt missing"
         assert b"Unload Plugin" in out_pop, "Unload modal popup title missing"
         border_line = b"+------------------------------------------------+"
         assert border_line in out_pop, "Unload modal popup border missing"
-        os.write(master, b"3")
+        os.write(master, b"y")
         ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
             print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u3)}",
@@ -259,13 +259,13 @@ def run_slots_test():
         print("[+] HALFPLUG.PRL loaded into Slot 3 as 'FAR (16KB)'.",
               flush=True)
 
-        # 8. Execute HALFPLUG (Slot 3) via '3' + Enter
+        # 8. View HALFPLUG About (Slot 3) via cursor and 'a'
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"3\r")
-        ok, out_run_hp = read_until(master, b"[Press any key to continue]",
+        os.write(master, b"a")
+        ok, out_run_hp = read_until(master, b"[Press any key to return]",
                                     timeout=8.0)
-        if not ok or b"HALFPLUG (16KB Far RAM Plugin)" not in out_run_hp:
+        if not ok or b"HALFPLUG 16KB Reference Plugin" not in out_run_hp:
             print(f"[-] HALFPLUG modal dialog failed to execute. "
                   f"Buffer: {repr(out_run_hp)}", flush=True)
             return False
@@ -280,9 +280,9 @@ def run_slots_test():
         # 9. Unload HALFPLUG (Slot 3) - releases Far RAM bank
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"u")
-        read_until(master, b"Unload Slot", timeout=4.0)
         os.write(master, b"3")
+        read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        os.write(master, b"y")
         ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
             print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u3)}",
@@ -306,13 +306,13 @@ def run_slots_test():
         print("[+] BIGPLUG.PRL loaded into Slot 3 as 'FAR (32KB)' "
               "(Multi-Bank Far RAM allocation).", flush=True)
 
-        # 11. Execute BIGPLUG (Slot 3) via '3' + Enter
+        # 11. View BIGPLUG About (Slot 3) via 'a'
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"3\r")
-        ok, out_run_bp = read_until(master, b"[Press any key to continue]",
+        os.write(master, b"a")
+        ok, out_run_bp = read_until(master, b"[Press any key to return]",
                                     timeout=8.0)
-        if not ok or b"BIGPLUG (32KB Far RAM Plugin)" not in out_run_bp:
+        if not ok or b"BIGPLUG 32KB Reference Plugin" not in out_run_bp:
             print(f"[-] BIGPLUG modal dialog failed to execute. "
                   f"Buffer: {repr(out_run_bp)}", flush=True)
             return False
@@ -327,9 +327,9 @@ def run_slots_test():
         # 12. Unload BIGPLUG (Slot 3)
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"u")
-        read_until(master, b"Unload Slot", timeout=4.0)
-        os.write(master, b"3")
+        os.write(master, b"\r")
+        read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        os.write(master, b"y")
         ok, out_u4 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
             print(f"[-] Unload slot 3 failed. Buffer: {repr(out_u4)}",

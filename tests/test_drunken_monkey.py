@@ -367,7 +367,8 @@ class VT100QualityMonitor:
             return "insert_file_prompt"
         if "Load Plugin (.PRL/.OVL):" in full_text:
             return "load_plugin_prompt"
-        if "Unload Slot (0..7):" in full_text:
+        if (("Unload Slot " in full_text and "[Y/N]" in full_text) or
+                "Unload Slot (0..7):" in full_text):
             return "unload_plugin_prompt"
         if "Goto line:" in full_text:
             return "goto_line_prompt"
@@ -392,7 +393,8 @@ class VT100QualityMonitor:
                 ("Active Screen:" in full_text or "type   e" in full_text)):
             return "splash_screen"
         if ("SE - Plugin Manager" in full_text or
-                "0..7:select" in full_text):
+                "0..7:select" in full_text or
+                "Up/Dn:select" in full_text):
             return "plugin_manager"
         if ("^K: Editor keys" in full_text or
                 "^V: Overwrite" in full_text or
@@ -667,20 +669,23 @@ class DrunkenMonkeyInputGenerator:
         elif screen_state == "plugin_manager":
             action = self.rng.choice([
                 ("q", "Plugin Mgr: (Q)uit to Editor"),
-                ("\r", "Plugin Mgr: Enter (Run)"),
+                ("\r", "Plugin Mgr: Enter (Load/Unload)"),
                 ("a", "Plugin Mgr: (A)bout"),
                 ("c", "Plugin Mgr: (C)onfig"),
                 ("l", "Plugin Mgr: (L)oad"),
                 ("u", "Plugin Mgr: (U)nload"),
-                (str(self.rng.randint(0, 7)), "Plugin Mgr: Select Slot"),
+                ("s", "Plugin Mgr: (S)ave Config"),
+                ("j", "Plugin Mgr: Down"),
+                ("k", "Plugin Mgr: Up"),
+                (str(self.rng.randint(0, 7)), "Plugin Mgr: Slot Action"),
             ])
             d = max(delay, 0.15) if action[0] == "q" else delay
             return action[0], d, action[1]
 
         elif screen_state == "unload_plugin_prompt":
-            choice = self.rng.choice(["0", "1", "2", "\x1b"])
-            d = max(delay, 0.15) if choice == "\x1b" else delay
-            return choice, d, f"Unload plugin: {choice}"
+            choice = self.rng.choice(["y", "n", "\r", "\x1b", "q"])
+            d = max(delay, 0.15) if choice in ("\x1b", "q") else delay
+            return choice, d, f"Unload plugin confirm: {choice}"
 
         elif screen_state == "plugin_config":
             choice = self.rng.choice(["1", "2", "3", "4", "q", "\r"])

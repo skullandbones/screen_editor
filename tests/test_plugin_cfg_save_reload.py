@@ -176,9 +176,10 @@ def run_test():
         # 3. Unload Slot 1 (ROT13)
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"u")
-        read_until(master, b"Unload Slot", timeout=4.0)
         os.write(master, b"1")
+        ok, out_pop = read_until(master, b"Unload Slot 1? [Y/N]", timeout=4.0)
+        assert ok, "Unload confirmation prompt missing"
+        os.write(master, b"y")
         ok, out_u = read_until(master, b"(empty slot)", timeout=6.0)
         assert ok, "Failed to unload Slot 1"
         print("[+] Slot 1 (ROT13) successfully unloaded.", flush=True)
@@ -213,7 +214,7 @@ def run_test():
         # 6. Dismiss pop-up with Space, verify clean redraw, then exit ('q')
         time.sleep(0.2)
         os.write(master, b" ")
-        ok, _ = read_until(master, b"0..7:select", timeout=5.0)
+        ok, _ = read_until(master, b"Up/Dn:select", timeout=5.0)
         assert ok, "Failed to redraw Plugin Manager upon modal dismissal"
         time.sleep(0.2)
         os.write(master, b"q")

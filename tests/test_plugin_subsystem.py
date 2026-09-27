@@ -155,30 +155,37 @@ def run_plugin_test():
             return False
         print("[+] Far RAM dynamic bank borrowing verified.", flush=True)
 
-        # 5. Execute WORDCNT.OVL in Far RAM by typing '0' + Enter
+        # 5. View WORDCNT.OVL About screen via 'a'
         time.sleep(0.3)
-        os.write(master, b"0\r")
-        ok, out_wc = read_until(master, b"[Press any key to continue]", timeout=8.0)
-        if not ok or b"Total Lines" not in out_wc or b"Total Words" not in out_wc:
-            print(f"[-] WORDCNT modal dialog failed to display. Buffer: {repr(out_wc)}", flush=True)
+        os.write(master, b"a")
+        ok, out_wc = read_until(master,
+                                b"Word & Character Count Plugin",
+                                timeout=8.0)
+        if not ok:
+            print(f"[-] WORDCNT About dialog failed to display. "
+                  f"Buffer: {repr(out_wc)}", flush=True)
             return False
-        print("[+] WORDCNT.OVL executed in Far RAM; modal statistics dialog displayed.", flush=True)
+        print("[+] WORDCNT.OVL About modal dialog verified.", flush=True)
 
-        # Dismiss WORDCNT dialog with Space / Enter
+        # Dismiss WORDCNT dialog with Space
         time.sleep(0.2)
         os.write(master, b" ")
         ok, out_ret = read_until(master, b"SE - Plugin Manager", timeout=5.0)
         if not ok:
-            print(f"[-] Failed to return to Plugin Manager after WORDCNT dialog. Buffer: {repr(out_ret)}", flush=True)
+            print(f"[-] Failed to return to Plugin Manager. "
+                  f"Buffer: {repr(out_ret)}", flush=True)
             return False
         print("[+] Returned cleanly to Plugin Manager.", flush=True)
 
         # 6. Exit Plugin Manager ('q') back to Splash Screen
         time.sleep(0.2)
         os.write(master, b"q")
-        ok, out_splash = read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
+        ok, out_splash = read_until(master,
+                                    b"type   e  or  <Enter>   to edit",
+                                    timeout=5.0)
         if not ok:
-            print(f"[-] Return to splash screen failed. Buffer: {repr(out_splash)}", flush=True)
+            print(f"[-] Return to splash screen failed. "
+                  f"Buffer: {repr(out_splash)}", flush=True)
             return False
         print("[+] Exited Plugin Manager back to Splash Screen.", flush=True)
 
@@ -187,7 +194,8 @@ def run_plugin_test():
         os.write(master, b"e")
         ok, out_edit = read_until(master, b"^K: Editor keys", timeout=5.0)
         if not ok:
-            print(f"[-] Failed to enter editor mode. Buffer: {repr(out_edit)}", flush=True)
+            print(f"[-] Failed to enter editor mode. Buffer: {repr(out_edit)}",
+                  flush=True)
             return False
         print("[+] Entered editor mode.", flush=True)
 
@@ -196,27 +204,31 @@ def run_plugin_test():
         os.write(master, b"HELLO WORLD")
         ok, out_hw = read_until(master, b"HELLO WORLD", timeout=4.0)
         if not ok:
-            print(f"[-] Failed to type text in editor. Buffer: {repr(out_hw)}", flush=True)
+            print(f"[-] Failed to type text in editor. Buffer: {repr(out_hw)}",
+                  flush=True)
             return False
         print("[+] Typed 'HELLO WORLD' into editor line.", flush=True)
 
-        # 8. Open Plugin Manager from Editor via Ctrl+Z (0x1A)
+        # 8. Open Context Pop-up from Editor via Ctrl+P (0x10)
         time.sleep(0.2)
-        os.write(master, b"\x1a")
-        ok, out_pm2 = read_until(master, b"SE - Plugin Manager", timeout=5.0)
+        os.write(master, b"\x10")
+        ok, out_pop1 = read_until(master, b"Plugins for Editor", timeout=5.0)
         if not ok:
-            print(f"[-] Ctrl+Z failed to open Plugin Manager from editor. Buffer: {repr(out_pm2)}", flush=True)
+            print(f"[-] Ctrl+P failed to open Context Pop-up. "
+                  f"Buffer: {repr(out_pop1)}", flush=True)
             return False
-        print("[+] Ctrl+Z opened Plugin Manager from editor.", flush=True)
+        print("[+] Ctrl+P opened Context Pop-up from editor.", flush=True)
 
         # 9. Execute ROT13.PRL in TPA slot by typing '1' + Enter
         time.sleep(0.2)
         os.write(master, b"1\r")
         ok, out_rot = read_until(master, b"[ROT13 Applied]", timeout=8.0)
         if not ok or b"URYYB JBEYQ" not in out_rot:
-            print(f"[-] ROT13 transformation failed. Buffer: {repr(out_rot)}", flush=True)
+            print(f"[-] ROT13 transformation failed. Buffer: {repr(out_rot)}",
+                  flush=True)
             return False
-        print("[+] ROT13 executed in TPA slot with PRL relocation: transformed to 'URYYB JBEYQ' and set status message.", flush=True)
+        print("[+] ROT13 executed in TPA slot with PRL relocation: "
+              "transformed to 'URYYB JBEYQ'.", flush=True)
 
         # Verify keypress clears status message
         time.sleep(0.2)
@@ -224,22 +236,26 @@ def run_plugin_test():
         os.write(master, b"!")
         ok, out_clr = read_until(master, b"^K: Editor keys", timeout=6.0)
         if not ok or b"[ROT13 Applied]" in out_clr:
-            print(f"[-] Status message was not cleared on keypress. Buffer: {repr(out_clr)}", flush=True)
+            print(f"[-] Status message was not cleared on keypress. "
+                  f"Buffer: {repr(out_clr)}", flush=True)
             return False
-        print("[+] Status bar message cleared on subsequent keypress.", flush=True)
+        print("[+] Status bar message cleared on subsequent keypress.",
+              flush=True)
 
-        # 10. Execute ROT13 a 2nd time via Ctrl+Z + 1 + Enter (round-trip)
+        # 10. Execute ROT13 a 2nd time via Ctrl+P + 1 + Enter (round-trip)
         time.sleep(0.2)
         drain_all(master)
-        os.write(master, b"\x1a")
-        read_until(master, b"SE - Plugin Manager", timeout=6.0)
+        os.write(master, b"\x10")
+        read_until(master, b"Plugins for Editor", timeout=6.0)
         time.sleep(0.2)
         os.write(master, b"1\r")
         ok, out_hw2 = read_until(master, b"[ROT13 Applied]", timeout=8.0)
         if not ok or b"HELLO WORLD!" not in out_hw2:
-            print(f"[-] ROT13 second invocation round-trip failed. Buffer: {repr(out_hw2)}", flush=True)
+            print(f"[-] ROT13 second invocation round-trip failed. "
+                  f"Buffer: {repr(out_hw2)}", flush=True)
             return False
-        print("[+] ROT13 second invocation round-trip verified ('HELLO WORLD!').", flush=True)
+        print("[+] ROT13 second invocation round-trip verified "
+              "('HELLO WORLD!').", flush=True)
 
         # 11. Test Unload ('u') and Load ('l')
         time.sleep(0.2)
@@ -247,9 +263,9 @@ def run_plugin_test():
         os.write(master, b"\x1a")
         read_until(master, b"SE - Plugin Manager", timeout=6.0)
         time.sleep(0.2)
-        os.write(master, b"u")
-        read_until(master, b"Unload Slot", timeout=4.0)
-        os.write(master, b"1")  # Unload slot 1
+        os.write(master, b"1")
+        read_until(master, b"Unload Slot 1? [Y/N]", timeout=4.0)
+        os.write(master, b"y")  # Confirm unload slot 1
         ok, out_unl = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
             print(f"[-] Unload slot 1 failed. Buffer: {repr(out_unl)}", flush=True)
