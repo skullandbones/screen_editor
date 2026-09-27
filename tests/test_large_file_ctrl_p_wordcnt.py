@@ -166,6 +166,7 @@ class ScreenBuffer:
 
 
 def main():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
 
     for p, name in [
@@ -237,6 +238,24 @@ def main():
         [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img, tmp_txt, "0:3000.TXT"],
         check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
+
+    # Inject freshly built plugin binaries so tests run against active code
+    plugin_files = [
+        "PLUGIN.PRL", "PLUGIN.CFG", "ROT13.PRL", "WORDCNT.OVL", "BEAUTIFY.PRL"
+    ]
+    for p_name in plugin_files:
+        p_path = os.path.join(repo_root, "plugins", p_name)
+        if os.path.isfile(p_path):
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, f"0:{p_name}"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            subprocess.run(
+                [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img,
+                 p_path, f"0:{p_name}"],
+                check=True, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
     master, slave = os.openpty()
     tty.setraw(slave)

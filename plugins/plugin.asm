@@ -1926,7 +1926,7 @@ STR_TITLE_HELP:		DB	"       Plugins with Embedded Documentation      ", 0
 STR_POPUP_NO_MATCH:	DB	"    No plugins found for this screen context    ", 0
 STR_POPUP_PROMPT_NOMATCH: DB	"   Press [Esc], [q], or [Ctrl+P] to Dismiss     ", 0
 STR_POPUP_PROMPT_MATCH:
-	DB	" [Up/Dn/0-7] Select  [Enter] Execute  [ESC/Q] Exit ", 0
+	DB	" [Up/Dn/0-7] Select  [Enter] Exec  [ESC/Q] Exit ", 0
 
 STR_DESC_CONFIG:	DB	"Embedded Plugin Settings     ", 0
 STR_DESC_ABOUT:		DB	"Modal About & Info Dialog    ", 0
