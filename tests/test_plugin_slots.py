@@ -226,11 +226,15 @@ def run_slots_test():
         os.write(master, b" ")
         read_until(master, b"SE - Plugin Manager", timeout=5.0)
 
-        # 6. Unload MIDPLUG (Slot 3) - releases Far RAM bank
+        # 6. Unload MIDPLUG (Slot 3) - releases Far RAM bank via modal pop-up
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"u")
-        read_until(master, b"Unload Slot", timeout=4.0)
+        ok, out_pop = read_until(master, b"Unload Slot (0..7):", timeout=4.0)
+        assert ok, "Unload modal popup prompt missing"
+        assert b"Unload Plugin" in out_pop, "Unload modal popup title missing"
+        border_line = b"+------------------------------------------------+"
+        assert border_line in out_pop, "Unload modal popup border missing"
         os.write(master, b"3")
         ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
