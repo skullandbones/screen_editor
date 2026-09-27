@@ -413,17 +413,17 @@ PKL_DO_U:
 
 PKL_DO_S:
 	CALL	DO_SAVE_PLUGIN_CFG
-	PUSH	AF
-	CALL	LOCATE_STATUS_ROW
-	POP	AF
-	JR	C,PKL_S_ERR
-	LD	DE,STR_MSG_CFG_SAVED
-	CALL	HOST_PRINT_STR
-	JP	PLUG_KEY_LOOP
-PKL_S_ERR:
-	LD	DE,STR_MSG_CFG_ERR
-	CALL	HOST_PRINT_STR
-	JP	PLUG_KEY_LOOP
+	CALL	SHOW_SAVE_CFG_POPUP
+	CP	27			; ESC?
+	JR	NZ,PKL_S_NOT_ESC
+	CALL	DRAIN_ESC_SEQUENCE
+	JP	DO_PLUG_REDRAW
+PKL_S_NOT_ESC:
+	CP	'q'
+	JP	Z,PKL_EXIT
+	CP	'Q'
+	JP	Z,PKL_EXIT
+	JP	DO_PLUG_REDRAW
 
 PLUG_PREV_SLOT:
 	LD	A,(SELECTED_SLOT)
@@ -1579,6 +1579,74 @@ STR_ABT_LINE4:	DB	"| Role   : Dynamic Slot Management & Pop-up UI   |", 0
 STR_ABT_LINE5:	DB	"|           [Press any key to return]            |", 0
 
 ;==============================================================================
+; Modal Pop-up: Save Plugin Configuration Confirmation
+;==============================================================================
+SHOW_SAVE_CFG_POPUP:
+	PUSH	AF			; Preserve Carry flag (save status)
+
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
+
+	; Center 7-line dialog box vertically: ((HOST_ROWS - 7) / 2) + 1
+	LD	A,(HOST_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+
+	; Center 50-col box horizontally: ((HOST_COLS - 50) / 2) + 1
+	LD	A,(HOST_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; Line 1: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_SAVE_CFG_TITLE
+	CALL	HOST_PRINT_STR
+
+	; Line 3: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Line 4: Blank line
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_SAVE_CFG_BLANK
+	CALL	HOST_PRINT_STR
+
+	; Line 5: Result status
+	CALL	POPUP_LOCATE_NEXT
+	POP	AF			; Restore Carry
+	JR	C,SSCP_ERR
+	LD	DE,STR_SAVE_CFG_OK
+	JR	SSCP_PRINT_MSG
+SSCP_ERR:
+	LD	DE,STR_SAVE_CFG_FAIL
+SSCP_PRINT_MSG:
+	CALL	HOST_PRINT_STR
+
+	; Line 6: Instructions / Prompt
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_SAVE_CFG_KEY
+	CALL	HOST_PRINT_STR
+
+	; Line 7: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Wait for keypress to dismiss
+	CALL	HOST_GET_KEY
+	RET
+
+;==============================================================================
 ; Helper Routines & String Formatting
 ;==============================================================================
 
@@ -1959,8 +2027,11 @@ STR_PLUG_CMDS_EMPTY:
 STR_MSG_NO_ABOUT:	DB	"[No About]$", 0
 STR_MSG_NO_CONFIG:	DB	"[No Config]$", 0
 STR_MSG_SLOTS_FULL:	DB	"[All Slots Full]$", 0
-STR_MSG_CFG_SAVED:	DB	"[Saved to PLUGIN.CFG]$", 0
-STR_MSG_CFG_ERR:	DB	"[Error saving PLUGIN.CFG]$", 0
+STR_SAVE_CFG_TITLE:	DB	"|           Save Plugin Configuration            |", 0
+STR_SAVE_CFG_BLANK:	DB	"|                                                |", 0
+STR_SAVE_CFG_OK:	DB	"|             [Saved to PLUGIN.CFG]              |", 0
+STR_SAVE_CFG_FAIL:	DB	"|           [Error saving PLUGIN.CFG]            |", 0
+STR_SAVE_CFG_KEY:	DB	"|           [Press any key to continue]          |", 0
 STR_PLUG_PROMPT_U:	DB	"Unload Slot (0..7): ", 0
 
 STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0
