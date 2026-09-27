@@ -191,9 +191,7 @@ START:
 	JR	NZ,DO_AUTO_LOAD
 
 	; Otherwise show splash screen
-	CALL	SHOW_SPLASH_SCREEN
-	CALL	RENDER_STATUS_BAR
-	JP	MAIN_LOOP
+	JP	SHOW_SPLASH_SCREEN
 
 DO_AUTO_LOAD:
 	LD	A,(CMDLINE_IS_FAT)
@@ -302,7 +300,25 @@ ALNF_EXPLICIT_DRIVE:
 	LD	SP,(SAVED_SP)
 	RET
 
+;------------------------------------------------------------------------------
+; ENTER_EDITOR: Top-level entry into editor mode from splash screen loop
+; Resets stack, initializes or resumes editor document, renders screen and
+; status bar, positions cursor, and enters main editor event loop.
+;------------------------------------------------------------------------------
 ENTER_EDITOR:
+	LD	SP,LOCAL_STACK
+	CALL	SETUP_EDITOR_STATE
+	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
+	JP	MAIN_LOOP
+
+;------------------------------------------------------------------------------
+; SETUP_EDITOR_STATE: Ensure editor document buffers and viewport are valid
+; Initializes empty doc if none open, constrains cursor, and renders screen.
+; Preserves return address for callers (e.g. DO_SPLASH_GOTO_LINE,
+; RESUME_EDITOR).
+;------------------------------------------------------------------------------
+SETUP_EDITOR_STATE:
 	LD	A,(IN_EDITOR_MODE)
 	OR	A
 	JR	NZ,RESUME_EDITOR
@@ -355,6 +371,7 @@ ENTER_EDITOR_WITH_ACTIVE_LINE:
 	JP	MAIN_LOOP
 
 SHOW_SPLASH_SCREEN:
+	LD	SP,LOCAL_STACK
 	XOR	A
 	LD	(BLOCK_ACTIVE),A
 	LD	(STATUS_OOM_FLAG),A
@@ -706,7 +723,8 @@ DO_SPLASH_SAVE:
 	JP	SHOW_SPLASH_SCREEN
 
 DO_SPLASH_GOTO_LINE:
-	CALL	ENTER_EDITOR
+	LD	SP,LOCAL_STACK
+	CALL	SETUP_EDITOR_STATE
 	CALL	RENDER_STATUS_BAR
 	CALL	DO_GOTO_LINE_UI
 	JP	MAIN_LOOP
@@ -9382,8 +9400,7 @@ WAIT_ESC_BYTE:
 	RET
 
 ESC_TO_SPLASH:
-	CALL	SHOW_SPLASH_SCREEN
-	RET
+	JP	SHOW_SPLASH_SCREEN
 
 GOT_ESC_BYTE:
 	CALL	GET_KEY
