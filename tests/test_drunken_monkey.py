@@ -797,8 +797,11 @@ def find_paths():
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
+    cpmrm_bin = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm"
+    )
 
-    return emu_bin, rom_file, img_file, se_bin, cpmcp_bin
+    return emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
 
 
 def read_available(master_fd, timeout=0.05):
@@ -862,7 +865,7 @@ def run_drunken_monkey_test(
               f"(seed: {seed}, mode: {mode})", flush=True)
     print("=" * 76, flush=True)
 
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin = find_paths()
+    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
 
     # Pre-test binary & file checks
     for p, name in [
@@ -898,6 +901,12 @@ def run_drunken_monkey_test(
           flush=True)
 
     # Sync latest SE.COM onto ephemeral disk image drive C:
+    if os.path.isfile(cpmrm_bin):
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, "0:SE.COM"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     if os.path.isfile(cpmcp_bin):
         try:
             subprocess.run(
@@ -907,8 +916,30 @@ def run_drunken_monkey_test(
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-        except subprocess.CalledProcessError:
-            pass
+        except subprocess.CalledProcessError as e:
+            print(f"[-] Warning: Failed to sync SE.COM: {e}", flush=True)
+
+    # Sync latest plugins onto ephemeral disk image drive C:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    plugins_dir = os.path.join(repo_root, "plugins")
+    if os.path.isdir(plugins_dir) and os.path.isfile(cpmcp_bin):
+        for pf in os.listdir(plugins_dir):
+            if pf.upper().endswith((".PRL", ".OVL")):
+                p_path = os.path.join(plugins_dir, pf)
+                tgt = f"0:{pf.upper()}"
+                if os.path.isfile(cpmrm_bin):
+                    subprocess.run(
+                        [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, tgt],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                subprocess.run(
+                    [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img, p_path,
+                     tgt],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
     # Setup terminal monitor
     cols = 120 if mode == "120x40" else 80
