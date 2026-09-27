@@ -21591,21 +21591,43 @@ DCPP_LOOP:
 	JR	C,DCPP_DISMISS		; Carry = 1: dismissed (ESC, Ctrl+P, Q)
 
 	; Carry = 0: user selected slot A with action C
-	; If C != 0 (About or Config), clean base screen first so previous popup is cleared
+	; If C != 0 (About or Config) or plugin has CAP_MODAL_UI,
+	; mark action as modal and pre-clear base screen.
 	LD	B,A			; Save slot number in B
 	LD	A,C
+	OR	A
+	JR	NZ,DCPP_MARK_MODAL
+	PUSH	BC
+	CALL	GET_REGISTRY_ENTRY_PTR
+	LD	DE,20			; Offset +20: CAPABILITIES (word)
+	ADD	HL,DE
+	LD	A,(HL)
+	AND	CAP_MODAL_UI		; 08h
+	POP	BC
+	JR	Z,DCPP_NOT_MODAL
+
+DCPP_MARK_MODAL:
+	LD	A,1
+	JR	DCPP_SET_MODAL
+
+DCPP_NOT_MODAL:
+	XOR	A
+
+DCPP_SET_MODAL:
+	LD	(POPUP_ACTION_MODAL),A
 	OR	A
 	JR	Z,DCPP_EXEC
 	PUSH	BC
 	CALL	REDRAW_BASE_SCREEN
 	POP	BC
+
 DCPP_EXEC:
 	LD	A,B			; A = slot number
 	CALL	EXEC_PLUGIN_SLOT_ACTION
-	LD	A,(PLUGIN_ACTION_INDEX)
+	LD	A,(POPUP_ACTION_MODAL)
 	OR	A
-	JR	Z,DCPP_DISMISS		; Action 0 (main run): dismiss back to caller
-	; Action 1 (About) or Action 2 (Config): Redraw base screen & return to Ctrl+P menu
+	JR	Z,DCPP_DISMISS		; Non-modal Action 0: dismiss back to caller
+	; Modal Action: Redraw base screen & return to Ctrl+P menu
 	CALL	REDRAW_BASE_SCREEN
 	JR	DCPP_LOOP
 
@@ -24107,6 +24129,7 @@ POPUP_ROW:		DB	0
 POPUP_COL:		DB	0
 POPUP_START_ROW:	DB	0
 POPUP_SAVE_START_ROW:	DB	0
+POPUP_ACTION_MODAL:	DB	0
 PLUGIN_MGR_SLOT:	DB	0FFH
 PLUGIN_MGR_BANK:	DB	0
 PLUGIN_MGR_LOADED:	DB	0

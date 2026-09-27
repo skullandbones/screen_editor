@@ -310,7 +310,9 @@ def main():
         drain_all(master)
         screen.cursor_seqs.clear()
         os.write(master, b"\x10")  # Ctrl+P
-        popup_out = read_until(master, b"Select", timeout=8.0)
+        popup_out = read_until(master, b"Exit", timeout=8.0)
+        time.sleep(0.2)
+        popup_out += drain_all(master, timeout=0.2)
         screen.feed(popup_out.decode("latin1", errors="replace"))
 
         print(">>> [SCREEN GRAB: Ctrl+P Pop-up Dialog]")
@@ -398,8 +400,10 @@ def main():
         screen.cursor_seqs.clear()
         os.write(master, b" ")  # Clear WORDCNT dialog
 
-        time.sleep(0.5)
-        post_wcnt_out = drain_all(master, timeout=0.5)
+        # Wait for Ctrl+P popup to be restored hierarchically (or timeout)
+        post_wcnt_out = read_until(master, b"Plugins for Editor", timeout=6.0)
+        time.sleep(0.3)
+        post_wcnt_out += drain_all(master, timeout=0.3)
         screen.feed(post_wcnt_out.decode("latin1", errors="replace"))
 
         print(">>> [SCREEN GRAB: Screen immediately after clearing WORDCNT]")
@@ -436,6 +440,14 @@ def main():
                     f"    Cursor row {r}, col {c} ({repr(seq)}) - OFF SCREEN!"
                 )
             bugs_detected.append("CURSOR_OUT_OF_BOUNDS")
+
+        # If Ctrl+P pop-up is active on screen, dismiss it with ESC
+        if "Plugins for Editor" in post_text:
+            print("[*] Dismissing Ctrl+P pop-up with ESC to return...")
+            os.write(master, b"\x1b")
+            time.sleep(0.3)
+            esc_out = drain_all(master, timeout=0.3)
+            screen.feed(esc_out.decode("latin1", errors="replace"))
 
         # Now type characters into editor
         print("[*] Typing 'XYZABC' into editor...")
