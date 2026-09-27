@@ -68,6 +68,7 @@ class VT100QualityMonitor:
         self.c = 0  # 0-indexed col (0..cols-1)
         self.cursor_visible = True
         self.in_buffer = ""
+        self.exiting = False
 
     def feed(self, text):
         """
@@ -311,36 +312,35 @@ class VT100QualityMonitor:
                     f"active but row 0 contains editor text: '{row0_str[:40]}'"
                 )
 
-        # 5. Premature CP/M exit detection:
-        # If SE.COM exits prematurely to CP/M, a console prompt ("C>") or
-        # "file not found" message appears on screen rows.
-        if " file not found" in full_text:
-            raise UnexpectedBehaviourError(
-                "Premature CP/M exit detected: 'file not found' on screen"
-            )
-        has_tildes = any(r[0] == "~" for r in self.buffer)
-        is_se_ui = ("SE - Screen Editor" in full_text or
-                    "SE - Plugin Manager" in full_text or
-                    "SE - Screen Editor Configuration" in full_text)
-        if not has_tildes and not is_se_ui:
-            for r_idx, row in enumerate(self.buffer):
-                row_str = "".join(row).strip()
-                if re.match(r"^[A-P]>", row_str):
-                    raise UnexpectedBehaviourError(
-                        f"Premature CP/M exit detected on row {r_idx}: "
-                        f"'{row_str[:40]}'"
-                    )
-        bottom_row = self.rows - 1
-        bottom_str = "".join(self.buffer[bottom_row])
-        editor_sigs = ("80x24 |", "120x40 |", "^K: Editor keys")
-        if any(sig in bottom_str for sig in editor_sigs):
-            for r_idx in range(bottom_row):
-                row_str = "".join(self.buffer[r_idx]).strip()
-                if re.match(r"^[A-P]>", row_str):
-                    raise UnexpectedBehaviourError(
-                        f"Premature CP/M exit detected on row {r_idx}: "
-                        f"'{row_str[:40]}'"
-                    )
+        # 5. Premature CP/M exit detection (skipped during clean test teardown):
+        if not self.exiting:
+            if " file not found" in full_text:
+                raise UnexpectedBehaviourError(
+                    "Premature CP/M exit detected: 'file not found' on screen"
+                )
+            has_tildes = any(r[0] == "~" for r in self.buffer)
+            is_se_ui = ("SE - Screen Editor" in full_text or
+                        "SE - Plugin Manager" in full_text or
+                        "SE - Screen Editor Configuration" in full_text)
+            if not has_tildes and not is_se_ui:
+                for r_idx, row in enumerate(self.buffer):
+                    row_str = "".join(row).strip()
+                    if re.match(r"^[A-P]>", row_str):
+                        raise UnexpectedBehaviourError(
+                            f"Premature CP/M exit detected on row {r_idx}: "
+                            f"'{row_str[:40]}'"
+                        )
+            bottom_row = self.rows - 1
+            bottom_str = "".join(self.buffer[bottom_row])
+            editor_sigs = ("80x24 |", "120x40 |", "^K: Editor keys")
+            if any(sig in bottom_str for sig in editor_sigs):
+                for r_idx in range(bottom_row):
+                    row_str = "".join(self.buffer[r_idx]).strip()
+                    if re.match(r"^[A-P]>", row_str):
+                        raise UnexpectedBehaviourError(
+                            f"Premature CP/M exit detected on row {r_idx}: "
+                            f"'{row_str[:40]}'"
+                        )
 
     def detect_screen_state(self):
         """
@@ -797,8 +797,11 @@ def find_paths():
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
+    cpmrm_bin = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm"
+    )
 
-    return emu_bin, rom_file, img_file, se_bin, cpmcp_bin
+    return emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
 
 
 def read_available(master_fd, timeout=0.05):
@@ -862,7 +865,7 @@ def run_drunken_monkey_test(
               f"(seed: {seed}, mode: {mode})", flush=True)
     print("=" * 76, flush=True)
 
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin = find_paths()
+    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
 
     # Pre-test binary & file checks
     for p, name in [
@@ -898,6 +901,12 @@ def run_drunken_monkey_test(
           flush=True)
 
     # Sync latest SE.COM onto ephemeral disk image drive C:
+    if os.path.isfile(cpmrm_bin):
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, "0:SE.COM"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     if os.path.isfile(cpmcp_bin):
         try:
             subprocess.run(
@@ -907,8 +916,30 @@ def run_drunken_monkey_test(
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-        except subprocess.CalledProcessError:
-            pass
+        except subprocess.CalledProcessError as e:
+            print(f"[-] Warning: Failed to sync SE.COM: {e}", flush=True)
+
+    # Sync latest plugins onto ephemeral disk image drive C:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    plugins_dir = os.path.join(repo_root, "plugins")
+    if os.path.isdir(plugins_dir) and os.path.isfile(cpmcp_bin):
+        for pf in os.listdir(plugins_dir):
+            if pf.upper().endswith((".PRL", ".OVL")):
+                p_path = os.path.join(plugins_dir, pf)
+                tgt = f"0:{pf.upper()}"
+                if os.path.isfile(cpmrm_bin):
+                    subprocess.run(
+                        [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, tgt],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                subprocess.run(
+                    [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img, p_path,
+                     tgt],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
     # Setup terminal monitor
     cols = 120 if mode == "120x40" else 80
@@ -1076,11 +1107,13 @@ def run_drunken_monkey_test(
 
         # 4. Clean exit back to CP/M
         print("[*] Performing clean exit with Ctrl+Q...", flush=True)
+        monitor.exiting = True
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl+Q
         time.sleep(0.2)
         exit_chunk = read_available(master, timeout=0.2)
-        monitor.feed(exit_chunk.decode("latin1", errors="replace"))
+        if exit_chunk:
+            monitor.feed(exit_chunk.decode("latin1", errors="replace"))
 
         # If prompted with "Save changes?", answer 'n'
         full_screen = "".join("".join(r) for r in monitor.buffer)
@@ -1090,7 +1123,7 @@ def run_drunken_monkey_test(
             time.sleep(0.2)
 
         final_chunk = read_until(master, b"C>", timeout=5.0)
-        if b"C>" in final_chunk:
+        if b"C>" in final_chunk or (exit_chunk and b"C>" in exit_chunk):
             print("[+] Clean exit to CP/M prompt (C>) verified.", flush=True)
         else:
             print("[*] Test concluded (CP/M prompt returned).", flush=True)

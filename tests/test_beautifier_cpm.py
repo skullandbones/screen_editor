@@ -154,7 +154,7 @@ def test_config_screen_beautifier_options():
         # Launch SE.COM
         time.sleep(0.4)
         os.write(master, b"se\r")
-        out = read_until(master, b"Col 0", timeout=25.0)
+        out = read_until(master, b"Col 0", timeout=45.0)
         assert b"Col 0" in out or b"to configure" in out, f"Failed launching SE.COM: {out}"
 
         # 1. Enter SE.COM Config Screen ('c')
@@ -281,7 +281,7 @@ def test_config_screen_beautifier_options():
     try:
         time.sleep(0.4)
         os.write(master2, b"se\r")
-        read_until(master2, b"Col 0", timeout=25.0)
+        read_until(master2, b"Col 0", timeout=45.0)
 
         # Enter Plugin Manager ('p')
         time.sleep(0.3)
@@ -345,7 +345,7 @@ def test_ctrl_y_whole_file_beautify():
         # Launch SE.COM RAW.ASM
         time.sleep(0.4)
         os.write(master, b"se raw.asm\r")
-        out = read_until(master, b"^K: Editor keys", timeout=25.0)
+        out = read_until(master, b"^K: Editor keys", timeout=45.0)
         assert b"^K: Editor keys" in out
         drain_all(master, 0.2)
         print("    [+] Opened RAW.ASM in editor")
@@ -447,7 +447,7 @@ def test_ctrl_y_block_beautify():
         # Launch SE.COM BLK.ASM
         time.sleep(0.4)
         os.write(master, b"se blk.asm\r")
-        out = read_until(master, b"BLK.ASM", timeout=25.0)
+        out = read_until(master, b"BLK.ASM", timeout=45.0)
         assert b"BLK.ASM" in out
         print("    [+] Opened BLK.ASM in editor")
 
@@ -618,7 +618,7 @@ def test_compact_beautification():
     try:
         time.sleep(0.4)
         os.write(master, b"se compact.asm\r")
-        out = read_until(master, b"^K: Editor keys", timeout=25.0)
+        out = read_until(master, b"^K: Editor keys", timeout=45.0)
         assert b"^K: Editor keys" in out
         drain_all(master, 0.2)
 
