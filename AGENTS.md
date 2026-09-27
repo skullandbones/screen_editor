@@ -91,6 +91,14 @@ How:
      6. *Buffer Pointer Clobber* (overwriting DE during string formatting).
    * When touching legacy UI routines, agents must remediate existing
      anti-patterns rather than perpetuating them.
+7. **Scratch Python Scripts Over Ad-Hoc Snippets (MANDATORY)**:
+   * Scratch python scripts should be used instead of ad-hoc python code
+     snippets (`python3 -c '...'`).
+   * Executing a standalone scratch python script by filename allows the user
+     to grant the agent permission to run the python script by name only
+     once for the project (via command prefix matching).
+   * In contrast, inline ad-hoc snippets generate novel command strings each
+     time, disabling prefix auto-approval and repeatedly prompting the user.
 
 ---
 
@@ -135,14 +143,22 @@ Linux commands. Any attempt to use these commands is a critical violation.
   - `mkfs`, `fdisk`, `parted`, `gparted`, `sfdisk`, `mkswap`.
   - `mount`, `umount` (unless operating within a sandboxed virtual image).
 
-### 4. Privilege Escalation & System Administration
+### 4. Privilege Escalation & `sudo` Commands (STRICTLY FORBIDDEN)
 * **Prohibited**:
-  - `sudo` or `su`: Agents must never escalate privileges.
+  - `sudo` (any invocation, e.g. `sudo <cmd>`, `sudo -n`, `sudo su`, etc.).
+    Executing any command with `sudo` is strictly prohibited.
+  - `su`, `pkexec`, `doas`, or any privilege escalation mechanism.
   - Modifying `/etc`, `/usr`, `/var`, `/boot`, `/lib`, or system directories.
+  - Modifying system services or firewall rules (`systemctl`, `ufw`,
+    `iptables`).
   - Recursive permission changes on wide directories (`chmod -R 777 /`,
     `chown -R ... /`).
   - `shutdown`, `reboot`, `poweroff`, `init`.
   - `killall`, `kill -9 -1`, or terminating processes outside the agent task.
+* **Rationale**:
+  - Agents operate with standard unprivileged user permissions. Privilege
+    escalation can corrupt host OS configuration, bypass isolation, or hang
+    waiting on interactive password prompts in non-interactive subshells.
 
 ### 5. Blind Network & Execution Piping
 * **Prohibited**:
@@ -150,12 +166,30 @@ Linux commands. Any attempt to use these commands is a critical violation.
   - Installing system-wide packages (`apt-get install`, `rpm`, `dnf`, `pacman`).
   - Executing untrusted remote scripts or downloading unverified binaries.
 
-### 6. Arbitrary One-Liners Over Project Tooling
+### 6. Scratch Python Scripts vs. Ad-Hoc Python Code Snippets
 * **Prohibited**:
-  - `python3 -c "..."` to check line lengths or repository state.
+  - Ad-hoc python code snippets (`python3 -c "..."` or multi-line
+    `python3 -c '...'`).
+  - Arbitrary python evaluation one-liners embedded in shell commands.
 * **Required**:
-  - Always use audited repository scripts: `python3 check_line_length.py`,
-    `python3 check_tpa.py`, `python3 check_plugin.py`, `make check-lines`.
+  - Scratch python scripts should be used instead of ad-hoc python code
+    snippets.
+  - Always write a persistent scratch script to disk (e.g. in the scratch
+    directory or `tests/`) and execute it by filename:
+    ```bash
+    python3 tests/scratch_probe.py
+    ```
+  - For line length checks, always use the audited repository scripts:
+    `python3 check_line_length.py` or `make check-lines`.
+  - For TPA and plugin checks, use `python3 check_tpa.py` and
+    `python3 check_plugin.py`.
+* **Rationale**:
+  - Using scratch python scripts allows the user to grant the agent
+    permission to run the python script by name only once for the project
+    (command prefix auto-approval).
+  - In contrast, ad-hoc inline code snippets create unique command strings on
+    every invocation, which breaks tool approval prefix matching and repeatedly
+    forces the user to manually review and approve modal prompts.
 
 ---
 
