@@ -191,9 +191,7 @@ START:
 	JR	NZ,DO_AUTO_LOAD
 
 	; Otherwise show splash screen
-	CALL	SHOW_SPLASH_SCREEN
-	CALL	RENDER_STATUS_BAR
-	JP	MAIN_LOOP
+	JP	SHOW_SPLASH_SCREEN
 
 DO_AUTO_LOAD:
 	LD	A,(CMDLINE_IS_FAT)
@@ -302,7 +300,25 @@ ALNF_EXPLICIT_DRIVE:
 	LD	SP,(SAVED_SP)
 	RET
 
+;------------------------------------------------------------------------------
+; ENTER_EDITOR: Top-level entry into editor mode from splash screen loop
+; Resets stack, initializes or resumes editor document, renders screen and
+; status bar, positions cursor, and enters main editor event loop.
+;------------------------------------------------------------------------------
 ENTER_EDITOR:
+	LD	SP,LOCAL_STACK
+	CALL	SETUP_EDITOR_STATE
+	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
+	JP	MAIN_LOOP
+
+;------------------------------------------------------------------------------
+; SETUP_EDITOR_STATE: Ensure editor document buffers and viewport are valid
+; Initializes empty doc if none open, constrains cursor, and renders screen.
+; Preserves return address for callers (e.g. DO_SPLASH_GOTO_LINE,
+; RESUME_EDITOR).
+;------------------------------------------------------------------------------
+SETUP_EDITOR_STATE:
 	LD	A,(IN_EDITOR_MODE)
 	OR	A
 	JR	NZ,RESUME_EDITOR
@@ -355,6 +371,7 @@ ENTER_EDITOR_WITH_ACTIVE_LINE:
 	JP	MAIN_LOOP
 
 SHOW_SPLASH_SCREEN:
+	LD	SP,LOCAL_STACK
 	XOR	A
 	LD	(BLOCK_ACTIVE),A
 	LD	(STATUS_OOM_FLAG),A
@@ -706,7 +723,8 @@ DO_SPLASH_SAVE:
 	JP	SHOW_SPLASH_SCREEN
 
 DO_SPLASH_GOTO_LINE:
-	CALL	ENTER_EDITOR
+	LD	SP,LOCAL_STACK
+	CALL	SETUP_EDITOR_STATE
 	CALL	RENDER_STATUS_BAR
 	CALL	DO_GOTO_LINE_UI
 	JP	MAIN_LOOP
@@ -9382,8 +9400,7 @@ WAIT_ESC_BYTE:
 	RET
 
 ESC_TO_SPLASH:
-	CALL	SHOW_SPLASH_SCREEN
-	RET
+	JP	SHOW_SPLASH_SCREEN
 
 GOT_ESC_BYTE:
 	CALL	GET_KEY
@@ -10531,6 +10548,7 @@ GOTO_UI_ENTER:
 
 	; Redraw editor and status bar smoothly without full screen clear flash
 	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
 	RET
 
 GOTO_UI_CANCEL:
@@ -23865,7 +23883,14 @@ WORK_FCB_USER:		DB	0		; User area for pending WORK_FCB operation (0..15)
 BLOCK_IO_USER:		DB	0		; User area for Block Insert / Block Save (0..15)
 PREFIX_DRIVE:		DB	0		; Parsed prefix drive (1..16 or 0)
 PREFIX_USER:		DB	0FFH		; Parsed prefix user (0..15 or 0xFF)
-DIR_SEARCH_FCB:	DS	36
+; Consolidated transient CP/M File Control Block (36 bytes)
+; Shared across sequential operations: dir search, raw disk, config, ramdrv
+SHARED_TEMP_FCB:	DS	36
+DIR_SEARCH_FCB		EQU	SHARED_TEMP_FCB
+RAW_TEST_FCB		EQU	SHARED_TEMP_FCB
+CFG_FCB			EQU	SHARED_TEMP_FCB
+COM_PROBE_FCB		EQU	SHARED_TEMP_FCB
+RAMDRV_FCB		EQU	SHARED_TEMP_FCB
 DIR_FILE_COUNT:	DB	0
 DIR_PAGE_INDEX:	DB	0
 DIR_PAGE_COUNT:	DB	0
@@ -23884,12 +23909,7 @@ DIR_FILTER_FCB:		DB	"???????????"	; 11-byte FCB wildcard pattern (8 name + 3 ext
 DIR_FILTER_STR:		DB	"*.*",0,0,0,0,0,0,0,0,0 ; Display string for active filter (null-terminated)
 DIR_FILTER_ACTIVE:	DB	0		; 0 = *.* (all files), 1 = custom filter active
 
-RAW_TEST_FCB:	DS	36
-RAW_SECTOR_BUF:	DS	128
-
-CFG_FCB:		DS	36
-COM_PROBE_FCB:		DS	36
-CFG_IO_BUF:		DS	256		; 256-byte scratch buffer for SE.CFG I/O
+; Transient FCBs and buffers moved to SHARED_TEMP_FCB and LINE_STORAGE
 CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
 CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
@@ -23905,7 +23925,6 @@ RAMDRIVE_DRIVE_NUM:	DB	0FFH		; Detected RomWBW RAM drive (0=A, 1=B, ..., 0xFF=no
 RAMDRIVE_DRIVE_CHAR:	DB	'?'		; Character representation ('A', 'B', etc. or '?')
 HIB_CUR_BANK:		DB	0		; Current bank being dumped/restored (0x81..0x88)
 HIB_FAR_OFFSET:		DW	0		; Current Far RAM offset (0x0000..0x7F80)
-RAMDRV_FCB:		DS	36		; FCB for RAMDRV.IMG
 CPM3_BIOSPB:
 CPM3_BIOSPB_FUNC:	DB	0
 CPM3_BIOSPB_A:		DB	0
@@ -24799,6 +24818,10 @@ DIR_NAMES_BUF	EQU	LINE_STORAGE
 
 ; Overlay 4KB TPA plugin execution slot onto LINE_STORAGE (0 extra bytes)
 PLUGIN_TPA_SLOT	EQU	LINE_STORAGE
+
+; Overlay transient config and sector buffers onto LINE_STORAGE beyond plugin
+CFG_IO_BUF		EQU	LINE_STORAGE + 4096
+RAW_SECTOR_BUF		EQU	LINE_STORAGE + 4096 + 256
 
 ; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
 ; Overlaid on upper half of SPLIT_LINE_TEMP to keep BSS strictly below CCP

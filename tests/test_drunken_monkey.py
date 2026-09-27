@@ -463,7 +463,7 @@ class DrunkenMonkeyInputGenerator:
             ("\x16", "Ctrl+V (Toggle Overwrite)"),
             ("\x17", "Ctrl+W (Close File)"),
             ("\x18", "Ctrl+X (Line Down)"),
-            ("\x19", "Ctrl+Y (Delete Line)"),
+            ("\x19", "Ctrl+Y (Beautify)"),
             ("\x1a", "Ctrl+Z (Plugin Manager)"),
             ("\x1b", "ESC (Cancel)"),
         ]
@@ -929,9 +929,12 @@ def run_drunken_monkey_test(
         # 2. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        splash_out = read_until(master, b"Col 0", timeout=20.0)
-        if b"Col 0" not in splash_out and b"for about" not in splash_out:
-            raise HangError("SE.COM splash screen failed to appear.")
+        splash_out = read_until(master, b"for about", timeout=30.0)
+        if b"for about" not in splash_out and b"Col 0" not in splash_out:
+            raise HangError(
+                f"SE.COM splash screen failed to appear. "
+                f"Captured: {repr(splash_out[-300:])}"
+            )
 
         # Configure screen mode if needed
         if mode == "120x40":
