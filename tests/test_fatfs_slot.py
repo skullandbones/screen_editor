@@ -157,8 +157,8 @@ def run_fatfs_slot_test():
         if not ok:
             print("[-] Failed to enter Plugin Manager.", flush=True)
             return False
-        if b"0..7:select" not in out:
-            read_until(master, b"0..7:select", timeout=5.0)
+        if b"Up/Dn:select" not in out:
+            read_until(master, b"Up/Dn:select", timeout=5.0)
         drain_all(master)
         print("[+] Entered SE.COM Plugin Manager.", flush=True)
 
@@ -177,11 +177,9 @@ def run_fatfs_slot_test():
         print("[+] FATFS.PRL successfully loaded into Slot as 'FAR (32KB)' (Multi-Bank Far RAM allocation).", flush=True)
         drain_all(master)
 
-        # 5. Navigate selection to Slot 3 (down 3 times)
-        print("[+] Navigating selection to Slot 3...", flush=True)
-        time.sleep(0.3)
-        os.write(master, b"jjj")
-        read_until(master, b"0..7:select", timeout=5.0)
+        # 5. Verify Slot 3 (FATFS) is selected
+        print("[+] Slot 3 (FATFS) is selected.", flush=True)
+        read_until(master, b">[3]", timeout=4.0)
         drain_all(master)
 
         # 6. Test Action 1: About Dialog ('a')
@@ -197,7 +195,7 @@ def run_fatfs_slot_test():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b" ")
-        read_until(master, b"0..7:select", timeout=5.0)
+        read_until(master, b"Up/Dn:select", timeout=5.0)
         drain_all(master)
 
         # 7. Test Action 2: Configuration Dialog ('c')
@@ -214,25 +212,10 @@ def run_fatfs_slot_test():
         drain_all(master)
         os.write(master, b"q")
         ok, _ = read_until(master, b"SE - Plugin Manager", timeout=6.0)
-        read_until(master, b"0..7:select", timeout=5.0)
+        read_until(master, b"Up/Dn:select", timeout=5.0)
         drain_all(master)
 
-        # 8. Test Action 0: Main Execution / Browser ('3' + Enter)
-        time.sleep(0.5)
-        os.write(master, b"3\r")
-        ok, out_run = read_until(master, b"FAT Filesystem", timeout=8.0)
-        if not ok:
-            print(f"[-] FATFS execution failed. Buffer: {repr(out_run)}", flush=True)
-            return False
-        print("[+] Action 0 (Main Execution) verified: Entered FAT Filesystem modal UI cleanly.", flush=True)
-
-        # Dismiss / exit browser back to Plugin Manager ('q')
-        time.sleep(0.3)
-        os.write(master, b"q")
-        read_until(master, b"0..7:select", timeout=5.0)
-        drain_all(master)
-
-        # 9. Test Action 0 from Editor Context-Aware Popup (Ctrl+P -> 3)
+        # 8. Test Action 0 from Editor Context-Aware Popup (Ctrl+P -> 3)
         print("[*] Testing FATFS execution via Ctrl+P popup in Editor mode...", flush=True)
         time.sleep(0.3)
         os.write(master, b"q")  # Exit Plugin Manager to Splash
@@ -339,15 +322,15 @@ def run_fatfs_slot_test():
         time.sleep(0.3)
         os.write(master, b"p")
         ok, _ = read_until(master, b"SE - Plugin Manager", timeout=6.0)
-        read_until(master, b"0..7:select", timeout=5.0)
+        read_until(master, b"Up/Dn:select", timeout=5.0)
         drain_all(master)
 
-        # 11. Unload Slot 3 ('u' then '3')
+        # 10. Unload Slot 3 ('3' then 'y')
         time.sleep(0.3)
-        os.write(master, b"u")
-        read_until(master, b"Unload Slot", timeout=4.0)
-        time.sleep(0.1)
         os.write(master, b"3")
+        read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        time.sleep(0.1)
+        os.write(master, b"y")
         ok, out_u = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
             print(f"[-] Failed to unload FATFS slot. Buffer: {repr(out_u)}", flush=True)

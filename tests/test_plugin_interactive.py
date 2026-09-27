@@ -122,31 +122,51 @@ def main():
             return 1
         print("[+] Verified initial selection cursor on Slot 0: >[0] WORDCNT")
 
-        # Verify context help line on Slot 0 (WORDCNT: Enter:run, A:about)
+        # Verify context help line on Slot 0 (WORDCNT: Enter:unload, A:about)
         ok, out = read_until(master, b"A:about", timeout=3.0)
-        if not ok:
-            print(f"[-] Slot 0 missing A:about. Out: {repr(out)}")
+        if not ok or b"Enter:unload" not in out:
+            print(f"[-] Slot 0 missing context help. Out: {repr(out)}")
             return 1
-        # Slot 0 context help verified (Enter:run, A:about).
-        print("[+] Slot 0 context help verified (Enter:run, A:about).")
+        print("[+] Slot 0 context help verified (Enter:unload, A:about).")
 
-        # Test digit navigation: press '2' to jump directly to slot 2
+        # Test digit action: typing '2' triggers Unload confirmation on Slot 2
         time.sleep(0.3)
         os.write(master, b"2")
-        ok, out = read_until(master, b">[2]", timeout=5.0)
+        ok, out = read_until(master, b"Unload Slot 2? [Y/N]", timeout=5.0)
         if not ok:
-            print(f"[-] Digit '2' failed to select Slot 2. Out: {repr(out)}")
+            print("[-] Digit '2' failed to show Unload modal. "
+                  f"Out: {repr(out)}")
             return 1
-        print("[+] Digit '2' successfully selected Slot 2 without executing.")
+        print("[+] Digit '2' triggered Unload confirmation modal for Slot 2.")
 
-        # Test digit navigation: press '0' to jump back to slot 0
+        # Cancel unload via 'n'
+        time.sleep(0.2)
+        os.write(master, b"n")
+        ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
+        if not ok or b">[2]" not in out:
+            print("[-] Cancel unload failed to return to Slot 2. "
+                  f"Out: {repr(out)}")
+            return 1
+        print("[+] Cancelled unload cleanly; Slot 2 remains selected.")
+
+        # Test digit action: typing '0' triggers Unload confirmation on Slot 0
         time.sleep(0.3)
         os.write(master, b"0")
-        ok, out = read_until(master, b">[0]", timeout=5.0)
+        ok, out = read_until(master, b"Unload Slot 0? [Y/N]", timeout=5.0)
         if not ok:
-            print(f"[-] Digit '0' failed to select Slot 0. Out: {repr(out)}")
+            print("[-] Digit '0' failed to show Unload modal. "
+                  f"Out: {repr(out)}")
             return 1
-        print("[+] Digit '0' successfully selected Slot 0 without executing.")
+        print("[+] Digit '0' triggered Unload confirmation modal for Slot 0.")
+
+        # Cancel unload via ESC
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
+        if not ok or b">[0]" not in out:
+            print(f"[-] ESC cancel unload failed. Out: {repr(out)}")
+            return 1
+        print("[+] ESC cancelled unload cleanly; Slot 0 remains selected.")
 
         # Test Down Arrow via ANSI escape: \x1b[B
         time.sleep(0.3)
@@ -166,21 +186,21 @@ def main():
             return 1
         print("[+] Key 'j' successfully moved selection to >[2] BEAUTIFY")
 
-        # Verify context help on Slot 2 (BEAUTIFY: Enter:run, A:about, C:cfg)
+        # Verify context help on Slot 2 (BEAUTIFY: Enter:unload, A:about, C:cfg)
         ok, out = read_until(master, b"C:cfg", timeout=3.0)
-        if not ok:
-            print(f"[-] Slot 2 missing C:cfg. Out: {repr(out)}")
+        if not ok or b"Enter:unload" not in out:
+            print(f"[-] Slot 2 missing C:cfg or Enter:unload. Out: {repr(out)}")
             return 1
-        print("[+] Slot 2 context help verified (Run, About, Config).")
+        print("[+] Slot 2 context help verified (Unload, About, Config).")
 
         # Test navigation to empty slot (Slot 3) to verify empty context help
         time.sleep(0.3)
         os.write(master, b"j")
-        ok, out = read_until(master, b"L:load plugin", timeout=3.0)
+        ok, out = read_until(master, b"Enter:load", timeout=3.0)
         if not ok:
-            print(f"[-] Slot 3 missing L:load plugin. Out: {repr(out)}")
+            print(f"[-] Slot 3 missing Enter:load. Out: {repr(out)}")
             return 1
-        print("[+] Slot 3 (empty) context help verified (L:load plugin).")
+        print("[+] Slot 3 (empty) context help verified (Enter:load).")
 
         # Navigate back to Slot 2
         time.sleep(0.3)
@@ -217,7 +237,7 @@ def main():
         # Dismiss About screen with space
         time.sleep(0.3)
         os.write(master, b" ")
-        ok, out = read_until(master, b"0..7:select", timeout=5.0)
+        ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
         if not ok or b">[0]" not in out:
             print(f"[-] Return from WORDCNT About screen to Plugin Manager failed. out={repr(out)}")
             return 1
@@ -238,7 +258,7 @@ def main():
         # Dismiss About screen with Enter
         time.sleep(0.3)
         os.write(master, b"\r")
-        read_until(master, b"0..7:select", timeout=5.0)
+        read_until(master, b"Up/Dn:select", timeout=5.0)
         print("[+] Returned cleanly from ROT13 About screen.")
 
         # Navigate to Slot 2 (BEAUTIFY) and test embedded About screen
@@ -256,7 +276,7 @@ def main():
         # Dismiss About screen with space
         time.sleep(0.3)
         os.write(master, b" ")
-        read_until(master, b"0..7:select", timeout=5.0)
+        read_until(master, b"Up/Dn:select", timeout=5.0)
         print("[+] Returned cleanly from BEAUTIFY About screen.")
 
         # Test Action 2: Embedded Configuration Screen on Slot 2 (BEAUTIFY)
@@ -289,30 +309,60 @@ def main():
         # Exit config screen and return to Plugin Manager ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        ok, out = read_until(master, b"0..7:select", timeout=5.0)
+        ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
         if not ok or b">[2]" not in out:
             print(f"[-] Return from BEAUTIFY config screen to Plugin Manager failed. out={repr(out)}")
             return 1
         print("[+] Successfully exited BEAUTIFY config and returned to Plugin Manager.")
 
-        # Test Action 0: Run BEAUTIFY from Plugin Manager by pressing Enter
-        # BEAUTIFY mutates document, so it transitions to editor with status
+        # Test Enter on occupied slot (Slot 2: BEAUTIFY) -> Unload confirmation
         time.sleep(0.3)
         os.write(master, b"\r")
-        ok, out = read_until(master, b"[Beautify Done]", timeout=8.0)
-        if not ok:
-            print(f"[-] BEAUTIFY execution failed. Out: {repr(out)}")
+        ok, out = read_until(master, b"Unload Slot 2? [Y/N]", timeout=6.0)
+        if not ok or b"Unload Plugin" not in out:
+            print("[-] Enter on Slot 2 failed to trigger Unload modal. "
+                  f"Out: {repr(out)}")
             return 1
-        print("[+] BEAUTIFY executed cleanly via Enter on Slot 2!")
+        print("[+] Enter on occupied Slot 2 opened Unload confirmation modal.")
 
-        # Exit Editor cleanly via Ctrl+Q -> 'n' (discard) back to CP/M
-        time.sleep(0.3)
-        os.write(master, b"\x11")
-        ok, _ = read_until(master, b"Save changes?", timeout=5.0)
+        # Confirm unload via 'y'
+        time.sleep(0.2)
+        os.write(master, b"y")
+        ok, out = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
-            print("[-] Save changes prompt failed")
+            print(f"[-] Unloading Slot 2 failed. Out: {repr(out)}")
             return 1
-        os.write(master, b"n")
+        print("[+] Slot 2 successfully unloaded via Enter -> 'y' confirmation.")
+
+        # Test Enter on now-empty Slot 2 -> triggers Load Plugin UI
+        time.sleep(0.3)
+        os.write(master, b"\r")
+        ok, out = read_until(master, b"Load Plugin (.PRL/.OVL):", timeout=6.0)
+        if not ok:
+            print("[-] Enter on empty Slot 2 failed to trigger Load UI. "
+                  f"Out: {repr(out)}")
+            return 1
+        print("[+] Enter on empty Slot 2 cleanly triggered Load Plugin UI.")
+
+        # Cancel Load UI with ESC
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
+        read_until(master, b"Up/Dn:select", timeout=5.0)
+
+        # Exit Plugin Manager cleanly via 'q' back to Splash Screen
+        time.sleep(0.3)
+        os.write(master, b"q")
+        ok, out_sp = read_until(master,
+                                b"type   e  or  <Enter>   to edit",
+                                timeout=6.0)
+        if not ok:
+            print(f"[-] Exit to Splash failed. Out: {repr(out_sp)}")
+            return 1
+        print("[+] Returned cleanly from Plugin Manager to Splash Screen.")
+
+        # Exit Splash Screen via 'q' back to CP/M
+        time.sleep(0.3)
+        os.write(master, b"q")
         ok, _ = read_until(master, b"C>", timeout=5.0)
         if not ok:
             print("[-] Return to CP/M prompt failed")

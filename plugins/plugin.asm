@@ -356,8 +356,8 @@ PKL_NOT_CTRL_P:
 	JP	Z,PLUG_PREV_SLOT
 	CP	24			; Ctrl+X (Down)
 	JP	Z,PLUG_NEXT_SLOT
-	CP	13			; Enter (Run)
-	JP	Z,PLUG_RUN_SELECTED
+	CP	13			; Enter
+	JP	Z,PLUG_DO_ENTER
 
 	; Convert lowercase to uppercase for letter commands
 	CP	'a'
@@ -372,8 +372,6 @@ PKL_NOT_LOWER:
 	JP	Z,PLUG_NEXT_SLOT
 	CP	'Q'
 	JP	Z,PKL_EXIT
-	CP	'R'
-	JP	Z,PLUG_RUN_SELECTED
 	CP	'A'
 	JP	Z,PLUG_DO_ABOUT
 	CP	'C'
@@ -385,14 +383,14 @@ PKL_NOT_LOWER:
 	CP	'S'
 	JP	Z,PKL_DO_S
 
-	; Slot selection: '0'..'7'
+	; Slot action: '0'..'7'
 	CP	'0'
 	JR	C,PLUG_KEY_LOOP
 	CP	'8'
 	JR	NC,PLUG_KEY_LOOP
 	SUB	'0'
 	LD	(SELECTED_SLOT),A
-	JP	DO_PLUG_REDRAW
+	JP	PLUG_DO_ENTER
 
 PKL_DO_L:
 	LD	A,(FPSL_LOADED_CNT)
@@ -408,7 +406,32 @@ PKL_DO_L_OPEN:
 	JP	DO_PLUG_REDRAW
 
 PKL_DO_U:
-	CALL	PROMPT_UNLOAD_PLUGIN
+	LD	A,(SELECTED_SLOT)
+	CALL	GET_SLOT_ENTRY_PTR
+	LD	DE,22
+	ADD	HL,DE
+	LD	A,(HL)			; SLOT_STATE
+	OR	A
+	JP	Z,PLUG_KEY_LOOP		; Slot empty -> ignore
+	CALL	CONFIRM_UNLOAD_SLOT
+	JP	DO_PLUG_REDRAW
+
+PLUG_DO_ENTER:
+	LD	A,(SELECTED_SLOT)
+	CALL	GET_SLOT_ENTRY_PTR
+	LD	DE,22
+	ADD	HL,DE
+	LD	A,(HL)			; SLOT_STATE: 0 = Free, 1 = Ready
+	OR	A
+	JR	NZ,PDE_OCCUPIED
+
+	; Free slot -> Load plugin
+	CALL	PROMPT_LOAD_PLUGIN
+	JP	DO_PLUG_REDRAW
+
+PDE_OCCUPIED:
+	; Occupied slot -> Confirm Unload
+	CALL	CONFIRM_UNLOAD_SLOT
 	JP	DO_PLUG_REDRAW
 
 PKL_DO_S:
@@ -467,27 +490,6 @@ PHE_CSI:
 	JP	Z,PLUG_NEXT_SLOT
 	CALL	DRAIN_ESC_SEQUENCE
 	JP	PLUG_KEY_LOOP
-
-PLUG_RUN_SELECTED:
-	LD	A,(SELECTED_SLOT)
-	CALL	GET_SLOT_ENTRY_PTR
-	LD	DE,22
-	ADD	HL,DE
-	LD	A,(HL)
-	OR	A
-	JP	Z,PLUG_KEY_LOOP		; Empty slot -> ignore
-
-	; If selected slot is PLUGIN.PRL itself, do nothing
-	LD	A,(HOST_MGR_SLOT)
-	LD	B,A
-	LD	A,(SELECTED_SLOT)
-	CP	B
-	JP	Z,PLUG_KEY_LOOP
-
-	LD	A,(SELECTED_SLOT)
-	LD	C,0			; Action 0: Main Execution
-	OR	A			; Clear Carry (CY=0)
-	RET
 
 PLUG_DO_ABOUT:
 	LD	A,(SELECTED_SLOT)
@@ -970,9 +972,9 @@ PROMPT_LOAD_PLUGIN:
 	RET
 
 ;------------------------------------------------------------------------------
-; Modal Pop-up: Unload Plugin
+; Modal Pop-up: Confirmation to Unload Selected Slot
 ;------------------------------------------------------------------------------
-PROMPT_UNLOAD_PLUGIN:
+CONFIRM_UNLOAD_SLOT:
 	LD	DE,STR_HIDE_CURSOR
 	CALL	HOST_PRINT_STR
 
@@ -1010,9 +1012,10 @@ PROMPT_UNLOAD_PLUGIN:
 	LD	DE,STR_SAVE_CFG_BLANK
 	CALL	HOST_PRINT_STR
 
-	; Line 5: Prompt line
+	; Line 5: Confirmation prompt with slot number
 	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_UNLOAD_PROMPT
+	CALL	FORMAT_UNLOAD_PROMPT
+	LD	DE,SCRATCH_BUF
 	CALL	HOST_PRINT_STR
 
 	; Line 6: Instructions / Keys
@@ -1025,40 +1028,46 @@ PROMPT_UNLOAD_PLUGIN:
 	LD	DE,STR_POPUP_BORDER
 	CALL	HOST_PRINT_STR
 
-	; Position cursor inside brackets on Line 5:
-	; Row = (POPUP_ROW - 3), Col = POPUP_COL + 24
-	LD	A,(POPUP_ROW)
-	SUB	3			; Row of Line 5
-	LD	H,A
-	LD	A,(POPUP_COL)
-	ADD	A,24			; Column of ' ' in '[ ]'
-	LD	L,A
-	CALL	HOST_LOCATE_RC
-	LD	DE,STR_SHOW_CURSOR
-	CALL	HOST_PRINT_STR
-
-	; Read user input
+CUS_KEY_LOOP:
 	CALL	HOST_GET_KEY
-	PUSH	AF
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
-	POP	AF
-
-	CP	27			; ESC?
-	JR	NZ,PUP_NOT_ESC
+	CP	27			; ESC
+	JR	NZ,CUS_NOT_ESC
 	CALL	DRAIN_ESC_SEQUENCE
 	RET
-PUP_NOT_ESC:
+CUS_NOT_ESC:
+	CP	'y'
+	JR	Z,CUS_CONFIRMED
+	CP	'Y'
+	JR	Z,CUS_CONFIRMED
+	CP	13			; Enter confirms
+	JR	Z,CUS_CONFIRMED
+	CP	'n'
+	RET	Z
+	CP	'N'
+	RET	Z
 	CP	'q'
 	RET	Z
 	CP	'Q'
 	RET	Z
-	CP	'0'
-	RET	C
-	CP	'8'
-	RET	NC
-	SUB	'0'
+	JR	CUS_KEY_LOOP
+
+CUS_CONFIRMED:
+	LD	A,(SELECTED_SLOT)
 	CALL	HOST_UNLOAD_SLOT
+	RET
+
+FORMAT_UNLOAD_PROMPT:
+	LD	DE,SCRATCH_BUF
+	LD	HL,STR_UNLOAD_PROMPT_PRE
+	CALL	COPY_STR_Z
+	LD	A,(SELECTED_SLOT)
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+	LD	HL,STR_UNLOAD_PROMPT_POST
+	CALL	COPY_STR_Z
+	XOR	A
+	LD	(DE),A
 	RET
 
 ;==============================================================================
@@ -2078,17 +2087,17 @@ STR_PLUG_SYS_POST:	DB	"/8]    TPA Slot: [4KB Overlaid]", 0
 STR_PLUG_HDR:		DB	"Slot Plugin Name      Type   Size    Exec Mode  Capabilities     Status ", 0
 STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+---------------+--------", 0
 
-STR_PLUG_CMDS_PRE:	DB	"0..7:select | ", 0
+STR_PLUG_CMDS_PRE:	DB	"Up/Dn:select | ", 0
 STR_PLUG_CMDS_BOTH:
-	DB	"Enter:run | A:about | C:cfg | L:load | U:unload | S:save | Q:exit", 0
+	DB	"Enter:unload | A:about | C:cfg | S:save | Q:exit", 0
 STR_PLUG_CMDS_ABOUT:
-	DB	"Enter:run | A:about | L:load | U:unload | S:save | Up/Dn | Q:exit", 0
+	DB	"Enter:unload | A:about | S:save | Q:exit", 0
 STR_PLUG_CMDS_CONFIG:
-	DB	"Enter:run | C:cfg | L:load | U:unload | S:save | Up/Dn | Q:exit", 0
+	DB	"Enter:unload | C:cfg | S:save | Q:exit", 0
 STR_PLUG_CMDS_PLAIN:
-	DB	"Enter:run | L:load | U:unload | S:save cfg | Up/Dn | Q/ESC:exit", 0
+	DB	"Enter:unload | S:save | Q:exit", 0
 STR_PLUG_CMDS_EMPTY:
-	DB	"L:load plugin | S:save cfg | Up/Dn:select | Q/ESC to exit", 0
+	DB	"Enter:load | S:save | Q:exit", 0
 
 STR_MSG_NO_ABOUT:	DB	"[No About]$", 0
 STR_MSG_NO_CONFIG:	DB	"[No Config]$", 0
@@ -2099,8 +2108,9 @@ STR_SAVE_CFG_OK:	DB	"|             [Saved to PLUGIN.CFG]              |", 0
 STR_SAVE_CFG_FAIL:	DB	"|           [Error saving PLUGIN.CFG]            |", 0
 STR_SAVE_CFG_KEY:	DB	"|           [Press any key to continue]          |", 0
 STR_UNLOAD_TITLE:	DB	"|                 Unload Plugin                  |", 0
-STR_UNLOAD_PROMPT:	DB	"|  Unload Slot (0..7): [ ]                       |", 0
-STR_UNLOAD_KEYS:	DB	"|              [0..7: Unload | ESC: Cancel]      |", 0
+STR_UNLOAD_PROMPT_PRE:	DB	"|              Unload Slot ", 0
+STR_UNLOAD_PROMPT_POST:	DB	"? [Y/N]              |", 0
+STR_UNLOAD_KEYS:	DB	"|           [Y: Confirm | N/ESC: Cancel]         |", 0
 
 STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0
 STR_PLUG_TYPE_PRL:	DB	"PRL   ", 0
