@@ -253,6 +253,18 @@ class VT100QualityMonitor:
                     f"Crash / fatal error signature detected: '{sig}'"
                 )
 
+        # Premature CP/M exit detection in raw terminal stream
+        if not self.exiting:
+            if "Exiting SE.COM" in text or "Returned to CP/M" in text:
+                raise UnexpectedBehaviourError(
+                    "Premature CP/M exit detected: 'Exiting SE.COM' in stream"
+                )
+            if re.search(r"(?:\r\n|\r|\n|^)[A-P]>", text):
+                raise UnexpectedBehaviourError(
+                    "Premature CP/M exit detected: '[A-P]>' prompt in stream"
+                )
+
+
     def _assert_crisp_layout(self):
         """
         Criterion 3: Ensures all screen rows maintain strictly crisp bounds,
@@ -318,25 +330,18 @@ class VT100QualityMonitor:
                 raise UnexpectedBehaviourError(
                     "Premature CP/M exit detected: 'file not found' on screen"
                 )
-            has_tildes = any(r[0] == "~" for r in self.buffer)
-            is_se_ui = ("SE - Screen Editor" in full_text or
-                        "SE - Plugin Manager" in full_text or
-                        "SE - Screen Editor Configuration" in full_text)
-            if not has_tildes and not is_se_ui:
-                for r_idx, row in enumerate(self.buffer):
-                    row_str = "".join(row).strip()
-                    if re.match(r"^[A-P]>", row_str):
-                        raise UnexpectedBehaviourError(
-                            f"Premature CP/M exit detected on row {r_idx}: "
-                            f"'{row_str[:40]}'"
-                        )
+            if "Exiting SE.COM" in full_text or "Returned to CP/M" in full_text:
+                raise UnexpectedBehaviourError(
+                    "Premature CP/M exit detected: SE.COM exit banner on screen"
+                )
             bottom_row = self.rows - 1
             bottom_str = "".join(self.buffer[bottom_row])
-            editor_sigs = ("80x24 |", "120x40 |", "^K: Editor keys")
-            if any(sig in bottom_str for sig in editor_sigs):
-                for r_idx in range(bottom_row):
-                    row_str = "".join(self.buffer[r_idx]).strip()
-                    if re.match(r"^[A-P]>", row_str):
+            editor_sigs = ("80x24 |", "120x40 |", "^K: Editor keys", "| Line ")
+            has_status_bar = any(sig in bottom_str for sig in editor_sigs)
+            for r_idx, row in enumerate(self.buffer):
+                row_str = "".join(row).strip()
+                if re.match(r"^[A-P]>", row_str):
+                    if r_idx == bottom_row or not has_status_bar:
                         raise UnexpectedBehaviourError(
                             f"Premature CP/M exit detected on row {r_idx}: "
                             f"'{row_str[:40]}'"
@@ -402,6 +407,11 @@ class VT100QualityMonitor:
                 "Replace done:" in full_text or
                 "Line > 120 chars" in full_text):
             return "editor"
+
+        if ("Exiting SE.COM" in full_text or
+                ("C>" in full_text and "^K: Editor keys" not in full_text and
+                 "| Line " not in full_text and "SE - " not in full_text)):
+            return "cpm_prompt"
 
         return "unknown"
 
@@ -1032,6 +1042,11 @@ def run_drunken_monkey_test(
 
             # Detect current UI state before action
             state = monitor.detect_screen_state()
+            if state == "cpm_prompt":
+                raise UnexpectedBehaviourError(
+                    f"Premature CP/M exit detected at step {step}: "
+                    "CP/M prompt active on screen!"
+                )
 
             # Select character and delay
             if replayer:
@@ -1106,27 +1121,82 @@ def run_drunken_monkey_test(
               flush=True)
 
         # 4. Clean exit back to CP/M
-        print("[*] Performing clean exit with Ctrl+Q...", flush=True)
+        print("[*] Performing clean exit back to CP/M...", flush=True)
         monitor.exiting = True
-        time.sleep(0.2)
-        os.write(master, b"\x11")  # Ctrl+Q
-        time.sleep(0.2)
-        exit_chunk = read_available(master, timeout=0.2)
-        if exit_chunk:
-            monitor.feed(exit_chunk.decode("latin1", errors="replace"))
+        t0 = time.time()
+        while time.time() - t0 < 8.0:
+            p_poll = proc.poll()
+            if verbose:
+                print(f"[*] Teardown loop: proc.poll()={p_poll}", flush=True)
+            if p_poll is not None:
+                raise HangError(
+                    f"Emulator exited prematurely in teardown (code {p_poll})"
+                )
+            chunk = read_available(master, timeout=0.25)
+            if chunk:
+                if verbose:
+                    print(f"[*] Teardown read {len(chunk)} bytes: "
+                          f"{repr(chunk[:50])}", flush=True)
+                monitor.feed(chunk.decode("latin1", errors="replace"))
 
-        # If prompted with "Save changes?", answer 'n'
-        full_screen = "".join("".join(r) for r in monitor.buffer)
-        if ("Save changes?" in full_screen or
-                "Unsaved Modifications" in full_screen):
-            os.write(master, b"n")
-            time.sleep(0.2)
+            full_screen = "\n".join("".join(r) for r in monitor.buffer)
+            chunk_str = (
+                chunk.decode("latin1", errors="replace") if chunk else ""
+            )
 
-        final_chunk = read_until(master, b"C>", timeout=5.0)
-        if b"C>" in final_chunk or (exit_chunk and b"C>" in exit_chunk):
-            print("[+] Clean exit to CP/M prompt (C>) verified.", flush=True)
+            # Check if CP/M prompt has returned
+            if (re.search(r"(?:^|\n)\s*[A-P]>", full_screen) or
+                    re.search(r"(?:\r\n|\r|\n|^)[A-P]>", chunk_str)):
+                print("[+] Clean exit to CP/M prompt (C>) verified.",
+                      flush=True)
+                break
+
+            state = monitor.detect_screen_state()
+            if verbose:
+                print(f"[*] Teardown loop: state={state}, prompt_check="
+                      f"{'C>' in full_screen or '[A-P]>' in full_screen}",
+                      flush=True)
+
+            # If Save changes / modifications prompt is visible, answer 'n'
+            if ("Save changes?" in full_screen or
+                    "Unsaved Modifications" in full_screen or
+                    state == "save_changes_prompt"):
+                if verbose:
+                    print("[*] Teardown: Sending 'n' to save changes prompt",
+                          flush=True)
+                os.write(master, b"n")
+                time.sleep(0.3)
+                continue
+
+            # If in splash screen, send 'q' to exit
+            if state == "splash_screen":
+                if verbose:
+                    print("[*] Teardown: Sending 'q' to splash screen",
+                          flush=True)
+                os.write(master, b"q")
+                time.sleep(0.3)
+                continue
+
+            # If in an input dialog or popup, cancel it with ESC
+            if (state.endswith("_prompt") or
+                    state in ("plugin_popup", "plugin_manager",
+                              "plugin_config", "configuration_screen")):
+                if verbose:
+                    print(f"[*] Teardown: Sending ESC to {state}", flush=True)
+                os.write(master, b"\x1b")
+                # Wait for SE.COM's VT100 ESC sequence debounce timer
+                time.sleep(0.35)
+                continue
+
+            # In normal editor mode: send Ctrl+Q
+            if verbose:
+                print("[*] Teardown: Sending Ctrl+Q to editor", flush=True)
+            os.write(master, b"\x11")  # Ctrl+Q
+            time.sleep(0.35)
         else:
-            print("[*] Test concluded (CP/M prompt returned).", flush=True)
+            raise UnexpectedBehaviourError(
+                "Teardown failed: Clean exit to CP/M prompt (C>) not verified!"
+            )
 
         # Save recorder output
         if recorder and record_file:
