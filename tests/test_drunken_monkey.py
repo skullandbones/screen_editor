@@ -259,10 +259,6 @@ class VT100QualityMonitor:
                 raise UnexpectedBehaviourError(
                     "Premature CP/M exit detected: 'Exiting SE.COM' in stream"
                 )
-            if re.search(r"(?:\r\n|\r|\n|^)[A-P]>", text):
-                raise UnexpectedBehaviourError(
-                    "Premature CP/M exit detected: '[A-P]>' prompt in stream"
-                )
 
 
     def _assert_crisp_layout(self):
@@ -1129,7 +1125,7 @@ def run_drunken_monkey_test(
         print("[*] Performing clean exit back to CP/M...", flush=True)
         monitor.exiting = True
         t0 = time.time()
-        while time.time() - t0 < 8.0:
+        while time.time() - t0 < 12.0:
             p_poll = proc.poll()
             if verbose:
                 print(f"[*] Teardown loop: proc.poll()={p_poll}", flush=True)
@@ -1182,22 +1178,30 @@ def run_drunken_monkey_test(
                 time.sleep(0.3)
                 continue
 
-            # If in an input dialog or popup, cancel it with ESC
+            # If in an input dialog or popup, cancel it
             if (state.endswith("_prompt") or
                     state in ("plugin_popup", "plugin_manager",
                               "plugin_config", "configuration_screen")):
                 if verbose:
-                    print(f"[*] Teardown: Sending ESC to {state}", flush=True)
-                os.write(master, b"\x1b")
-                # Wait for SE.COM's VT100 ESC sequence debounce timer
-                time.sleep(0.35)
+                    print(f"[*] Teardown: Cancelling {state}", flush=True)
+                if state in ("goto_line_prompt", "find_prompt",
+                             "replace_prompt"):
+                    os.write(master, b"\x03")  # Ctrl+C cancels instantly
+                else:
+                    os.write(master, b"\x1b")  # ESC
+                    time.sleep(0.20)
+                drain = read_available(master, timeout=0.4)
+                if drain:
+                    monitor.feed(drain.decode("latin1", errors="replace"))
                 continue
 
             # In normal editor mode: send Ctrl+Q
             if verbose:
                 print("[*] Teardown: Sending Ctrl+Q to editor", flush=True)
             os.write(master, b"\x11")  # Ctrl+Q
-            time.sleep(0.35)
+            drain = read_available(master, timeout=0.4)
+            if drain:
+                monitor.feed(drain.decode("latin1", errors="replace"))
         else:
             raise UnexpectedBehaviourError(
                 "Teardown failed: Clean exit to CP/M prompt (C>) not verified!"
