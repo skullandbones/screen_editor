@@ -194,17 +194,28 @@ def run_test():
         assert ok and b"MIDPLUG" in out_l, "Failed to load MIDPLUG into Slot 1"
         print("[+] MIDPLUG.PRL loaded into Slot 1 as 'FAR (8KB)'.", flush=True)
 
-        # 5. Save configuration to PLUGIN.CFG ('s')
+        # 5. Save configuration to PLUGIN.CFG ('s') and verify modal pop-up
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"s")
-        ok, out_s = read_until(master, b"[Saved to PLUGIN.CFG]", timeout=6.0)
-        assert ok, f"Save confirmation not displayed. Buffer: {repr(out_s)}"
-        print("[+] 's' key successfully saved configuration to PLUGIN.CFG.",
-              flush=True)
+        ok, out_s = read_until(master, b"[Press any key to continue]",
+                               timeout=6.0)
+        assert ok, f"Save pop-up not displayed. Buffer: {repr(out_s)}"
+        assert b"Save Plugin Configuration" in out_s, \
+            "Save configuration modal pop-up title missing"
+        assert b"[Saved to PLUGIN.CFG]" in out_s, \
+            "Save configuration confirmation message missing"
+        assert b"+------------------------------------------------+" in out_s, \
+            "Save configuration modal pop-up border missing"
+        print("[+] 's' key successfully displayed modal pop-up and saved "
+              "configuration to PLUGIN.CFG.", flush=True)
 
-        # 6. Exit Plugin Manager ('q') and exit SE.COM (Ctrl+Q)
-        time.sleep(0.3)
+        # 6. Dismiss pop-up with Space, verify clean redraw, then exit ('q')
+        time.sleep(0.2)
+        os.write(master, b" ")
+        ok, _ = read_until(master, b"0..7:select", timeout=5.0)
+        assert ok, "Failed to redraw Plugin Manager upon modal dismissal"
+        time.sleep(0.2)
         os.write(master, b"q")
         read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
         time.sleep(0.2)

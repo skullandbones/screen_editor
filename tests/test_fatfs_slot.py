@@ -263,14 +263,24 @@ def run_fatfs_slot_test():
             return False
         print("[+] FATFS launched cleanly from Editor Ctrl+P popup without visual corruption.", flush=True)
 
-        # Exit FATFS back to Editor
+        # Exit FATFS back to Editor (returns to Ctrl+P popup hierarchically)
         time.sleep(0.3)
         os.write(master, b"q")
+        ok, _ = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        if not ok:
+            print("[-] Failed to return to Ctrl+P popup after exiting FATFS.",
+                  flush=True)
+            return False
+        # Dismiss Ctrl+P popup with ESC to return to Editor
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
         ok, _ = read_until(master, b"Line    1/1", timeout=6.0)
         if not ok:
-            print("[-] Failed to restore Editor screen after exiting FATFS.", flush=True)
+            print("[-] Failed to restore Editor screen after exiting FATFS.",
+                  flush=True)
             return False
-        print("[+] Editor screen cleanly restored after exiting FATFS.", flush=True)
+        print("[+] Editor screen cleanly restored after exiting FATFS.",
+              flush=True)
         drain_all(master)
 
         # 10. Test Action 0: Import FAT text file into SE.COM editor
@@ -309,6 +319,12 @@ def run_fatfs_slot_test():
             print(f"[-] Document content missing from screen: {repr(out_editor)}", flush=True)
             return False
         print("[+] FAT text file successfully streamed into editor! Status bar and text displayed.", flush=True)
+        drain_all(master)
+
+        # Dismiss Ctrl+P popup with ESC to return cleanly to Editor
+        time.sleep(0.3)
+        os.write(master, b"\x1b")
+        time.sleep(0.3)
         drain_all(master)
 
         # Return to Splash screen via Ctrl+W (document was modified, so answer 'n' to discard prompt)
