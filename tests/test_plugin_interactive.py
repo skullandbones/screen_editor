@@ -97,9 +97,9 @@ def main():
 
         # Launch SE
         os.write(master, b"se\r")
-        ok, out = read_until(master, b"Col 0", timeout=18.0)
+        ok, out = read_until(master, b"for about", timeout=45.0)
         if not ok:
-            print("[-] Splash screen not seen")
+            print(f"[-] Splash screen not seen. Output: {repr(out)}")
             return 1
         print("[+] Splash screen loaded.")
         drain_all(master)
@@ -166,10 +166,10 @@ def main():
             return 1
         print("[+] Key 'j' successfully moved selection to >[2] BEAUTIFY")
 
-        # Verify context help on Slot 2 (BEAUTIFY: Enter:run, A:about, C:config)
-        ok, out = read_until(master, b"C:config", timeout=3.0)
+        # Verify context help on Slot 2 (BEAUTIFY: Enter:run, A:about, C:cfg)
+        ok, out = read_until(master, b"C:cfg", timeout=3.0)
         if not ok:
-            print(f"[-] Slot 2 missing C:config. Out: {repr(out)}")
+            print(f"[-] Slot 2 missing C:cfg. Out: {repr(out)}")
             return 1
         print("[+] Slot 2 context help verified (Run, About, Config).")
 

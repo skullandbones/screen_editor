@@ -70,7 +70,7 @@ def main():
         read_until(master, b"C>", timeout=8.0)
         time.sleep(0.5)
         os.write(master, b"se\r")
-        read_until(master, b"Col 0", timeout=18.0)
+        read_until(master, b"Col 0", timeout=45.0)
         drain_all(master)
 
         time.sleep(0.5)

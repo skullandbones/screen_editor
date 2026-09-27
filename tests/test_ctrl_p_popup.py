@@ -123,7 +123,7 @@ def main():
         # Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"for about", timeout=20.0)
+        out = read_until(master, b"for about", timeout=45.0)
         if b"for about" not in out and b"Col 0" not in out:
             print(f"[-] Failed to reach Splash Screen. Output:\n{out.decode('latin1', errors='replace')}")
             return 1

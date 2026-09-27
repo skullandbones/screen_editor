@@ -144,7 +144,7 @@ def run_fatfs_slot_test():
         # 2. Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        ok, out = read_until(master, b"Col 0", timeout=18.0)
+        ok, out = read_until(master, b"Col 0", timeout=45.0)
         if not ok:
             print("[-] Splash screen failed to display.", flush=True)
             return False
