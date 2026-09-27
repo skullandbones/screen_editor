@@ -184,7 +184,17 @@ def main():
 
     cfg_path = os.path.join(plugin_dir, "PLUGIN.CFG")
     if not os.path.exists(cfg_path):
-        cfg_data = b"WORDCNT.OVL\r\nROT13.PRL\r\nBEAUTIFY.PRL\r\n"
+        cfg_lines = [
+            b"SLOT0=WORDCNT.OVL\r\n",
+            b"SLOT1=ROT13.PRL\r\n",
+            b"SLOT2=BEAUTIFY.PRL\r\n",
+            b"SLOT3=\r\n",
+            b"SLOT4=\r\n",
+            b"SLOT5=\r\n",
+            b"SLOT6=\r\n",
+            b"SLOT7=\r\n",
+        ]
+        cfg_data = b"".join(cfg_lines)
         cfg_data += b"\x1a" * (128 - len(cfg_data))
         with open(cfg_path, "wb") as f:
             f.write(cfg_data)

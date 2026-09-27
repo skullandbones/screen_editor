@@ -72,7 +72,32 @@ DO_SAVE_PLUGIN_CFG:
 	LD	B,0			; B = slot 0..7
 DSP_SLOT_LOOP:
 	PUSH	BC
-	PUSH	DE
+
+	; Write "SLOT"
+	LD	A,'S'
+	LD	(DE),A
+	INC	DE
+	LD	A,'L'
+	LD	(DE),A
+	INC	DE
+	LD	A,'O'
+	LD	(DE),A
+	INC	DE
+	LD	A,'T'
+	LD	(DE),A
+	INC	DE
+
+	; Write slot digit '0'..'7'
+	LD	A,B
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+
+	; Write '='
+	LD	A,'='
+	LD	(DE),A
+	INC	DE
+
 	; Calculate slot ptr: PLUG_REG_PTR + B * 32
 	LD	HL,(PLUG_REG_PTR)
 	LD	A,B
@@ -84,7 +109,6 @@ DSP_SLOT_LOOP:
 	LD	C,A
 	LD	B,0
 	ADD	HL,BC			; HL = slot entry ptr
-	POP	DE
 
 	; Check if slot is loaded: offset 22 (SLOT_STATE != 0)
 	PUSH	HL
@@ -93,9 +117,10 @@ DSP_SLOT_LOOP:
 	LD	A,(HL)
 	POP	HL
 	OR	A
-	JR	Z,DSP_NEXT_SLOT
+	JR	Z,DSP_EMIT_EOL		; If empty, jump straight to emitting CRLF
 
 	; Copy plugin name (up to 8 chars or until null/space)
+	PUSH	HL
 	LD	B,8
 DSP_NAME_LOOP:
 	LD	A,(HL)
@@ -108,24 +133,12 @@ DSP_NAME_LOOP:
 	INC	HL
 	DJNZ	DSP_NAME_LOOP
 DSP_NAME_END:
+	POP	HL
 	LD	A,'.'
 	LD	(DE),A
 	INC	DE
 
 	; Determine extension (.OVL or .PRL)
-	POP	BC			; Restore B = slot
-	PUSH	BC
-	LD	HL,(PLUG_REG_PTR)
-	LD	A,B
-	ADD	A,A
-	ADD	A,A
-	ADD	A,A
-	ADD	A,A
-	ADD	A,A
-	LD	C,A
-	LD	B,0
-	ADD	HL,BC			; HL = slot entry ptr
-
 	PUSH	HL
 	LD	BC,28
 	ADD	HL,BC
@@ -160,6 +173,8 @@ DSP_EXT_COMMON:
 	LD	A,'L'
 	LD	(DE),A
 	INC	DE
+
+DSP_EMIT_EOL:
 	LD	A,13
 	LD	(DE),A
 	INC	DE
@@ -172,7 +187,7 @@ DSP_NEXT_SLOT:
 	INC	B
 	LD	A,B
 	CP	8
-	JR	NZ,DSP_SLOT_LOOP
+	JP	NZ,DSP_SLOT_LOOP
 
 	; Call HOST_SAVE_PLUGIN_CFG with DE = PLUGIN_CFG_BUF
 	LD	DE,PLUGIN_CFG_BUF
