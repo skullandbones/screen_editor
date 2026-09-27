@@ -425,10 +425,22 @@ def main():
         # -------------------------------------------------------------
         print("\n[*] STEP 4: Inspecting cursor positioning & testing "
               "editor typing...")
-        # Inspect cursor positioning sequences received after clearing WORDCNT
+
+        # If Ctrl+P pop-up is active on screen, dismiss it with ESC to return
+        # to editor
+        if "Plugins for Editor" in post_text:
+            print("[*] Dismissing Ctrl+P pop-up with ESC to return...")
+            screen.cursor_seqs.clear()
+            os.write(master, b"\x1b")
+            esc_out = read_until(master, b"1/3000", timeout=8.0)
+            time.sleep(0.3)
+            esc_out += drain_all(master, timeout=0.3)
+            screen.feed(esc_out.decode("latin1", errors="replace"))
+
+        # Inspect cursor positioning sequences received on return to editor
         invalid_cursor_seqs = []
         for row, col, raw_seq in screen.cursor_seqs:
-            if row < 1 or row > 23:  # Valid editor screen rows are 1..23
+            if row < 1 or row > 24:  # Valid terminal screen rows are 1..24
                 invalid_cursor_seqs.append((row, col, raw_seq))
 
         if invalid_cursor_seqs:
@@ -440,22 +452,34 @@ def main():
                     f"    Cursor row {r}, col {c} ({repr(seq)}) - OFF SCREEN!"
                 )
             bugs_detected.append("CURSOR_OUT_OF_BOUNDS")
+        else:
+            print("[+] All cursor coordinates within screen bounds [1..24].")
 
-        # If Ctrl+P pop-up is active on screen, dismiss it with ESC
-        if "Plugins for Editor" in post_text:
-            print("[*] Dismissing Ctrl+P pop-up with ESC to return...")
-            os.write(master, b"\x1b")
-            time.sleep(0.3)
-            esc_out = drain_all(master, timeout=0.3)
-            screen.feed(esc_out.decode("latin1", errors="replace"))
+        # Verify active editor caret is restored to row 1, col 1 (Line 1)
+        editor_cursor_seqs = [
+            (r, c) for r, c, _ in screen.cursor_seqs if 1 <= r <= 23
+        ]
+        if editor_cursor_seqs:
+            last_editor_pos = editor_cursor_seqs[-1]
+            if last_editor_pos != (1, 1):
+                print(
+                    f"[-] BUG CONFIRMED: Editor cursor placed at "
+                    f"{last_editor_pos} instead of (1, 1)!"
+                )
+                bugs_detected.append(
+                    f"CURSOR_DESYNC_ROW_{last_editor_pos[0]}_"
+                    f"COL_{last_editor_pos[1]}"
+                )
+            else:
+                print("[+] Editor cursor correctly restored to (1, 1).")
 
         # Now type characters into editor
         print("[*] Typing 'XYZABC' into editor...")
-        drain_all(master)
         screen.cursor_seqs.clear()
         os.write(master, b"XYZABC")
-        time.sleep(0.5)
-        type_out = drain_all(master, timeout=0.5)
+        type_out = read_until(master, b"XYZABC", timeout=8.0)
+        time.sleep(0.3)
+        type_out += drain_all(master, timeout=0.3)
         screen.feed(type_out.decode("latin1", errors="replace"))
 
         print(">>> [SCREEN GRAB: Screen after typing 'XYZABC']")
