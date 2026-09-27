@@ -378,14 +378,31 @@ def main():
             return 1
         print("    [+] Action 0 invoked: WORDCNT statistics dialog displayed")
 
-        # Dismiss dialog with space
+        # Dismiss dialog with space and verify hierarchical return to Ctrl+P
         time.sleep(0.2)
         os.write(master, b" ")
+        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=4.0)
+        if b"[Up/Dn/0-7] Select" not in out:
+            print(
+                f"[-] Test 5 failed: Return from WORDCNT modal dialog did not "
+                f"restore Ctrl+P menu. Captured: {repr(out)}"
+            )
+            return 1
+        print("    [+] Modal hierarchy verified: Returned cleanly to Ctrl+P "
+              "Editor pop-up menu")
+
+        # Dismiss Ctrl+P pop-up menu with ESC
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
         out = read_until(master, b"Sample Document Text", timeout=4.0)
         if b"Sample Document Text" not in out:
-            print(f"[-] Test 5 failed: Editor screen text not restored after WORDCNT dismissal.")
+            print(
+                f"[-] Test 5 failed: Editor screen text not restored after "
+                f"Ctrl+P dismissal."
+            )
             return 1
-        print("    [+] Editor viewport cleanly restored with original text intact")
+        print("    [+] Editor viewport cleanly restored with original text "
+              "intact")
 
         # Open Help Screen via Ctrl+K
         time.sleep(0.2)
