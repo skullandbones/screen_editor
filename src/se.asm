@@ -24267,19 +24267,16 @@ TRAMP_LOAD_PLUGIN_CFG:
 	RET
 
 TRAMP_FAR_CALL:
-	LD	A,(PLUGIN_FAR_BANK)
-	PUSH	AF
+	PUSH	AF			; Preserve input AF (parameters)
 	LD	A,(CPM_USER_BANK)
 	CALL	0FFF3H
 	EI
-	CALL	CALL_HL
-	PUSH	AF
+	POP	AF			; Restore input AF
+	CALL	CALL_HL			; Call target function with original AF, BC, DE
+	PUSH	AF			; Preserve return AF (results & Carry)
 	DI
-	POP	BC			; BC has return AF
-	POP	AF			; Restore caller's Far bank
-	LD	(PLUGIN_FAR_BANK),A
+	LD	A,(PLUGIN_FAR_BANK)
 	CALL	0FFF3H
-	PUSH	BC
 	POP	AF			; Restore return AF
 	RET
 

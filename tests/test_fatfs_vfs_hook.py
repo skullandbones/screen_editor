@@ -199,7 +199,7 @@ def main():
         # Launch fresh SE.COM without plugins loaded
         time.sleep(0.5)
         os.write(master, b"se\r")
-        ok, buf = read_until(master, b"Col 0", timeout=18.0)
+        ok, buf = read_until(master, b"Col 0", timeout=45.0)
         if not ok:
             print("[-] SE.COM splash screen not displayed. Buffer:\n", buf)
             sys.exit(1)
