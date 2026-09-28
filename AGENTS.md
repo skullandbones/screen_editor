@@ -251,8 +251,8 @@ When initializing a new agent instance (e.g. `agy3`):
 
 ## 5. Protected Branches (ENFORCED ON COLOSSUS & LOCAL HOOKS)
 
-The following branches are strictly protected from deletion and history
-rewriting (force pushes):
+The following branches are strictly protected from deletion, history
+rewriting (force pushes), and rogue direct commits:
 * `master`
 * `agy*_dev_branch` (e.g. `agy1_dev_branch`, `agy2_dev_branch`,
   `agy3_dev_branch`)
@@ -260,6 +260,11 @@ rewriting (force pushes):
 Enforced by:
 1. Server-side `pre-receive` hook on Colossus (`/git_repos/screen_editor.git`).
 2. Client-side `pre-push` hook (`.githooks/pre-push`).
+3. Local commit protection hooks (`.githooks/pre-commit` and
+   `.githooks/commit-msg`):
+   - Prohibit writing direct commits to the head of the local `master` branch.
+   - Merging feature/dev branches into `master` (fast-forward or merge commit)
+     is permitted.
 
 All updates to these branches must be fast-forward or standard merge commits.
 Never attempt `git push --force` or `git push --delete` on these branches.

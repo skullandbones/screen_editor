@@ -1,0 +1,20 @@
+#!/bin/bash
+# .githooks/pre-commit - Prevent direct commits to local master branch.
+# Merges into master (fast-forward or merge commits) are permitted.
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+if [ "$branch" = "master" ]; then
+    git_dir=$(git rev-parse --git-dir 2>/dev/null)
+    if [ -f "$git_dir/MERGE_HEAD" ] || \
+       git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+        exit 0
+    fi
+
+    echo "[-] Hook Error: Direct commits to 'master' are prohibited." >&2
+    echo "    Agents must develop on feature/dev branches and merge into " \
+         "master." >&2
+    exit 1
+fi
+
+exit 0
