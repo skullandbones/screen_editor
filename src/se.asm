@@ -1316,8 +1316,6 @@ DSCP_KEY_LOOP:
 
 	CP	KEY_ESC
 	JR	Z,DSCP_CHECK_ESC
-	CP	KEY_CTRL_C
-	JR	Z,DSCP_CANCEL
 
 	JR	DSCP_KEY_LOOP
 
@@ -10478,10 +10476,6 @@ GOTO_UI_LOOP:
 	CP	KEY_ESC
 	JR	Z,GOTO_UI_CHECK_ESC
 
-	; Ctrl+C -> cancel without moving cursor
-	CP	KEY_CTRL_C
-	JP	Z,GOTO_UI_CANCEL
-
 	; Ctrl+U -> cancel and Page Up
 	CP	KEY_CTRL_U
 	JR	Z,GOTO_UI_PGUP
@@ -10643,10 +10637,6 @@ FIND_UI_KEY_LOOP:
 	; Check ESC / escape sequence
 	CP	KEY_ESC
 	JP	Z,FIND_UI_CHECK_ESC
-
-	; Check Ctrl+C -> Cancel
-	CP	KEY_CTRL_C
-	JP	Z,FIND_UI_CANCEL
 
 	; Check Enter -> Confirm
 	CP	KEY_ENTER
@@ -11695,11 +11685,9 @@ DO_REPLACE_UI:
 REPLACE_INPUT_LOOP:
 	CALL	GET_KEY
 
-	; ESC / Ctrl+C -> Cancel replace
+	; ESC -> Cancel replace
 	CP	KEY_ESC
 	JR	Z,REPLACE_INPUT_CHECK_ESC
-	CP	KEY_CTRL_C
-	JR	Z,REPLACE_INPUT_CANCEL
 
 	; Enter -> Confirm replacement string
 	CP	KEY_ENTER
@@ -11915,13 +11903,7 @@ REPLACE_PROCESS_MATCH:
 
 REPLACE_CONFIRM_KEY:
 	CALL	GET_KEY
-	CP	'q'
-	JP	Z,REPLACE_QUIT
-	CP	'Q'
-	JP	Z,REPLACE_QUIT
 	CP	KEY_ESC
-	JP	Z,REPLACE_QUIT
-	CP	KEY_CTRL_C
 	JP	Z,REPLACE_QUIT
 
 	CP	'r'
@@ -23431,7 +23413,7 @@ STR_POPUP_SAVE_MSG1:
 STR_POPUP_SAVE_MSG2:
 	DB	"| Save changes?                                  |", 0
 STR_POPUP_SAVE_KEYS:
-	DB	"|    [Y] Yes       [N] No       ESC: Cancel      |", 0
+	DB	"|          [Y]es / [N]o / [ESC]=Cancel           |", 0
 
 ; Find Modal Pop-up Strings (50 cols x 7 rows)
 STR_FIND_POPUP_TITLE:

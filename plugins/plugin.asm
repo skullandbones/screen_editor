@@ -1043,10 +1043,6 @@ CUS_NOT_ESC:
 	RET	Z
 	CP	'N'
 	RET	Z
-	CP	'q'
-	RET	Z
-	CP	'Q'
-	RET	Z
 	JR	CUS_KEY_LOOP
 
 CUS_CONFIRMED:
@@ -2118,7 +2114,7 @@ STR_SAVE_CFG_KEY:	DB	"|           [Press any key to continue]          |", 0
 STR_UNLOAD_TITLE:	DB	"|                 Unload Plugin                  |", 0
 STR_UNLOAD_PROMPT_PRE:	DB	"|              Unload Slot ", 0
 STR_UNLOAD_PROMPT_POST:	DB	"? [Y/N]              |", 0
-STR_UNLOAD_KEYS:	DB	"|           [Y: Confirm | N/ESC: Cancel]         |", 0
+STR_UNLOAD_KEYS:	DB	"|          [Y]es / [N]o / [ESC]=Cancel           |", 0
 
 STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0
 STR_PLUG_TYPE_PRL:	DB	"PRL   ", 0
