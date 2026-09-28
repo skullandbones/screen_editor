@@ -262,16 +262,19 @@ def analyze_plugin_file(filepath):
             f"found {len(code_data):,d} bytes"
         )
 
-    # Relocation bitmap analysis (.PRL only)
-    has_reloc_bitmap = is_prl
-    bitmap_size = (prog_size + 7) // 8 if is_prl else 0
+    # Relocation bitmap analysis (.PRL or relocatable .OVL)
+    calc_bm_size = (prog_size + 7) // 8
+    has_reloc_bitmap = is_prl or (
+        load_addr == 0 and file_size >= HDR_MIN_SIZE + prog_size + calc_bm_size
+    )
+    bitmap_size = calc_bm_size if has_reloc_bitmap else 0
     expected_file_size = HDR_MIN_SIZE + prog_size + bitmap_size
     reloc_count = 0
     reloc_density_pct = 0.0
     invalid_trailing_bits = 0
     relocs_out_of_bounds = 0
 
-    if is_prl:
+    if has_reloc_bitmap:
         bitmap_data = data[HDR_MIN_SIZE + prog_size:]
         if len(bitmap_data) < bitmap_size:
             errors.append(
