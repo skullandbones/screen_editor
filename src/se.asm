@@ -224,6 +224,8 @@ AUTO_LOAD_RENDER:
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	CHECK_FILE_TRUNCATED_POPUP
+	CALL	LOCATE_CURSOR
 	JP	MAIN_LOOP
 
 DO_AUTO_LOAD_FAT:
@@ -5773,10 +5775,6 @@ SHOW_STATUS_REST:
 	OR	A
 	JP	NZ,SHOW_STATUS_OOM
 
-	LD	A,(FILE_IS_TRUNCATED)
-	OR	A
-	JP	NZ,SHOW_STATUS_TRUNC
-
 	LD	A,(BLOCK_ACTIVE)
 	OR	A
 	JP	Z,SHOW_STATUS_NORMAL_KEYS
@@ -5968,11 +5966,6 @@ SSPO_PAD_LOOP:
 
 SHOW_STATUS_OOM:
 	LD	DE,STR_STATUS_OOM
-	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
-
-SHOW_STATUS_TRUNC:
-	LD	DE,STR_STATUS_TRUNC
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
@@ -14995,7 +14988,6 @@ LOAD_STORE_CHAR:
 LOAD_LINE_OOM_EXT:
 	POP	BC
 	POP	HL
-	CALL	SET_OOM_STATUS
 	LD	A,1
 	LD	(FILE_IS_TRUNCATED),A
 	JP	NEXT_BYTE_IN_SECTOR
@@ -15003,7 +14995,6 @@ LOAD_LINE_OOM_EXT:
 LOAD_LINE_OOM:
 	POP	BC
 	POP	HL
-	CALL	SET_OOM_STATUS
 	LD	A,1
 	LD	(FILE_IS_TRUNCATED),A
 	JP	FILE_LOAD_DONE
@@ -15101,7 +15092,6 @@ LPCI_NO_TICK:
 LF_OOM_HANDLE:
 	POP	BC
 	POP	HL
-	CALL	SET_OOM_STATUS
 	LD	A,1
 	LD	(FILE_IS_TRUNCATED),A
 	JP	FILE_LOAD_DONE
@@ -15173,6 +15163,7 @@ LOAD_INIT_CACHE:
 	LD	(IS_LOADING_FILE),A
 	LD	(BLOCK_ACTIVE),A
 	LD	(DOC_MODIFIED),A
+	LD	(STATUS_OOM_FLAG),A
 	CALL	INVALIDATE_ACTIVE_LINE
 	CALL	CHECKOUT_ACTIVE_LINE
 	CALL	RELOAD_CACHE_WINDOW_FORCE
@@ -15497,6 +15488,8 @@ OPEN_RENDER:
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	CHECK_FILE_TRUNCATED_POPUP
+	CALL	LOCATE_CURSOR
 	JP	MAIN_LOOP
 
 HANDLE_OPEN_DRIVE_SWITCH:
@@ -16540,6 +16533,80 @@ TRUNC_TILDE_DONE:
 	XOR	A
 	LD	(IS_SPLASH_SCREEN),A
 	RET
+
+;------------------------------------------------------------------------------
+; CHECK_FILE_TRUNCATED_POPUP:
+; Check if document was truncated on load; if so, display modal popup.
+;------------------------------------------------------------------------------
+CHECK_FILE_TRUNCATED_POPUP:
+	LD	A,(FILE_IS_TRUNCATED)
+	OR	A
+	RET	Z
+
+;------------------------------------------------------------------------------
+; SHOW_FILE_TRUNCATED_POPUP:
+; Displays centered modal pop-up alerting user that file was truncated on load.
+; Dimensions: 50 columns wide x 7 rows high.
+; Waits for any key, then restores screen and status bar.
+;------------------------------------------------------------------------------
+SHOW_FILE_TRUNCATED_POPUP:
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+
+	; 3. Hide cursor while drawing popup
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+
+	; 4. Render 7-line Pop-Up Box
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_TRUNC_TITLE
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_TRUNC_MSG1
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_TRUNC_MSG2
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_TRUNC_KEY
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; 5. Wait for any key
+	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
+
+	; 6. Redraw editor screen and status bar
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	RET
+
 
 DO_SAVE_FILE_UI_IMPL:
 	; Initialize directory layout parameters based on active screen mode
@@ -22301,6 +22368,8 @@ HOFF_DO_LOAD:
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	CHECK_FILE_TRUNCATED_POPUP
+	CALL	LOCATE_CURSOR
 	JP	MAIN_LOOP
 
 HOFF_LOAD_FAIL:
@@ -23409,6 +23478,16 @@ STR_POPUP_SAVE_MSG2:
 STR_POPUP_SAVE_KEYS:
 	DB	"|          [Y]es / [N]o / [ESC]=Cancel           |", 0
 
+; File Truncated Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_TRUNC_TITLE:
+	DB	"|                 File Truncated                 |", 0
+STR_POPUP_TRUNC_MSG1:
+	DB	"| File exceeded capacity and has been truncated. |", 0
+STR_POPUP_TRUNC_MSG2:
+	DB	"| Save is disabled to protect data on disk.      |", 0
+STR_POPUP_TRUNC_KEY:
+	DB	"|           Press any key to continue            |", 0
+
 ; Find Modal Pop-up Strings (50 cols x 7 rows)
 STR_FIND_POPUP_TITLE:
 	DB	"|                   Find Text                    |", 0
@@ -23689,7 +23768,6 @@ STR_STATUS_SAVING:	DB	"Saving...       | ","$"
 STR_PAN_PREFIX:		DB	"[Pan +","$"
 
 STR_STATUS_OOM:		DB	"Out of memory   | ","$"
-STR_STATUS_TRUNC:	DB	"[FILE TRUNCATED]| ","$"
 
 STR_TRUNC_SAVE_BLOCKED:
 	DB	"~",13,10
