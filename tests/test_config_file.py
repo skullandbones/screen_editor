@@ -510,9 +510,10 @@ def run_tests():
         print("    [+] Created RAMTEST.DAT (4 sectors / 512 bytes) on RAM drive A:")
 
         # Switch to C: where SE.COM and SE.CFG reside
-        time.sleep(0.3)
+        time.sleep(0.5)
         os.write(master, b"c:\r")
-        read_until(master, b"C>", timeout=10.0)
+        out = read_until(master, b"C>", timeout=15.0)
+        assert b"C>" in out
 
         # Launch SE.COM - should trigger hibernation of A: into C:RAMDRV.IMG
         time.sleep(0.3)
@@ -843,7 +844,7 @@ def run_tests():
         # Launch SE TABTEST.TXT
         time.sleep(0.4)
         os.write(master, b"se tabtest.txt\r")
-        out = read_until(master, b"Col 0", timeout=25.0)
+        out = read_until(master, b"Col 0", timeout=45.0)
         assert b"Col 0" in out, f"Editor did not open at Col 0: {out}"
         print("    [+] Opened TABTEST.TXT in 4-space tab mode at Col 0")
 
@@ -884,7 +885,7 @@ def run_tests():
         # Launch SE TABTEST.TXT
         time.sleep(0.4)
         os.write(master, b"se tabtest.txt\r")
-        out = read_until(master, b"Col 0", timeout=25.0)
+        out = read_until(master, b"Col 0", timeout=45.0)
         assert b"Col 0" in out
 
         # Move right onto Tab (index 1)

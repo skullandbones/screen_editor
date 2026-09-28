@@ -125,6 +125,7 @@ START:
 	; Query initial CP/M drive via BDOS 25 (Return Current Disk)
 	LD	C,25
 	CALL	BDOS_ENTRY
+	LD	(CURRENT_DEFAULT_DRIVE),A
 	INC	A			; 0..15 -> 1..16
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
@@ -137,24 +138,26 @@ START:
 	; Initialize Screen Geometry to Default (120x40)
 	CALL	SET_MODE_120X40
 
-	; Detect RomWBW RAM drive letter (0=A, 1=B, ..., 0xFF=none)
-	CALL	DETECT_RAMDRIVE_LETTER
-
 	; Check if filename was provided in FCB1 (populates WORK_FCB and HAS_FILE_ARG)
 	CALL	CHECK_COMMAND_LINE
 
-	; Load configuration from SE.CFG if present (local dir first, then program drive)
+	; Load config from SE.CFG if present (local dir first, then program drive)
 	CALL	LOAD_CONFIG
 
-	; Safety check: Prevent hibernation or raw overwrite if target file
-	; or active drive is on RAM drive
-	CALL	VALIDATE_RAMDRIVE_SAFETY
-
-	; If RAM drive mode is HIBERNATE, dump RAM drive to RAMDRV.IMG
-	; before initializing buffer
+	; Process RAM drive via HIBERN.OVL
 	LD	A,(CFG_RAMDRIVE_FLAG)
-	CP	RAMDRV_MODE_HIBERNATE
-	CALL	Z,HIBERNATE_RAMDRIVE
+	OR	A
+	JR	Z,START_RAMDRV_DETECT
+	; Mode 1 or 2: Detect, Validate safety & Hibernate if requested
+	LD	B,A			; B = requested mode (1=ENABLE, 2=HIBERNATE)
+	LD	A,1			; Action 1
+	CALL	RUN_HIBERN_STARTUP
+	JR	START_RAMDRV_DONE
+START_RAMDRV_DETECT:
+	; Mode 0: Detect RAM drive letter only
+	XOR	A			; Action 0
+	CALL	RUN_HIBERN_STARTUP
+START_RAMDRV_DONE:
 
 	; Initialize Terminal (Clear Screen & Home)
 	CALL	TERM_INIT
@@ -14654,33 +14657,21 @@ HIB_CREATE_ERR:
 	CALL	PRINT_STR
 	RET
 
+;------------------------------------------------------------------------------
 ; RESTORE_RAMDRIVE:
-; Restores physical banks 0x81..0x88 from RAMDRV.IMG if hibernated.
+; If RAM drive was hibernated, loads HIBERN.OVL and executes Action 2 (Restore).
+;------------------------------------------------------------------------------
 RESTORE_RAMDRIVE:
-	; Only restore if currently marked as hibernated
 	LD	A,(RAMDRIVE_IS_HIBERNATED)
-	CP	1
-	RET	NZ
+	OR	A
+	RET	Z			; Not hibernated -> nothing to do
 
-	; Display Restoring message
-	LD	DE,STR_MSG_RESTORING
-	CALL	PRINT_STR
+	CALL	LOAD_HIBERN_OVERLAY
+	RET	C			; Failed to load overlay
 
-	CALL	RESTORE_RAMDRIVE_BODY
-	JR	C,REST_FAILED
-
-	; Successfully restored!
+	CALL	LINE_STORAGE + 256 + 6	; Action 2: Restore
 	XOR	A
 	LD	(RAMDRIVE_IS_HIBERNATED),A
-	LD	DE,STR_MSG_REST_DONE
-	CALL	PRINT_STR
-	RET
-
-REST_FAILED:
-	XOR	A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-	LD	DE,STR_MSG_REST_ERR
-	CALL	PRINT_STR
 	RET
 
 ; RESTORE_RAMDRIVE_BODY:
@@ -14790,6 +14781,181 @@ RRB_OPEN_ERR:
 	CALL	BDOS_ENTRY
 
 	SCF				; Carry = 1 (error)
+	RET
+
+STR_HIBERN_OVL_NAME:
+	DB	"HIBERN  OVL"
+
+INIT_HIB_OVL_FCB_LOCAL:
+	XOR	A
+	JR	INIT_HIB_OVL_FCB_COMMON
+
+INIT_HIB_OVL_FCB_DRIVE:
+	; A = drive code (1=A, 2=B...)
+INIT_HIB_OVL_FCB_COMMON:
+	LD	HL,SHARED_TEMP_FCB
+	LD	(HL),A			; Drive byte
+	INC	HL
+	LD	DE,STR_HIBERN_OVL_NAME
+	LD	B,11
+INIT_HIB_COPY:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	HL
+	INC	DE
+	DJNZ	INIT_HIB_COPY
+	LD	B,24
+INIT_HIB_ZERO:
+	LD	(HL),0
+	INC	HL
+	DJNZ	INIT_HIB_ZERO
+	RET
+
+;------------------------------------------------------------------------------
+; LOAD_HIBERN_OVERLAY:
+; Loads HIBERN.OVL into LINE_STORAGE and relocates it if relocatable PRL.
+; Returns: Carry = 0 on success, Carry = 1 on error.
+;------------------------------------------------------------------------------
+LOAD_HIBERN_OVERLAY:
+	CALL	INIT_HIB_OVL_FCB_LOCAL
+	LD	DE,SHARED_TEMP_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JR	NZ,LHO_OPEN_OK
+
+	; Try program drive if known
+	LD	A,(CONFIG_SOURCE_DRIVE)
+	CP	0FFH
+	JP	Z,LHO_ERR
+	INC	A			; 1-based drive
+	CALL	INIT_HIB_OVL_FCB_DRIVE
+	LD	DE,SHARED_TEMP_FCB
+	LD	C,15			; BDOS Open File
+	CALL	BDOS_ENTRY
+	CP	0FFH
+	JP	Z,LHO_ERR
+
+LHO_OPEN_OK:
+	; Clear record byte (cr)
+	XOR	A
+	LD	(SHARED_TEMP_FCB + 32),A
+
+	; Read up to 32 records (4096 bytes) into LINE_STORAGE
+	LD	HL,LINE_STORAGE
+	LD	B,32
+
+LHO_READ_LOOP:
+	PUSH	BC
+	PUSH	HL
+	EX	DE,HL			; DE = current buffer ptr
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+	LD	DE,SHARED_TEMP_FCB
+	LD	C,20			; BDOS Read Next Record
+	CALL	BDOS_ENTRY
+	POP	HL
+	POP	BC
+	OR	A
+	JR	NZ,LHO_READ_EOF		; EOF or read error
+	LD	DE,128
+	ADD	HL,DE
+	DJNZ	LHO_READ_LOOP
+
+LHO_READ_EOF:
+	; Close HIBERN.OVL
+	LD	DE,SHARED_TEMP_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+
+	; Restore default DMA
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; Check if relocation needed (LOAD_ADDR == 0 at offset 7)
+	LD	HL,(LINE_STORAGE + 7)
+	LD	A,H
+	OR	L
+	JR	NZ,LHO_DONE
+
+	; Relocate PRL in LINE_STORAGE
+	; Target page = high_byte(LINE_STORAGE + 256)
+	LD	HL,LINE_STORAGE + 256
+	LD	A,H
+	DEC	A			; Bias = Target Page - 1
+	LD	(RELOC_BIAS),A
+
+	LD	HL,LINE_STORAGE + 256
+	LD	DE,(LINE_STORAGE + 1)	; PROG_SIZE
+	PUSH	HL
+	ADD	HL,DE
+	EX	DE,HL			; DE = bitmap ptr
+	POP	HL			; HL = code ptr
+	LD	BC,(LINE_STORAGE + 1)
+	CALL	RELOCATE_PRL_LOOP
+
+LHO_DONE:
+	OR	A			; Carry = 0 (success)
+	RET
+
+LHO_ERR:
+	SCF				; Carry = 1 (error)
+	RET
+
+;------------------------------------------------------------------------------
+; RUN_HIBERN_STARTUP:
+; Loads HIBERN.OVL and executes Action 0 (Detect) or Action 1 (Hibernate/Valid).
+; Input:
+;   A = 0: Action 0 (Detect RAM drive letter only)
+;   A = 1: Action 1 (Hibernate or Validate mode in B)
+;   B = Requested mode (1=ENABLED, 2=HIBERNATE) if A=1
+;------------------------------------------------------------------------------
+RUN_HIBERN_STARTUP:
+	PUSH	AF
+	PUSH	BC
+	CALL	LOAD_HIBERN_OVERLAY
+	JR	C,RHS_LOAD_ERR
+
+	POP	BC
+	POP	AF
+	OR	A
+	JR	NZ,RHS_ACTION_HIB
+
+	; Action 0: Detect only
+	CALL	LINE_STORAGE + 256 + 0
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	LD	A,C
+	CALL	SET_RAMDRIVE_CHAR
+	RET
+
+RHS_ACTION_HIB:
+	; Action 1: Detect, Validate & Hibernate
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	LD	DE,WORK_FCB
+	LD	HL,HAS_FILE_ARG
+	LD	C,(HL)
+	; B already contains requested mode
+	CALL	LINE_STORAGE + 256 + 3
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	LD	A,D
+	LD	(CFG_RAMDRIVE_FLAG),A
+	LD	A,B
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	LD	A,C
+	CALL	SET_RAMDRIVE_CHAR
+	RET
+
+RHS_LOAD_ERR:
+	POP	BC
+	POP	AF
+	LD	A,0FFH
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	LD	A,'?'
+	CALL	SET_RAMDRIVE_CHAR
+	XOR	A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -24037,6 +24203,7 @@ RAW_TEST_FCB		EQU	SHARED_TEMP_FCB
 CFG_FCB			EQU	SHARED_TEMP_FCB
 COM_PROBE_FCB		EQU	SHARED_TEMP_FCB
 RAMDRV_FCB		EQU	SHARED_TEMP_FCB
+	HIB_FCB			EQU	SHARED_TEMP_FCB
 DIR_FILE_COUNT:	DB	0
 DIR_PAGE_INDEX:	DB	0
 DIR_PAGE_COUNT:	DB	0
