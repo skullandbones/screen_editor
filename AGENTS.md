@@ -99,6 +99,13 @@ How:
      once for the project (via command prefix matching).
    * In contrast, inline ad-hoc snippets generate novel command strings each
      time, disabling prefix auto-approval and repeatedly prompting the user.
+8. **Pre-Merge Validation & Test Summaries (MANDATORY)**:
+   * Agents must not merge unvalidated commits into the `master` branch.
+   * All changes must undergo rigorous local validation (sanity checks,
+     regression test suites, line length checks, and TPA headroom audits)
+     prior to requesting a merge.
+   * Agents must provide a clear summary of their test results to the user
+     before requesting permission to merge to `master`.
 
 ---
 
@@ -242,10 +249,16 @@ When initializing a new agent instance (e.g. `agy3`):
    git merge colossus/master
    ```
 3. **Promoting changes to master**:
-   Only when explicitly requested by the user:
-   - Commit all work cleanly to `agy<N>_dev_branch`.
-   - Merge `agy<N>_dev_branch` into `master` (in `src/screen_editor`).
-   - Push both `master` and `agy<N>_dev_branch` to `colossus`.
+   - **Mandatory Pre-Merge Validation**: Agents must not merge unvalidated
+     commits. All changes must be fully built, tested, and verified.
+   - **Mandatory Test Results Summary**: Agents must provide a comprehensive
+     summary of test results to the user before requesting approval to merge
+     into `master`.
+   - **Explicit User Approval Required**: Only when explicitly requested and
+     approved by the user:
+     - Commit all work cleanly to `agy<N>_dev_branch`.
+     - Merge `agy<N>_dev_branch` into `master` (in `src/screen_editor`).
+     - Push both `master` and `agy<N>_dev_branch` to `colossus`.
 
 ---
 
