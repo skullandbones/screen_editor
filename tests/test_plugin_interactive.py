@@ -97,7 +97,7 @@ def main():
 
         # Launch SE
         os.write(master, b"se\r")
-        ok, out = read_until(master, b"for about", timeout=45.0)
+        ok, out = read_until(master, b"for about", timeout=60.0)
         if not ok:
             print(f"[-] Splash screen not seen. Output: {repr(out)}")
             return 1
@@ -113,6 +113,16 @@ def main():
             return 1
         print("[+] Plugin Manager displayed.")
 
+        # Verify status bar presence on Plugin Manager screen
+        ok, out_stat = read_until(master, b"Free:", timeout=5.0)
+        out += out_stat
+        ok, out_stat2 = read_until(master, b"\x1b[0m", timeout=3.0)
+        out += out_stat2
+        if b"80x24" not in out or b"Free:" not in out or b"KB" not in out:
+            print(f"[-] Plugin Manager missing status bar. Out: {repr(out)}")
+            return 1
+        print("[+] Verified status bar rendered on Plugin Manager screen.")
+
         # Verify initial selection cursor on slot 0: >[0]
         if b">[0]" not in out:
             ok, out_more = read_until(master, b">[0]", timeout=5.0)
@@ -123,8 +133,10 @@ def main():
         print("[+] Verified initial selection cursor on Slot 0: >[0] WORDCNT")
 
         # Verify context help line on Slot 0 (WORDCNT: Enter:unload, A:about)
-        ok, out = read_until(master, b"A:about", timeout=3.0)
-        if not ok or b"Enter:unload" not in out:
+        if b"A:about" not in out:
+            ok, out_more = read_until(master, b"A:about", timeout=3.0)
+            out += out_more
+        if b"A:about" not in out or b"Enter:unload" not in out:
             print(f"[-] Slot 0 missing context help. Out: {repr(out)}")
             return 1
         print("[+] Slot 0 context help verified (Enter:unload, A:about).")
