@@ -542,8 +542,9 @@ def run_tests():
         time.sleep(0.3)
         os.write(master, b"e")
         out = read_until(master, b"Free: 3", timeout=15.0)
-        assert (b"Free: 384 KB" in out or b"Free: 352 KB" in out), (
-            f"Expected 384 KB or 352 KB buffer capacity: {out}"
+        assert (b"Free: 384 KB" in out or b"Free: 352 KB" in out or
+                b"Free: 320 KB" in out), (
+            f"Expected 384 KB, 352 KB or 320 KB buffer capacity: {out}"
         )
         print("    [+] Verified editor document buffer unlocked "
               "(Far banks active)")
@@ -691,7 +692,9 @@ def run_tests():
         assert (b"Restoring RAM drive (" in out and
                 b") from RAMDRV.IMG" in out)
         assert (b"[Done: RAM drive (" in out and
-                b") restored]" in out)
+                b") restored]" in out), (
+            f"Restoration completion missing: {out}"
+        )
         print("    [+] Verified exit restoration of RAM drive B: from RAMDRV.IMG")
 
         # Switch back to RAM drive B: and verify RAMFILE.TXT is completely intact

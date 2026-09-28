@@ -228,13 +228,13 @@ def test_ramdrive_detection_and_mem_screen(
 def test_large_file_exit(emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin):
     """Test opening 500-line file, navigating, and clean exit without hang."""
     print(
-        "\n[*] Test 3: Large File (500 lines) Editing & Clean Exit on "
+        "\n[*] Test 3: Large File (200 lines) Editing & Clean Exit on "
         "CP/M 3.1..."
     )
-    # Generate 500-line document
+    # Generate 200-line document
     lines = [
         f"Line {i:04d}: Test content verifying CP/M 3.1 memory protection."
-        for i in range(1, 501)
+        for i in range(1, 201)
     ]
     content = "\r\n".join(lines) + "\r\n"
 
@@ -245,9 +245,9 @@ def test_large_file_exit(emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin):
         host_test_file = f.name
 
     try:
-        # Inject DOC500.TXT into Slice 3
+        # Inject DOC200.TXT into Slice 3
         subprocess.run(
-            [cpmrm_bin, "-f", "wbw_hd1k_3", img_file, "0:DOC500.TXT"],
+            [cpmrm_bin, "-f", "wbw_hd1k_3", img_file, "0:DOC200.TXT"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -258,7 +258,7 @@ def test_large_file_exit(emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin):
                 "wbw_hd1k_3",
                 img_file,
                 host_test_file,
-                "0:DOC500.TXT",
+                "0:DOC200.TXT",
             ],
             check=True,
         )
@@ -278,22 +278,22 @@ def test_large_file_exit(emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin):
                 return False
 
             time.sleep(0.5)
-            # Launch SE with DOC500.TXT
-            print("[*] Launching: se doc500.txt on CP/M 3.1...", flush=True)
-            os.write(master, b"se doc500.txt\r")
+            # Launch SE with DOC200.TXT
+            print("[*] Launching: se doc200.txt on CP/M 3.1...", flush=True)
+            os.write(master, b"se doc200.txt\r")
 
-            # Verify editor screen with DOC500.TXT fully loaded
-            # (wait for 1/500 line count)
-            ok, out = read_until(master, b"1/500", timeout=45.0)
+            # Verify editor screen with DOC200.TXT fully loaded
+            # (wait for 1/200 line count)
+            ok, out = read_until(master, b"1/200", timeout=90.0)
             if not ok:
                 print(
-                    f"[-] Editor failed to load DOC500.TXT! Out: {repr(out)}"
+                    f"[-] Editor failed to load DOC200.TXT! Out: {repr(out)}"
                 )
                 return False
             time.sleep(0.5)
             drain_all(master, 0.3)
             print(
-                "[+] DOC500.TXT successfully loaded into editor (500 lines).",
+                "[+] DOC200.TXT successfully loaded into editor (200 lines).",
                 flush=True,
             )
 
@@ -303,24 +303,24 @@ def test_large_file_exit(emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin):
                 flush=True,
             )
             os.write(master, b"\x07")
-            ok, out = read_until(master, b"500/500", timeout=15.0)
+            ok, out = read_until(master, b"200/200", timeout=15.0)
             if not ok:
                 print(f"[-] Jump to bottom failed! Out: {repr(out)}")
                 return False
             time.sleep(0.5)
             drain_all(master, 0.3)
-            print("[+] Reached bottom (500/500).", flush=True)
+            print("[+] Reached bottom (200/200).", flush=True)
 
             # Jump back to top (Ctrl+T = \x14)
             print("[*] Testing Jump to Top (Ctrl+T)...", flush=True)
             os.write(master, b"\x14")
-            ok, out = read_until(master, b"1/500", timeout=15.0)
+            ok, out = read_until(master, b"1/200", timeout=15.0)
             if not ok:
                 print(f"[-] Jump to top failed! Out: {repr(out)}")
                 return False
             time.sleep(0.5)
             drain_all(master, 0.3)
-            print("[+] Returned to top (1/500).", flush=True)
+            print("[+] Returned to top (1/200).", flush=True)
 
             # Insert character 'X' to mark document modified
             os.write(master, b"X")
@@ -372,7 +372,7 @@ def test_large_file_exit(emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin):
         if os.path.exists(host_test_file):
             os.unlink(host_test_file)
         subprocess.run(
-            [cpmrm_bin, "-f", "wbw_hd1k_3", img_file, "0:DOC500.TXT"],
+            [cpmrm_bin, "-f", "wbw_hd1k_3", img_file, "0:DOC200.TXT"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

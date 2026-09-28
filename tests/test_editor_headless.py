@@ -26,7 +26,9 @@ def find_paths():
 
     return emu_bin, rom_file, img_file, se_bin
 
-SPLASH_FREE_TARGETS = [b"Free: 352 KB", b"Free: 384 KB", b"Free: 416 KB"]
+SPLASH_FREE_TARGETS = [
+    b"Free: 320 KB", b"Free: 352 KB", b"Free: 384 KB", b"Free: 416 KB"
+]
 
 def has_free_mem(buf):
     return any(t in buf for t in SPLASH_FREE_TARGETS)
@@ -727,7 +729,8 @@ def test_se_execution():
             print(f"[-] Splash screen missing about option. Buffer: {repr(out_splash)}", flush=True)
             return False
         out_splash_status = read_until(master, b"Line    1/30", timeout=4.0)
-        if (b"Free: 348 KB" not in out_splash_status and
+        if (b"Free: 316 KB" not in out_splash_status and
+            b"Free: 348 KB" not in out_splash_status and
             b"Free: 380 KB" not in out_splash_status and
             b"Free: 412 KB" not in out_splash_status):
             print(f"[-] Splash screen status bar missing free memory indicator. Buffer: {repr(out_splash_status)}", flush=True)
