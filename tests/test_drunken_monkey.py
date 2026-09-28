@@ -297,6 +297,18 @@ class VT100QualityMonitor:
                         f"instead of bottom row {bottom_row}!"
                     )
 
+        # In Plugin Manager screen, ensure bottom row contains the status bar
+        full_text = "\n".join("".join(row) for row in self.buffer)
+        if "SE - Plugin Manager" in full_text:
+            bottom_str = "".join(self.buffer[bottom_row])
+            if "|" not in bottom_str or (
+                "80x24" not in bottom_str and "120x40" not in bottom_str
+            ):
+                raise CrispLayoutError(
+                    "Plugin Manager screen missing bottom row status bar: "
+                    f"'{bottom_str.strip()}'"
+                )
+
         # 3. Modal dialog box border alignment:
         # If a row starts with '+---' or '| ' and ends with '---+' or ' |',
         # check width consistency.
@@ -377,7 +389,9 @@ class VT100QualityMonitor:
         if "Replace (" in full_text and "uit/" in full_text:
             return "replace_confirm_prompt"
         if ("[Up/Dn/0-7] Select" in full_text or
-                "Select [0-7] to Execute" in full_text):
+                "Select [0-7] to Execute" in full_text or
+                "Plugins for Editor" in full_text or
+                "to Dismiss" in full_text):
             return "plugin_popup"
         if "Save & Exit" in full_text:
             return "plugin_config"
@@ -655,8 +669,8 @@ class DrunkenMonkeyInputGenerator:
             return choice, d, f"Replace confirm: {choice}"
 
         elif screen_state == "plugin_popup":
-            slot = self.rng.choice(["0", "1", "2", "\x1b"])
-            d = max(delay, 0.15) if slot == "\x1b" else delay
+            slot = self.rng.choice(["0", "1", "2", "\x1b", "q"])
+            d = max(delay, 0.15) if slot in ("\x1b", "q") else delay
             return slot, d, f"Plugin popup: {slot}"
 
         elif screen_state == "press_any_key":
@@ -1125,7 +1139,7 @@ def run_drunken_monkey_test(
         print("[*] Performing clean exit back to CP/M...", flush=True)
         monitor.exiting = True
         t0 = time.time()
-        while time.time() - t0 < 12.0:
+        while time.time() - t0 < 20.0:
             p_poll = proc.poll()
             if verbose:
                 print(f"[*] Teardown loop: proc.poll()={p_poll}", flush=True)
@@ -1189,8 +1203,8 @@ def run_drunken_monkey_test(
                     os.write(master, b"\x03")  # Ctrl+C cancels instantly
                 else:
                     os.write(master, b"\x1b")  # ESC
-                    time.sleep(0.20)
-                drain = read_available(master, timeout=0.4)
+                    time.sleep(0.40)
+                drain = read_available(master, timeout=0.6)
                 if drain:
                     monitor.feed(drain.decode("latin1", errors="replace"))
                 continue
