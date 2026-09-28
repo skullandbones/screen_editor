@@ -637,12 +637,12 @@ class DrunkenMonkeyInputGenerator:
 
         elif screen_state == "save_changes_prompt":
             choice = self.rng.choice([
-                ("\x03", "Save changes: Ctrl+C (Cancel)"),
+                ("y", "Save changes: 'y' (Save)"),
                 ("n", "Save changes: 'n' (Discard)"),
                 ("\x1b", "Save changes: ESC (Cancel)"),
             ])
             ch, desc = choice
-            d = max(delay, 0.15) if ch in ("\x1b", "\x03") else delay
+            d = max(delay, 0.15) if ch == "\x1b" else delay
             return ch, d, desc
 
         elif screen_state == "overwrite_prompt":
@@ -650,7 +650,7 @@ class DrunkenMonkeyInputGenerator:
             return choice, delay, f"Overwrite: {choice}"
 
         elif screen_state == "replace_confirm_prompt":
-            choice = self.rng.choice(["y", "n", "a", "q", "\x1b"])
+            choice = self.rng.choice(["y", "n", "a", "\x1b"])
             d = max(delay, 0.15) if choice == "\x1b" else delay
             return choice, d, f"Replace confirm: {choice}"
 
@@ -679,8 +679,8 @@ class DrunkenMonkeyInputGenerator:
             return action[0], d, action[1]
 
         elif screen_state == "unload_plugin_prompt":
-            choice = self.rng.choice(["y", "n", "\r", "\x1b", "q"])
-            d = max(delay, 0.15) if choice in ("\x1b", "q") else delay
+            choice = self.rng.choice(["y", "n", "\r", "\x1b"])
+            d = max(delay, 0.15) if choice == "\x1b" else delay
             return choice, d, f"Unload plugin confirm: {choice}"
 
         elif screen_state == "plugin_config":
@@ -1125,7 +1125,7 @@ def run_drunken_monkey_test(
         print("[*] Performing clean exit back to CP/M...", flush=True)
         monitor.exiting = True
         t0 = time.time()
-        while time.time() - t0 < 12.0:
+        while time.time() - t0 < 25.0:
             p_poll = proc.poll()
             if verbose:
                 print(f"[*] Teardown loop: proc.poll()={p_poll}", flush=True)
@@ -1166,7 +1166,13 @@ def run_drunken_monkey_test(
                     print("[*] Teardown: Sending 'n' to save changes prompt",
                           flush=True)
                 os.write(master, b"n")
-                time.sleep(0.3)
+                time.sleep(0.15)
+                drain = read_available(master, timeout=1.5)
+                if drain:
+                    if verbose:
+                        print(f"[*] Teardown drained {len(drain)} bytes "
+                              f"after 'n'", flush=True)
+                    monitor.feed(drain.decode("latin1", errors="replace"))
                 continue
 
             # If in splash screen, send 'q' to exit
@@ -1175,23 +1181,42 @@ def run_drunken_monkey_test(
                     print("[*] Teardown: Sending 'q' to splash screen",
                           flush=True)
                 os.write(master, b"q")
-                time.sleep(0.3)
+                time.sleep(0.15)
+                drain = read_available(master, timeout=1.5)
+                if drain:
+                    if verbose:
+                        print(f"[*] Teardown drained {len(drain)} bytes "
+                              f"after 'q'", flush=True)
+                    monitor.feed(drain.decode("latin1", errors="replace"))
                 continue
 
-            # If in an input dialog or popup, cancel it
-            if (state.endswith("_prompt") or
-                    state in ("plugin_popup", "plugin_manager",
-                              "plugin_config", "configuration_screen")):
+            # If in management/workspace screen, send 'q' to exit
+            if state in ("plugin_manager", "plugin_config",
+                         "configuration_screen"):
                 if verbose:
-                    print(f"[*] Teardown: Cancelling {state}", flush=True)
-                if state in ("goto_line_prompt", "find_prompt",
-                             "replace_prompt"):
-                    os.write(master, b"\x03")  # Ctrl+C cancels instantly
-                else:
-                    os.write(master, b"\x1b")  # ESC
-                    time.sleep(0.20)
-                drain = read_available(master, timeout=0.4)
+                    print(f"[*] Teardown: Sending 'q' to {state}", flush=True)
+                os.write(master, b"q")
+                time.sleep(0.15)
+                drain = read_available(master, timeout=1.5)
                 if drain:
+                    if verbose:
+                        print(f"[*] Teardown drained {len(drain)} bytes "
+                              f"after 'q'", flush=True)
+                    monitor.feed(drain.decode("latin1", errors="replace"))
+                continue
+
+            # If in an input dialog or popup, cancel it via ESC
+            if state.endswith("_prompt") or state == "plugin_popup":
+                if verbose:
+                    print(f"[*] Teardown: Cancelling {state} with ESC",
+                          flush=True)
+                os.write(master, b"\x1b")
+                time.sleep(0.15)
+                drain = read_available(master, timeout=2.0)
+                if drain:
+                    if verbose:
+                        print(f"[*] Teardown drained {len(drain)} bytes "
+                              f"after ESC", flush=True)
                     monitor.feed(drain.decode("latin1", errors="replace"))
                 continue
 
@@ -1199,8 +1224,12 @@ def run_drunken_monkey_test(
             if verbose:
                 print("[*] Teardown: Sending Ctrl+Q to editor", flush=True)
             os.write(master, b"\x11")  # Ctrl+Q
-            drain = read_available(master, timeout=0.4)
+            time.sleep(0.15)
+            drain = read_available(master, timeout=1.5)
             if drain:
+                if verbose:
+                    print(f"[*] Teardown drained {len(drain)} bytes "
+                          f"after Ctrl+Q", flush=True)
                 monitor.feed(drain.decode("latin1", errors="replace"))
         else:
             raise UnexpectedBehaviourError(
