@@ -298,6 +298,7 @@ class VT100QualityMonitor:
                     )
 
         # In Plugin Manager screen, ensure bottom row contains the status bar
+        # and all rows above bottom row have '~' in column 0
         full_text = "\n".join("".join(row) for row in self.buffer)
         if "SE - Plugin Manager" in full_text:
             bottom_str = "".join(self.buffer[bottom_row])
@@ -308,6 +309,12 @@ class VT100QualityMonitor:
                     "Plugin Manager screen missing bottom row status bar: "
                     f"'{bottom_str.strip()}'"
                 )
+            for r_idx in range(bottom_row):
+                if self.buffer[r_idx][0] != "~":
+                    raise CrispLayoutError(
+                        f"Plugin Manager missing '~' in col 0 on row {r_idx}: "
+                        f"'{''.join(self.buffer[r_idx])[:30]}'"
+                    )
 
         # 3. Modal dialog box border alignment:
         # If a row starts with '+---' or '| ' and ends with '---+' or ' |',

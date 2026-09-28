@@ -132,8 +132,25 @@ def run_screen_consistency_test(mode_name="80x24"):
             print("[-] Plugin Manager status bar missing screen mode "
                   f"{mode_name}. Buffer: {repr(out_plug)}", flush=True)
             return False
-        print(f"[+] Plugin Manager Screen has active status bar ({mode_name})!",
-              flush=True)
+
+        # Verify vertical padding and row above status bar has '~' in col 0
+        expected_top_pad = b"~\r\n" * (3 if mode_name == "80x24" else 11)
+        expected_bottom_pad = b"~\r\n" * (4 if mode_name == "80x24" else 12)
+        status_row_esc = (
+            b"\x1b[24;1H" if mode_name == "80x24" else b"\x1b[40;1H"
+        )
+        if expected_top_pad not in out_plug:
+            print("[-] Plugin Manager missing expected top padding tildes. "
+                  f"Buffer: {repr(out_plug)}", flush=True)
+            return False
+
+        if (expected_bottom_pad + status_row_esc) not in out_plug:
+            print("[-] Plugin Manager missing '~' directly before status bar. "
+                  f"Buffer: {repr(out_plug)}", flush=True)
+            return False
+
+        print(f"[+] Plugin Manager Screen has '~' in col 0 and active status "
+              f"bar ({mode_name})!", flush=True)
 
         # Return to splash screen ('q')
         drain_all(master)

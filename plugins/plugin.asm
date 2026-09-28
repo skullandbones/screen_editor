@@ -26,6 +26,7 @@ PLUG_CTX_MEM_INFO	EQU	3
 PLUG_CTX_PLUGIN_MGR	EQU	4
 PLUG_CTX_HELP		EQU	5
 PLUG_CTX_ABOUT		EQU	6
+PLUGIN_UI_LINES		EQU	16
 
 ;------------------------------------------------------------------------------
 ; Standard Jump Table
@@ -568,10 +569,10 @@ RENDER_PLUGIN_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	HOST_PRINT_STR
 
-	; Calculate vertical top padding: ((HOST_ROWS - 1) - 17) / 2
+	; Calculate vertical top padding: ((HOST_ROWS - 1) - PLUGIN_UI_LINES) / 2
 	LD	A,(HOST_ROWS)
 	DEC	A
-	SUB	17
+	SUB	PLUGIN_UI_LINES
 	JR	Z,RPS_NO_TOP_PAD
 	JR	C,RPS_NO_TOP_PAD
 	SRL	A
@@ -616,17 +617,17 @@ RPS_ROW_LOOP:
 	CALL	FORMAT_PLUGIN_FOOTER
 	CALL	PRINT_ABOUT_LINE
 
-	; Calculate bottom padding
+	; Calculate bottom padding: (HOST_ROWS - 1) - PLUGIN_UI_LINES - top_pad
 	LD	A,(HOST_ROWS)
 	DEC	A
-	SUB	17
+	SUB	PLUGIN_UI_LINES
 	JR	Z,RPS_BOTTOM_DONE
 	JR	C,RPS_BOTTOM_DONE
 	SRL	A
 	LD	C,A
 	LD	A,(HOST_ROWS)
 	DEC	A
-	SUB	17
+	SUB	PLUGIN_UI_LINES
 	SUB	C
 	JR	Z,RPS_BOTTOM_DONE
 	JR	C,RPS_BOTTOM_DONE
