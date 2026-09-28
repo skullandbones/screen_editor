@@ -171,37 +171,13 @@ def main():
                     os.path.join(plugin_dir, "plugin_100.bin"),
                     os.path.join(plugin_dir, "plugin_200.bin")], check=True)
 
-    # 8. Build HIBERN.OVL (4KB TPA Relocatable Overlay)
-    subprocess.run([z80asm_bin, "-b",
-                    f"-o={os.path.join(plugin_dir, 'hibern_100.bin')}",
-                    os.path.join(plugin_dir, "hibern.asm")], check=True)
-
-    hibern_200_asm = os.path.join(plugin_dir, "hibern_200.asm")
-    with open(os.path.join(plugin_dir, "hibern.asm"), "r") as f:
-        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
-    with open(hibern_200_asm, "w") as f:
-        f.write(src)
-
-    subprocess.run([z80asm_bin, "-b",
-                    f"-o={os.path.join(plugin_dir, 'hibern_200.bin')}",
-                    hibern_200_asm], check=True)
-    if os.path.exists(hibern_200_asm):
-        os.remove(hibern_200_asm)
-
-    subprocess.run([sys.executable, mkprl_bin, "-n", "HIBERN",
-                    "-o", os.path.join(plugin_dir, "HIBERN.OVL"),
-                    "--tpa", "--has-about", "--has-config",
-                    os.path.join(plugin_dir, "hibern_100.bin"),
-                    os.path.join(plugin_dir, "hibern_200.bin")], check=True)
-
     # Clean up temporary binaries
     for tmp in ["rot13_100.bin", "rot13_200.bin", "wordcnt.bin",
                 "beautify_100.bin", "beautify_200.bin",
                 "midplug_100.bin", "midplug_200.bin",
                 "halfplug_100.bin", "halfplug_200.bin",
                 "bigplug_100.bin", "bigplug_200.bin",
-                "plugin_100.bin", "plugin_200.bin",
-                "hibern_100.bin", "hibern_200.bin"]:
+                "plugin_100.bin", "plugin_200.bin"]:
         p = os.path.join(plugin_dir, tmp)
         if os.path.exists(p):
             os.remove(p)
@@ -231,7 +207,6 @@ def main():
     print(f"    - {os.path.join(plugin_dir, 'HALFPLUG.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'BIGPLUG.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'PLUGIN.PRL')}")
-    print(f"    - {os.path.join(plugin_dir, 'HIBERN.OVL')}")
 
 if __name__ == "__main__":
     main()
