@@ -636,9 +636,7 @@ RPS_BOTTOM_PAD_LOOP:
 	DJNZ	RPS_BOTTOM_PAD_LOOP
 
 RPS_BOTTOM_DONE:
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_CLEAR_EOL
-	CALL	HOST_PRINT_STR
+	CALL	HOST_RENDER_STATUS_BAR
 	RET
 
 LOCATE_STATUS_ROW:
@@ -1044,10 +1042,6 @@ CUS_NOT_ESC:
 	CP	'n'
 	RET	Z
 	CP	'N'
-	RET	Z
-	CP	'q'
-	RET	Z
-	CP	'Q'
 	RET	Z
 	JR	CUS_KEY_LOOP
 
@@ -2049,6 +2043,16 @@ HOST_LOAD_PLUGIN_CFG:
 	EX	(SP),HL
 	RET
 
+HOST_RENDER_STATUS_BAR:
+	PUSH	HL
+	LD	HL,(HOST_API_PTR)
+	PUSH	BC
+	LD	BC,73			; Offset +73: RENDER_STATUS_BAR
+	ADD	HL,BC
+	POP	BC
+	EX	(SP),HL
+	RET
+
 ;==============================================================================
 ; Static Strings & Data
 ;==============================================================================
@@ -2110,7 +2114,7 @@ STR_SAVE_CFG_KEY:	DB	"|           [Press any key to continue]          |", 0
 STR_UNLOAD_TITLE:	DB	"|                 Unload Plugin                  |", 0
 STR_UNLOAD_PROMPT_PRE:	DB	"|              Unload Slot ", 0
 STR_UNLOAD_PROMPT_POST:	DB	"? [Y/N]              |", 0
-STR_UNLOAD_KEYS:	DB	"|           [Y: Confirm | N/ESC: Cancel]         |", 0
+STR_UNLOAD_KEYS:	DB	"|          [Y]es / [N]o / [ESC]=Cancel           |", 0
 
 STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0
 STR_PLUG_TYPE_PRL:	DB	"PRL   ", 0

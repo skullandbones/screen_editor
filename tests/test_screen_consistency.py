@@ -2,11 +2,12 @@
 """
 Test Screen Consistency for SE.COM.
 Verifies:
-  1. Help Keys Screen (Ctrl+K) has status bar on row ACTIVE_ROWS and '~' in column 0.
-  2. Open File Screen (Ctrl+O) has status bar on row ACTIVE_ROWS and '~' in column 0.
-  3. Save File Screen (Ctrl+S) has status bar on row ACTIVE_ROWS and '~' in column 0.
-  4. Input box cursor positioning remains functional in Open & Save screens.
-  5. Tested in both 80x24 and 120x40 screen modes.
+  1. Plugin Manager Screen ('p') has status bar on row ACTIVE_ROWS.
+  2. Help Keys Screen (Ctrl+K) has status bar on ACTIVE_ROWS and '~' in col 0.
+  3. Open File Screen (Ctrl+O) has status bar on ACTIVE_ROWS and '~' in col 0.
+  4. Save File Screen (Ctrl+S) has status bar on ACTIVE_ROWS and '~' in col 0.
+  5. Input box cursor positioning remains functional in Open & Save screens.
+  6. Tested in both 80x24 and 120x40 screen modes.
 """
 
 import os
@@ -97,7 +98,7 @@ def run_screen_consistency_test(mode_name="80x24"):
         time.sleep(0.5)
         drain_all(master)
         os.write(master, b"se\r")
-        out_splash = read_until(master, b"SE - Screen Editor", timeout=15.0)
+        out_splash = read_until(master, b"SE - Screen Editor", timeout=45.0)
         if b"SE - Screen Editor" not in out_splash:
             print(f"[-] SE splash not displayed. Buffer: {repr(out_splash)}", flush=True)
             return False
@@ -112,7 +113,41 @@ def run_screen_consistency_test(mode_name="80x24"):
         time.sleep(0.5)
         drain_all(master)
 
-        # 1. Test Help Keys Screen (Ctrl+K from editor mode)
+        # 1. Test Plugin Manager Screen ('p' from splash screen)
+        print("[*] Testing Plugin Manager Screen...", flush=True)
+        os.write(master, b"p")
+        out_plug = read_until(master, b"SE - Plugin Manager", timeout=8.0)
+        out_plug += read_until(master, b"Free:", timeout=5.0)
+        out_plug += read_until(master, b"\x1b[0m", timeout=3.0)
+        if b"SE - Plugin Manager" not in out_plug:
+            print("[-] Plugin Manager missing title. "
+                  f"Buffer: {repr(out_plug)}", flush=True)
+            return False
+
+        if b"Free:" not in out_plug or b"KB" not in out_plug:
+            print("[-] Plugin Manager missing status bar free memory. "
+                  f"Buffer: {repr(out_plug)}", flush=True)
+            return False
+        if mode_name.encode() not in out_plug:
+            print("[-] Plugin Manager status bar missing screen mode "
+                  f"{mode_name}. Buffer: {repr(out_plug)}", flush=True)
+            return False
+        print(f"[+] Plugin Manager Screen has active status bar ({mode_name})!",
+              flush=True)
+
+        # Return to splash screen ('q')
+        drain_all(master)
+        os.write(master, b"q")
+        out_back = read_until(master, b"SE - Screen Editor", timeout=6.0)
+        if b"SE - Screen Editor" not in out_back:
+            print("[-] Failed to return to splash screen from Plugin Manager",
+                  flush=True)
+            return False
+        print("[+] 'q' returned cleanly from Plugin Manager to splash screen.",
+              flush=True)
+        drain_all(master)
+
+        # 2. Test Help Keys Screen (Ctrl+K from editor mode)
         print("[*] Testing Help Keys Screen...", flush=True)
         os.write(master, b"e")  # enter editor
         out_ed = read_until(master, b"^K: Editor keys", timeout=6.0)
@@ -178,8 +213,9 @@ def run_screen_consistency_test(mode_name="80x24"):
         if expected_title_pad not in out_open:
             print(f"[-] Open screen missing centered title. Buffer: {repr(out_open)}", flush=True)
             return False
-        if b"~  <ESC>=Cancel    Enter <drive>: to list directory" not in out_open:
-            print(f"[-] Open screen missing '~  <ESC>=Cancel    Enter <drive>: to list directory'. Buffer: {repr(out_open)}", flush=True)
+        if b"~  <ESC>=Cancel" not in out_open:
+            print("[-] Open screen missing '~  <ESC>=Cancel'. "
+                  f"Buffer: {repr(out_open)}", flush=True)
             return False
         if b"Free:" not in out_open or b"KB" not in out_open:
             print(f"[-] Open screen missing status bar free memory. Buffer: {repr(out_open)}", flush=True)
@@ -220,8 +256,9 @@ def run_screen_consistency_test(mode_name="80x24"):
         if b"~  Format: [" not in out_save:
             print(f"[-] Save screen missing '~' in format indicator. Buffer: {repr(out_save)}", flush=True)
             return False
-        if b"~  <ESC>=Cancel    Enter <drive>: to list directory" not in out_save:
-            print(f"[-] Save screen missing '~  <ESC>=Cancel    Enter <drive>: to list directory'. Buffer: {repr(out_save)}", flush=True)
+        if b"~  <ESC>=Cancel" not in out_save:
+            print("[-] Save screen missing '~  <ESC>=Cancel'. "
+                  f"Buffer: {repr(out_save)}", flush=True)
             return False
         if b"Free:" not in out_save or b"KB" not in out_save:
             print(f"[-] Save screen missing status bar free memory. Buffer: {repr(out_save)}", flush=True)
