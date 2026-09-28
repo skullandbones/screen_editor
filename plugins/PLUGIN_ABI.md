@@ -300,6 +300,10 @@ PLUGIN_HOST_API (+0):
 | `+55` | Vector | `CALL_LOAD_PLUGIN` | Load plugin from disk (`DE` = filename). |
 | `+58` | Vector | `CALL_UNLOAD_SLOT` | Unload plugin in slot `A` (`0`..`7`). |
 | `+61` | Vector | `CALL_REDRAW_BASE` | Redraw host screen for context in `A`. |
+| `+64` | Vector | `CALL_OPEN_PLUGIN_UI`| Interactive plugin file selector UI. |
+| `+67` | Vector | `CALL_SAVE_PLUGIN_CFG`| Save 128B plugin config from `DE`. |
+| `+70` | Vector | `CALL_LOAD_PLUGIN_CFG`| Load 128B plugin config to `DE`. |
+| `+73` | Vector | `CALL_RENDER_STATUS_BAR`| Render bottom status bar. |
 
 ---
 
@@ -359,6 +363,11 @@ Updates the status bar notification area with a custom message.
 Resets the document slot allocator, sets `DOC_TOTAL_LINES` to 0, resets cursor,
 clears dirty flags and line cache, preparing the host editor for streaming a
 fresh document into Far RAM (e.g. via `COMMIT_LINE`).
+- **Preserves**: `IX`, `IY`.
+
+### 9. `RENDER_STATUS_BAR` (`IX + 73`)
+Renders the standard host status bar on row `ACTIVE_ROWS` (geometry, format,
+free memory, and position), matching the host screen layout.
 - **Preserves**: `IX`, `IY`.
 
 ---
