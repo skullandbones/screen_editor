@@ -1,5 +1,5 @@
 # SE.COM Plugin Architecture & Application Binary Interface (ABI) Specification
-**Version 1.3 (2026-09-25)**
+**Version 1.4 (2026-09-29)**
 *Modular Far RAM Slots (4K, 8K, 16K, 32K), CP/M 3 Standard & Headless VFS ABI*
 
 This document specifies the technical architecture, binary packaging standards,
@@ -27,10 +27,10 @@ format standards.
          |                                                   |
          v                                                   v
 +------------------------------------+   +------------------------------------+
-| 0x0000 .. 0x7FFF: TPA Slot (4KB)   |   | 0x0000 .. 0x7FFF: Far RAM Banks    |
+| 0x0000 .. 0x7FFF: TPA Slot (5KB)   |   | 0x0000 .. 0x7FFF: Far RAM Banks    |
 | - Overlays LINE_STORAGE (5,120 B)  |   | - Borrowed on-demand (32KB Banks)  |
-| - Strictly restricted to 4KB size  |   | - 4K: Sub-allocated 8 x 4KB slots  |
-| - Zero extra bytes of TPA RAM      |   | - 8K/16K/32K: Dedicated 32KB bank  |
+| - 4KB or 8KB TPA plugins <= 5,120B |   | - Dynamic page-stepped allocation  |
+| - Zero extra bytes of TPA RAM      |   | - 8K/16K/32K Far: Dedicated bank   |
 | - On-the-fly PRL page relocation   |   | - Direct execution via RomWBW      |
 | - Relocates to high_byte(TPA_SLOT) |   |   HB_BNKCALL proxy (0xFFF9)        |
 +------------------------------------+   +------------------------------------+
@@ -40,13 +40,19 @@ format standards.
 
 Plugins declare their size class in header metadata (`CAPABILITIES` bits 7..6):
 - **4KB Plugins (`CAP_SIZE_4K = 0x0000`, `00b`)**: Payload <= 4096 bytes.
-  Can execute either in the 4KB TPA overlay slot (`CAP_TPA_EXEC`) or in Far RAM
+  Can execute either in the TPA overlay slot (`CAP_TPA_EXEC`) or in Far RAM
   (`CAP_FAR_EXEC`). Multiple 4KB plugins share a single 32KB Far RAM bank,
   sub-allocated into 4KB slots (`0x0000, 0x1000, 0x2000, ...`).
 - **8KB Plugins (`CAP_SIZE_8K = 0x0040`, `01b`)**: Payload <= 8192 bytes.
-  Strictly restricted from TPA overlay execution. Dynamically allocated a
-  dedicated 32KB Far RAM bank borrowed on-demand from `EXT_BANK_TABLE`. Always
-  executes at base page `0x00` (entry point `0x0100`).
+  - **Far Execution (`CAP_FAR_EXEC`)**: Dynamically allocated a dedicated 32KB
+    Far RAM bank borrowed on-demand from `EXT_BANK_TABLE`. Always executes at
+    base page `0x00` (entry point `0x0100`).
+  - **TPA Overlay Execution (`CAP_TPA_EXEC`)**: Permitted when total runtime
+    footprint (`PROG_SIZE + BSS_SIZE`) <= 5,120 bytes (`LINE_STORAGE` limit,
+    e.g. `BEAUTIFY.PRL`). Sub-allocates exact 256B pages (`PAGE_COUNT` pages)
+    in shared Far RAM banks via first-fit page stepping, leaving unused pages
+    free for other modules. At run time, code is relocated and copied into the
+    resident TPA overlay slot at `0xB300`.
 - **16KB Plugins (`CAP_SIZE_16K = 0x0080`, `10b`)**: Payload <= 16384 bytes.
   Strictly restricted from TPA overlay execution. Dynamically allocated a
   dedicated 32KB Far RAM bank borrowed on-demand from `EXT_BANK_TABLE`. Always
@@ -94,7 +100,7 @@ Bit: 15..9   8    7..6   5     4     3     2     1     0
 
 | Flag | Value | Description |
 | :--- | :---: | :--- |
-| `CAP_TPA_EXEC` | `0x0001` | Runs in 4KB TPA overlay slot (4KB only). |
+| `CAP_TPA_EXEC` | `0x0001` | Runs in TPA overlay slot (<= 5,120B limit). |
 | `CAP_FAR_EXEC` | `0x0002` | Executes in Far RAM via `HB_BNKCALL`. |
 | `CAP_DOC_MUTATE`| `0x0004` | Mutates document lines (re-render). |
 | `CAP_MODAL_UI` | `0x0008` | Renders modal UI dialog or summary box. |
@@ -146,21 +152,30 @@ simultaneously (`PLUGIN_MAX_SLOTS = 8`), each described by a 32-byte descriptor.
 When a plugin is loaded (`LOAD_PLUGIN_BY_NAME` / `ALLOC_FAR_PLUGIN_SLOT`):
 1. **Determine Page Requirement**:
    - 4KB class (`SIZE_CLASS 0`): 16 pages (4,096 bytes).
-   - 8KB class (`SIZE_CLASS 1`): 32 pages (8,192 bytes).
-   - 16KB class (`SIZE_CLASS 2`): 64 pages (16,384 bytes).
-   - 32KB class (`SIZE_CLASS 3`): 128 pages (32,768 bytes).
-2. **Sub-Allocation for 4KB Plugins**:
+   - 8KB class (`SIZE_CLASS 1`):
+     - Far execution (`CAP_FAR_EXEC`): 32 pages (8,192 bytes, dedicated bank).
+     - TPA execution (`CAP_TPA_EXEC`): Exact payload pages:
+       `PAGE_COUNT = (PAYLOAD_SECTORS + 3) / 2` (where payload includes code,
+       data, and relocation bitmap). Sub-allocated dynamically.
+   - 16KB class (`SIZE_CLASS 2`): 64 pages (16,384 bytes, dedicated bank).
+   - 32KB class (`SIZE_CLASS 3`): 128 pages (32,768 bytes, dedicated bank).
+2. **Sub-Allocation for 4KB Plugins & 8KB TPA Plugins**:
    - The editor scans all currently borrowed Far RAM banks recorded in
      `BORROWED_BANKS_TBL`.
-   - For each bank, candidate 4KB page boundaries (`0x00, 0x10, ..., 0x70`)
-     are checked against active slots using `IS_RANGE_FREE_IN_BANK`.
-   - If a free 16-page slot is found, the plugin is assigned to that bank and
-     base page.
-   - If all borrowed banks are full (or none borrowed yet), a new 32KB bank is
-     borrowed via `BORROW_NEW_FAR_BANK` from RomWBW `EXT_BANK_TABLE` and base
+   - Dynamic page-stepping tests candidate page ranges (`[C, C + E)`) across
+     each borrowed bank using `IS_RANGE_FREE_IN_BANK`:
+     - 4KB plugins step across 16-page slot boundaries (`C = 0, 16, 32, ...`).
+     - 8KB TPA plugins step page-by-page (`C = 0, 1, 2, ..., 128 - E`) for
+       an exact first-fit range.
+   - If a free range of `PAGE_COUNT` pages is found, the plugin is assigned
+     to that bank and base page `C`.
+   - Remaining unallocated pages in that Far RAM bank remain completely free to
+     accommodate other plugins.
+   - If no borrowed bank has sufficient contiguous free pages, a new 32KB bank
+     is borrowed via `BORROW_NEW_FAR_BANK` from RomWBW `EXT_BANK_TABLE` and base
      page `0x00` is allocated.
-3. **Dedicated Bank Allocation for 8KB, 16KB & 32KB Plugins**:
-   - Dedicated plugins require dedicated 32KB banks to avoid address
+3. **Dedicated Bank Allocation for Far-Executing Plugins (8KB, 16KB & 32KB)**:
+   - Dedicated Far plugins require dedicated 32KB banks to avoid address
      conflicts and eliminate the need for run-time code relocation.
    - The editor checks if any borrowed bank is completely free (`C=0, E=128`).
    - If not, a new 32KB bank is borrowed from `EXT_BANK_TABLE`.
