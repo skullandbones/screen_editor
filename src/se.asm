@@ -19322,6 +19322,8 @@ MAKE_BLK_FILE_OK:
 	LD	(CUR_DMA_PTR),DE
 	LD	A,128
 	LD	(DMA_BYTES_LEFT),A
+	LD	HL,0
+	LD	(SAVE_RECORD_NUM),HL
 
 	; Check if block is empty:
 	; BLOCK_START_ROW == BLOCK_END_ROW and BLOCK_START_COL == BLOCK_END_COL
@@ -19647,6 +19649,8 @@ MAKE_FILE_OK:
 	LD	(CUR_DMA_PTR),DE
 	LD	A,128
 	LD	(DMA_BYTES_LEFT),A
+	LD	HL,0
+	LD	(SAVE_RECORD_NUM),HL
 
 	; Stream lines from Far RAM banks to disk
 	LD	BC,0			; BC = document line counter
@@ -19767,8 +19771,15 @@ WRITE_BYTE_TO_DMA:
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
 
+	LD	HL,(SAVE_RECORD_NUM)
+	LD	(WORK_FCB+33),HL	; Set r0, r1 for BDOS Write Random
+	XOR	A
+	LD	(WORK_FCB+35),A		; Set r2 = 0
+	INC	HL
+	LD	(SAVE_RECORD_NUM),HL
+
 	LD	DE,WORK_FCB
-	LD	C,21			; BDOS Write Record
+	LD	C,34			; BDOS Write Random (prevents ghost extent)
 	CALL	BDOS_ENTRY
 	POP	DE
 
@@ -23501,6 +23512,7 @@ ACTIVE_LINE_LEN:	DW	0		; 16-bit byte length of line in ACTIVE_LINE_BUF
 ACTIVE_LINE_BUF:	DS	1024		; 1024-byte dynamic workspace for active line
 CUR_DMA_PTR:	DW	0
 DMA_BYTES_LEFT:	DB	0
+SAVE_RECORD_NUM: DW	0
 
 
 WORK_FCB:	DS	36
