@@ -65,10 +65,10 @@ SIZE_CLASSES = {
     },
     CAP_SIZE_8K: {
         "name": "8K",
-        "desc": "Dedicated 32KB Far RAM bank",
+        "desc": "Far RAM bank (dedicated or shared sub-allocated)",
         "limit": 8192,
         "far_pages": 32,
-        "tpa_allowed": False,
+        "tpa_allowed": True,
     },
     CAP_SIZE_16K: {
         "name": "16K",
@@ -240,11 +240,21 @@ def analyze_plugin_file(filepath):
     # Execution model consistency checks
     can_tpa = bool(caps & CAP_TPA_EXEC)
     can_far = bool(caps & CAP_FAR_EXEC)
-    if can_tpa and not tpa_allowed:
-        errors.append(
-            f"{size_class} plugins cannot execute in TPA overlay slot "
-            "(CAP_TPA_EXEC is strictly restricted to 4KB plugins)"
-        )
+    if can_tpa:
+        if size_class == "8K":
+            bm_sz = (prog_size + 7) // 8 if is_prl else 0
+            total_tpa = 256 + prog_size + bss_size + bm_sz
+            if total_tpa > 5120:
+                errors.append(
+                    f"8K plugin runtime footprint ({total_tpa} B) exceeds "
+                    f"5,120-byte TPA overlay slot"
+                )
+        elif not tpa_allowed:
+            errors.append(
+                f"{size_class} plugins cannot execute in TPA overlay slot "
+                "(CAP_TPA_EXEC is restricted to 4KB and <=5KB 8KB plugins)"
+            )
+
     if not can_tpa and not can_far:
         warnings.append(
             "Neither CAP_TPA_EXEC nor CAP_FAR_EXEC execution mode flag is set"

@@ -126,11 +126,23 @@ def make_prl(name: str, code_100: bytes, code_200: bytes = None,
     size_flag = SIZE_MAP[size]
     capabilities = (capabilities & ~CAP_SIZE_MASK) | size_flag
 
-    if size in ("8k", "16k", "32k"):
+    if size == "8k":
+        if capabilities & CAP_TPA_EXEC:
+            bitmap_sz = 0 if is_ovl else (prog_size + 7) // 8
+            total_tpa = 256 + prog_size + bss_size + bitmap_sz
+            if total_tpa > 5120:
+                raise ValueError(
+                    f"8K plugin runtime footprint ({total_tpa} B) exceeds "
+                    f"5,120-byte TPA overlay slot"
+                )
+        if not (capabilities & (CAP_TPA_EXEC | CAP_FAR_EXEC)):
+            capabilities |= CAP_FAR_EXEC
+    elif size in ("16k", "32k"):
         if capabilities & CAP_TPA_EXEC:
             raise ValueError(
                 f"{size.upper()} plugins cannot execute in TPA overlay slot "
-                f"(restricted to 4KB plugins)")
+                f"(restricted to <=8KB plugins fitting within 5KB slot)"
+            )
         capabilities |= CAP_FAR_EXEC
 
     if is_ovl:
@@ -218,12 +230,28 @@ def main():
                 size = "4k"
     else:
         caps = 0
-        if size in ("8k", "16k", "32k"):
+        if size in ("16k", "32k"):
             if args.tpa:
                 parser.error(
                     f"{size.upper()} plugins cannot use --tpa (TPA overlay "
-                    f"execution is strictly restricted to 4KB plugins)")
+                    f"execution is strictly restricted to <=8KB plugins)"
+                )
             caps |= CAP_FAR_EXEC
+        elif size == "8k":
+            if args.tpa:
+                code_sz = len(code_100)
+                bm_sz = 0 if args.ovl else (code_sz + 7) // 8
+                tot_tpa = 256 + code_sz + args.bss + bm_sz
+                if tot_tpa > 5120:
+                    parser.error(
+                        f"8K plugins cannot use --tpa (footprint {tot_tpa} B "
+                        f"exceeds 5,120-byte TPA overlay slot)"
+                    )
+                caps |= CAP_TPA_EXEC
+            if args.far:
+                caps |= CAP_FAR_EXEC
+            if not args.tpa and not args.far:
+                caps |= CAP_FAR_EXEC
         else:
             if args.tpa is not None:
                 if args.tpa:

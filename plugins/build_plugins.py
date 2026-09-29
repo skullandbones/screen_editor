@@ -78,11 +78,12 @@ def main():
     if os.path.exists(beautify_200_asm):
         os.remove(beautify_200_asm)
 
-    # Package into BEAUTIFY.PRL
+    # Package into BEAUTIFY.PRL (8K Slot Class, Sub-allocated, TPA Exec)
     subprocess.run([sys.executable, mkprl_bin, "-n", "BEAUTIFY",
                     "-o", os.path.join(plugin_dir, "BEAUTIFY.PRL"),
+                    "--size", "8k",
                     "--tpa", "--mutate", "--has-about", "--has-config",
-                    "--bss", "544",
+                    "--bss", "324",
                     os.path.join(plugin_dir, "beautify_100.bin"),
                     os.path.join(plugin_dir, "beautify_200.bin")], check=True)
 

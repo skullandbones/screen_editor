@@ -2206,9 +2206,13 @@ STR_P_VAL_0:		DB	"0",13,10,0
 
 ;------------------------------------------------------------------------------
 ; Uninitialized Working Storage (BSS)
+; Total required: STR_TICK_BUF (32) + PLUGIN_CFG_BUF (256) + FCB (36) = 324 B
 ;------------------------------------------------------------------------------
 BSS_START:
 STR_TICK_BUF		EQU	BSS_START
 LINE_OUTPUT_BUF		EQU	BSS_START + 32
 PLUGIN_CFG_BUF		EQU	LINE_OUTPUT_BUF
 PLUGIN_CFG_FCB		EQU	LINE_OUTPUT_BUF + 256
+BSS_END			EQU	PLUGIN_CFG_FCB + 36
+BSS_SIZE		EQU	BSS_END - BSS_START
+
