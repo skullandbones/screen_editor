@@ -355,8 +355,12 @@ class VT100QualityMonitor:
             has_status_bar = any(sig in bottom_str for sig in editor_sigs)
             for r_idx, row in enumerate(self.buffer):
                 row_str = "".join(row).strip()
-                if re.match(r"^[A-P]>", row_str):
-                    if r_idx == bottom_row or not has_status_bar:
+                is_prompt = bool(re.match(r"^(?:[A-P]>|[A-P]{2}>>)", row_str))
+                if is_prompt:
+                    is_cpm_echo = bool(re.search(r"\^[A-Z\[]", row_str))
+                    is_printer_echo = bool(re.match(r"^[A-P]{2}>>", row_str))
+                    if (r_idx == bottom_row or not has_status_bar or
+                            is_cpm_echo or is_printer_echo):
                         raise UnexpectedBehaviourError(
                             f"Premature CP/M exit detected on row {r_idx}: "
                             f"'{row_str[:40]}'"
@@ -413,6 +417,12 @@ class VT100QualityMonitor:
                 "0..7:select" in full_text or
                 "Up/Dn:select" in full_text):
             return "plugin_manager"
+        if ("Exiting SE.COM" in full_text or
+                "Returned to CP/M" in full_text or
+                re.search(r"(?:^|\n)\s*[A-P]{2}>>", full_text) or
+                re.search(r"(?:^|\n)\s*[A-P]>\s*\^", full_text)):
+            return "cpm_prompt"
+
         if ("^K: Editor keys" in full_text or
                 "^V: Overwrite" in full_text or
                 "[SEL:" in full_text or
@@ -427,9 +437,9 @@ class VT100QualityMonitor:
                 "Line > 120 chars" in full_text):
             return "editor"
 
-        if ("Exiting SE.COM" in full_text or
-                ("C>" in full_text and "^K: Editor keys" not in full_text and
-                 "| Line " not in full_text and "SE - " not in full_text)):
+        if (re.search(r"(?:^|\n)\s*(?:[A-P]>|[A-P]{2}>>)", full_text) and
+                "^K: Editor keys" not in full_text and
+                "| Line " not in full_text and "SE - " not in full_text):
             return "cpm_prompt"
 
         return "unknown"
@@ -1091,11 +1101,15 @@ def run_drunken_monkey_test(
             # Major keys or modal/splash states trigger full screen redraws
             major_keys = (
                 "\r", "\x1b", "\x03", "\x06", "\x0b", "\x0c",
-                "\x0f", "\x10", "\x12", "\x13", "\x17", "\x1a",
+                "\x0f", "\x10", "\x11", "\x12", "\x13", "\x17",
+                "\x19", "\x1a",
                 "e", "E", "1", "2"
             )
             needs_wait = char in major_keys or state != "editor"
-            read_timeout = 0.30 if needs_wait else 0.04
+            if char == "\x19":
+                read_timeout = 2.50
+            else:
+                read_timeout = 0.30 if needs_wait else 0.04
             chunk = read_available(master, timeout=read_timeout)
 
             if chunk:
@@ -1166,14 +1180,20 @@ def run_drunken_monkey_test(
                 chunk.decode("latin1", errors="replace") if chunk else ""
             )
 
-            # Check if CP/M prompt has returned
-            if (re.search(r"(?:^|\n)\s*[A-P]>", full_screen) or
-                    re.search(r"(?:\r\n|\r|\n|^)[A-P]>", chunk_str)):
+            # Check if CP/M prompt has returned (including printer echo)
+            prompt_pat = r"(?:^|\n)\s*(?:[A-P]>|[A-P]{2}>>)"
+            prompt_chunk_pat = r"(?:\r\n|\r|\n|^)\s*(?:[A-P]>|[A-P]{2}>>)"
+            if (re.search(prompt_pat, full_screen) or
+                    re.search(prompt_chunk_pat, chunk_str)):
                 print("[+] Clean exit to CP/M prompt (C>) verified.",
                       flush=True)
                 break
 
             state = monitor.detect_screen_state()
+            if state == "cpm_prompt":
+                print("[+] Clean exit to CP/M prompt (C>) verified.",
+                      flush=True)
+                break
             if verbose:
                 print(f"[*] Teardown loop: state={state}, prompt_check="
                       f"{'C>' in full_screen or '[A-P]>' in full_screen}",
