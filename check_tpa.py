@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import re
+import struct
 import sys
 
 # Standard CP/M TPA load origin for all .COM executables
@@ -215,15 +216,140 @@ def parse_memory_boundary(map_path, sym_path, code_end):
     }
 
 
+def find_plugins_dir(com_path, explicit_dir=None):
+    """
+    Locates companion plugins directory containing .PRL and .OVL files.
+    Searches explicit_dir if provided, then common relative paths.
+    Returns None if explicit_dir == 'none' or no directory found.
+    """
+    if explicit_dir is not None:
+        if explicit_dir.strip().lower() == "none":
+            return None
+        if os.path.isdir(explicit_dir):
+            return os.path.abspath(explicit_dir)
+        return None
+
+    directory = os.path.dirname(os.path.abspath(com_path))
+    candidates = [
+        os.path.join(directory, "plugins"),
+        os.path.join(directory, "..", "plugins"),
+        os.path.join(directory, "src", "plugins"),
+    ]
+    for c in candidates:
+        if os.path.isdir(c):
+            return os.path.abspath(c)
+    return None
+
+
+def analyze_plugin_file(filepath, tpa_slot_size=5120):
+    """
+    Analyzes a CP/M 3 .PRL or .OVL plugin binary against TPA overlay
+    and Far RAM slot boundary capacity.
+    """
+    filename = os.path.basename(filepath)
+    try:
+        with open(filepath, "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+
+    if len(data) < 256:
+        return None
+
+    prog_size = struct.unpack_from("<H", data, 1)[0]
+    bss_size = struct.unpack_from("<H", data, 4)[0]
+    load_addr = struct.unpack_from("<H", data, 7)[0]
+    name_bytes = data[12:28].split(b"\x00")[0]
+    clean_name = name_bytes.decode("ascii", errors="replace").strip()
+    caps = struct.unpack_from("<H", data, 28)[0]
+
+    size_bits = caps & 0xC0
+    is_ovl = (load_addr != 0) or filename.upper().endswith(".OVL")
+    can_tpa = bool(caps & 0x01)
+    can_far = bool(caps & 0x02)
+
+    if size_bits == 0x00:
+        sz_class = "4K"
+        slot_limit = 4096
+    elif size_bits == 0x40:
+        sz_class = "8K"
+        slot_limit = 8192
+    elif size_bits == 0x80:
+        sz_class = "16K"
+        slot_limit = 16384
+    else:
+        sz_class = "32K"
+        slot_limit = 32768
+
+    bitmap_sz = 0 if is_ovl else (prog_size + 7) // 8
+
+    # TPA execution overlay footprint (header + code + BSS + bitmap)
+    tpa_needed = 256 + prog_size + bss_size + bitmap_sz
+    tpa_headroom = tpa_slot_size - tpa_needed
+    tpa_overflow = (
+        (tpa_headroom < 0) if (can_tpa or sz_class == "4K") else False
+    )
+
+    # Far RAM storage footprint
+    if sz_class == "4K" and not is_ovl:
+        payload_sz = prog_size + bitmap_sz
+    else:
+        payload_sz = prog_size
+
+    payload_sectors = (payload_sz + 127) // 128
+    far_needed = 256 + payload_sectors * 128
+    far_headroom = slot_limit - far_needed
+    far_overflow = far_headroom < 0
+
+    status = "PASS"
+    issues = []
+    if tpa_overflow:
+        status = "FAIL"
+        issues.append(
+            f"TPA overlay overflow: {abs(tpa_headroom)} bytes past "
+            f"{tpa_slot_size}-byte LINE_STORAGE slot"
+        )
+    if far_overflow:
+        status = "FAIL"
+        issues.append(
+            f"Far RAM slot overflow: {abs(far_headroom)} bytes past "
+            f"{slot_limit}-byte {sz_class} slot limit"
+        )
+
+    return {
+        "file": filename,
+        "name": clean_name or filename,
+        "type": "OVL" if is_ovl else "PRL",
+        "class": sz_class,
+        "prog_size": prog_size,
+        "bss_size": bss_size,
+        "bitmap_size": bitmap_sz,
+        "file_size": len(data),
+        "can_tpa": can_tpa,
+        "can_far": can_far,
+        "tpa_needed": tpa_needed,
+        "tpa_headroom": tpa_headroom,
+        "tpa_overflow": tpa_overflow,
+        "far_needed": far_needed,
+        "far_limit": slot_limit,
+        "far_headroom": far_headroom,
+        "far_overflow": far_overflow,
+        "status": status,
+        "issues": issues,
+    }
+
+
 def analyze_com_file(
     com_path,
     map_path=None,
     sym_path=None,
     tpa_top=None,
     preset=DEFAULT_PRESET,
+    plugins_dir=None,
 ):
     """
-    Performs full TPA memory analysis on a CP/M .COM file.
+    Performs full TPA memory analysis on a CP/M .COM file and its
+    companion plugins.
 
     Returns a comprehensive dictionary of results suitable for both
     human-formatted reports and machine-readable JSON output.
@@ -283,6 +409,29 @@ def analyze_com_file(
             "is_selected": (key == preset and tpa_top is None),
         })
 
+    # Resolve TPA plugin execution slot metrics from symbols
+    syms = mem_info.get("all_symbols", {})
+    tpa_slot_addr = syms.get(
+        "LINE_STORAGE", syms.get("PLUGIN_TPA_SLOT", None)
+    )
+    tpa_slot_size = syms.get("LINE_STORAGE_SIZE", 5120)
+
+    # Analyze companion plugins if directory is found
+    p_dir = find_plugins_dir(com_abs, plugins_dir)
+    plugin_results = []
+    if p_dir and os.path.isdir(p_dir):
+        for pf in sorted(os.listdir(p_dir)):
+            if pf.upper().endswith((".PRL", ".OVL")):
+                p_path = os.path.join(p_dir, pf)
+                p_res = analyze_plugin_file(
+                    p_path, tpa_slot_size=tpa_slot_size
+                )
+                if p_res:
+                    plugin_results.append(p_res)
+
+    plugins_failed = sum(1 for p in plugin_results if p["status"] == "FAIL")
+    plugins_status = "FAIL" if plugins_failed > 0 else "PASS"
+
     return {
         "file": com_abs,
         "filename": os.path.basename(com_abs),
@@ -326,6 +475,16 @@ def analyze_com_file(
         "exceeded": exceeded,
         "status": status,
         "environments": env_results,
+        "tpa_slot_addr": tpa_slot_addr,
+        "tpa_slot_addr_hex": (
+            f"0x{tpa_slot_addr:04X}" if tpa_slot_addr is not None else None
+        ),
+        "tpa_slot_size": tpa_slot_size,
+        "plugins_dir": p_dir,
+        "plugins": plugin_results,
+        "plugins_count": len(plugin_results),
+        "plugins_status": plugins_status if plugin_results else None,
+        "plugins_failed_count": plugins_failed,
     }
 
 
@@ -463,6 +622,84 @@ def format_human_report(res, verbose=False, no_color=False):
     lines.append("  (* = currently selected target)")
     lines.append("")
 
+    if res.get("plugins"):
+        p_border = (
+            "  +----------------+------+-------+-------+-------+"
+            "--------------+--------------+--------+"
+        )
+        p_hdr = (
+            "  | Plugin Binary  | Type | Class | Code  | BSS   |"
+            " TPA Headroom | Far Headroom | Status |"
+        )
+        lines.append("")
+        lines.append(
+            f"  {c_bold}Plugin Slot & TPA Overlay Verification:{c_reset}"
+        )
+        lines.append(f"  Plugins Directory  : {res['plugins_dir']}")
+        slot_hex = res["tpa_slot_addr_hex"] or "BSS"
+        lines.append(
+            f"  TPA Overlay Slot   : {slot_hex} "
+            f"({res['tpa_slot_size']:,d} bytes)"
+        )
+        lines.append(p_border)
+        lines.append(p_hdr)
+        lines.append(p_border)
+        for p in res["plugins"]:
+            tpa_str = (
+                f"{p['tpa_headroom']:+d} B"
+                if (p["can_tpa"] or p["class"] == "4K")
+                else "N/A (Far)"
+            )
+            far_str = f"{p['far_headroom']:+d} B"
+            p_stat = (
+                f"{c_green}PASS{c_reset}"
+                if p["status"] == "PASS"
+                else f"{c_red}FAIL{c_reset}"
+            )
+            code_str = f"{p['prog_size']:,d}B"
+            bss_str = f"{p['bss_size']:,d}B"
+            line = (
+                f"  | {p['file']:<14} | {p['type']:<4} | {p['class']:<5} | "
+                f"{code_str:>5} | {bss_str:>5} | "
+                f"{tpa_str:>12} | {far_str:>12} |  {p_stat}  |"
+            )
+            lines.append(line)
+        lines.append(p_border)
+
+        # Print detailed warnings for failing plugins
+        failing_plugins = [p for p in res["plugins"] if p["status"] == "FAIL"]
+        if failing_plugins:
+            lines.append("")
+            for p in failing_plugins:
+                lines.append(
+                    f"  {c_red}[!] WARNING: {p['file']} exceeds slot "
+                    f"boundaries:{c_reset}"
+                )
+                for iss in p["issues"]:
+                    lines.append(f"      - {iss}")
+
+        lines.append("")
+        p_badge = (
+            f"{c_green}[ PASS ]{c_reset}"
+            if res["plugins_status"] == "PASS"
+            else f"{c_red}[ FAIL ]{c_reset}"
+        )
+        cnt = len(res["plugins"])
+        if res["plugins_status"] == "PASS":
+            lines.append(
+                f"  {c_bold}PLUGIN VERDICT: {p_badge} All {cnt} "
+                f"plugins fit within TPA and Far RAM slots.{c_reset}"
+            )
+        else:
+            fail_names = ", ".join(p["file"] for p in failing_plugins)
+            fcnt = res["plugins_failed_count"]
+            lines.append(
+                f"  {c_bold}PLUGIN VERDICT: {p_badge} {fcnt} plugin(s) exceed "
+                f"slot boundaries ({fail_names})!{c_reset}"
+            )
+        lines.append("=" * 80)
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -547,6 +784,26 @@ Examples:
         help="Display verbose diagnostics",
     )
     parser.add_argument(
+        "--plugins",
+        dest="plugins_dir",
+        default=None,
+        nargs="?",
+        const="",
+        help=(
+            "Audit companion .PRL/.OVL plugins against TPA overlay and "
+            "Far RAM slot boundaries (auto-detected if omitted; pass "
+            "'none' to disable)"
+        ),
+    )
+    parser.add_argument(
+        "--strict-plugins",
+        action="store_true",
+        help=(
+            "Exit with code 1 if any plugin exceeds TPA overlay or "
+            "Far RAM slot boundaries"
+        ),
+    )
+    parser.add_argument(
         "--no-color",
         action="store_true",
         help="Disable ANSI color output in terminal",
@@ -570,6 +827,7 @@ def main(argv=None):
             sym_path=args.sym_file,
             tpa_top=args.tpa_top,
             preset=args.preset,
+            plugins_dir=args.plugins_dir,
         )
     except Exception as e:
         sys.stderr.write(f"[-] Error analyzing '{args.com_file}': {e}\n")
@@ -594,7 +852,10 @@ def main(argv=None):
         )
         print(report)
 
-    return 1 if res["exceeded"] else 0
+    has_failure = res["exceeded"]
+    if args.strict_plugins and res.get("plugins_status") == "FAIL":
+        has_failure = True
+    return 1 if has_failure else 0
 
 
 if __name__ == "__main__":
