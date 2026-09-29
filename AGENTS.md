@@ -188,6 +188,21 @@ How:
      prior to requesting a merge.
    * Agents must provide a clear summary of their test results to the user
      before requesting permission to merge to `master`.
+   * **Mandatory TPA Headroom Evidence**: As part of the evidence when
+     requesting a merge to the `master` branch, agents MUST provide a summary
+     table of the `SE.COM` headroom TPA analysis results (from running
+     `python3 check_tpa.py SE.COM`) demonstrating positive headroom below
+     BDOS (`0xD800`):
+     ```text
+     +----------------------+----------+---------+-----------+--------+
+     | Environment          | BDOS Top | TPA Max | Headroom  | Status |
+     +----------------------+----------+---------+-----------+--------+
+     | RomWBW RC2014 CP/M  *| 0xD800   | 53.75 KB | +  4,352 B |   PASS  |
+     | Standard 64K CP/M    | 0xDC00   | 54.75 KB | +  5,376 B |   PASS  |
+     | Minimal 64K CP/M     | 0xD000   | 51.75 KB | +  2,304 B |   PASS  |
+     | CP/M Plus (Banked)   | 0xF600   | 61.25 KB | + 12,032 B |   PASS  |
+     +----------------------+----------+---------+-----------+--------+
+     ```
 
 ---
 
@@ -336,6 +351,10 @@ When initializing a new agent instance (e.g. `agy3`):
    - **Mandatory Test Results Summary**: Agents must provide a comprehensive
      summary of test results to the user before requesting approval to merge
      into `master`.
+   - **Mandatory TPA Headroom Evidence**: Agents MUST provide a summary table
+     of the `SE.COM` headroom TPA result (from `python3 check_tpa.py SE.COM`)
+     verifying positive headroom below BDOS (`0xD800`) as part of the
+     evidence provided when requesting permission to merge to `master`.
    - **Explicit User Approval Required**: Only when explicitly requested and
      approved by the user:
      - Commit all work cleanly to `agy<N>_dev_branch`.
