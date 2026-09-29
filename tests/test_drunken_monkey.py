@@ -1106,10 +1106,30 @@ def run_drunken_monkey_test(
                 "e", "E", "1", "2"
             )
             needs_wait = char in major_keys or state != "editor"
-            if char == "\x19":
+
+            # Disk saves and file operations require extended timeouts on the
+            # RC2014 emulator due to BDOS directory and sector I/O latency.
+            is_disk_save = (
+                (char in ("s", "S") and
+                 state in ("plugin_manager", "configuration_screen")) or
+                (char in ("y", "Y") and
+                 state in ("save_changes_prompt", "overwrite_prompt"))
+            )
+            is_file_io = (char == "\r" and state in (
+                "save_file_prompt",
+                "open_file_prompt",
+                "load_plugin_prompt",
+                "insert_file_prompt",
+            ))
+
+            if is_disk_save:
+                read_timeout = 5.00
+            elif is_file_io:
+                read_timeout = 3.50
+            elif char == "\x19":
                 read_timeout = 2.50
             else:
-                read_timeout = 0.30 if needs_wait else 0.04
+                read_timeout = 0.35 if needs_wait else 0.04
             chunk = read_available(master, timeout=read_timeout)
 
             if chunk:
