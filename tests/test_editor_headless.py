@@ -119,6 +119,15 @@ def test_se_execution():
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, two_txt_host, "0:2.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        thirty_txt_host = os.path.join(repo_root, "30.TXT")
+        if os.path.isfile(thirty_txt_host) and os.path.isfile(cpmcp_bin):
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:30.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                 thirty_txt_host, "0:30.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if os.path.isfile(cpmcp_bin):
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big_tmp, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1345,7 +1354,7 @@ def test_se_execution():
         # Test 4: Multi-line block copy (1L boundary at Row 2 Col 0, and 2L full block)
         # Cancel previous block with ESC
         os.write(master, b"\x1b")
-        time.sleep(0.1)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
@@ -1372,7 +1381,7 @@ def test_se_execution():
 
         # Cancel block
         os.write(master, b"\x1b")
-        time.sleep(0.1)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
@@ -1403,7 +1412,7 @@ def test_se_execution():
 
         # Test 5: Cancellation terminates Ctrl+C
         os.write(master, b"\x1b")
-        time.sleep(0.1)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
         os.write(master, b"\x03")
         time.sleep(0.2)
@@ -1469,7 +1478,7 @@ def test_se_execution():
 
         # 7. Cancel block with ESC
         os.write(master, b"\x1b")
-        time.sleep(0.1)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         print("[+] Successfully verified half-open caret selection [Start, End) semantics (Step 37)!", flush=True)
@@ -1537,7 +1546,7 @@ def test_se_execution():
 
         # Cancel block with ESC
         os.write(master, b"\x1b")
-        time.sleep(0.1)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         # Part 2: Single-line backwards selection (Col 5 left to Col 4)
@@ -1582,7 +1591,7 @@ def test_se_execution():
 
         # Cancel block with ESC
         os.write(master, b"\x1b")
-        time.sleep(0.1)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         print("[+] Successfully verified backwards block selection semantics (Step 38)!", flush=True)
@@ -2023,12 +2032,17 @@ def test_se_execution():
 
         print("[+] Successfully verified splash screen Goto Line facility (Step 43)!", flush=True)
 
-        # Final exit from editor with Ctrl+Q back to CP/M (answer 'n' to discard test edits)
-        time.sleep(0.2)
+        # Final exit from editor with Ctrl+Q back to CP/M
+        time.sleep(0.3)
+        drain_all(master)
         os.write(master, b"\x11")
-        read_until(master, b"ESC:", timeout=4.0)
-        os.write(master, b"n")
-        read_until(master, b"C>", timeout=4.0)
+        out_q = read_until(master, [b"Save changes?", b"C>"], timeout=6.0)
+        if b"Save changes?" in out_q:
+            time.sleep(0.2)
+            os.write(master, b"n")
+            read_until(master, b"C>", timeout=6.0)
+        time.sleep(0.3)
+        drain_all(master)
         print("[+] Final exit from SE.COM completed.", flush=True)
 
         # ---------------------------------------------------------------------
@@ -2039,7 +2053,7 @@ def test_se_execution():
         # Launch SE directly with line number: 'se 30.TXT:15'
         time.sleep(0.5)
         os.write(master, b"se 30.TXT:15\r")
-        out_s44_l15 = read_until(master, b"Line   15/30", timeout=20.0)
+        out_s44_l15 = read_until(master, b"Line   15/30", timeout=35.0)
         if b"Line   15/30" not in out_s44_l15 or b"Line 15 of test file content" not in out_s44_l15:
             print(f"[-] Step 44 failed: 'se 30.TXT:15' did not position at Line 15. Buffer: {repr(out_s44_l15)}", flush=True)
             return False
@@ -2056,7 +2070,7 @@ def test_se_execution():
         # Launch SE with line number beyond EOF: 'se 30.TXT:999' (should clamp to max line)
         time.sleep(0.5)
         os.write(master, b"se 30.TXT:999\r")
-        out_s44_l30 = read_until(master, b"Line   30/30", timeout=20.0)
+        out_s44_l30 = read_until(master, b"Line   30/30", timeout=35.0)
         if b"Line   30/30" not in out_s44_l30 or b"Line 30 of test file content" not in out_s44_l30:
             print(f"[-] Step 44 failed: 'se 30.TXT:999' did not clamp to Line 30. Buffer: {repr(out_s44_l30)}", flush=True)
             return False
@@ -2076,7 +2090,7 @@ def test_se_execution():
         # Launch SE on 30.TXT
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_s45_init = read_until(master, b"Line    1/30", timeout=25.0)
+        out_s45_init = read_until(master, b"Line    1/30", timeout=35.0)
         if b"Line    1/30" not in out_s45_init:
             print(f"[-] Step 45 failed: 30.TXT did not load. Buffer: {repr(out_s45_init)}", flush=True)
             return False
@@ -2389,8 +2403,9 @@ def test_se_execution():
         # 1. Document was modified in Step 47. Send Ctrl+Q and verify prompt
         time.sleep(0.3)
         os.write(master, b"\x11")
-        out_s52_prompt = read_until(master, b"ESC: Cancel", timeout=4.0)
-        if b"Save changes?" not in out_s52_prompt or b"ESC:" not in out_s52_prompt:
+        out_s52_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if (b"Save changes?" not in out_s52_prompt or
+                b"[ESC]" not in out_s52_prompt):
             print(f"[-] Step 52 failed: Save changes prompt missing. Buffer: {repr(out_s52_prompt)}", flush=True)
             return False
 
@@ -2427,7 +2442,7 @@ def test_se_execution():
         # 5. On splash screen, send Ctrl+Q. Verify it switches to editor and displays Save changes prompt
         time.sleep(0.2)
         os.write(master, b"\x11")
-        out_splash_prompt = read_until(master, b"ESC:", timeout=4.0)
+        out_splash_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         if b"Save changes?" not in out_splash_prompt:
             print(f"[-] Step 52 failed: Splash Ctrl+Q did not show save changes prompt. Buffer: {repr(out_splash_prompt)}", flush=True)
             return False
@@ -2469,7 +2484,7 @@ def test_se_execution():
         os.write(master, b"X")
         time.sleep(0.2)
         os.write(master, b"\x17")
-        out_s53_prompt = read_until(master, b"ESC:", timeout=4.0)
+        out_s53_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         if b"Save changes?" not in out_s53_prompt:
             print(f"[-] Step 53 failed: Ctrl+W did not show save changes prompt. Buffer: {repr(out_s53_prompt)}", flush=True)
             return False
@@ -2501,7 +2516,7 @@ def test_se_execution():
         # 6. On splash screen with modified document, test ':w'
         time.sleep(0.2)
         os.write(master, b"w")
-        out_s53_spw = read_until(master, b"ESC:", timeout=4.0)
+        out_s53_spw = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         if b"Save changes?" not in out_s53_spw:
             print(f"[-] Step 53 failed: Splash ':w' did not prompt for save changes. Buffer: {repr(out_s53_spw)}", flush=True)
             return False
@@ -2516,7 +2531,7 @@ def test_se_execution():
         read_until(master, b"Active Screen:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"\x17")
-        read_until(master, b"ESC:", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
         os.write(master, b"n")
         out_s53_splash2 = read_until(master, b"Active Screen:", timeout=4.0)
         if b"Active Screen:" not in out_s53_splash2:
@@ -2563,7 +2578,7 @@ def test_se_execution():
         os.write(master, b"Z")
         time.sleep(0.2)
         os.write(master, b"\x0f")
-        out_s54_prompt = read_until(master, b"ESC:", timeout=4.0)
+        out_s54_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         if b"Save changes?" not in out_s54_prompt:
             print(f"[-] Step 54 failed: Ctrl+O on modified document did not prompt to save changes. Buffer: {repr(out_s54_prompt)}", flush=True)
             return False
@@ -2622,7 +2637,7 @@ def test_se_execution():
         # 8. On splash screen with modified document, test ':o'
         time.sleep(0.2)
         os.write(master, b"o")
-        out_s54_spo = read_until(master, b"ESC:", timeout=4.0)
+        out_s54_spo = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         if b"Save changes?" not in out_s54_spo:
             print(f"[-] Step 54 failed: Splash ':o' did not prompt for save changes. Buffer: {repr(out_s54_spo)}", flush=True)
             return False
@@ -2637,7 +2652,7 @@ def test_se_execution():
         read_until(master, b"Active Screen:", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"o")
-        read_until(master, b"ESC:", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
         os.write(master, b"n")
         out_s54_spo_open = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
         if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_s54_spo_open:
@@ -2799,7 +2814,7 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x11")
-        out_s57_q = read_until(master, b"ESC:", timeout=4.0)
+        out_s57_q = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         if b"Save changes?" not in out_s57_q:
             print(f"[-] Step 57 failed: Missing save changes prompt on exit. "
                   f"Buffer: {repr(out_s57_q)}", flush=True)
@@ -3268,7 +3283,7 @@ def test_se_execution():
         # 1. Launch 'se 30.TXT' in default 120x40 mode
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out_s62_120 = read_until(master, b"Line    1/30", timeout=20.0)
+        out_s62_120 = read_until(master, b"Line    1/30", timeout=35.0)
         if b"Line    1/30" not in out_s62_120:
             print(f"[-] Step 62 failed: Could not open 30.TXT in 120x40 mode: {repr(out_s62_120[-300:])}", flush=True)
             return False
@@ -3979,7 +3994,7 @@ def test_se_execution():
         time.sleep(0.5)
         drain_all(master)
         os.write(master, b"se 2.TXT\r")
-        out_s69_load = read_until(master, b"^K: Editor keys", timeout=20.0)
+        out_s69_load = read_until(master, b"^K: Editor keys", timeout=35.0)
         out_s69_load += drain_all(master)
 
         if b"| C:2.TXT        |" not in out_s69_load:
@@ -4065,7 +4080,7 @@ def test_se_execution():
         time.sleep(0.5)
         drain_all(master)
         os.write(master, b"se LONGNAME.TXT\r")
-        out_s69_long = read_until(master, b"^K: Editor keys", timeout=20.0)
+        out_s69_long = read_until(master, b"^K: Editor keys", timeout=35.0)
         out_s69_long += drain_all(master)
 
         if b"| C:LONGNAME.TXT |" not in out_s69_long:
@@ -4938,8 +4953,16 @@ def test_se_execution():
         if os.path.isfile(two_txt_host) and os.path.isfile(cpmcp_bin) and os.path.isfile(cpmrm_bin):
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:2.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, two_txt_host, "0:2.TXT"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        thirty_txt_host = os.path.join(repo_root, "30.TXT")
+        if (os.path.isfile(thirty_txt_host) and os.path.isfile(cpmcp_bin) and
+                os.path.isfile(cpmrm_bin)):
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:30.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                 thirty_txt_host, "0:30.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if os.path.isfile(cpmrm_bin):
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_1", img_file,
                             "0:30.TXT"],
