@@ -185,8 +185,10 @@ def test_config_screen_beautifier_options():
         # 2. Enter Plugin Manager ('p')
         time.sleep(0.3)
         os.write(master, b"p")
-        out = read_until(master, b"0..7:select", timeout=10.0)
-        assert b"0..7:select" in out, f"Failed entering Plugin Manager: {out}"
+        out = read_until(master, b"Plugin Manager", timeout=10.0)
+        assert b"Plugin Manager" in out, (
+            f"Failed entering Plugin Manager: {out}"
+        )
 
         # Select BEAUTIFY slot: navigate down twice to BEAUTIFY (slot 2)
         time.sleep(0.3)
@@ -235,7 +237,7 @@ def test_config_screen_beautifier_options():
         # Save & Exit ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"0..7:select", timeout=10.0)
+        read_until(master, b"Plugin Manager", timeout=10.0)
         print("    [+] Exited BEAUTIFY config menu with 'q' (persisted to BEAUTIFY.CFG)")
 
         # Exit Plugin Manager ('q') and exit SE.COM ('q')
@@ -286,7 +288,7 @@ def test_config_screen_beautifier_options():
         # Enter Plugin Manager ('p')
         time.sleep(0.3)
         os.write(master2, b"p")
-        read_until(master2, b"0..7:select", timeout=10.0)
+        read_until(master2, b"Plugin Manager", timeout=10.0)
 
         # Navigate down twice to BEAUTIFY
         time.sleep(0.3)
@@ -297,12 +299,13 @@ def test_config_screen_beautifier_options():
         assert b"Compact  (8/16)" in out, f"Persisted columns not loaded: {out}"
         assert b"lowercase      " in out, f"Persisted case not loaded: {out}"
         assert b"OFF (Fast)     " in out, f"Persisted animation not loaded: {out}"
-        print("    [+] Verified BEAUTIFY plugin reloaded persisted settings from BEAUTIFY.CFG successfully")
+        print("    [+] Verified BEAUTIFY plugin reloaded persisted settings "
+              "from BEAUTIFY.CFG successfully")
 
         # Exit
         time.sleep(0.3)
         os.write(master2, b"q")
-        read_until(master2, b"0..7:select", timeout=10.0)
+        read_until(master2, b"Plugin Manager", timeout=10.0)
         time.sleep(0.3)
         os.write(master2, b"q")
         read_until(master2, b"Col 0", timeout=10.0)

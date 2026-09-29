@@ -37,8 +37,12 @@ def find_paths():
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
 
     emu_bin = os.path.join(workspace_root, "tools", "rc2014_emu", "rc2014")
-    rom_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom")
-    img_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img")
+    rom_file = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
+    )
+    img_file = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
+    )
     se_bin = os.path.join(repo_root, "SE.COM")
     mkprl_bin = os.path.join(repo_root, "tools", "mkprl.py")
 
@@ -49,18 +53,22 @@ def test_tooling_validations(mkprl_bin):
     """Verify mkprl.py constraints on sizes and TPA execution."""
     print("[*] Running mkprl.py packaging and validation tests...", flush=True)
 
-    # 1. 8KB / 16KB / 32KB rejection of --tpa
+    # 1. 8KB (>5KB) / 16KB / 32KB rejection of --tpa
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    midplug_prl = os.path.join(repo_root, "plugins", "MIDPLUG.PRL")
     proc = subprocess.run([sys.executable, mkprl_bin, "-n", "FAIL8",
                            "-o", "/dev/null", "--size", "8k",
-                           "--tpa", "/dev/null"],
+                           "--tpa", midplug_prl],
                           capture_output=True, text=True)
     if proc.returncode == 0:
-        print("[-] mkprl.py failed to reject --size 8k with --tpa", flush=True)
+        print("[-] mkprl.py failed to reject oversized 8k with --tpa",
+              flush=True)
         return False
     if "cannot use --tpa" not in proc.stderr:
         print(f"[-] Unexpected error message for 8K --tpa: {proc.stderr}",
               flush=True)
         return False
+
 
     proc = subprocess.run([sys.executable, mkprl_bin, "-n", "FAIL16",
                            "-o", "/dev/null", "--size", "16k",
@@ -136,13 +144,16 @@ def run_slots_test():
         print(f"[-] Disk image not found: {img_file}", flush=True)
         return False
 
-    print("[*] Launching RomWBW on RC2014 emulator (Plugin Slots Test)...", flush=True)
+    print("[*] Launching RomWBW on RC2014 emulator (Plugin Slots Test)...",
+          flush=True)
     master, slave = os.openpty()
     tty.setraw(slave)
     os.set_blocking(master, False)
 
     cmd = [emu_bin, "-b", "-r", rom_file, "-1", "-S", img_file]
-    proc = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True)
+    proc = subprocess.Popen(
+        cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True
+    )
     os.close(slave)
 
     try:
@@ -189,9 +200,11 @@ def run_slots_test():
             ok, out_more = read_until(master, b"0..7:select", timeout=5.0)
             out += out_more
         if b"FAR (4KB)" not in out or b"TPA (4KB)" not in out:
-            print(f"[-] Plugin Manager did not display 4KB slot modes. Buffer: {repr(out)}", flush=True)
+            print("[-] Plugin Manager did not display 4KB slot modes. "
+                  f"Buffer: {repr(out)}", flush=True)
             return False
-        print("[+] Plugin Manager displayed 4KB slot mode identifiers.", flush=True)
+        print("[+] Plugin Manager displayed 4KB slot mode identifiers.",
+              flush=True)
 
         # 4. Load 8KB Plugin (MIDPLUG.PRL)
         time.sleep(0.3)
