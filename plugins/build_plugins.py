@@ -15,12 +15,15 @@ def main():
     repo_root = os.path.dirname(plugin_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
 
-    z80asm_bin = os.path.join(workspace_root, "tools", "z88dk", "bin", "z88dk-z80asm")
+    z80asm_bin = os.path.join(
+        workspace_root, "tools", "z88dk", "bin", "z88dk-z80asm"
+    )
     mkprl_bin = os.path.join(repo_root, "tools", "mkprl.py")
 
     # 1. Build ROT13.PRL
     # Assemble at 0100h
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'rot13_100.bin')}",
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'rot13_100.bin')}",
                     os.path.join(plugin_dir, "rot13.asm")], check=True)
 
     # Prepare temporary source at 0200h for relocation bitmap computation
@@ -31,7 +34,8 @@ def main():
         f.write(src)
 
     # Assemble at 0200h
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'rot13_200.bin')}",
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'rot13_200.bin')}",
                     rot13_200_asm], check=True)
     if os.path.exists(rot13_200_asm):
         os.remove(rot13_200_asm)
@@ -44,17 +48,20 @@ def main():
                     os.path.join(plugin_dir, "rot13_200.bin")], check=True)
 
     # 2. Build WORDCNT.OVL
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'wordcnt.bin')}",
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'wordcnt.bin')}",
                     os.path.join(plugin_dir, "wordcnt.asm")], check=True)
 
     subprocess.run([sys.executable, mkprl_bin, "-n", "WORDCNT",
                     "-o", os.path.join(plugin_dir, "WORDCNT.OVL"),
-                    "--ovl", "--tpa", "--far", "--modal", "--has-about", "--has-config",
+                    "--ovl", "--tpa", "--far", "--modal", "--has-about",
+                    "--has-config",
                     os.path.join(plugin_dir, "wordcnt.bin")], check=True)
 
     # 3. Build BEAUTIFY.PRL (CP/M 3 Page-Relocatable, Far-RAM & TPA executable)
     # Assemble at 0100h
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'beautify_100.bin')}",
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'beautify_100.bin')}",
                     os.path.join(plugin_dir, "beautify.asm")], check=True)
 
     # Prepare temporary source at 0200h for relocation bitmap computation
@@ -65,7 +72,8 @@ def main():
         f.write(src)
 
     # Assemble at 0200h
-    subprocess.run([z80asm_bin, "-b", f"-o={os.path.join(plugin_dir, 'beautify_200.bin')}",
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'beautify_200.bin')}",
                     beautify_200_asm], check=True)
     if os.path.exists(beautify_200_asm):
         os.remove(beautify_200_asm)
@@ -194,6 +202,29 @@ def main():
                     os.path.join(plugin_dir, "hibern_100.bin"),
                     os.path.join(plugin_dir, "hibern_200.bin")], check=True)
 
+    # 9. Build HELP.OVL (4KB TPA Relocatable Overlay)
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'help_100.bin')}",
+                    os.path.join(plugin_dir, "help.asm")], check=True)
+
+    help_200_asm = os.path.join(plugin_dir, "help_200.asm")
+    with open(os.path.join(plugin_dir, "help.asm"), "r") as f:
+        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
+    with open(help_200_asm, "w") as f:
+        f.write(src)
+
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'help_200.bin')}",
+                    help_200_asm], check=True)
+    if os.path.exists(help_200_asm):
+        os.remove(help_200_asm)
+
+    subprocess.run([sys.executable, mkprl_bin, "-n", "HELP",
+                    "-o", os.path.join(plugin_dir, "HELP.OVL"),
+                    "--tpa", "--has-about", "--has-config",
+                    os.path.join(plugin_dir, "help_100.bin"),
+                    os.path.join(plugin_dir, "help_200.bin")], check=True)
+
     # Clean up temporary binaries
     for tmp in ["rot13_100.bin", "rot13_200.bin", "wordcnt.bin",
                 "beautify_100.bin", "beautify_200.bin",
@@ -201,7 +232,8 @@ def main():
                 "halfplug_100.bin", "halfplug_200.bin",
                 "bigplug_100.bin", "bigplug_200.bin",
                 "plugin_100.bin", "plugin_200.bin",
-                "hibern_100.bin", "hibern_200.bin"]:
+                "hibern_100.bin", "hibern_200.bin",
+                "help_100.bin", "help_200.bin"]:
         p = os.path.join(plugin_dir, tmp)
         if os.path.exists(p):
             os.remove(p)
@@ -232,6 +264,7 @@ def main():
     print(f"    - {os.path.join(plugin_dir, 'BIGPLUG.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'PLUGIN.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'HIBERN.OVL')}")
+    print(f"    - {os.path.join(plugin_dir, 'HELP.OVL')}")
 
 if __name__ == "__main__":
     main()

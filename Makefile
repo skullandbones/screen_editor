@@ -70,6 +70,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/fat/VFSTEST.COM 0:VFSTEST.COM
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HIBERN.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HIBERN.OVL 0:HIBERN.OVL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HELP.OVL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HELP.OVL 0:HELP.OVL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
@@ -96,6 +98,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/fat/VFSTEST.COM 0:VFSTEST.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:HIBERN.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HIBERN.OVL 0:HIBERN.OVL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:HELP.OVL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HELP.OVL 0:HELP.OVL
 
 test: test-sanity
 
