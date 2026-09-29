@@ -869,7 +869,43 @@ CHECK_CTRL_K:
 
 DO_HELP_SCREEN:
 	CALL	FLUSH_DEFERRED_RENDER
-	CALL	SHOW_HELP_KEYS_UI
+	CALL	INVALIDATE_ACTIVE_LINE
+	CALL	FLUSH_DIRTY_CACHE
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
+
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A	; Prevent cursor / dirty updates
+
+DHS_RETRY:
+	CALL	LOAD_HELP_OVERLAY
+	JR	NC,DHS_RUN
+
+	; Help overlay missing or failed to load -> display status message
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
+	LD	DE,STR_HELP_NOT_FOUND
+	CALL	HOST_SET_STATUS_MSG
+	JR	DHS_EXIT
+
+DHS_RUN:
+	LD	IX,PLUGIN_HOST_API
+	LD	IY,PLUGIN_HOST_API
+	CALL	LINE_STORAGE + 256	; Entry point of HELP.OVL
+
+	; If HELP.OVL returned A == KEY_CTRL_P, run context popup and re-run
+	CP	KEY_CTRL_P
+	JR	NZ,DHS_RESTORE
+	LD	A,PLUG_CTX_HELP
+	CALL	DO_CONTEXT_PLUGIN_POPUP
+	JR	DHS_RETRY
+
+DHS_RESTORE:
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
+
+DHS_EXIT:
+	CALL	RELOAD_CACHE_WINDOW_FORCE
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
@@ -14132,58 +14168,68 @@ RESTORE_RAMDRIVE:
 
 STR_HIBERN_OVL_NAME:
 	DB	"HIBERN  OVL"
+STR_HELP_OVL_NAME:
+	DB	"HELP    OVL"
+STR_HELP_NOT_FOUND:
+	DB	"[HELP.OVL not found] ",0
 
-INIT_HIB_OVL_FCB_LOCAL:
-	XOR	A
-	JR	INIT_HIB_OVL_FCB_COMMON
-
-INIT_HIB_OVL_FCB_DRIVE:
-	; A = drive code (1=A, 2=B...)
-INIT_HIB_OVL_FCB_COMMON:
+; Helper: Initialize SHARED_TEMP_FCB with 11-char name in DE and drive in A.
+INIT_OVERLAY_FCB:
+	PUSH	DE
 	LD	HL,SHARED_TEMP_FCB
-	LD	(HL),A			; Drive byte
+	LD	(HL),A			; Drive byte (0 = default, 1 = A...)
 	INC	HL
-	LD	DE,STR_HIBERN_OVL_NAME
 	LD	B,11
-INIT_HIB_COPY:
+IOF_COPY:
 	LD	A,(DE)
 	LD	(HL),A
 	INC	HL
 	INC	DE
-	DJNZ	INIT_HIB_COPY
+	DJNZ	IOF_COPY
 	LD	B,24
-INIT_HIB_ZERO:
+IOF_ZERO:
 	LD	(HL),0
 	INC	HL
-	DJNZ	INIT_HIB_ZERO
+	DJNZ	IOF_ZERO
+	POP	DE
 	RET
 
 ;------------------------------------------------------------------------------
-; LOAD_HIBERN_OVERLAY:
-; Loads HIBERN.OVL into LINE_STORAGE and relocates it if relocatable PRL.
-; Returns: Carry = 0 on success, Carry = 1 on error.
+; LOAD_OVERLAY_FILE:
+; Loads an overlay into LINE_STORAGE and relocates it if relocatable PRL.
+; Input:
+;   DE = Pointer to 11-char FCB name (e.g. STR_HIBERN_OVL_NAME)
+; Returns:
+;   Carry = 0 on success, Carry = 1 on error.
 ;------------------------------------------------------------------------------
-LOAD_HIBERN_OVERLAY:
-	CALL	INIT_HIB_OVL_FCB_LOCAL
+LOAD_OVERLAY_FILE:
+	PUSH	DE
+	XOR	A
+	CALL	INIT_OVERLAY_FCB
+	POP	DE
+	PUSH	DE
 	LD	DE,SHARED_TEMP_FCB
 	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
+	POP	DE
 	CP	0FFH
-	JR	NZ,LHO_OPEN_OK
+	JR	NZ,LOF_OPEN_OK
 
 	; Try program drive if known
 	LD	A,(CONFIG_SOURCE_DRIVE)
 	CP	0FFH
-	JP	Z,LHO_ERR
+	JP	Z,LOF_ERR
 	INC	A			; 1-based drive
-	CALL	INIT_HIB_OVL_FCB_DRIVE
+	PUSH	DE
+	CALL	INIT_OVERLAY_FCB
+	POP	DE
 	LD	DE,SHARED_TEMP_FCB
 	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
 	CP	0FFH
-	JP	Z,LHO_ERR
+	JP	Z,LOF_ERR
 
-LHO_OPEN_OK:
+LOF_OPEN_OK:
 	; Clear record byte (cr)
 	XOR	A
 	LD	(SHARED_TEMP_FCB + 32),A
@@ -14192,7 +14238,7 @@ LHO_OPEN_OK:
 	LD	HL,LINE_STORAGE
 	LD	B,32
 
-LHO_READ_LOOP:
+LOF_READ_LOOP:
 	PUSH	BC
 	PUSH	HL
 	EX	DE,HL			; DE = current buffer ptr
@@ -14204,13 +14250,13 @@ LHO_READ_LOOP:
 	POP	HL
 	POP	BC
 	OR	A
-	JR	NZ,LHO_READ_EOF		; EOF or read error
+	JR	NZ,LOF_READ_EOF		; EOF or read error
 	LD	DE,128
 	ADD	HL,DE
-	DJNZ	LHO_READ_LOOP
+	DJNZ	LOF_READ_LOOP
 
-LHO_READ_EOF:
-	; Close HIBERN.OVL
+LOF_READ_EOF:
+	; Close overlay file
 	LD	DE,SHARED_TEMP_FCB
 	LD	C,16			; BDOS Close File
 	CALL	BDOS_ENTRY
@@ -14224,7 +14270,7 @@ LHO_READ_EOF:
 	LD	HL,(LINE_STORAGE + 7)
 	LD	A,H
 	OR	L
-	JR	NZ,LHO_DONE
+	JR	NZ,LOF_DONE
 
 	; Relocate PRL in LINE_STORAGE
 	; Target page = high_byte(LINE_STORAGE + 256)
@@ -14242,13 +14288,21 @@ LHO_READ_EOF:
 	LD	BC,(LINE_STORAGE + 1)
 	CALL	RELOCATE_PRL_LOOP
 
-LHO_DONE:
+LOF_DONE:
 	OR	A			; Carry = 0 (success)
 	RET
 
-LHO_ERR:
+LOF_ERR:
 	SCF				; Carry = 1 (error)
 	RET
+
+LOAD_HIBERN_OVERLAY:
+	LD	DE,STR_HIBERN_OVL_NAME
+	JP	LOAD_OVERLAY_FILE
+
+LOAD_HELP_OVERLAY:
+	LD	DE,STR_HELP_OVL_NAME
+	JP	LOAD_OVERLAY_FILE
 
 ;------------------------------------------------------------------------------
 ; RUN_HIBERN_STARTUP:
@@ -15871,119 +15925,6 @@ AIV_DO_SCROLL_DOWN:
 
 AIV_CHECK_HORIZ:
 	CALL	ADJUST_HORIZ_VIEWPORT
-	RET
-
-;------------------------------------------------------------------------------
-; Show Editor Mode Keys Screen (Ctrl+K)
-; Displays summary of all SE editor keys and waits for any key to return.
-;------------------------------------------------------------------------------
-HELP_LINES	EQU	22
-
-SHOW_HELP_KEYS_UI:
-	LD	A,1
-	LD	(IS_SPLASH_SCREEN),A
-	CALL	RENDER_HELP_SCREEN_STATIC
-HELP_KEY_LOOP:
-	CALL	GET_KEY
-	CP	KEY_CTRL_P
-	JR	NZ,HELP_NOT_CTRL_P
-	LD	A,PLUG_CTX_HELP
-	CALL	DO_CONTEXT_PLUGIN_POPUP
-	JR	HELP_KEY_LOOP
-HELP_NOT_CTRL_P:
-	CP	KEY_ESC
-	CALL	Z,DRAIN_ESC_SEQUENCE
-	XOR	A
-	LD	(IS_SPLASH_SCREEN),A
-	RET
-
-RENDER_HELP_SCREEN_STATIC:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
-
-	; 1. Row 1: Horizontal Rule
-	CALL	PRINT_HR_EQUAL
-
-	; 2. Row 2: Centered Title
-	CALL	RENDER_HELP_TITLE
-
-	; 3. Row 3: Horizontal Rule
-	CALL	PRINT_HR_EQUAL
-
-	; 4. Rows 4..20: Help Key Descriptions (17 lines)
-	LD	DE,STR_HELP_BODY
-	CALL	PRINT_STR
-
-	; 5. Row 21: Horizontal Dash Rule
-	CALL	PRINT_HR_DASH
-
-	; 6. Row 22: Centered Return Prompt
-	CALL	RENDER_HELP_FOOTER
-
-	; Fill remaining rows down to status row with '~'
-	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
-	SUB	HELP_LINES		; A = remaining rows
-	JR	Z,HELP_TILDE_DONE
-	JR	C,HELP_TILDE_DONE
-	LD	B,A
-HELP_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
-	DJNZ	HELP_TILDE_LOOP
-
-HELP_TILDE_DONE:
-	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	RET
-
-;------------------------------------------------------------------------------
-; Render Ctrl+K Help Title (Row 2):
-; Emits '~' followed by ((ACTIVE_COLS - 25) / 2 - 1) spaces and STR_HELP_TITLE.
-;------------------------------------------------------------------------------
-RENDER_HELP_TITLE:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	25
-	SRL	A
-	DEC	A
-	LD	B,A
-RHT_PAD_LOOP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	RHT_PAD_LOOP
-	LD	DE,STR_HELP_TITLE
-	CALL	PRINT_STR
-	RET
-
-;------------------------------------------------------------------------------
-; Render Ctrl+K Help Footer (Row 22):
-; Emits '~' followed by ((ACTIVE_COLS - 36) / 2 - 1) spaces and STR_HELP_RETURN_PROMPT.
-;------------------------------------------------------------------------------
-RENDER_HELP_FOOTER:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	36
-	SRL	A
-	DEC	A
-	LD	B,A
-RHF_PAD_LOOP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	RHF_PAD_LOOP
-	LD	DE,STR_HELP_RETURN_PROMPT
-	CALL	PRINT_STR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -21205,8 +21146,7 @@ PDR_NOT_CONFIG:
 PDR_NOT_MEM_INFO:
 	CP	PLUG_CTX_HELP
 	JR	NZ,PDR_NOT_HELP
-	CALL	RENDER_HELP_SCREEN_STATIC
-	RET
+	RET				; Help screen rendered by HELP.OVL
 PDR_NOT_HELP:
 	CP	PLUG_CTX_ABOUT
 	JR	NZ,PDR_NOT_ABOUT
@@ -23210,29 +23150,6 @@ STR_LINE_SUFFIX:	DB	"L]","$"
 STR_CHAR_LOCK_SUFFIX:	DB	"c LOCK]","$"
 
 STR_LINE_LOCK_SUFFIX:	DB	"L LOCK]","$"
-
-STR_HELP_TITLE:		DB	"SE.COM - EDITOR MODE KEYS",13,10,"$"
-
-STR_HELP_BODY:
-	DB	"~  FILE & SYSTEM:",13,10
-	DB	"~    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
-	DB	"~    Ctrl+W           Close file to splash    Ctrl+Q          Quit to CP/M",13,10
-	DB	"~    Ctrl+K           Help / Solidify block   Ctrl+P          Plugins pop-up",13,10
-	DB	"~  NAVIGATION & SEARCH:",13,10
-	DB	"~    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
-	DB	"~    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
-	DB	"~    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
-	DB	"~    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10
-	DB	"~    Ctrl+F           Find text               Ctrl+N          Find next",13,10
-	DB	"~    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle find case",13,10
-	DB	"~  EDITING & BLOCK:",13,10
-	DB	"~    Insert           Toggle Insert/Overwrite Enter           New line",13,10
-	DB	"~    ASCII 32..126    Insert/Overwrite text   Backspace       Delete left / join",13,10
-	DB	"~    Delete / Ctrl+D  Delete char or block    Ctrl+B          Start/Toggle block",13,10
-	DB	"~    Ctrl+C           Copy solidified block   Ctrl+K          Solidify block",13,10
-	DB	"~    Ctrl+X           Move solidified block   ESC             Clear block",13,10,"$"
-
-STR_HELP_RETURN_PROMPT:	DB	"Press any key to return to editor...",13,10,"$"
 
 STR_STATUS_SEP:	DB	" | ","$"
 
