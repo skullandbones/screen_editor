@@ -183,7 +183,7 @@ def run_sanity_test():
         # Verify modal pop-up contains title and Save changes? prompt
         # inside the box enclosure
         if b"Unsaved Modifications" not in out_prompt or \
-           b"| Save changes?" not in out_prompt:
+           b"|                 Save changes?" not in out_prompt:
             print(f"[-] Save changes prompt not embedded in modal popup. "
                   f"Buffer: {repr(out_prompt)}", flush=True)
             return False

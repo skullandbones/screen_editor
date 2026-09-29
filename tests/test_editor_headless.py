@@ -2397,7 +2397,7 @@ def test_se_execution():
         # Verify modal pop-up contains title and Save changes? prompt
         # inside the box enclosure
         if b"Unsaved Modifications" not in out_s52_prompt or \
-           b"| Save changes?" not in out_s52_prompt:
+           b"|                 Save changes?" not in out_s52_prompt:
             print(f"[-] Step 52 failed: Save changes prompt not embedded in "
                   f"modal popup. Buffer: {repr(out_s52_prompt)}", flush=True)
             return False

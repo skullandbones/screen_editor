@@ -1338,12 +1338,12 @@ DO_SAVE_CHANGES_POPUP:
 	CALL	PRINT_STR
 
 	; Position cursor inside popup on prompt line after "Save changes? "
-	; Row = POPUP_SAVE_START_ROW + 4, Col = POPUP_COL + 16
+	; Row = POPUP_SAVE_START_ROW + 4, Col = POPUP_COL + 32
 	LD	A,(POPUP_SAVE_START_ROW)
 	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
-	ADD	A,16
+	ADD	A,32
 	LD	L,A
 	CALL	LOCATE_RC
 	LD	DE,STR_SHOW_CURSOR
@@ -22985,9 +22985,9 @@ STR_POPUP_BORDER:		DB	"+------------------------------------------------+", 0
 STR_POPUP_SAVE_TITLE:
 	DB	"|             Unsaved Modifications              |", 0
 STR_POPUP_SAVE_MSG1:
-	DB	"| Any unsaved edits will be lost if discarded.   |", 0
+	DB	"|  Any unsaved edits will be lost if discarded.  |", 0
 STR_POPUP_SAVE_MSG2:
-	DB	"| Save changes?                                  |", 0
+	DB	"|                 Save changes?                  |", 0
 STR_POPUP_SAVE_KEYS:
 	DB	"|          [Y]es / [N]o / [ESC]=Cancel           |", 0
 
