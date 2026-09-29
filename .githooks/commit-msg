@@ -4,10 +4,13 @@
 
 Validates:
   1. Maximum line length <= 80 characters for all lines.
-  2. Subject header length <= 72 characters (warning/error).
-  3. Presence of structured 'Why:' section with descriptive content.
-  4. Presence of structured 'How:' section with descriptive content.
-  5. Merge commits are exempt from structured Why/How requirements.
+  2. Subject header length <= 72 characters.
+  3. Conventional commit header format <type>(<scope>): <summary>.
+  4. Presence of structured 'Why:' section with descriptive content.
+  5. Presence of structured 'How:' section with descriptive content.
+  6. Compact list formatting (no double-spaced items or orphan lines).
+  7. Section header spacing (no blank line immediately following Why/How).
+  8. Merge commits are exempt from structured Why/How requirements.
 """
 
 import os
@@ -124,9 +127,76 @@ def validate_commit_msg(msg_file_path: str) -> int:
         print(f"    Received: '{subject}'")
         return 1
 
+    # 4. Blank line after subject header
+    if len(non_comment_lines) > 1 and non_comment_lines[1].strip() != "":
+        print("[-] Hook Error: Line 2 must be an empty blank line separating "
+              "subject from body.")
+        return 1
+
+    # 5. Consecutive blank lines check
+    for idx in range(len(non_comment_lines) - 1):
+        if (not non_comment_lines[idx].strip()
+                and not non_comment_lines[idx + 1].strip()):
+            print(f"[-] Hook Error: Multiple consecutive blank lines at "
+                  f"line {idx + 2}.")
+            print("    Use at most a single blank line between sections.")
+            return 1
+
+    # 6. Section header spacing and list styling checks
+    for idx, line in enumerate(non_comment_lines):
+        clean = line.strip()
+        # Ensure no blank line immediately following section header
+        if clean in ("Why:", "WHY:", "How:", "HOW:"):
+            if (idx + 1 < len(non_comment_lines)
+                    and not non_comment_lines[idx + 1].strip()):
+                print(f"[-] Hook Error: Empty blank line immediately "
+                      f"following '{clean}' on line {idx + 2}.")
+                print("    Content must begin immediately on the next line "
+                      "(compact spacing).")
+                return 1
+            if (clean in ("How:", "HOW:")
+                    and idx > 0
+                    and non_comment_lines[idx - 1].strip()):
+                print(f"[-] Hook Error: Missing blank line before '{clean}' "
+                      f"on line {idx + 1}.")
+                print("    Sections must be separated by exactly one "
+                      "blank line.")
+                return 1
+
+        # Check for orphan continuation lines separated by a blank line
+        if not clean and idx + 1 < len(non_comment_lines):
+            next_line = non_comment_lines[idx + 1]
+            if (next_line.startswith("  ")
+                    and not next_line.lstrip().startswith(("- ", "* ", "+ "))
+                    and not re.match(r"^\d+\.\s+", next_line.lstrip())):
+                if idx > 0 and non_comment_lines[idx - 1].strip():
+                    print(f"[-] Hook Error: Orphan continuation line on line "
+                          f"{idx + 2} separated by blank line {idx + 1}:")
+                    print(f"    {next_line}")
+                    print("    Wrapped continuation lines must not be "
+                          "separated by blank lines.")
+                    return 1
+
+        # Check for double-spaced bullet lists
+        if idx + 2 < len(non_comment_lines):
+            prev_line = non_comment_lines[idx].strip()
+            mid_line = non_comment_lines[idx + 1].strip()
+            next_line = non_comment_lines[idx + 2].strip()
+            is_prev = (prev_line.startswith(("- ", "* "))
+                       or bool(re.match(r"^\d+\.\s+", prev_line)))
+            is_next = (next_line.startswith(("- ", "* "))
+                       or bool(re.match(r"^\d+\.\s+", next_line)))
+            if is_prev and not mid_line and is_next:
+                print(f"[-] Hook Error: Double-spaced list item detected "
+                      f"at line {idx + 3}:")
+                print(f"    {next_line}")
+                print("    Lists must be compact (single-spaced). Do not "
+                      "insert blank lines between items.")
+                return 1
+
     full_text = "\n".join(non_comment_lines)
 
-    # 4. Check for 'Why:' section
+    # 7. Check for 'Why:' section
     why_match = re.search(
         r"^[ \t]*(?:Why|WHY):[ \t]*\n([\s\S]*?)(?=^[ \t]*(?:How|HOW):|\Z)",
         full_text,
@@ -137,7 +207,7 @@ def validate_commit_msg(msg_file_path: str) -> int:
         print_usage_guide()
         return 1
 
-    # 5. Check for 'How:' section
+    # 8. Check for 'How:' section
     how_match = re.search(
         r"^[ \t]*(?:How|HOW):[ \t]*\n([\s\S]*?)(?=^[ \t]*(?:Why|WHY):|\Z)",
         full_text,
@@ -157,6 +227,8 @@ def print_usage_guide():
     print("")
     print("  Why:")
     print("  - Explain rationale, background, or user issue addressed")
+    print("    (indent wrapped lines with 2 spaces, no blank lines between)")
+    print("  - Single-spaced bullet items (no blank lines between bullets)")
     print("")
     print("  How:")
     print("  - List concrete implementation changes and routines modified")
