@@ -41,6 +41,88 @@ How:
   are exempt from `Why:` / `How:` requirements but must still respect the
   $\le 80$ character line width limit.
 
+### Acceptable vs. Unacceptable Body Styles
+
+#### Acceptable Styles:
+1. **Compact Bullet List (Recommended)**:
+   - Exactly one blank line between subject and `Why:`, and between `Why:`
+     and `How:`.
+   - Bullets immediately follow the section header without an intervening
+     blank line.
+   - List items are single-spaced (no blank lines between items).
+   - Wrapped lines are indented with 2 spaces to align with the text.
+   ```text
+   test(editor): add test suite for 16KB to 32KB file sizes
+
+   Why:
+   - Validate editor loading and saving across large file sizes
+     ranging from 16,384 bytes up to the maximum limit of 32,768 bytes.
+   - Ensure end-to-end byte fidelity across multi-sector CP/M text files.
+
+   How:
+   - Implement tests/test_large_file_sizes.py targeting 4 sizes:
+     16,384 B (16 KB min), 21,845 B, 27,306 B, and 32,768 B (32 KB max).
+   - Generate valid ASCII lines ending in CRLF and inject onto CP/M disk.
+   - Boot RC2014 RomWBW emulator, verify document load and line counts.
+   - Test top and bottom jumps (Ctrl+G and Ctrl+T), trigger Ctrl+S save cycle.
+   - Extract saved files via cpmcp and verify 100% byte fidelity.
+   ```
+
+2. **Prose / Numbered Implementation Style**:
+   - Structured paragraphs or numbered steps explaining rationale and steps.
+   - Paragraphs separated by a single blank line.
+   ```text
+   fix(file-io): prevent ghost extent creation when saving 32K documents
+
+   Why:
+   When saving documents whose sector count fills a directory extent exactly,
+   CP/M 2.2 BDOS sequential write (Call 21) automatically advances the extent,
+   allocating a new directory entry for extent 2 with 0 records and 0 blocks.
+   Host extraction tools treat this as a sparse hole and append null bytes.
+
+   How:
+   1. Introduce 16-bit record counter SAVE_RECORD_NUM initialized to 0 in
+      MAKE_FILE_OK and MAKE_BLK_FILE_OK.
+   2. In WRITE_BYTE_TO_DMA, populate WORK_FCB random record bytes (r0, r1, r2)
+      from SAVE_RECORD_NUM and invoke BDOS Call 34 (Write Random).
+   3. BDOS Call 34 only allocates extents when records are actually written,
+      preventing phantom extent creation upon filling extent boundaries.
+   4. Verify 100% byte fidelity across all 4 large file sizes (16KB to 32KB).
+   ```
+
+#### Unacceptable Styles (Strictly Forbidden):
+1. **Double-Spaced Bullets / Orphan Continuation Lines**:
+   - NEVER insert blank lines between wrapped continuation lines of the same
+     sentence or bullet point.
+   - NEVER double-space bullet lists by inserting blank lines between every
+     single bullet item.
+   - NEVER place a blank line immediately after `Why:` or `How:` before the
+     first bullet point.
+   ```text
+   [UNACCEPTABLE: broken continuation lines and double-spaced bullets]
+   Why:
+
+   - Validate editor loading, navigation, and saving across large file sizes
+
+     ranging from 16,384 bytes up to the maximum limit of 32,768 bytes.
+
+   - Ensure end-to-end byte fidelity across multi-sector CP/M text files.
+
+   How:
+
+   - Implement tests/test_large_file_sizes.py targeting 4 representative sizes:
+
+     16,384 B (16 KB min), 21,845 B, 27,306 B, and 32,768 B (32 KB max).
+   ```
+
+2. **Uninformative Placeholders**:
+   - NEVER write trivial, empty, or vague content (e.g. `Why:\n- Fix bug`,
+     `How:\n- Updated code`).
+
+3. **Exceeding 80 Characters**:
+   - NEVER allow any line in the commit body to exceed 80 characters.
+     Always run `python3 check_line_length.py` to audit commits before pushing.
+
 ---
 
 ## 2. Hard House Rules
