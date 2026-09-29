@@ -125,6 +125,7 @@ START:
 	; Query initial CP/M drive via BDOS 25 (Return Current Disk)
 	LD	C,25
 	CALL	BDOS_ENTRY
+	LD	(CURRENT_DEFAULT_DRIVE),A
 	INC	A			; 0..15 -> 1..16
 	LD	(CURRENT_DIR_DRIVE),A
 	ADD	A,'A'-1
@@ -137,24 +138,26 @@ START:
 	; Initialize Screen Geometry to Default (120x40)
 	CALL	SET_MODE_120X40
 
-	; Detect RomWBW RAM drive letter (0=A, 1=B, ..., 0xFF=none)
-	CALL	DETECT_RAMDRIVE_LETTER
-
 	; Check if filename was provided in FCB1 (populates WORK_FCB and HAS_FILE_ARG)
 	CALL	CHECK_COMMAND_LINE
 
-	; Load configuration from SE.CFG if present (local dir first, then program drive)
+	; Load config from SE.CFG if present (local dir first, then program drive)
 	CALL	LOAD_CONFIG
 
-	; Safety check: Prevent hibernation or raw overwrite if target file
-	; or active drive is on RAM drive
-	CALL	VALIDATE_RAMDRIVE_SAFETY
-
-	; If RAM drive mode is HIBERNATE, dump RAM drive to RAMDRV.IMG
-	; before initializing buffer
+	; Process RAM drive via HIBERN.OVL
 	LD	A,(CFG_RAMDRIVE_FLAG)
-	CP	RAMDRV_MODE_HIBERNATE
-	CALL	Z,HIBERNATE_RAMDRIVE
+	OR	A
+	JR	Z,START_RAMDRV_DETECT
+	; Mode 1 or 2: Detect, Validate safety & Hibernate if requested
+	LD	B,A			; B = requested mode (1=ENABLE, 2=HIBERNATE)
+	LD	A,1			; Action 1
+	CALL	RUN_HIBERN_STARTUP
+	JR	START_RAMDRV_DONE
+START_RAMDRV_DETECT:
+	; Mode 0: Detect RAM drive letter only
+	XOR	A			; Action 0
+	CALL	RUN_HIBERN_STARTUP
+START_RAMDRV_DONE:
 
 	; Initialize Terminal (Clear Screen & Home)
 	CALL	TERM_INIT
@@ -868,7 +871,43 @@ CHECK_CTRL_K:
 
 DO_HELP_SCREEN:
 	CALL	FLUSH_DEFERRED_RENDER
-	CALL	SHOW_HELP_KEYS_UI
+	CALL	INVALIDATE_ACTIVE_LINE
+	CALL	FLUSH_DIRTY_CACHE
+	LD	HL,0FFFFH
+	LD	(CACHE_START_ROW),HL
+
+	LD	A,1
+	LD	(IS_SPLASH_SCREEN),A	; Prevent cursor / dirty updates
+
+DHS_RETRY:
+	CALL	LOAD_HELP_OVERLAY
+	JR	NC,DHS_RUN
+
+	; Help overlay missing or failed to load -> display status message
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
+	LD	DE,STR_HELP_NOT_FOUND
+	CALL	HOST_SET_STATUS_MSG
+	JR	DHS_EXIT
+
+DHS_RUN:
+	LD	IX,PLUGIN_HOST_API
+	LD	IY,PLUGIN_HOST_API
+	CALL	LINE_STORAGE + 256	; Entry point of HELP.OVL
+
+	; If HELP.OVL returned A == KEY_CTRL_P, run context popup and re-run
+	CP	KEY_CTRL_P
+	JR	NZ,DHS_RESTORE
+	LD	A,PLUG_CTX_HELP
+	CALL	DO_CONTEXT_PLUGIN_POPUP
+	JR	DHS_RETRY
+
+DHS_RESTORE:
+	XOR	A
+	LD	(IS_SPLASH_SCREEN),A
+
+DHS_EXIT:
+	CALL	RELOAD_CACHE_WINDOW_FORCE
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
@@ -14021,321 +14060,18 @@ COMPARE_PLUGIN_NAME:
 
 
 ;==============================================================================
-; RAM Drive Hibernation & Restoration Subsystem
-; Dumps RomWBW MD0:0 physical banks (0x81..0x88, 256KB) to RAMDRV.IMG on startup
-; and restores them upon exit, unlocking 12 Far RAM banks for the editor buffer.
+; RAM Drive Helper Routines
 ;==============================================================================
 
 ;------------------------------------------------------------------------------
-; DETECT_RAMDRIVE_LETTER:
-; Detects RomWBW CBIOS RAM drive letter dynamically by inspecting DRVMAP
-; and querying HBIOS BF_DIODEVICE (0x17) for unit MD0 (RAM disk, type 0,
-; unit 0).
-; Output:
-;   A = 0-based drive index (0=A, 1=B, ..., 0xFF = none)
-;   RAMDRIVE_DRIVE_NUM = 0-based drive index or 0xFF
-;   RAMDRIVE_DRIVE_CHAR = drive letter ('A', 'B', ...) or '?'
-;   STR_MSG_HIB_DRV_CHAR and STR_MSG_HIB_FILE_CHAR updated with drive letter
-;   Carry = 0 if RAM drive detected, Carry = 1 if none / not RomWBW
-;------------------------------------------------------------------------------
-DETECT_RAMDRIVE_LETTER:
-	LD	A,0FFH
-	LD	(RAMDRIVE_DRIVE_NUM),A
-	LD	A,'?'
-	LD	(RAMDRIVE_DRIVE_CHAR),A
-
-	; Check HBIOS presence
-	CALL	HBIOS_DETECT
-	JP	NZ,DRL_NOT_FOUND
-
-	; Check CP/M version: CP/M 3.x uses BDOS 50 (Direct BIOS Call) + DRVTBL
-	LD	A,(CPM_VERSION_ID)
-	CP	030H
-	JP	NC,DRL_CPM3
-
-	; Check RomWBW CBIOS page zero stamp at 0x0040 ('W') and 0x0041 (~'W' = 0xA8)
-	LD	HL,0040H
-	LD	A,(HL)
-	CP	'W'
-	JP	NZ,DRL_NOT_FOUND
-	INC	HL
-	LD	A,(HL)
-	CP	0A8H			; ~'W'
-	JP	NZ,DRL_NOT_FOUND
-
-	; Word at 0x0044 is pointer to CBIOS extension (CBX)
-	LD	HL,(0044H)
-	; DRVMAPADR is at CBX + 2
-	INC	HL
-	INC	HL
-	LD	E,(HL)
-	INC	HL
-	LD	D,(HL)			; DE = DRVMAPADR
-	LD	A,D
-	OR	E
-	JP	Z,DRL_NOT_FOUND
-
-	; DRVCNT is at DRVMAPADR - 1
-	EX	DE,HL			; HL = DRVMAPADR
-	DEC	HL
-	LD	A,(HL)			; A = DRVCNT
-	INC	HL			; HL = DRVMAPADR
-	OR	A
-	JP	Z,DRL_NOT_FOUND
-	CP	17
-	JP	NC,DRL_NOT_FOUND
-
-	LD	B,A			; B = loop counter (DRVCNT)
-	LD	C,0			; C = CP/M drive index (0 = A:, 1 = B:, ...)
-
-DRL_LOOP:
-	LD	A,(HL)			; A = HBIOS Disk Unit (or 0xFF if unassigned)
-	INC	HL
-	INC	HL
-	INC	HL
-	INC	HL
-	CP	0FFH
-	JR	Z,DRL_NEXT
-
-	PUSH	BC
-	PUSH	HL
-	LD	C,A			; C = HBIOS Disk Unit
-	LD	B,17H			; BF_DIODEVICE (0x17)
-	PUSH	IX
-	RST	08H			; D = Device Type, E = Phys Unit, C = Attributes
-	POP	IX
-	LD	A,D
-	CP	00H			; DIODEV_MD (0x00)
-	JR	NZ,DRL_NOT_MD
-	LD	A,E
-	CP	00H			; Physical Unit 0 = MD0 (RAM disk)
-	JR	NZ,DRL_NOT_MD
-
-	; Match found!
-	POP	HL
-	POP	BC
-	LD	A,C			; A = CP/M drive index (0 = A:, 1 = B:, ...)
-	LD	(RAMDRIVE_DRIVE_NUM),A
-	ADD	A,'A'
-	CALL	SET_RAMDRIVE_CHAR
-	LD	A,C
-	OR	A			; Carry = 0
-	RET
-
-DRL_NOT_MD:
-	POP	HL
-	POP	BC
-
-DRL_NEXT:
-	INC	C
-	DJNZ	DRL_LOOP
-	JP	DRL_NOT_FOUND
-
-DRL_CPM3:
-	; Call BDOS 50: BIOS 22 (DRVTBL)
-	LD	A,22
-	LD	(CPM3_BIOSPB_FUNC),A
-	XOR	A
-	LD	(CPM3_BIOSPB_A),A
-	LD	HL,0
-	LD	(CPM3_BIOSPB_BC),HL
-	LD	(CPM3_BIOSPB_DE),HL
-	LD	(CPM3_BIOSPB_HL),HL
-	LD	DE,CPM3_BIOSPB
-	LD	C,50
-	CALL	BDOS_ENTRY
-	; HL = address of DRVTBL (16-word array) in common memory
-	LD	A,H
-	OR	L
-	JR	Z,DRL_NOT_FOUND
-	LD	(CPM3_DRVTBL_PTR),HL
-
-	; Query System Bank ID from HBIOS (SYSGET BNKINFO: B=0xF8, C=0xF2)
-	PUSH	IX
-	LD	B,0F8H
-	LD	C,0F2H
-	RST	08H
-	POP	IX
-	; D = BIOS Bank, E = User/System Bank (typically 0x8E)
-	LD	A,E
-	LD	(CPM3_SYS_BANK),A
-
-	; Query User Bank ID from HBIOS (SYSGETBNK: B=0xF3)
-	PUSH	IX
-	LD	B,0F3H
-	RST	08H
-	POP	IX
-	LD	A,C
-	LD	(CPM_USER_BANK),A
-
-	; Iterate through all 16 drive entries in DRVTBL
-	LD	HL,(CPM3_DRVTBL_PTR)
-	LD	B,16			; 16 drives A..P
-	LD	C,0			; CP/M drive index (0 = A:, 1 = B:, ...)
-
-DRL_CPM3_LOOP:
-	PUSH	BC
-	PUSH	HL
-
-	; Read 16-bit DPH pointer from (HL)
-	LD	E,(HL)
-	INC	HL
-	LD	D,(HL)			; DE = DPH address
-	LD	A,D
-	OR	E
-	JP	Z,DRL_CPM3_NEXT		; Unassigned drive (0x0000)
-
-	; In System Bank, (DPH - 2) is Disk Unit, (DPH - 1) is Slice
-	DEC	DE
-	DEC	DE			; DE = DPH - 2
-	EX	DE,HL			; HL = DPH - 2 (source in System Bank)
-
-	; Copy 2 bytes from SYS_BANK:(DPH-2) to CPM_USER_BANK:(CPM3_DPH_BUF)
-	PUSH	HL
-	PUSH	IX
-	LD	B,0F4H			; SYSSETCPY
-	LD	A,(CPM_USER_BANK)
-	LD	D,A			; Dest = User Bank
-	LD	A,(CPM3_SYS_BANK)
-	LD	E,A			; Src = System Bank
-	LD	HL,2
-	RST	08H
-	POP	IX
-	POP	HL
-
-	LD	DE,CPM3_DPH_BUF
-	PUSH	IX
-	LD	B,0F5H			; SYSBNKCPY
-	RST	08H
-	POP	IX
-
-	; Query HBIOS BF_DIODEVICE (0x17) with unit in CPM3_DPH_BUF[0]
-	LD	A,(CPM3_DPH_BUF)
-	LD	C,A			; C = Unit
-	LD	B,17H			; BF_DIODEVICE
-	PUSH	IX
-	RST	08H
-	POP	IX
-	; D = Device Type, E = Physical Unit
-	; DIODEV_MD = 0x00, MD0 = 0x00
-	LD	A,D
-	OR	A
-	JR	NZ,DRL_CPM3_NOT_MD
-	LD	A,E
-	OR	A
-	JR	NZ,DRL_CPM3_NOT_MD
-
-	; Match found!
-	POP	HL
-	POP	BC
-	LD	A,C			; A = drive index (0=A, 1=B...)
-	LD	(RAMDRIVE_DRIVE_NUM),A
-	ADD	A,'A'
-	CALL	SET_RAMDRIVE_CHAR
-	LD	A,C
-	OR	A			; Carry = 0
-	RET
-
-DRL_CPM3_NOT_MD:
-DRL_CPM3_NEXT:
-	POP	HL
-	INC	HL
-	INC	HL
-	POP	BC
-	INC	C
-	DEC	B
-	JP	NZ,DRL_CPM3_LOOP
-	JR	DRL_NOT_FOUND
-
-DRL_NOT_FOUND:
-	LD	A,0FFH
-	SCF
-	RET
-
-;------------------------------------------------------------------------------
 ; SET_RAMDRIVE_CHAR:
-; Sets RAMDRIVE_DRIVE_CHAR and updates all status/message strings containing
-; the drive letter.
+; Sets RAMDRIVE_DRIVE_CHAR and updates splash screen string.
 ; Input: A = Drive character ('A'..'P')
 ; Destroys: None
 ;------------------------------------------------------------------------------
 SET_RAMDRIVE_CHAR:
 	LD	(RAMDRIVE_DRIVE_CHAR),A
-	LD	(STR_MSG_HIB_DRV_CHAR),A
-	LD	(STR_MSG_HIB_FILE_CHAR),A
-	LD	(STR_MSG_HIB_LETTER),A
-	LD	(STR_MSG_REST_LETTER),A
-	LD	(STR_MSG_REST_DONE_LTR),A
-	LD	(STR_MSG_ORPHAN_LETTER),A
 	LD	(STR_SPLASH_RAM_LTR),A
-	RET
-
-;------------------------------------------------------------------------------
-; VALIDATE_RAMDRIVE_SAFETY:
-; If CFG_RAMDRIVE_FLAG != 0 (Enabled or Hibernate):
-; Verifies that the RAM drive memory blocks can be safely repurposed.
-; Reverts to Protected mode (CFG_RAMDRIVE_FLAG = 0) if:
-;   1. Active default drive is the RAM drive, OR
-;   2. Target file to load is on the RAM drive.
-; Displays status message if reverting.
-;------------------------------------------------------------------------------
-VALIDATE_RAMDRIVE_SAFETY:
-	LD	A,(CFG_RAMDRIVE_FLAG)
-	OR	A
-	RET	Z			; Already protected mode -> nothing to do
-
-	LD	A,(RAMDRIVE_DRIVE_NUM)
-	CP	0FFH
-	JR	NZ,VRS_CHECK_ACTIVE
-	; No RAM drive detected! If in Hibernate mode, revert to protected
-	LD	A,(CFG_RAMDRIVE_FLAG)
-	CP	RAMDRV_MODE_HIBERNATE
-	RET	NZ
-	XOR	A
-	LD	(CFG_RAMDRIVE_FLAG),A
-	RET
-
-VRS_CHECK_ACTIVE:
-	LD	B,A			; B = RAM drive number (0-based)
-	LD	A,(CURRENT_DEFAULT_DRIVE)
-	CP	B
-	JR	Z,VRS_FAIL_ACTIVE
-
-	; Check if command-line target file is on RAM drive
-	LD	A,(HAS_FILE_ARG)
-	OR	A
-	RET	Z			; No file arg -> safe
-
-	LD	A,(WORK_FCB)
-	OR	A
-	JR	NZ,VRS_TARGET_EXP
-	LD	A,(CURRENT_DEFAULT_DRIVE)
-	JR	VRS_TARGET_CMP
-
-VRS_TARGET_EXP:
-	DEC	A			; 1->0 (A:), 2->1 (B:), etc.
-
-VRS_TARGET_CMP:
-	CP	B
-	JR	Z,VRS_FAIL_TARGET
-	RET
-
-VRS_FAIL_ACTIVE:
-	LD	DE,STR_MSG_HIB_DRV_ERR
-	CALL	PRINT_STR
-	CALL	DELAY_BRIEF
-	XOR	A
-	LD	(CFG_RAMDRIVE_FLAG),A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-	RET
-
-VRS_FAIL_TARGET:
-	LD	DE,STR_MSG_HIB_FILE_ERR
-	CALL	PRINT_STR
-	CALL	DELAY_BRIEF
-	XOR	A
-	LD	(CFG_RAMDRIVE_FLAG),A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -14404,385 +14140,216 @@ CHECK_FCB_IS_HIBERNATED:
 CFIH_HAVE_DRV:
 	JP	CHECK_TARGET_DRIVE_UNAVAILABLE
 
-INIT_RAMDRV_FCB:
-	LD	HL,RAMDRV_FCB
-	LD	(HL),0			; Drive 0 = current default drive
+
+;------------------------------------------------------------------------------
+; RESTORE_RAMDRIVE:
+; If RAM drive was hibernated, loads HIBERN.OVL and executes Action 2 (Restore).
+;------------------------------------------------------------------------------
+RESTORE_RAMDRIVE:
+	LD	A,(RAMDRIVE_IS_HIBERNATED)
+	OR	A
+	RET	Z			; Not hibernated -> nothing to do
+
+	CALL	LOAD_HIBERN_OVERLAY
+	RET	C			; Failed to load overlay
+
+	CALL	LINE_STORAGE + 256 + 6	; Action 2: Restore
+	XOR	A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	RET
+
+
+STR_HIBERN_OVL_NAME:
+	DB	"HIBERN  OVL"
+STR_HELP_OVL_NAME:
+	DB	"HELP    OVL"
+STR_HELP_NOT_FOUND:
+	DB	"[HELP.OVL not found] ",0
+
+; Helper: Initialize SHARED_TEMP_FCB with 11-char name in DE and drive in A.
+INIT_OVERLAY_FCB:
+	PUSH	DE
+	LD	HL,SHARED_TEMP_FCB
+	LD	(HL),A			; Drive byte (0 = default, 1 = A...)
 	INC	HL
-	LD	DE,STR_RAMDRV_FILENAME	; "RAMDRV  IMG" (11 bytes)
 	LD	B,11
-IRF_COPY:
+IOF_COPY:
 	LD	A,(DE)
 	LD	(HL),A
 	INC	HL
 	INC	DE
-	DJNZ	IRF_COPY
+	DJNZ	IOF_COPY
 	LD	B,24
-IRF_ZERO:
+IOF_ZERO:
 	LD	(HL),0
 	INC	HL
-	DJNZ	IRF_ZERO
+	DJNZ	IOF_ZERO
+	POP	DE
 	RET
 
-; HIBERNATE_RAMDRIVE:
-; Saves physical banks 0x81..0x88 (256 KB) into RAMDRV.IMG on active drive.
-HIBERNATE_RAMDRIVE:
-	; If already hibernated, nothing to do
-	LD	A,(RAMDRIVE_IS_HIBERNATED)
-	OR	A
-	RET	NZ
-
-	; Safety Check 1: Prohibit hibernating if running from RAM drive
-	LD	A,(RAMDRIVE_DRIVE_NUM)
-	CP	0FFH
-	RET	Z			; No RAM drive detected -> nothing to hibernate
-	LD	C,25			; BDOS Get Current Drive
+;------------------------------------------------------------------------------
+; LOAD_OVERLAY_FILE:
+; Loads an overlay into LINE_STORAGE and relocates it if relocatable PRL.
+; Input:
+;   DE = Pointer to 11-char FCB name (e.g. STR_HIBERN_OVL_NAME)
+; Returns:
+;   Carry = 0 on success, Carry = 1 on error.
+;------------------------------------------------------------------------------
+LOAD_OVERLAY_FILE:
+	PUSH	DE
+	XOR	A
+	CALL	INIT_OVERLAY_FCB
+	POP	DE
+	PUSH	DE
+	LD	DE,SHARED_TEMP_FCB
+	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
-	LD	(CURRENT_DEFAULT_DRIVE),A
-	LD	HL,RAMDRIVE_DRIVE_NUM
-	CP	(HL)
-	JP	Z,HIB_FAIL_RAMDRV_ACTIVE
+	POP	DE
+	CP	0FFH
+	JR	NZ,LOF_OPEN_OK
 
-	; Safety Check 2: Prohibit hibernating if target file is on RAM drive
-	LD	A,(HAS_FILE_ARG)
-	OR	A
-	JR	Z,HIB_CHECK_SPACE
-	LD	A,(WORK_FCB)
-	OR	A
-	JR	NZ,HIB_TARGET_EXP
-	LD	A,(CURRENT_DEFAULT_DRIVE)
-	JR	HIB_TARGET_CMP
-HIB_TARGET_EXP:
-	DEC	A
-HIB_TARGET_CMP:
-	LD	HL,RAMDRIVE_DRIVE_NUM
-	CP	(HL)
-	JP	Z,HIB_FAIL_TARGET_ON_RAMDRV
-
-HIB_CHECK_SPACE:
-	; Safety Check 3: Pre-check DPB disk size (DSM >= 200 blocks)
-	LD	C,31			; BDOS Get DPB
-	CALL	BDOS_ENTRY		; HL = DPB address
-	; DSM is at offset 5 (little-endian word)
-	INC	HL
-	INC	HL
-	INC	HL
-	INC	HL
-	INC	HL
-	LD	E,(HL)
-	INC	HL
-	LD	D,(HL)			; DE = DSM
-	LD	A,D
-	OR	A
-	JR	NZ,HIB_SPACE_OK
-	LD	A,E
-	CP	200
-	JP	C,HIB_FAIL_TOO_SMALL
-
-HIB_SPACE_OK:
-	; Ensure CPM_USER_BANK is queried and known
-	PUSH	IX
-	LD	B,0F3H			; SYSGETBNK
-	RST	08H
-	POP	IX
-	LD	A,C
-	LD	(CPM_USER_BANK),A
-
-	; Check for orphaned RAMDRV.IMG from previous crash/power failure
-	CALL	INIT_RAMDRV_FCB
-	LD	DE,RAMDRV_FCB
+	; Try program drive if known
+	LD	A,(CONFIG_SOURCE_DRIVE)
+	CP	0FFH
+	JP	Z,LOF_ERR
+	INC	A			; 1-based drive
+	PUSH	DE
+	CALL	INIT_OVERLAY_FCB
+	POP	DE
+	LD	DE,SHARED_TEMP_FCB
 	LD	C,15			; BDOS Open File
 	CALL	BDOS_ENTRY
 	CP	0FFH
-	JR	Z,HIB_NO_ORPHAN
+	JP	Z,LOF_ERR
 
-	; Orphan found! Restore it first to avoid losing data
-	LD	DE,STR_MSG_ORPHAN_FOUND
-	CALL	PRINT_STR
-	CALL	RESTORE_RAMDRIVE_BODY
-	JP	C,HIB_WRITE_ERR
-	LD	DE,STR_MSG_REST_DONE
-	CALL	PRINT_STR
+LOF_OPEN_OK:
+	; Clear record byte (cr)
+	XOR	A
+	LD	(SHARED_TEMP_FCB + 32),A
 
-HIB_NO_ORPHAN:
-	; Delete any old RAMDRV.IMG file just in case
-	CALL	INIT_RAMDRV_FCB
-	LD	DE,RAMDRV_FCB
-	LD	C,19			; BDOS Delete File
-	CALL	BDOS_ENTRY
+	; Read up to 32 records (4096 bytes) into LINE_STORAGE
+	LD	HL,LINE_STORAGE
+	LD	B,32
 
-	; Create new RAMDRV.IMG
-	CALL	INIT_RAMDRV_FCB
-	LD	DE,RAMDRV_FCB
-	LD	C,22			; BDOS Make File
-	CALL	BDOS_ENTRY
-	CP	0FFH
-	JP	Z,HIB_CREATE_ERR
-
-	; Display Hibernating message
-	LD	DE,STR_MSG_HIBERNATING
-	CALL	PRINT_STR
-
-	; Set BDOS DMA buffer to CFG_IO_BUF
-	LD	DE,CFG_IO_BUF
+LOF_READ_LOOP:
+	PUSH	BC
+	PUSH	HL
+	EX	DE,HL			; DE = current buffer ptr
 	LD	C,26			; BDOS Set DMA
 	CALL	BDOS_ENTRY
-
-	; Outer Loop: Bank 0x81 through 0x88 (8 banks)
-	LD	A,RAMDRV_START_BANK
-	LD	(HIB_CUR_BANK),A
-
-HIB_BANK_LOOP:
-	; Inner Loop: 256 sectors (offset 0x0000 to 0x7F80)
-	LD	HL,0
-	LD	(HIB_FAR_OFFSET),HL
-
-HIB_SECTOR_LOOP:
-	; Set up HBIOS Far copy parameters (Dest = CPM_USER_BANK,
-	; Src = HIB_CUR_BANK, Count = 128)
-	PUSH	IX
-	LD	B,0F4H			; SYSSETCPY
-	LD	A,(CPM_USER_BANK)
-	LD	D,A			; Dest Bank = CPM_USER_BANK
-	LD	A,(HIB_CUR_BANK)
-	LD	E,A			; Src Bank = HIB_CUR_BANK
-	LD	HL,128			; Byte count = 128
-	RST	08H
-	POP	IX
-
-	; Copy 128 bytes from Far RAM (HIB_CUR_BANK, HIB_FAR_OFFSET) into CFG_IO_BUF
-	LD	HL,(HIB_FAR_OFFSET)	; Src Addr = Far Offset
-	LD	DE,CFG_IO_BUF		; Dest Addr = Local Buffer
-	PUSH	IX
-	LD	B,0F5H			; SYSBNKCPY
-	RST	08H
-	POP	IX
-
-	; Write sector to disk via BDOS 21 (Write Sequential)
-	LD	DE,RAMDRV_FCB
-	LD	C,21			; BDOS Write Sequential
+	LD	DE,SHARED_TEMP_FCB
+	LD	C,20			; BDOS Read Next Record
 	CALL	BDOS_ENTRY
+	POP	HL
+	POP	BC
 	OR	A
-	JR	NZ,HIB_WRITE_ERR
-
-	; Advance HIB_FAR_OFFSET by 128 bytes
-	LD	HL,(HIB_FAR_OFFSET)
+	JR	NZ,LOF_READ_EOF		; EOF or read error
 	LD	DE,128
 	ADD	HL,DE
-	LD	(HIB_FAR_OFFSET),HL
+	DJNZ	LOF_READ_LOOP
+
+LOF_READ_EOF:
+	; Close overlay file
+	LD	DE,SHARED_TEMP_FCB
+	LD	C,16			; BDOS Close File
+	CALL	BDOS_ENTRY
+
+	; Restore default DMA
+	LD	DE,DEFAULT_DMA
+	LD	C,26			; BDOS Set DMA
+	CALL	BDOS_ENTRY
+
+	; Check if relocation needed (LOAD_ADDR == 0 at offset 7)
+	LD	HL,(LINE_STORAGE + 7)
 	LD	A,H
-	CP	080H			; Reached 0x8000 (32KB)?
-	JR	NZ,HIB_SECTOR_LOOP
+	OR	L
+	JR	NZ,LOF_DONE
 
-	; Advance to next bank
-	LD	A,(HIB_CUR_BANK)
-	INC	A
-	LD	(HIB_CUR_BANK),A
-	CP	RAMDRV_END_BANK + 1
-	JR	NZ,HIB_BANK_LOOP
+	; Relocate PRL in LINE_STORAGE
+	; Target page = high_byte(LINE_STORAGE + 256)
+	LD	HL,LINE_STORAGE + 256
+	LD	A,H
+	DEC	A			; Bias = Target Page - 1
+	LD	(RELOC_BIAS),A
 
-	; Close RAMDRV.IMG
-	LD	DE,RAMDRV_FCB
-	LD	C,16			; BDOS Close File
-	CALL	BDOS_ENTRY
-	CP	0FFH
-	JR	Z,HIB_CREATE_ERR
-
-	; Reset DMA buffer to default
-	LD	DE,DEFAULT_DMA
-	LD	C,26			; BDOS Set DMA
-	CALL	BDOS_ENTRY
-
-	; Mark as hibernated
-	LD	A,1
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-
-	; Print completion message
-	LD	DE,STR_MSG_HIB_DONE
-	CALL	PRINT_STR
-	RET
-
-HIB_FAIL_RAMDRV_ACTIVE:
-	LD	DE,STR_MSG_HIB_DRV_ERR
-	CALL	PRINT_STR
-	CALL	DELAY_BRIEF
-	XOR	A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-	LD	(CFG_RAMDRIVE_FLAG),A
-	RET
-
-HIB_FAIL_TARGET_ON_RAMDRV:
-	LD	DE,STR_MSG_HIB_FILE_ERR
-	CALL	PRINT_STR
-	CALL	DELAY_BRIEF
-	XOR	A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-	LD	(CFG_RAMDRIVE_FLAG),A
-	RET
-
-HIB_FAIL_TOO_SMALL:
-	LD	DE,STR_MSG_HIB_TOO_SMALL
-	CALL	PRINT_STR
-	XOR	A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-	LD	(CFG_RAMDRIVE_FLAG),A
-	RET
-
-HIB_WRITE_ERR:
-HIB_CREATE_ERR:
-	; Cleanup partial file and reset DMA
-	LD	DE,RAMDRV_FCB
-	LD	C,16			; BDOS Close File
-	CALL	BDOS_ENTRY
-	CALL	INIT_RAMDRV_FCB
-	LD	DE,RAMDRV_FCB
-	LD	C,19			; BDOS Delete File
-	CALL	BDOS_ENTRY
-	LD	DE,DEFAULT_DMA
-	LD	C,26			; BDOS Set DMA
-	CALL	BDOS_ENTRY
-	XOR	A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-	LD	(CFG_RAMDRIVE_FLAG),A	; Revert to protected mode
-	LD	DE,STR_MSG_HIB_ERR
-	CALL	PRINT_STR
-	RET
-
-; RESTORE_RAMDRIVE:
-; Restores physical banks 0x81..0x88 from RAMDRV.IMG if hibernated.
-RESTORE_RAMDRIVE:
-	; Only restore if currently marked as hibernated
-	LD	A,(RAMDRIVE_IS_HIBERNATED)
-	CP	1
-	RET	NZ
-
-	; Display Restoring message
-	LD	DE,STR_MSG_RESTORING
-	CALL	PRINT_STR
-
-	CALL	RESTORE_RAMDRIVE_BODY
-	JR	C,REST_FAILED
-
-	; Successfully restored!
-	XOR	A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-	LD	DE,STR_MSG_REST_DONE
-	CALL	PRINT_STR
-	RET
-
-REST_FAILED:
-	XOR	A
-	LD	(RAMDRIVE_IS_HIBERNATED),A
-	LD	DE,STR_MSG_REST_ERR
-	CALL	PRINT_STR
-	RET
-
-; RESTORE_RAMDRIVE_BODY:
-; Reads RAMDRV.IMG from disk and writes sectors into Far RAM banks 0x81..0x88.
-; Deletes RAMDRV.IMG upon completion.
-; Output: Carry = 0 on success, Carry = 1 on failure.
-RESTORE_RAMDRIVE_BODY:
-	; Set BDOS DMA buffer to CFG_IO_BUF
-	LD	DE,CFG_IO_BUF
-	LD	C,26			; BDOS Set DMA
-	CALL	BDOS_ENTRY
-
-	; Open RAMDRV.IMG
-	CALL	INIT_RAMDRV_FCB
-	LD	DE,RAMDRV_FCB
-	LD	C,15			; BDOS Open File
-	CALL	BDOS_ENTRY
-	CP	0FFH
-	JR	Z,RRB_OPEN_ERR
-
-	; Ensure CR = 0
-	XOR	A
-	LD	(RAMDRV_FCB + 32),A
-
-	; Outer Loop: Bank 0x81 through 0x88
-	LD	A,RAMDRV_START_BANK
-	LD	(HIB_CUR_BANK),A
-
-RRB_BANK_LOOP:
-	; Inner Loop: 256 sectors
-	LD	HL,0
-	LD	(HIB_FAR_OFFSET),HL
-
-RRB_SECTOR_LOOP:
-	; Read 128 bytes from disk into CFG_IO_BUF
-	LD	DE,RAMDRV_FCB
-	LD	C,20			; BDOS Read Sequential
-	CALL	BDOS_ENTRY
-	OR	A
-	JR	NZ,RRB_READ_ERR
-
-	; Set up HBIOS Far copy parameters (Dest = HIB_CUR_BANK,
-	; Src = CPM_USER_BANK, Count = 128)
-	PUSH	IX
-	LD	B,0F4H			; SYSSETCPY
-	LD	A,(HIB_CUR_BANK)
-	LD	D,A			; Dest Bank = HIB_CUR_BANK
-	LD	A,(CPM_USER_BANK)
-	LD	E,A			; Src Bank = CPM_USER_BANK
-	LD	HL,128			; Byte count = 128
-	RST	08H
-	POP	IX
-
-	; Copy 128 bytes from CFG_IO_BUF into Far RAM (HIB_CUR_BANK, HIB_FAR_OFFSET)
-	LD	HL,CFG_IO_BUF		; Src Addr = Local Buffer
-	LD	DE,(HIB_FAR_OFFSET)	; Dest Addr = Far Offset
-	PUSH	IX
-	LD	B,0F5H			; SYSBNKCPY
-	RST	08H
-	POP	IX
-
-	; Advance HIB_FAR_OFFSET by 128 bytes
-	LD	HL,(HIB_FAR_OFFSET)
-	LD	DE,128
+	LD	HL,LINE_STORAGE + 256
+	LD	DE,(LINE_STORAGE + 1)	; PROG_SIZE
+	PUSH	HL
 	ADD	HL,DE
-	LD	(HIB_FAR_OFFSET),HL
-	LD	A,H
-	CP	080H			; Reached 0x8000 (32KB)?
-	JR	NZ,RRB_SECTOR_LOOP
+	EX	DE,HL			; DE = bitmap ptr
+	POP	HL			; HL = code ptr
+	LD	BC,(LINE_STORAGE + 1)
+	CALL	RELOCATE_PRL_LOOP
 
-	; Advance to next bank
-	LD	A,(HIB_CUR_BANK)
-	INC	A
-	LD	(HIB_CUR_BANK),A
-	CP	RAMDRV_END_BANK + 1
-	JR	NZ,RRB_BANK_LOOP
-
-	; Close RAMDRV.IMG
-	LD	DE,RAMDRV_FCB
-	LD	C,16			; BDOS Close File
-	CALL	BDOS_ENTRY
-
-	; Delete RAMDRV.IMG to free disk space
-	CALL	INIT_RAMDRV_FCB
-	LD	DE,RAMDRV_FCB
-	LD	C,19			; BDOS Delete File
-	CALL	BDOS_ENTRY
-
-	; Reset DMA buffer
-	LD	DE,DEFAULT_DMA
-	LD	C,26
-	CALL	BDOS_ENTRY
-
-	AND	A			; Carry = 0 (success)
+LOF_DONE:
+	OR	A			; Carry = 0 (success)
 	RET
 
-RRB_READ_ERR:
-RRB_OPEN_ERR:
-	; Close if open
-	LD	DE,RAMDRV_FCB
-	LD	C,16			; BDOS Close File
-	CALL	BDOS_ENTRY
-
-	; Reset DMA buffer
-	LD	DE,DEFAULT_DMA
-	LD	C,26
-	CALL	BDOS_ENTRY
-
+LOF_ERR:
 	SCF				; Carry = 1 (error)
+	RET
+
+LOAD_HIBERN_OVERLAY:
+	LD	DE,STR_HIBERN_OVL_NAME
+	JP	LOAD_OVERLAY_FILE
+
+LOAD_HELP_OVERLAY:
+	LD	DE,STR_HELP_OVL_NAME
+	JP	LOAD_OVERLAY_FILE
+
+;------------------------------------------------------------------------------
+; RUN_HIBERN_STARTUP:
+; Loads HIBERN.OVL and executes Action 0 (Detect) or Action 1 (Hibernate/Valid).
+; Input:
+;   A = 0: Action 0 (Detect RAM drive letter only)
+;   A = 1: Action 1 (Hibernate or Validate mode in B)
+;   B = Requested mode (1=ENABLED, 2=HIBERNATE) if A=1
+;------------------------------------------------------------------------------
+RUN_HIBERN_STARTUP:
+	PUSH	AF
+	PUSH	BC
+	CALL	LOAD_HIBERN_OVERLAY
+	JR	C,RHS_LOAD_ERR
+
+	POP	BC
+	POP	AF
+	OR	A
+	JR	NZ,RHS_ACTION_HIB
+
+	; Action 0: Detect only
+	CALL	LINE_STORAGE + 256 + 0
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	LD	A,C
+	CALL	SET_RAMDRIVE_CHAR
+	RET
+
+RHS_ACTION_HIB:
+	; Action 1: Detect, Validate & Hibernate
+	LD	A,(CURRENT_DEFAULT_DRIVE)
+	LD	DE,WORK_FCB
+	LD	HL,HAS_FILE_ARG
+	LD	C,(HL)
+	; B already contains requested mode
+	CALL	LINE_STORAGE + 256 + 3
+	LD	(RAMDRIVE_IS_HIBERNATED),A
+	LD	A,D
+	LD	(CFG_RAMDRIVE_FLAG),A
+	LD	A,B
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	LD	A,C
+	CALL	SET_RAMDRIVE_CHAR
+	RET
+
+RHS_LOAD_ERR:
+	POP	BC
+	POP	AF
+	LD	A,0FFH
+	LD	(RAMDRIVE_DRIVE_NUM),A
+	LD	A,'?'
+	CALL	SET_RAMDRIVE_CHAR
+	XOR	A
+	LD	(CFG_RAMDRIVE_FLAG),A
+	LD	(RAMDRIVE_IS_HIBERNATED),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -16351,119 +15918,6 @@ AIV_DO_SCROLL_DOWN:
 
 AIV_CHECK_HORIZ:
 	CALL	ADJUST_HORIZ_VIEWPORT
-	RET
-
-;------------------------------------------------------------------------------
-; Show Editor Mode Keys Screen (Ctrl+K)
-; Displays summary of all SE editor keys and waits for any key to return.
-;------------------------------------------------------------------------------
-HELP_LINES	EQU	22
-
-SHOW_HELP_KEYS_UI:
-	LD	A,1
-	LD	(IS_SPLASH_SCREEN),A
-	CALL	RENDER_HELP_SCREEN_STATIC
-HELP_KEY_LOOP:
-	CALL	GET_KEY
-	CP	KEY_CTRL_P
-	JR	NZ,HELP_NOT_CTRL_P
-	LD	A,PLUG_CTX_HELP
-	CALL	DO_CONTEXT_PLUGIN_POPUP
-	JR	HELP_KEY_LOOP
-HELP_NOT_CTRL_P:
-	CP	KEY_ESC
-	CALL	Z,DRAIN_ESC_SEQUENCE
-	XOR	A
-	LD	(IS_SPLASH_SCREEN),A
-	RET
-
-RENDER_HELP_SCREEN_STATIC:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
-
-	; 1. Row 1: Horizontal Rule
-	CALL	PRINT_HR_EQUAL
-
-	; 2. Row 2: Centered Title
-	CALL	RENDER_HELP_TITLE
-
-	; 3. Row 3: Horizontal Rule
-	CALL	PRINT_HR_EQUAL
-
-	; 4. Rows 4..20: Help Key Descriptions (17 lines)
-	LD	DE,STR_HELP_BODY
-	CALL	PRINT_STR
-
-	; 5. Row 21: Horizontal Dash Rule
-	CALL	PRINT_HR_DASH
-
-	; 6. Row 22: Centered Return Prompt
-	CALL	RENDER_HELP_FOOTER
-
-	; Fill remaining rows down to status row with '~'
-	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1 (last text row)
-	SUB	HELP_LINES		; A = remaining rows
-	JR	Z,HELP_TILDE_DONE
-	JR	C,HELP_TILDE_DONE
-	LD	B,A
-HELP_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
-	DJNZ	HELP_TILDE_LOOP
-
-HELP_TILDE_DONE:
-	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	RET
-
-;------------------------------------------------------------------------------
-; Render Ctrl+K Help Title (Row 2):
-; Emits '~' followed by ((ACTIVE_COLS - 25) / 2 - 1) spaces and STR_HELP_TITLE.
-;------------------------------------------------------------------------------
-RENDER_HELP_TITLE:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	25
-	SRL	A
-	DEC	A
-	LD	B,A
-RHT_PAD_LOOP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	RHT_PAD_LOOP
-	LD	DE,STR_HELP_TITLE
-	CALL	PRINT_STR
-	RET
-
-;------------------------------------------------------------------------------
-; Render Ctrl+K Help Footer (Row 22):
-; Emits '~' followed by ((ACTIVE_COLS - 36) / 2 - 1) spaces and STR_HELP_RETURN_PROMPT.
-;------------------------------------------------------------------------------
-RENDER_HELP_FOOTER:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	36
-	SRL	A
-	DEC	A
-	LD	B,A
-RHF_PAD_LOOP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	RHF_PAD_LOOP
-	LD	DE,STR_HELP_RETURN_PROMPT
-	CALL	PRINT_STR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -21759,8 +21213,7 @@ PDR_NOT_CONFIG:
 PDR_NOT_MEM_INFO:
 	CP	PLUG_CTX_HELP
 	JR	NZ,PDR_NOT_HELP
-	CALL	RENDER_HELP_SCREEN_STATIC
-	RET
+	RET				; Help screen rendered by HELP.OVL
 PDR_NOT_HELP:
 	CP	PLUG_CTX_ABOUT
 	JR	NZ,PDR_NOT_ABOUT
@@ -23650,29 +23103,6 @@ STR_VAL_PLUG_ONDEMAND:	DB	"ONDEMAND",13,10,0
 STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 
 
-STR_RAMDRV_FILENAME:	DB	"RAMDRV  IMG"
-STR_MSG_HIBERNATING:	DB	13,10,"[SE] Hibernating RAM drive ("
-STR_MSG_HIB_LETTER:	DB	"A:) to RAMDRV.IMG... $"
-STR_MSG_HIB_DONE:	DB	"[Done: 256 KB preserved]",13,10,"$"
-STR_MSG_RESTORING:	DB	13,10,"[SE] Restoring RAM drive ("
-STR_MSG_REST_LETTER:	DB	"A:) from RAMDRV.IMG... $"
-STR_MSG_REST_DONE:	DB	"[Done: RAM drive ("
-STR_MSG_REST_DONE_LTR:	DB	"A:) restored]",13,10,"$"
-STR_MSG_ORPHAN_FOUND:
-	DB	13,10,"[SE] Existing RAMDRV.IMG found! Restoring RAM drive ("
-STR_MSG_ORPHAN_LETTER:	DB	"A:)... $"
-STR_MSG_HIB_DRV_ERR:	DB	13,10,"[SE] Active drive is RAM drive ("
-STR_MSG_HIB_DRV_CHAR:	DB	"A:). RAM drive protected.",13,10,"$"
-STR_MSG_HIB_FILE_ERR:	DB	13,10,"[SE] Target file is on RAM drive ("
-STR_MSG_HIB_FILE_CHAR:	DB	"A:). RAM drive protected.",13,10,"$"
-STR_MSG_HIB_TOO_SMALL:
-	DB	13,10,"[SE] Active drive has insufficient space (<256KB). "
-	DB	"RAM drive protected.",13,10,"$"
-STR_MSG_HIB_ERR:
-	DB	13,10,"[Error] Hibernation failed. RAM drive protected."
-	DB	13,10,"$"
-STR_MSG_REST_ERR:	DB	13,10,"[Error] RAM drive restoration incomplete.",13,10,"$"
-
 ;------------------------------------------------------------------------------
 ; About Screen Strings
 ;------------------------------------------------------------------------------
@@ -23798,29 +23228,6 @@ STR_LINE_SUFFIX:	DB	"L]","$"
 STR_CHAR_LOCK_SUFFIX:	DB	"c LOCK]","$"
 
 STR_LINE_LOCK_SUFFIX:	DB	"L LOCK]","$"
-
-STR_HELP_TITLE:		DB	"SE.COM - EDITOR MODE KEYS",13,10,"$"
-
-STR_HELP_BODY:
-	DB	"~  FILE & SYSTEM:",13,10
-	DB	"~    Ctrl+O           Open file screen        Ctrl+S          Save file screen",13,10
-	DB	"~    Ctrl+W           Close file to splash    Ctrl+Q          Quit to CP/M",13,10
-	DB	"~    Ctrl+K           Help / Solidify block   Ctrl+P          Plugins pop-up",13,10
-	DB	"~  NAVIGATION & SEARCH:",13,10
-	DB	"~    Arrow Keys       Move Up/Down/Left/Right Ctrl+A / Home   Start of line",13,10
-	DB	"~    Ctrl+U / PgUp    Page Up                 Ctrl+E / End    End of line",13,10
-	DB	"~    Ctrl+V / PgDn    Page Down               Ctrl+T / ^Home  Top of file",13,10
-	DB	"~    Ctrl+L           Goto line number        Ctrl+G / ^End   Bottom of file",13,10
-	DB	"~    Ctrl+F           Find text               Ctrl+N          Find next",13,10
-	DB	"~    Ctrl+R           Search and Replace      Ctrl+I / Tab    Toggle find case",13,10
-	DB	"~  EDITING & BLOCK:",13,10
-	DB	"~    Insert           Toggle Insert/Overwrite Enter           New line",13,10
-	DB	"~    ASCII 32..126    Insert/Overwrite text   Backspace       Delete left / join",13,10
-	DB	"~    Delete / Ctrl+D  Delete char or block    Ctrl+B          Start/Toggle block",13,10
-	DB	"~    Ctrl+C           Copy solidified block   Ctrl+K          Solidify block",13,10
-	DB	"~    Ctrl+X           Move solidified block   ESC             Clear block",13,10,"$"
-
-STR_HELP_RETURN_PROMPT:	DB	"Press any key to return to editor...",13,10,"$"
 
 STR_STATUS_SEP:	DB	" | ","$"
 
@@ -24114,7 +23521,7 @@ DIR_SEARCH_FCB		EQU	SHARED_TEMP_FCB
 RAW_TEST_FCB		EQU	SHARED_TEMP_FCB
 CFG_FCB			EQU	SHARED_TEMP_FCB
 COM_PROBE_FCB		EQU	SHARED_TEMP_FCB
-RAMDRV_FCB		EQU	SHARED_TEMP_FCB
+HIB_FCB			EQU	SHARED_TEMP_FCB
 DIR_FILE_COUNT:	DB	0
 DIR_PAGE_INDEX:	DB	0
 DIR_PAGE_COUNT:	DB	0
@@ -24147,17 +23554,6 @@ CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)
 RAMDRIVE_IS_HIBERNATED:	DB	0		; 0=not hibernated, 1=hibernated to RAMDRV.IMG
 RAMDRIVE_DRIVE_NUM:	DB	0FFH		; Detected RomWBW RAM drive (0=A, 1=B, ..., 0xFF=none)
 RAMDRIVE_DRIVE_CHAR:	DB	'?'		; Character representation ('A', 'B', etc. or '?')
-HIB_CUR_BANK:		DB	0		; Current bank being dumped/restored (0x81..0x88)
-HIB_FAR_OFFSET:		DW	0		; Current Far RAM offset (0x0000..0x7F80)
-CPM3_BIOSPB:
-CPM3_BIOSPB_FUNC:	DB	0
-CPM3_BIOSPB_A:		DB	0
-CPM3_BIOSPB_BC:		DW	0
-CPM3_BIOSPB_DE:		DW	0
-CPM3_BIOSPB_HL:		DW	0
-CPM3_DRVTBL_PTR:	DW	0
-CPM3_SYS_BANK:		DB	0
-CPM3_DPH_BUF:		DB	0,0
 
 ;==============================================================================
 ; Plugin Subsystem High-Memory Variables & Registry
