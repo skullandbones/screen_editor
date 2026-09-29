@@ -20051,19 +20051,21 @@ IRFIB_OVERLAP_DED:
 	RET
 
 ALLOC_FAR_PLUGIN_SLOT:
-	; Input: A = SIZE_CLASS (0=4K, 1=16K, 2=32K)
+	; Input: A = CAN_SUBALLOC (1 = sub-allocate in shared Far RAM bank;
+	;                          0 = dedicated bank at BASE_PAGE = 0)
+	;        E = PAGE_COUNT needed (e.g. 18 for Beautify, 5 for ROT13)
 	; Output: Carry=0 on success, A=FAR_BANK, C=BASE_PAGE, E=PAGE_COUNT
 	;         Carry=1 on failure
-	LD	(ALLOC_SIZE_CLASS),A
-	OR	A
-	JR	NZ,AFPS_DEDICATED_BANK
-
-	; --- 4KB Plugin Allocation (Sub-allocated in 4KB slots) ---
-	LD	E,16			; 4K: 16 pages
+	LD	(ALLOC_SUBALLOC_FLAG),A
 	LD	A,E
 	LD	(ALLOC_PAGE_COUNT),A
 
-	; Search existing borrowed banks for a free 4K page range
+	LD	A,(ALLOC_SUBALLOC_FLAG)
+	OR	A
+	JR	Z,AFPS_DEDICATED_BANK
+
+	; --- Sub-allocated Plugin Allocation (Shared banks) ---
+	; Search existing borrowed banks for a free contiguous page range of length E
 	LD	A,(BORROWED_BANKS_CNT)
 	OR	A
 	JR	Z,AFPS_NEED_NEW_BANK
@@ -20076,20 +20078,21 @@ AFPS_BANK_LOOP:
 	LD	A,(HL)			; A = bank ID
 	LD	(ALLOC_TEMP_BANK),A
 
-	; Candidates for 4K: 0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70
+	; Candidate search in bank: test C = 0, 1, 2, ... while C + PAGE_COUNT <= 128
 	LD	C,0
-	LD	B,8
-AFPS_CAND_4K_LOOP:
+AFPS_CAND_LOOP:
 	PUSH	BC
 	LD	A,(ALLOC_TEMP_BANK)
-	LD	E,16
+	LD	HL,ALLOC_PAGE_COUNT
+	LD	E,(HL)
 	CALL	IS_RANGE_FREE_IN_BANK
 	POP	BC
 	JR	NC,AFPS_FOUND_IN_BANK
-	LD	A,C
-	ADD	A,16
-	LD	C,A
-	DJNZ	AFPS_CAND_4K_LOOP
+	INC	C
+	LD	A,(ALLOC_PAGE_COUNT)
+	ADD	A,C			; A = C + PAGE_COUNT
+	CP	129			; Must be <= 128
+	JR	C,AFPS_CAND_LOOP
 
 	POP	HL
 	POP	BC
@@ -20097,24 +20100,9 @@ AFPS_CAND_4K_LOOP:
 	DJNZ	AFPS_BANK_LOOP
 	JR	AFPS_NEED_NEW_BANK
 
-	; --- 8K / 16K / 32K Dedicated Bank Allocation (Always BASE_PAGE = 0) ---
+	; --- Dedicated Bank Allocation (Always BASE_PAGE = 0) ---
 AFPS_DEDICATED_BANK:
-	CP	1
-	JR	NZ,AFPS_NOT_8K
-	LD	E,32			; 8K: 32 pages
-	JR	AFPS_GOT_DED_PAGES
-AFPS_NOT_8K:
-	CP	2
-	JR	NZ,AFPS_IS_32K
-	LD	E,64			; 16K: 64 pages
-	JR	AFPS_GOT_DED_PAGES
-AFPS_IS_32K:
-	LD	E,128			; 32K: 128 pages
-AFPS_GOT_DED_PAGES:
-	LD	A,E
-	LD	(ALLOC_PAGE_COUNT),A
-
-	; Check if any existing borrowed bank is completely free (C=0, E=128)
+	; Search for any existing borrowed bank that is completely free (C=0, E=128)
 	LD	A,(BORROWED_BANKS_CNT)
 	OR	A
 	JR	Z,AFPS_NEED_NEW_BANK
@@ -20140,7 +20128,7 @@ AFPS_NEED_NEW_BANK:
 	CALL	BORROW_NEW_FAR_BANK
 	JR	C,AFPS_FAIL
 
-	; New bank always has 0x00 free
+	; New bank always has page 0x00 free
 	PUSH	AF			; Preserve new bank ID
 	LD	C,0
 	LD	HL,ALLOC_PAGE_COUNT
@@ -20316,7 +20304,7 @@ LPBN_OPEN_OK:
 	LD	DE,4097
 	CALL	CMP_HL_DE
 	JP	NC,LPBN_TOO_LARGE
-	JR	LPBN_SIZE_OK
+	JP	LPBN_CALC_PAYLOAD
 
 LPBN_CHK_8K:
 	CP	CAP_SIZE_8K
@@ -20328,11 +20316,37 @@ LPBN_CHK_8K:
 	LD	DE,8193
 	CALL	CMP_HL_DE
 	JP	NC,LPBN_TOO_LARGE
-	; Check TPA restriction: bit 0 of capabilities MUST NOT be set
+	; Check TPA restriction: if bit 0 set, footprint must fit in LINE_STORAGE_SIZE
 	LD	A,(LINE_STORAGE + 4096 + 28)
 	BIT	0,A
-	JP	NZ,LPBN_TOO_LARGE
-	JR	LPBN_SIZE_OK
+	JR	Z,LPBN_CALC_PAYLOAD	; Pure Far 8K plugin -> proceed
+
+	; 8K plugin with TPA: verify total TPA footprint <= LINE_STORAGE_SIZE (5120)
+	LD	HL,(LINE_STORAGE + 4096 + 1)	; PROG_SIZE
+	LD	DE,(LINE_STORAGE + 4096 + 7)	; LOAD_ADDR
+	LD	A,D
+	OR	E
+	JR	NZ,LPBN_8K_NO_BM
+	; PRL: include bitmap (PROG_SIZE + 7) / 8
+	PUSH	HL
+	LD	DE,7
+	ADD	HL,DE
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	POP	DE
+	ADD	HL,DE				; PROG_SIZE + bitmap
+LPBN_8K_NO_BM:
+	LD	DE,(LINE_STORAGE + 4096 + 4)	; BSS_SIZE
+	ADD	HL,DE
+	INC	H				; + 256 bytes for header
+	LD	DE,LINE_STORAGE_SIZE + 1
+	CALL	CMP_HL_DE
+	JP	NC,LPBN_TOO_LARGE
+	JP	LPBN_CALC_PAYLOAD
 
 LPBN_CHK_16K:
 	CP	CAP_SIZE_16K
@@ -20348,7 +20362,7 @@ LPBN_CHK_16K:
 	LD	A,(LINE_STORAGE + 4096 + 28)
 	BIT	0,A
 	JP	NZ,LPBN_TOO_LARGE
-	JR	LPBN_SIZE_OK
+	JR	LPBN_CALC_PAYLOAD
 
 LPBN_CHK_32K:
 	LD	A,3
@@ -20363,9 +20377,84 @@ LPBN_CHK_32K:
 	BIT	0,A
 	JP	NZ,LPBN_TOO_LARGE
 
-LPBN_SIZE_OK:
-	; Allocate Far RAM slot for this plugin
+LPBN_CALC_PAYLOAD:
+	; Calculate sectors for code + relocation bitmap
+	LD	HL,(LINE_STORAGE + 4096 + 1)	; PROG_SIZE
+	LD	DE,(LINE_STORAGE + 4096 + 7)	; LOAD_ADDR
+	LD	A,D
+	OR	E
+	JR	NZ,LPBN_PAYLOAD_OVL
+
+	; If purely Far RAM execution (no TPA), skip trailing bitmap
+	LD	A,(LINE_STORAGE + 4096 + 28)
+	BIT	0,A
+	JR	Z,LPBN_PAYLOAD_OVL
+
+	; PRL bitmap size: (PROG_SIZE + 7) / 8
+	PUSH	HL
+	LD	DE,7
+	ADD	HL,DE
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	POP	DE
+	ADD	HL,DE				; PROG_SIZE + bitmap
+LPBN_PAYLOAD_OVL:
+	LD	DE,127
+	ADD	HL,DE
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	SRL	H
+	RR	L
+	LD	(PAYLOAD_SECTORS_REMAIN),HL	; 16-bit sector count (0..256)
+
+	; Determine sub-allocation vs dedicated bank:
+	; Sub-allocated if bit 0 of capabilities (CAP_TPA_EXEC) is set
+	LD	A,(LINE_STORAGE + 4096 + 28)
+	BIT	0,A
+	JR	Z,LPBN_DEDICATED_PAGES
+
+	; Sub-allocated: PAGE_COUNT = (PAYLOAD_SECTORS_REMAIN + 2 + 1) / 2
+	LD	HL,(PAYLOAD_SECTORS_REMAIN)
+	INC	HL
+	INC	HL
+	INC	HL
+	SRL	H
+	RR	L
+	LD	E,L				; E = PAGE_COUNT
+	LD	A,1				; A = CAN_SUBALLOC (1)
+	JR	LPBN_DO_ALLOC
+
+LPBN_DEDICATED_PAGES:
 	LD	A,(LOAD_SIZE_CLASS)
+	CP	1
+	JR	NZ,LPBN_DED_NOT_8K
+	LD	E,32				; 8K: 32 pages
+	JR	LPBN_DED_GOT_PAGES
+LPBN_DED_NOT_8K:
+	CP	2
+	JR	NZ,LPBN_DED_IS_32K
+	LD	E,64				; 16K: 64 pages
+	JR	LPBN_DED_GOT_PAGES
+LPBN_DED_IS_32K:
+	LD	E,128				; 32K: 128 pages
+LPBN_DED_GOT_PAGES:
+	XOR	A				; A = CAN_SUBALLOC (0)
+
+LPBN_DO_ALLOC:
 	CALL	ALLOC_FAR_PLUGIN_SLOT
 	JP	C,LPBN_ALLOC_FAIL
 
@@ -20401,49 +20490,6 @@ LPBN_SIZE_OK:
 	POP	IX
 
 	CALL	REGISTER_SLOT_METADATA
-
-	; Calculate sectors for code + relocation bitmap
-	LD	HL,(LINE_STORAGE + 4096 + 1)	; PROG_SIZE
-	LD	DE,(LINE_STORAGE + 4096 + 7)	; LOAD_ADDR
-	LD	A,D
-	OR	E
-	JR	NZ,LPBN_PAYLOAD_OVL
-
-	; 16K/32K Far plugins strictly run in Far RAM; skip trailing bitmap
-	LD	A,(LOAD_SIZE_CLASS)
-	OR	A
-	JR	NZ,LPBN_PAYLOAD_OVL
-
-	; PRL bitmap size: (PROG_SIZE + 7) / 8
-	PUSH	HL
-	LD	DE,7
-	ADD	HL,DE
-	SRL	H
-	RR	L
-	SRL	H
-	RR	L
-	SRL	H
-	RR	L
-	POP	DE
-	ADD	HL,DE				; PROG_SIZE + bitmap
-LPBN_PAYLOAD_OVL:
-	LD	DE,127
-	ADD	HL,DE
-	SRL	H
-	RR	L
-	SRL	H
-	RR	L
-	SRL	H
-	RR	L
-	SRL	H
-	RR	L
-	SRL	H
-	RR	L
-	SRL	H
-	RR	L
-	SRL	H
-	RR	L
-	LD	(PAYLOAD_SECTORS_REMAIN),HL	; 16-bit sector count (0..256)
 
 	LD	HL,(FAR_SLOT_BASE_ADDR)
 	INC	H				; + 256 bytes
@@ -20579,15 +20625,13 @@ REGISTER_SLOT_METADATA:
 	INC	DE
 
 	; EXEC_MODE:
-	; If SIZE_CLASS != 0 (16K or 32K) -> Always FAR (1)
-	LD	A,(LOAD_SIZE_CLASS)
-	OR	A
-	JR	NZ,RSM_MODE_FAR
-
-	; 4K plugin: FAR if CAP_FAR_EXEC and (BASE_PAGE == 0 or LOAD_ADDR != 0)
+	; Plugin runs in FAR RAM if CAP_FAR_EXEC (bit 1) is set AND:
+	;   - either LOAD_ADDR != 0 (OVL with target address)
+	;   - or BASE_PAGE == 0 (PRL at origin 0100H)
 	LD	A,(LINE_STORAGE + 4096 + 28)
 	AND	02H			; Bit 1: FAR_EXEC
 	JR	Z,RSM_MODE_TPA
+
 	LD	HL,(LINE_STORAGE + 4096 + 7)	; LOAD_ADDR
 	LD	A,H
 	OR	L
@@ -20746,7 +20790,7 @@ EXEC_PLUGIN_TPA:
 	XOR	A
 	LD	(PLUGIN_IS_FAR_EXEC),A
 
-	; Read slot's Far RAM bank and base address
+	; Read slot's Far RAM bank, base address, and page count
 	LD	A,(PLUGIN_CUR_SLOT)
 	LD	B,A
 	CALL	GET_REGISTRY_ENTRY_PTR
@@ -20755,11 +20799,16 @@ EXEC_PLUGIN_TPA:
 	ADD	HL,DE
 	LD	A,(HL)			; A = FAR_BANK
 	LD	(EP_TPA_FAR_BANK),A
-	INC	HL
-	LD	A,(HL)			; A = BASE_PAGE
-	LD	H,A
+	INC	HL			; Offset +25: BASE_PAGE
+	LD	C,(HL)			; C = BASE_PAGE
+	INC	HL			; Offset +26: SIZE_CLASS
+	INC	HL			; Offset +27: PAGE_COUNT
+	LD	D,(HL)			; D = PAGE_COUNT
+	LD	E,0
+	LD	(EP_TPA_COPY_LEN),DE	; DE = PAGE_COUNT * 256
+	LD	H,C			; H = BASE_PAGE
 	LD	L,0
-	LD	(FAR_SLOT_BASE_ADDR),HL
+	LD	(FAR_SLOT_BASE_ADDR),HL	; HL = BASE_PAGE * 256
 	POP	HL
 
 	CALL	FLUSH_DIRTY_CACHE
@@ -20769,14 +20818,14 @@ EXEC_PLUGIN_TPA:
 	CALL	GET_CUR_ROW_LEN
 	LD	(ACTIVE_LINE_LEN),DE
 
-	; Copy up to LINE_STORAGE_SIZE bytes from Far RAM to LINE_STORAGE (code + PRL bitmap)
+	; Copy exact PAGE_COUNT pages from Far RAM to LINE_STORAGE
 	PUSH	IX
 	LD	B,0F4H
 	LD	A,(CPM_USER_BANK)
 	LD	D,A
 	LD	A,(EP_TPA_FAR_BANK)
 	LD	E,A
-	LD	HL,LINE_STORAGE_SIZE
+	LD	HL,(EP_TPA_COPY_LEN)
 	RST	08H
 	POP	IX
 
@@ -23578,11 +23627,13 @@ LOAD_SIZE_CLASS:	DB	0
 LOAD_PAGE_COUNT:	DB	0
 ALLOC_SIZE_CLASS:	DB	0
 ALLOC_PAGE_COUNT:	DB	0
+ALLOC_SUBALLOC_FLAG:	DB	0
 ALLOC_TEMP_BANK:	DB	0
 IRF_TARGET_BANK:	DB	0
 IRF_CAND_EC:		DB	0
 PAYLOAD_SECTORS_REMAIN:	DW	0
 EP_TPA_FAR_BANK:	DB	0
+EP_TPA_COPY_LEN:	DW	0
 PLUGIN_FAR_BANK:	DB	0
 PLUGIN_LOAD_COUNT:	DB	0
 PLUGIN_CUR_SLOT:	DB	0
