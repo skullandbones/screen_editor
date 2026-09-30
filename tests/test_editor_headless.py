@@ -101,6 +101,12 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:se.cfg"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:se.com"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],
@@ -133,6 +139,11 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, cfg_tmp, "0:SE.CFG"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.isfile(se_bin):
+            subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin,
+                            "0:SE.COM"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
         ins1_tmp = "/tmp/INS1.TXT"
         with open(ins1_tmp, "wb") as f:
             f.write(b"INSERTED")
@@ -1573,7 +1584,11 @@ def test_se_execution():
         os.write(master, b"\x0b")
         out_solid_cpy = read_until(master, b"[BLK: 2c LOCK]", timeout=4.0)
         if b"[BLK: 2c LOCK]" not in out_solid_cpy:
-            print(f"[-] Block solidification failed for Ctrl+C test. Buffer: {repr(out_solid_cpy)}", flush=True)
+            print(
+                f"[-] Step 36: Block solidification failed for Ctrl+C test. "
+                f"Buffer: {repr(out_solid_cpy)}",
+                flush=True
+            )
             return False
         time.sleep(0.1)
         drain_all(master)
@@ -1586,7 +1601,11 @@ def test_se_execution():
         time.sleep(0.2)
         out_in_blk = drain_all(master)
         if out_in_blk != b"":
-            print(f"[-] Ctrl+C inside block was not ignored. Buffer: {repr(out_in_blk)}", flush=True)
+            print(
+                f"[-] Step 36: Ctrl+C inside block was not ignored. "
+                f"Buffer: {repr(out_in_blk)}",
+                flush=True
+            )
             return False
 
         # Move cursor to end of line: Ctrl+E (Col 2 or higher, outside block)
@@ -1598,27 +1617,41 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_cpy1 = drain_all(master)
-        if b"[BLK: 2c LOCK]" not in out_cpy1 or (b"L1L1" not in out_cpy1 and b"L1\x1b[0mL1" not in out_cpy1):
-            print(f"[-] Ctrl+C copy failed or lost block lock. Buffer: {repr(out_cpy1)}", flush=True)
+        if b"[BLK: 2c LOCK]" not in out_cpy1 or (
+            b"L1L1" not in out_cpy1 and b"L1\x1b[0mL1" not in out_cpy1
+        ):
+            print(
+                f"[-] Step 36: Ctrl+C copy failed or lost block lock. "
+                f"Buffer: {repr(out_cpy1)}",
+                flush=True
+            )
             return False
 
         # Test 3: Press Ctrl+C again consecutively: duplicate copy
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_cpy2 = drain_all(master)
-        if b"[BLK: 2c LOCK]" not in out_cpy2 or (b"L1L1L1" not in out_cpy2 and b"L1\x1b[0mL1L1" not in out_cpy2):
-            print(f"[-] Consecutive Ctrl+C failed or lost block lock. Buffer: {repr(out_cpy2)}", flush=True)
+        if b"[BLK: 2c LOCK]" not in out_cpy2 or (
+            b"L1L1L1" not in out_cpy2 and b"L1\x1b[0mL1L1" not in out_cpy2
+        ):
+            print(
+                f"[-] Step 36: Consecutive Ctrl+C failed or lost block lock. "
+                f"Buffer: {repr(out_cpy2)}",
+                flush=True
+            )
             return False
 
         # Test 4: Multi-line block copy (1L boundary at Row 2 Col 0, and 2L full block)
         # Cancel previous block with ESC
         os.write(master, b"\x1b")
+        time.sleep(0.1)
         read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
         os.write(master, b"\x14\x01")
         time.sleep(0.1)
+        drain_all(master)
         # Start block (Ctrl+B), expand down 1 row (Down Arrow to Row 2 Col 0)
         os.write(master, b"\x02\x1b[B")
         time.sleep(0.1)
@@ -1626,7 +1659,11 @@ def test_se_execution():
         os.write(master, b"\x0b")
         out_1l_solid = read_until(master, b"[BLK: 1L LOCK]", timeout=4.0)
         if b"[BLK: 1L LOCK]" not in out_1l_solid:
-            print(f"[-] 1L block solidification failed. Buffer: {repr(out_1l_solid)}", flush=True)
+            print(
+                f"[-] Step 36: 1L block solidification failed. "
+                f"Buffer: {repr(out_1l_solid)}",
+                flush=True
+            )
             return False
 
         # Test Ctrl+C directly at Row 2 Col 0: must not be ignored
@@ -1635,17 +1672,23 @@ def test_se_execution():
         time.sleep(0.3)
         out_1l_cpy = drain_all(master)
         if b"[BLK: 1L LOCK]" not in out_1l_cpy:
-            print(f"[-] Ctrl+C at Row 2 Col 0 failed. Buffer: {repr(out_1l_cpy)}", flush=True)
+            print(
+                f"[-] Step 36: Ctrl+C at Row 2 Col 0 failed. "
+                f"Buffer: {repr(out_1l_cpy)}",
+                flush=True
+            )
             return False
 
         # Cancel block
         os.write(master, b"\x1b")
+        time.sleep(0.1)
         read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
         os.write(master, b"\x14\x01")
         time.sleep(0.1)
+        drain_all(master)
         # Start block (Ctrl+B), expand down 2 rows (Down Arrow twice) for 2 lines
         os.write(master, b"\x02\x1b[B\x1b[B")
         time.sleep(0.1)
@@ -1653,7 +1696,11 @@ def test_se_execution():
         os.write(master, b"\x0b")
         out_ml_solid = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
         if b"[BLK: 2L LOCK]" not in out_ml_solid:
-            print(f"[-] Multi-line solidification failed. Buffer: {repr(out_ml_solid)}", flush=True)
+            print(
+                f"[-] Step 36: Multi-line solidification failed. "
+                f"Buffer: {repr(out_ml_solid)}",
+                flush=True
+            )
             return False
 
         # Jump to bottom of file (Ctrl+G), then end of line (Ctrl+E)
@@ -1666,18 +1713,27 @@ def test_se_execution():
         time.sleep(0.3)
         out_ml_cpy = drain_all(master)
         if b"[BLK: 2L LOCK]" not in out_ml_cpy:
-            print(f"[-] Multi-line block copy failed. Buffer: {repr(out_ml_cpy)}", flush=True)
+            print(
+                f"[-] Step 36: Multi-line block copy failed. "
+                f"Buffer: {repr(out_ml_cpy)}",
+                flush=True
+            )
             return False
 
         # Test 5: Cancellation terminates Ctrl+C
         os.write(master, b"\x1b")
+        time.sleep(0.1)
         read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
         os.write(master, b"\x03")
         time.sleep(0.2)
         out_cancelled = drain_all(master)
         if out_cancelled != b"":
-            print(f"[-] Ctrl+C operated after block was cancelled! Buffer: {repr(out_cancelled)}", flush=True)
+            print(
+                f"[-] Step 36: Ctrl+C operated after block was cancelled! "
+                f"Buffer: {repr(out_cancelled)}",
+                flush=True
+            )
             return False
 
         print(
