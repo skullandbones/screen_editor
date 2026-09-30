@@ -755,7 +755,7 @@ class DrunkenMonkeyInputGenerator:
 
 class SessionRecorder:
     """Records key sequences and time gaps to JSON for deterministic replay."""
-    def __init__(self, mode="80x24", seed=None, base_image=None):
+    def __init__(self, mode="80x24", seed=None, base_image=None, se_cfg=None):
         self.metadata = {
             "version": 1,
             "suite": "drunken_monkey",
@@ -765,6 +765,8 @@ class SessionRecorder:
             "base_image": base_image or "hd1k_golden.img",
             "total_steps": 0,
         }
+        if se_cfg is not None:
+            self.metadata["se_cfg"] = se_cfg
         self.events = []
 
     def record_step(self, step, ch, delay, desc, state, screen=None):
@@ -846,6 +848,61 @@ def find_paths():
     return emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
 
 
+def build_se_cfg(base_cfg_path=None, overrides=None):
+    """
+    Constructs synthetic SE.CFG content by reading an optional base
+    configuration file and applying key/value overrides.
+
+    Args:
+        base_cfg_path: Optional path to base SE.CFG file.
+        overrides: Optional dict of {key: value} configuration pairs.
+
+    Returns:
+        Formatted config string with CRLF line endings, or None if no
+        configuration was specified.
+    """
+    lines = []
+    found_keys = {}
+    if base_cfg_path:
+        target_path = base_cfg_path
+        if not os.path.isfile(target_path):
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            repo_root = os.path.dirname(script_dir)
+            alt_path = os.path.join(repo_root, base_cfg_path)
+            if os.path.isfile(alt_path):
+                target_path = alt_path
+        if not os.path.isfile(target_path):
+            raise FileNotFoundError(
+                f"SE.CFG base file not found: {base_cfg_path}"
+            )
+        with open(target_path, "r", encoding="latin1") as f:
+            raw_lines = f.read().splitlines()
+        for idx, line in enumerate(raw_lines):
+            stripped = line.strip()
+            if (stripped and not stripped.startswith(("#", ";"))
+                    and "=" in stripped):
+                k, _ = stripped.split("=", 1)
+                found_keys[k.strip().upper()] = idx
+            lines.append(line)
+    elif overrides:
+        lines.append("# Drunken Monkey Generated SE.CFG")
+
+    if overrides:
+        for k, v in overrides.items():
+            k_upper = k.strip().upper()
+            new_line = f"{k_upper}={v}"
+            if k_upper in found_keys:
+                lines[found_keys[k_upper]] = new_line
+            else:
+                lines.append(new_line)
+                found_keys[k_upper] = len(lines) - 1
+
+    if not lines:
+        return None
+
+    return "\r\n".join(lines).strip() + "\r\n"
+
+
 def read_available(master_fd, timeout=0.05):
     """Reads all currently available bytes from master_fd without blocking."""
     buf = b""
@@ -894,10 +951,33 @@ def run_drunken_monkey_test(
     show_grabs=True,
     grab_interval=10,
     keep_disk=False,
+    cfg_file=None,
+    cfg_overrides=None,
 ):
     """
     Main runner for the Drunken Monkey Test.
     """
+    replayer = None
+    if replay_file:
+        replayer = SessionReplayer(replay_file, speed=speed)
+        steps = replayer.total_steps
+        if mode is None:
+            mode = replayer.metadata.get("screen_mode", "80x24")
+        if not cfg_file and not cfg_overrides:
+            se_cfg_content = replayer.metadata.get("se_cfg")
+        else:
+            se_cfg_content = build_se_cfg(cfg_file, cfg_overrides)
+    else:
+        se_cfg_content = build_se_cfg(cfg_file, cfg_overrides)
+
+    if mode is None:
+        if se_cfg_content:
+            m = re.search(r"^\s*SCREEN\s*=\s*(120x40|80x24)",
+                          se_cfg_content, re.IGNORECASE | re.MULTILINE)
+            mode = m.group(1) if m else "80x24"
+        else:
+            mode = "80x24"
+
     print("=" * 76, flush=True)
     if replay_file:
         print(f"[*] Starting Drunken Monkey REPLAY: {replay_file} "
@@ -983,6 +1063,37 @@ def run_drunken_monkey_test(
                     stderr=subprocess.DEVNULL,
                 )
 
+    # Clear previous SE.CFG and inject custom configuration if specified
+    if os.path.isfile(cpmrm_bin):
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, "0:SE.CFG"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    if se_cfg_content:
+        tmp_cfg = os.path.join(
+            "/tmp", f"se_cfg_{os.getpid()}_{int(time.time() * 1000)}.cfg"
+        )
+        try:
+            with open(tmp_cfg, "wb") as f:
+                f.write(se_cfg_content.encode("latin1"))
+            if os.path.isfile(cpmcp_bin):
+                subprocess.run(
+                    [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img, tmp_cfg,
+                     "0:SE.CFG"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            cfg_disp = "\n".join(
+                f"    {line}" for line in se_cfg_content.strip().splitlines()
+            )
+            print(f"[*] Injected SE.CFG into ephemeral Drive C:\n{cfg_disp}",
+                  flush=True)
+        finally:
+            if os.path.isfile(tmp_cfg):
+                os.remove(tmp_cfg)
+
     # Setup terminal monitor
     cols = 120 if mode == "120x40" else 80
     rows = 40 if mode == "120x40" else 24
@@ -990,14 +1101,11 @@ def run_drunken_monkey_test(
 
     # Initialize recorder or replayer
     recorder = None
-    replayer = None
-    if replay_file:
-        replayer = SessionReplayer(replay_file, speed=speed)
-        steps = replayer.total_steps
-    else:
+    if not replay_file:
         if record_file:
             recorder = SessionRecorder(mode=mode, seed=seed,
-                                       base_image=base_name)
+                                       base_image=base_name,
+                                       se_cfg=se_cfg_content)
         generator = DrunkenMonkeyInputGenerator(mode=mode, seed=seed)
 
     # Spawn emulator process over PTY
@@ -1372,8 +1480,8 @@ def main():
         help="Random seed for reproducible chaos generation"
     )
     parser.add_argument(
-        "--mode", choices=["80x24", "120x40"], default="80x24",
-        help="Terminal screen mode (default: 80x24)"
+        "--mode", choices=["80x24", "120x40"], default=None,
+        help="Terminal screen mode (default: 80x24 or from SE.CFG)"
     )
     parser.add_argument(
         "--speed", type=float, default=1.0,
@@ -1398,6 +1506,41 @@ def main():
     parser.add_argument(
         "--keep-disk", action="store_true", default=False,
         help="Preserve ephemeral virtual disk image after test completion"
+    )
+    parser.add_argument(
+        "--cfg", "--config", type=str, default=None, dest="cfg_file",
+        help="Path to base SE.CFG file to inject into test disk image"
+    )
+    parser.add_argument(
+        "--ram", choices=["128k", "512k", "preserve", "overwrite",
+                          "hibernate"],
+        type=str.lower, default=None,
+        help="RAM size / RAM drive mode in SE.CFG (128K/preserve vs "
+             "512K/overwrite)"
+    )
+    parser.add_argument(
+        "--plugin", "--plugin-mgr",
+        choices=["autoload", "ondemand", "disabled"],
+        type=str.lower, default=None,
+        help="Plugin manager mode in SE.CFG (autoload, ondemand, disabled)"
+    )
+    parser.add_argument(
+        "--no-plugin", action="store_true", default=False,
+        help="Disable plugin manager (equivalent to --plugin disabled)"
+    )
+    parser.add_argument(
+        "--lines", "--max-lines", choices=["16k", "32k"],
+        type=str.lower, default=None,
+        help="Max document lines in SE.CFG (16K vs 32K)"
+    )
+    parser.add_argument(
+        "--tab", "--tab-width", choices=[4, 8], type=int, default=None,
+        help="Tab width in SE.CFG (4 vs 8)"
+    )
+    parser.add_argument(
+        "--cfg-set", action="append", default=[], metavar="KEY=VAL",
+        help="Override specific SE.CFG setting (repeatable: e.g. "
+             "--cfg-set TAB=4)"
     )
     parser.add_argument(
         "--view", nargs="?", const="tests/monkey_session_sample.json",
@@ -1432,6 +1575,41 @@ def main():
     # Determine seed if not provided
     seed = args.seed if args.seed is not None else random.randint(1000, 999999)
 
+    # Collect SE.CFG overrides from CLI flags
+    cfg_overrides = {}
+
+    if args.ram:
+        ram_map = {
+            "128k": "PRESERVE",
+            "preserve": "PRESERVE",
+            "512k": "OVERWRITE",
+            "overwrite": "OVERWRITE",
+            "hibernate": "HIBERNATE",
+        }
+        cfg_overrides["RAMDRIVE"] = ram_map.get(args.ram, args.ram.upper())
+
+    if args.no_plugin or (args.plugin and args.plugin.lower() == "disabled"):
+        cfg_overrides["PLUGIN"] = "DISABLED"
+    elif args.plugin:
+        cfg_overrides["PLUGIN"] = args.plugin.upper()
+
+    if args.lines:
+        cfg_overrides["MAXLINES"] = args.lines.upper()
+
+    if args.tab:
+        cfg_overrides["TAB"] = str(args.tab)
+
+    if args.mode:
+        cfg_overrides["SCREEN"] = args.mode
+
+    if args.cfg_set:
+        for item in args.cfg_set:
+            if "=" in item:
+                k, v = item.split("=", 1)
+                cfg_overrides[k.strip().upper()] = v.strip()
+            else:
+                cfg_overrides[item.strip().upper()] = "ON"
+
     success = run_drunken_monkey_test(
         steps=args.steps,
         record_file=args.record,
@@ -1443,6 +1621,8 @@ def main():
         show_grabs=args.show_grabs,
         grab_interval=args.grab_interval,
         keep_disk=args.keep_disk,
+        cfg_file=args.cfg_file,
+        cfg_overrides=cfg_overrides,
     )
 
     sys.exit(0 if success else 1)
