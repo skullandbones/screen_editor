@@ -644,8 +644,8 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"OUTPUT.TXT\r")
         time.sleep(0.2)
-        resp = read_until(master, b"o): ", timeout=2.0)
-        if b"Overwrite? (" in resp:
+        resp = read_until(master, [b"Overwrite?", b"Line    1/1"], timeout=2.0)
+        if b"Overwrite?" in resp:
             os.write(master, b"y")
         read_until(master, b"Line    1/1", timeout=5.0)
         drain_all(master)
@@ -1099,16 +1099,18 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\r")
-        out_warn = read_until(master, b"o): ", timeout=4.0)
-        if b"File already exists. Overwrite? (" not in out_warn:
-            print(f"[-] Overwrite warning prompt missing. Buffer: {repr(out_warn)}", flush=True)
+        out_warn = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if b"File already exists. Overwrite?" not in out_warn:
+            print("[-] Overwrite warning prompt missing. "
+                  f"Buffer: {repr(out_warn)}", flush=True)
             return False
-        if b"\x1b[4mY\x1b[24mes" not in out_warn or b"\x1b[4mN\x1b[24mo" not in out_warn:
-            print(f"[-] Overwrite prompt missing underscored hotkeys. Buffer: {repr(out_warn)}", flush=True)
+        if b"[Y]es" not in out_warn or b"[N]o" not in out_warn:
+            print("[-] Overwrite prompt missing bracketed hotkeys. "
+                  f"Buffer: {repr(out_warn)}", flush=True)
             return False
         print(
-            "[+] Step 27: Successfully verified overwrite warning prompt on "
-            "existing file with underscored hotkeys.",
+            "[+] Step 27: Successfully verified overwrite warning modal pop-up "
+            "on existing file with bracketed hotkeys.",
             flush=True
         )
 

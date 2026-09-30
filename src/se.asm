@@ -16232,15 +16232,14 @@ DO_PARSE_AND_SAVE:
 	; Check if target drive is unavailable RAM drive
 	LD	A,(WORK_FCB)
 	CALL	CHECK_TARGET_DRIVE_UNAVAILABLE
-	JR	C,SAVE_RAMDRV_UNAVAILABLE
+	JP	C,SAVE_RAMDRV_UNAVAILABLE
 
 	; Check if file already exists on disk
 	CALL	CHECK_FILE_EXISTS
 	JR	NC,DO_ACTUAL_SAVE	; Does not exist -> save directly
 
-	; File already exists! Prompt warning
-	LD	DE,STR_OVERWRITE_WARN
-	CALL	PRINT_STR
+	; File already exists! Render Tier 2 centered modal warning popup
+	CALL	DRAW_OVERWRITE_POPUP
 
 OVERWRITE_KEY_LOOP:
 	CALL	GET_KEY
@@ -16249,8 +16248,55 @@ OVERWRITE_KEY_LOOP:
 	CP	'Y'
 	JR	Z,DO_OVERWRITE_CONFIRMED
 
-	; Any other key cancels overwrite: restore original WORK_FCB
-	CALL	PUTC			; Echo typed char
+	CP	'n'
+	JR	Z,DO_OVERWRITE_CANCELLED
+	CP	'N'
+	JR	Z,DO_OVERWRITE_CANCELLED
+
+	CP	KEY_ESC
+	JR	Z,OVERWRITE_CHECK_ESC
+
+	JR	OVERWRITE_KEY_LOOP
+
+OVERWRITE_CHECK_ESC:
+	LD	BC,ESC_TIMEOUT_LOOPS
+OW_WAIT_ESC:
+	CALL	CHECK_KEY_READY
+	JR	NZ,OW_DRAIN_ESC
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,OW_WAIT_ESC
+	; Standalone ESC key: cancel
+	JR	DO_OVERWRITE_CANCELLED
+
+OW_DRAIN_ESC:
+	CALL	GET_KEY			; Consume '[' or 'O'
+OW_DRAIN_MORE:
+	LD	BC,500
+OW_DRAIN_WAIT:
+	CALL	CHECK_KEY_READY
+	JR	NZ,OW_DRAIN_BYTE
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,OW_DRAIN_WAIT
+	; Sequence drained: reposition cursor and resume key loop
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,40
+	LD	L,A
+	CALL	LOCATE_RC
+	JR	OVERWRITE_KEY_LOOP
+
+OW_DRAIN_BYTE:
+	CALL	GET_KEY
+	JR	OW_DRAIN_MORE
+
+DO_OVERWRITE_CANCELLED:
+	; Restore original WORK_FCB
 	LD	HL,DIR_TEMP_FCB
 	LD	DE,WORK_FCB
 	LD	BC,36
@@ -16264,7 +16310,6 @@ OVERWRITE_KEY_LOOP:
 	RET
 
 DO_OVERWRITE_CONFIRMED:
-	CALL	PUTC			; Echo 'y'
 
 DO_ACTUAL_SAVE:
 	LD	A,(IS_BLOCK_SAVE_UI)
@@ -16292,6 +16337,68 @@ DO_ACTUAL_BLOCK_SAVE:
 	LDIR
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
+	RET
+
+;------------------------------------------------------------------------------
+; DRAW_OVERWRITE_POPUP:
+; Render centered 50x7 modal query pop-up warning of file overwrite.
+;------------------------------------------------------------------------------
+DRAW_OVERWRITE_POPUP:
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
+
+	; 3. Render 7-line Pop-Up Box
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_OVERWRITE_POPUP_TITLE
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_OVERWRITE_POPUP_MSG1
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_OVERWRITE_POPUP_MSG2
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_SAVE_KEYS
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Position cursor inside popup on prompt line after "Overwrite? "
+	; Row = POPUP_START_ROW + 4, Col = POPUP_COL + 40
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,40
+	LD	L,A
+	CALL	LOCATE_RC
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
 	RET
 
 SAVE_RAMDRV_UNAVAILABLE:
@@ -23078,6 +23185,14 @@ STR_GOTO_POPUP_MSG:
 	DB	"|          Enter line number to jump to          |", 0
 STR_GOTO_POPUP_KEYS:
 	DB	"|       [Enter]=Goto Line     [ESC]=Cancel       |", 0
+
+; Overwrite Modal Pop-up Strings (50 cols x 7 rows)
+STR_OVERWRITE_POPUP_TITLE:
+	DB	"|                 Overwrite File                 |", 0
+STR_OVERWRITE_POPUP_MSG1:
+	DB	"|       Existing file contents will be lost      |", 0
+STR_OVERWRITE_POPUP_MSG2:
+	DB	"|        File already exists. Overwrite?         |", 0
 STR_DEF_PLUGIN_MGR:	DB	"PLUGIN.PRL", 0
 STR_MSG_NEED_PLUGIN_MGR: DB	"Feature requires PLUGIN.PRL", "$"
 STR_NAME_BEAUTIFY:	DB	"BEAUTIFY", 0
@@ -23389,7 +23504,6 @@ STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
 STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 
-STR_OVERWRITE_WARN:	DB	13,10,"~  File already exists. Overwrite? (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o): ","$"
 
 STR_SAVE_CANCELLED:	DB	13,10,"~  Save cancelled.",13,10,"$"
 

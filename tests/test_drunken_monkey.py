@@ -396,7 +396,8 @@ class VT100QualityMonitor:
         if ("Find:" in full_text or "Find Text" in full_text or
                 "Find (Exact):" in full_text or "Find (Insens):" in full_text):
             return "find_prompt"
-        if "File already exists. Overwrite?" in full_text:
+        if ("File already exists. Overwrite?" in full_text or
+                "Overwrite File" in full_text):
             return "overwrite_prompt"
         if "Replace (" in full_text and "uit/" in full_text:
             return "replace_confirm_prompt"
