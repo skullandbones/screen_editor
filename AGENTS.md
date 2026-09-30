@@ -204,6 +204,72 @@ How:
      +----------------------+----------+---------+-----------+--------+
      ```
 
+9. **Validation Test Script Output Standards (MANDATORY & ENFORCED)**:
+   * All version-controlled automated test scripts (under `tests/`) must adhere
+     to a standardized, three-tier sequential logging convention to ensure
+     clear diagnostic pinpointing in automated and headless environments.
+   * **Tag Prefixes**:
+     - `[*]` (Asterisk): **Initiation Banner**. Logged immediately before
+       actions in a step begin. Must include the step number and end with `...`:
+       `[*] Step <N>: <Action or Target description>...`
+     - `[+]` (Plus): **Completion / Success Tag**. Logged immediately after
+       step assertions pass:
+       `[+] Step <N>: <Verified Outcome description>.`
+     - `[-]` (Minus): **Failure / Error Tag**. Logged upon assertion failure
+       or timeout, detailing what failed and capturing diagnostic data:
+       `[-] Step <N>: <Failure description>. Buffer: {repr(out[-300:])}`
+   * **Sequential Step Numbering**:
+     - Every distinct logical test phase must have a 1-based sequential step
+       number: `Step 1:`, `Step 2:`, ..., `Step <N>:`.
+     - The step number must remain identical across initiation
+       (`[*] Step <N>:`), all intermediate assertions, failure logs
+       (`[-] Step <N>:`), and the success log (`[+] Step <N>:`).
+   * **Stream Flushing**:
+     - All test logging `print()` statements must specify `flush=True` to
+       prevent stdout buffering across PTYs and background tasks.
+   * **Failure Diagnostic State**:
+     - All failure logs must capture the terminal buffer or unexpected data
+       (e.g. `Buffer: {repr(out)}` or `Buffer: {repr(out[-300:])}`) to allow
+       instant root-cause analysis from log files.
+   * **Suite Completion Banner**:
+     - Tests must conclude with a standardized summary banner reporting elapsed
+       wall-clock time:
+       `[+] All <Suite Name> tests PASSED in {elapsed:.2f}s!`
+   * **Line Width**:
+     - All print statements and string concatenations must strictly satisfy
+       the $\le 80$ characters per line limit.
+   * **Acceptable Pattern**:
+     ```python
+     # [*] Initiation
+     print("[*] Step 4: Entering Editor Mode ('e')...", flush=True)
+     os.write(master, b"e")
+     out_edit = read_until(master, b"^K: Editor keys", timeout=6.0)
+
+     # [-] Failure with diagnostic context
+     if b"(Untitled)" not in out_edit:
+         print(f"[-] Step 4: Failed to enter editor mode. "
+               f"Buffer: {repr(out_edit)}", flush=True)
+         return False
+
+     # [+] Success
+     print("[+] Step 4: Entered editor mode with status bar verified.",
+           flush=True)
+     ```
+   * **Unacceptable Patterns**:
+     ```python
+     # [UNACCEPTABLE: missing Step prefix, missing flush, no diagnostic buffer]
+     print("[*] Entering editor mode...")
+     if not ok:
+         print("[-] Test failed.")
+         return False
+     print("[+] Editor mode OK.")
+
+     # [UNACCEPTABLE: mismatched step numbers between start and failure logs]
+     print("[*] Step 3: Launching editor...", flush=True)
+     if not ok:
+         print("[-] Step 4: Launch failed.", flush=True)
+     ```
+
 ---
 
 ## 3. Prohibited Linux Commands (STRICTLY FORBIDDEN)
