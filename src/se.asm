@@ -10475,32 +10475,28 @@ PARSE_DEC_LOOP:
 
 ;------------------------------------------------------------------------------
 ; Interactive Goto Line UI (Ctrl+L in editor, or 'l'/Ctrl+L from splash)
-; Prompts for line number on status row.
+; Displays centered Tier 2 modal pop-up (50 cols x 7 rows).
 ; Enter -> jumps to line (centered). ESC -> cancels.
 ;------------------------------------------------------------------------------
 DO_GOTO_LINE_UI:
 	CALL	CANCEL_BLOCK
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
 
-	; Display Goto line prompt on status bar: highlighted query ending in ':'
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	LD	DE,STR_GOTO_LINE_PROMPT	; "Goto line:"
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
 
-	; Normal video edit box: " [     ]"
-	LD	DE,STR_GOTO_LINE_BOX	; " [     ]"
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
 
-	; Position cursor inside box at first space (6 backspaces)
-	LD	DE,STR_BS_6
-	CALL	PRINT_STR
+	CALL	DRAW_GOTO_POPUP_BODY
 
 	; Clear buffer
 	LD	HL,GOTO_LINE_BUF
@@ -10581,19 +10577,17 @@ GOTO_UI_BS:
 	JR	GOTO_UI_LOOP
 
 GOTO_UI_PGUP:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
 	CALL	PAGE_UP
-	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
 	RET
 
 GOTO_UI_PGDN:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
 	CALL	PAGE_DOWN
-	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
 	RET
 
 GOTO_UI_CHECK_ESC:
@@ -10612,14 +10606,10 @@ GOTO_WAIT_ESC:
 
 GOTO_GOT_ESC_SEQ:
 	; User pressed an escape sequence (e.g. cursor arrow keys, PgUp, PgDn)
-	; 1. Cancel inverse video before executing navigation and rendering
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
-	; 2. Consume escape sequence and execute cursor navigation
 	CALL	GOT_ESC_BYTE
-	; 3. Refresh screen if scrolled, or redraw status bar and locate cursor
-	CALL	FLUSH_DEFERRED_RENDER
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
 	RET
 
 GOTO_UI_ENTER:
@@ -10627,10 +10617,6 @@ GOTO_UI_ENTER:
 	LD	A,B
 	OR	A
 	JR	Z,GOTO_UI_CANCEL
-
-	; Cancel inverse video before parsing and redrawing
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
 
 	; Parse decimal number from GOTO_LINE_BUF into DE
 	LD	HL,GOTO_LINE_BUF
@@ -10641,12 +10627,73 @@ GOTO_UI_ENTER:
 	; Redraw editor and status bar smoothly without full screen clear flash
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
 	RET
 
 GOTO_UI_CANCEL:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+	CALL	LOCATE_CURSOR
+	RET
+
+DRAW_GOTO_POPUP_BODY:
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+
+	; Line 1: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_GOTO_POPUP_TITLE
+	CALL	PRINT_STR
+
+	; Line 3: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 4: Description
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_GOTO_POPUP_MSG
+	CALL	PRINT_STR
+
+	; Line 5: Prompt and input field
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_GOTO_POPUP_PROMPT
+	CALL	PRINT_STR
+	; Pad 5 spaces for input field
+	LD	C,5
+DGP_PAD_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DEC	C
+	JR	NZ,DGP_PAD_LOOP
+	LD	DE,STR_GOTO_POPUP_BOX_CLOSE
+	CALL	PRINT_STR
+
+	; Line 6: Keys
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_GOTO_POPUP_KEYS
+	CALL	PRINT_STR
+
+	; Line 7: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Position cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL + 28)
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,28
+	LD	L,A
+	CALL	LOCATE_RC
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -23026,6 +23073,18 @@ STR_REPLACE_POPUP_MSG:
 	DB	"| Enter replacement text to substitute for match |", 0
 STR_REPLACE_POPUP_KEYS:
 	DB	"| Enter:Confirm                       ESC:Cancel |", 0
+
+; Goto Line Modal Pop-up Strings (50 cols x 7 rows)
+STR_GOTO_POPUP_TITLE:
+	DB	"|                   Goto Line                    |", 0
+STR_GOTO_POPUP_PROMPT:
+	DB	"|               Goto line: [", 0
+STR_GOTO_POPUP_BOX_CLOSE:
+	DB	"]               |", 0
+STR_GOTO_POPUP_MSG:
+	DB	"|          Enter line number to jump to          |", 0
+STR_GOTO_POPUP_KEYS:
+	DB	"|       [Enter]=Goto Line     [ESC]=Cancel       |", 0
 STR_DEF_PLUGIN_MGR:	DB	"PLUGIN.PRL", 0
 STR_MSG_NEED_PLUGIN_MGR: DB	"Feature requires PLUGIN.PRL", "$"
 STR_NAME_BEAUTIFY:	DB	"BEAUTIFY", 0
@@ -23351,9 +23410,6 @@ STR_CSI_C:		DB	27,"[C","$"
 STR_FNF_INLINE:		DB	"  File not found","$"
 STR_RAMDRV_UNAVAIL_INLINE:	DB	"  RAM drive not available","$"
 STR_FAT_NO_PLUGIN_INLINE:	DB	"  feature requires FATFS.PRL","$"
-STR_GOTO_LINE_PROMPT:	DB	"Goto line:","$"
-STR_GOTO_LINE_BOX:	DB	" [     ]","$"
-STR_BS_6:		DB	8,8,8,8,8,8,"$"
 STR_REPLACE_CONFIRM:	DB	"Replace (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/",27,"[4m","A",27,"[24m","ll/",27,"[4m","Q",27,"[24m","uit/",27,"[4m","R",27,"[24m","everse)? ","$"
 STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
 STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"

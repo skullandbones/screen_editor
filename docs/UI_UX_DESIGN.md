@@ -39,6 +39,9 @@ codebase must adhere strictly to these principles.
      (Tier 1) or Centered Boxed Modal Pop-ups (Tier 2).
    - **All pop-ups shall be shown in the centre of the screen both
      horizontally and vertically.**
+   - **Query pop-up format shall have a title line box, the pop-up body
+     first line shall be the description, then the query line followed
+     by the query options. All text is centre justified.**
 5. **Clean Single-Level Pop-up Visibility**:
    - **When a child pop-up is to be shown, the parent pop-up shall be taken
      off the screen (hidden) and the parent pop-up is redrawn when the child
@@ -46,9 +49,15 @@ codebase must adhere strictly to these principles.
 6. **Mandatory Bracket Notation for Parameters & Hotkeys**:
    - Variable parameters (user inputs, run-time settings), slot indexes,
      list selectors, and action hotkeys shall be expressed inside `[ ]` pairs
-     (e.g. `[Y]es / [N]o`, `[ESC]=Cancel`).
+     (e.g. `[Y]es   [N]o   [ESC]=Cancel`).
    - **The `Y:Yes, N:No` forms are no longer allowed.**
-7. **Cancellation & Dismissal Discipline**:
+   - **Pop-up decision options shall not have any delimiters such as `/` and
+     `|` and instead should have sufficient spaces to separate the options
+     nicely (e.g. `[Y]es   [N]o   [ESC]=Cancel`).**
+7. **"Press any key" Statements & Dismissal Discipline**:
+   - **"Press any key" statements must not be inside `[ ]` or `( )` pairs and
+     do not have `...` (e.g. `Press any key to continue`, not
+     `[Press any key]` or `Press any key...`).**
    - **If a pop-up needs user input such as yes or no, then only ESC can
      cancel the pop-up (no use of Ctrl-C or q key).**
    - **A pop-up with no user input, such as a status pop-up, shall be
@@ -113,24 +122,44 @@ Never blur the boundaries between these tiers.
     - **Status Event Pop-ups (No User Input)**:
       - Used for informational notices (e.g. Save Confirmation, File Not Found,
         Done Notification).
-      - Visual Hierarchy: Event message context followed by dismissal prompt
-        (e.g. `[Any Key]=Dismiss`).
+      - Visual Hierarchy: Event message context followed by dismissal
+        statement (e.g. `Press any key to continue`).
       - Dismissal Rule: **A pop-up with no user input such as a status
         pop-up shall be dismissable by any key.**
-    - **Decision & Interactive Pop-ups (Needs User Input)**:
+      - Formatting Rule: **"Press any key" statements must not be inside `[ ]`
+        or `( )` pairs and do not have `...`.**
+    - **Decision & Interactive Pop-ups (Query Pop-ups)**:
       - Used for decisions and inputs (e.g. Save Changes Prompt, Overwrite
-        Warning, interactive text input loops).
-      - Visual Hierarchy (Mandatory Ordering):
-        1. **Context & Warning First**: State consequences before questions
-           (e.g. *"Any unsaved edits will be lost if discarded"*).
-        2. **Question / Decision Prompt Second**: Present clear question
-           (e.g. *"Save changes?"*).
-        3. **Action Hotkeys Third**: Present valid choices with hotkeys
-           wrapped in `[ ]` pairs (e.g. `[Y]es / [N]o / [ESC]=Cancel`).
-           The `Y:Yes, N:No` forms are no longer allowed.
-        4. **Cursor Placement**: Blinking cursor positioned adjacent to input.
-      - Cancellation Rule: **If a pop-up needs user input such as yes or no,
-        then only ESC can cancel the pop-up.** No use of `Ctrl-C` or `q` key.
+        Warning, Goto Line Prompt, interactive text input loops).
+      - **Mandatory Box & Body Layout**:
+        - **Title Line Box**: Enclosed by top border, centered title text,
+          and a separator border line:
+          - Line 1: Top border (`+-------------------------------------+`)
+          - Line 2: Title line (`|              Title Text             |`)
+          - Line 3: Separator border (`+-------------------------------------+`)
+        - **Pop-up Body Lines**:
+          - Line 4 (First body line): **Description** (consequences or
+            context, e.g. *"Unsaved edits will be lost if discarded"*).
+          - Line 5 (Second body line): **Query Line** (the question or
+            input field, e.g. *"Save changes?"* or *"Goto line: [     ]"*).
+          - Line 6 (Third body line): **Query Options** (hotkey triggers
+            separated by spaces, e.g. `[Y]es   [N]o   [ESC]=Cancel`).
+          - Line 7: Bottom border (`+-------------------------------------+`)
+      - **Centre Justification Rule**:
+        - **All text is centre justified.** Every line inside the pop-up
+          (title, description, query line, and query options) must be
+          horizontally centered within the box borders.
+      - **Query Options Formatting**:
+        - Present valid choices with hotkeys wrapped in `[ ]` pairs.
+        - **Pop-up decision options shall not have any delimiters such as
+          `/` and `|` and instead should have sufficient spaces to separate
+          the options nicely** (e.g. `[Y]es   [N]o   [ESC]=Cancel`).
+        - The `Y:Yes, N:No` forms are no longer allowed.
+      - **Cursor Placement**:
+        - Blinking cursor positioned adjacent to input or inside input field.
+      - **Cancellation Rule**:
+        - **If a pop-up needs user input such as yes or no, then only ESC can
+          cancel the pop-up.** No use of `Ctrl-C` or `q` key.
 
 ### Tier 3: Persistent Status Bar (Bottom Row / `HOST_ROWS`)
 * **Mandate**: All screens shall show the status bar.
@@ -168,7 +197,7 @@ Every screen and dialog must adhere to uniform keybinding semantics:
     commands (e.g. `Q` on the splash screen to exit to CP/M).
 * **Confirm / Execute / Primary Action**:
   - `Enter` runs or confirms the primary action of the selected item or input.
-  - Single-key hotkeys (e.g. `[Y]es` / `[N]o`) execute immediately without
+  - Single-key hotkeys (e.g. `[Y]es   [N]o`) execute immediately without
     requiring a trailing `Enter`.
 * **Navigation**:
   - Directional navigation must dual-bind Arrow keys (`Up`/`Down`,
@@ -190,12 +219,27 @@ Brackets (`[ ]`) convey structured parameters and triggers across SE.COM:
      - Dynamic Settings: `Format: [CP/M]`, `Match: [Case Sensitive  ]`
      - Runtime Resource Info: `Far RAM: [Dynamic On-Demand]`, `Slot: [Free]`
      - Slot Indexes & List Selectors: `[0] BEAUTIFY.PRL`, `[Page 1/2]`
-     - Action Hotkeys & Triggers: `[Y]es / [N]o`, `[ESC]=Cancel`
+     - Action Hotkeys & Triggers: `[Y]es   [N]o   [ESC]=Cancel`
 2. **Prohibited Hotkey Syntax & Label Misplacement**:
    - **The `Y:Yes, N:No` forms are no longer allowed.** All hotkey triggers
-     must use bracket notation (e.g. `[Y]es / [N]o`).
+     must use bracket notation (e.g. `[Y]es   [N]o`).
    - Never place static prompt labels inside brackets (e.g. use
      `Filename: [          ]`, never `[Filename]:`).
+3. **No Delimiters for Pop-up Decision Options**:
+   - **Pop-up decision options shall not have any delimiters such as `/` and
+     `|` and instead should have sufficient spaces to separate the options
+     nicely.**
+   - Use spacing to separate options visually:
+     - Allowed: `[Y]es   [N]o   [ESC]=Cancel`,
+       `[Enter]=Goto Line   [ESC]=Cancel`
+     - Prohibited: `[Y]es / [N]o`, `[Y]es | [N]o`,
+       `[Enter]=OK / [ESC]=Cancel`
+4. **"Press any key" Formatting Standards**:
+   - **"Press any key" statements must not be inside `[ ]` or `( )` pairs and
+     do not have `...`.**
+   - Allowed: `Press any key to continue`, `Press any key`
+   - Prohibited: `[Press any key]`, `(Press any key)`, `Press any key...`,
+     `[Press any key to continue...]`, `[Any Key]=Dismiss`
 
 ---
 
@@ -261,11 +305,15 @@ agents must actively check for and refactor these non-conformances:
 3. **Pop-up Stacking / Ghosting**:
    - *Symptom*: Drawing a child pop-up directly over an unhidden parent pop-up.
    - *Remedy*: Hide parent before showing child; redraw parent on child close.
-4. **Legacy Hotkey Forms & Bracket Misplacement**:
-   - *Symptom*: Using legacy `Y:Yes, N:No` forms or enclosing static prompt
-     labels (e.g. `[Filename]:`) in brackets.
-   - *Remedy*: Enforce bracketed hotkeys (`[Y]es / [N]o`) and reserve brackets
-     for variable parameters, inputs, slot indexes, and hotkeys.
+4. **Legacy Hotkey Forms, Delimiters & Bracket Misplacement**:
+   - *Symptom*: Using legacy `Y:Yes, N:No` forms, using `/` or `|` delimiters
+     between pop-up options, enclosing static labels in brackets
+     (e.g. `[Filename]:`), or placing "Press any key" inside brackets or
+     adding trailing ellipsis (e.g. `[Press any key...]`).
+   - *Remedy*: Enforce bracketed hotkeys (`[Y]es   [N]o`), separate options
+     with spaces only (no `/` or `|`), format dismissal prompts as
+     unbracketed `Press any key to continue` without `...`, and reserve
+     brackets for variable parameters, inputs, slot indexes, and hotkeys.
 5. **Non-ESC Cancellation & Status Pop-up Lock**:
    - *Symptom*: Using `Ctrl-C` or `q`/`Q` to cancel interactive input dialogs,
      or failing to dismiss status pop-ups (no user input) on any key.
@@ -285,6 +333,13 @@ agents must actively check for and refactor these non-conformances:
    - *Symptom*: Emitting strings > 78 chars inside padded rows, causing line
      wrapping.
    - *Remedy*: Shorten strings or split across lines; enforce <= 80 columns.
+9. **Query Pop-up Format & Alignment Violations**:
+   - *Symptom*: Omitting the title line box, placing the query line
+     before the description, using left-justified text inside pop-ups,
+     or failing to centre-justify all lines.
+   - *Remedy*: Enforce the standard layout (title line box, first body line
+     as description, query line second, query options third) with all text
+     centre justified.
 
 ---
 
@@ -308,6 +363,13 @@ Before submitting any UI/UX changes:
    - Child pop-ups hide parent pop-ups and restore them upon exit.
    - User inputs, runtime settings, slot indexes, and hotkeys use `[ ]`.
    - The `Y:Yes, N:No` forms are not used.
+   - Pop-up decision options have no delimiters such as `/` and `|` and use
+     sufficient spaces instead.
+   - Query pop-ups have a title line box, description as first body line,
+     query line second, and query options third.
+   - All text in query pop-ups is centre justified.
+   - "Press any key" statements are not inside `[ ]` or `( )` pairs and do
+     not have `...`.
    - Pop-ups needing user input (e.g. yes/no) are cancelled solely via `ESC`.
    - Pop-ups with no user input (e.g. status pop-ups) are dismissable by
      any key.
