@@ -181,7 +181,7 @@ def run_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"1")
-        ok, out_pop = read_until(master, b"Unload Slot 1? [Y/N]", timeout=4.0)
+        ok, out_pop = read_until(master, b"Unload Slot 1?", timeout=4.0)
         assert ok, "Unload confirmation prompt missing"
         os.write(master, b"y")
         ok, out_u = read_until(master, b"(empty slot)", timeout=6.0)

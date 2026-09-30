@@ -145,7 +145,7 @@ def main():
         # Test digit action: typing '2' triggers Unload confirmation on Slot 2
         time.sleep(0.3)
         os.write(master, b"2")
-        ok, out = read_until(master, b"Unload Slot 2? [Y/N]", timeout=5.0)
+        ok, out = read_until(master, b"Unload Slot 2?", timeout=5.0)
         if not ok:
             print("[-] Digit '2' failed to show Unload modal. "
                   f"Out: {repr(out)}")
@@ -165,7 +165,7 @@ def main():
         # Test digit action: typing '0' triggers Unload confirmation on Slot 0
         time.sleep(0.3)
         os.write(master, b"0")
-        ok, out = read_until(master, b"Unload Slot 0? [Y/N]", timeout=5.0)
+        ok, out = read_until(master, b"Unload Slot 0?", timeout=5.0)
         if not ok:
             print("[-] Digit '0' failed to show Unload modal. "
                   f"Out: {repr(out)}")
@@ -331,7 +331,7 @@ def main():
         # Test Enter on occupied slot (Slot 2: BEAUTIFY) -> Unload confirmation
         time.sleep(0.3)
         os.write(master, b"\r")
-        ok, out = read_until(master, b"Unload Slot 2? [Y/N]", timeout=6.0)
+        ok, out = read_until(master, b"Unload Slot 2?", timeout=6.0)
         if not ok or b"Unload Plugin" not in out:
             print("[-] Enter on Slot 2 failed to trigger Unload modal. "
                   f"Out: {repr(out)}")

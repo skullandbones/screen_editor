@@ -386,7 +386,9 @@ class VT100QualityMonitor:
             return "insert_file_prompt"
         if "Load Plugin (.PRL/.OVL):" in full_text:
             return "load_plugin_prompt"
-        if (("Unload Slot " in full_text and "[Y/N]" in full_text) or
+        if (("Unload Slot " in full_text and
+             ("?" in full_text or "[Y/N]" in full_text)) or
+                "Unload Plugin" in full_text or
                 "Unload Slot (0..7):" in full_text):
             return "unload_plugin_prompt"
         if "Goto line:" in full_text:

@@ -243,9 +243,14 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\r")
-        ok, out_pop = read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        ok, out_pop = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         assert ok, "Unload modal popup prompt missing"
+        assert b"Unload Slot 3?" in out_pop, "Unload modal popup prompt missing"
         assert b"Unload Plugin" in out_pop, "Unload modal popup title missing"
+        assert b"Unloading plugin frees Far RAM slot" in out_pop, \
+            "Unload modal popup description missing"
+        assert b"[Y]es" in out_pop and b"[ESC]=Cancel" in out_pop, \
+            "Unload modal popup keys missing"
         border_line = b"+------------------------------------------------+"
         assert border_line in out_pop, "Unload modal popup border missing"
         os.write(master, b"y")
@@ -294,7 +299,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"3")
-        read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        read_until(master, b"Unload Slot 3?", timeout=4.0)
         os.write(master, b"y")
         ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
@@ -341,7 +346,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\r")
-        read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        read_until(master, b"Unload Slot 3?", timeout=4.0)
         os.write(master, b"y")
         ok, out_u4 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:

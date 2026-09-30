@@ -1006,9 +1006,9 @@ CONFIRM_UNLOAD_SLOT:
 	LD	DE,STR_POPUP_BORDER
 	CALL	HOST_PRINT_STR
 
-	; Line 4: Blank line
+	; Line 4: Description
 	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_SAVE_CFG_BLANK
+	LD	DE,STR_UNLOAD_DESC
 	CALL	HOST_PRINT_STR
 
 	; Line 5: Confirmation prompt with slot number
@@ -1027,11 +1027,25 @@ CONFIRM_UNLOAD_SLOT:
 	LD	DE,STR_POPUP_BORDER
 	CALL	HOST_PRINT_STR
 
+	; Position cursor inside popup on prompt line after "Unload Slot N? "
+	; Row = (POPUP_ROW) - 3, Col = (POPUP_COL) + 32
+	LD	A,(POPUP_ROW)
+	SUB	3
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,32
+	LD	L,A
+	CALL	HOST_LOCATE_RC
+	LD	DE,STR_SHOW_CURSOR
+	CALL	HOST_PRINT_STR
+
 CUS_KEY_LOOP:
 	CALL	HOST_GET_KEY
 	CP	27			; ESC
 	JR	NZ,CUS_NOT_ESC
 	CALL	DRAIN_ESC_SEQUENCE
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
 	RET
 CUS_NOT_ESC:
 	CP	'y'
@@ -1041,12 +1055,19 @@ CUS_NOT_ESC:
 	CP	13			; Enter confirms
 	JR	Z,CUS_CONFIRMED
 	CP	'n'
-	RET	Z
+	JR	Z,CUS_CANCELLED
 	CP	'N'
-	RET	Z
+	JR	Z,CUS_CANCELLED
 	JR	CUS_KEY_LOOP
 
+CUS_CANCELLED:
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
+	RET
+
 CUS_CONFIRMED:
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
 	LD	A,(SELECTED_SLOT)
 	CALL	HOST_UNLOAD_SLOT
 	RET
@@ -2113,9 +2134,10 @@ STR_SAVE_CFG_OK:	DB	"|             [Saved to PLUGIN.CFG]              |", 0
 STR_SAVE_CFG_FAIL:	DB	"|           [Error saving PLUGIN.CFG]            |", 0
 STR_SAVE_CFG_KEY:	DB	"|           [Press any key to continue]          |", 0
 STR_UNLOAD_TITLE:	DB	"|                 Unload Plugin                  |", 0
-STR_UNLOAD_PROMPT_PRE:	DB	"|              Unload Slot ", 0
-STR_UNLOAD_PROMPT_POST:	DB	"? [Y/N]              |", 0
-STR_UNLOAD_KEYS:	DB	"|          [Y]es / [N]o / [ESC]=Cancel           |", 0
+STR_UNLOAD_DESC:	DB	"|      Unloading plugin frees Far RAM slot       |", 0
+STR_UNLOAD_PROMPT_PRE:	DB	"|                 Unload Slot ", 0
+STR_UNLOAD_PROMPT_POST:	DB	"?                 |", 0
+STR_UNLOAD_KEYS:	DB	"|        [Y]es      [N]o      [ESC]=Cancel       |", 0
 
 STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0
 STR_PLUG_TYPE_PRL:	DB	"PRL   ", 0

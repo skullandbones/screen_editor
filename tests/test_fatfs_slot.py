@@ -328,7 +328,7 @@ def run_fatfs_slot_test():
         # 10. Unload Slot 3 ('3' then 'y')
         time.sleep(0.3)
         os.write(master, b"3")
-        read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        read_until(master, b"Unload Slot 3?", timeout=4.0)
         time.sleep(0.1)
         os.write(master, b"y")
         ok, out_u = read_until(master, b"(empty slot)", timeout=6.0)
