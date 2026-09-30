@@ -10832,16 +10832,21 @@ DRAW_FIND_POPUP_BODY:
 	LD	DE,STR_POPUP_BORDER
 	CALL	PRINT_STR
 
-	; Line 4: Prompt and input field
+	; Line 4: Match mode (Description)
 	CALL	POPUP_LOCATE_NEXT
 	LD	A,(SEARCH_CASE_SENSITIVE)
 	OR	A
-	JR	Z,DFP_INSENS
-	LD	DE,STR_FIND_POPUP_PROMPT_EXACT
-	JR	DFP_PRINT_PFX
-DFP_INSENS:
-	LD	DE,STR_FIND_POPUP_PROMPT_INSENS
-DFP_PRINT_PFX:
+	JR	Z,DFP_MODE_INSENS
+	LD	DE,STR_FIND_POPUP_MODE_EXACT
+	JR	DFP_PRINT_MODE
+DFP_MODE_INSENS:
+	LD	DE,STR_FIND_POPUP_MODE_INSENS
+DFP_PRINT_MODE:
+	CALL	PRINT_STR
+
+	; Line 5: Prompt and input field (Query Line)
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_FIND_POPUP_PROMPT
 	CALL	PRINT_STR
 	; Echo prefilled / current SEARCH_INPUT_BUF if B > 0
 	LD	A,B
@@ -10863,18 +10868,6 @@ DFP_BOX_CLOSE:
 	LD	DE,STR_FIND_POPUP_BOX_CLOSE
 	CALL	PRINT_STR
 
-	; Line 5: Match mode
-	CALL	POPUP_LOCATE_NEXT
-	LD	A,(SEARCH_CASE_SENSITIVE)
-	OR	A
-	JR	Z,DFP_MODE_INSENS
-	LD	DE,STR_FIND_POPUP_MODE_EXACT
-	JR	DFP_PRINT_MODE
-DFP_MODE_INSENS:
-	LD	DE,STR_FIND_POPUP_MODE_INSENS
-DFP_PRINT_MODE:
-	CALL	PRINT_STR
-
 	; Line 6: Keys
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_FIND_POPUP_KEYS
@@ -10886,12 +10879,12 @@ DFP_PRINT_MODE:
 	CALL	PRINT_STR
 
 	; Position cursor inside popup box at
-	; (POPUP_START_ROW + 3, POPUP_COL + 18 + B)
+	; (POPUP_START_ROW + 4, POPUP_COL + 13 + B)
 	LD	A,(POPUP_START_ROW)
-	ADD	A,3
+	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
-	ADD	A,18
+	ADD	A,13
 	ADD	A,B
 	LD	L,A
 	CALL	LOCATE_RC
@@ -11926,7 +11919,7 @@ DRP_PAD_LOOP:
 	CALL	PUTC
 	DEC	C
 	JR	NZ,DRP_PAD_LOOP
-	LD	DE,STR_FIND_POPUP_BOX_CLOSE
+	LD	DE,STR_REPLACE_POPUP_BOX_CLOSE
 	CALL	PRINT_STR
 
 	; Line 5: Instructions
@@ -23051,24 +23044,24 @@ STR_POPUP_TRUNC_KEY:
 ; Find Modal Pop-up Strings (50 cols x 7 rows)
 STR_FIND_POPUP_TITLE:
 	DB	"|                   Find Text                    |", 0
-STR_FIND_POPUP_PROMPT_EXACT:
-	DB	"| Find (Exact):  [", 0
-STR_FIND_POPUP_PROMPT_INSENS:
-	DB	"| Find (Insens): [", 0
-STR_FIND_POPUP_BOX_CLOSE:
-	DB	"] |", 0
 STR_FIND_POPUP_MODE_EXACT:
-	DB	"| Match:   [Case Sensitive  ]                    |", 0
+	DB	"|           Match: [Case Sensitive  ]            |", 0
 STR_FIND_POPUP_MODE_INSENS:
-	DB	"| Match:   [Case Insensitive]                    |", 0
+	DB	"|           Match: [Case Insensitive]            |", 0
+STR_FIND_POPUP_PROMPT:
+	DB	"|     Find: [", 0
+STR_FIND_POPUP_BOX_CLOSE:
+	DB	"]      |", 0
 STR_FIND_POPUP_KEYS:
-	DB	"| Enter:Find       Tab:Toggle Case    ESC:Cancel |", 0
+	DB	"| [Enter]=Find  [Tab]=Toggle Case  [ESC]=Cancel  |", 0
 
 ; Replace Modal Pop-up Strings (50 cols x 7 rows)
 STR_REPLACE_POPUP_TITLE:
 	DB	"|                  Replace Text                  |", 0
 STR_REPLACE_POPUP_PROMPT:
 	DB	"| Replace with:  [", 0
+STR_REPLACE_POPUP_BOX_CLOSE:
+	DB	"] |", 0
 STR_REPLACE_POPUP_MSG:
 	DB	"| Enter replacement text to substitute for match |", 0
 STR_REPLACE_POPUP_KEYS:

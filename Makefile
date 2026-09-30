@@ -44,8 +44,8 @@ plugins:
 
 image: $(TARGET) plugins
 	@echo "==> Injecting $(TARGET) and plugins into hd1k image (0 & 3)..."
-	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 2>/dev/null || true
-	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 0:se.com 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:se.com
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.CFG 2>/dev/null || true
@@ -72,8 +72,8 @@ image: $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HIBERN.OVL 0:HIBERN.OVL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HELP.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HELP.OVL 0:HELP.OVL
-	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 2>/dev/null || true
-	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 0:se.com 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:se.com
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.CFG 2>/dev/null || true

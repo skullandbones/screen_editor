@@ -596,11 +596,13 @@ def test_se_execution():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x06")
-        out_find_prompt = read_until(master, b"Find (Exact):", timeout=4.0)
-        if b"Find (Exact):" not in out_find_prompt:
+        out_find_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if (b"Find: [" not in out_find_prompt or
+                b"[ESC]=Cancel" not in out_find_prompt):
             print(f"[-] Ctrl+F failed to open Find prompt. Buffer: {repr(out_find_prompt)}", flush=True)
             return False
         # Cancel with ESC
+        time.sleep(0.1)
         os.write(master, b"\x1b")
         read_until(master, b"Line    4/4", timeout=4.0)
         drain_all(master)
@@ -2361,10 +2363,11 @@ def test_se_execution():
         # 1. Press Ctrl+F -> verify default [Exact] prompt
         time.sleep(0.2)
         os.write(master, b"\x06")
-        out_s45_f1 = read_until(master, b"Find (Exact):", timeout=4.0)
-        if b"Find (Exact):" not in out_s45_f1:
+        out_s45_f1 = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if b"Find: [" not in out_s45_f1 or b"Case Sensitive" not in out_s45_f1:
             print(f"[-] Step 45 failed: Ctrl+F prompt missing. Buffer: {repr(out_s45_f1)}", flush=True)
             return False
+        time.sleep(0.1)
 
         # 2. Search for exact "Line 15"
         os.write(master, b"Line 15\r")
@@ -2379,7 +2382,8 @@ def test_se_execution():
         read_until(master, b"Line    1/30", timeout=4.0)
 
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"line 15\r")
         out_s45_nf = read_until(master, b"Pattern not found.", timeout=4.0)
         if b"Pattern not found." not in out_s45_nf:
@@ -2389,7 +2393,8 @@ def test_se_execution():
         # 4. Search for common word "content" on Line 1, then repeat with Ctrl+N
         time.sleep(0.5)
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"content\r")
         read_until(master, b"Line    1/30", timeout=4.0)
 
@@ -2423,14 +2428,17 @@ def test_se_execution():
 
         # Open Find: Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
 
         # Press Tab (Ctrl+I) to toggle to [Insens]
         os.write(master, b"\t")
-        out_s46_ins = read_until(master, b"Find (Insens):", timeout=4.0)
-        if b"Find (Insens):" not in out_s46_ins:
+        out_s46_ins = read_until(master, b"Case Insensitive", timeout=4.0)
+        if b"Case Insensitive" not in out_s46_ins:
             print(f"[-] Step 46 failed: Tab/Ctrl+I did not toggle to [Insens]. Buffer: {repr(out_s46_ins)}", flush=True)
             return False
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
 
         # Search for lowercase "line 20"
         os.write(master, b"line 20\r")
@@ -2441,17 +2449,24 @@ def test_se_execution():
 
         # Verify setting persisted: next Ctrl+F starts in [Insens]
         time.sleep(0.2)
+        drain_all(master)
         os.write(master, b"\x06")
-        out_s46_pers = read_until(master, b"Find (Insens):", timeout=4.0)
-        if b"Find (Insens):" not in out_s46_pers:
+        out_s46_pers = read_until(master, b"Case Insensitive", timeout=4.0)
+        if b"Case Insensitive" not in out_s46_pers:
             print(f"[-] Step 46 failed: [Insens] setting did not persist. Buffer: {repr(out_s46_pers)}", flush=True)
             return False
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
 
         # Toggle back to [Exact] and cancel
         os.write(master, b"\t")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"Case Sensitive", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"\x1b")
         read_until(master, b"Line   20/30", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
 
         print("[+] Successfully verified Case Insensitivity Toggle (Ctrl+I) (Step 46)!", flush=True)
 
@@ -2464,10 +2479,13 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x14\x01")
         read_until(master, b"Line    1/30", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
 
         # Trigger Replace: Ctrl+R
         os.write(master, b"\x12")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"Line 01\r")
         out_s47_rep_prompt = read_until(master, b"Replace with:", timeout=4.0)
         if b"Replace with:" not in out_s47_rep_prompt:
@@ -2502,7 +2520,8 @@ def test_se_execution():
         drain_all(master)
         # Search for "BetaLine" with Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"BetaLine\r")
         out_s48 = read_until(master, b"Col 8", timeout=4.0)
         if b"[BLK: 8c LOCK]" not in out_s48:
@@ -2513,13 +2532,16 @@ def test_se_execution():
             return False
 
         # Press ESC to dismiss block highlight
-        time.sleep(0.3)
+        time.sleep(0.2)
         os.write(master, b"\x1b")
-        time.sleep(0.3)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
+
         # Re-search: Ctrl+F then Enter to repeat previous search
+        time.sleep(0.2)
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"\r")
         out_s48_re = read_until(master, b"Col 8", timeout=4.0)
         if b"[BLK: 8c LOCK]" not in out_s48_re or b"Col 8" not in out_s48_re:
@@ -2532,9 +2554,9 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         print("[*] Step 49: Verifying Start Search from Highlighted Block...", flush=True)
         # Dismiss existing block with ESC
-        time.sleep(0.3)
+        time.sleep(0.2)
         os.write(master, b"\x1b")
-        time.sleep(0.3)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
         # Move to top of document: Ctrl+T, Ctrl+A (Line 1 Col 0)
         os.write(master, b"\x14\x01")
@@ -2552,11 +2574,11 @@ def test_se_execution():
 
         # Press Ctrl+F: should imply Ctrl+K and pre-fill "Line"
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
-        out_s49_prompt = read_until(master, b"Line", timeout=4.0)
-        if b"Line" not in out_s49_prompt:
+        out_s49_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if b"Find: [Line" not in out_s49_prompt:
             print(f"[-] Step 49 failed: Prompt not pre-filled with block text. Buffer: {repr(out_s49_prompt)}", flush=True)
             return False
+        time.sleep(0.1)
 
         # Confirm search with Enter
         os.write(master, b"\r")
@@ -2574,7 +2596,8 @@ def test_se_execution():
         drain_all(master)
         # Search for a pattern that does not exist anywhere:
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         # Erase prefilled "Line" (4 backspaces) and type ZZZ999
         os.write(master, b"\x08\x08\x08\x08ZZZ999\r")
         out_s50_notfound = read_until(master, b"Pattern not found.", timeout=4.0)
@@ -2586,7 +2609,8 @@ def test_se_execution():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"BetaLine\r")
         read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
 
@@ -2608,7 +2632,8 @@ def test_se_execution():
         drain_all(master)
         # Search for "content" with Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         # Erase prefilled "BetaLine" (8 backspaces) and type "content\r"
         os.write(master, b"\x08\x08\x08\x08\x08\x08\x08\x08content\r")
         read_until(master, b"Line    1/30", timeout=4.0)
@@ -2637,8 +2662,12 @@ def test_se_execution():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x12") # Ctrl+R
-        read_until(master, b"Find (Exact):", timeout=4.0)
-        read_until(master, b"content", timeout=4.0)
+        out_s51_rep = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if b"Find: [content" not in out_s51_rep:
+            print(f"[-] Step 51 failed: Prompt not pre-filled with content. "
+                  f"Buffer: {repr(out_s51_rep)}", flush=True)
+            return False
+        time.sleep(0.1)
         os.write(master, b"\r")
         read_until(master, b"Replace with:", timeout=4.0)
         os.write(master, b"Item\r")

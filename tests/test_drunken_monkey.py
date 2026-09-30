@@ -393,7 +393,8 @@ class VT100QualityMonitor:
             return "goto_line_prompt"
         if "Replace with:" in full_text:
             return "replace_prompt"
-        if "Find (Exact):" in full_text or "Find (Insens):" in full_text:
+        if ("Find:" in full_text or "Find Text" in full_text or
+                "Find (Exact):" in full_text or "Find (Insens):" in full_text):
             return "find_prompt"
         if "File already exists. Overwrite?" in full_text:
             return "overwrite_prompt"
