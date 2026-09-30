@@ -11908,7 +11908,12 @@ DRAW_REPLACE_POPUP_FULL:
 	LD	DE,STR_POPUP_BORDER
 	CALL	PRINT_STR
 
-	; Line 4: Prompt and empty input box
+	; Line 4: Instructions (Description)
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REPLACE_POPUP_MSG
+	CALL	PRINT_STR
+
+	; Line 5: Prompt and empty input box (Query Line)
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_REPLACE_POPUP_PROMPT
 	CALL	PRINT_STR
@@ -11922,11 +11927,6 @@ DRP_PAD_LOOP:
 	LD	DE,STR_REPLACE_POPUP_BOX_CLOSE
 	CALL	PRINT_STR
 
-	; Line 5: Instructions
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_REPLACE_POPUP_MSG
-	CALL	PRINT_STR
-
 	; Line 6: Keys
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_REPLACE_POPUP_KEYS
@@ -11937,9 +11937,9 @@ DRP_PAD_LOOP:
 	LD	DE,STR_POPUP_BORDER
 	CALL	PRINT_STR
 
-	; Position cursor inside replace box at (POPUP_START_ROW + 3, POPUP_COL + 18)
+	; Position cursor inside replace box at (POPUP_START_ROW + 4, POPUP_COL + 18)
 	LD	A,(POPUP_START_ROW)
-	ADD	A,3
+	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
 	ADD	A,18
@@ -23059,13 +23059,13 @@ STR_FIND_POPUP_KEYS:
 STR_REPLACE_POPUP_TITLE:
 	DB	"|                  Replace Text                  |", 0
 STR_REPLACE_POPUP_PROMPT:
-	DB	"| Replace with:  [", 0
+	DB	"|  Replace with: [", 0
 STR_REPLACE_POPUP_BOX_CLOSE:
 	DB	"] |", 0
 STR_REPLACE_POPUP_MSG:
 	DB	"| Enter replacement text to substitute for match |", 0
 STR_REPLACE_POPUP_KEYS:
-	DB	"| Enter:Confirm                       ESC:Cancel |", 0
+	DB	"|        [Enter]=Confirm     [ESC]=Cancel        |", 0
 
 ; Goto Line Modal Pop-up Strings (50 cols x 7 rows)
 STR_GOTO_POPUP_TITLE:
