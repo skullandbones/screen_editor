@@ -831,12 +831,16 @@ def find_paths():
         workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
     )
     golden_img = os.path.join(
-        workspace_root, "tools", "romwbw_src", "Binary", "hd1k_golden.img"
-    )
-    combo_img = os.path.join(
         workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
     )
-    img_file = golden_img if os.path.isfile(golden_img) else combo_img
+    img_dir = os.path.join(repo_root, "disks")
+    img_file = os.path.join(img_dir, "hd1k_combo.img")
+    if not os.path.isfile(img_file):
+        os.makedirs(img_dir, exist_ok=True)
+        subprocess.run(
+            ["cp", "--sparse=always", golden_img, img_file], check=True
+        )
+        os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"

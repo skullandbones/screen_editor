@@ -18,7 +18,17 @@ workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
 
 emu_bin = os.path.join(workspace_root, "tools", "rc2014_emu", "rc2014")
 rom_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom")
-img_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img")
+golden_img = os.path.join(
+    workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
+)
+img_dir = os.path.join(repo_root, "disks")
+img_file = os.path.join(img_dir, "hd1k_combo.img")
+if not os.path.isfile(img_file):
+    os.makedirs(img_dir, exist_ok=True)
+    subprocess.run(
+        ["cp", "--sparse=always", golden_img, img_file], check=True
+    )
+    os.chmod(img_file, 0o644)
 
 def read_until(master_fd, match_bytes, timeout=6.0):
     buf = b""

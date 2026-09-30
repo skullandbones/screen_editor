@@ -28,8 +28,20 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 WORKSPACE_ROOT = os.path.abspath(os.path.join(REPO_ROOT, "..", ".."))
 
 EMU_BIN = os.path.join(WORKSPACE_ROOT, "tools", "rc2014_emu", "rc2014")
-ROM_FILE = os.path.join(WORKSPACE_ROOT, "tools", "romwbw_src", "Binary", "RC2014_std.rom")
-IMG_FILE = os.path.join(WORKSPACE_ROOT, "tools", "romwbw_src", "Binary", "hd1k_combo.img")
+ROM_FILE = os.path.join(
+    WORKSPACE_ROOT, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
+)
+GOLDEN_IMG = os.path.join(
+    WORKSPACE_ROOT, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
+)
+IMG_DIR = os.path.join(REPO_ROOT, "disks")
+IMG_FILE = os.path.join(IMG_DIR, "hd1k_combo.img")
+if not os.path.isfile(IMG_FILE):
+    os.makedirs(IMG_DIR, exist_ok=True)
+    subprocess.run(
+        ["cp", "--sparse=always", GOLDEN_IMG, IMG_FILE], check=True
+    )
+    os.chmod(IMG_FILE, 0o644)
 
 
 def read_until(master_fd, match_bytes, timeout=8.0):
