@@ -2581,28 +2581,42 @@ def test_se_execution():
             return False
 
         # Press ESC to dismiss block highlight
-        time.sleep(0.3)
+        time.sleep(0.2)
         os.write(master, b"\x1b")
-        time.sleep(0.3)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+        time.sleep(0.1)
         drain_all(master)
         # Re-search: Ctrl+F then Enter to repeat previous search
         os.write(master, b"\x06")
         read_until(master, b"Find (Exact):", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"\r")
         out_s48_re = read_until(master, b"Col 8", timeout=4.0)
         if b"[BLK: 8c LOCK]" not in out_s48_re or b"Col 8" not in out_s48_re:
-            print(f"[-] Step 48 failed: Solidified block re-match missing or not at Col 8. Buffer: {repr(out_s48_re)}", flush=True)
+            print(
+                f"[-] Step 48 failed: Solidified block re-match missing or "
+                f"not at Col 8. Buffer: {repr(out_s48_re)}",
+                flush=True
+            )
             return False
-        print("[+] Successfully verified Solidified Block Highlighting on Match (Step 48)!", flush=True)
+        print(
+            "[+] Successfully verified Solidified Block Highlighting on "
+            "Match (Step 48)!",
+            flush=True
+        )
 
         # ---------------------------------------------------------------------
         # Step 49: Start Search / Replace from Active Highlighted Block
         # ---------------------------------------------------------------------
-        print("[*] Step 49: Verifying Start Search from Highlighted Block...", flush=True)
+        print(
+            "[*] Step 49: Verifying Start Search from Highlighted Block...",
+            flush=True
+        )
         # Dismiss existing block with ESC
-        time.sleep(0.3)
+        time.sleep(0.2)
         os.write(master, b"\x1b")
-        time.sleep(0.3)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+        time.sleep(0.1)
         drain_all(master)
         # Move to top of document: Ctrl+T, Ctrl+A (Line 1 Col 0)
         os.write(master, b"\x14\x01")
