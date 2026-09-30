@@ -98,93 +98,120 @@ def run_sanity_test():
 
     try:
         # 1. Boot loader prompt
+        print("[*] Step 1: Waiting for RomWBW boot loader prompt...",
+              flush=True)
         out = read_until(master, b"Boot [H=Help]:", timeout=6.0)
         if b"Boot [H=Help]:" not in out:
-            print("[-] Failed to reach RomWBW boot loader prompt.", flush=True)
+            print("[-] Step 1: Failed to reach RomWBW boot loader prompt.",
+                  flush=True)
             return False
+        print("[+] Step 1: Boot loader prompt reached.", flush=True)
 
         # 2. Boot CP/M on ROM disk (Choice 'c') and switch to Drive C:
+        print("[*] Step 2: Booting into CP/M and switching to Drive C:...",
+              flush=True)
         time.sleep(0.5)
         os.write(master, b"c\r")
         out = read_until(master, b"B>", timeout=6.0)
         if b"B>" not in out:
-            print("[-] Failed to boot into CP/M prompt.", flush=True)
+            print("[-] Step 2: Failed to boot into CP/M prompt.", flush=True)
             return False
 
         time.sleep(0.5)
         os.write(master, b"c:\r")
         out = read_until(master, b"C>", timeout=10.0)
         if b"C>" not in out:
-            print(f"[-] Failed to switch to Drive C:. Buffer captured: {repr(out)}", flush=True)
+            print(f"[-] Step 2: Failed to switch to Drive C:. Buffer: "
+                  f"{repr(out)}", flush=True)
             return False
-        print("[+] Switched to Drive C>.", flush=True)
+        print("[+] Step 2: Switched to Drive C>.", flush=True)
 
         # 3. Launch SE.COM
+        print("[*] Step 3: Launching SE.COM...", flush=True)
         time.sleep(0.5)
         os.write(master, b"se\r")
         out = read_until(master, b"for about", timeout=30.0)
         if b"for about" not in out and b"Col 0" not in out:
-            print(f"[-] SE.COM splash screen not detected. Buffer: {repr(out)}", flush=True)
+            print(f"[-] Step 3: SE.COM splash screen not detected. Buffer: "
+                  f"{repr(out)}", flush=True)
             return False
-        print("[+] Splash screen displayed successfully.", flush=True)
+        print("[+] Step 3: Splash screen displayed successfully.", flush=True)
 
         # 4. Enter Editor Mode ('e')
+        print("[*] Step 4: Entering Editor Mode ('e')...", flush=True)
         time.sleep(0.3)
         os.write(master, b"e")
         out_edit = read_until(master, b"^K: Editor keys", timeout=6.0)
         if b"(Untitled)" not in out_edit or b"^K: Editor keys" not in out_edit:
-            print(f"[-] Failed to enter editor mode. Buffer: {repr(out_edit)}", flush=True)
+            print(f"[-] Step 4: Failed to enter editor mode. Buffer: "
+                  f"{repr(out_edit)}", flush=True)
             return False
-        print("[+] Entered editor mode with status bar verified.", flush=True)
+        print("[+] Step 4: Entered editor mode with status bar verified.",
+              flush=True)
 
         # 5. Type 'SANITY CHECK OK'
+        print("[*] Step 5: Typing 'SANITY CHECK OK'...", flush=True)
         time.sleep(0.1)
         os.write(master, b"SANITY CHECK OK")
         out_typed = read_until(master, b"Col 15", timeout=3.0)
         if b"SANITY CHECK OK" not in out_typed:
-            print(f"[-] Text insertion failed. Buffer: {repr(out_typed)}", flush=True)
+            print(f"[-] Step 5: Text insertion failed. Buffer: "
+                  f"{repr(out_typed)}", flush=True)
             return False
-        print("[+] Text insertion and cursor tracking verified.", flush=True)
+        print("[+] Step 5: Text insertion and cursor tracking verified.",
+              flush=True)
 
-        # 6. Test Block Mode toggle: Ctrl+B to start, verify [SEL: 0c], Ctrl+B to toggle off
+        # 6. Test Block Mode toggle: Ctrl+B to start, verify [SEL: 0c]
+        print("[*] Step 6: Testing Block Mode toggle (Ctrl+B)...", flush=True)
         os.write(master, b"\x02")
         out_blk = read_until(master, b"[SEL: 0c]", timeout=3.0)
         if b"[SEL: 0c]" not in out_blk:
-            print(f"[-] Block mode activation failed. Buffer: {repr(out_blk)}", flush=True)
+            print(f"[-] Step 6: Block mode activation failed. Buffer: "
+                  f"{repr(out_blk)}", flush=True)
             return False
         os.write(master, b"\x02")
         out_unblk = read_until(master, b"^K: Editor keys", timeout=3.0)
         if b"^K: Editor keys" not in out_unblk:
-            print(f"[-] Block mode deactivation failed. Buffer: {repr(out_unblk)}", flush=True)
+            print(f"[-] Step 6: Block mode deactivation failed. Buffer: "
+                  f"{repr(out_unblk)}", flush=True)
             return False
-        print("[+] Block mode toggle verified.", flush=True)
+        print("[+] Step 6: Block mode toggle verified.", flush=True)
 
         # 7. Test Editor Mode Keys Help Screen: Ctrl+K, then return with Enter
+        print("[*] Step 7: Testing Editor Mode Keys Help Screen (Ctrl+K)...",
+              flush=True)
         os.write(master, b"\x0b")
-        out_help = read_until(master, b"Press any key to return to editor", timeout=3.0)
+        out_help = read_until(master,
+                              b"Press any key to return to editor",
+                              timeout=3.0)
         if b"EDITOR MODE KEYS" not in out_help:
-            print(f"[-] Help screen failed. Buffer: {repr(out_help)}", flush=True)
+            print(f"[-] Step 7: Help screen failed. Buffer: {repr(out_help)}",
+                  flush=True)
             return False
         drain_all(master)
         os.write(master, b"\r")
         out_back = read_until(master, b"^K: Editor keys", timeout=3.0)
         if b"SANITY CHECK OK" not in out_back:
-            print(f"[-] Return from help screen failed. Buffer: {repr(out_back)}", flush=True)
+            print(f"[-] Step 7: Return from help screen failed. Buffer: "
+                  f"{repr(out_back)}", flush=True)
             return False
-        print("[+] Help screen and return verified.", flush=True)
+        print("[+] Step 7: Help screen and return verified.", flush=True)
 
-        # 8. Clean exit to CP/M with Ctrl+Q (prompts for unsaved changes since buffer was modified)
+        # 8. Clean exit to CP/M with Ctrl+Q (prompts for unsaved changes)
+        print("[*] Step 8: Testing clean exit with Ctrl+Q and prompt...",
+              flush=True)
         time.sleep(0.1)
         os.write(master, b"\x11")
         out_prompt = read_until(master, b"Cancel", timeout=3.0)
         if b"Save changes?" not in out_prompt or b"ESC" not in out_prompt:
-            print(f"[-] Save changes prompt failed. Buffer: {repr(out_prompt)}", flush=True)
+            print(f"[-] Step 8: Save changes prompt failed. Buffer: "
+                  f"{repr(out_prompt)}", flush=True)
             return False
         # Verify modal pop-up contains title and Save changes? prompt
         # inside the box enclosure
         if b"Unsaved Modifications" not in out_prompt or \
            b"|                 Save changes?" not in out_prompt:
-            print(f"[-] Save changes prompt not embedded in modal popup. "
+            print(f"[-] Step 8: Save changes prompt not embedded in popup. "
                   f"Buffer: {repr(out_prompt)}", flush=True)
             return False
 
@@ -192,25 +219,30 @@ def run_sanity_test():
         os.write(master, b"n")
         out_exit = read_until(master, b"C>", timeout=4.0)
         if b"C>" not in out_exit:
-            print(f"[-] Clean exit with Ctrl+Q failed. Buffer: {repr(out_exit)}", flush=True)
+            print(f"[-] Step 8: Clean exit with Ctrl+Q failed. Buffer: "
+                  f"{repr(out_exit)}", flush=True)
             return False
-        print("[+] Clean exit to CP/M prompt with unsaved changes prompt verified.", flush=True)
+        print("[+] Step 8: Clean exit with unsaved prompt verified.",
+              flush=True)
 
         # 9. Verify CLI file load & clean status bar filename: 'se 2.TXT'
+        print("[*] Step 9: Verifying CLI file load & status bar (se 2.TXT)...",
+              flush=True)
         drain_all(master)
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
         out_load = read_until(master, b"Line    1/2", timeout=30.0)
         if b"| C:2.TXT        |" not in out_load:
-            print(f"[-] Status bar filename malformed (expected "
+            print(f"[-] Step 9: Status bar filename malformed (expected "
                   f"'| C:2.TXT        |'). Buffer: {repr(out_load[-400:])}",
                   flush=True)
             return False
         if b"2.TXTU:" in out_load or b".TXTU:" in out_load:
-            print(f"[-] Status bar corrupted with erroneous 'U:' suffix! "
-                  f"Buffer: {repr(out_load[-400:])}", flush=True)
+            print("[-] Step 9: Status bar corrupted with "
+                  f"erroneous 'U:' suffix! Buffer: {repr(out_load[-400:])}",
+                  flush=True)
             return False
-        print("[+] Verified clean status bar for CP/M file (se 2.TXT): "
+        print("[+] Step 9: Verified clean status bar for CP/M file (se 2.TXT): "
               "'| C:2.TXT        |'.", flush=True)
 
         # Clean exit to CP/M
@@ -218,10 +250,10 @@ def run_sanity_test():
         os.write(master, b"\x11")
         out_exit2 = read_until(master, b"C>", timeout=6.0)
         if b"C>" not in out_exit2:
-            print(f"[-] Exit from 2.TXT session failed. "
+            print(f"[-] Step 9: Exit from 2.TXT session failed. "
                   f"Buffer: {repr(out_exit2)}", flush=True)
             return False
-        print("[+] Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Step 9: Clean exit back to CP/M prompt.", flush=True)
 
         elapsed = time.time() - t_start
         print(f"[+] All SE.COM sanity tests PASSED in {elapsed:.2f}s!", flush=True)

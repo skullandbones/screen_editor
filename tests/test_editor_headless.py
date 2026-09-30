@@ -1550,7 +1550,11 @@ def test_se_execution():
         os.write(master, b"\x02")
         time.sleep(0.1)
         drain_all(master)
-        print("[+] Successfully verified dynamic tab block highlighting on last line!", flush=True)
+        print(
+            "[+] Step 35: Successfully verified dynamic tab block "
+            "highlighting on last line!",
+            flush=True
+        )
 
         # Step 36: Test Solidified Block Copy (Ctrl+C)
         print("[*] Step 36: Testing solidified block copy (Ctrl+C)...", flush=True)
@@ -1676,7 +1680,11 @@ def test_se_execution():
             print(f"[-] Ctrl+C operated after block was cancelled! Buffer: {repr(out_cancelled)}", flush=True)
             return False
 
-        print("[+] Successfully verified solidified block copy (Ctrl+C) feature!", flush=True)
+        print(
+            "[+] Step 36: Successfully verified solidified block copy "
+            "(Ctrl+C) feature!",
+            flush=True
+        )
 
         # Step 37: Test Half-Open Caret Selection [Start, End) Semantics
         print("[*] Step 37: Testing half-open caret selection [Start, End) semantics...", flush=True)
@@ -2924,7 +2932,7 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x11")
         read_until(master, b"C>", timeout=4.0)
-        print("[+] Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Step 57: Clean exit back to CP/M prompt.", flush=True)
         print("[+] Successfully verified Open File (Ctrl+O & Splash :o) Unsaved Modifications Check (Step 54)!", flush=True)
 
         # ---------------------------------------------------------------------
@@ -3052,11 +3060,19 @@ def test_se_execution():
         if b"Line    1/3072" not in out_s57 or b"^K: Editor keys" not in out_s57:
             print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing '^K: Editor keys'. Buffer: {repr(out_s57[-200:])}", flush=True)
             return False
-        print("[+] BIG.TXT loaded with status bar showing '^K: Editor keys'.", flush=True)
+        print(
+            "[+] Step 57: BIG.TXT loaded with status bar showing "
+            "'^K: Editor keys'.",
+            flush=True
+        )
 
         # Step 57 note: Document capacity is now 16,384 lines under Phase 4 virtual paging engine,
         # so inserting a line at 3,072 lines no longer triggers in-memory OOM.
-        print("[+] BIG.TXT loaded successfully; Phase 4 virtual paging allows expansion past 3072 lines.", flush=True)
+        print(
+            "[+] Step 57: BIG.TXT loaded successfully; Phase 4 virtual "
+            "paging allows expansion past 3072 lines.",
+            flush=True
+        )
 
         # Type 'x' to modify document so Ctrl+Q triggers unsaved changes prompt
         drain_all(master)
@@ -3084,8 +3100,11 @@ def test_se_execution():
         time.sleep(0.5)
         drain_all(master)
         print("[+] Clean exit back to CP/M prompt.", flush=True)
-        print("[+] Successfully verified OOM Status Bar Replacement and "
-              "Revert on Keypress (Step 57)!", flush=True)
+        print(
+            "[+] Step 57: Successfully verified OOM Status Bar Replacement "
+            "and Revert on Keypress!",
+            flush=True
+        )
 
         # ---------------------------------------------------------------------
         # Step 58: Verifying Horizontal Scrolling in 80x24 Mode
@@ -4044,6 +4063,7 @@ def test_se_execution():
         print("[+] Successfully verified Block Insert File feature (Step 66)!", flush=True)
 
         # 67. Test Block Save feature (Ctrl+S when BLOCK_ACTIVE != 0)
+        print("[*] Step 67: Testing Block Save feature...", flush=True)
         # We currently have "HelloINSERTED END" on line 1.
         # Move cursor to col 5 (start of "INSERTED")
         time.sleep(0.2)
@@ -4366,7 +4386,8 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         # Step 70: Directory Listing Filter on Open, Save, Insert, Block Save
         # ---------------------------------------------------------------------
-        print("[*] Testing Directory Listing Filter (Step 70)...", flush=True)
+        print("[*] Step 70: Testing Directory Listing Filter on Open, Save, "
+              "Insert, and Block Save...", flush=True)
 
         # 1. Start SE from CP/M prompt
         time.sleep(0.5)

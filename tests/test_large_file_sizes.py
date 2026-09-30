@@ -190,13 +190,15 @@ def run_single_size_test(target_bytes, cpm_filename, description):
     print("=" * 70)
 
     # 1. Generate exact test file
+    print(f"[*] Step 1: Generating exact test file ({cpm_filename})...")
     total_lines = generate_text_file(target_bytes, test_file)
     print(
-        f"[+] Generated {test_file}: {target_bytes} bytes, "
+        f"[+] Step 1: Generated {test_file}: {target_bytes} bytes, "
         f"{total_lines} lines."
     )
 
     # 2. Prepare disk image
+    print("[*] Step 2: Preparing disk image...")
     subprocess.run(
         [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:$$$se$$$.swp"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -225,13 +227,16 @@ def run_single_size_test(target_bytes, cpm_filename, description):
         [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, test_file, cpm_user],
         check=True
     )
-    print(f"[+] Injected SE.COM and {cpm_filename} into disk image.")
+    print(f"[+] Step 2: Injected SE.COM and {cpm_filename} into disk image.")
 
     # 3. Boot emulator
+    print("[*] Step 3: Booting emulator...")
     proc, master = boot_cpm(emu_bin, rom_file, img_file)
+    print("[+] Step 3: RomWBW booted into CP/M successfully.")
 
     try:
         # 4. Ensure drive C directory is logged in
+        print("[*] Step 4: Ensuring drive C directory is logged in...")
         time.sleep(0.4)
         os.write(master, f"dir {cpm_filename}\r".encode("ascii"))
         out_dir = read_until(master, b"C>", timeout=10.0)
@@ -239,10 +244,11 @@ def run_single_size_test(target_bytes, cpm_filename, description):
         print(f"[*] CP/M DIR output:\n{dir_text}")
         time.sleep(0.4)
         drain_all(master, quiet_time=0.1)
+        print("[+] Step 4: Drive C directory logged in.")
 
         # 5. Launch editor
         cmd_str = f"se {cpm_filename}\r".encode("ascii")
-        print(f"[*] Executing 'se {cpm_filename}'...")
+        print(f"[*] Step 5: Executing 'se {cpm_filename}'...")
         t0 = time.time()
         os.write(master, cmd_str)
 
@@ -253,17 +259,18 @@ def run_single_size_test(target_bytes, cpm_filename, description):
         out_load += drain_all(master)
 
         if expected_line_stat not in out_load:
-            print(f"[-] Failed to load {cpm_filename}.")
+            print(f"[-] Step 5: Failed to load {cpm_filename}.")
             print(f"    out_load len: {len(out_load)}")
             print(f"    out_load head: {repr(out_load[:300])}")
             print(f"    out_load tail: {repr(out_load[-300:])}")
             return False
         print(
-            f"[+] Document loaded in {dt_load:.2f}s "
+            f"[+] Step 5: Document loaded in {dt_load:.2f}s "
             f"(verified Line 1/{total_lines})."
         )
 
         # 6. Verify Jump to Bottom (Ctrl+G)
+        print("[*] Step 6: Verifying Jump to Bottom (Ctrl+G)...")
         drain_all(master, quiet_time=0.15)
         os.write(master, b"\x07")  # Ctrl+G
         expected_bot = f"{total_lines}/{total_lines}".encode("ascii")
@@ -271,27 +278,32 @@ def run_single_size_test(target_bytes, cpm_filename, description):
         out_bot += drain_all(master, quiet_time=0.15)
 
         if expected_bot not in out_bot:
-            print(f"[-] Jump to bottom failed: {repr(out_bot[-200:])}")
+            print(f"[-] Step 6: Jump to bottom failed: {repr(out_bot[-200:])}")
             return False
-        print(f"[+] Jump to bottom (Ctrl+G) verified: Line {total_lines}.")
+        print(
+            f"[+] Step 6: Jump to bottom (Ctrl+G) verified: Line {total_lines}."
+        )
 
         # 7. Jump back to top (Ctrl+T)
+        print("[*] Step 7: Verifying Jump back to top (Ctrl+T)...")
         drain_all(master, quiet_time=0.15)
         os.write(master, b"\x14")  # Ctrl+T
         out_top = read_until(master, expected_line_stat, timeout=20.0)
         out_top += drain_all(master, quiet_time=0.15)
         if expected_line_stat not in out_top:
-            print(f"[-] Jump to top failed: {repr(out_top[-200:])}")
+            print(f"[-] Step 7: Jump to top failed: {repr(out_top[-200:])}")
             return False
-        print(f"[+] Jump to top (Ctrl+T) verified: Line 1/{total_lines}.")
+        print(
+            f"[+] Step 7: Jump to top (Ctrl+T) verified: Line 1/{total_lines}."
+        )
 
         # 8. Save document via Ctrl+S
-        print("[*] Saving file via Ctrl+S...")
+        print("[*] Step 8: Saving file via Ctrl+S...")
         drain_all(master, quiet_time=0.15)
         os.write(master, b"\x13")  # Ctrl+S
         out_save = read_until(master, b"SAVE FILE", timeout=10.0)
         if b"SAVE FILE" not in out_save:
-            print(f"[-] Save prompt not shown: {repr(out_save[-200:])}")
+            print(f"[-] Step 8: Save prompt not shown: {repr(out_save[-200:])}")
             return False
 
         # Confirm filename (Enter)
@@ -300,7 +312,8 @@ def run_single_size_test(target_bytes, cpm_filename, description):
         out_ow = read_until(master, b"Overwrite?", timeout=8.0)
         if b"Overwrite?" not in out_ow:
             print(
-                f"[-] Overwrite prompt not received: {repr(out_ow[-200:])}"
+                f"[-] Step 8: Overwrite prompt not received: "
+                f"{repr(out_ow[-200:])}"
             )
             return False
 
@@ -314,23 +327,27 @@ def run_single_size_test(target_bytes, cpm_filename, description):
         dt_save = time.time() - t_save0
         if b"^K: Editor keys" not in out_resumed:
             print(
-                f"[-] Editor did not resume after save: "
+                f"[-] Step 8: Editor did not resume after save: "
                 f"{repr(out_resumed[-200:])}"
             )
             return False
-        print(f"[+] File saved and editor resumed in {dt_save:.2f}s.")
+        print(f"[+] Step 8: File saved and editor resumed in {dt_save:.2f}s.")
 
         # 9. Clean exit via Ctrl+Q
+        print("[*] Step 9: Exiting editor cleanly via Ctrl+Q...")
         drain_all(master, quiet_time=0.2)
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl+Q
         out_exit = read_until(master, b"C>", timeout=10.0)
         if b"C>" not in out_exit:
-            print(f"[-] Failed clean exit to CP/M: {repr(out_exit[-200:])}")
+            print(f"[-] Step 9: Failed clean exit to CP/M: "
+                  f"{repr(out_exit[-200:])}")
             return False
-        print("[+] Exited cleanly to CP/M prompt.")
+        print("[+] Step 9: Exited cleanly to CP/M prompt.")
 
         # 10. Extract saved file and verify 100% byte fidelity
+        print("[*] Step 10: Extracting saved file and verifying byte "
+              "fidelity...")
         if os.path.exists(saved_file):
             os.remove(saved_file)
         subprocess.run(
@@ -344,7 +361,7 @@ def run_single_size_test(target_bytes, cpm_filename, description):
             clean_orig = f.read().split(b"\x1a")[0]
 
         if clean_saved != clean_orig:
-            print("[-] Byte comparison mismatch!")
+            print("[-] Step 10: Byte comparison mismatch!")
             print(
                 f"    Orig: {len(clean_orig)} bytes, "
                 f"Saved: {len(clean_saved)} bytes"
@@ -353,14 +370,14 @@ def run_single_size_test(target_bytes, cpm_filename, description):
 
         if len(clean_saved) != target_bytes:
             print(
-                f"[-] Size mismatch: got {len(clean_saved)}, "
+                f"[-] Step 10: Size mismatch: got {len(clean_saved)}, "
                 f"expected {target_bytes}"
             )
             return False
 
         print(
-            f"[+] 100% BYTE FIDELITY VERIFIED: exact {target_bytes} bytes "
-            f"preserved across load/save cycle!"
+            f"[+] Step 10: 100% BYTE FIDELITY VERIFIED: exact {target_bytes} "
+            f"bytes preserved across load/save cycle!"
         )
         return True
 
