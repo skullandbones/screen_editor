@@ -152,13 +152,16 @@ def run_test():
         print("[+] Switched to Drive C>.", flush=True)
 
         # 1. Launch SE.COM (Session 1)
+        print("[*] Step 1: Launching SE.COM (Session 1)...", flush=True)
         time.sleep(0.5)
         os.write(master, b"se\r")
         ok, _ = read_until(master, b"Col 0", timeout=45.0)
         assert ok, "Failed to display splash screen"
         drain_all(master)
+        print("[+] Step 1: SE.COM splash screen displayed.", flush=True)
 
         # 2. Enter Plugin Manager ('p')
+        print("[*] Step 2: Entering Plugin Manager ('p')...", flush=True)
         time.sleep(0.5)
         os.write(master, b"p")
         ok, out = read_until(master, b"SE - Plugin Manager", timeout=8.0)
@@ -169,11 +172,12 @@ def run_test():
         assert b"WORDCNT" in out, "WORDCNT not found in Slot 0"
         assert b"ROT13" in out, "ROT13 not found in Slot 1"
         assert b"BEAUTIFY" in out, "BEAUTIFY not found in Slot 2"
-        print("[+] Initial autoloaded slots verified "
+        print("[+] Step 2: Initial autoloaded slots verified "
               "(WORDCNT, ROT13, BEAUTIFY).",
               flush=True)
 
         # 3. Unload Slot 1 (ROT13)
+        print("[*] Step 3: Unloading Slot 1 (ROT13)...", flush=True)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"1")
@@ -182,9 +186,10 @@ def run_test():
         os.write(master, b"y")
         ok, out_u = read_until(master, b"(empty slot)", timeout=6.0)
         assert ok, "Failed to unload Slot 1"
-        print("[+] Slot 1 (ROT13) successfully unloaded.", flush=True)
+        print("[+] Step 3: Slot 1 (ROT13) successfully unloaded.", flush=True)
 
         # 4. Load MIDPLUG.PRL (8KB) into next free slot (Slot 1)
+        print("[*] Step 4: Loading MIDPLUG.PRL into Slot 1...", flush=True)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"l")
@@ -193,9 +198,12 @@ def run_test():
         os.write(master, b"MIDPLUG.PRL\r")
         ok, out_l = read_until(master, b"FAR (8KB)", timeout=8.0)
         assert ok and b"MIDPLUG" in out_l, "Failed to load MIDPLUG into Slot 1"
-        print("[+] MIDPLUG.PRL loaded into Slot 1 as 'FAR (8KB)'.", flush=True)
+        print("[+] Step 4: MIDPLUG.PRL loaded into Slot 1 as 'FAR (8KB)'.",
+              flush=True)
 
         # 5. Save configuration to PLUGIN.CFG ('s') and verify modal pop-up
+        print("[*] Step 5: Saving configuration to PLUGIN.CFG ('s')...",
+              flush=True)
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"s")
@@ -208,10 +216,12 @@ def run_test():
             "Save configuration confirmation message missing"
         assert b"+------------------------------------------------+" in out_s, \
             "Save configuration modal pop-up border missing"
-        print("[+] 's' key successfully displayed modal pop-up and saved "
-              "configuration to PLUGIN.CFG.", flush=True)
+        print("[+] Step 5: 's' key successfully displayed modal pop-up and "
+              "saved configuration to PLUGIN.CFG.", flush=True)
 
         # 6. Dismiss pop-up with Space, verify clean redraw, then exit ('q')
+        print("[*] Step 6: Dismissing pop-up and exiting to CP/M...",
+              flush=True)
         time.sleep(0.2)
         os.write(master, b" ")
         ok, _ = read_until(master, b"Up/Dn:select", timeout=5.0)
@@ -223,27 +233,32 @@ def run_test():
         os.write(master, b"\x11")  # Ctrl+Q
         ok, _ = read_until(master, b"C>", timeout=6.0)
         assert ok, "Failed to exit SE.COM to CP/M prompt"
-        print("[+] Exited SE.COM cleanly to CP/M prompt.", flush=True)
+        print("[+] Step 6: Exited SE.COM cleanly to CP/M prompt.", flush=True)
 
         # 7. Verify PLUGIN.CFG on disk
+        print("[*] Step 7: Verifying on-disk PLUGIN.CFG...", flush=True)
         cfg_disk = read_cfg_from_image(cpmcp_bin, img_file)
-        print(f"[*] On-disk PLUGIN.CFG contents:\n{cfg_disk.strip()}",
+        print(f"[*] Step 7: On-disk PLUGIN.CFG contents:\n{cfg_disk.strip()}",
               flush=True)
         assert "SLOT0=WORDCNT.OVL" in cfg_disk, "SLOT0 missing WORDCNT"
         assert "SLOT1=MIDPLUG.PRL" in cfg_disk, "SLOT1 missing MIDPLUG"
         assert "SLOT2=BEAUTIFY.PRL" in cfg_disk, "SLOT2 missing BEAUTIFY"
         assert "SLOT3=" in cfg_disk, "SLOT3 not empty"
-        print("[+] On-disk PLUGIN.CFG verified: SLOT1 contains MIDPLUG.PRL.",
-              flush=True)
+        print("[+] Step 7: On-disk PLUGIN.CFG verified: SLOT1 contains "
+              "MIDPLUG.PRL.", flush=True)
 
         # 8. Relaunch SE.COM (Session 2 - testing autoload)
+        print("[*] Step 8: Relaunching SE.COM (Session 2)...", flush=True)
         time.sleep(0.5)
         os.write(master, b"se\r")
         ok, _ = read_until(master, b"Col 0", timeout=45.0)
         assert ok, "Failed to display splash screen on relaunch"
         drain_all(master)
+        print("[+] Step 8: SE.COM relaunched successfully.", flush=True)
 
         # 9. Enter Plugin Manager ('p') on second launch
+        print("[*] Step 9: Entering Plugin Manager on second launch...",
+              flush=True)
         time.sleep(0.5)
         os.write(master, b"p")
         ok, out2 = read_until(master, b"SE - Plugin Manager", timeout=8.0)
@@ -252,16 +267,18 @@ def run_test():
         out2 += out2_tbl
 
         tbl_str = out2.decode('latin1', 'replace')
-        print(f"[*] Relaunched Plugin Manager table:\n{tbl_str}")
+        print(f"[*] Step 9: Relaunched Plugin Manager table:\n{tbl_str}")
         assert b"WORDCNT" in out2, "WORDCNT not autoloaded in Slot 0"
         assert b"MIDPLUG" in out2, "MIDPLUG not autoloaded in Slot 1"
         assert b"FAR (8KB)" in out2, "MIDPLUG 8KB mode not displayed"
         assert b"BEAUTIFY" in out2, "BEAUTIFY not autoloaded in Slot 2"
-        print("[+] Autoload on relaunch verified: "
+        print("[+] Step 9: Autoload on relaunch verified: "
               "MIDPLUG.PRL successfully loaded!",
               flush=True)
 
         # 10. Clean exit back to CP/M prompt
+        print("[*] Step 10: Exiting second session cleanly to CP/M...",
+              flush=True)
         time.sleep(0.3)
         os.write(master, b"q")
         read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
@@ -269,7 +286,8 @@ def run_test():
         os.write(master, b"\x11")  # Ctrl+Q
         ok, _ = read_until(master, b"C>", timeout=6.0)
         assert ok, "Failed to exit second SE.COM session to CP/M prompt"
-        print("[+] Clean exit from second session confirmed.", flush=True)
+        print("[+] Step 10: Clean exit from second session confirmed.",
+              flush=True)
 
         print("\n" + "=" * 65)
         print("  PLUGIN.CFG SAVE & RELOAD TEST PASSED 100%!")
