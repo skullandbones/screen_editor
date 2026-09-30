@@ -157,57 +157,76 @@ def test_se_execution():
 
     try:
         # 1. Wait for RomWBW boot loader prompt
+        print("[*] Step 1: Waiting for RomWBW boot loader prompt...",
+              flush=True)
         out = read_until(master, b"Boot [H=Help]:", timeout=6.0)
         if b"Boot [H=Help]:" not in out:
-            print("[-] Failed to reach RomWBW boot loader prompt.")
+            print("[-] Step 1: Failed to reach RomWBW boot loader prompt.")
             return False
-        print("[+] Boot loader prompt reached.")
+        print("[+] Step 1: Boot loader prompt reached.", flush=True)
 
         # 2. Boot into CP/M 2.2 on ROM disk (Choice 'c')
+        print("[*] Step 2: Booting into CP/M 2.2 on ROM disk...", flush=True)
         time.sleep(0.5)
         os.write(master, b"c\r")
         out = read_until(master, b"B>", timeout=6.0)
         if b"B>" not in out:
-            print("[-] Failed to boot into CP/M prompt.")
+            print("[-] Step 2: Failed to boot into CP/M prompt.")
             return False
-        print("[+] Booted into CP/M (Drive B>).")
+        print("[+] Step 2: Booted into CP/M (Drive B>).", flush=True)
 
         # 3. Switch to Drive C: (SD slice 0 with SE.COM)
+        print("[*] Step 3: Switching to Drive C:...", flush=True)
         time.sleep(0.5)
         os.write(master, b"c:\r")
         out = read_until(master, b"C>", timeout=4.0)
-        print("[+] Switched to Drive C>.")
+        print("[+] Step 3: Switched to Drive C>.", flush=True)
 
         # 4. Run SE.COM
+        print("[*] Step 4: Running SE.COM...", flush=True)
         time.sleep(0.5)
         os.write(master, b"se\r")
         out = read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
         if b"for about" not in out or not has_free_mem(out):
-            print(f"[-] Splash or free memory missing: {repr(out)}",
+            print(f"[-] Step 4: Splash or free memory missing: {repr(out)}",
                   flush=True)
             return False
-        print("[+] SE.COM splash screen successfully displayed with Free memory status bar.", flush=True)
+        print(
+            "[+] Step 4: SE.COM splash screen successfully displayed with "
+            "Free memory status bar.",
+            flush=True
+        )
 
         # 5. Verify splash screen does not show removed test options ('f' and 't')
+        print("[*] Step 5: Verifying splash screen removed test options...",
+              flush=True)
         if b"for file test" in out:
-            print("[-] File test option ('for file test') unexpectedly "
+            print("[-] Step 5: File test option ('for file test') unexpectedly "
                   "found on splash screen.", flush=True)
             return False
         if b"for mem test" in out:
-            print("[-] Memory test option ('for mem test') unexpectedly "
-                  "found on splash screen.", flush=True)
+            print("[-] Step 5: Memory test option ('for mem test') "
+                  "unexpectedly found on splash screen.", flush=True)
             return False
-        print("[+] Verified file test ('f') and mem test ('t') cleanly removed from splash screen.",
-              flush=True)
+        print(
+            "[+] Step 5: Verified file test ('f') and mem test ('t') cleanly "
+            "removed from splash screen.",
+            flush=True
+        )
 
         # 6. Verify pressing 't' does not trigger removed diagnostic
+        print("[*] Step 6: Verifying pressing 't' ignored on splash screen...",
+              flush=True)
         time.sleep(0.5)
         os.write(master, b"t")
         time.sleep(0.3)
         drain_all(master)
-        print("[+] Verified pressing 't' ignored on splash screen.", flush=True)
+        print("[+] Step 6: Verified pressing 't' ignored on splash screen.",
+              flush=True)
 
         # 7. Verify only 'e'/Enter enter editor mode, and enter editor ('e')
+        print("[*] Step 7: Verifying editor entry from splash screen...",
+              flush=True)
         drain_all(master)
         time.sleep(0.3)
 
@@ -218,7 +237,8 @@ def test_se_execution():
         if r:
             check_buf = os.read(master, 2048)
             if b"Line    1/" in check_buf or b"(Untitled)" in check_buf:
-                print(f"[-] Space key on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
+                print(f"[-] Step 7: Space key erroneously entered editor mode! "
+                      f"Buffer: {repr(check_buf)}", flush=True)
                 return False
 
         # Verify cursor arrow keys do NOT enter editor mode from splash screen
@@ -229,26 +249,41 @@ def test_se_execution():
             if r:
                 check_buf = os.read(master, 2048)
                 if b"Line    1/" in check_buf or b"(Untitled)" in check_buf:
-                    print(f"[-] Cursor {arrow_name} key ({repr(arrow_seq)}) on splash screen erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
+                    print(f"[-] Step 7: Cursor {arrow_name} key erroneously "
+                          f"entered editor mode! Buffer: {repr(check_buf)}",
+                          flush=True)
                     return False
 
-        print("[+] Successfully verified Space and Cursor keys do not enter editor mode from splash screen.", flush=True)
+        print(
+            "[+] Step 7: Successfully verified Space and Cursor keys do not "
+            "enter editor mode from splash screen.",
+            flush=True
+        )
 
         # Enter editor mode with 'e'
         os.write(master, b"e")
         out_edit = read_until(master, b"Line    1/1", timeout=6.0)
         if b"Line    1/1" not in out_edit:
-            print(f"[-] Failed to enter editor mode. Buffer captured: {repr(out_edit)}", flush=True)
+            print(f"[-] Step 7: Failed to enter editor mode. Buffer captured: "
+                  f"{repr(out_edit)}", flush=True)
             return False
         if b"(Untitled)" not in out_edit:
-            print(f"[-] Missing '(Untitled)' in status bar for unnamed buffer. Buffer: {repr(out_edit)}", flush=True)
+            print(f"[-] Step 7: Missing '(Untitled)' in status bar. Buffer: "
+                  f"{repr(out_edit)}", flush=True)
             return False
         if b"^K: Editor keys" not in out_edit:
-            print(f"[-] Missing '^K: Editor keys' in status bar. Buffer: {repr(out_edit)}", flush=True)
+            print(f"[-] Step 7: Missing '^K: Editor keys' in status bar. "
+                  f"Buffer: {repr(out_edit)}", flush=True)
             return False
-        print("[+] Successfully entered full-screen editing mode with '(Untitled)' and '^K: Editor keys'.", flush=True)
+        print(
+            "[+] Step 7: Successfully entered full-screen editing mode with "
+            "'(Untitled)' and '^K: Editor keys'.",
+            flush=True
+        )
 
         # 8. Test interactive character typing in empty buffer
+        print("[*] Step 8: Testing interactive typing & Home/End...",
+              flush=True)
         time.sleep(0.3)
         drain_all(master)
         for ch in b"HELLO WORLD":
@@ -260,7 +295,11 @@ def test_se_execution():
         if b"Col 11" not in out_type:
             print("[-] Interactive typing failed to reach Col 11. Buffer captured:", out_type)
             return False
-        print("[+] Successfully typed and rendered 'HELLO WORLD' (Row 1, Col 11).")
+        print(
+            "[+] Step 8: Successfully typed and rendered 'HELLO WORLD' "
+            "(Row 1, Col 11).",
+            flush=True
+        )
 
         # 8a. Test Home Key (\x1b[1~, \x1b[H, \x1bOH, Ctrl+A) and End Key (\x1b[4~, \x1b[F, \x1bOF, Ctrl+E)
         # Test Standard PC Home key: ESC [ 1 ~
@@ -334,7 +373,12 @@ def test_se_execution():
             print(f"[-] Ctrl+E (End) failed to move to Col 11. Buffer: {repr(out_end_ctrl)}", flush=True)
             return False
 
-        print("[+] Successfully verified Home (ESC [ 1 ~, ESC [ H, ESC O H, ^A) and End (ESC [ 4 ~, ESC [ F, ESC O F, ^E) navigation!", flush=True)
+        print(
+            "[+] Step 8: Successfully verified Home (ESC [ 1 ~, ESC [ H, "
+            "ESC O H, ^A) and End (ESC [ 4 ~, ESC [ F, ESC O F, ^E) "
+            "navigation!",
+            flush=True
+        )
 
         # 8b. Create multi-line text by pressing Enter
         for line in [b"\r", b"Line Two of Document", b"\r", b"Line Three with Tabs", b"\r", b"Line Four Final"]:
@@ -344,6 +388,8 @@ def test_se_execution():
         drain_all(master)
 
         # 9. Test Left / Right cursor movement and line-end wrapping
+        print("[*] Step 9: Testing cursor navigation and line wrapping...",
+              flush=True)
         time.sleep(0.2)
         drain_all(master)
         # Move Left 3 times
@@ -359,9 +405,14 @@ def test_se_execution():
             os.write(master, b"\x1b[C")
             time.sleep(0.01)
         drain_all(master)
-        print("[+] Successfully verified horizontal cursor navigation and line wrapping.")
+        print(
+            "[+] Step 9: Successfully verified horizontal cursor navigation "
+            "and line wrapping.",
+            flush=True
+        )
 
         # 10. Test cursor down clamping at end of file (4 lines -> cursor stops at line 4)
+        print("[*] Step 10: Testing cursor down clamping at EOF...", flush=True)
         time.sleep(0.2)
         for _ in range(15):
             os.write(master, b"\x1b[B")
@@ -370,9 +421,15 @@ def test_se_execution():
         if b"Line    4/4" not in out_row_clamp:
             print("[-] Cursor down clamping at EOF failed. Buffer captured:", repr(out_row_clamp))
             return False
-        print("[+] Successfully verified cursor cannot move past the last line of text (line 4).")
+        print(
+            "[+] Step 10: Successfully verified cursor cannot move past the "
+            "last line of text (line 4).",
+            flush=True
+        )
 
         # 11. Test mid-line insertion line length capacity (preventing exceeding 120 chars)
+        print("[*] Step 11: Testing mid-line insertion line length capacity...",
+              flush=True)
         drain_all(master)
         # Type 50 characters at end of line 4, move back 20 cols, insert 25 'A's
         os.write(master, b"0123456789" * 5)
@@ -385,9 +442,15 @@ def test_se_execution():
             os.write(master, b"A")
             time.sleep(0.01)
         drain_all(master)
-        print("[+] Successfully verified 120-char line capacity limit during mid-line insertion.")
+        print(
+            "[+] Step 11: Successfully verified 120-char line capacity limit "
+            "during mid-line insertion.",
+            flush=True
+        )
 
         # 12. Test Line Joining with Backspace at column 0
+        print("[*] Step 12: Testing line joining with Backspace at col 0...",
+              flush=True)
         # Ensure cursor at top of document
         os.write(master, b"\x14")  # Ctrl+T -> Top of file
         time.sleep(0.2)
@@ -404,9 +467,15 @@ def test_se_execution():
             print(f"[-] Line join via Backspace at Col 0 failed. Buffer: {repr(out_join_bs)}", flush=True)
             return False
         drain_all(master)
-        print("[+] Successfully verified Line Joining with Backspace at column 0.")
+        print(
+            "[+] Step 12: Successfully verified Line Joining with Backspace "
+            "at column 0.",
+            flush=True
+        )
 
         # 13. Test Line Joining with Delete Key (\x1b[3~) at End of Line
+        print("[*] Step 13: Testing line joining with Delete key at EOL...",
+              flush=True)
         # Move cursor to end of Row 1 (length 31)
         os.write(master, b"\x05")  # Ctrl+E -> End of line
         time.sleep(0.2)
@@ -418,9 +487,15 @@ def test_se_execution():
             print(f"[-] Line join via Delete key at EOL failed. Buffer: {repr(out_join_del)}", flush=True)
             return False
         drain_all(master)
-        print("[+] Successfully verified Line Joining with Delete key (ESC [ 3 ~) at End of Line.")
+        print(
+            "[+] Step 13: Successfully verified Line Joining with Delete "
+            "key (ESC [ 3 ~) at End of Line.",
+            flush=True
+        )
 
         # 14. Test Real Tab character insertion & Tab-jumping navigation
+        print("[*] Step 14: Testing real Tab character insertion & "
+              "navigation...", flush=True)
         # Move cursor to (1,0)
         os.write(master, b"\x01")  # Ctrl+A -> Home
         read_until(master, b"Line    1/2    Col 0", timeout=3.0)
@@ -453,11 +528,19 @@ def test_se_execution():
         os.write(master, b"\x08")
         out_tab_bs = read_until(master, b"Line    1/2    Col 0", timeout=4.0)
         if b"Line    1/2    Col 0" not in out_tab_bs:
-            print(f"[-] Backspace over Tab failed to return to col 0. Buffer captured: {repr(out_tab_bs)}", flush=True)
+            print(f"[-] Step 14: Backspace over Tab failed to return to col 0. "
+                  f"Buffer: {repr(out_tab_bs)}", flush=True)
             return False
+        print(
+            "[+] Step 14: Successfully verified real Tab character insertion "
+            "& tab-jumping navigation!",
+            flush=True
+        )
         drain_all(master)
 
         # 15. Test extending line past Col 119 barrier with horizontal scrolling ([Pan +40])
+        print("[*] Step 15: Testing horizontal scrolling ([Pan +40])...",
+              flush=True)
         # Move down to line 4, then type characters extending line past 120 columns
         for _ in range(3):
             os.write(master, b"\x1b[B")
@@ -492,9 +575,15 @@ def test_se_execution():
             print(f"[-] Home failed to reset pan to Col 0. Buffer: {repr(out_home)}", flush=True)
             return False
         drain_all(master)
-        print("[+] Successfully verified entering characters to extend line past 119 column barrier with [Pan +40].", flush=True)
+        print(
+            "[+] Step 15: Successfully verified entering characters to extend "
+            "line past 119 column barrier with [Pan +40].",
+            flush=True
+        )
 
         # 16. Verify Ctrl+F in editor mode opens Find prompt and ESC cancels cleanly
+        print("[*] Step 16: Verifying Ctrl+F opens Find prompt and ESC "
+              "cancels...", flush=True)
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x06")
@@ -506,9 +595,15 @@ def test_se_execution():
         os.write(master, b"\x1b")
         read_until(master, b"Line    4/4", timeout=4.0)
         drain_all(master)
-        print("[+] Successfully verified ^F in editor mode opens Find prompt and ESC cancels cleanly.", flush=True)
+        print(
+            "[+] Step 16: Successfully verified ^F in editor mode opens Find "
+            "prompt and ESC cancels cleanly.",
+            flush=True
+        )
 
         # 17. Save file with Ctrl+S (opens Save Screen, tests Save Screen Ctrl+F toggle, and saves to OUTPUT.TXT)
+        print("[*] Step 17: Testing Save Screen (Ctrl+S) and format toggle...",
+              flush=True)
         time.sleep(0.3)
         os.write(master, b"\x13")
         read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=5.0)
@@ -530,7 +625,11 @@ def test_se_execution():
         if b"Format: [CP/M]" not in out_toggle_cpm:
             print(f"[-] Save Screen Ctrl+F toggle back to CP/M failed. Buffer: {repr(out_toggle_cpm)}", flush=True)
             return False
-        print("[+] Successfully verified Save Screen ^F format toggle (CP/M <-> Linux).", flush=True)
+        print(
+            "[+] Step 17: Successfully verified Save Screen ^F format toggle "
+            "(CP/M <-> Linux).",
+            flush=True
+        )
         time.sleep(0.2)
         os.write(master, b"OUTPUT.TXT\r")
         time.sleep(0.2)
@@ -539,18 +638,25 @@ def test_se_execution():
             os.write(master, b"y")
         read_until(master, b"Line    1/1", timeout=5.0)
         drain_all(master)
-        print("[+] Successfully saved file with Ctrl+S.", flush=True)
+        print("[+] Step 17: Successfully saved file with Ctrl+S.", flush=True)
 
         # 18. Send Ctrl+Q to exit cleanly back to CP/M
+        print("[*] Step 18: Testing Ctrl+Q clean exit back to CP/M...",
+              flush=True)
         time.sleep(0.5)
         os.write(master, b"\x11")
         out_exit = read_until(master, b"C>", timeout=4.0)
         if b"C>" not in out_exit and b"Exiting SE.COM" not in out_exit:
             print(f"[-] Clean exit message not observed. Buffer captured: {repr(out_exit)}", flush=True)
             return False
-        print("[+] SE.COM successfully received Ctrl+Q and returned cleanly to CP/M.", flush=True)
+        print(
+            "[+] Step 18: SE.COM successfully received Ctrl+Q and returned "
+            "cleanly to CP/M.",
+            flush=True
+        )
 
         # 19. Test File Loading: Open 2-line file 'se 2.TXT'
+        print("[*] Step 19: Testing file loading ('se 2.TXT')...", flush=True)
         time.sleep(0.5)
         os.write(master, b"se 2.TXT\r")
         out_load = read_until(master, b"Line    1/2", timeout=30.0)
@@ -570,16 +676,21 @@ def test_se_execution():
             print(f"[-] Status bar corrupted with erroneous 'U:' suffix! "
                   f"Buffer: {repr(out_load[-400:])}", flush=True)
             return False
-        print("[+] Successfully verified multi-line file loading (se 2.TXT) "
-              "and Far RAM streaming!", flush=True)
+        print(
+            "[+] Step 19: Successfully verified multi-line file loading "
+            "(se 2.TXT) and Far RAM streaming!",
+            flush=True
+        )
 
         # Exit editor again
         time.sleep(0.5)
         os.write(master, b"\x11")
         read_until(master, b"C>", timeout=4.0)
-        print("[+] Exit from SE.COM completed.", flush=True)
+        print("[+] Step 19: Exit from SE.COM completed.", flush=True)
 
         # 20. Test Multi-Sector File Loading and Page-Up / Page-Down Navigation: 'se 30.TXT'
+        print("[*] Step 20: Testing multi-sector file loading ('se 30.TXT')...",
+              flush=True)
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
         out_load_30 = read_until(master, b"Line    1/30", timeout=30.0)
@@ -602,9 +713,14 @@ def test_se_execution():
             print(f"[-] Status bar corrupted with erroneous 'U:' suffix! "
                   f"Buffer: {repr(out_load_30[-400:])}", flush=True)
             return False
-        print("[+] Successfully verified 30-line multi-sector file loading (se 30.TXT) into editor Far RAM buffer!", flush=True)
+        print(
+            "[+] Step 20: Successfully verified 30-line multi-sector file "
+            "loading (se 30.TXT) into editor Far RAM buffer!",
+            flush=True
+        )
 
         # 21. Test Page-Down key (\x1b[6~)
+        print("[*] Step 21: Testing Page-Down key (ESC [ 6 ~)...", flush=True)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x1b[6~")
@@ -612,9 +728,14 @@ def test_se_execution():
         if b"Line   30" not in out_pgdn:
             print(f"[-] Page Down key failed to navigate to bottom of document. Buffer: {repr(out_pgdn)}", flush=True)
             return False
-        print("[+] Successfully verified Page-Down key (ESC [ 6 ~) navigation to Line 30.", flush=True)
+        print(
+            "[+] Step 21: Successfully verified Page-Down key (ESC [ 6 ~) "
+            "navigation to Line 30.",
+            flush=True
+        )
 
         # 22. Test Page-Up key (\x1b[5~)
+        print("[*] Step 22: Testing Page-Up key (ESC [ 5 ~)...", flush=True)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x1b[5~")
@@ -622,9 +743,15 @@ def test_se_execution():
         if b"Line    1" not in out_pgup:
             print(f"[-] Page Up key failed to navigate back to top of document. Buffer: {repr(out_pgup)}", flush=True)
             return False
-        print("[+] Successfully verified Page-Up key (ESC [ 5 ~) navigation to Line 1.", flush=True)
+        print(
+            "[+] Step 22: Successfully verified Page-Up key (ESC [ 5 ~) "
+            "navigation to Line 1.",
+            flush=True
+        )
 
         # 23. Test Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts
+        print("[*] Step 23: Testing Ctrl+V (Page Down) and Ctrl+U (Page Up)...",
+              flush=True)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x16")  # Ctrl+V -> Page Down
@@ -637,9 +764,15 @@ def test_se_execution():
         if b"Line    1" not in out_ctrl_u:
             print(f"[-] Ctrl+U (Page Up) failed. Buffer: {repr(out_ctrl_u)}", flush=True)
             return False
-        print("[+] Successfully verified Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts.", flush=True)
+        print(
+            "[+] Step 23: Successfully verified Ctrl+V (Page Down) and "
+            "Ctrl+U (Page Up) shortcuts.",
+            flush=True
+        )
 
         # 24. Test Jump to Top / Bottom (Ctrl+Home / Ctrl+End, Ctrl+T / Ctrl+G, ESC < / ESC >, ESC t / ESC b)
+        print("[*] Step 24: Testing Jump to Top / Bottom shortcuts...",
+              flush=True)
         # Test Ctrl+G (Jump to Bottom)
         drain_all(master)
         time.sleep(0.1)
@@ -712,9 +845,16 @@ def test_se_execution():
             print(f"[-] ESC t failed to jump to top. Buffer: {repr(out_esc_t)}", flush=True)
             return False
 
-        print("[+] Successfully verified Jump to Top (Ctrl+T, Ctrl+Home, ESC <, ESC t) and Jump to Bottom (Ctrl+G, Ctrl+End, ESC >, ESC b)!", flush=True)
+        print(
+            "[+] Step 24: Successfully verified Jump to Top (Ctrl+T, "
+            "Ctrl+Home, ESC <, ESC t) and Jump to Bottom (Ctrl+G, Ctrl+End, "
+            "ESC >, ESC b)!",
+            flush=True
+        )
 
         # 25. Test ESC key showing splash screen and Enter resuming editor mode
+        print("[*] Step 25: Testing ESC splash screen and Enter resume...",
+              flush=True)
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b")  # Standalone ESC key
@@ -735,7 +875,11 @@ def test_se_execution():
             b"Free: 412 KB" not in out_splash_status):
             print(f"[-] Splash screen status bar missing free memory indicator. Buffer: {repr(out_splash_status)}", flush=True)
             return False
-        print("[+] Successfully verified ESC key in editor displays streamlined splash screen and free memory.", flush=True)
+        print(
+            "[+] Step 25: Successfully verified ESC key in editor displays "
+            "streamlined splash screen and free memory.",
+            flush=True
+        )
 
         drain_all(master)
         time.sleep(0.2)
@@ -744,9 +888,15 @@ def test_se_execution():
         if b"Line 01 of test file content" not in out_resume:
             print(f"[-] Enter key on splash failed to return to editor. Buffer: {repr(out_resume)}", flush=True)
             return False
-        print("[+] Successfully verified Enter key resumes editor mode with document intact.", flush=True)
+        print(
+            "[+] Step 25: Successfully verified Enter key resumes editor mode "
+            "with document intact.",
+            flush=True
+        )
 
         # 26. Test Open File option (:o) on splash screen with Directory Listing
+        print("[*] Step 26: Testing Open File (:o) with Directory Listing...",
+              flush=True)
         drain_all(master)
         time.sleep(0.1)
         os.write(master, b"\x1b")  # Standalone ESC key to go to splash screen
@@ -760,7 +910,11 @@ def test_se_execution():
         if b"Enter filename to open" not in out_dir:
             print(f"[-] Open prompt not displayed. Buffer: {repr(out_dir)}", flush=True)
             return False
-        print("[+] Successfully verified Open File screen with sorted directory listing.", flush=True)
+        print(
+            "[+] Step 26: Successfully verified Open File screen with sorted "
+            "directory listing.",
+            flush=True
+        )
 
         # Check if directory is multi-page or single-page
         if b"<PgUp>/<PgDn>=Page" in out_dir:
@@ -805,7 +959,11 @@ def test_se_execution():
             print("[+] Successfully verified PageDown retains typed filename in text box.", flush=True)
         else:
             # Single-page mode (expanded 120x40 capacity fits all files on 1 page without premature pagination)
-            print("[+] Successfully verified expanded 120x40 capacity displays directory on single page without premature pagination.", flush=True)
+            print(
+            "[+] Step 26: Successfully verified expanded 120x40 capacity "
+            "displays directory on single page without premature pagination.",
+            flush=True
+        )
             # Verify typing in text box and that PgDn/PgUp are benign
             drain_all(master)
             time.sleep(0.1)
@@ -816,7 +974,11 @@ def test_se_execution():
             os.write(master, b"\x1b[5~")  # PgUp should not break text box
             time.sleep(0.1)
             os.write(master, b"\x08" * 8) # Clear typed TESTFILE
-            print("[+] Successfully verified text box editing and PgDn/PgUp stability in single-page mode.", flush=True)
+            print(
+            "[+] Step 26: Successfully verified text box editing and "
+            "PgDn/PgUp stability in single-page mode.",
+            flush=True
+        )
 
         # Test ESC to cancel from Open File prompt
         drain_all(master)
@@ -826,7 +988,11 @@ def test_se_execution():
         if b"SE - Screen Editor" not in out_cancel:
             print(f"[-] ESC key did not cancel open prompt back to splash screen. Buffer: {repr(out_cancel)}", flush=True)
             return False
-        print("[+] Successfully verified ESC cancels Open File prompt back to splash screen.", flush=True)
+        print(
+            "[+] Step 26: Successfully verified ESC cancels Open File prompt "
+            "back to splash screen.",
+            flush=True
+        )
 
         # Re-enter Open File screen and open 2.TXT
         drain_all(master)
@@ -850,7 +1016,11 @@ def test_se_execution():
             if b"Line    1/" in check_buf:
                 print(f"[-] Non-existent file erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
-        print("[+] Successfully verified bad filename shows 'File not found' without entering editor mode.", flush=True)
+        print(
+            "[+] Step 26: Successfully verified bad filename shows "
+            "'File not found' without entering editor mode.",
+            flush=True
+        )
 
         # Now edit bad filename in-place: send 3 Backspaces to erase 'BAK' (first BS clears 'File not found' & 'K')
         time.sleep(0.1)
@@ -875,9 +1045,15 @@ def test_se_execution():
         if b"First line of two" not in out_loaded:
             print(f"[-] Document contents not loaded after backspace amendment. Buffer: {repr(out_loaded)}", flush=True)
             return False
-        print("[+] Successfully verified bad filename kept in text box, amended via backspace, and loaded.", flush=True)
+        print(
+            "[+] Step 26: Successfully verified bad filename kept in text "
+            "box, amended via backspace, and loaded.",
+            flush=True
+        )
 
         # 27. Test Save Screen: Pre-filling, Overwrite check, and Splash :s
+        print("[*] Step 27: Testing Save Screen pre-filling, overwrite & :s...",
+              flush=True)
         time.sleep(0.5)
         # We are currently editing '2.TXT'. Trigger Save Screen via Ctrl+S (\x13)
         os.write(master, b"\x13")
@@ -902,7 +1078,11 @@ def test_se_execution():
         os.write(master, b"\x06")
         read_until(master, b"Format: [CP/M]", timeout=3.0)
         read_until(master, b"2.TXT", timeout=3.0)
-        print("[+] Successfully verified Save Screen with pre-filled filename '2.TXT' and ^F toggle.", flush=True)
+        print(
+            "[+] Step 27: Successfully verified Save Screen with pre-filled "
+            "filename '2.TXT' and ^F toggle.",
+            flush=True
+        )
 
         # Press Enter (\r) to save with existing filename: should trigger overwrite warning
         drain_all(master)
@@ -915,7 +1095,11 @@ def test_se_execution():
         if b"\x1b[4mY\x1b[24mes" not in out_warn or b"\x1b[4mN\x1b[24mo" not in out_warn:
             print(f"[-] Overwrite prompt missing underscored hotkeys. Buffer: {repr(out_warn)}", flush=True)
             return False
-        print("[+] Successfully verified overwrite warning prompt on existing file with underscored hotkeys.", flush=True)
+        print(
+            "[+] Step 27: Successfully verified overwrite warning prompt on "
+            "existing file with underscored hotkeys.",
+            flush=True
+        )
 
         # Test canceling overwrite with 'n'
         time.sleep(0.2)
@@ -928,7 +1112,11 @@ def test_se_execution():
         if b"C:2.TXT" not in out_back:
             print(f"[-] Editor mode not restored after cancelling save. Buffer: {repr(out_back)}", flush=True)
             return False
-        print("[+] Successfully verified cancelling overwrite returns cleanly to editor.", flush=True)
+        print(
+            "[+] Step 27: Successfully verified cancelling overwrite "
+            "returns cleanly to editor.",
+            flush=True
+        )
 
         # Re-open Save Screen with Ctrl+S and confirm overwrite with 'y'
         time.sleep(0.3)
@@ -944,7 +1132,11 @@ def test_se_execution():
         if b"C:2.TXT" not in out_saved:
             print(f"[-] Editor mode not restored after confirming save. Buffer: {repr(out_saved)}", flush=True)
             return False
-        print("[+] Successfully verified confirming overwrite ('y') saves file and resumes editor.", flush=True)
+        print(
+            "[+] Step 27: Successfully verified confirming overwrite ('y') "
+            "saves file and resumes editor.",
+            flush=True
+        )
 
         # Return to splash screen (ESC) and test ':s' option
         drain_all(master)
@@ -954,7 +1146,11 @@ def test_se_execution():
         if b"s                to save file" not in out_splash:
             print(f"[-] Splash screen 's to save file' not found. Buffer: {repr(out_splash)}", flush=True)
             return False
-        print("[+] Successfully verified splash screen displays 's to save file'.", flush=True)
+        print(
+            "[+] Step 27: Successfully verified splash screen displays "
+            "'s to save file'.",
+            flush=True
+        )
 
         # Launch Save Screen from Splash screen ('s')
         time.sleep(0.2)
@@ -967,9 +1163,15 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x1b")
         read_until(master, b"for about", timeout=4.0)
-        print("[+] Successfully verified splash ':s' enters Save Screen and ESC returns to splash.", flush=True)
+        print(
+            "[+] Step 27: Successfully verified splash ':s' enters Save "
+            "Screen and ESC returns to splash.",
+            flush=True
+        )
 
         # 28. Test Editor Mode Keys screen (^K)
+        print("[*] Step 28: Testing Editor Mode Keys screen (^K)...",
+              flush=True)
         time.sleep(0.2)
         os.write(master, b"e")  # Return to editor from splash
         read_until(master, b"^K: Editor keys", timeout=4.0)
@@ -989,9 +1191,14 @@ def test_se_execution():
         if b"^K: Editor keys" not in out_keys_back:
             print(f"[-] Failed to return to editor from keys screen. Buffer: {repr(out_keys_back)}", flush=True)
             return False
-        print("[+] Successfully verified Ctrl+K Editor Mode Keys screen and return to editor.", flush=True)
+        print(
+            "[+] Step 28: Successfully verified Ctrl+K Editor Mode Keys "
+            "screen and return to editor.",
+            flush=True
+        )
 
         # 29. Test Ctrl+O in Editor Mode (Open File Screen and ESC cancel)
+        print("[*] Step 29: Testing Ctrl+O in Editor Mode...", flush=True)
         time.sleep(0.2)
         os.write(master, b"\x0f")  # Ctrl+O
         out_open_ui = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
@@ -1006,7 +1213,11 @@ def test_se_execution():
         if b"C:2.TXT" not in out_cancelled or b"First line of two" not in out_cancelled:
             print(f"[-] ESC did not cleanly restore editor mode with document intact. Buffer: {repr(out_cancelled)}", flush=True)
             return False
-        print("[+] Successfully verified Ctrl+O opens directory browser and ESC returns to editor without opening file.", flush=True)
+        print(
+            "[+] Step 29: Successfully verified Ctrl+O opens directory browser "
+            "and ESC returns to editor without opening file.",
+            flush=True
+        )
 
         # Test Ctrl+O successfully opening a new file from editor mode
         time.sleep(0.2)
@@ -1031,10 +1242,15 @@ def test_se_execution():
                   f"Ctrl+O open! Buffer: {repr(out_open_30[-400:])}",
                   flush=True)
             return False
-        print("[+] Successfully verified Ctrl+O in editor mode opens file "
-              "into editor with clean status bar.", flush=True)
+        print(
+            "[+] Step 29: Successfully verified Ctrl+O in editor mode opens "
+            "file into editor with clean status bar.",
+            flush=True
+        )
 
         # 30. Test Drive Switching in Open Screen ("B:" and "C:")
+        print("[*] Step 30: Testing Drive Switching in Open Screen...",
+              flush=True)
         time.sleep(0.2)
         os.write(master, b"\x0f")  # Ctrl+O
         read_until(master, b"Enter filename to open:", timeout=4.0)
@@ -1050,7 +1266,11 @@ def test_se_execution():
         if b"[B:" not in out_retained_b:
             print(f"[-] Prompt did not retain 'B:'. Buffer: {repr(out_retained_b)}", flush=True)
             return False
-        print("[+] Successfully verified switching to Drive B: in Open Screen with 'B:' retained in text box.", flush=True)
+        print(
+            "[+] Step 30: Successfully verified switching to Drive B: in Open "
+            "Screen with 'B:' retained in text box.",
+            flush=True
+        )
 
         # Type backspaces to clear 'B:' and switch back to Drive C:
         time.sleep(0.2)
@@ -1070,9 +1290,15 @@ def test_se_execution():
         if b"C:30.TXT" not in out_esc_back:
             print(f"[-] ESC from drive-switched open screen failed to restore editor. Buffer: {repr(out_esc_back)}", flush=True)
             return False
-        print("[+] Successfully verified switching back to Drive C: and returning to editor on ESC.", flush=True)
+        print(
+            "[+] Step 30: Successfully verified switching back to Drive C: "
+            "and returning to editor on ESC.",
+            flush=True
+        )
 
         # 31. Test Drive Switching in Save Screen ("B:" and "C:")
+        print("[*] Step 31: Testing Drive Switching in Save Screen...",
+              flush=True)
         time.sleep(0.2)
         os.write(master, b"\x13")  # Ctrl+S
         read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=4.0)
@@ -1088,7 +1314,11 @@ def test_se_execution():
         if b"[B:" not in out_save_retained_b:
             print(f"[-] Save prompt did not retain 'B:'. Buffer: {repr(out_save_retained_b)}", flush=True)
             return False
-        print("[+] Successfully verified switching to Drive B: in Save Screen with 'B:' retained in text box.", flush=True)
+        print(
+            "[+] Step 31: Successfully verified switching to Drive B: in Save "
+            "Screen with 'B:' retained in text box.",
+            flush=True
+        )
 
         # Switch back to Drive C: in Save Screen
         time.sleep(0.2)
@@ -1105,9 +1335,14 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x1b")
         read_until(master, b"^K: Editor keys", timeout=4.0)
-        print("[+] Successfully verified switching back to Drive C: in Save Screen and ESC returns cleanly.", flush=True)
+        print(
+            "[+] Step 31: Successfully verified switching back to Drive C: "
+            "in Save Screen and ESC returns cleanly.",
+            flush=True
+        )
 
         # 32. Test High-Speed Burst Paste (Clipboard Simulation)
+        print("[*] Step 32: Testing high-speed burst paste...", flush=True)
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x05")  # Ctrl+E -> End of Line
@@ -1120,9 +1355,15 @@ def test_se_execution():
         if b"[BURST-PASTED TEXT VIA CLIPBOARD]" not in out_paste:
             print(f"[-] Fast burst paste text missing on screen. Buffer: {repr(out_paste)}", flush=True)
             return False
-        print("[+] Successfully verified high-speed clipboard burst paste deferred redraw!", flush=True)
+        print(
+            "[+] Step 32: Successfully verified high-speed clipboard burst "
+            "paste deferred redraw!",
+            flush=True
+        )
 
         # 33. Test Line Slot Indirection & Slot Recycling from Extended RAM
+        print("[*] Step 33: Testing line slot indirection & recycling...",
+              flush=True)
         time.sleep(0.2)
         drain_all(master)
         # Split line with Enter to allocate a slot
@@ -1140,9 +1381,15 @@ def test_se_execution():
         if b"RECYCLED_SLOT_LINE" not in out_recycled:
             print(f"[-] Slot recycling failed. Buffer: {repr(out_recycled)}", flush=True)
             return False
-        print("[+] Successfully verified slot allocation, deallocation, and recycling from Extended RAM!", flush=True)
+        print(
+            "[+] Step 33: Successfully verified slot allocation, "
+            "deallocation, and recycling from Extended RAM!",
+            flush=True
+        )
 
         # 34. Test Hybrid Block Highlighting & Ctrl+K Solidification
+        print("[*] Step 34: Testing hybrid block highlighting & "
+              "solidification...", flush=True)
         time.sleep(0.2)
         drain_all(master)
         # Move to top of document (Ctrl+T) and column 0 (Ctrl+A)
@@ -1225,7 +1472,15 @@ def test_se_execution():
         os.write(master, b"\x02")
         out_toggle_off = read_until(master, b"^K: Editor keys", timeout=4.0)
         if b"^K: Editor keys" not in out_toggle_off:
-            print(f"[-] Ctrl+B cancel of solidified block failed. Buffer: {repr(out_toggle_off)}", flush=True)
+            print(f"[-] Step 34: Ctrl+B cancel of solidified block failed. "
+                  f"Buffer: {repr(out_toggle_off)}", flush=True)
+            return False
+        print(
+            "[+] Step 34: Successfully verified hybrid block highlighting & "
+            "Ctrl+K solidification!",
+            flush=True
+        )
+
         # Step 35: Verify tab block highlighting on the last line of block
         print("[*] Step 35: Testing dynamic tab block highlighting on the last line...", flush=True)
         # Move to top of document (Ctrl+T)
