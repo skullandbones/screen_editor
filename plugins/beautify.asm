@@ -255,6 +255,16 @@ BT_CFG_API_OK:
 	CALL	LOAD_PLUGIN_CFG
 	LD	IX,(HOST_API_PTR)
 
+	; Save initial config state for ESC cancel
+	LD	A,(CFG_PRESET_IDX)
+	LD	(SAVED_PRESET_IDX),A
+	LD	A,(FMT_CASE_MNEM)
+	LD	(SAVED_CASE_MNEM),A
+	LD	A,(FMT_CASE_OPER)
+	LD	(SAVED_CASE_OPER),A
+	LD	A,(FMT_ANIMATE)
+	LD	(SAVED_ANIMATE),A
+
 BT_CFG_LOOP:
 	; 1. Format Preset
 	LD	A,(CFG_PRESET_IDX)
@@ -340,14 +350,10 @@ COPY_ANIM_STR:
 	JR	Z,BT_TOGGLE_OPER
 	CP	'4'
 	JR	Z,BT_TOGGLE_ANIM
-	CP	'Q'
+	CP	13			; Enter: Save & Exit
 	JR	Z,BT_CFG_SAVE_EXIT
-	CP	'q'
-	JR	Z,BT_CFG_SAVE_EXIT
-	CP	13			; Enter
-	JR	Z,BT_CFG_SAVE_EXIT
-	CP	27			; ESC
-	JR	Z,BT_CFG_DONE
+	CP	27			; ESC: Cancel
+	JR	Z,BT_CFG_CANCEL
 	JP	BT_CFG_LOOP
 
 BT_TOGGLE_COLS:
@@ -388,6 +394,17 @@ BT_TOGGLE_ANIM:
 
 BT_CFG_SAVE_EXIT:
 	CALL	SAVE_PLUGIN_CFG
+	JR	BT_CFG_DONE
+
+BT_CFG_CANCEL:
+	LD	A,(SAVED_PRESET_IDX)
+	CALL	APPLY_COL_PRESET
+	LD	A,(SAVED_CASE_MNEM)
+	LD	(FMT_CASE_MNEM),A
+	LD	A,(SAVED_CASE_OPER)
+	LD	(FMT_CASE_OPER),A
+	LD	A,(SAVED_ANIMATE)
+	LD	(FMT_ANIMATE),A
 
 BT_CFG_DONE:
 	XOR	A			; A = 0: Clean, document unmodified
@@ -1637,6 +1654,10 @@ PREV_WAS_ID_CHAR:	DB	0
 BLB_MNEM_CASE_TEMP:	DB	0
 
 CFG_PRESET_IDX:		DB	0
+SAVED_PRESET_IDX:	DB	0
+SAVED_CASE_MNEM:	DB	0
+SAVED_CASE_OPER:	DB	0
+SAVED_ANIMATE:		DB	1
 
 PRESET_COLUMNS:
 	DB	9, 17, 41		; Preset 0: Standard
@@ -1706,7 +1727,7 @@ STR_CFG_OPER_VAL:	DB	"UPPERCASE      "
 STR_BTC_L7:		DB	"|  4. Animation : ["
 STR_CFG_ANIM_VAL:	DB	"ON (Real-Time) "
 			DB	"]  |", 0
-STR_BTC_L9:		DB	"| [1-4] Toggle  [Enter/Q] Save & Exit|", 0
+STR_BTC_L9:		DB	"| [Enter]=Save & Exit   [ESC]=Cancel |", 0
 
 ;==============================================================================
 ; Plugin Configuration File Subsystem (BEAUTIFY.CFG)

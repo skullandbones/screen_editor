@@ -309,7 +309,9 @@ def main():
         # Test Action 2: Embedded Configuration Screen on Slot 2 (BEAUTIFY)
         time.sleep(0.3)
         os.write(master, b"c")
-        ok, out = read_until(master, b"[1-4] Toggle  [Enter/Q] Save & Exit", timeout=6.0)
+        ok, out = read_until(
+            master, b"[Enter]=Save & Exit   [ESC]=Cancel", timeout=6.0
+        )
         if not ok or b"Z80 Beautifier Configuration" not in out:
             print(f"[-] BEAUTIFY Configuration screen failed to display. Out: {repr(out)}")
             return 1
@@ -333,9 +335,9 @@ def main():
             return 1
         print("[+] BEAUTIFY config option 4 toggled to [OFF (Fast)].")
 
-        # Exit config screen and return to Plugin Manager ('q')
+        # Exit config screen and return to Plugin Manager (Enter)
         time.sleep(0.3)
-        os.write(master, b"q")
+        os.write(master, b"\r")
         ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
         if not ok or b">[2]" not in out:
             print(f"[-] Return from BEAUTIFY config screen to Plugin Manager failed. out={repr(out)}")

@@ -584,7 +584,7 @@ class DrunkenMonkeyInputGenerator:
             elif screen_state == "plugin_manager":
                 return "q", 0.15, "Watchdog Breakout: 'q' (Plugin Mgr)"
             elif screen_state == "plugin_config":
-                return "q", 0.15, "Watchdog Breakout: 'q' (Plugin Config)"
+                return "\x1b", 0.15, "Watchdog Breakout: ESC (Plugin Config)"
             elif screen_state == "configuration_screen":
                 return "q", 0.15, "Watchdog Breakout: 'q' (Config)"
             else:
@@ -720,8 +720,8 @@ class DrunkenMonkeyInputGenerator:
             return choice, d, f"Unload plugin confirm: {choice}"
 
         elif screen_state == "plugin_config":
-            choice = self.rng.choice(["1", "2", "3", "4", "q", "\r"])
-            d = max(delay, 0.15) if choice in ("q", "\r") else delay
+            choice = self.rng.choice(["1", "2", "3", "4", "\r", "\x1b"])
+            d = max(delay, 0.15) if choice in ("\r", "\x1b") else delay
             return choice, d, f"Plugin Config: {choice}"
 
         elif screen_state == "configuration_screen":
@@ -1368,9 +1368,22 @@ def run_drunken_monkey_test(
                     monitor.feed(drain.decode("latin1", errors="replace"))
                 continue
 
+            # If in plugin config, send ESC to exit
+            if state == "plugin_config":
+                if verbose:
+                    print(f"[*] Teardown: Sending ESC to {state}", flush=True)
+                os.write(master, b"\x1b")
+                time.sleep(0.15)
+                drain = read_available(master, timeout=1.5)
+                if drain:
+                    if verbose:
+                        print(f"[*] Teardown drained {len(drain)} bytes "
+                              f"after ESC", flush=True)
+                    monitor.feed(drain.decode("latin1", errors="replace"))
+                continue
+
             # If in management/workspace screen, send 'q' to exit
-            if state in ("plugin_manager", "plugin_config",
-                         "configuration_screen"):
+            if state in ("plugin_manager", "configuration_screen"):
                 if verbose:
                     print(f"[*] Teardown: Sending 'q' to {state}", flush=True)
                 os.write(master, b"q")

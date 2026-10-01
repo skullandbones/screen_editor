@@ -220,9 +220,9 @@ def main():
             return 1
         print("    [+] Action 2 invoked: Embedded Beautifier Configuration menu opened")
 
-        # Exit Beautifier config with 'q' -> returns to Ctrl+P pop-up menu
+        # Exit Beautifier config with ESC -> returns to Ctrl+P pop-up menu
         time.sleep(0.2)
-        os.write(master, b"q")
+        os.write(master, b"\x1b")
         out = read_until(master, b"Plugins with Configurable Settings", timeout=6.0)
         if b"Plugins with Configurable Settings" not in out:
             print(f"[-] Test 2 failed: Return from Beautifier config did not restore Ctrl+P menu. Buffer: {repr(out)}")
