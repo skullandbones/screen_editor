@@ -5495,9 +5495,8 @@ def test_se_execution():
         # 2. Launch SE without file arguments
         time.sleep(0.3)
         os.write(master, b"se\r")
-        out_s74_splash = read_until(master, b"Active Screen: [", timeout=20.0)
-        out_s74_splash += read_until(master, b"RAM Drive (", timeout=5.0)
-        out_s74_splash += read_until(master, b"to configure", timeout=5.0)
+        out_s74_splash = read_until(master, b"RAM Drive (", timeout=35.0)
+        out_s74_splash += read_until(master, b"Free: ", timeout=10.0)
 
         # Verify Splash Screen shows RAM Drive line under Active Screen
         if b"RAM Drive (A:): [Preserved (Active)]" not in out_s74_splash:
@@ -5550,9 +5549,8 @@ def test_se_execution():
         read_until(master, b"Saved to local drive", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
-        out_s74_splash2 = read_until(master, b"Active Screen: [", timeout=10.0)
-        out_s74_splash2 += read_until(master, b"RAM Drive (", timeout=5.0)
-        out_s74_splash2 += read_until(master, b"]", timeout=5.0)
+        out_s74_splash2 = read_until(master, b"RAM Drive (", timeout=15.0)
+        out_s74_splash2 += read_until(master, b"Free: ", timeout=10.0)
         if b"RAM Drive (A:): [Overwritten (Max RAM)]" not in out_s74_splash2:
             print("[-] Step 74 failed: Splash screen does not show "
                   f"Overwritten. Buffer: {repr(out_s74_splash2)}", flush=True)
@@ -5646,6 +5644,7 @@ def test_se_execution():
         # Cancel Save dialog with ESC
         time.sleep(0.3)
         os.write(master, b"\x1b")
+        read_until(master, b"^K: Editor keys", timeout=6.0)
         time.sleep(0.3)
 
         # Exit editor cleanly to CP/M
