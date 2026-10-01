@@ -5547,9 +5547,12 @@ def test_se_execution():
         time.sleep(0.3)
         os.write(master, b"s")
         read_until(master, b"Saved to local drive", timeout=10.0)
+        read_until(master, b"return to splash screen", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
-        out_s74_splash2 = read_until(master, b"RAM Drive (", timeout=15.0)
+        out_s74_splash2 = read_until(
+            master, b"SE - Screen Editor", timeout=15.0
+        )
         out_s74_splash2 += read_until(master, b"Free: ", timeout=10.0)
         if b"RAM Drive (A:): [Overwritten (Max RAM)]" not in out_s74_splash2:
             print("[-] Step 74 failed: Splash screen does not show "
