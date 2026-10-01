@@ -3028,9 +3028,16 @@ def test_se_execution():
         # 10. Exit cleanly with Ctrl+Q
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
-        print("[+] Step 57: Clean exit back to CP/M prompt.", flush=True)
-        print("[+] Successfully verified Open File (Ctrl+O & Splash :o) Unsaved Modifications Check (Step 54)!", flush=True)
+        out_s54_exit = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s54_exit:
+            print(f"[-] Step 54 failed: Exit to CP/M prompt missing. "
+                  f"Buffer: {repr(out_s54_exit)}", flush=True)
+            return False
+        time.sleep(0.3)
+        drain_all(master)
+        print("[+] Step 54: Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Successfully verified Open File (Ctrl+O & Splash :o) "
+              "Unsaved Modifications Check (Step 54)!", flush=True)
 
         # ---------------------------------------------------------------------
         # Step 55: Open File Screen Line Number Specification (e.g. 30.TXT:15)
@@ -3115,7 +3122,7 @@ def test_se_execution():
             return False
         time.sleep(0.3)
         drain_all(master)
-        print("[+] Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Step 55: Clean exit back to CP/M prompt.", flush=True)
         print("[+] Successfully verified Open File Screen Line Number "
               "Specification (Step 55)!", flush=True)
 
@@ -3161,6 +3168,7 @@ def test_se_execution():
             return False
         time.sleep(0.3)
         drain_all(master)
+        print("[+] Step 56: Clean exit back to CP/M prompt.", flush=True)
         print("[+] Successfully verified 13-Bank Far RAM discovery and "
               "HBIOS Bank 0x80 protection (Step 56)!", flush=True)
 
