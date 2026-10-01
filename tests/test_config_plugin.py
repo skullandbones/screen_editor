@@ -208,19 +208,30 @@ def run_tests():
         os.write(master, b" ")
         read_until(master, b"Plugin System : [Disabled]", timeout=10.0)
 
-        # Press 'p' to request plugin manager
+        # Press 'p' to request plugin manager: shows Tier 2 modal pop-up
         time.sleep(0.3)
         os.write(master, b"p")
         out = read_until(
-            master, b"Plugin System : [Disabled]", timeout=10.0
+            master, b"Plugin Manager Missing", timeout=10.0
         )
-        assert b"Plugin System : [Disabled]" in out, (
-            f"Failed staying on splash when disabled: {out}"
+        assert b"Plugin Manager Missing" in out, (
+            f"Missing Plugin Manager Missing modal pop-up: {out}"
         )
         assert b"=== Plugin Manager ===" not in out, (
             "Plugin manager opened despite being disabled!"
         )
-        print("    [+] Pressing 'p' correctly refused launch")
+        # Dismiss pop-up with space
+        time.sleep(0.1)
+        os.write(master, b" ")
+        out_splash = read_until(
+            master, b"Plugin System : [Disabled]", timeout=10.0
+        )
+        assert b"Plugin System : [Disabled]" in out_splash, (
+            f"Failed returning to splash when disabled: {out_splash}"
+        )
+        print(
+            "    [+] Pressing 'p' correctly displayed modal and refused launch"
+        )
 
         # Enter Configuration Screen ('c')
         time.sleep(0.3)

@@ -883,12 +883,16 @@ DHS_RETRY:
 	CALL	LOAD_HELP_OVERLAY
 	JR	NC,DHS_RUN
 
-	; Help overlay missing or failed to load -> display status message
+	; Help overlay missing or failed to load -> display status modal
 	XOR	A
 	LD	(IS_SPLASH_SCREEN),A
-	LD	DE,STR_HELP_NOT_FOUND
-	CALL	HOST_SET_STATUS_MSG
-	JR	DHS_EXIT
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	CALL	SHOW_POPUP_HELP_MISSING
+	XOR	A
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_LINE_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+	JP	MAIN_LOOP
 
 DHS_RUN:
 	LD	IX,PLUGIN_HOST_API
@@ -11684,11 +11688,19 @@ SHOW_STATUS_EVENT_POPUP:
 	CALL	Z,DRAIN_ESC_SEQUENCE
 
 	; 5. Restore screen & persistent status bar
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JR	Z,SSEP_NOT_EDITOR
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
 	LD	DE,STR_SHOW_CURSOR
 	CALL	PRINT_STR
 	CALL	LOCATE_CURSOR
+	SCF
+	RET
+
+SSEP_NOT_EDITOR:
+	CALL	REDRAW_BASE_SCREEN
 	SCF
 	RET
 
@@ -11714,6 +11726,24 @@ SHOW_POPUP_REPLACE_DONE:
 	LD	DE,STR_POPUP_REP_DONE_TITLE
 	LD	HL,STR_POPUP_REP_DONE_MSG1
 	LD	BC,REPLACE_DONE_POPUP_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_NEED_PLUGIN_MGR:
+	LD	DE,STR_POPUP_NEED_PLUG_TITLE
+	LD	HL,STR_POPUP_NEED_PLUG_MSG1
+	LD	BC,STR_POPUP_NEED_PLUG_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_PLUG_MISSING:
+	LD	DE,STR_POPUP_PLUG_MISS_TITLE
+	LD	HL,STR_POPUP_PLUG_MISS_MSG1
+	LD	BC,STR_POPUP_PLUG_MISS_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_HELP_MISSING:
+	LD	DE,STR_POPUP_HELP_MISS_TITLE
+	LD	HL,STR_POPUP_HELP_MISS_MSG1
+	LD	BC,STR_POPUP_HELP_MISS_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
 
 FORMAT_REPLACE_DONE_MSG2:
@@ -14222,11 +14252,8 @@ DO_CY_NEXT_SLOT:
 	CALL	LOAD_PLUGIN_BY_NAME
 	JR	NC,DO_CY_LOADED_OK
 
-	; Failed to load BEAUTIFY.PRL: report missing on status bar
-	LD	DE,STR_MSG_PLUG_MISSING
-	CALL	HOST_SET_STATUS_MSG
-	CALL	RENDER_STATUS_BAR
-	CALL	LOCATE_CURSOR
+	; Failed to load BEAUTIFY.PRL: display Tier 2 status event pop-up
+	CALL	SHOW_POPUP_PLUG_MISSING
 	JP	MAIN_LOOP
 
 DO_CY_LOADED_OK:
@@ -14375,8 +14402,6 @@ STR_HIBERN_OVL_NAME:
 	DB	"HIBERN  OVL"
 STR_HELP_OVL_NAME:
 	DB	"HELP    OVL"
-STR_HELP_NOT_FOUND:
-	DB	"[HELP.OVL not found] ",0
 
 ; Helper: Initialize SHARED_TEMP_FCB with 11-char name in DE and drive in A.
 INIT_OVERLAY_FCB:
@@ -21333,8 +21358,7 @@ DPS_DISMISS:
 	RET
 
 DPS_MISSING:
-	LD	DE,STR_MSG_NEED_PLUGIN_MGR
-	CALL	HOST_SET_STATUS_MSG
+	CALL	SHOW_POPUP_NEED_PLUGIN_MGR
 	RET
 
 SAVE_EDITOR_PLUGIN_STATE:
@@ -21470,15 +21494,7 @@ DCPP_DISMISS:
 	RET
 
 DCPP_MISSING:
-	LD	DE,STR_MSG_NEED_PLUGIN_MGR
-	CALL	HOST_SET_STATUS_MSG
-	LD	A,(IN_EDITOR_MODE)
-	OR	A
-	JR	NZ,DCPM_ED
-	CALL	REDRAW_BASE_SCREEN
-	RET
-DCPM_ED:
-	CALL	RENDER_STATUS_BAR
+	CALL	SHOW_POPUP_NEED_PLUGIN_MGR
 	RET
 
 
@@ -23360,9 +23376,31 @@ STR_OVERWRITE_POPUP_MSG1:
 STR_OVERWRITE_POPUP_MSG2:
 	DB	"|        File already exists. Overwrite?         |", 0
 STR_DEF_PLUGIN_MGR:	DB	"PLUGIN.PRL", 0
-STR_MSG_NEED_PLUGIN_MGR: DB	"Feature requires PLUGIN.PRL", "$"
 STR_NAME_BEAUTIFY:	DB	"BEAUTIFY", 0
-STR_MSG_PLUG_MISSING:	DB	"[Plugin Missing]$", 0
+
+; Plugin Manager Missing Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_NEED_PLUG_TITLE:
+	DB	"|             Plugin Manager Missing             |", 0
+STR_POPUP_NEED_PLUG_MSG1:
+	DB	"|          Feature requires PLUGIN.PRL.          |", 0
+STR_POPUP_NEED_PLUG_MSG2:
+	DB	"|        Unable to load plugin subsystem.        |", 0
+
+; Plugin Missing Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_PLUG_MISS_TITLE:
+	DB	"|                 Plugin Missing                 |", 0
+STR_POPUP_PLUG_MISS_MSG1:
+	DB	"|         Required plugin was not found.         |", 0
+STR_POPUP_PLUG_MISS_MSG2:
+	DB	"|      Unable to execute requested command.      |", 0
+
+; Help Missing Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_HELP_MISS_TITLE:
+	DB	"|                  Help Missing                  |", 0
+STR_POPUP_HELP_MISS_MSG1:
+	DB	"|             HELP.OVL was not found.            |", 0
+STR_POPUP_HELP_MISS_MSG2:
+	DB	"|       Unable to load online help screen.       |", 0
 
 ;------------------------------------------------------------------------------
 ; String Constants & Data
