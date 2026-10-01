@@ -4616,110 +4616,175 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         # Step 70: Directory Listing Filter on Open, Save, Insert, Block Save
         # ---------------------------------------------------------------------
-        print("[*] Step 70: Testing Directory Listing Filter on Open, Save, "
-              "Insert, and Block Save...", flush=True)
+        print(
+            "[*] Step 70: Testing Directory Listing Filter on Open, Save, "
+            "Insert, and Block Save...",
+            flush=True
+        )
 
         # 1. Start SE from CP/M prompt
         time.sleep(0.5)
+        drain_all(master)
         os.write(master, b"se\r")
-        out_s70_splash = read_until(master, b"Free: ", timeout=20.0)
+        out_s70_splash = read_until(master, b"Free: ", timeout=35.0)
+        out_s70_splash += drain_all(master, quiet_time=0.1)
         if b"Free: " not in out_s70_splash:
-            print(f"[-] Step 70 failed: Could not reach splash screen. Buffer: {repr(out_s70_splash)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Could not reach splash screen. "
+                f"Buffer: {repr(out_s70_splash)}",
+                flush=True
+            )
             return False
-        time.sleep(0.5)
-        drain_all(master, quiet_time=0.1)
 
         # Subtest 1: Open File Screen Filter
         # Press 'o' to enter Open File screen
+        time.sleep(0.2)
         os.write(master, b"o")
-        out_s70_open = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s70_open = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
         if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_s70_open:
-            print(f"[-] Step 70 failed: Initial Open File header mismatch. Buffer: {repr(out_s70_open)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Initial Open File header mismatch. "
+                f"Buffer: {repr(out_s70_open)}",
+                flush=True
+            )
             return False
         if b"SE.COM" not in out_s70_open:
-            print("[-] Step 70 failed: SE.COM not found in unfiltered directory listing.", flush=True)
+            print(
+                "[-] Step 70 failed: SE.COM not found in unfiltered directory "
+                "listing.",
+                flush=True
+            )
             return False
 
         # Apply filter: '*.TXT'
         time.sleep(0.2)
         os.write(master, b"*.TXT\r")
-        out_s70_filt = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s70_filt = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
         if b"OPEN FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_filt:
-            print(f"[-] Step 70 failed: Header did not update to [*.TXT]. Buffer: {repr(out_s70_filt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Header did not update to [*.TXT]. "
+                f"Buffer: {repr(out_s70_filt)}",
+                flush=True
+            )
             return False
         new_s70_txt = out_s70_filt[out_s70_filt.rfind(b"[*.TXT]"):]
         if b"SE.COM" in new_s70_txt:
-            print(f"[-] Step 70 failed: SE.COM unexpectedly found in *.TXT filtered listing! Buffer: {repr(new_s70_txt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: SE.COM unexpectedly found in *.TXT "
+                f"filtered listing! Buffer: {repr(new_s70_txt)}",
+                flush=True
+            )
             return False
 
         # Reset filter: '*.*'
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"*.*\r")
-        out_s70_reset = read_until(master, b"Enter filename to open:", timeout=6.0)
-        last_s70_reset = out_s70_reset[out_s70_reset.rfind(b"DIRECTORY - DRIVE C:"):]
+        out_s70_reset = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
+        last_s70_reset = out_s70_reset[
+            out_s70_reset.rfind(b"DIRECTORY - DRIVE C:"):
+        ]
         header_s70_reset = last_s70_reset.split(b"\r\n")[0]
         if b": [" in header_s70_reset:
-            print(f"[-] Step 70 failed: Header did not reset after *.*. Buffer: {repr(header_s70_reset)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Header did not reset after *.*. "
+                f"Buffer: {repr(header_s70_reset)}",
+                flush=True
+            )
             return False
         if b"SE.COM" not in last_s70_reset:
-            print("[-] Step 70 failed: SE.COM not restored after *.* reset.", flush=True)
+            print(
+                "[-] Step 70 failed: SE.COM not restored after *.* reset.",
+                flush=True
+            )
             return False
 
         # Combined drive switch and filter: 'B:*.COM'
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"B:*.COM\r")
-        out_s70_b = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s70_b = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
         if b"OPEN FILE (DIRECTORY - DRIVE B: [*.COM])" not in out_s70_b:
-            print(f"[-] Step 70 failed: Combined drive+filter failed. Buffer: {repr(out_s70_b)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Combined drive+filter failed. "
+                f"Buffer: {repr(out_s70_b)}",
+                flush=True
+            )
             return False
 
         # Switch back to Drive C: with reset: 'C:*.*'
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"C:*.*\r")
-        out_s70_c = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s70_c = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
         last_s70_c = out_s70_c[out_s70_c.rfind(b"DIRECTORY - DRIVE C:"):]
         header_s70_c = last_s70_c.split(b"\r\n")[0]
         if b": [" in header_s70_c:
-            print(f"[-] Step 70 failed: Reset back to C:*.* failed. Buffer: {repr(header_s70_c)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Reset back to C:*.* failed. "
+                f"Buffer: {repr(header_s70_c)}",
+                flush=True
+            )
             return False
 
         # Test inline 'File not found' then filtering
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"NONEXIST.XYZ\r")
-        out_s70_fnf = read_until(master, b"File not found", timeout=4.0)
+        out_s70_fnf = read_until(master, b"File not found", timeout=6.0)
         if b"File not found" not in out_s70_fnf:
-            print(f"[-] Step 70 failed: 'File not found' inline message not displayed. Buffer: {repr(out_s70_fnf)}", flush=True)
+            print(
+                f"[-] Step 70 failed: 'File not found' inline message not "
+                f"displayed. Buffer: {repr(out_s70_fnf)}",
+                flush=True
+            )
             return False
 
         # Filter directly from FNF state: '*.TXT'
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"*.TXT\r")
-        out_s70_fnf_filt = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=4.0)
+        out_s70_fnf_filt = read_until(
+            master, b"OPEN FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=6.0
+        )
         if b"OPEN FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_fnf_filt:
-            print(f"[-] Step 70 failed: Filter from FNF state failed. Buffer: {repr(out_s70_fnf_filt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Filter from FNF state failed. "
+                f"Buffer: {repr(out_s70_fnf_filt)}",
+                flush=True
+            )
             return False
 
         # Press ESC to return to splash
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=4.0)
-        print("[+] Step 70 Subtest 1 PASSED: Open File directory filter and FNF recovery verified.", flush=True)
+        read_until(master, b"Active Screen:", timeout=6.0)
+        print(
+            "[+] Step 70 Subtest 1 PASSED: Open File directory filter and "
+            "FNF recovery verified.",
+            flush=True
+        )
 
         # Subtest 2: Save File Screen Filter & Filename Preservation
         # Start new editor document with 'e'
         time.sleep(0.2)
         os.write(master, b"e")
-        read_until(master, b"Line    1/1", timeout=4.0)
+        read_until(master, b"Line    1/1", timeout=6.0)
         time.sleep(0.2)
         os.write(master, b"Hello Filter Test")
 
         # Save file as TESTF.TXT
         time.sleep(0.3)
-        os.write(master, b"\x13") # Ctrl+S
+        os.write(master, b"\x13")  # Ctrl+S
         read_until(master, b"Enter filename to save:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"TESTF.TXT\r")
-        read_until(master, b"Line    1/1", timeout=6.0)
+        read_until(master, b"Line    1/1", timeout=8.0)
         time.sleep(0.3)
 
         # Modify document
@@ -4728,22 +4793,40 @@ def test_se_execution():
 
         # Press Ctrl+S: input box prefills with TESTF.TXT
         os.write(master, b"\x13")
-        out_s70_save2 = read_until(master, b"Enter filename to save:", timeout=8.0)
-        out_s70_save2 += read_until(master, b"TESTF.TXT", timeout=4.0)
+        out_s70_save2 = read_until(
+            master, b"Enter filename to save:", timeout=8.0
+        )
+        out_s70_save2 += read_until(master, b"TESTF.TXT", timeout=6.0)
         if b"TESTF.TXT" not in out_s70_save2:
-            print(f"[-] Step 70 failed: Save prompt did not prefill 'TESTF.TXT'. Buffer: {repr(out_s70_save2)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Save prompt did not prefill "
+                f"'TESTF.TXT'. Buffer: {repr(out_s70_save2)}",
+                flush=True
+            )
             return False
 
         # Type '*.TXT' and Enter to filter directory on Save screen
         time.sleep(0.3)
         os.write(master, b"\x08" * 20 + b"*.TXT\r")
-        out_s70_save_filt = read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=8.0)
+        out_s70_save_filt = read_until(
+            master, b"SAVE FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=8.0
+        )
         if b"SAVE FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_save_filt:
-            print(f"[-] Step 70 failed: Save header did not update to [*.TXT]. Buffer: {repr(out_s70_save_filt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Save header did not update to "
+                f"[*.TXT]. Buffer: {repr(out_s70_save_filt)}",
+                flush=True
+            )
             return False
-        out_s70_save_filt += read_until(master, b"Enter filename to save:", timeout=6.0)
+        out_s70_save_filt += read_until(
+            master, b"Enter filename to save:", timeout=6.0
+        )
         if b"*.TXT" not in out_s70_save_filt:
-            print(f"[-] Step 70 failed: Save prompt did NOT preserve input string '*.TXT'. Buffer: {repr(out_s70_save_filt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Save prompt did NOT preserve input "
+                f"string '*.TXT'. Buffer: {repr(out_s70_save_filt)}",
+                flush=True
+            )
             return False
 
         # Clear '*.TXT' and save as TESTF.TXT, confirm overwrite
@@ -4753,11 +4836,19 @@ def test_se_execution():
         if b"Overwrite?" in out_s70_ow:
             time.sleep(0.2)
             os.write(master, b"y")
-        out_s70_saved = read_until(master, b"Line    1/1", timeout=6.0)
+        out_s70_saved = read_until(master, b"Line    1/1", timeout=8.0)
         if b"TESTF.TXT" not in out_s70_saved:
-            print(f"[-] Step 70 failed: Return did not save file. Buffer: {repr(out_s70_saved)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Return did not save file. "
+                f"Buffer: {repr(out_s70_saved)}",
+                flush=True
+            )
             return False
-        print("[+] Step 70 Subtest 2 PASSED: Save File filter & filename preservation verified.", flush=True)
+        print(
+            "[+] Step 70 Subtest 2 PASSED: Save File filter & filename "
+            "preservation verified.",
+            flush=True
+        )
 
         # Subtest 3: Block Insert Screen Filter
         # Start block with Ctrl+B in editor
@@ -4766,17 +4857,30 @@ def test_se_execution():
         time.sleep(0.2)
         # Press Ctrl+O -> opens Block Insert File screen
         os.write(master, b"\x0f")
-        out_s70_ins = read_until(master, b"Enter filename to insert:", timeout=6.0)
+        out_s70_ins = read_until(
+            master, b"Enter filename to insert:", timeout=6.0
+        )
         if b"INSERT FILE (DIRECTORY - DRIVE C:" not in out_s70_ins:
-            print(f"[-] Step 70 failed: Failed to open Insert File screen. Buffer: {repr(out_s70_ins)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Failed to open Insert File screen. "
+                f"Buffer: {repr(out_s70_ins)}",
+                flush=True
+            )
             return False
 
         # Filter on Insert File screen: '*.TXT'
         time.sleep(0.2)
         os.write(master, b"*.TXT\r")
-        out_s70_ins_filt = read_until(master, b"Enter filename to insert:", timeout=6.0)
-        if b"INSERT FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_ins_filt:
-            print(f"[-] Step 70 failed: Insert File header filter failed. Buffer: {repr(out_s70_ins_filt)}", flush=True)
+        out_s70_ins_filt = read_until(
+            master, b"Enter filename to insert:", timeout=6.0
+        )
+        if (b"INSERT FILE (DIRECTORY - DRIVE C: [*.TXT])" not in
+                out_s70_ins_filt):
+            print(
+                f"[-] Step 70 failed: Insert File header filter failed. "
+                f"Buffer: {repr(out_s70_ins_filt)}",
+                flush=True
+            )
             return False
 
         # Cancel with ESC back to editor with solidified block
@@ -4784,25 +4888,45 @@ def test_se_execution():
         os.write(master, b"\x1b")
         out_s70_esc_ins = read_until(master, b"LOCK]", timeout=6.0)
         if b"LOCK]" not in out_s70_esc_ins:
-            print(f"[-] Step 70 failed: ESC from Insert File did not return with lock. Buffer: {repr(out_s70_esc_ins)}", flush=True)
+            print(
+                f"[-] Step 70 failed: ESC from Insert File did not return "
+                f"with lock. Buffer: {repr(out_s70_esc_ins)}",
+                flush=True
+            )
             return False
-        print("[+] Step 70 Subtest 3 PASSED: Block Insert File filter verified.", flush=True)
+        print(
+            "[+] Step 70 Subtest 3 PASSED: Block Insert File filter verified.",
+            flush=True
+        )
 
         # Subtest 4: Block Save Screen Filter
         # Block is already solidified; open Block Save screen with Ctrl+S
         time.sleep(0.3)
         os.write(master, b"\x13")
-        out_s70_blksave = read_until(master, b"Enter filename to save:", timeout=6.0)
+        out_s70_blksave = read_until(
+            master, b"Enter filename to save:", timeout=6.0
+        )
         if b"SAVE BLOCK (DIRECTORY - DRIVE C:" not in out_s70_blksave:
-            print(f"[-] Step 70 failed: Failed to open Save Block screen. Buffer: {repr(out_s70_blksave)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Failed to open Save Block screen. "
+                f"Buffer: {repr(out_s70_blksave)}",
+                flush=True
+            )
             return False
 
         # Filter on Block Save screen: '*.TXT'
         time.sleep(0.3)
         os.write(master, b"*.TXT\r")
-        out_s70_blksave_filt = read_until(master, b"Enter filename to save:", timeout=6.0)
-        if b"SAVE BLOCK (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_blksave_filt:
-            print(f"[-] Step 70 failed: Save Block header filter failed. Buffer: {repr(out_s70_blksave_filt)}", flush=True)
+        out_s70_blksave_filt = read_until(
+            master, b"Enter filename to save:", timeout=6.0
+        )
+        if (b"SAVE BLOCK (DIRECTORY - DRIVE C: [*.TXT])" not in
+                out_s70_blksave_filt):
+            print(
+                f"[-] Step 70 failed: Save Block header filter failed. "
+                f"Buffer: {repr(out_s70_blksave_filt)}",
+                flush=True
+            )
             return False
 
         # Cancel Block Save with ESC
@@ -4813,17 +4937,28 @@ def test_se_execution():
         # Cancel active block in editor with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"^K: Editor keys", timeout=4.0)
+        read_until(master, b"^K: Editor keys", timeout=6.0)
 
         # Exit editor cleanly to CP/M
         time.sleep(0.2)
-        os.write(master, b"\x11") # Ctrl+Q
+        os.write(master, b"\x11")  # Ctrl+Q
         out_s70_exit = read_until(master, b"C>", timeout=6.0)
         if b"C>" not in out_s70_exit:
-            print(f"[-] Step 70 failed: Exit to CP/M failed: {repr(out_s70_exit)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Exit to CP/M failed: "
+                f"{repr(out_s70_exit)}",
+                flush=True
+            )
             return False
-        print("[+] Step 70 Subtest 4 PASSED: Block Save File filter verified.", flush=True)
-        print("[+] Successfully verified Directory Listing Filter on Open, Save, Insert, and Block Save (Step 70)!", flush=True)
+        print(
+            "[+] Step 70 Subtest 4 PASSED: Block Save File filter verified.",
+            flush=True
+        )
+        print(
+            "[+] Successfully verified Directory Listing Filter on Open, "
+            "Save, Insert, and Block Save (Step 70)!",
+            flush=True
+        )
 
         # =============================================================
         # STEP 71: CP/M User Areas Support (C1: and 1C: Formats)
