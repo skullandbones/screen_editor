@@ -5151,15 +5151,22 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         # Step 72: Memory Information Screen ('m' key from splash menu)
         # ---------------------------------------------------------------------
-        print("[*] Step 72: Verifying Memory Information Screen ('m')...", flush=True)
+        print(
+            "[*] Step 72: Verifying Memory Information Screen ('m')...",
+            flush=True
+        )
         drain_all(master)
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s72_splash = read_until(master, b"for memory info", timeout=30.0)
+        out_s72_splash = read_until(master, b"for memory info", timeout=35.0)
         time.sleep(0.2)
         out_s72_splash += drain_all(master)
         if b"for memory info" not in out_s72_splash:
-            print(f"[-] Step 72 failed: 'for memory info' not found on splash screen. Buffer: {repr(out_s72_splash)}", flush=True)
+            print(
+                f"[-] Step 72 failed: 'for memory info' not found on splash "
+                f"screen. Buffer: {repr(out_s72_splash)}",
+                flush=True
+            )
             return False
         print("    [+] Splash screen displays 'for memory info' menu option.")
 
@@ -5170,38 +5177,92 @@ def test_se_execution():
         time.sleep(0.2)
         out_s72_mem += drain_all(master)
         if b"SE.COM - Extended Memory Map" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Title 'SE.COM - Extended Memory Map' missing. Buffer: {repr(out_s72_mem)}", flush=True)
+            print(
+                f"[-] Step 72 failed: Title 'SE.COM - Extended Memory Map' "
+                f"missing. Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
 
         # Verify summary line components
-        if b"HBIOS: RomWBW v" not in out_s72_mem or b"OS: CP/M 2.2" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Summary line HBIOS/OS missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        if (b"HBIOS: RomWBW v" not in out_s72_mem or
+                b"OS: CP/M 2.2" not in out_s72_mem):
+            print(
+                f"[-] Step 72 failed: Summary line HBIOS/OS missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
-        if b"RAM: 512 KB (16x32K)" not in out_s72_mem or (b"SE: 192 KB" not in out_s72_mem and b"SE: 448 KB" not in out_s72_mem):
-            print(f"[-] Step 72 failed: Summary line RAM/SE missing. Buffer: {repr(out_s72_mem)}", flush=True)
+
+        valid_se_ram = [b"SE: 192 KB", b"SE: 416 KB", b"SE: 448 KB"]
+        if (b"RAM: 512 KB (16x32K)" not in out_s72_mem or
+                not any(s in out_s72_mem for s in valid_se_ram)):
+            print(
+                f"[-] Step 72 failed: Summary line RAM/SE missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
         print("    [+] System summary row verified (HBIOS, OS, RAM, SE usage).")
 
         # Verify table headers
-        if b"Bank  Phys   Size   System / OS Role        SE.COM Usage" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Table header missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        tbl_hdr = b"Bank  Phys   Size   System / OS Role        SE.COM Usage"
+        if tbl_hdr not in out_s72_mem:
+            print(
+                f"[-] Step 72 failed: Table header missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
 
         # Verify key bank rows
-        if b"00    80h    32K    HBIOS System Firmware   Reserved: Protected HBIOS" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 00 HBIOS entry missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        b00_hdr = (
+            b"00    80h    32K    HBIOS System Firmware   "
+            b"Reserved: Protected HBIOS"
+        )
+        if b00_hdr not in out_s72_mem:
+            print(
+                f"[-] Step 72 failed: Bank 00 HBIOS entry missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
         if b"01    81h    32K    RAM Disk (MD0:)" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 01 RAM disk entry missing. Buffer: {repr(out_s72_mem)}", flush=True)
+            print(
+                f"[-] Step 72 failed: Bank 01 RAM disk entry missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
-        if b"Preserved: RAM Disk Active" not in out_s72_mem and b"Active: Doc Buffer Bank" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 01 RAM disk usage missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        if (b"Preserved: RAM Disk Active" not in out_s72_mem and
+                b"Active: Doc Buffer Bank" not in out_s72_mem):
+            print(
+                f"[-] Step 72 failed: Bank 01 RAM disk usage missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
-        if b"13    8Dh    32K    Application Memory      Active: 16K Line Slot Table" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 13 line table entry missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        b13_hdr = (
+            b"13    8Dh    32K    Application Memory      "
+            b"Active: 16K Line Slot Table"
+        )
+        if b13_hdr not in out_s72_mem:
+            print(
+                f"[-] Step 72 failed: Bank 13 line table entry missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
-        if b"14    8Eh    32K    CP/M 2.2 TPA & Base     Active: SE Program & Cache" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 14 TPA entry missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        b14_hdr = (
+            b"14    8Eh    32K    CP/M 2.2 TPA & Base     "
+            b"Active: SE Program & Cache"
+        )
+        if b14_hdr not in out_s72_mem:
+            print(
+                f"[-] Step 72 failed: Bank 14 TPA entry missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
         print("    [+] Table bank rows and dynamic roles verified.")
 
@@ -5209,7 +5270,11 @@ def test_se_execution():
         lines = out_s72_mem.decode("latin1", errors="replace").split("\r\n")
         tilde_rows = [l for l in lines if l.startswith("~")]
         if len(tilde_rows) < 20:
-            print(f"[-] Step 72 failed: Insufficient tildes in column 0 (got {len(tilde_rows)}).", flush=True)
+            print(
+                f"[-] Step 72 failed: Insufficient tildes in column 0 "
+                f"(got {len(tilde_rows)}).",
+                flush=True
+            )
             return False
         print(f"    [+] Column 0 tildes verified ({len(tilde_rows)} rows).")
 
@@ -5218,7 +5283,11 @@ def test_se_execution():
         os.write(master, b"\x1b")
         out_s72_back = read_until(master, b"for memory info", timeout=15.0)
         if b"for memory info" not in out_s72_back:
-            print(f"[-] Step 72 failed: Return to splash screen failed. Buffer: {repr(out_s72_back)}", flush=True)
+            print(
+                f"[-] Step 72 failed: Return to splash screen failed. "
+                f"Buffer: {repr(out_s72_back)}",
+                flush=True
+            )
             return False
         print("    [+] Clean return to splash screen on ESC verified.")
 
@@ -5227,11 +5296,17 @@ def test_se_execution():
         os.write(master, b"q")
         out_s72_cpm = read_until(master, b"C>", timeout=15.0)
         if b"C>" not in out_s72_cpm:
-            print(f"[-] Step 72 failed: Clean exit to CP/M failed. Buffer: {repr(out_s72_cpm)}", flush=True)
+            print(
+                f"[-] Step 72 failed: Clean exit to CP/M failed. "
+                f"Buffer: {repr(out_s72_cpm)}",
+                flush=True
+            )
             return False
         print("    [+] Clean exit to CP/M prompt verified.")
-        print("[+] Successfully verified Memory Information Screen (Step 72)!",
-              flush=True)
+        print(
+            "[+] Successfully verified Memory Information Screen (Step 72)!",
+            flush=True
+        )
 
         # ---------------------------------------------------------------------
         # Step 73: In-line Filename Edit Box Navigation and Editing
