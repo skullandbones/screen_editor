@@ -99,6 +99,11 @@ def test_se_execution():
     with open(big_tmp, "w") as f:
         for i in range(1, 3073):
             f.write(f"Line {i:04d}\r\n")
+    # Prepare BIG300.TXT on test disk image (300 lines) for Step 68
+    big300_tmp = "/tmp/BIG300.TXT"
+    with open(big300_tmp, "w") as f:
+        for i in range(1, 301):
+            f.write(f"Line {i:04d} of 300\r\n")
     # Prepare SE.CFG with RAMDRIVE=ON so all 12 Far banks (384 KB) are enabled for conformity suite
     cfg_tmp = "/tmp/SE.CFG"
     with open(cfg_tmp, "w") as f:
@@ -111,6 +116,9 @@ def test_se_execution():
     if os.path.isfile(cpmrm_bin):
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BIG300.TXT"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:se.cfg"],
@@ -149,6 +157,10 @@ def test_se_execution():
     if os.path.isfile(cpmcp_bin):
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big_tmp, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big300_tmp,
+             "0:BIG300.TXT"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, cfg_tmp, "0:SE.CFG"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if os.path.isfile(se_bin):
@@ -4283,15 +4295,23 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         # STEP 68: Save Progress Indicator ("Saving... | Line <count>")
         # ---------------------------------------------------------------------
-        print("[*] STEP 68: Testing Save Progress Indicator and 100-line ticker...", flush=True)
+        print(
+            "[*] STEP 68: Testing Save Progress Indicator and 100-line "
+            "ticker...",
+            flush=True
+        )
 
-        # Subtest 1: File Save progress on 300-line file (BIG300.TXT -> SAV300.TXT)
+        # Subtest 1: File Save progress on 300-line file (BIG300.TXT)
         time.sleep(0.5)
         os.write(master, b"se BIG300.TXT\r")
         out_s68_load = read_until(master, b"^K: Editor keys", timeout=35.0)
         drain_all(master)
         if b"^K: Editor keys" not in out_s68_load:
-            print(f"[-] Step 68 failed: Failed to open BIG300.TXT: {repr(out_s68_load[-200:])}", flush=True)
+            print(
+                f"[-] Step 68 failed: Failed to open BIG300.TXT: "
+                f"{repr(out_s68_load[-200:])}",
+                flush=True
+            )
             return False
 
         # Trigger Save with Ctrl+S (\x13)
@@ -4308,20 +4328,43 @@ def test_se_execution():
         out_s68_save += drain_all(master)
 
         if b"\x1b[?25l" not in out_s68_save:
-            print("[-] Step 68 failed: Cursor hide escape sequence not found during save.", flush=True)
+            print(
+                "[-] Step 68 failed: Cursor hide escape sequence not found "
+                "during save.",
+                flush=True
+            )
             return False
         if b"Saving..." not in out_s68_save:
-            print(f"[-] Step 68 failed: 'Saving...' not found in status bar during save: {repr(out_s68_save[:400])}", flush=True)
+            print(
+                f"[-] Step 68 failed: 'Saving...' not found in status bar "
+                f"during save: {repr(out_s68_save[:400])}",
+                flush=True
+            )
             return False
         if b"SAV300.TXT" not in out_s68_save:
-            print("[-] Step 68 failed: Target filename 'SAV300.TXT' not found in Field 1 during save.", flush=True)
+            print(
+                "[-] Step 68 failed: Target filename 'SAV300.TXT' not found "
+                "in Field 1 during save.",
+                flush=True
+            )
             return False
 
-        found_s68_ticks = [t for t in [b"Line   100", b"Line   200", b"Line   300"] if t in out_s68_save]
+        found_s68_ticks = [
+            t for t in [b"Line   100", b"Line   200", b"Line   300"]
+            if t in out_s68_save
+        ]
         if len(found_s68_ticks) < 3:
-            print(f"[-] Step 68 failed: Missing progress ticks during file save: {found_s68_ticks}", flush=True)
+            print(
+                f"[-] Step 68 failed: Missing progress ticks during file "
+                f"save: {found_s68_ticks}",
+                flush=True
+            )
             return False
-        print(f"[+] Step 68 Subtest 1 PASSED: File save progress verified with ticks: {[t.decode() for t in found_s68_ticks]}", flush=True)
+        print(
+            f"[+] Step 68 Subtest 1 PASSED: File save progress verified "
+            f"with ticks: {[t.decode() for t in found_s68_ticks]}",
+            flush=True
+        )
 
         # Subtest 2: Block Save progress on 250-line block (BLK300.TXT)
         os.write(master, b"\x14")  # Ctrl+T (Top of file)
@@ -4330,7 +4373,9 @@ def test_se_execution():
 
         os.write(master, b"\x02")  # Ctrl+B (Start block)
         time.sleep(0.1)
-        os.write(master, b"\x1b[B" * 250)  # Down 250 lines
+        for _ in range(250):
+            os.write(master, b"\x1b[B")  # Down 250 lines
+            time.sleep(0.01)
         time.sleep(0.5)
         drain_all(master)
 
@@ -4346,23 +4391,49 @@ def test_se_execution():
         out_s68_bsave += drain_all(master)
 
         if b"Saving..." not in out_s68_bsave:
-            print(f"[-] Step 68 failed: 'Saving...' not found during block save: {repr(out_s68_bsave[:400])}", flush=True)
+            print(
+                f"[-] Step 68 failed: 'Saving...' not found during block "
+                f"save: {repr(out_s68_bsave[:400])}",
+                flush=True
+            )
             return False
         if b"BLK300.TXT" not in out_s68_bsave:
-            print("[-] Step 68 failed: Target block filename 'BLK300.TXT' not found in Field 1 during save.", flush=True)
+            print(
+                "[-] Step 68 failed: Target block filename 'BLK300.TXT' not "
+                "found in Field 1 during save.",
+                flush=True
+            )
             return False
 
-        found_s68_bticks = [t for t in [b"Line   100", b"Line   200"] if t in out_s68_bsave]
+        found_s68_bticks = [
+            t for t in [b"Line   100", b"Line   200"]
+            if t in out_s68_bsave
+        ]
         if len(found_s68_bticks) < 2:
-            print(f"[-] Step 68 failed: Missing progress ticks during block save: {found_s68_bticks}", flush=True)
+            print(
+                f"[-] Step 68 failed: Missing progress ticks during block "
+                f"save: {found_s68_bticks}",
+                flush=True
+            )
             return False
-        if b"[BLK: 251L LOCK]" not in out_s68_bsave and b"LOCK]" not in out_s68_bsave:
-            print(f"[-] Step 68 failed: Block status not restored: {repr(out_s68_bsave[-200:])}", flush=True)
+        if (b"[BLK: 251L LOCK]" not in out_s68_bsave and
+                b"LOCK]" not in out_s68_bsave):
+            print(
+                f"[-] Step 68 failed: Block status not restored: "
+                f"{repr(out_s68_bsave[-200:])}",
+                flush=True
+            )
             return False
-        print(f"[+] Step 68 Subtest 2 PASSED: Block save progress verified with ticks: {[t.decode() for t in found_s68_bticks]}", flush=True)
+        print(
+            f"[+] Step 68 Subtest 2 PASSED: Block save progress verified "
+            f"with ticks: {[t.decode() for t in found_s68_bticks]}",
+            flush=True
+        )
 
         # Subtest 3: Save on Exit progress (EXIT_SAVE_AND_QUIT)
+        time.sleep(0.2)
         os.write(master, b"\x1b")  # ESC (Clear block)
+        read_until(master, b"^K: Editor keys", timeout=6.0)
         time.sleep(0.2)
         drain_all(master)
 
@@ -4373,7 +4444,11 @@ def test_se_execution():
         os.write(master, b"\x11")  # Ctrl+Q
         out_s68_prompt = read_until(master, b"Save changes?", timeout=5.0)
         if b"Save changes?" not in out_s68_prompt:
-            print(f"[-] Step 68 failed: Save changes prompt not found: {repr(out_s68_prompt)}", flush=True)
+            print(
+                f"[-] Step 68 failed: Save changes prompt not found: "
+                f"{repr(out_s68_prompt)}",
+                flush=True
+            )
             return False
 
         os.write(master, b"y")  # Confirm save
@@ -4381,18 +4456,39 @@ def test_se_execution():
         out_s68_exit += drain_all(master)
 
         if b"Saving..." not in out_s68_exit:
-            print(f"[-] Step 68 failed: 'Saving...' not found during exit save: {repr(out_s68_exit[:400])}", flush=True)
+            print(
+                f"[-] Step 68 failed: 'Saving...' not found during exit "
+                f"save: {repr(out_s68_exit[:400])}",
+                flush=True
+            )
             return False
 
-        found_s68_eticks = [t for t in [b"Line   100", b"Line   200", b"Line   300"] if t in out_s68_exit]
+        found_s68_eticks = [
+            t for t in [b"Line   100", b"Line   200", b"Line   300"]
+            if t in out_s68_exit
+        ]
         if len(found_s68_eticks) < 2:
-            print(f"[-] Step 68 failed: Missing progress ticks during exit save: {found_s68_eticks}", flush=True)
+            print(
+                f"[-] Step 68 failed: Missing progress ticks during exit "
+                f"save: {found_s68_eticks}",
+                flush=True
+            )
             return False
         if b"C>" not in out_s68_exit:
-            print("[-] Step 68 failed: Did not exit cleanly to CP/M.", flush=True)
+            print(
+                "[-] Step 68 failed: Did not exit cleanly to CP/M.",
+                flush=True
+            )
             return False
-        print(f"[+] Step 68 Subtest 3 PASSED: Exit save progress verified with ticks: {[t.decode() for t in found_s68_eticks]}", flush=True)
-        print("[+] Successfully verified Save Progress Indicator (Step 68)!", flush=True)
+        print(
+            f"[+] Step 68 Subtest 3 PASSED: Exit save progress verified "
+            f"with ticks: {[t.decode() for t in found_s68_eticks]}",
+            flush=True
+        )
+        print(
+            "[+] Successfully verified Save Progress Indicator (Step 68)!",
+            flush=True
+        )
 
         # ---------------------------------------------------------------------
         # STEP 69: Modified Document Indicator ('*') in Status Bar
