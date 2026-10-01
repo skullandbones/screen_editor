@@ -23596,8 +23596,6 @@ STR_TILDE_CRLF:		DB	"~",13,10,"$"
 STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
 STR_FILE_NOT_FOUND_SUFFIX:	DB	" file not found",13,10,"$"
 
-STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
-
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
 ;------------------------------------------------------------------------------
