@@ -4,16 +4,18 @@
 WORKSPACE_ROOT ?= ../..
 TOOLS_DIR ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Tools/Linux
 Z80ASM ?= $(WORKSPACE_ROOT)/tools/z88dk/bin/z88dk-z80asm
-IMAGE ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Binary/hd1k_combo.img
+GOLDEN_IMAGE ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Binary/hd1k_combo.img
+IMAGE_DIR ?= disks
+IMAGE ?= $(IMAGE_DIR)/hd1k_combo.img
 CPMCP ?= $(TOOLS_DIR)/cpmcp
 CPMRM ?= $(TOOLS_DIR)/cpmrm
 
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all plugins image check-tpa check-plugins check-lines test \
-	test-sanity test-conformity test-paging test-config test-32k \
-	test-cpm3 test-plugins test-beautifier test-popup test-slots \
+.PHONY: all plugins image init-image clean-image check-tpa check-plugins \
+	check-lines test test-sanity test-conformity test-paging test-config \
+	test-32k test-cpm3 test-plugins test-beautifier test-popup test-slots \
 	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
 	test-fatfs-hook test-full clean
 
@@ -42,7 +44,18 @@ plugins:
 	$(MAKE) -C plugins/fat all
 	cp -f plugins/fat/FATFS.PRL plugins/FATFS.PRL
 
-image: $(TARGET) plugins
+$(IMAGE):
+	@mkdir -p $(IMAGE_DIR)
+	@echo "==> Initializing workspace-isolated disk image from golden image..."
+	cp --sparse=always $(GOLDEN_IMAGE) $(IMAGE)
+	chmod 644 $(IMAGE)
+
+init-image: $(IMAGE)
+
+clean-image:
+	rm -rf $(IMAGE_DIR)
+
+image: $(IMAGE) $(TARGET) plugins
 	@echo "==> Injecting $(TARGET) and plugins into hd1k image (0 & 3)..."
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 0:se.com 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM

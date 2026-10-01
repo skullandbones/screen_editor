@@ -26,3 +26,8 @@ dist/
 tests/monkey_session*.json
 !tests/monkey_session_sample.json
 
+# Workspace-isolated disk images
+disks/
+*.img
+
+

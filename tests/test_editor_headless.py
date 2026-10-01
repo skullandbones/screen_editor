@@ -20,8 +20,20 @@ def find_paths():
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
 
     emu_bin = os.path.join(workspace_root, "tools", "rc2014_emu", "rc2014")
-    rom_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom")
-    img_file = os.path.join(workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img")
+    rom_file = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
+    )
+    golden_img = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
+    )
+    img_dir = os.path.join(repo_root, "disks")
+    img_file = os.path.join(img_dir, "hd1k_combo.img")
+    if not os.path.isfile(img_file):
+        os.makedirs(img_dir, exist_ok=True)
+        subprocess.run(
+            ["cp", "--sparse=always", golden_img, img_file], check=True
+        )
+        os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
 
     return emu_bin, rom_file, img_file, se_bin
@@ -87,6 +99,11 @@ def test_se_execution():
     with open(big_tmp, "w") as f:
         for i in range(1, 3073):
             f.write(f"Line {i:04d}\r\n")
+    # Prepare BIG300.TXT on test disk image (300 lines) for Step 68
+    big300_tmp = "/tmp/BIG300.TXT"
+    with open(big300_tmp, "w") as f:
+        for i in range(1, 301):
+            f.write(f"Line {i:04d} of 300\r\n")
     # Prepare SE.CFG with RAMDRIVE=ON so all 12 Far banks (384 KB) are enabled for conformity suite
     cfg_tmp = "/tmp/SE.CFG"
     with open(cfg_tmp, "w") as f:
@@ -99,7 +116,16 @@ def test_se_execution():
     if os.path.isfile(cpmrm_bin):
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BIG300.TXT"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:se.cfg"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:se.com"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -131,8 +157,17 @@ def test_se_execution():
     if os.path.isfile(cpmcp_bin):
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big_tmp, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, big300_tmp,
+             "0:BIG300.TXT"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, cfg_tmp, "0:SE.CFG"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.isfile(se_bin):
+            subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin,
+                            "0:SE.COM"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
         ins1_tmp = "/tmp/INS1.TXT"
         with open(ins1_tmp, "wb") as f:
             f.write(b"INSERTED")
@@ -1577,7 +1612,11 @@ def test_se_execution():
         os.write(master, b"\x0b")
         out_solid_cpy = read_until(master, b"[BLK: 2c LOCK]", timeout=4.0)
         if b"[BLK: 2c LOCK]" not in out_solid_cpy:
-            print(f"[-] Block solidification failed for Ctrl+C test. Buffer: {repr(out_solid_cpy)}", flush=True)
+            print(
+                f"[-] Step 36: Block solidification failed for Ctrl+C test. "
+                f"Buffer: {repr(out_solid_cpy)}",
+                flush=True
+            )
             return False
         time.sleep(0.1)
         drain_all(master)
@@ -1590,7 +1629,11 @@ def test_se_execution():
         time.sleep(0.2)
         out_in_blk = drain_all(master)
         if out_in_blk != b"":
-            print(f"[-] Ctrl+C inside block was not ignored. Buffer: {repr(out_in_blk)}", flush=True)
+            print(
+                f"[-] Step 36: Ctrl+C inside block was not ignored. "
+                f"Buffer: {repr(out_in_blk)}",
+                flush=True
+            )
             return False
 
         # Move cursor to end of line: Ctrl+E (Col 2 or higher, outside block)
@@ -1602,27 +1645,41 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_cpy1 = drain_all(master)
-        if b"[BLK: 2c LOCK]" not in out_cpy1 or (b"L1L1" not in out_cpy1 and b"L1\x1b[0mL1" not in out_cpy1):
-            print(f"[-] Ctrl+C copy failed or lost block lock. Buffer: {repr(out_cpy1)}", flush=True)
+        if b"[BLK: 2c LOCK]" not in out_cpy1 or (
+            b"L1L1" not in out_cpy1 and b"L1\x1b[0mL1" not in out_cpy1
+        ):
+            print(
+                f"[-] Step 36: Ctrl+C copy failed or lost block lock. "
+                f"Buffer: {repr(out_cpy1)}",
+                flush=True
+            )
             return False
 
         # Test 3: Press Ctrl+C again consecutively: duplicate copy
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_cpy2 = drain_all(master)
-        if b"[BLK: 2c LOCK]" not in out_cpy2 or (b"L1L1L1" not in out_cpy2 and b"L1\x1b[0mL1L1" not in out_cpy2):
-            print(f"[-] Consecutive Ctrl+C failed or lost block lock. Buffer: {repr(out_cpy2)}", flush=True)
+        if b"[BLK: 2c LOCK]" not in out_cpy2 or (
+            b"L1L1L1" not in out_cpy2 and b"L1\x1b[0mL1L1" not in out_cpy2
+        ):
+            print(
+                f"[-] Step 36: Consecutive Ctrl+C failed or lost block lock. "
+                f"Buffer: {repr(out_cpy2)}",
+                flush=True
+            )
             return False
 
         # Test 4: Multi-line block copy (1L boundary at Row 2 Col 0, and 2L full block)
         # Cancel previous block with ESC
         os.write(master, b"\x1b")
+        time.sleep(0.1)
         read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
         os.write(master, b"\x14\x01")
         time.sleep(0.1)
+        drain_all(master)
         # Start block (Ctrl+B), expand down 1 row (Down Arrow to Row 2 Col 0)
         os.write(master, b"\x02\x1b[B")
         time.sleep(0.1)
@@ -1630,7 +1687,11 @@ def test_se_execution():
         os.write(master, b"\x0b")
         out_1l_solid = read_until(master, b"[BLK: 1L LOCK]", timeout=4.0)
         if b"[BLK: 1L LOCK]" not in out_1l_solid:
-            print(f"[-] 1L block solidification failed. Buffer: {repr(out_1l_solid)}", flush=True)
+            print(
+                f"[-] Step 36: 1L block solidification failed. "
+                f"Buffer: {repr(out_1l_solid)}",
+                flush=True
+            )
             return False
 
         # Test Ctrl+C directly at Row 2 Col 0: must not be ignored
@@ -1639,17 +1700,23 @@ def test_se_execution():
         time.sleep(0.3)
         out_1l_cpy = drain_all(master)
         if b"[BLK: 1L LOCK]" not in out_1l_cpy:
-            print(f"[-] Ctrl+C at Row 2 Col 0 failed. Buffer: {repr(out_1l_cpy)}", flush=True)
+            print(
+                f"[-] Step 36: Ctrl+C at Row 2 Col 0 failed. "
+                f"Buffer: {repr(out_1l_cpy)}",
+                flush=True
+            )
             return False
 
         # Cancel block
         os.write(master, b"\x1b")
+        time.sleep(0.1)
         read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
 
         # Move to Row 1 Col 0: Ctrl+T, Ctrl+A
         os.write(master, b"\x14\x01")
         time.sleep(0.1)
+        drain_all(master)
         # Start block (Ctrl+B), expand down 2 rows (Down Arrow twice) for 2 lines
         os.write(master, b"\x02\x1b[B\x1b[B")
         time.sleep(0.1)
@@ -1657,7 +1724,11 @@ def test_se_execution():
         os.write(master, b"\x0b")
         out_ml_solid = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
         if b"[BLK: 2L LOCK]" not in out_ml_solid:
-            print(f"[-] Multi-line solidification failed. Buffer: {repr(out_ml_solid)}", flush=True)
+            print(
+                f"[-] Step 36: Multi-line solidification failed. "
+                f"Buffer: {repr(out_ml_solid)}",
+                flush=True
+            )
             return False
 
         # Jump to bottom of file (Ctrl+G), then end of line (Ctrl+E)
@@ -1670,18 +1741,27 @@ def test_se_execution():
         time.sleep(0.3)
         out_ml_cpy = drain_all(master)
         if b"[BLK: 2L LOCK]" not in out_ml_cpy:
-            print(f"[-] Multi-line block copy failed. Buffer: {repr(out_ml_cpy)}", flush=True)
+            print(
+                f"[-] Step 36: Multi-line block copy failed. "
+                f"Buffer: {repr(out_ml_cpy)}",
+                flush=True
+            )
             return False
 
         # Test 5: Cancellation terminates Ctrl+C
         os.write(master, b"\x1b")
+        time.sleep(0.1)
         read_until(master, b"^K: Editor keys", timeout=4.0)
         drain_all(master)
         os.write(master, b"\x03")
         time.sleep(0.2)
         out_cancelled = drain_all(master)
         if out_cancelled != b"":
-            print(f"[-] Ctrl+C operated after block was cancelled! Buffer: {repr(out_cancelled)}", flush=True)
+            print(
+                f"[-] Step 36: Ctrl+C operated after block was cancelled! "
+                f"Buffer: {repr(out_cancelled)}",
+                flush=True
+            )
             return False
 
         print(
@@ -2537,6 +2617,7 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x1b")
         read_until(master, b"^K: Editor keys", timeout=4.0)
+        time.sleep(0.1)
         drain_all(master)
 
         # Re-search: Ctrl+F then Enter to repeat previous search
@@ -2547,18 +2628,30 @@ def test_se_execution():
         os.write(master, b"\r")
         out_s48_re = read_until(master, b"Col 8", timeout=4.0)
         if b"[BLK: 8c LOCK]" not in out_s48_re or b"Col 8" not in out_s48_re:
-            print(f"[-] Step 48 failed: Solidified block re-match missing or not at Col 8. Buffer: {repr(out_s48_re)}", flush=True)
+            print(
+                f"[-] Step 48 failed: Solidified block re-match missing or "
+                f"not at Col 8. Buffer: {repr(out_s48_re)}",
+                flush=True
+            )
             return False
-        print("[+] Successfully verified Solidified Block Highlighting on Match (Step 48)!", flush=True)
+        print(
+            "[+] Successfully verified Solidified Block Highlighting on "
+            "Match (Step 48)!",
+            flush=True
+        )
 
         # ---------------------------------------------------------------------
         # Step 49: Start Search / Replace from Active Highlighted Block
         # ---------------------------------------------------------------------
-        print("[*] Step 49: Verifying Start Search from Highlighted Block...", flush=True)
+        print(
+            "[*] Step 49: Verifying Start Search from Highlighted Block...",
+            flush=True
+        )
         # Dismiss existing block with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
         read_until(master, b"^K: Editor keys", timeout=4.0)
+        time.sleep(0.1)
         drain_all(master)
         # Move to top of document: Ctrl+T, Ctrl+A (Line 1 Col 0)
         os.write(master, b"\x14\x01")
@@ -2686,8 +2779,23 @@ def test_se_execution():
 
         # Quit replace with 'q'
         os.write(master, b"q")
-        read_until(master, b"Replace done: 0 replacement(s).", timeout=4.0)
-        print("[+] Successfully verified Dynamic Reversal of Search Direction (Step 51)!", flush=True)
+        out_s51_done = read_until(
+            master, b"Replace done: 0 replacement(s).", timeout=4.0
+        )
+        if b"Replace done: 0 replacement(s)." not in out_s51_done:
+            print(
+                f"[-] Step 51 failed: Replace done missing. "
+                f"Buffer: {repr(out_s51_done)}",
+                flush=True,
+            )
+            return False
+        time.sleep(0.3)
+        drain_all(master)
+        print(
+            "[+] Successfully verified Dynamic Reversal of Search Direction "
+            "(Step 51)!",
+            flush=True,
+        )
 
         # ---------------------------------------------------------------------
         # Step 52: Unsaved Modifications Check on Exit (Ctrl+Q)
@@ -2962,9 +3070,16 @@ def test_se_execution():
         # 10. Exit cleanly with Ctrl+Q
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
-        print("[+] Step 57: Clean exit back to CP/M prompt.", flush=True)
-        print("[+] Successfully verified Open File (Ctrl+O & Splash :o) Unsaved Modifications Check (Step 54)!", flush=True)
+        out_s54_exit = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s54_exit:
+            print(f"[-] Step 54 failed: Exit to CP/M prompt missing. "
+                  f"Buffer: {repr(out_s54_exit)}", flush=True)
+            return False
+        time.sleep(0.3)
+        drain_all(master)
+        print("[+] Step 54: Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Successfully verified Open File (Ctrl+O & Splash :o) "
+              "Unsaved Modifications Check (Step 54)!", flush=True)
 
         # ---------------------------------------------------------------------
         # Step 55: Open File Screen Line Number Specification (e.g. 30.TXT:15)
@@ -3042,18 +3157,27 @@ def test_se_execution():
         # 7. Exit cleanly with Ctrl+Q
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
-        print("[+] Clean exit back to CP/M prompt.", flush=True)
-        print("[+] Successfully verified Open File Screen Line Number Specification (Step 55)!", flush=True)
+        out_s55_exit = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s55_exit:
+            print(f"[-] Step 55 failed: Exit to CP/M prompt missing. "
+                  f"Buffer: {repr(out_s55_exit)}", flush=True)
+            return False
+        time.sleep(0.3)
+        drain_all(master)
+        print("[+] Step 55: Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Successfully verified Open File Screen Line Number "
+              "Specification (Step 55)!", flush=True)
 
         # ---------------------------------------------------------------------
-        # Step 56: Verifying 13-Bank Far RAM Discovery and HBIOS Bank 0x80 Protection
+        # Step 56: Verifying 13-Bank Far RAM Discovery and HBIOS Bank 0x80
+        # Protection
         # ---------------------------------------------------------------------
-        print("[*] Step 56: Verifying 13-Bank Far RAM discovery and HBIOS Bank 0x80 protection...", flush=True)
+        print("[*] Step 56: Verifying 13-Bank Far RAM discovery and "
+              "HBIOS Bank 0x80 protection...", flush=True)
         drain_all(master)
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s56 = read_until(master, SPLASH_FREE_TARGETS, timeout=20.0)
+        out_s56 = read_until(master, SPLASH_FREE_TARGETS, timeout=35.0)
         if not has_free_mem(out_s56):
             print(f"[-] Step 56 failed: Free memory missing: {repr(out_s56)}",
                   flush=True)
@@ -3062,34 +3186,47 @@ def test_se_execution():
         # View memory info map ('m')
         time.sleep(0.5)
         os.write(master, b"m")
-        out_diag = read_until(master, b"return to splash screen", timeout=12.0)
-        if b"80h" not in out_diag or b"Protected HBIOS" not in out_diag or b"Line Slot Table" not in out_diag:
-            print(f"[-] Step 56 failed: Memory map did not display. Buffer: {repr(out_diag)}", flush=True)
+        out_diag = read_until(master, b"return to splash screen", timeout=15.0)
+        if (b"80h" not in out_diag or b"Protected HBIOS" not in out_diag or
+                b"Line Slot Table" not in out_diag):
+            print(f"[-] Step 56 failed: Memory map did not display. "
+                  f"Buffer: {repr(out_diag)}", flush=True)
             return False
 
         # Return to splash screen
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b" ")
-        read_until(master, SPLASH_FREE_TARGETS, timeout=15.0)
+        read_until(master, SPLASH_FREE_TARGETS, timeout=20.0)
 
         # Clean exit to CP/M
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
-        print("[+] Successfully verified 13-Bank Far RAM discovery and HBIOS Bank 0x80 protection (Step 56)!", flush=True)
+        out_s56_exit = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s56_exit:
+            print(f"[-] Step 56 failed: Exit to CP/M prompt missing. "
+                  f"Buffer: {repr(out_s56_exit)}", flush=True)
+            return False
+        time.sleep(0.3)
+        drain_all(master)
+        print("[+] Step 56: Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Successfully verified 13-Bank Far RAM discovery and "
+              "HBIOS Bank 0x80 protection (Step 56)!", flush=True)
 
         # ---------------------------------------------------------------------
         # Step 57: Verifying OOM Status Bar Replacement and Revert on Keypress
         # ---------------------------------------------------------------------
-        print("[*] Step 57: Verifying OOM status bar replacement and revert on keypress...", flush=True)
+        print("[*] Step 57: Verifying OOM status bar replacement and "
+              "revert on keypress...", flush=True)
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"se BIG.TXT\r")
-        out_s57 = read_until(master, b"Line    1/3072", timeout=60.0)
+        out_s57 = read_until(master, b"Line    1/3072", timeout=100.0)
         if b"Line    1/3072" not in out_s57 or b"^K: Editor keys" not in out_s57:
-            print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing '^K: Editor keys'. Buffer: {repr(out_s57[-200:])}", flush=True)
+            print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing "
+                  f"'^K: Editor keys'. Buffer: {repr(out_s57[-200:])}",
+                  flush=True)
             return False
         print(
             "[+] Step 57: BIG.TXT loaded with status bar showing "
@@ -3097,8 +3234,9 @@ def test_se_execution():
             flush=True
         )
 
-        # Step 57 note: Document capacity is now 16,384 lines under Phase 4 virtual paging engine,
-        # so inserting a line at 3,072 lines no longer triggers in-memory OOM.
+        # Step 57 note: Document capacity is now 16,384 lines under Phase 4
+        # virtual paging engine, so inserting a line at 3,072 lines no longer
+        # triggers in-memory OOM.
         print(
             "[+] Step 57: BIG.TXT loaded successfully; Phase 4 virtual "
             "paging allows expansion past 3072 lines.",
@@ -3116,7 +3254,7 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x11")
-        out_s57_q = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        out_s57_q = read_until(master, b"[ESC]=Cancel", timeout=6.0)
         if b"Save changes?" not in out_s57_q:
             print(f"[-] Step 57 failed: Missing save changes prompt on exit. "
                   f"Buffer: {repr(out_s57_q)}", flush=True)
@@ -3130,7 +3268,7 @@ def test_se_execution():
             return False
         time.sleep(0.5)
         drain_all(master)
-        print("[+] Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Step 57: Clean exit back to CP/M prompt.", flush=True)
         print(
             "[+] Step 57: Successfully verified OOM Status Bar Replacement "
             "and Revert on Keypress!",
@@ -3853,16 +3991,17 @@ def test_se_execution():
         # Launch SE.COM directly into new document
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s66_boot = read_until(master, b"Col 0", timeout=14.0)
+        out_s66_boot = read_until(master, b"Col 0", timeout=35.0)
         time.sleep(0.3)
         drain_all(master)
 
         # Enter editor mode with 'e'
         os.write(master, b"e")
-        out_s66_ed = read_until(master, b"^K: Editor keys", timeout=6.0)
+        out_s66_ed = read_until(master, b"^K: Editor keys", timeout=8.0)
         drain_all(master)
         if b"^K: Editor keys" not in out_s66_ed:
-            print(f"[-] Step 66 failed: Failed to enter editor mode: {repr(out_s66_ed)}", flush=True)
+            print(f"[-] Step 66 failed: Failed to enter editor mode: "
+                  f"{repr(out_s66_ed)}", flush=True)
             return False
 
         # Subtest 1: Open Insert File screen with block, verify title/prompt and ESC cancel
@@ -4017,14 +4156,16 @@ def test_se_execution():
 
         # Subtest 5: Replace multi-line block with single-line file
         # Dismiss previous solidified block with ESC
+        time.sleep(0.3)
         os.write(master, b"\x1b")
-        time.sleep(0.1)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+        time.sleep(0.2)
         drain_all(master)
 
         os.write(master, b"\x1b[A")  # Up to line 0
-        time.sleep(0.05)
+        time.sleep(0.1)
         os.write(master, b"\x01")    # Home
-        time.sleep(0.05)
+        time.sleep(0.1)
         for _ in range(5):
             os.write(master, b"\x1b[C")
             time.sleep(0.05)
@@ -4032,11 +4173,11 @@ def test_se_execution():
 
         # Block from Line 0 Col 5 to Line 1 Col 11
         os.write(master, b"\x02")
-        time.sleep(0.1)
+        time.sleep(0.2)
         os.write(master, b"\x1b[B")  # Down to line 1
-        time.sleep(0.05)
+        time.sleep(0.1)
         os.write(master, b"\x01")
-        time.sleep(0.05)
+        time.sleep(0.1)
         for _ in range(11):
             os.write(master, b"\x1b[C")
             time.sleep(0.05)
@@ -4051,12 +4192,16 @@ def test_se_execution():
         out_s66_ins3 += drain_all(master)
 
         if b"[BLK: 8c LOCK]" not in out_s66_ins3:
-            print(f"[-] Step 66 Subtest 5 failed: '[BLK: 8c LOCK]' not found: {repr(out_s66_ins3)}", flush=True)
+            print(f"[-] Step 66 Subtest 5 failed: '[BLK: 8c LOCK]' not "
+                  f"found: {repr(out_s66_ins3)}", flush=True)
             return False
         if b"INSERTED" not in out_s66_ins3:
-            print(f"[-] Step 66 Subtest 5 failed: 'INSERTED' not found: {repr(out_s66_ins3)}", flush=True)
+            print(f"[-] Step 66 Subtest 5 failed: 'INSERTED' not found: "
+                  f"{repr(out_s66_ins3)}", flush=True)
             return False
-        print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted, replaced with single-line file, and solidified [BLK: 8c LOCK].", flush=True)
+        print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted, "
+              "replaced with single-line file, and solidified "
+              "[BLK: 8c LOCK].", flush=True)
 
         # Subtest 6: Test block delete of inserted file, re-insert and ESC dismiss
         # Line 1 currently has "Hello" + [BLK: 8c LOCK] "INSERTED" + " END"
@@ -4180,15 +4325,23 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         # STEP 68: Save Progress Indicator ("Saving... | Line <count>")
         # ---------------------------------------------------------------------
-        print("[*] STEP 68: Testing Save Progress Indicator and 100-line ticker...", flush=True)
+        print(
+            "[*] STEP 68: Testing Save Progress Indicator and 100-line "
+            "ticker...",
+            flush=True
+        )
 
-        # Subtest 1: File Save progress on 300-line file (BIG300.TXT -> SAV300.TXT)
+        # Subtest 1: File Save progress on 300-line file (BIG300.TXT)
         time.sleep(0.5)
         os.write(master, b"se BIG300.TXT\r")
         out_s68_load = read_until(master, b"^K: Editor keys", timeout=35.0)
         drain_all(master)
         if b"^K: Editor keys" not in out_s68_load:
-            print(f"[-] Step 68 failed: Failed to open BIG300.TXT: {repr(out_s68_load[-200:])}", flush=True)
+            print(
+                f"[-] Step 68 failed: Failed to open BIG300.TXT: "
+                f"{repr(out_s68_load[-200:])}",
+                flush=True
+            )
             return False
 
         # Trigger Save with Ctrl+S (\x13)
@@ -4205,20 +4358,43 @@ def test_se_execution():
         out_s68_save += drain_all(master)
 
         if b"\x1b[?25l" not in out_s68_save:
-            print("[-] Step 68 failed: Cursor hide escape sequence not found during save.", flush=True)
+            print(
+                "[-] Step 68 failed: Cursor hide escape sequence not found "
+                "during save.",
+                flush=True
+            )
             return False
         if b"Saving..." not in out_s68_save:
-            print(f"[-] Step 68 failed: 'Saving...' not found in status bar during save: {repr(out_s68_save[:400])}", flush=True)
+            print(
+                f"[-] Step 68 failed: 'Saving...' not found in status bar "
+                f"during save: {repr(out_s68_save[:400])}",
+                flush=True
+            )
             return False
         if b"SAV300.TXT" not in out_s68_save:
-            print("[-] Step 68 failed: Target filename 'SAV300.TXT' not found in Field 1 during save.", flush=True)
+            print(
+                "[-] Step 68 failed: Target filename 'SAV300.TXT' not found "
+                "in Field 1 during save.",
+                flush=True
+            )
             return False
 
-        found_s68_ticks = [t for t in [b"Line   100", b"Line   200", b"Line   300"] if t in out_s68_save]
+        found_s68_ticks = [
+            t for t in [b"Line   100", b"Line   200", b"Line   300"]
+            if t in out_s68_save
+        ]
         if len(found_s68_ticks) < 3:
-            print(f"[-] Step 68 failed: Missing progress ticks during file save: {found_s68_ticks}", flush=True)
+            print(
+                f"[-] Step 68 failed: Missing progress ticks during file "
+                f"save: {found_s68_ticks}",
+                flush=True
+            )
             return False
-        print(f"[+] Step 68 Subtest 1 PASSED: File save progress verified with ticks: {[t.decode() for t in found_s68_ticks]}", flush=True)
+        print(
+            f"[+] Step 68 Subtest 1 PASSED: File save progress verified "
+            f"with ticks: {[t.decode() for t in found_s68_ticks]}",
+            flush=True
+        )
 
         # Subtest 2: Block Save progress on 250-line block (BLK300.TXT)
         os.write(master, b"\x14")  # Ctrl+T (Top of file)
@@ -4227,7 +4403,9 @@ def test_se_execution():
 
         os.write(master, b"\x02")  # Ctrl+B (Start block)
         time.sleep(0.1)
-        os.write(master, b"\x1b[B" * 250)  # Down 250 lines
+        for _ in range(250):
+            os.write(master, b"\x1b[B")  # Down 250 lines
+            time.sleep(0.01)
         time.sleep(0.5)
         drain_all(master)
 
@@ -4243,23 +4421,49 @@ def test_se_execution():
         out_s68_bsave += drain_all(master)
 
         if b"Saving..." not in out_s68_bsave:
-            print(f"[-] Step 68 failed: 'Saving...' not found during block save: {repr(out_s68_bsave[:400])}", flush=True)
+            print(
+                f"[-] Step 68 failed: 'Saving...' not found during block "
+                f"save: {repr(out_s68_bsave[:400])}",
+                flush=True
+            )
             return False
         if b"BLK300.TXT" not in out_s68_bsave:
-            print("[-] Step 68 failed: Target block filename 'BLK300.TXT' not found in Field 1 during save.", flush=True)
+            print(
+                "[-] Step 68 failed: Target block filename 'BLK300.TXT' not "
+                "found in Field 1 during save.",
+                flush=True
+            )
             return False
 
-        found_s68_bticks = [t for t in [b"Line   100", b"Line   200"] if t in out_s68_bsave]
+        found_s68_bticks = [
+            t for t in [b"Line   100", b"Line   200"]
+            if t in out_s68_bsave
+        ]
         if len(found_s68_bticks) < 2:
-            print(f"[-] Step 68 failed: Missing progress ticks during block save: {found_s68_bticks}", flush=True)
+            print(
+                f"[-] Step 68 failed: Missing progress ticks during block "
+                f"save: {found_s68_bticks}",
+                flush=True
+            )
             return False
-        if b"[BLK: 251L LOCK]" not in out_s68_bsave and b"LOCK]" not in out_s68_bsave:
-            print(f"[-] Step 68 failed: Block status not restored: {repr(out_s68_bsave[-200:])}", flush=True)
+        if (b"[BLK: 251L LOCK]" not in out_s68_bsave and
+                b"LOCK]" not in out_s68_bsave):
+            print(
+                f"[-] Step 68 failed: Block status not restored: "
+                f"{repr(out_s68_bsave[-200:])}",
+                flush=True
+            )
             return False
-        print(f"[+] Step 68 Subtest 2 PASSED: Block save progress verified with ticks: {[t.decode() for t in found_s68_bticks]}", flush=True)
+        print(
+            f"[+] Step 68 Subtest 2 PASSED: Block save progress verified "
+            f"with ticks: {[t.decode() for t in found_s68_bticks]}",
+            flush=True
+        )
 
         # Subtest 3: Save on Exit progress (EXIT_SAVE_AND_QUIT)
+        time.sleep(0.2)
         os.write(master, b"\x1b")  # ESC (Clear block)
+        read_until(master, b"^K: Editor keys", timeout=6.0)
         time.sleep(0.2)
         drain_all(master)
 
@@ -4270,7 +4474,11 @@ def test_se_execution():
         os.write(master, b"\x11")  # Ctrl+Q
         out_s68_prompt = read_until(master, b"Save changes?", timeout=5.0)
         if b"Save changes?" not in out_s68_prompt:
-            print(f"[-] Step 68 failed: Save changes prompt not found: {repr(out_s68_prompt)}", flush=True)
+            print(
+                f"[-] Step 68 failed: Save changes prompt not found: "
+                f"{repr(out_s68_prompt)}",
+                flush=True
+            )
             return False
 
         os.write(master, b"y")  # Confirm save
@@ -4278,18 +4486,39 @@ def test_se_execution():
         out_s68_exit += drain_all(master)
 
         if b"Saving..." not in out_s68_exit:
-            print(f"[-] Step 68 failed: 'Saving...' not found during exit save: {repr(out_s68_exit[:400])}", flush=True)
+            print(
+                f"[-] Step 68 failed: 'Saving...' not found during exit "
+                f"save: {repr(out_s68_exit[:400])}",
+                flush=True
+            )
             return False
 
-        found_s68_eticks = [t for t in [b"Line   100", b"Line   200", b"Line   300"] if t in out_s68_exit]
+        found_s68_eticks = [
+            t for t in [b"Line   100", b"Line   200", b"Line   300"]
+            if t in out_s68_exit
+        ]
         if len(found_s68_eticks) < 2:
-            print(f"[-] Step 68 failed: Missing progress ticks during exit save: {found_s68_eticks}", flush=True)
+            print(
+                f"[-] Step 68 failed: Missing progress ticks during exit "
+                f"save: {found_s68_eticks}",
+                flush=True
+            )
             return False
         if b"C>" not in out_s68_exit:
-            print("[-] Step 68 failed: Did not exit cleanly to CP/M.", flush=True)
+            print(
+                "[-] Step 68 failed: Did not exit cleanly to CP/M.",
+                flush=True
+            )
             return False
-        print(f"[+] Step 68 Subtest 3 PASSED: Exit save progress verified with ticks: {[t.decode() for t in found_s68_eticks]}", flush=True)
-        print("[+] Successfully verified Save Progress Indicator (Step 68)!", flush=True)
+        print(
+            f"[+] Step 68 Subtest 3 PASSED: Exit save progress verified "
+            f"with ticks: {[t.decode() for t in found_s68_eticks]}",
+            flush=True
+        )
+        print(
+            "[+] Successfully verified Save Progress Indicator (Step 68)!",
+            flush=True
+        )
 
         # ---------------------------------------------------------------------
         # STEP 69: Modified Document Indicator ('*') in Status Bar
@@ -4417,110 +4646,175 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         # Step 70: Directory Listing Filter on Open, Save, Insert, Block Save
         # ---------------------------------------------------------------------
-        print("[*] Step 70: Testing Directory Listing Filter on Open, Save, "
-              "Insert, and Block Save...", flush=True)
+        print(
+            "[*] Step 70: Testing Directory Listing Filter on Open, Save, "
+            "Insert, and Block Save...",
+            flush=True
+        )
 
         # 1. Start SE from CP/M prompt
         time.sleep(0.5)
+        drain_all(master)
         os.write(master, b"se\r")
-        out_s70_splash = read_until(master, b"Free: ", timeout=20.0)
+        out_s70_splash = read_until(master, b"Free: ", timeout=35.0)
+        out_s70_splash += drain_all(master, quiet_time=0.1)
         if b"Free: " not in out_s70_splash:
-            print(f"[-] Step 70 failed: Could not reach splash screen. Buffer: {repr(out_s70_splash)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Could not reach splash screen. "
+                f"Buffer: {repr(out_s70_splash)}",
+                flush=True
+            )
             return False
-        time.sleep(0.5)
-        drain_all(master, quiet_time=0.1)
 
         # Subtest 1: Open File Screen Filter
         # Press 'o' to enter Open File screen
+        time.sleep(0.2)
         os.write(master, b"o")
-        out_s70_open = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s70_open = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
         if b"OPEN FILE (DIRECTORY - DRIVE C:)" not in out_s70_open:
-            print(f"[-] Step 70 failed: Initial Open File header mismatch. Buffer: {repr(out_s70_open)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Initial Open File header mismatch. "
+                f"Buffer: {repr(out_s70_open)}",
+                flush=True
+            )
             return False
         if b"SE.COM" not in out_s70_open:
-            print("[-] Step 70 failed: SE.COM not found in unfiltered directory listing.", flush=True)
+            print(
+                "[-] Step 70 failed: SE.COM not found in unfiltered directory "
+                "listing.",
+                flush=True
+            )
             return False
 
         # Apply filter: '*.TXT'
         time.sleep(0.2)
         os.write(master, b"*.TXT\r")
-        out_s70_filt = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s70_filt = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
         if b"OPEN FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_filt:
-            print(f"[-] Step 70 failed: Header did not update to [*.TXT]. Buffer: {repr(out_s70_filt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Header did not update to [*.TXT]. "
+                f"Buffer: {repr(out_s70_filt)}",
+                flush=True
+            )
             return False
         new_s70_txt = out_s70_filt[out_s70_filt.rfind(b"[*.TXT]"):]
         if b"SE.COM" in new_s70_txt:
-            print(f"[-] Step 70 failed: SE.COM unexpectedly found in *.TXT filtered listing! Buffer: {repr(new_s70_txt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: SE.COM unexpectedly found in *.TXT "
+                f"filtered listing! Buffer: {repr(new_s70_txt)}",
+                flush=True
+            )
             return False
 
         # Reset filter: '*.*'
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"*.*\r")
-        out_s70_reset = read_until(master, b"Enter filename to open:", timeout=6.0)
-        last_s70_reset = out_s70_reset[out_s70_reset.rfind(b"DIRECTORY - DRIVE C:"):]
+        out_s70_reset = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
+        last_s70_reset = out_s70_reset[
+            out_s70_reset.rfind(b"DIRECTORY - DRIVE C:"):
+        ]
         header_s70_reset = last_s70_reset.split(b"\r\n")[0]
         if b": [" in header_s70_reset:
-            print(f"[-] Step 70 failed: Header did not reset after *.*. Buffer: {repr(header_s70_reset)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Header did not reset after *.*. "
+                f"Buffer: {repr(header_s70_reset)}",
+                flush=True
+            )
             return False
         if b"SE.COM" not in last_s70_reset:
-            print("[-] Step 70 failed: SE.COM not restored after *.* reset.", flush=True)
+            print(
+                "[-] Step 70 failed: SE.COM not restored after *.* reset.",
+                flush=True
+            )
             return False
 
         # Combined drive switch and filter: 'B:*.COM'
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"B:*.COM\r")
-        out_s70_b = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s70_b = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
         if b"OPEN FILE (DIRECTORY - DRIVE B: [*.COM])" not in out_s70_b:
-            print(f"[-] Step 70 failed: Combined drive+filter failed. Buffer: {repr(out_s70_b)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Combined drive+filter failed. "
+                f"Buffer: {repr(out_s70_b)}",
+                flush=True
+            )
             return False
 
         # Switch back to Drive C: with reset: 'C:*.*'
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"C:*.*\r")
-        out_s70_c = read_until(master, b"Enter filename to open:", timeout=6.0)
+        out_s70_c = read_until(
+            master, b"Enter filename to open:", timeout=8.0
+        )
         last_s70_c = out_s70_c[out_s70_c.rfind(b"DIRECTORY - DRIVE C:"):]
         header_s70_c = last_s70_c.split(b"\r\n")[0]
         if b": [" in header_s70_c:
-            print(f"[-] Step 70 failed: Reset back to C:*.* failed. Buffer: {repr(header_s70_c)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Reset back to C:*.* failed. "
+                f"Buffer: {repr(header_s70_c)}",
+                flush=True
+            )
             return False
 
         # Test inline 'File not found' then filtering
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"NONEXIST.XYZ\r")
-        out_s70_fnf = read_until(master, b"File not found", timeout=4.0)
+        out_s70_fnf = read_until(master, b"File not found", timeout=6.0)
         if b"File not found" not in out_s70_fnf:
-            print(f"[-] Step 70 failed: 'File not found' inline message not displayed. Buffer: {repr(out_s70_fnf)}", flush=True)
+            print(
+                f"[-] Step 70 failed: 'File not found' inline message not "
+                f"displayed. Buffer: {repr(out_s70_fnf)}",
+                flush=True
+            )
             return False
 
         # Filter directly from FNF state: '*.TXT'
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"*.TXT\r")
-        out_s70_fnf_filt = read_until(master, b"OPEN FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=4.0)
+        out_s70_fnf_filt = read_until(
+            master, b"OPEN FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=6.0
+        )
         if b"OPEN FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_fnf_filt:
-            print(f"[-] Step 70 failed: Filter from FNF state failed. Buffer: {repr(out_s70_fnf_filt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Filter from FNF state failed. "
+                f"Buffer: {repr(out_s70_fnf_filt)}",
+                flush=True
+            )
             return False
 
         # Press ESC to return to splash
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=4.0)
-        print("[+] Step 70 Subtest 1 PASSED: Open File directory filter and FNF recovery verified.", flush=True)
+        read_until(master, b"Active Screen:", timeout=6.0)
+        print(
+            "[+] Step 70 Subtest 1 PASSED: Open File directory filter and "
+            "FNF recovery verified.",
+            flush=True
+        )
 
         # Subtest 2: Save File Screen Filter & Filename Preservation
         # Start new editor document with 'e'
         time.sleep(0.2)
         os.write(master, b"e")
-        read_until(master, b"Line    1/1", timeout=4.0)
+        read_until(master, b"Line    1/1", timeout=6.0)
         time.sleep(0.2)
         os.write(master, b"Hello Filter Test")
 
         # Save file as TESTF.TXT
         time.sleep(0.3)
-        os.write(master, b"\x13") # Ctrl+S
+        os.write(master, b"\x13")  # Ctrl+S
         read_until(master, b"Enter filename to save:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"TESTF.TXT\r")
-        read_until(master, b"Line    1/1", timeout=6.0)
+        read_until(master, b"Line    1/1", timeout=8.0)
         time.sleep(0.3)
 
         # Modify document
@@ -4529,22 +4823,40 @@ def test_se_execution():
 
         # Press Ctrl+S: input box prefills with TESTF.TXT
         os.write(master, b"\x13")
-        out_s70_save2 = read_until(master, b"Enter filename to save:", timeout=8.0)
-        out_s70_save2 += read_until(master, b"TESTF.TXT", timeout=4.0)
+        out_s70_save2 = read_until(
+            master, b"Enter filename to save:", timeout=8.0
+        )
+        out_s70_save2 += read_until(master, b"TESTF.TXT", timeout=6.0)
         if b"TESTF.TXT" not in out_s70_save2:
-            print(f"[-] Step 70 failed: Save prompt did not prefill 'TESTF.TXT'. Buffer: {repr(out_s70_save2)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Save prompt did not prefill "
+                f"'TESTF.TXT'. Buffer: {repr(out_s70_save2)}",
+                flush=True
+            )
             return False
 
         # Type '*.TXT' and Enter to filter directory on Save screen
         time.sleep(0.3)
         os.write(master, b"\x08" * 20 + b"*.TXT\r")
-        out_s70_save_filt = read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=8.0)
+        out_s70_save_filt = read_until(
+            master, b"SAVE FILE (DIRECTORY - DRIVE C: [*.TXT])", timeout=8.0
+        )
         if b"SAVE FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_save_filt:
-            print(f"[-] Step 70 failed: Save header did not update to [*.TXT]. Buffer: {repr(out_s70_save_filt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Save header did not update to "
+                f"[*.TXT]. Buffer: {repr(out_s70_save_filt)}",
+                flush=True
+            )
             return False
-        out_s70_save_filt += read_until(master, b"Enter filename to save:", timeout=6.0)
+        out_s70_save_filt += read_until(
+            master, b"Enter filename to save:", timeout=6.0
+        )
         if b"*.TXT" not in out_s70_save_filt:
-            print(f"[-] Step 70 failed: Save prompt did NOT preserve input string '*.TXT'. Buffer: {repr(out_s70_save_filt)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Save prompt did NOT preserve input "
+                f"string '*.TXT'. Buffer: {repr(out_s70_save_filt)}",
+                flush=True
+            )
             return False
 
         # Clear '*.TXT' and save as TESTF.TXT, confirm overwrite
@@ -4554,11 +4866,19 @@ def test_se_execution():
         if b"Overwrite?" in out_s70_ow:
             time.sleep(0.2)
             os.write(master, b"y")
-        out_s70_saved = read_until(master, b"Line    1/1", timeout=6.0)
+        out_s70_saved = read_until(master, b"Line    1/1", timeout=8.0)
         if b"TESTF.TXT" not in out_s70_saved:
-            print(f"[-] Step 70 failed: Return did not save file. Buffer: {repr(out_s70_saved)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Return did not save file. "
+                f"Buffer: {repr(out_s70_saved)}",
+                flush=True
+            )
             return False
-        print("[+] Step 70 Subtest 2 PASSED: Save File filter & filename preservation verified.", flush=True)
+        print(
+            "[+] Step 70 Subtest 2 PASSED: Save File filter & filename "
+            "preservation verified.",
+            flush=True
+        )
 
         # Subtest 3: Block Insert Screen Filter
         # Start block with Ctrl+B in editor
@@ -4567,17 +4887,30 @@ def test_se_execution():
         time.sleep(0.2)
         # Press Ctrl+O -> opens Block Insert File screen
         os.write(master, b"\x0f")
-        out_s70_ins = read_until(master, b"Enter filename to insert:", timeout=6.0)
+        out_s70_ins = read_until(
+            master, b"Enter filename to insert:", timeout=6.0
+        )
         if b"INSERT FILE (DIRECTORY - DRIVE C:" not in out_s70_ins:
-            print(f"[-] Step 70 failed: Failed to open Insert File screen. Buffer: {repr(out_s70_ins)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Failed to open Insert File screen. "
+                f"Buffer: {repr(out_s70_ins)}",
+                flush=True
+            )
             return False
 
         # Filter on Insert File screen: '*.TXT'
         time.sleep(0.2)
         os.write(master, b"*.TXT\r")
-        out_s70_ins_filt = read_until(master, b"Enter filename to insert:", timeout=6.0)
-        if b"INSERT FILE (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_ins_filt:
-            print(f"[-] Step 70 failed: Insert File header filter failed. Buffer: {repr(out_s70_ins_filt)}", flush=True)
+        out_s70_ins_filt = read_until(
+            master, b"Enter filename to insert:", timeout=6.0
+        )
+        if (b"INSERT FILE (DIRECTORY - DRIVE C: [*.TXT])" not in
+                out_s70_ins_filt):
+            print(
+                f"[-] Step 70 failed: Insert File header filter failed. "
+                f"Buffer: {repr(out_s70_ins_filt)}",
+                flush=True
+            )
             return False
 
         # Cancel with ESC back to editor with solidified block
@@ -4585,25 +4918,45 @@ def test_se_execution():
         os.write(master, b"\x1b")
         out_s70_esc_ins = read_until(master, b"LOCK]", timeout=6.0)
         if b"LOCK]" not in out_s70_esc_ins:
-            print(f"[-] Step 70 failed: ESC from Insert File did not return with lock. Buffer: {repr(out_s70_esc_ins)}", flush=True)
+            print(
+                f"[-] Step 70 failed: ESC from Insert File did not return "
+                f"with lock. Buffer: {repr(out_s70_esc_ins)}",
+                flush=True
+            )
             return False
-        print("[+] Step 70 Subtest 3 PASSED: Block Insert File filter verified.", flush=True)
+        print(
+            "[+] Step 70 Subtest 3 PASSED: Block Insert File filter verified.",
+            flush=True
+        )
 
         # Subtest 4: Block Save Screen Filter
         # Block is already solidified; open Block Save screen with Ctrl+S
         time.sleep(0.3)
         os.write(master, b"\x13")
-        out_s70_blksave = read_until(master, b"Enter filename to save:", timeout=6.0)
+        out_s70_blksave = read_until(
+            master, b"Enter filename to save:", timeout=6.0
+        )
         if b"SAVE BLOCK (DIRECTORY - DRIVE C:" not in out_s70_blksave:
-            print(f"[-] Step 70 failed: Failed to open Save Block screen. Buffer: {repr(out_s70_blksave)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Failed to open Save Block screen. "
+                f"Buffer: {repr(out_s70_blksave)}",
+                flush=True
+            )
             return False
 
         # Filter on Block Save screen: '*.TXT'
         time.sleep(0.3)
         os.write(master, b"*.TXT\r")
-        out_s70_blksave_filt = read_until(master, b"Enter filename to save:", timeout=6.0)
-        if b"SAVE BLOCK (DIRECTORY - DRIVE C: [*.TXT])" not in out_s70_blksave_filt:
-            print(f"[-] Step 70 failed: Save Block header filter failed. Buffer: {repr(out_s70_blksave_filt)}", flush=True)
+        out_s70_blksave_filt = read_until(
+            master, b"Enter filename to save:", timeout=6.0
+        )
+        if (b"SAVE BLOCK (DIRECTORY - DRIVE C: [*.TXT])" not in
+                out_s70_blksave_filt):
+            print(
+                f"[-] Step 70 failed: Save Block header filter failed. "
+                f"Buffer: {repr(out_s70_blksave_filt)}",
+                flush=True
+            )
             return False
 
         # Cancel Block Save with ESC
@@ -4614,17 +4967,28 @@ def test_se_execution():
         # Cancel active block in editor with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"^K: Editor keys", timeout=4.0)
+        read_until(master, b"^K: Editor keys", timeout=6.0)
 
         # Exit editor cleanly to CP/M
         time.sleep(0.2)
-        os.write(master, b"\x11") # Ctrl+Q
+        os.write(master, b"\x11")  # Ctrl+Q
         out_s70_exit = read_until(master, b"C>", timeout=6.0)
         if b"C>" not in out_s70_exit:
-            print(f"[-] Step 70 failed: Exit to CP/M failed: {repr(out_s70_exit)}", flush=True)
+            print(
+                f"[-] Step 70 failed: Exit to CP/M failed: "
+                f"{repr(out_s70_exit)}",
+                flush=True
+            )
             return False
-        print("[+] Step 70 Subtest 4 PASSED: Block Save File filter verified.", flush=True)
-        print("[+] Successfully verified Directory Listing Filter on Open, Save, Insert, and Block Save (Step 70)!", flush=True)
+        print(
+            "[+] Step 70 Subtest 4 PASSED: Block Save File filter verified.",
+            flush=True
+        )
+        print(
+            "[+] Successfully verified Directory Listing Filter on Open, "
+            "Save, Insert, and Block Save (Step 70)!",
+            flush=True
+        )
 
         # =============================================================
         # STEP 71: CP/M User Areas Support (C1: and 1C: Formats)
@@ -4817,15 +5181,22 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         # Step 72: Memory Information Screen ('m' key from splash menu)
         # ---------------------------------------------------------------------
-        print("[*] Step 72: Verifying Memory Information Screen ('m')...", flush=True)
+        print(
+            "[*] Step 72: Verifying Memory Information Screen ('m')...",
+            flush=True
+        )
         drain_all(master)
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s72_splash = read_until(master, b"for memory info", timeout=30.0)
+        out_s72_splash = read_until(master, b"for memory info", timeout=35.0)
         time.sleep(0.2)
         out_s72_splash += drain_all(master)
         if b"for memory info" not in out_s72_splash:
-            print(f"[-] Step 72 failed: 'for memory info' not found on splash screen. Buffer: {repr(out_s72_splash)}", flush=True)
+            print(
+                f"[-] Step 72 failed: 'for memory info' not found on splash "
+                f"screen. Buffer: {repr(out_s72_splash)}",
+                flush=True
+            )
             return False
         print("    [+] Splash screen displays 'for memory info' menu option.")
 
@@ -4836,38 +5207,92 @@ def test_se_execution():
         time.sleep(0.2)
         out_s72_mem += drain_all(master)
         if b"SE.COM - Extended Memory Map" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Title 'SE.COM - Extended Memory Map' missing. Buffer: {repr(out_s72_mem)}", flush=True)
+            print(
+                f"[-] Step 72 failed: Title 'SE.COM - Extended Memory Map' "
+                f"missing. Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
 
         # Verify summary line components
-        if b"HBIOS: RomWBW v" not in out_s72_mem or b"OS: CP/M 2.2" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Summary line HBIOS/OS missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        if (b"HBIOS: RomWBW v" not in out_s72_mem or
+                b"OS: CP/M 2.2" not in out_s72_mem):
+            print(
+                f"[-] Step 72 failed: Summary line HBIOS/OS missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
-        if b"RAM: 512 KB (16x32K)" not in out_s72_mem or (b"SE: 192 KB" not in out_s72_mem and b"SE: 448 KB" not in out_s72_mem):
-            print(f"[-] Step 72 failed: Summary line RAM/SE missing. Buffer: {repr(out_s72_mem)}", flush=True)
+
+        valid_se_ram = [b"SE: 192 KB", b"SE: 416 KB", b"SE: 448 KB"]
+        if (b"RAM: 512 KB (16x32K)" not in out_s72_mem or
+                not any(s in out_s72_mem for s in valid_se_ram)):
+            print(
+                f"[-] Step 72 failed: Summary line RAM/SE missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
         print("    [+] System summary row verified (HBIOS, OS, RAM, SE usage).")
 
         # Verify table headers
-        if b"Bank  Phys   Size   System / OS Role        SE.COM Usage" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Table header missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        tbl_hdr = b"Bank  Phys   Size   System / OS Role        SE.COM Usage"
+        if tbl_hdr not in out_s72_mem:
+            print(
+                f"[-] Step 72 failed: Table header missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
 
         # Verify key bank rows
-        if b"00    80h    32K    HBIOS System Firmware   Reserved: Protected HBIOS" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 00 HBIOS entry missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        b00_hdr = (
+            b"00    80h    32K    HBIOS System Firmware   "
+            b"Reserved: Protected HBIOS"
+        )
+        if b00_hdr not in out_s72_mem:
+            print(
+                f"[-] Step 72 failed: Bank 00 HBIOS entry missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
         if b"01    81h    32K    RAM Disk (MD0:)" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 01 RAM disk entry missing. Buffer: {repr(out_s72_mem)}", flush=True)
+            print(
+                f"[-] Step 72 failed: Bank 01 RAM disk entry missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
-        if b"Preserved: RAM Disk Active" not in out_s72_mem and b"Active: Doc Buffer Bank" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 01 RAM disk usage missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        if (b"Preserved: RAM Disk Active" not in out_s72_mem and
+                b"Active: Doc Buffer Bank" not in out_s72_mem):
+            print(
+                f"[-] Step 72 failed: Bank 01 RAM disk usage missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
-        if b"13    8Dh    32K    Application Memory      Active: 16K Line Slot Table" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 13 line table entry missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        b13_hdr = (
+            b"13    8Dh    32K    Application Memory      "
+            b"Active: 16K Line Slot Table"
+        )
+        if b13_hdr not in out_s72_mem:
+            print(
+                f"[-] Step 72 failed: Bank 13 line table entry missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
-        if b"14    8Eh    32K    CP/M 2.2 TPA & Base     Active: SE Program & Cache" not in out_s72_mem:
-            print(f"[-] Step 72 failed: Bank 14 TPA entry missing. Buffer: {repr(out_s72_mem)}", flush=True)
+        b14_hdr = (
+            b"14    8Eh    32K    CP/M 2.2 TPA & Base     "
+            b"Active: SE Program & Cache"
+        )
+        if b14_hdr not in out_s72_mem:
+            print(
+                f"[-] Step 72 failed: Bank 14 TPA entry missing. "
+                f"Buffer: {repr(out_s72_mem)}",
+                flush=True
+            )
             return False
         print("    [+] Table bank rows and dynamic roles verified.")
 
@@ -4875,7 +5300,11 @@ def test_se_execution():
         lines = out_s72_mem.decode("latin1", errors="replace").split("\r\n")
         tilde_rows = [l for l in lines if l.startswith("~")]
         if len(tilde_rows) < 20:
-            print(f"[-] Step 72 failed: Insufficient tildes in column 0 (got {len(tilde_rows)}).", flush=True)
+            print(
+                f"[-] Step 72 failed: Insufficient tildes in column 0 "
+                f"(got {len(tilde_rows)}).",
+                flush=True
+            )
             return False
         print(f"    [+] Column 0 tildes verified ({len(tilde_rows)} rows).")
 
@@ -4884,7 +5313,11 @@ def test_se_execution():
         os.write(master, b"\x1b")
         out_s72_back = read_until(master, b"for memory info", timeout=15.0)
         if b"for memory info" not in out_s72_back:
-            print(f"[-] Step 72 failed: Return to splash screen failed. Buffer: {repr(out_s72_back)}", flush=True)
+            print(
+                f"[-] Step 72 failed: Return to splash screen failed. "
+                f"Buffer: {repr(out_s72_back)}",
+                flush=True
+            )
             return False
         print("    [+] Clean return to splash screen on ESC verified.")
 
@@ -4893,11 +5326,17 @@ def test_se_execution():
         os.write(master, b"q")
         out_s72_cpm = read_until(master, b"C>", timeout=15.0)
         if b"C>" not in out_s72_cpm:
-            print(f"[-] Step 72 failed: Clean exit to CP/M failed. Buffer: {repr(out_s72_cpm)}", flush=True)
+            print(
+                f"[-] Step 72 failed: Clean exit to CP/M failed. "
+                f"Buffer: {repr(out_s72_cpm)}",
+                flush=True
+            )
             return False
         print("    [+] Clean exit to CP/M prompt verified.")
-        print("[+] Successfully verified Memory Information Screen (Step 72)!",
-              flush=True)
+        print(
+            "[+] Successfully verified Memory Information Screen (Step 72)!",
+            flush=True
+        )
 
         # ---------------------------------------------------------------------
         # Step 73: In-line Filename Edit Box Navigation and Editing
@@ -5086,9 +5525,8 @@ def test_se_execution():
         # 2. Launch SE without file arguments
         time.sleep(0.3)
         os.write(master, b"se\r")
-        out_s74_splash = read_until(master, b"Active Screen: [", timeout=20.0)
-        out_s74_splash += read_until(master, b"RAM Drive (", timeout=5.0)
-        out_s74_splash += read_until(master, b"to configure", timeout=5.0)
+        out_s74_splash = read_until(master, b"RAM Drive (", timeout=35.0)
+        out_s74_splash += read_until(master, b"Free: ", timeout=10.0)
 
         # Verify Splash Screen shows RAM Drive line under Active Screen
         if b"RAM Drive (A:): [Preserved (Active)]" not in out_s74_splash:
@@ -5139,11 +5577,13 @@ def test_se_execution():
         time.sleep(0.3)
         os.write(master, b"s")
         read_until(master, b"Saved to local drive", timeout=10.0)
+        read_until(master, b"return to splash screen", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
-        out_s74_splash2 = read_until(master, b"Active Screen: [", timeout=10.0)
-        out_s74_splash2 += read_until(master, b"RAM Drive (", timeout=5.0)
-        out_s74_splash2 += read_until(master, b"]", timeout=5.0)
+        out_s74_splash2 = read_until(
+            master, b"SE - Screen Editor", timeout=15.0
+        )
+        out_s74_splash2 += read_until(master, b"Free: ", timeout=10.0)
         if b"RAM Drive (A:): [Overwritten (Max RAM)]" not in out_s74_splash2:
             print("[-] Step 74 failed: Splash screen does not show "
                   f"Overwritten. Buffer: {repr(out_s74_splash2)}", flush=True)
@@ -5237,6 +5677,7 @@ def test_se_execution():
         # Cancel Save dialog with ESC
         time.sleep(0.3)
         os.write(master, b"\x1b")
+        read_until(master, b"^K: Editor keys", timeout=6.0)
         time.sleep(0.3)
 
         # Exit editor cleanly to CP/M

@@ -56,7 +56,7 @@ cd src/screen_editor
 # Assemble SE.COM:
 make
 
-# Assemble SE.COM and inject it into the RomWBW disk image (hd1k_combo.img):
+# Assemble SE.COM and inject into workspace disk (disks/hd1k_combo.img):
 make image
 
 # Run automated headless integration tests:
