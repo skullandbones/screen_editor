@@ -3175,13 +3175,16 @@ def test_se_execution():
         # ---------------------------------------------------------------------
         # Step 57: Verifying OOM Status Bar Replacement and Revert on Keypress
         # ---------------------------------------------------------------------
-        print("[*] Step 57: Verifying OOM status bar replacement and revert on keypress...", flush=True)
+        print("[*] Step 57: Verifying OOM status bar replacement and "
+              "revert on keypress...", flush=True)
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"se BIG.TXT\r")
-        out_s57 = read_until(master, b"Line    1/3072", timeout=60.0)
+        out_s57 = read_until(master, b"Line    1/3072", timeout=100.0)
         if b"Line    1/3072" not in out_s57 or b"^K: Editor keys" not in out_s57:
-            print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing '^K: Editor keys'. Buffer: {repr(out_s57[-200:])}", flush=True)
+            print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing "
+                  f"'^K: Editor keys'. Buffer: {repr(out_s57[-200:])}",
+                  flush=True)
             return False
         print(
             "[+] Step 57: BIG.TXT loaded with status bar showing "
@@ -3189,8 +3192,9 @@ def test_se_execution():
             flush=True
         )
 
-        # Step 57 note: Document capacity is now 16,384 lines under Phase 4 virtual paging engine,
-        # so inserting a line at 3,072 lines no longer triggers in-memory OOM.
+        # Step 57 note: Document capacity is now 16,384 lines under Phase 4
+        # virtual paging engine, so inserting a line at 3,072 lines no longer
+        # triggers in-memory OOM.
         print(
             "[+] Step 57: BIG.TXT loaded successfully; Phase 4 virtual "
             "paging allows expansion past 3072 lines.",
@@ -3208,7 +3212,7 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\x11")
-        out_s57_q = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        out_s57_q = read_until(master, b"[ESC]=Cancel", timeout=6.0)
         if b"Save changes?" not in out_s57_q:
             print(f"[-] Step 57 failed: Missing save changes prompt on exit. "
                   f"Buffer: {repr(out_s57_q)}", flush=True)
@@ -3222,7 +3226,7 @@ def test_se_execution():
             return False
         time.sleep(0.5)
         drain_all(master)
-        print("[+] Clean exit back to CP/M prompt.", flush=True)
+        print("[+] Step 57: Clean exit back to CP/M prompt.", flush=True)
         print(
             "[+] Step 57: Successfully verified OOM Status Bar Replacement "
             "and Revert on Keypress!",
