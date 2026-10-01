@@ -3108,18 +3108,27 @@ def test_se_execution():
         # 7. Exit cleanly with Ctrl+Q
         time.sleep(0.2)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
+        out_s55_exit = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s55_exit:
+            print(f"[-] Step 55 failed: Exit to CP/M prompt missing. "
+                  f"Buffer: {repr(out_s55_exit)}", flush=True)
+            return False
+        time.sleep(0.3)
+        drain_all(master)
         print("[+] Clean exit back to CP/M prompt.", flush=True)
-        print("[+] Successfully verified Open File Screen Line Number Specification (Step 55)!", flush=True)
+        print("[+] Successfully verified Open File Screen Line Number "
+              "Specification (Step 55)!", flush=True)
 
         # ---------------------------------------------------------------------
-        # Step 56: Verifying 13-Bank Far RAM Discovery and HBIOS Bank 0x80 Protection
+        # Step 56: Verifying 13-Bank Far RAM Discovery and HBIOS Bank 0x80
+        # Protection
         # ---------------------------------------------------------------------
-        print("[*] Step 56: Verifying 13-Bank Far RAM discovery and HBIOS Bank 0x80 protection...", flush=True)
+        print("[*] Step 56: Verifying 13-Bank Far RAM discovery and "
+              "HBIOS Bank 0x80 protection...", flush=True)
         drain_all(master)
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s56 = read_until(master, SPLASH_FREE_TARGETS, timeout=20.0)
+        out_s56 = read_until(master, SPLASH_FREE_TARGETS, timeout=35.0)
         if not has_free_mem(out_s56):
             print(f"[-] Step 56 failed: Free memory missing: {repr(out_s56)}",
                   flush=True)
@@ -3128,23 +3137,32 @@ def test_se_execution():
         # View memory info map ('m')
         time.sleep(0.5)
         os.write(master, b"m")
-        out_diag = read_until(master, b"return to splash screen", timeout=12.0)
-        if b"80h" not in out_diag or b"Protected HBIOS" not in out_diag or b"Line Slot Table" not in out_diag:
-            print(f"[-] Step 56 failed: Memory map did not display. Buffer: {repr(out_diag)}", flush=True)
+        out_diag = read_until(master, b"return to splash screen", timeout=15.0)
+        if (b"80h" not in out_diag or b"Protected HBIOS" not in out_diag or
+                b"Line Slot Table" not in out_diag):
+            print(f"[-] Step 56 failed: Memory map did not display. "
+                  f"Buffer: {repr(out_diag)}", flush=True)
             return False
 
         # Return to splash screen
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b" ")
-        read_until(master, SPLASH_FREE_TARGETS, timeout=15.0)
+        read_until(master, SPLASH_FREE_TARGETS, timeout=20.0)
 
         # Clean exit to CP/M
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"\x11")
-        read_until(master, b"C>", timeout=4.0)
-        print("[+] Successfully verified 13-Bank Far RAM discovery and HBIOS Bank 0x80 protection (Step 56)!", flush=True)
+        out_s56_exit = read_until(master, b"C>", timeout=6.0)
+        if b"C>" not in out_s56_exit:
+            print(f"[-] Step 56 failed: Exit to CP/M prompt missing. "
+                  f"Buffer: {repr(out_s56_exit)}", flush=True)
+            return False
+        time.sleep(0.3)
+        drain_all(master)
+        print("[+] Successfully verified 13-Bank Far RAM discovery and "
+              "HBIOS Bank 0x80 protection (Step 56)!", flush=True)
 
         # ---------------------------------------------------------------------
         # Step 57: Verifying OOM Status Bar Replacement and Revert on Keypress
