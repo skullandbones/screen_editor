@@ -2471,6 +2471,9 @@ def test_se_execution():
         if b"Pattern not found." not in out_s45_nf:
             print(f"[-] Step 45 failed: 'line 15' did not fail in Exact mode. Buffer: {repr(out_s45_nf)}", flush=True)
             return False
+        # Dismiss Pattern Not Found modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
 
         # 4. Search for common word "content" on Line 1, then repeat with Ctrl+N
         time.sleep(0.5)
@@ -2605,6 +2608,9 @@ def test_se_execution():
         # Confirm replacement with 'y'
         os.write(master, b"y")
         read_until(master, b"Replace done: 1 replacement(s).", timeout=4.0)
+        # Dismiss Replace Done modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
         time.sleep(0.3)
         drain_all(master)
         print("[+] Successfully verified Search and Replace (Ctrl+R) (Step 47)!", flush=True)
@@ -2714,6 +2720,9 @@ def test_se_execution():
         if b"Pattern not found." not in out_s50_notfound:
             print(f"[-] Step 50 failed: Pattern not found missing. Buffer: {repr(out_s50_notfound)}", flush=True)
             return False
+        # Dismiss Pattern Not Found modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
 
         # Now search for "BetaLine" which exists once in the file
         time.sleep(0.3)
@@ -2732,6 +2741,9 @@ def test_se_execution():
         if b"Search completed." not in out_s50_completed:
             print(f"[-] Step 50 failed: 'Search completed.' missing. Buffer: {repr(out_s50_completed)}", flush=True)
             return False
+        # Dismiss Search Completed modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
         print("[+] Successfully verified 'Search completed.' vs 'Pattern not found.' (Step 50)!", flush=True)
 
         # ---------------------------------------------------------------------
@@ -2804,6 +2816,9 @@ def test_se_execution():
                 flush=True,
             )
             return False
+        # Dismiss Replace Done modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
         time.sleep(0.3)
         drain_all(master)
         print(

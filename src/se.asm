@@ -10891,19 +10891,10 @@ FIND_CHECK_PREV:
 	JR	Z,FIND_UI_CANCEL	; No previous pattern, cancel
 
 FIND_EXEC_SEARCH:
-	CALL	FIND_STRING_FORWARD
-	RET	NC			; Match found: defer render to MAIN_LOOP
-
-	; Search failed: erase popup dialog by redrawing screen
+	; Erase find popup dialog before running search so screen is clean
 	CALL	RENDER_SCREEN
-	LD	A,(SEARCH_EVER_FOUND)
-	OR	A
-	LD	DE,STR_PATTERN_NOT_FOUND
-	JR	Z,FES_PRINT_MSG
-	LD	DE,STR_SEARCH_COMPLETED
-FES_PRINT_MSG:
-	CALL	S_PRINT_MSG
-	SCF
+	CALL	RENDER_STATUS_BAR
+	CALL	FIND_STRING_FORWARD
 	RET
 
 
@@ -11593,36 +11584,227 @@ SEARCH_NOT_FOUND:
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
 
+	; Check if replace is currently active
+	LD	A,(REPLACE_ACTIVE)
+	OR	A
+	JR	NZ,SNF_RETURN_CARRY
+
 	; Check if pattern was ever found during this search session
 	LD	A,(SEARCH_EVER_FOUND)
 	OR	A
 	JR	NZ,S_SHOW_COMPLETED
 
-	; Never found: cancel block and display " Pattern not found. "
+	; Never found: cancel block and display Pattern Not Found popup
 	CALL	CANCEL_BLOCK
-	LD	DE,STR_PATTERN_NOT_FOUND
-	JR	S_PRINT_MSG
+	CALL	SHOW_POPUP_NOT_FOUND
+	SCF
+	RET
 
 S_SHOW_COMPLETED:
-	; Previously found: keep current match highlighted, display " Search completed. "
-	LD	DE,STR_SEARCH_COMPLETED
+	; Previously found: keep match highlighted, display Search Completed popup
+	CALL	SHOW_POPUP_SEARCH_COMPLETED
+	SCF
+	RET
 
-S_PRINT_MSG:
-	PUSH	DE
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	POP	DE
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
+SNF_RETURN_CARRY:
+	SCF
+	RET
+
+;------------------------------------------------------------------------------
+; SHOW_STATUS_EVENT_POPUP:
+; Displays a centered 50x7 Tier 2 status event pop-up with "Press any key".
+; Dismissed by ANY key. Redraws screen and persistent status bar upon exit.
+; Inputs:
+;   DE = Title string pointer (50 chars null-terminated)
+;   HL = Msg1 string pointer (50 chars null-terminated)
+;   BC = Msg2 string pointer (50 chars null-terminated)
+; Returns: Carry flag set (failure convention for search routines)
+;------------------------------------------------------------------------------
+SHOW_STATUS_EVENT_POPUP:
+	PUSH	BC			; Msg2
+	PUSH	HL			; Msg1
+	PUSH	DE			; Title
+
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+
+	; 3. Hide cursor
+	LD	DE,STR_HIDE_CURSOR
 	CALL	PRINT_STR
 
-	XOR	A
-	LD	(NEED_STATUS_RENDER),A	; Keep message visible
+	; Line 1: Top Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Title
+	CALL	PRINT_STR
+
+	; Line 3: Separator Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 4: Msg1
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Msg1
+	CALL	PRINT_STR
+
+	; Line 5: Msg2
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Msg2
+	CALL	PRINT_STR
+
+	; Line 6: Keys
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_TRUNC_KEY
+	CALL	PRINT_STR
+
+	; Line 7: Bottom Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; 4. Wait for any key to dismiss
+	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
+
+	; 5. Restore screen & persistent status bar
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
 	CALL	LOCATE_CURSOR
-	SCF				; Set carry (failure)
+	SCF
+	RET
+
+SHOW_POPUP_NOT_FOUND:
+	LD	DE,STR_POPUP_NOT_FOUND_TITLE
+	LD	HL,STR_POPUP_NOT_FOUND_MSG1
+	LD	BC,STR_POPUP_NOT_FOUND_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_SEARCH_COMPLETED:
+	LD	DE,STR_POPUP_SEARCH_COMP_TITLE
+	LD	HL,STR_POPUP_SEARCH_COMP_MSG1
+	LD	BC,STR_POPUP_SEARCH_COMP_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_LINE_TOO_LONG:
+	LD	DE,STR_POPUP_TOO_LONG_TITLE
+	LD	HL,STR_POPUP_TOO_LONG_MSG1
+	LD	BC,STR_POPUP_TOO_LONG_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_REPLACE_DONE:
+	LD	DE,STR_POPUP_REP_DONE_TITLE
+	LD	HL,STR_POPUP_REP_DONE_MSG1
+	LD	BC,REPLACE_DONE_POPUP_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+FORMAT_REPLACE_DONE_MSG2:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; 1. Initialize buffer with 50 spaces and borders:
+	; "|                                                |"
+	LD	HL,REPLACE_DONE_POPUP_MSG2
+	LD	(HL),'|'
+	INC	HL
+	LD	B,48
+	LD	A,' '
+FRDM_FILL_SPACES:
+	LD	(HL),A
+	INC	HL
+	DJNZ	FRDM_FILL_SPACES
+	LD	(HL),'|'
+	INC	HL
+	LD	(HL),0			; Null terminator
+
+	; 2. Determine number of digits for REPLACE_COUNT
+	LD	HL,(REPLACE_COUNT)
+	CALL	GET_DEC_WORD_DIGITS	; A = digits D (1..5)
+	; Total text length = 14 ("Replace done: ") + D + 16 (" replacement(s).")
+	; = 30 + D chars
+	; Remaining spaces inside 48 chars = 48 - (30 + D) = 18 - D
+	; Left spaces = (18 - D) / 2
+	LD	C,A			; C = D (digit count)
+	LD	A,18
+	SUB	C			; A = 18 - D
+	SRL	A			; A = (18 - D) / 2 = left spaces
+	INC	A			; +1 for leading '|' at index 0
+
+	; HL = pointer to start of text in REPLACE_DONE_POPUP_MSG2
+	LD	HL,REPLACE_DONE_POPUP_MSG2
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = target position
+
+	; 3. Copy "Replace done: " (14 chars)
+	LD	DE,STR_REP_DONE_TXT_PFX
+	LD	B,14
+FRDM_CPY_PFX:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FRDM_CPY_PFX
+
+	; 4. Format decimal count digits into buffer at HL
+	PUSH	HL			; Save target position in buffer
+	LD	HL,(REPLACE_COUNT)
+	CALL	FORMAT_DEC_WORD_RAM	; DE = pointer to first digit
+	POP	HL			; Restore target position in buffer
+	LD	B,C			; B = digit count
+FRDM_CPY_DIGITS:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FRDM_CPY_DIGITS
+
+	; 5. Copy " replacement(s)." (16 chars)
+	LD	DE,STR_REP_DONE_TXT_SFX
+	LD	B,16
+FRDM_CPY_SFX:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FRDM_CPY_SFX
+
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+FORMAT_DEC_WORD_RAM:
+	LD	DE,DEC_WORD_BUF+5
+	LD	A,0
+	LD	(DE),A
+FDWR_LOOP:
+	CALL	DIV_HL_10
+	ADD	A,'0'
+	DEC	DE
+	LD	(DE),A
+	LD	A,H
+	OR	L
+	JR	NZ,FDWR_LOOP
 	RET
 
 ;------------------------------------------------------------------------------
@@ -11806,6 +11988,8 @@ REPLACE_INPUT_CONFIRM:
 	LD	(SEARCH_DIRECTION),A	; 0 = Forward
 	LD	HL,0
 	LD	(REPLACE_COUNT),HL
+	LD	A,1
+	LD	(REPLACE_ACTIVE),A
 
 	; Lock search wrap origin for this replace session:
 	LD	HL,(BLOCK_START_ROW)
@@ -12109,30 +12293,23 @@ REPLACE_EXECUTE_SUBST:
 	JP	REPLACE_SEARCH_NEXT
 
 REPLACE_SUMMARY:
+	XOR	A
+	LD	(REPLACE_ACTIVE),A
+
 	; Cancel any active block highlight
 	CALL	CANCEL_BLOCK
 
-	; Display " Replace done: N replacement(s). "
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	LD	DE,STR_REPLACE_DONE_PFX
-	CALL	PRINT_STR
-	LD	HL,(REPLACE_COUNT)
-	CALL	PRINT_DEC_WORD
-	LD	DE,STR_REPLACE_DONE_SFX
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	; Format dynamic replacement count into modal Msg2 line
+	CALL	FORMAT_REPLACE_DONE_MSG2
+
+	; Display centered Tier 2 Replace Done modal pop-up
+	CALL	SHOW_POPUP_REPLACE_DONE
 
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
-	XOR	A
-	LD	(NEED_STATUS_RENDER),A	; Keep replace done message visible
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
 	CALL	LOCATE_CURSOR
 	RET
 
@@ -12174,16 +12351,8 @@ ALR_CALC_LEN_DONE:
 	CP	MAX_LINE_STRIDE-7	; 121 (max 120 chars)
 	JR	C,ALR_LENGTH_OK
 
-	; Line would exceed 120 chars: display warning and skip
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	LD	DE,STR_LINE_TOO_LONG	; " Line > 120 chars - skipped. "
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	; Line would exceed 120 chars: display warning modal and skip
+	CALL	SHOW_POPUP_LINE_TOO_LONG
 
 	; Advance past match start
 	LD	A,(CUR_COL)
@@ -16049,62 +16218,10 @@ CHECK_FILE_TRUNCATED_POPUP:
 ; Waits for any key, then restores screen and status bar.
 ;------------------------------------------------------------------------------
 SHOW_FILE_TRUNCATED_POPUP:
-	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
-	LD	A,(ACTIVE_COLS)
-	SUB	50
-	SRL	A
-	INC	A
-	LD	(POPUP_COL),A
-
-	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
-	LD	A,(ACTIVE_ROWS)
-	SUB	7
-	SRL	A
-	INC	A
-	LD	(POPUP_ROW),A
-
-	; 3. Hide cursor while drawing popup
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-
-	; 4. Render 7-line Pop-Up Box
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_POPUP_TRUNC_TITLE
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_TRUNC_MSG1
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_TRUNC_MSG2
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_TRUNC_KEY
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
-
-	; 5. Wait for any key
-	CALL	GET_KEY
-	CP	KEY_ESC
-	CALL	Z,DRAIN_ESC_SEQUENCE
-
-	; 6. Redraw editor screen and status bar
-	CALL	RENDER_SCREEN
-	CALL	RENDER_STATUS_BAR
-	RET
+	LD	HL,STR_POPUP_TRUNC_MSG1
+	LD	BC,STR_POPUP_TRUNC_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
 
 
 DO_SAVE_FILE_UI_IMPL:
@@ -23189,6 +23306,40 @@ STR_REP_CONFIRM_MSG2:
 STR_REP_CONFIRM_KEYS:
 	DB	"| [Y]es [N]o [A]ll [Q]uit [R]everse [ESC]=Cancel |", 0
 
+; Pattern Not Found Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_NOT_FOUND_TITLE:
+	DB	"|               Pattern Not Found                |", 0
+STR_POPUP_NOT_FOUND_MSG1:
+	DB	"|              Pattern not found.                |", 0
+STR_POPUP_NOT_FOUND_MSG2:
+	DB	"|       Search pattern not found in file.        |", 0
+
+; Search Completed Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_SEARCH_COMP_TITLE:
+	DB	"|                Search Completed                |", 0
+STR_POPUP_SEARCH_COMP_MSG1:
+	DB	"|               Search completed.                |", 0
+STR_POPUP_SEARCH_COMP_MSG2:
+	DB	"|          No further occurrences found.         |", 0
+
+; Line Too Long Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_TOO_LONG_TITLE:
+	DB	"|                 Line Too Long                  |", 0
+STR_POPUP_TOO_LONG_MSG1:
+	DB	"|          Line > 120 chars - skipped.           |", 0
+STR_POPUP_TOO_LONG_MSG2:
+	DB	"|      Line length limit exceeded on replace.    |", 0
+
+; Replace Done Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_REP_DONE_TITLE:
+	DB	"|                  Replace Done                  |", 0
+STR_POPUP_REP_DONE_MSG1:
+	DB	"|         Search and replace completed.          |", 0
+STR_REP_DONE_TXT_PFX:
+	DB	"Replace done: "
+STR_REP_DONE_TXT_SFX:
+	DB	" replacement(s)."
+
 ; Goto Line Modal Pop-up Strings (50 cols x 7 rows)
 STR_GOTO_POPUP_TITLE:
 	DB	"|                   Goto Line                    |", 0
@@ -23533,11 +23684,6 @@ STR_FNF_INLINE:		DB	"  File not found","$"
 STR_RAMDRV_UNAVAIL_INLINE:	DB	"  RAM drive not available","$"
 STR_FAT_NO_PLUGIN_INLINE:	DB	"  feature requires FATFS.PRL","$"
 STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
-STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
-STR_SEARCH_COMPLETED:	DB	" Search completed. ","$"
-STR_REPLACE_DONE_PFX:	DB	" Replace done: ","$"
-STR_REPLACE_DONE_SFX:	DB	" replacement(s). ","$"
-STR_LINE_TOO_LONG:	DB	" Line > 120 chars - skipped. ","$"
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
@@ -23619,6 +23765,8 @@ LOAD_PROGRESS_LINES:	DW	0		; Lines read counter for loading status bar
 SAVED_HAS_FILE_ARG:	DB	0		; Saved HAS_FILE_ARG during block insert
 INSERT_LINE_HAD_CHARS:	DB	0		; 1 if current line of inserted file had chars
 IS_EXIT_PROMPT:		DB	0		; 1 if currently in Save Changes Exit Prompt
+REPLACE_ACTIVE:		DB	0		; 1 during active Search & Replace loop
+REPLACE_DONE_POPUP_MSG2: DS	51		; 50-col Msg2 buffer for Replace Done popup
 INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0		; Streaming insert current line length
 INSERT_NEW_CUR_COL:	DW	0		; Cursor column position after insert

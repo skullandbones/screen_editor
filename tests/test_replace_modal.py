@@ -187,7 +187,13 @@ def main():
         if b"Replace done: 1 replacement(s)." not in out_rep:
             print(f"[-] Replacement failed! Buffer: {repr(out_rep)}")
             return 1
-        print("[+] Replacement confirmed and completed with 'y'.")
+        if b"Replace Done" not in out_rep:
+            print(f"[-] Replace Done title missing! Buffer: {repr(out_rep)}")
+            return 1
+        print("[+] Tier 2 Replace Done modal pop-up verified.")
+        # Dismiss modal on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
 
         time.sleep(0.3)
         drain_all(master)
@@ -237,8 +243,61 @@ def main():
             print(f"[-] Quit replace failed. Buffer: {repr(out_quit)}")
             return 1
         print("[+] Quit ('q') terminated interactive replace cleanly.")
+        # Dismiss Replace Done modal
+        time.sleep(0.1)
+        os.write(master, b" ")
 
-        # 8. Clean exit
+        time.sleep(0.3)
+        drain_all(master)
+
+        # 8. Test Pattern Not Found modal pop-up
+        os.write(master, b"\x06")
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
+        os.write(master, b"ZZZNONEXIST\r")
+        out_nf = read_until(master, b"Pattern not found.", timeout=4.0)
+        if b"Pattern not found." not in out_nf:
+            print(f"[-] Pattern not found missing! Buffer: {repr(out_nf)}")
+            return 1
+        if b"Pattern Not Found" not in out_nf:
+            print(
+                f"[-] Pattern Not Found title missing! Buffer: {repr(out_nf)}"
+            )
+            return 1
+        print("[+] Tier 2 Pattern Not Found modal pop-up verified.")
+        # Dismiss modal on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+
+        time.sleep(0.3)
+        drain_all(master)
+
+        # 9. Test Search Completed modal pop-up
+        os.write(master, b"\x06")
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
+        os.write(master, b"BetaLine 01\r")
+        read_until(master, b"[BLK: 11c LOCK]", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
+
+        # Trigger Find Next (Ctrl+N): wraps around and completes
+        os.write(master, b"\x0e")
+        out_comp = read_until(master, b"Search completed.", timeout=4.0)
+        if b"Search completed." not in out_comp:
+            print(f"[-] Search completed missing! Buffer: {repr(out_comp)}")
+            return 1
+        if b"Search Completed" not in out_comp:
+            print(
+                f"[-] Search Completed title missing! Buffer: {repr(out_comp)}"
+            )
+            return 1
+        print("[+] Tier 2 Search Completed modal pop-up verified.")
+        # Dismiss modal on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+
+        # 10. Clean exit
         time.sleep(0.3)
         drain_all(master)
         # Discard changes on exit: Ctrl+Q, 'n'
@@ -247,7 +306,7 @@ def main():
         os.write(master, b"n")
         time.sleep(0.5)
 
-        print("\n[SUCCESS] Task 2.1 Replace Modal fully verified!")
+        print("\n[SUCCESS] Tasks 2.1 & 2.2 fully verified!")
         return 0
 
     finally:
