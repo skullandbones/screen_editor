@@ -11625,6 +11625,26 @@ SNF_RETURN_CARRY:
 ; Returns: Carry flag set (failure convention for search routines)
 ;------------------------------------------------------------------------------
 SHOW_STATUS_EVENT_POPUP:
+	CALL	SHOW_STATUS_EVENT_POPUP_MODAL
+
+	; 5. Restore screen & persistent status bar
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JR	Z,SSEP_NOT_EDITOR
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
+	CALL	LOCATE_CURSOR
+	SCF
+	RET
+
+SSEP_NOT_EDITOR:
+	CALL	REDRAW_BASE_SCREEN
+	SCF
+	RET
+
+SHOW_STATUS_EVENT_POPUP_MODAL:
 	PUSH	BC			; Msg2
 	PUSH	HL			; Msg1
 	PUSH	DE			; Title
@@ -11686,21 +11706,6 @@ SHOW_STATUS_EVENT_POPUP:
 	CALL	GET_KEY
 	CP	KEY_ESC
 	CALL	Z,DRAIN_ESC_SEQUENCE
-
-	; 5. Restore screen & persistent status bar
-	LD	A,(IN_EDITOR_MODE)
-	OR	A
-	JR	Z,SSEP_NOT_EDITOR
-	CALL	RENDER_SCREEN
-	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
-	CALL	LOCATE_CURSOR
-	SCF
-	RET
-
-SSEP_NOT_EDITOR:
-	CALL	REDRAW_BASE_SCREEN
 	SCF
 	RET
 
@@ -11745,6 +11750,24 @@ SHOW_POPUP_HELP_MISSING:
 	LD	HL,STR_POPUP_HELP_MISS_MSG1
 	LD	BC,STR_POPUP_HELP_MISS_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_FILE_NOT_FOUND:
+	LD	DE,STR_POPUP_FNF_TITLE
+	LD	HL,STR_POPUP_FNF_MSG1
+	LD	BC,STR_POPUP_FNF_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP_MODAL
+
+SHOW_POPUP_RAMDRV_UNAVAIL:
+	LD	DE,STR_POPUP_RAMDRV_TITLE
+	LD	HL,STR_POPUP_RAMDRV_MSG1
+	LD	BC,STR_POPUP_RAMDRV_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP_MODAL
+
+SHOW_POPUP_FAT_NO_PLUGIN:
+	LD	DE,STR_POPUP_FAT_MISS_TITLE
+	LD	HL,STR_POPUP_FAT_MISS_MSG1
+	LD	BC,STR_POPUP_FAT_MISS_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP_MODAL
 
 FORMAT_REPLACE_DONE_MSG2:
 	PUSH	BC
@@ -15217,7 +15240,10 @@ RENDER_OPEN_PAGE:
 
 	; Check if user typed a FAT specification (U: or U<unit>:)
 	CALL	CHECK_FAT_INPUT_OPEN
-	JP	C,SHOW_INLINE_OPEN_ERROR
+	JR	NC,CFIO_DISPATCH_CHECK
+	CALL	SHOW_POPUP_FAT_NO_PLUGIN
+	JP	RENDER_OPEN_PAGE
+CFIO_DISPATCH_CHECK:
 	JP	NZ,HANDLE_OPEN_FAT_DISPATCH
 
 	; Check if user typed a drive specification (e.g. "A:")
@@ -15349,11 +15375,8 @@ OPEN_RAMDRV_UNAVAILABLE:
 	LDIR
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
-
-	; Display inline "  RAM drive not available"
-	LD	DE,STR_RAMDRV_UNAVAIL_INLINE
-	LD	C,25			; length of message
-	JR	SHOW_INLINE_OPEN_ERROR
+	CALL	SHOW_POPUP_RAMDRV_UNAVAIL
+	JP	RENDER_OPEN_PAGE
 
 OPEN_FILE_NOT_FOUND:
 	; Restore previous WORK_FCB from DIR_TEMP_FCB
@@ -15363,62 +15386,8 @@ OPEN_FILE_NOT_FOUND:
 	LDIR
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
-
-	; Display inline "  File not found"
-	LD	DE,STR_FNF_INLINE
-	LD	C,16			; length of message
-
-SHOW_INLINE_OPEN_ERROR:
-	LD	A,C
-	LD	(INLINE_MSG_LEN),A
-
-	; Move cursor past ']' box before printing error message
-	LD	A,(INPUT_BUF_LEN)
-	LD	B,A
-	LD	A,21
-	SUB	B
-	JR	Z,FNF_FWD_DONE
-	LD	B,A			; B = 21 - INPUT_BUF_LEN
-FNF_FWD_LOOP:
-	PUSH	BC
-	PUSH	DE
-	LD	DE,STR_CSI_C		; ESC [ C
-	CALL	PRINT_STR
-	POP	DE
-	POP	BC
-	DJNZ	FNF_FWD_LOOP
-FNF_FWD_DONE:
-
-	; Display inline message right after ']'
-	CALL	PRINT_STR
-
-	; Set flag that inline message is currently visible
-	LD	A,1
-	LD	(SHOWING_FNF_MSG),A
-
-	; Resume input loop without blanking filename in text box
-	CALL	RESUME_FILENAME_INPUT
-	JP	C,CHECK_PAGING_OR_CANCEL
-
-	; Check if user edited input to a FAT specification (U: or U<unit>:)
-	CALL	CHECK_FAT_INPUT_OPEN
-	JP	C,SHOW_INLINE_OPEN_ERROR
-	JP	NZ,HANDLE_OPEN_FAT_DISPATCH
-
-	; Check if user edited input to a drive specification (e.g. "B:")
-	CALL	CHECK_DRIVE_SWITCH
-	JP	C,HANDLE_OPEN_DRIVE_SWITCH
-
-	; Check if user edited input to a filter pattern (e.g. "*.TXT")
-	CALL	CHECK_FILTER_PATTERN
-	JP	C,HANDLE_OPEN_FILTER
-
-	; If currently browsing a FAT volume, handle relative navigation/open
-	LD	A,(CURRENT_DIR_IS_FAT)
-	OR	A
-	JP	NZ,HANDLE_OPEN_FAT_RELATIVE
-
-	JP	DO_PARSE_AND_LOAD
+	CALL	SHOW_POPUP_FILE_NOT_FOUND
+	JP	RENDER_OPEN_PAGE
 
 CHECK_PAGING_OR_CANCEL:
 	; A = return code: 0 = Cancel (ESC), 1 = Next Page (PgDn), 3 = Prev Page (PgUp)
@@ -15480,9 +15449,8 @@ DO_PARSE_AND_LOAD_PLUGIN:
 
 OPEN_PLUGIN_FAIL:
 	CALL	RESTORE_DOC_USER
-	LD	DE,STR_FNF_INLINE
-	LD	C,16			; length of message
-	JP	SHOW_INLINE_OPEN_ERROR
+	CALL	SHOW_POPUP_FILE_NOT_FOUND
+	JP	RENDER_OPEN_PAGE
 
 ;------------------------------------------------------------------------------
 ; Block Insert File UI & Execution Subsystem
@@ -16349,7 +16317,10 @@ RENDER_SAVE_PAGE:
 
 	; Check if user typed a FAT specification (U: or U<unit>:)
 	CALL	CHECK_FAT_INPUT_SAVE
-	JP	C,SHOW_INLINE_SAVE_ERROR
+	JR	NC,CFIS_DISPATCH_CHECK
+	CALL	SHOW_POPUP_FAT_NO_PLUGIN
+	JP	RENDER_SAVE_PAGE
+CFIS_DISPATCH_CHECK:
 	JP	NZ,HANDLE_SAVE_FAT_DISPATCH
 
 	; Check if user typed a drive specification (e.g. "A:")
@@ -16556,60 +16527,8 @@ SAVE_RAMDRV_UNAVAILABLE:
 	LDIR
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
-
-	; Display inline "  RAM drive not available"
-	LD	DE,STR_RAMDRV_UNAVAIL_INLINE
-	LD	A,25
-
-SHOW_INLINE_SAVE_ERROR:
-	LD	(INLINE_MSG_LEN),A
-
-	; Move cursor past ']' box before printing error message
-	LD	A,(INPUT_BUF_LEN)
-	LD	B,A
-	LD	A,21
-	SUB	B
-	JR	Z,SRU_FWD_DONE
-	LD	B,A			; B = 21 - INPUT_BUF_LEN
-SRU_FWD_LOOP:
-	PUSH	BC
-	PUSH	DE
-	LD	DE,STR_CSI_C		; ESC [ C
-	CALL	PRINT_STR
-	POP	DE
-	POP	BC
-	DJNZ	SRU_FWD_LOOP
-SRU_FWD_DONE:
-
-	CALL	PRINT_STR
-
-	; Set flag that inline message is currently visible
-	LD	A,1
-	LD	(SHOWING_FNF_MSG),A
-
-	; Resume input loop without blanking filename in text box
-	CALL	RESUME_FILENAME_INPUT
-	JP	C,CHECK_SAVE_PAGING_OR_CANCEL
-
-	; Check if user typed a FAT specification (U: or U<unit>:)
-	CALL	CHECK_FAT_INPUT_SAVE
-	JP	C,SHOW_INLINE_SAVE_ERROR
-	JP	NZ,HANDLE_SAVE_FAT_DISPATCH
-
-	; Check if user edited input to a drive specification (e.g. "B:")
-	CALL	CHECK_DRIVE_SWITCH
-	JR	C,HANDLE_SAVE_DRIVE_SWITCH
-
-	; Check if user edited input to a filter pattern (e.g. "*.TXT")
-	CALL	CHECK_FILTER_PATTERN
-	JP	C,HANDLE_SAVE_FILTER
-
-	; If currently browsing a FAT volume, handle relative navigation/save
-	LD	A,(CURRENT_DIR_IS_FAT)
-	OR	A
-	JP	NZ,HANDLE_SAVE_FAT_RELATIVE
-
-	JP	DO_PARSE_AND_SAVE
+	CALL	SHOW_POPUP_RAMDRV_UNAVAIL
+	JP	RENDER_SAVE_PAGE
 
 HANDLE_SAVE_DRIVE_SWITCH:
 	; A = new drive (1..16 or 0), C = new user (0..15 or 0xFF)
@@ -19234,61 +19153,6 @@ IMCTE_LOOP:
 ; Preserves AF and BC
 ;------------------------------------------------------------------------------
 CHECK_CLEAR_FNF:
-	PUSH	AF
-	PUSH	BC
-	PUSH	DE
-	PUSH	HL
-	LD	A,(SHOWING_FNF_MSG)
-	OR	A
-	JR	Z,CLEAR_FNF_DONE
-
-	XOR	A
-	LD	(SHOWING_FNF_MSG),A
-
-	; Erase inline message: B backspaces, B spaces, B backspaces
-	LD	A,(INLINE_MSG_LEN)
-	LD	B,A
-ERASE_FNF_BS1:
-	LD	A,008H
-	CALL	PUTC
-	DJNZ	ERASE_FNF_BS1
-
-	LD	A,(INLINE_MSG_LEN)
-	LD	B,A
-ERASE_FNF_SP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	ERASE_FNF_SP
-
-	LD	A,(INLINE_MSG_LEN)
-	LD	B,A
-ERASE_FNF_BS2:
-	LD	A,008H
-	CALL	PUTC
-	DJNZ	ERASE_FNF_BS2
-
-	; Reset INLINE_MSG_LEN to default 16
-	LD	A,16
-	LD	(INLINE_MSG_LEN),A
-
-	; Move cursor from after ']' box back inside to INPUT_BUF_LEN:
-	; Emit (21 - INPUT_BUF_LEN) backspaces
-	LD	A,(INPUT_BUF_LEN)
-	LD	B,A
-	LD	A,21
-	SUB	B
-	JR	Z,CLEAR_FNF_DONE
-	LD	B,A
-ERASE_FNF_RET_BOX:
-	LD	A,008H
-	CALL	PUTC
-	DJNZ	ERASE_FNF_RET_BOX
-
-CLEAR_FNF_DONE:
-	POP	HL
-	POP	DE
-	POP	BC
-	POP	AF
 	RET
 
 INPUT_CANCEL:
@@ -21848,7 +21712,6 @@ ENSURE_VFS_PLUGIN_LOADED:
 ; Inspects INPUT_FILENAME_BUF in Open dialog.
 ; Returns:
 ;   Carry = 1: FAT path detected, but FATFS.PRL is NOT loaded.
-;              DE = STR_FAT_NO_PLUGIN_INLINE, C = 28.
 ;   Carry = 0, NZ: FAT path detected, and FATFS.PRL IS loaded!
 ;   Carry = 0, Z:  Not a FAT path.
 ;------------------------------------------------------------------------------
@@ -21875,8 +21738,6 @@ CFIO_NOT_FAT:
 	RET
 
 CFIO_NO_PLUGIN:
-	LD	DE,STR_FAT_NO_PLUGIN_INLINE
-	LD	C,28			; Message length
 	SCF				; Carry = 1
 	RET
 
@@ -21885,7 +21746,6 @@ CFIO_NO_PLUGIN:
 ; Inspects INPUT_FILENAME_BUF in Save dialog.
 ; Returns:
 ;   Carry = 1: FAT path detected, but FATFS.PRL is NOT loaded.
-;              DE = STR_FAT_NO_PLUGIN_INLINE, A = 28.
 ;   Carry = 0, NZ: FAT path detected, and FATFS.PRL IS loaded!
 ;   Carry = 0, Z:  Not a FAT path.
 ;------------------------------------------------------------------------------
@@ -21908,8 +21768,6 @@ CFIS_NOT_FAT:
 	RET
 
 CFIS_NO_PLUGIN:
-	LD	DE,STR_FAT_NO_PLUGIN_INLINE
-	LD	A,28			; Message length
 	SCF				; Carry = 1
 	RET
 
@@ -22171,10 +22029,8 @@ HOFF_DO_LOAD:
 	JP	MAIN_LOOP
 
 HOFF_LOAD_FAIL:
-	; File not found / disk error: show inline "  File not found"
-	LD	DE,STR_FNF_INLINE
-	LD	C,16
-	JP	SHOW_INLINE_OPEN_ERROR
+	CALL	SHOW_POPUP_FILE_NOT_FOUND
+	JP	RENDER_OPEN_PAGE
 
 ;------------------------------------------------------------------------------
 ; HANDLE_SAVE_FAT_DISPATCH:
@@ -22324,9 +22180,8 @@ HSFF_DO_SAVE:
 	RET
 
 HSFF_SAVE_FAIL:
-	LD	DE,STR_FNF_INLINE
-	LD	C,16
-	JP	SHOW_INLINE_SAVE_ERROR
+	CALL	SHOW_POPUP_FILE_NOT_FOUND
+	JP	RENDER_SAVE_PAGE
 
 ;------------------------------------------------------------------------------
 ; CHECK_AND_HANDLE_FAT_NAV:
@@ -23402,6 +23257,30 @@ STR_POPUP_HELP_MISS_MSG1:
 STR_POPUP_HELP_MISS_MSG2:
 	DB	"|       Unable to load online help screen.       |", 0
 
+; File Not Found Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_FNF_TITLE:
+	DB	"|                 File Not Found                 |", 0
+STR_POPUP_FNF_MSG1:
+	DB	"|               File was not found.              |", 0
+STR_POPUP_FNF_MSG2:
+	DB	"|        Specified file not found on disk.       |", 0
+
+; RAM Drive Unavailable Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_RAMDRV_TITLE:
+	DB	"|              RAM Drive Unavailable             |", 0
+STR_POPUP_RAMDRV_MSG1:
+	DB	"|      RAM drive is not currently available.     |", 0
+STR_POPUP_RAMDRV_MSG2:
+	DB	"|   Select a valid disk drive (e.g. A: or B:).   |", 0
+
+; FAT Subsystem Missing Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_FAT_MISS_TITLE:
+	DB	"|              FAT Subsystem Missing             |", 0
+STR_POPUP_FAT_MISS_MSG1:
+	DB	"|           Feature requires FATFS.PRL.          |", 0
+STR_POPUP_FAT_MISS_MSG2:
+	DB	"|      FAT filesystem plugin is not loaded.      |", 0
+
 ;------------------------------------------------------------------------------
 ; String Constants & Data
 ;------------------------------------------------------------------------------
@@ -23717,10 +23596,6 @@ STR_TILDE_CRLF:		DB	"~",13,10,"$"
 STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
 STR_FILE_NOT_FOUND_SUFFIX:	DB	" file not found",13,10,"$"
 
-STR_CSI_C:		DB	27,"[C","$"
-STR_FNF_INLINE:		DB	"  File not found","$"
-STR_RAMDRV_UNAVAIL_INLINE:	DB	"  RAM drive not available","$"
-STR_FAT_NO_PLUGIN_INLINE:	DB	"  feature requires FATFS.PRL","$"
 STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
 
 ;------------------------------------------------------------------------------

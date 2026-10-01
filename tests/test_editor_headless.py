@@ -1048,12 +1048,22 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
 
-        # Type bad filename '2.BAK' and press Enter: verify 'File not found'
+        # Type bad filename '2.BAK' and press Enter: verify popup
         os.write(master, b"2.BAK\r")
-        out_nofile = read_until(master, b"File not found", timeout=4.0)
-        if b"File not found" not in out_nofile:
-            print(f"[-] 'File not found' message missing for non-existent file. Buffer: {repr(out_nofile)}", flush=True)
+        out_nofile = read_until(master, b"File Not Found", timeout=4.0)
+        if (b"File Not Found" not in out_nofile and
+                b"File not found" not in out_nofile):
+            print(
+                "[-] 'File Not Found' message missing for non-existent file. "
+                f"Buffer: {repr(out_nofile)}",
+                flush=True
+            )
             return False
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to open", timeout=4.0)
 
         # Verify it did NOT enter editor mode
         r, _, _ = select.select([master], [], [], 0.3)
@@ -1064,7 +1074,7 @@ def test_se_execution():
                 return False
         print(
             "[+] Step 26: Successfully verified bad filename shows "
-            "'File not found' without entering editor mode.",
+            "'File Not Found' popup without entering editor mode.",
             flush=True
         )
 
@@ -4085,11 +4095,22 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"NOFILE.TXT\r")
-        out_s66_fnf = read_until(master, b"File not found", timeout=6.0)
+        out_s66_fnf = read_until(master, b"File Not Found", timeout=6.0)
         drain_all(master)
-        if b"File not found" not in out_s66_fnf:
-            print(f"[-] Step 66 Subtest 2 failed: 'File not found' message not displayed: {repr(out_s66_fnf)}", flush=True)
+        if (b"File Not Found" not in out_s66_fnf and
+                b"File not found" not in out_s66_fnf):
+            print(
+                "[-] Step 66 Subtest 2 failed: 'File Not Found' message not "
+                f"displayed: {repr(out_s66_fnf)}",
+                flush=True
+            )
             return False
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to insert:", timeout=6.0)
+        drain_all(master)
 
         # Cancel back to editor with ESC and clear block
         time.sleep(0.2)
@@ -4099,7 +4120,11 @@ def test_se_execution():
         os.write(master, b"\x1b")
         time.sleep(0.2)
         drain_all(master)
-        print("[+] Step 66 Subtest 2 PASSED: Non-existent file displayed 'File not found' and cancelled cleanly.", flush=True)
+        print(
+            "[+] Step 66 Subtest 2 PASSED: Non-existent file displayed "
+            "'File Not Found' popup and cancelled cleanly.",
+            flush=True
+        )
 
         # Subtest 3: Insert single-line file at empty block (cursor)
         os.write(master, b"\x02")  # Ctrl-B
@@ -4794,17 +4819,23 @@ def test_se_execution():
             )
             return False
 
-        # Test inline 'File not found' then filtering
+        # Test modal 'File Not Found' then filtering
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"NONEXIST.XYZ\r")
-        out_s70_fnf = read_until(master, b"File not found", timeout=6.0)
-        if b"File not found" not in out_s70_fnf:
+        out_s70_fnf = read_until(master, b"File Not Found", timeout=6.0)
+        if (b"File Not Found" not in out_s70_fnf and
+                b"File not found" not in out_s70_fnf):
             print(
-                f"[-] Step 70 failed: 'File not found' inline message not "
+                f"[-] Step 70 failed: 'File Not Found' modal pop-up not "
                 f"displayed. Buffer: {repr(out_s70_fnf)}",
                 flush=True
             )
             return False
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to open", timeout=6.0)
 
         # Filter directly from FNF state: '*.TXT'
         time.sleep(0.2)
@@ -5634,28 +5665,40 @@ def test_se_execution():
         # Clear preloaded 'C0:' and switch to unavailable RAM drive A:
         time.sleep(0.3)
         os.write(master, b"\x08\x08\x08a:\r")
-        out_s74_open_err = read_until(master, b"RAM drive not available",
+        out_s74_open_err = read_until(master, b"RAM Drive Unavailable",
                                       timeout=10.0)
-        if b"RAM drive not available" not in out_s74_open_err:
-            print("[-] Step 74 failed: 'RAM drive not available' not "
+        if (b"RAM Drive Unavailable" not in out_s74_open_err and
+                b"RAM drive" not in out_s74_open_err):
+            print("[-] Step 74 failed: 'RAM Drive Unavailable' not "
                   f"shown on A: in Open screen. Buffer: "
                   f"{repr(out_s74_open_err)}", flush=True)
             return False
-        print("    [+] Open screen displayed inline "
-              "'  RAM drive not available' on 'a:'.")
+        print("    [+] Open screen displayed modal "
+              "'RAM Drive Unavailable' popup on 'a:'.")
 
-        # Typing backspace clears message and deletes ':', type ':nofile.txt'
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to open:", timeout=10.0)
+
+        # Typing backspace deletes ':', type ':nofile.txt'
         time.sleep(0.3)
         os.write(master, b"\x08:nofile.txt\r")
-        out_s74_open_err2 = read_until(master, b"RAM drive not available",
+        out_s74_open_err2 = read_until(master, b"RAM Drive Unavailable",
                                        timeout=10.0)
-        if b"RAM drive not available" not in out_s74_open_err2:
-            print("[-] Step 74 failed: 'RAM drive not available' not "
+        if (b"RAM Drive Unavailable" not in out_s74_open_err2 and
+                b"RAM drive" not in out_s74_open_err2):
+            print("[-] Step 74 failed: 'RAM Drive Unavailable' not "
                   f"shown on A:NOFILE.TXT. Buffer: "
                   f"{repr(out_s74_open_err2)}", flush=True)
             return False
-        print("    [+] Open screen displayed inline "
+        print("    [+] Open screen displayed modal "
               "error on 'a:nofile.txt'.")
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to open:", timeout=10.0)
 
         # Cancel Open dialog with ESC
         time.sleep(0.3)
@@ -5681,28 +5724,40 @@ def test_se_execution():
         # Clear preloaded 'C0:' and switch to unavailable RAM drive A:
         time.sleep(0.3)
         os.write(master, b"\x08\x08\x08a:\r")
-        out_s74_save_err = read_until(master, b"RAM drive not available",
+        out_s74_save_err = read_until(master, b"RAM Drive Unavailable",
                                       timeout=10.0)
-        if b"RAM drive not available" not in out_s74_save_err:
-            print("[-] Step 74 failed: 'RAM drive not available' not "
+        if (b"RAM Drive Unavailable" not in out_s74_save_err and
+                b"RAM drive" not in out_s74_save_err):
+            print("[-] Step 74 failed: 'RAM Drive Unavailable' not "
                   f"shown on A: in Save screen. Buffer: "
                   f"{repr(out_s74_save_err)}", flush=True)
             return False
-        print("    [+] Save screen displayed inline "
-              "'  RAM drive not available' on 'a:'.")
+        print("    [+] Save screen displayed modal "
+              "'RAM Drive Unavailable' popup on 'a:'.")
 
-        # Typing backspace clears message and deletes ':', type ':savefile.txt'
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to save:", timeout=10.0)
+
+        # Typing backspace deletes ':', type ':savefile.txt'
         time.sleep(0.3)
         os.write(master, b"\x08:savefile.txt\r")
-        out_s74_save_err2 = read_until(master, b"RAM drive not available",
+        out_s74_save_err2 = read_until(master, b"RAM Drive Unavailable",
                                        timeout=10.0)
-        if b"RAM drive not available" not in out_s74_save_err2:
-            print("[-] Step 74 failed: 'RAM drive not available' not "
+        if (b"RAM Drive Unavailable" not in out_s74_save_err2 and
+                b"RAM drive" not in out_s74_save_err2):
+            print("[-] Step 74 failed: 'RAM Drive Unavailable' not "
                   f"shown on A:SAVEFILE.TXT. Buffer: "
                   f"{repr(out_s74_save_err2)}", flush=True)
             return False
-        print("    [+] Save screen displayed inline "
+        print("    [+] Save screen displayed modal "
               "error on 'a:savefile.txt'.")
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to save:", timeout=10.0)
 
         # Cancel Save dialog with ESC
         time.sleep(0.3)
