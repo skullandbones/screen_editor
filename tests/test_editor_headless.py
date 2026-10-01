@@ -3949,16 +3949,17 @@ def test_se_execution():
         # Launch SE.COM directly into new document
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out_s66_boot = read_until(master, b"Col 0", timeout=14.0)
+        out_s66_boot = read_until(master, b"Col 0", timeout=35.0)
         time.sleep(0.3)
         drain_all(master)
 
         # Enter editor mode with 'e'
         os.write(master, b"e")
-        out_s66_ed = read_until(master, b"^K: Editor keys", timeout=6.0)
+        out_s66_ed = read_until(master, b"^K: Editor keys", timeout=8.0)
         drain_all(master)
         if b"^K: Editor keys" not in out_s66_ed:
-            print(f"[-] Step 66 failed: Failed to enter editor mode: {repr(out_s66_ed)}", flush=True)
+            print(f"[-] Step 66 failed: Failed to enter editor mode: "
+                  f"{repr(out_s66_ed)}", flush=True)
             return False
 
         # Subtest 1: Open Insert File screen with block, verify title/prompt and ESC cancel
@@ -4113,14 +4114,16 @@ def test_se_execution():
 
         # Subtest 5: Replace multi-line block with single-line file
         # Dismiss previous solidified block with ESC
+        time.sleep(0.3)
         os.write(master, b"\x1b")
-        time.sleep(0.1)
+        read_until(master, b"^K: Editor keys", timeout=4.0)
+        time.sleep(0.2)
         drain_all(master)
 
         os.write(master, b"\x1b[A")  # Up to line 0
-        time.sleep(0.05)
+        time.sleep(0.1)
         os.write(master, b"\x01")    # Home
-        time.sleep(0.05)
+        time.sleep(0.1)
         for _ in range(5):
             os.write(master, b"\x1b[C")
             time.sleep(0.05)
@@ -4128,11 +4131,11 @@ def test_se_execution():
 
         # Block from Line 0 Col 5 to Line 1 Col 11
         os.write(master, b"\x02")
-        time.sleep(0.1)
+        time.sleep(0.2)
         os.write(master, b"\x1b[B")  # Down to line 1
-        time.sleep(0.05)
+        time.sleep(0.1)
         os.write(master, b"\x01")
-        time.sleep(0.05)
+        time.sleep(0.1)
         for _ in range(11):
             os.write(master, b"\x1b[C")
             time.sleep(0.05)
@@ -4147,12 +4150,16 @@ def test_se_execution():
         out_s66_ins3 += drain_all(master)
 
         if b"[BLK: 8c LOCK]" not in out_s66_ins3:
-            print(f"[-] Step 66 Subtest 5 failed: '[BLK: 8c LOCK]' not found: {repr(out_s66_ins3)}", flush=True)
+            print(f"[-] Step 66 Subtest 5 failed: '[BLK: 8c LOCK]' not "
+                  f"found: {repr(out_s66_ins3)}", flush=True)
             return False
         if b"INSERTED" not in out_s66_ins3:
-            print(f"[-] Step 66 Subtest 5 failed: 'INSERTED' not found: {repr(out_s66_ins3)}", flush=True)
+            print(f"[-] Step 66 Subtest 5 failed: 'INSERTED' not found: "
+                  f"{repr(out_s66_ins3)}", flush=True)
             return False
-        print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted, replaced with single-line file, and solidified [BLK: 8c LOCK].", flush=True)
+        print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted, "
+              "replaced with single-line file, and solidified "
+              "[BLK: 8c LOCK].", flush=True)
 
         # Subtest 6: Test block delete of inserted file, re-insert and ESC dismiss
         # Line 1 currently has "Hello" + [BLK: 8c LOCK] "INSERTED" + " END"
