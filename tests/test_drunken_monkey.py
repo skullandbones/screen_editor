@@ -404,6 +404,7 @@ class VT100QualityMonitor:
         if "Replace (" in full_text and "uit/" in full_text:
             return "replace_confirm_prompt"
         if ("[Up/Dn/0-7] Select" in full_text or
+                "[Up]/[Down]=Select" in full_text or
                 "Select [0-7] to Execute" in full_text or
                 "Plugins for Editor" in full_text or
                 "to Dismiss" in full_text):
@@ -690,8 +691,8 @@ class DrunkenMonkeyInputGenerator:
             return choice, d, f"Replace confirm: {choice}"
 
         elif screen_state == "plugin_popup":
-            slot = self.rng.choice(["0", "1", "2", "\x1b", "q"])
-            d = max(delay, 0.15) if slot in ("\x1b", "q") else delay
+            slot = self.rng.choice(["0", "1", "2", "\x1b"])
+            d = max(delay, 0.15) if slot == "\x1b" else delay
             return slot, d, f"Plugin popup: {slot}"
 
         elif screen_state == "press_any_key":

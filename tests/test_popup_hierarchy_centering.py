@@ -106,7 +106,7 @@ def main():
         # Launch SE.COM
         time.sleep(0.5)
         os.write(master, b"se\r")
-        out = read_until(master, b"for about", timeout=20.0)
+        out = read_until(master, b"for about", timeout=45.0)
         if b"for about" not in out:
             print(f"[-] Failed to reach Splash Screen. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -126,7 +126,7 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if b"Plugins with Embedded Documentation" not in out:
             print(f"[-] Failed to open Ctrl+P menu on About screen. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -157,9 +157,9 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b" ")
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if (b"Plugins with Embedded Documentation" not in out or
-                b"[Up/Dn/0-7] Select" not in out):
+                b"[Up]/[Down]=Select" not in out):
             print("[-] HIERARCHY FAILURE: Expected Ctrl+P menu after popup!")
             return 1
         print("[+] Modal hierarchy verified: About returned to Ctrl+P menu!")

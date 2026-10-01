@@ -1235,7 +1235,14 @@ DCPP_DRAW_BOX:
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_POPUP_BORDER
 	CALL	HOST_PRINT_STR
-	JR	CPK_KEY_LOOP
+
+CPK_NOMATCH_KEY_LOOP:
+	CALL	HOST_GET_KEY
+	CP	27			; ESC
+	JR	NZ,CPK_NM_NOT_ESC
+	CALL	DRAIN_ESC_SEQUENCE
+CPK_NM_NOT_ESC:
+	JP	CPKL_DISMISS
 
 DCPP_RENDER_ITEMS:
 	LD	C,0			; Match index 0..MATCH_COUNT-1
@@ -1288,8 +1295,6 @@ CPK_KEY_LOOP:
 	JR	NC,CPKL_NOT_LOWER
 	SUB	32
 CPKL_NOT_LOWER:
-	CP	'Q'
-	JP	Z,CPKL_DISMISS
 	CP	'K'			; Vi Up
 	JP	Z,CPK_PREV_ITEM
 	CP	'J'			; Vi Down
@@ -2093,9 +2098,10 @@ STR_TITLE_PLUGIN_MGR:	DB	"            Installed Plugin Catalog            ", 0
 STR_TITLE_HELP:		DB	"       Plugins with Embedded Documentation      ", 0
 
 STR_POPUP_NO_MATCH:	DB	"    No plugins found for this screen context    ", 0
-STR_POPUP_PROMPT_NOMATCH: DB	"   Press [Esc], [q], or [Ctrl+P] to Dismiss     ", 0
+STR_POPUP_PROMPT_NOMATCH:
+	DB	"            Press any key to dismiss            ", 0
 STR_POPUP_PROMPT_MATCH:
-	DB	" [Up/Dn/0-7] Select  [Enter] Exec  [ESC/Q] Exit ", 0
+	DB	" [Up]/[Down]=Select   [Enter]=Exec   [ESC]=Exit ", 0
 
 STR_DESC_CONFIG:	DB	"Embedded Plugin Settings     ", 0
 STR_DESC_ABOUT:		DB	"Modal About & Info Dialog    ", 0

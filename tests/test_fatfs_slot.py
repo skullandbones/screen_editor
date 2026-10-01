@@ -241,7 +241,7 @@ def run_fatfs_slot_test():
 
         time.sleep(0.3)
         os.write(master, b"\x10")  # Ctrl+P
-        ok, out_popup = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        ok, out_popup = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if not ok or b"FATFS" not in out_popup:
             print(f"[-] FATFS not found in Editor Ctrl+P popup. Buffer: {repr(out_popup)}", flush=True)
             return False
@@ -261,7 +261,7 @@ def run_fatfs_slot_test():
         # Exit FATFS back to Editor (returns to Ctrl+P popup hierarchically)
         time.sleep(0.3)
         os.write(master, b"q")
-        ok, _ = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        ok, _ = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if not ok:
             print("[-] Failed to return to Ctrl+P popup after exiting FATFS.",
                   flush=True)
@@ -282,7 +282,7 @@ def run_fatfs_slot_test():
         print("[*] Testing FAT text file import into SE.COM editor buffer...", flush=True)
         time.sleep(0.3)
         os.write(master, b"\x10")  # Ctrl+P
-        read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         time.sleep(0.2)
         os.write(master, b"3\r")  # Launch Slot 3 (FATFS) via '3' + Enter
         ok, out_footer = read_until(master, b"[ENTER/O] Open", timeout=12.0)
