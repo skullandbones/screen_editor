@@ -2576,15 +2576,30 @@ def test_se_execution():
 
         # Enter replacement string: "BetaLine 01"
         os.write(master, b"BetaLine 01\r")
-        out_s47_confirm = read_until(master, b"everse)? ", timeout=4.0)
-        if b"Replace (" not in out_s47_confirm or b"everse)? " not in out_s47_confirm:
-            print(f"[-] Step 47 failed: Confirmation prompt missing. Buffer: {repr(out_s47_confirm)}", flush=True)
+        out_s47_title = read_until(
+            master, b"Replace Confirmation", timeout=4.0
+        )
+        if b"Replace Confirmation" not in out_s47_title:
+            print(
+                f"[-] Step 47 failed: Confirmation pop-up missing. "
+                f"Buffer: {repr(out_s47_title)}",
+                flush=True
+            )
             return False
-        # Verify underscored options (Y, N, A, Q, R)
-        if b"\x1b[4mY\x1b[24mes" not in out_s47_confirm or b"\x1b[4mN\x1b[24mo" not in out_s47_confirm or \
-           b"\x1b[4mA\x1b[24mll" not in out_s47_confirm or b"\x1b[4mQ\x1b[24muit" not in out_s47_confirm or \
-           b"\x1b[4mR\x1b[24meverse" not in out_s47_confirm:
-            print(f"[-] Step 47 failed: Underscored options missing. Buffer: {repr(out_s47_confirm)}", flush=True)
+        # Read the rest of the modal pop-up up to the keys line
+        out_s47_keys = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        # Verify bracketed options
+        if b"[Y]es" not in out_s47_keys or \
+           b"[N]o" not in out_s47_keys or \
+           b"[A]ll" not in out_s47_keys or \
+           b"[Q]uit" not in out_s47_keys or \
+           b"[R]everse" not in out_s47_keys or \
+           b"[ESC]=Cancel" not in out_s47_keys:
+            print(
+                f"[-] Step 47 failed: Modal options missing. "
+                f"Buffer: {repr(out_s47_keys)}",
+                flush=True
+            )
             return False
 
         # Confirm replacement with 'y'
@@ -2766,16 +2781,16 @@ def test_se_execution():
         os.write(master, b"\r")
         read_until(master, b"Replace with:", timeout=4.0)
         os.write(master, b"Item\r")
-        read_until(master, b"everse)? ", timeout=4.0)
+        read_until(master, b"Replace Confirmation", timeout=4.0)
         # We are on line 1. Skip with 'n' -> moves forward to line 2:
         os.write(master, b"n")
         read_until(master, b"Line    2/30", timeout=4.0)
-        read_until(master, b"everse)? ", timeout=4.0)
+        read_until(master, b"Replace Confirmation", timeout=4.0)
 
         # Press 'r' to dynamically reverse direction -> moves back to line 1!
         os.write(master, b"r")
         read_until(master, b"Line    1/30", timeout=4.0)
-        read_until(master, b"everse)? ", timeout=4.0)
+        read_until(master, b"Replace Confirmation", timeout=4.0)
 
         # Quit replace with 'q'
         os.write(master, b"q")

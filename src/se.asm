@@ -5785,10 +5785,6 @@ SHOW_LINUX_FMT:
 
 SHOW_STATUS_REST:
 	; Field 4: Print Mode / Keys / Selection / OOM / Memory (18 chars)
-	LD	A,(IS_REPLACE_PROMPT)
-	OR	A
-	JP	NZ,SHOW_STATUS_REPLACE_PROMPT
-
 	LD	A,(IS_LOADING_FILE)
 	OR	A
 	JP	NZ,SHOW_STATUS_LOADING
@@ -6008,19 +6004,6 @@ SHOW_STATUS_OOM:
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
-
-SHOW_STATUS_REPLACE_PROMPT:
-	; Fields 4 & 5 (combined 40 chars): Print replace prompt followed by 5 spaces
-	; STR_REPLACE_CONFIRM is 35 visible characters
-	LD	DE,STR_REPLACE_CONFIRM
-	CALL	PRINT_STR
-	LD	B,5
-SSRP_PAD_LOOP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	SSRP_PAD_LOOP
-	JP	SSRC_POS_DONE
-
 SHOW_STATUS_LOADING:
 	LD	DE,STR_STATUS_LOADING
 	CALL	PRINT_STR
@@ -6165,45 +6148,7 @@ SSRC_RIGHT_PAD:
 SSRC_RIGHT_PAD_DONE:
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
-	LD	A,(IS_REPLACE_PROMPT)
-	OR	A
-	JR	NZ,STATUS_LOCATE_REP_CURSOR
 	CALL	LOCATE_CURSOR
-	RET
-
-STATUS_LOCATE_REP_CURSOR:
-	CALL	LOCATE_REPLACE_PROMPT_CURSOR
-	RET
-
-;------------------------------------------------------------------------------
-; LOCATE_REPLACE_PROMPT_CURSOR:
-; Position cursor on status row immediately after "Replace (...)? "
-; Column = ((ACTIVE_COLS - 78) / 2) + 72
-; (Col 73 in 80x24, Col 93 in 120x40)
-; Preserves: BC, DE, HL
-;------------------------------------------------------------------------------
-LOCATE_REPLACE_PROMPT_CURSOR:
-	PUSH	BC
-	PUSH	DE
-	PUSH	HL
-	LD	A,27
-	CALL	PUTC
-	LD	A,'['
-	CALL	PUTC
-	LD	A,(ACTIVE_ROWS)
-	CALL	PRINT_DEC_BYTE
-	LD	A,';'
-	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	STATUS_ENCLOSED_WIDTH	; 80 - 78 = 2,  120 - 78 = 42
-	SRL	A			; 1 or 21
-	ADD	A,72			; Col 73 (80x24) or Col 93 (120x40)
-	CALL	PRINT_DEC_BYTE
-	LD	A,'H'
-	CALL	PUTC
-	POP	HL
-	POP	DE
-	POP	BC
 	RET
 
 MEM_FIELD_WIDTH		EQU	15
@@ -11857,7 +11802,6 @@ REPLACE_INPUT_CONFIRM:
 
 	; 3. Initialize replace execution
 	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	LD	(REPLACE_ALL_MODE),A
 	LD	(SEARCH_DIRECTION),A	; 0 = Forward
 	LD	HL,0
@@ -11949,6 +11893,73 @@ DRP_PAD_LOOP:
 	CALL	PRINT_STR
 	RET
 
+DRAW_REPLACE_CONFIRM_POPUP:
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
+
+	; Line 1: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REP_CONFIRM_TITLE
+	CALL	PRINT_STR
+
+	; Line 3: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 4: Description
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REP_CONFIRM_MSG1
+	CALL	PRINT_STR
+
+	; Line 5: Query Prompt
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REP_CONFIRM_MSG2
+	CALL	PRINT_STR
+
+	; Line 6: Keys
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REP_CONFIRM_KEYS
+	CALL	PRINT_STR
+
+	; Line 7: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Position cursor inside popup on prompt line after "Replace this occurrence? "
+	CALL	LOCATE_REPLACE_CONFIRM_CURSOR
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
+	RET
+
+LOCATE_REPLACE_CONFIRM_CURSOR:
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,36
+	LD	L,A
+	CALL	LOCATE_RC
+	RET
+
 REPLACE_SEARCH_NEXT:
 	; Check current search direction
 	LD	A,(SEARCH_DIRECTION)
@@ -11972,12 +11983,13 @@ REPLACE_PROCESS_MATCH:
 	OR	A
 	JP	NZ,REPLACE_EXECUTE_SUBST
 
-	; Render screen to show match to user with prompt in status bar
-	LD	A,1
-	LD	(IS_REPLACE_PROMPT),A
+	; Render screen to show match to user with persistent status bar
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+
+	; Render centered Tier 2 modal pop-up box
+	CALL	DRAW_REPLACE_CONFIRM_POPUP
 
 REPLACE_CONFIRM_KEY:
 	CALL	GET_KEY
@@ -12014,27 +12026,19 @@ REPLACE_CONFIRM_KEY:
 	CP	KEY_ENTER
 	JP	Z,REPLACE_DO_SUBST
 
-	CALL	LOCATE_REPLACE_PROMPT_CURSOR
+	CALL	LOCATE_REPLACE_CONFIRM_CURSOR
 	JR	REPLACE_CONFIRM_KEY
 
 REPLACE_QUIT:
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	JP	REPLACE_SUMMARY
 
 REPLACE_DO_REVERSE:
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	JR	REPLACE_REVERSE_DIR
 
 REPLACE_DO_SKIP:
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	JR	REPLACE_SKIP
 
 REPLACE_DO_SUBST:
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	JP	REPLACE_EXECUTE_SUBST
 
 REPLACE_REVERSE_DIR:
@@ -12062,7 +12066,6 @@ REPLACE_REV_TO_BW:
 
 REPLACE_ACTIVATE_ALL:
 	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	LD	(SEARCH_DIRECTION),A	; Ensure forward direction for Replace All
 	LD	A,1
 	LD	(REPLACE_ALL_MODE),A
@@ -12106,10 +12109,6 @@ REPLACE_EXECUTE_SUBST:
 	JP	REPLACE_SEARCH_NEXT
 
 REPLACE_SUMMARY:
-	; Ensure replace prompt flag is cleared
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
-
 	; Cancel any active block highlight
 	CALL	CANCEL_BLOCK
 
@@ -23180,6 +23179,16 @@ STR_REPLACE_POPUP_MSG:
 STR_REPLACE_POPUP_KEYS:
 	DB	"|        [Enter]=Confirm     [ESC]=Cancel        |", 0
 
+; Replace Confirmation Modal Pop-up Strings (50 cols x 7 rows)
+STR_REP_CONFIRM_TITLE:
+	DB	"|              Replace Confirmation              |", 0
+STR_REP_CONFIRM_MSG1:
+	DB	"|     Match found for search pattern in text     |", 0
+STR_REP_CONFIRM_MSG2:
+	DB	"|            Replace this occurrence?            |", 0
+STR_REP_CONFIRM_KEYS:
+	DB	"| [Y]es [N]o [A]ll [Q]uit [R]everse [ESC]=Cancel |", 0
+
 ; Goto Line Modal Pop-up Strings (50 cols x 7 rows)
 STR_GOTO_POPUP_TITLE:
 	DB	"|                   Goto Line                    |", 0
@@ -23523,7 +23532,6 @@ STR_CSI_C:		DB	27,"[C","$"
 STR_FNF_INLINE:		DB	"  File not found","$"
 STR_RAMDRV_UNAVAIL_INLINE:	DB	"  RAM drive not available","$"
 STR_FAT_NO_PLUGIN_INLINE:	DB	"  feature requires FATFS.PRL","$"
-STR_REPLACE_CONFIRM:	DB	"Replace (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/",27,"[4m","A",27,"[24m","ll/",27,"[4m","Q",27,"[24m","uit/",27,"[4m","R",27,"[24m","everse)? ","$"
 STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
 STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
 STR_SEARCH_COMPLETED:	DB	" Search completed. ","$"
@@ -23611,7 +23619,6 @@ LOAD_PROGRESS_LINES:	DW	0		; Lines read counter for loading status bar
 SAVED_HAS_FILE_ARG:	DB	0		; Saved HAS_FILE_ARG during block insert
 INSERT_LINE_HAD_CHARS:	DB	0		; 1 if current line of inserted file had chars
 IS_EXIT_PROMPT:		DB	0		; 1 if currently in Save Changes Exit Prompt
-IS_REPLACE_PROMPT:	DB	0		; 1 if currently in Search & Replace prompt
 INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0		; Streaming insert current line length
 INSERT_NEW_CUR_COL:	DW	0		; Cursor column position after insert

@@ -401,7 +401,8 @@ class VT100QualityMonitor:
         if ("File already exists. Overwrite?" in full_text or
                 "Overwrite File" in full_text):
             return "overwrite_prompt"
-        if "Replace (" in full_text and "uit/" in full_text:
+        if (("Replace (" in full_text and "uit/" in full_text) or
+                "Replace Confirmation" in full_text):
             return "replace_confirm_prompt"
         if ("[Up/Dn/0-7] Select" in full_text or
                 "[Up]/[Down]=Select" in full_text or
@@ -686,7 +687,7 @@ class DrunkenMonkeyInputGenerator:
             return choice, delay, f"Overwrite: {choice}"
 
         elif screen_state == "replace_confirm_prompt":
-            choice = self.rng.choice(["y", "n", "a", "\x1b"])
+            choice = self.rng.choice(["y", "n", "a", "q", "r", "\x1b"])
             d = max(delay, 0.15) if choice == "\x1b" else delay
             return choice, d, f"Replace confirm: {choice}"
 
