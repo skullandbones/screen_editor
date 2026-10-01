@@ -2737,8 +2737,23 @@ def test_se_execution():
 
         # Quit replace with 'q'
         os.write(master, b"q")
-        read_until(master, b"Replace done: 0 replacement(s).", timeout=4.0)
-        print("[+] Successfully verified Dynamic Reversal of Search Direction (Step 51)!", flush=True)
+        out_s51_done = read_until(
+            master, b"Replace done: 0 replacement(s).", timeout=4.0
+        )
+        if b"Replace done: 0 replacement(s)." not in out_s51_done:
+            print(
+                f"[-] Step 51 failed: Replace done missing. "
+                f"Buffer: {repr(out_s51_done)}",
+                flush=True,
+            )
+            return False
+        time.sleep(0.3)
+        drain_all(master)
+        print(
+            "[+] Successfully verified Dynamic Reversal of Search Direction "
+            "(Step 51)!",
+            flush=True,
+        )
 
         # ---------------------------------------------------------------------
         # Step 52: Unsaved Modifications Check on Exit (Ctrl+Q)
