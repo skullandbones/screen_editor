@@ -27,9 +27,17 @@ def find_paths():
     rom_file = os.path.join(
         workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
     )
-    base_img = os.path.join(
+    golden_img = os.path.join(
         workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
     )
+    img_dir = os.path.join(repo_root, "disks")
+    base_img = os.path.join(img_dir, "hd1k_combo.img")
+    if not os.path.isfile(base_img):
+        os.makedirs(img_dir, exist_ok=True)
+        subprocess.run(
+            ["cp", "--sparse=always", golden_img, base_img], check=True
+        )
+        os.chmod(base_img, 0o644)
     cpmcp = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )

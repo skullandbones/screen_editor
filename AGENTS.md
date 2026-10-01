@@ -270,6 +270,42 @@ How:
          print("[-] Step 4: Launch failed.", flush=True)
      ```
 
+10. **Workspace-Isolated Disk Image Architecture (MANDATORY & ENFORCED)**:
+    * **Vendor Golden Base Immutability**:
+      - The vendor RomWBW disk image at
+        `tools/romwbw_src/Binary/hd1k_combo.img` is strictly immutable and
+        read-only (`chmod 444`).
+      - Under NO circumstances may any agent, build script, test harness, or
+        tool write to, modify, truncate, or inject files into this vendor
+        image.
+      - Mutating the vendor golden image contaminates other workspaces and
+        destroys cross-workspace build reproducibility.
+    * **Workspace-Local Disk Images**:
+      - Every agent workspace must maintain its own dedicated disk image at
+        `<workspace>/disks/hd1k_combo.img`.
+      - The `disks/` directory and `*.img` files are ignored by git
+        (`.gitignore`) to prevent repository bloat while providing full local
+        isolation.
+    * **Sparse Initialization & Copy-on-Write**:
+      - The local image is initialized on demand from the vendor golden base
+        using sparse allocation:
+        ```bash
+        cp --sparse=always $(GOLDEN_IMAGE) $(IMAGE)
+        chmod 644 $(IMAGE)
+        ```
+      - This creates a zero-overhead, copy-on-write sparse file (~50 MB
+        allocated blocks) in milliseconds without duplicating storage.
+    * **Build System & Test Harness Conformance**:
+      - `Makefile` defaults to `IMAGE ?= disks/hd1k_combo.img` with automatic
+        sparse creation via the `$(IMAGE)` dependency rule and `init-image`.
+      - `make clean-image` removes the workspace `disks/` directory to allow
+        clean re-initialization.
+      - All automated test scripts (under `tests/`) must resolve `img_file`
+        to `os.path.join(repo_root, "disks", "hd1k_combo.img")` and
+        auto-initialize via `cp --sparse=always` if not already present.
+      - Test scripts and emulators must never point to the vendor golden
+        image for read-write execution.
+
 ---
 
 ## 3. Prohibited Linux Commands (STRICTLY FORBIDDEN)
@@ -308,10 +344,17 @@ Linux commands. Any attempt to use these commands is a critical violation.
 
 ### 3. Raw Disk & Filesystem Modification
 * **Prohibited**:
+  - Direct in-place mutation, overwriting, truncation, or injection into the
+    vendor RomWBW disk image (`tools/romwbw_src/Binary/hd1k_combo.img`). All
+    disk modifications must strictly target workspace-local
+    `disks/hd1k_combo.img`.
   - `dd` targeting block devices (e.g. `dd if=... of=/dev/sd*`, `/dev/nvme*`,
     `/dev/loop*`).
   - `mkfs`, `fdisk`, `parted`, `gparted`, `sfdisk`, `mkswap`.
   - `mount`, `umount` (unless operating within a sandboxed virtual image).
+* **Permitted**:
+  - Modifying workspace-isolated disk images inside `disks/`
+    (e.g. `disks/hd1k_combo.img`) via `cpmtools` or virtual emulators.
 
 ### 4. Privilege Escalation & `sudo` Commands (STRICTLY FORBIDDEN)
 * **Prohibited**:
@@ -381,6 +424,11 @@ and dedicated development branches.
   - `agy1` -> `src/se.com_dev/agy1_dev` on `agy1_dev_branch`
   - `agy2` -> `src/se.com_dev/agy2_dev` on `agy2_dev_branch`
   - `agy3` -> `src/se.com_dev/agy3_dev` on `agy3_dev_branch`
+- **Workspace-Isolated Storage**:
+  `src/se.com_dev/agy<N>_dev/disks/`
+  Each agent operates on its own isolated disk image (`disks/hd1k_combo.img`)
+  sparsely cloned from `tools/romwbw_src/Binary/hd1k_combo.img`. No agent may
+  ever touch another workspace's `disks/` or the shared RomWBW vendor image.
 
 ### Agent On-boarding Procedure (e.g. for `agy3`)
 When initializing a new agent instance (e.g. `agy3`):
@@ -399,6 +447,10 @@ When initializing a new agent instance (e.g. `agy3`):
 4. **Publish initial branch to remote**:
    ```bash
    git push -u colossus agy3_dev_branch
+   ```
+5. **Initialize workspace-isolated disk image**:
+   ```bash
+   make init-image
    ```
 
 ### Daily Agent Workflow & Synchronization
