@@ -131,7 +131,8 @@ def main():
         os.write(master, b"se\r")
         out = read_until(master, b"Screen Editor", timeout=25.0)
         if b"Screen Editor" not in out:
-            print(f"[-] SE.COM splash screen not displayed: {repr(out)}", flush=True)
+            print(f"[-] SE.COM splash screen not displayed: {repr(out)}",
+                  flush=True)
             return False
         print("[+] SE.COM splash screen reached.")
 
@@ -228,7 +229,8 @@ def main():
         os.write(master, b"\x1b")
         out = read_until(master, b"type   [C]", timeout=6.0)
         if b"type   [C]" not in out:
-            print(f"[-] Failed to return to splash screen with ESC: {repr(out)}")
+            print("[-] Failed to return to splash screen with ESC: "
+                  f"{repr(out)}")
             return False
 
         # Enter editor mode with 'e'
