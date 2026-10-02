@@ -169,7 +169,9 @@ def run_tests():
         os.write(master, b"se\r")
         out = read_until(master, b"120x40 (Modern Default)", timeout=25.0)
         assert b"120x40 (Modern Default)" in out, f"Splash did not show 120x40 default: {out}"
-        assert b"type   c                to configure" in out, "Splash missing 'to configure' option"
+        assert b"type   [C]              to configure" in out, (
+            "Splash missing 'to configure' option"
+        )
         print("    [+] Splash screen shows 120x40 (Modern Default)")
 
         # Enter Configuration Screen ('c')

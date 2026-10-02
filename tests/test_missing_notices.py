@@ -146,8 +146,8 @@ def main():
         # Dismiss popup with space
         time.sleep(0.1)
         os.write(master, b" ")
-        out_splash = read_until(master, b"type   c", timeout=4.0)
-        if b"type   c" not in out_splash:
+        out_splash = read_until(master, b"type   [C]", timeout=4.0)
+        if b"type   [C]" not in out_splash:
             print(f"[-] Failed restoring splash screen: {repr(out_splash)}")
             return 1
         print("[+] Splash screen restored cleanly on popup dismissal.")

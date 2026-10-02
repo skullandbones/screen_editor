@@ -226,8 +226,8 @@ def main():
         # Exit Open dialog back to splash screen with ESC
         time.sleep(0.1)
         os.write(master, b"\x1b")
-        out = read_until(master, b"type   c", timeout=6.0)
-        if b"type   c" not in out:
+        out = read_until(master, b"type   [C]", timeout=6.0)
+        if b"type   [C]" not in out:
             print(f"[-] Failed to return to splash screen with ESC: {repr(out)}")
             return False
 

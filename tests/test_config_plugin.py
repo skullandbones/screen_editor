@@ -363,7 +363,7 @@ def run_tests():
         # Return to splash and exit SE
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   c", timeout=10.0)
+        read_until(master, b"type   [C]", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
         out = read_until(master, b"C>", timeout=15.0)
@@ -412,7 +412,7 @@ def run_tests():
         # Exit SE
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   c", timeout=10.0)
+        read_until(master, b"type   [C]", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
         read_until(master, b"C>", timeout=15.0)
@@ -461,7 +461,7 @@ def run_tests():
         # Exit SE
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   c", timeout=10.0)
+        read_until(master, b"type   [C]", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
         read_until(master, b"C>", timeout=15.0)
@@ -520,7 +520,7 @@ def run_tests():
         # Dismiss Plugin Manager UI ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   c", timeout=10.0)
+        read_until(master, b"type   [C]", timeout=10.0)
 
         # Exit SE
         time.sleep(0.3)
