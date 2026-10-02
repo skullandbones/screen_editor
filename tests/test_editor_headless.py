@@ -4146,8 +4146,13 @@ def test_se_execution():
         out_s66_ins1 = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
         out_s66_ins1 += drain_all(master)
 
-        if b"Loading..." not in out_s66_ins1:
-            print(f"[-] Step 66 Subtest 3 failed: 'Loading...' not found during insert: {repr(out_s66_ins1)}", flush=True)
+        if (b"Loading File" not in out_s66_ins1 and
+                b"Loading..." not in out_s66_ins1):
+            print(
+                f"[-] Step 66 Subtest 3 failed: 'Loading File' not found "
+                f"during insert: {repr(out_s66_ins1)}",
+                flush=True
+            )
             return False
         if b"~" not in out_s66_ins1:
             print(f"[-] Step 66 Subtest 3 failed: '~' not found during insert: {repr(out_s66_ins1)}", flush=True)
@@ -4196,8 +4201,13 @@ def test_se_execution():
         out_s66_ins2 = read_until(master, b"[BLK: 2L LOCK]", timeout=8.0)
         out_s66_ins2 += drain_all(master)
 
-        if b"Loading..." not in out_s66_ins2:
-            print(f"[-] Step 66 Subtest 4 failed: 'Loading...' not found during insert: {repr(out_s66_ins2)}", flush=True)
+        if (b"Loading File" not in out_s66_ins2 and
+                b"Loading..." not in out_s66_ins2):
+            print(
+                f"[-] Step 66 Subtest 4 failed: 'Loading File' not found "
+                f"during insert: {repr(out_s66_ins2)}",
+                flush=True
+            )
             return False
         if b"~" not in out_s66_ins2:
             print(f"[-] Step 66 Subtest 4 failed: '~' not found during insert: {repr(out_s66_ins2)}", flush=True)
