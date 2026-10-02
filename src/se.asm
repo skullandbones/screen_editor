@@ -23421,7 +23421,7 @@ STR_ABOUT_VERSION:	DB	"version 0.9.8 (2026-09-25)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
 STR_ABOUT_AI:		DB	"Google Antigravity 2.16.0 & Gemini FLASH 3.8 high", "$"
 STR_ABOUT_LICENSE:	DB	"Open source software under the MIT License", "$"
-STR_ABOUT_RETURN:	DB	"Press any key to return to splash...", "$"
+STR_ABOUT_RETURN:	DB	"Press any key to return to splash", "$"
 
 ;------------------------------------------------------------------------------
 ; Memory Information Screen Strings
@@ -23437,9 +23437,9 @@ STR_MEM_TABLE_HDR:
 STR_MEM_TABLE_DIV:
 	DB	"----  ----   ----   ---------------------   ----------------------------",13,10,"$"
 STR_MEM_PROMPT_PAD:
-	DB	"              ","$"		; 14 spaces to center within 72 columns
+	DB	"                ","$"		; 16 spaces to center within 72 columns
 STR_MEM_RETURN_PROMPT:
-	DB	"Press any key to return to splash screen...",13,10,"$"
+	DB	"Press any key to return to splash screen",13,10,"$"
 
 STR_MEM_SUM_PREFIX:	DB	"HBIOS: ","$"
 STR_MEM_SUM_NONE:	DB	"None","$"
@@ -23520,7 +23520,7 @@ STR_TRUNC_SAVE_BLOCKED:
 	DB	"~  Saving has been blocked to protect the unread portion of the ",13,10
 	DB	"~  file from being overwritten and permanently lost on disk.    ",13,10
 	DB	"~",13,10
-	DB	"~  Press any key to return to the editor...                     ",13,10
+	DB	"~  Press any key to return to the editor                        ",13,10
 	DB	"~  =============================================================",13,10,"$"
 
 STR_STATUS_FREE:	DB	"Free: ","$"

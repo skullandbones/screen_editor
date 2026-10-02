@@ -161,7 +161,7 @@ int fat_plugin_about(void) {
     vt_cursor(17, 16);
     host_print("+------------------------------------------------+");
     vt_cursor(18, 16);
-    host_print("|            Press any key to close...           |");
+    host_print("|             Press any key to close             |");
     vt_cursor(19, 16);
     host_print("+------------------------------------------------+");
 

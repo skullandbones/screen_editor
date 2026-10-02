@@ -1064,12 +1064,13 @@ def test_se_execution():
         time.sleep(0.1)
         os.write(master, b" ")
         read_until(master, b"Enter filename to open", timeout=4.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
 
         # Verify it did NOT enter editor mode
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line    1/" in check_buf:
+            if b"^K: Editor keys" in check_buf:
                 print(f"[-] Non-existent file erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
         print(
@@ -1078,7 +1079,7 @@ def test_se_execution():
             flush=True
         )
 
-        # Now edit bad filename in-place: send 3 Backspaces to erase 'BAK' (first BS clears 'File not found' & 'K')
+        # Now edit bad filename in-place: send 3 Backspaces to erase 'BAK'
         time.sleep(0.1)
         for _ in range(3):
             os.write(master, b"\x08")
@@ -1088,7 +1089,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line    1/" in check_buf:
+            if b"^K: Editor keys" in check_buf:
                 print(f"[-] Backspace in open prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
@@ -1235,7 +1236,9 @@ def test_se_execution():
         read_until(master, b"^K: Editor keys", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"\x0b")  # Ctrl+K
-        out_keys = read_until(master, b"Press any key to return to editor...", timeout=4.0)
+        out_keys = read_until(
+            master, b"Press any key to return to editor", timeout=4.0
+        )
         if b"SE.COM - EDITOR MODE KEYS" not in out_keys:
             print(f"[-] Help screen not reached via Ctrl+K. Buffer: {repr(out_keys)}", flush=True)
             return False
