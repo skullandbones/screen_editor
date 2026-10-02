@@ -750,26 +750,14 @@ MAIN_LOOP:
 MAIN_LOOP_GET_KEY:
 	CALL	GET_KEY
 
-	; If OOM status was displayed on status bar, revert upon any keypress
+	; If OOM flag was set during operation, clear upon any keypress
 	LD	B,A
 	LD	A,(STATUS_OOM_FLAG)
 	OR	A
 	JR	Z,ML_NO_OOM_CLEAR
 	XOR	A
 	LD	(STATUS_OOM_FLAG),A
-	LD	A,1
-	LD	(NEED_STATUS_RENDER),A
 ML_NO_OOM_CLEAR:
-	; If plugin status message was displayed on status bar, clear upon keypress
-	LD	HL,(PLUGIN_STATUS_MSG_PTR)
-	LD	A,H
-	OR	L
-	JR	Z,ML_NO_PLUG_CLEAR
-	LD	HL,0
-	LD	(PLUGIN_STATUS_MSG_PTR),HL
-	LD	A,1
-	LD	(NEED_STATUS_RENDER),A
-ML_NO_PLUG_CLEAR:
 	LD	A,B
 
 	; Command: Ctrl+Q -> Exit
@@ -5714,15 +5702,7 @@ SHOW_LINUX_FMT:
 	CALL	PRINT_STR
 
 SHOW_STATUS_REST:
-	; Field 4: Print Mode / Keys / Selection / OOM / Memory (18 chars)
-	LD	A,(IS_LOADING_FILE)
-	OR	A
-	JP	NZ,SHOW_STATUS_LOADING
-
-	LD	A,(IS_SAVING_FILE)
-	OR	A
-	JP	NZ,SHOW_STATUS_SAVING
-
+	; Field 4: Print Mode / Keys / Selection / Memory (18 chars)
 	LD	A,(IS_SPLASH_SCREEN)
 	OR	A
 	JP	NZ,SHOW_STATUS_SPLASH_MEM
@@ -5730,15 +5710,6 @@ SHOW_STATUS_REST:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
 	JP	NZ,SHOW_STATUS_SPLASH_MEM
-
-	LD	HL,(PLUGIN_STATUS_MSG_PTR)
-	LD	A,H
-	OR	L
-	JP	NZ,SHOW_STATUS_PLUGIN_MSG
-
-	LD	A,(STATUS_OOM_FLAG)
-	OR	A
-	JP	NZ,SHOW_STATUS_OOM
 
 	LD	A,(BLOCK_ACTIVE)
 	OR	A
@@ -5856,37 +5827,6 @@ STATUS_BLOCK_PAD_DONE:
 	CALL	PRINT_STR
 	JP	SHOW_STATUS_ROWCOL
 
-SHOW_STATUS_PLUGIN_MSG:
-	LD	HL,(PLUGIN_STATUS_MSG_PTR)
-	LD	B,0			; char count
-SSPM_LOOP:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SSPM_PAD
-	CP	'$'
-	JR	Z,SSPM_PAD
-	CALL	PUTC
-	INC	HL
-	INC	B
-	LD	A,B
-	CP	15
-	JR	C,SSPM_LOOP
-	JR	SSPM_DONE
-
-SSPM_PAD:
-	LD	A,B
-	CP	15
-	JR	NC,SSPM_DONE
-	LD	A,' '
-	CALL	PUTC
-	INC	B
-	JR	SSPM_PAD
-
-SSPM_DONE:
-	LD	DE,STR_STATUS_SEP
-	CALL	PRINT_STR
-	JP	SHOW_STATUS_ROWCOL
-
 SHOW_STATUS_NORMAL_KEYS:
 	; Check if viewport is panned horizontally (VIEW_LEFT_COL > 0)
 	LD	HL,(VIEW_LEFT_COL)
@@ -5929,21 +5869,6 @@ SSPO_PAD_LOOP:
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
-SHOW_STATUS_OOM:
-	LD	DE,STR_STATUS_OOM
-	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
-
-SHOW_STATUS_LOADING:
-	LD	DE,STR_STATUS_LOADING
-	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
-
-SHOW_STATUS_SAVING:
-	LD	DE,STR_STATUS_SAVING
-	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
-
 SHOW_STATUS_SPLASH_MEM:
 	CALL	PRINT_STATUS_FREE_MEM
 	JR	SHOW_STATUS_ROWCOL
@@ -5951,48 +5876,9 @@ SHOW_STATUS_SPLASH_MEM:
 SHOW_STATUS_ROWCOL:
 	; Field 5: Print fixed-position cursor position (POS_FIELD_WIDTH = 22 chars)
 	; "Line <cur:4>/<total:4> Col <col:3>"
-	LD	A,(IS_LOADING_FILE)
-	OR	A
-	JR	NZ,SHOW_STATUS_LOADING_POS
-
-	LD	A,(IS_SAVING_FILE)
-	OR	A
-	JR	NZ,SHOW_STATUS_LOADING_POS
-
 	; 1. Prefix: "Line " (5 chars)
 	LD	DE,STR_STATUS_POS	; "Line "
 	CALL	PRINT_STR
-	JR	SSRC_NORMAL_POS
-
-SHOW_STATUS_LOADING_POS:
-	; 1. Prefix: "Line " (5 chars)
-	LD	DE,STR_STATUS_POS	; "Line "
-	CALL	PRINT_STR
-
-	; 2. Line number: right-justified in 5 chars
-	LD	HL,(LOAD_PROGRESS_LINES)
-	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
-	LD	C,A
-	LD	A,5
-	SUB	C
-	JR	C,SSLP_NUM
-	JR	Z,SSLP_NUM
-	LD	B,A
-SSLP_PAD:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	SSLP_PAD
-SSLP_NUM:
-	LD	HL,(LOAD_PROGRESS_LINES)
-	CALL	PRINT_DEC_WORD
-
-	; 3. Trailing spaces: POS_FIELD_WIDTH (22) - 10 = 12 spaces
-	LD	B,12
-SSLP_TRAIL_PAD:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	SSLP_TRAIL_PAD
-	JP	SSRC_POS_DONE
 
 SSRC_NORMAL_POS:
 
@@ -6121,7 +6007,7 @@ PSFM_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; SET_OOM_STATUS: Record Out of Memory condition and update status bar if displayed
+; SET_OOM_STATUS: Record Out of Memory condition and display modal pop-up
 ;------------------------------------------------------------------------------
 SET_OOM_STATUS:
 	PUSH	AF
@@ -6130,21 +6016,26 @@ SET_OOM_STATUS:
 	PUSH	HL
 	LD	A,1
 	LD	(STATUS_OOM_FLAG),A
-	LD	(NEED_STATUS_RENDER),A
-	; Only update status bar if in editor mode and not splash screen
+	; Only display modal pop-up if in editor mode and not splash screen
 	LD	A,(IN_EDITOR_MODE)
 	OR	A
 	JR	Z,SOS_DONE
 	LD	A,(IS_SPLASH_SCREEN)
 	OR	A
 	JR	NZ,SOS_DONE
-	CALL	RENDER_STATUS_BAR
+	CALL	SHOW_OOM_POPUP
 SOS_DONE:
 	POP	HL
 	POP	DE
 	POP	BC
 	POP	AF
 	RET
+
+SHOW_OOM_POPUP:
+	LD	DE,STR_POPUP_OOM_TITLE
+	LD	HL,STR_POPUP_OOM_MSG1
+	LD	BC,STR_POPUP_OOM_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
 
 ;------------------------------------------------------------------------------
 ; Calculate Free Memory in Whole KB
@@ -9401,6 +9292,27 @@ DES_DRAIN_WAIT:
 DES_DRAIN_BYTE:
 	CALL	GET_KEY
 	JR	DES_DRAIN_MORE
+
+;------------------------------------------------------------------------------
+; DRAIN_INPUT_BUFFER: Consume and discard all pending keystrokes in input buffer
+; Preserves: none
+;------------------------------------------------------------------------------
+DRAIN_INPUT_BUFFER:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+DIB_LOOP:
+	CALL	CHECK_KEY_READY
+	JR	Z,DIB_DONE
+	CALL	GET_KEY
+	JR	DIB_LOOP
+DIB_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
 
 HANDLE_VT100_ESC:
 	; Check if a character follows ESC within a short timeout
@@ -14930,6 +14842,7 @@ LOAD_INIT_CACHE:
 	LD	(BLOCK_ACTIVE),A
 	LD	(DOC_MODIFIED),A
 	LD	(STATUS_OOM_FLAG),A
+	CALL	DRAIN_INPUT_BUFFER
 	CALL	INVALIDATE_ACTIVE_LINE
 	CALL	CHECKOUT_ACTIVE_LINE
 	CALL	RELOAD_CACHE_WINDOW_FORCE
@@ -14944,12 +14857,14 @@ LOAD_FILE_NOT_FOUND:
 	CALL	BDOS_ENTRY
 	XOR	A
 	LD	(IS_LOADING_FILE),A
+	CALL	DRAIN_INPUT_BUFFER
 	SCF				; Carry = 1 (error: file not found)
 	RET
 
 ;------------------------------------------------------------------------------
 ; DRAW_LOADING_SCREEN:
-; Clear screen, fill column 0 with tildes '~', and draw initial status bar.
+; Clear screen, fill column 0 with tildes '~', draw initial status bar,
+; and display centered Tier 2 loading modal box.
 ; Preserves: none
 ;------------------------------------------------------------------------------
 DRAW_LOADING_SCREEN:
@@ -14974,12 +14889,69 @@ DLS_TILDE_LOOP:
 
 	; Render initial status bar on row ACTIVE_ROWS
 	CALL	RENDER_STATUS_BAR
-	RET
+
+	; Render centered Tier 2 loading modal dialog box
+	LD	DE,STR_POPUP_LOAD_TITLE
+	LD	HL,STR_POPUP_LOAD_DESC
+	JP	DRAW_PROGRESS_MODAL
+
+;------------------------------------------------------------------------------
+; DRAW_PROGRESS_MODAL:
+; Render centered 50x7 Tier 2 progress modal box for file loading / saving.
+; Input: DE = Title string (50 cols), HL = Description string (50 cols)
+; Preserves: none
+;------------------------------------------------------------------------------
+DRAW_PROGRESS_MODAL:
+	PUSH	HL			; Save description pointer
+	PUSH	DE			; Save title pointer
+
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
+
+	; Line 1: Top Border
+	CALL	POPUP_PRINT_BORDER
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = title pointer
+	CALL	PRINT_STR
+
+	; Line 3: Separator Border
+	CALL	POPUP_PRINT_BORDER
+
+	; Line 4: Description
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = description pointer
+	CALL	PRINT_STR
+
+	; Line 5: Progress Line
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_PROGRESS_LINE
+	CALL	PRINT_STR
+
+	; Line 6: Subtext
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_PROGRESS_SUB
+	CALL	PRINT_STR
+
+	; Line 7: Bottom Border
+	JP	POPUP_PRINT_BORDER
 
 ;------------------------------------------------------------------------------
 ; UPDATE_LOAD_PROGRESS:
-; Update line field on status bar during file loading.
-; Positions cursor directly to Field 5 and prints "Line <lines:5>" in inverse video.
+; Update line counter inside centered Tier 2 progress modal dialog.
 ; Preserves all registers (AF, BC, DE, HL).
 ;------------------------------------------------------------------------------
 UPDATE_LOAD_PROGRESS:
@@ -14988,21 +14960,16 @@ UPDATE_LOAD_PROGRESS:
 	PUSH	DE
 	PUSH	HL
 
-	; Locate cursor at (ACTIVE_ROWS, Field 5 Col)
-	LD	A,(ACTIVE_ROWS)
+	; Locate cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL + 25)
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
 	LD	H,A
-	LD	A,(ACTIVE_COLS)
-	SUB	STATUS_ENCLOSED_WIDTH	; 80 - 78 = 2,  120 - 78 = 42
-	SRL	A			; 1 or 21
-	ADD	A,55			; Col 56 (80x24) or Col 76 (120x40)
+	LD	A,(POPUP_COL)
+	ADD	A,25
 	LD	L,A
 	CALL	LOCATE_RC
 
-	CALL	TERM_INVERSE_ON
-
-	LD	DE,STR_STATUS_POS	; "Line " (5 chars)
-	CALL	PRINT_STR
-
+	; Print line number right-justified in 5 chars
 	LD	HL,(LOAD_PROGRESS_LINES)
 	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
 	LD	C,A
@@ -15018,8 +14985,6 @@ ULP_PAD:
 ULP_NUM:
 	LD	HL,(LOAD_PROGRESS_LINES)
 	CALL	PRINT_DEC_WORD
-
-	CALL	TERM_INVERSE_OFF
 
 	POP	HL
 	POP	DE
@@ -19587,7 +19552,9 @@ INIT_SAVE_PROGRESS:
 	LD	(LOAD_PROGRESS_LINES),HL
 	LD	A,100
 	LD	(LOAD_PROGRESS_COUNT),A
-	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_POPUP_SAVING_TITLE
+	LD	HL,STR_POPUP_SAVE_DESC
+	CALL	DRAW_PROGRESS_MODAL
 	POP	HL
 	POP	DE
 	POP	BC
@@ -19614,11 +19581,13 @@ FINISH_SAVE_PROGRESS:
 	PUSH	AF
 	PUSH	DE
 	CALL	UPDATE_LOAD_PROGRESS
+	CALL	DRAIN_INPUT_BUFFER
 	JR	CSP_COMMON
 
 CLEANUP_SAVE_PROGRESS:
 	PUSH	AF
 	PUSH	DE
+	CALL	DRAIN_INPUT_BUFFER
 CSP_COMMON:
 	XOR	A
 	LD	(IS_SAVING_FILE),A
@@ -23037,6 +23006,38 @@ STR_POPUP_TRUNC_MSG2:
 STR_POPUP_TRUNC_KEY:
 	DB	"|           Press any key to continue            |", 0
 
+; Out of Memory Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_OOM_TITLE:
+	DB	"|                 Out of Memory                  |", 0
+STR_POPUP_OOM_MSG1:
+	DB	"|      Not enough memory for this operation      |", 0
+STR_POPUP_OOM_MSG2:
+	DB	"|      Free memory or reduce document size       |", 0
+
+; File Loading Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_LOAD_TITLE:
+	DB	"|                  Loading File                  |", 0
+STR_POPUP_LOAD_DESC:
+	DB	"|            Reading file into memory            |", 0
+
+; File Saving Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_SAVING_TITLE:
+	DB	"|                  Saving File                   |", 0
+STR_POPUP_SAVE_DESC:
+	DB	"|            Writing file to storage             |", 0
+
+; Progress Modal Common Strings (50 cols x 7 rows)
+STR_POPUP_PROGRESS_LINE:
+	DB	"|                   Line      0                  |", 0
+STR_POPUP_PROGRESS_SUB:
+	DB	"|           Please wait for completion           |", 0
+
+; Plugin Notification Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_PLUGIN_TITLE:
+	DB	"|              Plugin Notification               |", 0
+STR_POPUP_BLANK_ROW:
+	DB	"|                                                |", 0
+
 ; Find Modal Pop-up Strings (50 cols x 7 rows)
 STR_FIND_POPUP_TITLE:
 	DB	"|                   Find Text                    |", 0
@@ -23387,11 +23388,7 @@ STR_FMT_LINUX:	DB	"Linux | ","$"
 
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 STR_STATUS_OVR:		DB	"Overwrite mode  | ","$"
-STR_STATUS_LOADING:	DB	"Loading...      | ","$"
-STR_STATUS_SAVING:	DB	"Saving...       | ","$"
 STR_PAN_PREFIX:		DB	"[Pan +","$"
-
-STR_STATUS_OOM:		DB	"Out of memory   | ","$"
 
 STR_TRUNC_SAVE_BLOCKED:
 	DB	"~",13,10
@@ -23759,7 +23756,7 @@ PLUGIN_ACTION_INDEX:	DB	0
 PLUGIN_IS_FAR_EXEC:	DB	0
 PLUGIN_RET_CODE:	DB	0
 PLUGIN_STATUS_MSG_PTR:	DW	0
-PLUGIN_STATUS_MSG_BUF:	DS	16
+PLUGIN_POPUP_MSG_BUF:	DS	52
 PLUGIN_ORIG_USER:	DB	0
 PLUGIN_USER_AREA:	DB	0
 PLUGIN_FCB:		DS	36
@@ -24578,36 +24575,81 @@ HCL_ACTIVE:
 HOST_SET_STATUS_MSG:
 	LD	A,D
 	OR	E
-	JR	NZ,HSSM_COPY
-	LD	(PLUGIN_STATUS_MSG_PTR),DE
-	RET
-HSSM_COPY:
+	RET	Z
+	; Display plugin notification in centered Tier 2 modal pop-up
 	PUSH	AF
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	EX	DE,HL			; HL = source string
-	LD	DE,PLUGIN_STATUS_MSG_BUF
-	LD	B,15
-HSSM_LOOP:
-	LD	A,(HL)
-	OR	A
-	JR	Z,HSSM_PAD
-	CP	'$'
-	JR	Z,HSSM_PAD
-	LD	(DE),A
-	INC	HL
-	INC	DE
-	DJNZ	HSSM_LOOP
-HSSM_PAD:
-	XOR	A
-	LD	(DE),A			; Zero terminate
-	LD	HL,PLUGIN_STATUS_MSG_BUF
-	LD	(PLUGIN_STATUS_MSG_PTR),HL
+	CALL	SHOW_PLUGIN_STATUS_POPUP
 	POP	HL
 	POP	DE
 	POP	BC
 	POP	AF
+	RET
+
+SHOW_PLUGIN_STATUS_POPUP:
+	; DE = pointer to plugin status string
+	; Copy and center inside PLUGIN_POPUP_MSG_BUF (50 chars: "| ... |", 0)
+	PUSH	DE
+
+	; 1. Initialize buffer with spaces enclosed in '|'
+	LD	HL,PLUGIN_POPUP_MSG_BUF
+	LD	(HL),'|'
+	INC	HL
+	LD	B,48
+SPSP_INIT_SPACE:
+	LD	(HL),' '
+	INC	HL
+	DJNZ	SPSP_INIT_SPACE
+	LD	(HL),'|'
+	INC	HL
+	LD	(HL),0
+
+	; 2. Measure string length in DE (max 46 chars)
+	POP	HL			; HL = source string
+	PUSH	HL
+	LD	C,0
+SPSP_LEN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SPSP_LEN_DONE
+	CP	'$'
+	JR	Z,SPSP_LEN_DONE
+	INC	HL
+	INC	C
+	LD	A,C
+	CP	46
+	JR	C,SPSP_LEN_LOOP
+SPSP_LEN_DONE:
+	LD	A,C
+	OR	A
+	JR	NZ,SPSP_CALC_PAD
+	INC	C			; at least 1
+SPSP_CALC_PAD:
+	; Calculate left offset: ((48 - C) / 2) + 1
+	LD	A,48
+	SUB	C
+	SRL	A
+	INC	A
+	LD	E,A
+	LD	D,0
+	LD	HL,PLUGIN_POPUP_MSG_BUF
+	ADD	HL,DE			; HL = target in buffer
+	POP	DE			; DE = source string
+	LD	B,C
+SPSP_COPY_LOOP:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	SPSP_COPY_LOOP
+
+	; 3. Invoke Tier 2 status event pop-up
+	LD	DE,STR_POPUP_PLUGIN_TITLE
+	LD	HL,PLUGIN_POPUP_MSG_BUF
+	LD	BC,STR_POPUP_BLANK_ROW
+	CALL	SHOW_STATUS_EVENT_POPUP
 	RET
 
 LOCAL_STACK_TOP:

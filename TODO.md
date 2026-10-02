@@ -25,7 +25,7 @@ upcoming milestones for SE.COM.
   of large files hangs the system.
 
 ### 2.3 Status Events Displayed on Status Bar Instead of Tier 2 Modal Pop-ups
-- [ ] Refactor status event notifications to use Tier 2 centered modal
+- [x] Refactor status event notifications to use Tier 2 centered modal
   pop-ups instead of writing directly to the bottom status bar row.
   - Remove `STATUS_OOM_FLAG` text ("* Out of memory *") from status bar
     (`src/se.asm:5756, 5949`); replace with centered Tier 2 status pop-up.

@@ -396,10 +396,10 @@ PKL_DO_L:
 	LD	A,(FPSL_LOADED_CNT)
 	CP	8
 	JR	NZ,PKL_DO_L_OPEN
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_MSG_SLOTS_FULL
-	CALL	HOST_PRINT_STR
-	JP	PLUG_KEY_LOOP
+	LD	DE,STR_PLUG_FULL_TITLE
+	LD	HL,STR_PLUG_FULL_MSG
+	CALL	SHOW_ALERT_POPUP
+	JP	DO_PLUG_REDRAW
 
 PKL_DO_L_OPEN:
 	CALL	PROMPT_LOAD_PLUGIN
@@ -522,10 +522,10 @@ PDA_CHECK_CAP:
 	RET
 
 PLUG_NO_ABOUT:
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_MSG_NO_ABOUT
-	CALL	HOST_PRINT_STR
-	JP	PLUG_KEY_LOOP
+	LD	DE,STR_PLUG_NO_ABT_TITLE
+	LD	HL,STR_PLUG_NO_ABT_MSG
+	CALL	SHOW_ALERT_POPUP
+	JP	DO_PLUG_REDRAW
 
 PLUG_DO_CONFIG:
 	LD	A,(SELECTED_SLOT)
@@ -548,10 +548,10 @@ PLUG_DO_CONFIG:
 	RET
 
 PLUG_NO_CONFIG:
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_MSG_NO_CONFIG
-	CALL	HOST_PRINT_STR
-	JP	PLUG_KEY_LOOP
+	LD	DE,STR_PLUG_NO_CFG_TITLE
+	LD	HL,STR_PLUG_NO_CFG_MSG
+	CALL	SHOW_ALERT_POPUP
+	JP	DO_PLUG_REDRAW
 
 PKL_EXIT:
 	XOR	A
@@ -1728,6 +1728,76 @@ SSCP_PRINT_MSG:
 	CALL	HOST_GET_KEY
 	RET
 
+;------------------------------------------------------------------------------
+; SHOW_ALERT_POPUP:
+; Render centered 50x7 Tier 2 alert modal pop-up; wait for any key to dismiss.
+; Input: DE = Title string (50 cols), HL = Msg string (50 cols)
+; Preserves: none
+;------------------------------------------------------------------------------
+SHOW_ALERT_POPUP:
+	PUSH	HL			; Save Msg pointer
+	PUSH	DE			; Save Title pointer
+
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
+
+	; Center 7-line dialog box vertically: ((HOST_ROWS - 7) / 2) + 1
+	LD	A,(HOST_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+
+	; Center 50-col box horizontally: ((HOST_COLS - 50) / 2) + 1
+	LD	A,(HOST_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; Line 1: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Title
+	CALL	HOST_PRINT_STR
+
+	; Line 3: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Line 4: Blank line
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_SAVE_CFG_BLANK
+	CALL	HOST_PRINT_STR
+
+	; Line 5: Msg
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Msg
+	CALL	HOST_PRINT_STR
+
+	; Line 6: Instructions
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_SAVE_CFG_KEY
+	CALL	HOST_PRINT_STR
+
+	; Line 7: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Wait for keypress to dismiss
+	CALL	HOST_GET_KEY
+	CP	27
+	JR	NZ,SAP_NOT_ESC
+	CALL	DRAIN_ESC_SEQUENCE
+SAP_NOT_ESC:
+	RET
+
 ;==============================================================================
 ; Helper Routines & String Formatting
 ;==============================================================================
@@ -2117,9 +2187,18 @@ STR_PLUG_CMDS_PLAIN:
 STR_PLUG_CMDS_EMPTY:
 	DB	"[Enter]=Load  [S]=Save  [ESC]=Exit", 0
 
-STR_MSG_NO_ABOUT:	DB	"[No About]$", 0
-STR_MSG_NO_CONFIG:	DB	"[No Config]$", 0
-STR_MSG_SLOTS_FULL:	DB	"[All Slots Full]$", 0
+STR_PLUG_NO_ABT_TITLE:
+	DB	"|               Plugin Information               |", 0
+STR_PLUG_NO_ABT_MSG:
+	DB	"|        This plugin has no about dialog         |", 0
+STR_PLUG_NO_CFG_TITLE:
+	DB	"|              Plugin Configuration              |", 0
+STR_PLUG_NO_CFG_MSG:
+	DB	"|    This plugin has no configuration screen     |", 0
+STR_PLUG_FULL_TITLE:
+	DB	"|               Plugin Load Error                |", 0
+STR_PLUG_FULL_MSG:
+	DB	"|      All plugin slots are currently full       |", 0
 STR_SAVE_CFG_TITLE:	DB	"|           Save Plugin Configuration            |", 0
 STR_SAVE_CFG_BLANK:	DB	"|                                                |", 0
 STR_SAVE_CFG_OK:	DB	"|             [Saved to PLUGIN.CFG]              |", 0

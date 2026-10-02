@@ -173,16 +173,22 @@ BEAUTIFY_ROW_INC:
 	JR	BEAUTIFY_ROW_LOOP
 
 BEAUTIFY_CANCELLED:
-	LD	DE,STR_MSG_CANCEL
-	CALL	CALL_HOST_STATUS
+	LD	HL,BEAUTIFY_CANCEL_TABLE
+	LD	B,7
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
+	CALL	CALL_HOST_GETKEY
 	LD	A,(ANY_LINE_MODIFIED)
 	OR	A
 	JR	NZ,FINISH_MODIFIED
 	JR	FINISH_NO_CHANGE
 
 BEAUTIFY_FINISHED:
-	LD	DE,STR_MSG_DONE
-	CALL	CALL_HOST_STATUS
+	LD	HL,BEAUTIFY_DONE_TABLE
+	LD	B,7
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
+	CALL	CALL_HOST_GETKEY
 	LD	A,2			; A = 2: Document modified / redraw screen
 	OR	A			; Clear carry (CY=0)
 	RET
@@ -424,35 +430,6 @@ DO_ANIM_STEP:
 	JR	Z,ANIM_ESC_HIT
 
 ANIM_TICK_PROGRESS:
-	; Check if tick threshold (every 32 lines or first line)
-	LD	HL,(CUR_ROW_VAL)
-	LD	A,L
-	AND	1FH
-	JR	NZ,ANIM_DONE
-
-	; Format status ticker: "[Beautify: X/Y]"
-	LD	DE,STR_TICK_BUF
-	LD	HL,STR_TICK_PRE
-	CALL	COPY_STR_Z_LOCAL
-	LD	HL,(CUR_ROW_VAL)
-	INC	HL
-	CALL	FORMAT_DEC_5_DE
-	LD	A,'/'
-	LD	(DE),A
-	INC	DE
-	LD	HL,(BEAUTIFY_END_ROW)
-	INC	HL
-	CALL	FORMAT_DEC_5_DE
-	LD	A,']'
-	LD	(DE),A
-	INC	DE
-	XOR	A
-	LD	(DE),A
-
-	LD	DE,STR_TICK_BUF
-	CALL	CALL_HOST_STATUS
-
-ANIM_DONE:
 	OR	A			; Carry = 0
 	RET
 
@@ -1596,14 +1573,6 @@ TBL_BUR_REG2:
 TBL_BUR_REG3:
 	DB	"IXH","IXL","IYH","IYL"
 
-STR_MSG_DONE:
-	DB	"[Beautify Done]$", 0
-STR_MSG_CANCEL:
-	DB	"[Beautify Cancel]$", 0
-
-STR_TICK_PRE:
-	DB	"[Beautify: ", 0
-
 ;------------------------------------------------------------------------------
 ; Working Storage & Schemas
 ;------------------------------------------------------------------------------
@@ -1676,6 +1645,31 @@ STR_ANIM_1:	DB	"ON (Real-Time) "
 STR_ANIM_0:	DB	"OFF (Fast)     "
 
 STR_BT_BORDER:		DB	"+------------------------------------+", 0
+
+; Completion Dialog Table
+BEAUTIFY_DONE_TABLE:
+	DW	STR_BT_BORDER
+	DW	STR_BTA_L2
+	DW	STR_BT_BORDER
+	DW	STR_BTD_MSG
+	DW	STR_BT_BLANK
+	DW	STR_BTD_KEY
+	DW	STR_BT_BORDER
+
+; Cancellation Dialog Table
+BEAUTIFY_CANCEL_TABLE:
+	DW	STR_BT_BORDER
+	DW	STR_BTA_L2
+	DW	STR_BT_BORDER
+	DW	STR_BTC_MSG
+	DW	STR_BT_BLANK
+	DW	STR_BTD_KEY
+	DW	STR_BT_BORDER
+
+STR_BTD_MSG:		DB	"|      Beautification Complete       |", 0
+STR_BTC_MSG:		DB	"|      Beautification Cancelled      |", 0
+STR_BT_BLANK:		DB	"|                                    |", 0
+STR_BTD_KEY:		DB	"|     Press any key to continue      |", 0
 
 ; About Dialog Table
 BEAUTIFY_ABT_TABLE:
@@ -2227,11 +2221,10 @@ STR_P_VAL_0:		DB	"0",13,10,0
 
 ;------------------------------------------------------------------------------
 ; Uninitialized Working Storage (BSS)
-; Total required: STR_TICK_BUF (32) + PLUGIN_CFG_BUF (256) + FCB (36) = 324 B
+; Total required: LINE_OUTPUT_BUF / PLUGIN_CFG_BUF (256) + FCB (36) = 292 B
 ;------------------------------------------------------------------------------
 BSS_START:
-STR_TICK_BUF		EQU	BSS_START
-LINE_OUTPUT_BUF		EQU	BSS_START + 32
+LINE_OUTPUT_BUF		EQU	BSS_START
 PLUGIN_CFG_BUF		EQU	LINE_OUTPUT_BUF
 PLUGIN_CFG_FCB		EQU	LINE_OUTPUT_BUF + 256
 BSS_END			EQU	PLUGIN_CFG_FCB + 36
