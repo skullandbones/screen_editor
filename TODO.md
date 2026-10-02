@@ -178,6 +178,8 @@ upcoming milestones for SE.COM.
 ### 4.1 Audit Column 0 Tilde Discipline on File & Block Screens
 - [ ] Verify column 0 tildes (`~`) are rendered on all unallocated margin
   rows across Open File, Save File, and Block selection screens.
+  - *Identified Bug*: Bug 2.5 (Open, Save, and Block screens missing top
+    margin tildes); see also Bug 2.9 (Help plugin header row tildes).
 - *Justification* (`docs/UI_UX_DESIGN.md` Section 1.3):
   > *"Tildes in column 0 are used on all screens without exception
   > (including file open, save, and block screens)."*
@@ -185,6 +187,9 @@ upcoming milestones for SE.COM.
 ### 4.2 Audit Center Justification in Remaining Query Pop-ups
 - [ ] Audit all Tier 2 query pop-ups to ensure text lines (description, query,
   and options) are centre justified with space-separated options.
+  - *Identified Bugs*: Bug 2.7 (Option delimiters `/` in pop-up prompts),
+    Bug 2.8 (Non-ESC `[Q]uit` cancellation), and Bug 2.10 (Left-justified text
+    and non-standard dismissals in plugin pop-ups).
 - *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4 & 1.6):
   > *"Query pop-up format shall have a title line box, the pop-up body first
   > line shall be the description, then the query line followed by the query
@@ -197,6 +202,8 @@ upcoming milestones for SE.COM.
 ### 4.3 Verify Single-Level Pop-up Visibility Across Nested Dialogs
 - [ ] Verify parent pop-ups are hidden before child pop-ups display and
   correctly redrawn when child pop-ups are dismissed.
+  - *Identified Bug*: Bug 2.11 (Child pop-ups rendered over unhidden parent
+    pop-ups in plugin manager).
 - *Justification* (`docs/UI_UX_DESIGN.md` Section 1.5):
   > *"When a child pop-up is to be shown, the parent pop-up shall be taken
   > off the screen (hidden) and the parent pop-up is redrawn when the child
