@@ -631,11 +631,13 @@ def test_se_execution():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x06")
-        out_find_prompt = read_until(master, b"Find (Exact):", timeout=4.0)
-        if b"Find (Exact):" not in out_find_prompt:
+        out_find_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if (b"Find: [" not in out_find_prompt or
+                b"[ESC]=Cancel" not in out_find_prompt):
             print(f"[-] Ctrl+F failed to open Find prompt. Buffer: {repr(out_find_prompt)}", flush=True)
             return False
         # Cancel with ESC
+        time.sleep(0.1)
         os.write(master, b"\x1b")
         read_until(master, b"Line    4/4", timeout=4.0)
         drain_all(master)
@@ -677,8 +679,8 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"OUTPUT.TXT\r")
         time.sleep(0.2)
-        resp = read_until(master, b"o): ", timeout=2.0)
-        if b"Overwrite? (" in resp:
+        resp = read_until(master, [b"Overwrite?", b"Line    1/1"], timeout=2.0)
+        if b"Overwrite?" in resp:
             os.write(master, b"y")
         read_until(master, b"Line    1/1", timeout=5.0)
         drain_all(master)
@@ -1046,27 +1048,38 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.1)
 
-        # Type bad filename '2.BAK' and press Enter: verify 'File not found'
+        # Type bad filename '2.BAK' and press Enter: verify popup
         os.write(master, b"2.BAK\r")
-        out_nofile = read_until(master, b"File not found", timeout=4.0)
-        if b"File not found" not in out_nofile:
-            print(f"[-] 'File not found' message missing for non-existent file. Buffer: {repr(out_nofile)}", flush=True)
+        out_nofile = read_until(master, b"File Not Found", timeout=4.0)
+        if (b"File Not Found" not in out_nofile and
+                b"File not found" not in out_nofile):
+            print(
+                "[-] 'File Not Found' message missing for non-existent file. "
+                f"Buffer: {repr(out_nofile)}",
+                flush=True
+            )
             return False
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to open", timeout=4.0)
+        read_until(master, b"\x1b[?25h", timeout=4.0)
 
         # Verify it did NOT enter editor mode
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line    1/" in check_buf:
+            if b"^K: Editor keys" in check_buf:
                 print(f"[-] Non-existent file erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
         print(
             "[+] Step 26: Successfully verified bad filename shows "
-            "'File not found' without entering editor mode.",
+            "'File Not Found' popup without entering editor mode.",
             flush=True
         )
 
-        # Now edit bad filename in-place: send 3 Backspaces to erase 'BAK' (first BS clears 'File not found' & 'K')
+        # Now edit bad filename in-place: send 3 Backspaces to erase 'BAK'
         time.sleep(0.1)
         for _ in range(3):
             os.write(master, b"\x08")
@@ -1076,7 +1089,7 @@ def test_se_execution():
         r, _, _ = select.select([master], [], [], 0.3)
         if r:
             check_buf = os.read(master, 2048)
-            if b"Line    1/" in check_buf:
+            if b"^K: Editor keys" in check_buf:
                 print(f"[-] Backspace in open prompt erroneously entered editor mode! Buffer: {repr(check_buf)}", flush=True)
                 return False
 
@@ -1132,16 +1145,18 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"\r")
-        out_warn = read_until(master, b"o): ", timeout=4.0)
-        if b"File already exists. Overwrite? (" not in out_warn:
-            print(f"[-] Overwrite warning prompt missing. Buffer: {repr(out_warn)}", flush=True)
+        out_warn = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if b"File already exists. Overwrite?" not in out_warn:
+            print("[-] Overwrite warning prompt missing. "
+                  f"Buffer: {repr(out_warn)}", flush=True)
             return False
-        if b"\x1b[4mY\x1b[24mes" not in out_warn or b"\x1b[4mN\x1b[24mo" not in out_warn:
-            print(f"[-] Overwrite prompt missing underscored hotkeys. Buffer: {repr(out_warn)}", flush=True)
+        if b"[Y]es" not in out_warn or b"[N]o" not in out_warn:
+            print("[-] Overwrite prompt missing bracketed hotkeys. "
+                  f"Buffer: {repr(out_warn)}", flush=True)
             return False
         print(
-            "[+] Step 27: Successfully verified overwrite warning prompt on "
-            "existing file with underscored hotkeys.",
+            "[+] Step 27: Successfully verified overwrite warning modal pop-up "
+            "on existing file with bracketed hotkeys.",
             flush=True
         )
 
@@ -1221,7 +1236,9 @@ def test_se_execution():
         read_until(master, b"^K: Editor keys", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"\x0b")  # Ctrl+K
-        out_keys = read_until(master, b"Press any key to return to editor...", timeout=4.0)
+        out_keys = read_until(
+            master, b"Press any key to return to editor", timeout=4.0
+        )
         if b"SE.COM - EDITOR MODE KEYS" not in out_keys:
             print(f"[-] Help screen not reached via Ctrl+K. Buffer: {repr(out_keys)}", flush=True)
             return False
@@ -2354,8 +2371,9 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x1b")
         out_s43_splash = read_until(master, b"for about", timeout=4.0)
-        if b"type   l  or  ^L        to goto line" not in out_s43_splash:
-            print(f"[-] Step 43 failed: Splash missing goto line prompt hint. Buffer: {repr(out_s43_splash)}", flush=True)
+        if b"type   [L]  or  [^L]    to goto line" not in out_s43_splash:
+            print("[-] Step 43 failed: Splash missing goto line prompt hint. "
+                  f"Buffer: {repr(out_s43_splash)}", flush=True)
             return False
 
         # Press 'l' on splash screen -> enters editor with Goto line prompt
@@ -2441,10 +2459,11 @@ def test_se_execution():
         # 1. Press Ctrl+F -> verify default [Exact] prompt
         time.sleep(0.2)
         os.write(master, b"\x06")
-        out_s45_f1 = read_until(master, b"Find (Exact):", timeout=4.0)
-        if b"Find (Exact):" not in out_s45_f1:
+        out_s45_f1 = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if b"Find: [" not in out_s45_f1 or b"Case Sensitive" not in out_s45_f1:
             print(f"[-] Step 45 failed: Ctrl+F prompt missing. Buffer: {repr(out_s45_f1)}", flush=True)
             return False
+        time.sleep(0.1)
 
         # 2. Search for exact "Line 15"
         os.write(master, b"Line 15\r")
@@ -2459,17 +2478,22 @@ def test_se_execution():
         read_until(master, b"Line    1/30", timeout=4.0)
 
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"line 15\r")
         out_s45_nf = read_until(master, b"Pattern not found.", timeout=4.0)
         if b"Pattern not found." not in out_s45_nf:
             print(f"[-] Step 45 failed: 'line 15' did not fail in Exact mode. Buffer: {repr(out_s45_nf)}", flush=True)
             return False
+        # Dismiss Pattern Not Found modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
 
         # 4. Search for common word "content" on Line 1, then repeat with Ctrl+N
         time.sleep(0.5)
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"content\r")
         read_until(master, b"Line    1/30", timeout=4.0)
 
@@ -2503,14 +2527,17 @@ def test_se_execution():
 
         # Open Find: Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
 
         # Press Tab (Ctrl+I) to toggle to [Insens]
         os.write(master, b"\t")
-        out_s46_ins = read_until(master, b"Find (Insens):", timeout=4.0)
-        if b"Find (Insens):" not in out_s46_ins:
+        out_s46_ins = read_until(master, b"Case Insensitive", timeout=4.0)
+        if b"Case Insensitive" not in out_s46_ins:
             print(f"[-] Step 46 failed: Tab/Ctrl+I did not toggle to [Insens]. Buffer: {repr(out_s46_ins)}", flush=True)
             return False
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
 
         # Search for lowercase "line 20"
         os.write(master, b"line 20\r")
@@ -2521,17 +2548,24 @@ def test_se_execution():
 
         # Verify setting persisted: next Ctrl+F starts in [Insens]
         time.sleep(0.2)
+        drain_all(master)
         os.write(master, b"\x06")
-        out_s46_pers = read_until(master, b"Find (Insens):", timeout=4.0)
-        if b"Find (Insens):" not in out_s46_pers:
+        out_s46_pers = read_until(master, b"Case Insensitive", timeout=4.0)
+        if b"Case Insensitive" not in out_s46_pers:
             print(f"[-] Step 46 failed: [Insens] setting did not persist. Buffer: {repr(out_s46_pers)}", flush=True)
             return False
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
 
         # Toggle back to [Exact] and cancel
         os.write(master, b"\t")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"Case Sensitive", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"\x1b")
         read_until(master, b"Line   20/30", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
 
         print("[+] Successfully verified Case Insensitivity Toggle (Ctrl+I) (Step 46)!", flush=True)
 
@@ -2544,10 +2578,13 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x14\x01")
         read_until(master, b"Line    1/30", timeout=4.0)
+        time.sleep(0.2)
+        drain_all(master)
 
         # Trigger Replace: Ctrl+R
         os.write(master, b"\x12")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"Line 01\r")
         out_s47_rep_prompt = read_until(master, b"Replace with:", timeout=4.0)
         if b"Replace with:" not in out_s47_rep_prompt:
@@ -2556,20 +2593,38 @@ def test_se_execution():
 
         # Enter replacement string: "BetaLine 01"
         os.write(master, b"BetaLine 01\r")
-        out_s47_confirm = read_until(master, b"everse)? ", timeout=4.0)
-        if b"Replace (" not in out_s47_confirm or b"everse)? " not in out_s47_confirm:
-            print(f"[-] Step 47 failed: Confirmation prompt missing. Buffer: {repr(out_s47_confirm)}", flush=True)
+        out_s47_title = read_until(
+            master, b"Replace Confirmation", timeout=4.0
+        )
+        if b"Replace Confirmation" not in out_s47_title:
+            print(
+                f"[-] Step 47 failed: Confirmation pop-up missing. "
+                f"Buffer: {repr(out_s47_title)}",
+                flush=True
+            )
             return False
-        # Verify underscored options (Y, N, A, Q, R)
-        if b"\x1b[4mY\x1b[24mes" not in out_s47_confirm or b"\x1b[4mN\x1b[24mo" not in out_s47_confirm or \
-           b"\x1b[4mA\x1b[24mll" not in out_s47_confirm or b"\x1b[4mQ\x1b[24muit" not in out_s47_confirm or \
-           b"\x1b[4mR\x1b[24meverse" not in out_s47_confirm:
-            print(f"[-] Step 47 failed: Underscored options missing. Buffer: {repr(out_s47_confirm)}", flush=True)
+        # Read the rest of the modal pop-up up to the keys line
+        out_s47_keys = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        # Verify bracketed options
+        if b"[Y]es" not in out_s47_keys or \
+           b"[N]o" not in out_s47_keys or \
+           b"[A]ll" not in out_s47_keys or \
+           b"[Q]uit" not in out_s47_keys or \
+           b"[R]everse" not in out_s47_keys or \
+           b"[ESC]=Cancel" not in out_s47_keys:
+            print(
+                f"[-] Step 47 failed: Modal options missing. "
+                f"Buffer: {repr(out_s47_keys)}",
+                flush=True
+            )
             return False
 
         # Confirm replacement with 'y'
         os.write(master, b"y")
         read_until(master, b"Replace done: 1 replacement(s).", timeout=4.0)
+        # Dismiss Replace Done modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
         time.sleep(0.3)
         drain_all(master)
         print("[+] Successfully verified Search and Replace (Ctrl+R) (Step 47)!", flush=True)
@@ -2582,7 +2637,8 @@ def test_se_execution():
         drain_all(master)
         # Search for "BetaLine" with Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"BetaLine\r")
         out_s48 = read_until(master, b"Col 8", timeout=4.0)
         if b"[BLK: 8c LOCK]" not in out_s48:
@@ -2598,9 +2654,11 @@ def test_se_execution():
         read_until(master, b"^K: Editor keys", timeout=4.0)
         time.sleep(0.1)
         drain_all(master)
+
         # Re-search: Ctrl+F then Enter to repeat previous search
+        time.sleep(0.2)
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
         time.sleep(0.1)
         os.write(master, b"\r")
         out_s48_re = read_until(master, b"Col 8", timeout=4.0)
@@ -2646,11 +2704,11 @@ def test_se_execution():
 
         # Press Ctrl+F: should imply Ctrl+K and pre-fill "Line"
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
-        out_s49_prompt = read_until(master, b"Line", timeout=4.0)
-        if b"Line" not in out_s49_prompt:
+        out_s49_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if b"Find: [Line" not in out_s49_prompt:
             print(f"[-] Step 49 failed: Prompt not pre-filled with block text. Buffer: {repr(out_s49_prompt)}", flush=True)
             return False
+        time.sleep(0.1)
 
         # Confirm search with Enter
         os.write(master, b"\r")
@@ -2668,19 +2726,24 @@ def test_se_execution():
         drain_all(master)
         # Search for a pattern that does not exist anywhere:
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         # Erase prefilled "Line" (4 backspaces) and type ZZZ999
         os.write(master, b"\x08\x08\x08\x08ZZZ999\r")
         out_s50_notfound = read_until(master, b"Pattern not found.", timeout=4.0)
         if b"Pattern not found." not in out_s50_notfound:
             print(f"[-] Step 50 failed: Pattern not found missing. Buffer: {repr(out_s50_notfound)}", flush=True)
             return False
+        # Dismiss Pattern Not Found modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
 
         # Now search for "BetaLine" which exists once in the file
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         os.write(master, b"BetaLine\r")
         read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
 
@@ -2692,6 +2755,9 @@ def test_se_execution():
         if b"Search completed." not in out_s50_completed:
             print(f"[-] Step 50 failed: 'Search completed.' missing. Buffer: {repr(out_s50_completed)}", flush=True)
             return False
+        # Dismiss Search Completed modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
         print("[+] Successfully verified 'Search completed.' vs 'Pattern not found.' (Step 50)!", flush=True)
 
         # ---------------------------------------------------------------------
@@ -2702,7 +2768,8 @@ def test_se_execution():
         drain_all(master)
         # Search for "content" with Ctrl+F
         os.write(master, b"\x06")
-        read_until(master, b"Find (Exact):", timeout=4.0)
+        read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        time.sleep(0.1)
         # Erase prefilled "BetaLine" (8 backspaces) and type "content\r"
         os.write(master, b"\x08\x08\x08\x08\x08\x08\x08\x08content\r")
         read_until(master, b"Line    1/30", timeout=4.0)
@@ -2731,21 +2798,25 @@ def test_se_execution():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x12") # Ctrl+R
-        read_until(master, b"Find (Exact):", timeout=4.0)
-        read_until(master, b"content", timeout=4.0)
+        out_s51_rep = read_until(master, b"[ESC]=Cancel", timeout=4.0)
+        if b"Find: [content" not in out_s51_rep:
+            print(f"[-] Step 51 failed: Prompt not pre-filled with content. "
+                  f"Buffer: {repr(out_s51_rep)}", flush=True)
+            return False
+        time.sleep(0.1)
         os.write(master, b"\r")
         read_until(master, b"Replace with:", timeout=4.0)
         os.write(master, b"Item\r")
-        read_until(master, b"everse)? ", timeout=4.0)
+        read_until(master, b"Replace Confirmation", timeout=4.0)
         # We are on line 1. Skip with 'n' -> moves forward to line 2:
         os.write(master, b"n")
         read_until(master, b"Line    2/30", timeout=4.0)
-        read_until(master, b"everse)? ", timeout=4.0)
+        read_until(master, b"Replace Confirmation", timeout=4.0)
 
         # Press 'r' to dynamically reverse direction -> moves back to line 1!
         os.write(master, b"r")
         read_until(master, b"Line    1/30", timeout=4.0)
-        read_until(master, b"everse)? ", timeout=4.0)
+        read_until(master, b"Replace Confirmation", timeout=4.0)
 
         # Quit replace with 'q'
         os.write(master, b"q")
@@ -2759,6 +2830,9 @@ def test_se_execution():
                 flush=True,
             )
             return False
+        # Dismiss Replace Done modal pop-up on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
         time.sleep(0.3)
         drain_all(master)
         print(
@@ -4025,11 +4099,22 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"NOFILE.TXT\r")
-        out_s66_fnf = read_until(master, b"File not found", timeout=6.0)
+        out_s66_fnf = read_until(master, b"File Not Found", timeout=6.0)
         drain_all(master)
-        if b"File not found" not in out_s66_fnf:
-            print(f"[-] Step 66 Subtest 2 failed: 'File not found' message not displayed: {repr(out_s66_fnf)}", flush=True)
+        if (b"File Not Found" not in out_s66_fnf and
+                b"File not found" not in out_s66_fnf):
+            print(
+                "[-] Step 66 Subtest 2 failed: 'File Not Found' message not "
+                f"displayed: {repr(out_s66_fnf)}",
+                flush=True
+            )
             return False
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to insert:", timeout=6.0)
+        drain_all(master)
 
         # Cancel back to editor with ESC and clear block
         time.sleep(0.2)
@@ -4039,7 +4124,11 @@ def test_se_execution():
         os.write(master, b"\x1b")
         time.sleep(0.2)
         drain_all(master)
-        print("[+] Step 66 Subtest 2 PASSED: Non-existent file displayed 'File not found' and cancelled cleanly.", flush=True)
+        print(
+            "[+] Step 66 Subtest 2 PASSED: Non-existent file displayed "
+            "'File Not Found' popup and cancelled cleanly.",
+            flush=True
+        )
 
         # Subtest 3: Insert single-line file at empty block (cursor)
         os.write(master, b"\x02")  # Ctrl-B
@@ -4734,17 +4823,23 @@ def test_se_execution():
             )
             return False
 
-        # Test inline 'File not found' then filtering
+        # Test modal 'File Not Found' then filtering
         time.sleep(0.2)
         os.write(master, b"\x08" * 20 + b"NONEXIST.XYZ\r")
-        out_s70_fnf = read_until(master, b"File not found", timeout=6.0)
-        if b"File not found" not in out_s70_fnf:
+        out_s70_fnf = read_until(master, b"File Not Found", timeout=6.0)
+        if (b"File Not Found" not in out_s70_fnf and
+                b"File not found" not in out_s70_fnf):
             print(
-                f"[-] Step 70 failed: 'File not found' inline message not "
+                f"[-] Step 70 failed: 'File Not Found' modal pop-up not "
                 f"displayed. Buffer: {repr(out_s70_fnf)}",
                 flush=True
             )
             return False
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to open", timeout=6.0)
 
         # Filter directly from FNF state: '*.TXT'
         time.sleep(0.2)
@@ -5574,28 +5669,40 @@ def test_se_execution():
         # Clear preloaded 'C0:' and switch to unavailable RAM drive A:
         time.sleep(0.3)
         os.write(master, b"\x08\x08\x08a:\r")
-        out_s74_open_err = read_until(master, b"RAM drive not available",
+        out_s74_open_err = read_until(master, b"RAM Drive Unavailable",
                                       timeout=10.0)
-        if b"RAM drive not available" not in out_s74_open_err:
-            print("[-] Step 74 failed: 'RAM drive not available' not "
+        if (b"RAM Drive Unavailable" not in out_s74_open_err and
+                b"RAM drive" not in out_s74_open_err):
+            print("[-] Step 74 failed: 'RAM Drive Unavailable' not "
                   f"shown on A: in Open screen. Buffer: "
                   f"{repr(out_s74_open_err)}", flush=True)
             return False
-        print("    [+] Open screen displayed inline "
-              "'  RAM drive not available' on 'a:'.")
+        print("    [+] Open screen displayed modal "
+              "'RAM Drive Unavailable' popup on 'a:'.")
 
-        # Typing backspace clears message and deletes ':', type ':nofile.txt'
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to open:", timeout=10.0)
+
+        # Typing backspace deletes ':', type ':nofile.txt'
         time.sleep(0.3)
         os.write(master, b"\x08:nofile.txt\r")
-        out_s74_open_err2 = read_until(master, b"RAM drive not available",
+        out_s74_open_err2 = read_until(master, b"RAM Drive Unavailable",
                                        timeout=10.0)
-        if b"RAM drive not available" not in out_s74_open_err2:
-            print("[-] Step 74 failed: 'RAM drive not available' not "
+        if (b"RAM Drive Unavailable" not in out_s74_open_err2 and
+                b"RAM drive" not in out_s74_open_err2):
+            print("[-] Step 74 failed: 'RAM Drive Unavailable' not "
                   f"shown on A:NOFILE.TXT. Buffer: "
                   f"{repr(out_s74_open_err2)}", flush=True)
             return False
-        print("    [+] Open screen displayed inline "
+        print("    [+] Open screen displayed modal "
               "error on 'a:nofile.txt'.")
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to open:", timeout=10.0)
 
         # Cancel Open dialog with ESC
         time.sleep(0.3)
@@ -5621,28 +5728,40 @@ def test_se_execution():
         # Clear preloaded 'C0:' and switch to unavailable RAM drive A:
         time.sleep(0.3)
         os.write(master, b"\x08\x08\x08a:\r")
-        out_s74_save_err = read_until(master, b"RAM drive not available",
+        out_s74_save_err = read_until(master, b"RAM Drive Unavailable",
                                       timeout=10.0)
-        if b"RAM drive not available" not in out_s74_save_err:
-            print("[-] Step 74 failed: 'RAM drive not available' not "
+        if (b"RAM Drive Unavailable" not in out_s74_save_err and
+                b"RAM drive" not in out_s74_save_err):
+            print("[-] Step 74 failed: 'RAM Drive Unavailable' not "
                   f"shown on A: in Save screen. Buffer: "
                   f"{repr(out_s74_save_err)}", flush=True)
             return False
-        print("    [+] Save screen displayed inline "
-              "'  RAM drive not available' on 'a:'.")
+        print("    [+] Save screen displayed modal "
+              "'RAM Drive Unavailable' popup on 'a:'.")
 
-        # Typing backspace clears message and deletes ':', type ':savefile.txt'
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to save:", timeout=10.0)
+
+        # Typing backspace deletes ':', type ':savefile.txt'
         time.sleep(0.3)
         os.write(master, b"\x08:savefile.txt\r")
-        out_s74_save_err2 = read_until(master, b"RAM drive not available",
+        out_s74_save_err2 = read_until(master, b"RAM Drive Unavailable",
                                        timeout=10.0)
-        if b"RAM drive not available" not in out_s74_save_err2:
-            print("[-] Step 74 failed: 'RAM drive not available' not "
+        if (b"RAM Drive Unavailable" not in out_s74_save_err2 and
+                b"RAM drive" not in out_s74_save_err2):
+            print("[-] Step 74 failed: 'RAM Drive Unavailable' not "
                   f"shown on A:SAVEFILE.TXT. Buffer: "
                   f"{repr(out_s74_save_err2)}", flush=True)
             return False
-        print("    [+] Save screen displayed inline "
+        print("    [+] Save screen displayed modal "
               "error on 'a:savefile.txt'.")
+
+        # Dismiss modal popup on any key
+        time.sleep(0.1)
+        os.write(master, b" ")
+        read_until(master, b"Enter filename to save:", timeout=10.0)
 
         # Cancel Save dialog with ESC
         time.sleep(0.3)

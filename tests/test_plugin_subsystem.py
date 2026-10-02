@@ -215,7 +215,7 @@ def run_plugin_test():
         time.sleep(0.2)
         os.write(master, b"q")
         ok, out_splash = read_until(master,
-                                    b"type   e  or  <Enter>   to edit",
+                                    b"type   [E]  or  [Enter]  to edit",
                                     timeout=5.0)
         if not ok:
             print(f"[-] Step 6: Return to splash screen failed. "
@@ -307,7 +307,7 @@ def run_plugin_test():
         read_until(master, b"SE - Plugin Manager", timeout=6.0)
         time.sleep(0.2)
         os.write(master, b"1")
-        read_until(master, b"Unload Slot 1? [Y/N]", timeout=4.0)
+        read_until(master, b"Unload Slot 1?", timeout=4.0)
         os.write(master, b"y")  # Confirm unload slot 1
         ok, out_unl = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:

@@ -173,7 +173,7 @@ MID_EXEC_TABLE:
 STR_MID_EXEC_L2:	DB	"|       MIDPLUG (8KB Far RAM Plugin) |", 0
 STR_MID_EXEC_L4:	DB	"| Mode   : Far RAM Direct Execution  |", 0
 STR_MID_EXEC_L5:	DB	"| Size   : 8KB Modular Slot Class    |", 0
-STR_MID_EXEC_L7:	DB	"|     [Press any key to continue]    |", 0
+STR_MID_EXEC_L7:	DB	"|     Press any key to continue      |", 0
 
 ; About Dialog Table
 MID_ABT_TABLE:
@@ -191,7 +191,7 @@ STR_MID_ABT_L2:		DB	"|    MIDPLUG 8KB Reference Plugin    |", 0
 STR_MID_ABT_L4:		DB	"| Version: v0.1.0 (2026-09-25)       |", 0
 STR_MID_ABT_L5:		DB	"| Size   : 8KB Far RAM Slot Class    |", 0
 STR_MID_ABT_L6:		DB	"| Mode   : Far RAM Direct Execution  |", 0
-STR_MID_ABT_L8:		DB	"|     [Press any key to return]      |", 0
+STR_MID_ABT_L8:		DB	"|      Press any key to return       |", 0
 
 ;------------------------------------------------------------------------------
 ; 8KB Slot Padding Payload (> 4096 bytes and <= 8192 bytes)

@@ -26,7 +26,6 @@ PLUG_CTX_MEM_INFO	EQU	3
 PLUG_CTX_PLUGIN_MGR	EQU	4
 PLUG_CTX_HELP		EQU	5
 PLUG_CTX_ABOUT		EQU	6
-PLUGIN_UI_LINES		EQU	16
 
 ;------------------------------------------------------------------------------
 ; Standard Jump Table
@@ -569,37 +568,30 @@ RENDER_PLUGIN_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	HOST_PRINT_STR
 
-	; Calculate vertical top padding: ((HOST_ROWS - 1) - PLUGIN_UI_LINES) / 2
-	LD	A,(HOST_ROWS)
-	DEC	A
-	SUB	PLUGIN_UI_LINES
-	JR	Z,RPS_NO_TOP_PAD
-	JR	C,RPS_NO_TOP_PAD
-	SRL	A
-	JR	Z,RPS_NO_TOP_PAD
-	LD	B,A
-RPS_TOP_PAD_LOOP:
-	CALL	PRINT_TILDE_CRLF
-	DJNZ	RPS_TOP_PAD_LOOP
-
-RPS_NO_TOP_PAD:
+	; Row 1: Fixed centered Header
 	LD	DE,STR_PLUG_TITLE
 	CALL	PRINT_ABOUT_LINE
 
+	; Row 2: Blank line
 	CALL	PRINT_TILDE_CRLF
 
+	; Row 3: System information line
 	CALL	FORMAT_PLUGIN_SYS_LINE
 	LD	DE,SCRATCH_BUF
 	CALL	PRINT_ABOUT_LINE
 
+	; Row 4: Blank line
 	CALL	PRINT_TILDE_CRLF
 
+	; Row 5: Table Header
 	LD	DE,STR_PLUG_HDR
 	CALL	PRINT_ABOUT_LINE
 
+	; Row 6: Table Separator
 	LD	DE,STR_PLUG_SEP
 	CALL	PRINT_ABOUT_LINE
 
+	; Rows 7..14: Slot Rows 0..7
 	LD	B,0
 RPS_ROW_LOOP:
 	PUSH	BC
@@ -612,31 +604,25 @@ RPS_ROW_LOOP:
 	CP	8
 	JR	NZ,RPS_ROW_LOOP
 
+	; Pad margin rows down to HOST_ROWS - 2
+	; Rows 1..14 are header and body (14 rows)
+	; Footer is on row HOST_ROWS - 1, Status bar on row HOST_ROWS
+	; Number of margin rows = (HOST_ROWS - 2) - 14 = HOST_ROWS - 16
+	LD	A,(HOST_ROWS)
+	SUB	16
+	JR	Z,RPS_FOOTER
+	JR	C,RPS_FOOTER
+	LD	B,A
+RPS_MARGIN_LOOP:
 	CALL	PRINT_TILDE_CRLF
+	DJNZ	RPS_MARGIN_LOOP
 
+RPS_FOOTER:
+	; Row HOST_ROWS - 1: Fixed Footer command summary line
 	CALL	FORMAT_PLUGIN_FOOTER
 	CALL	PRINT_ABOUT_LINE
 
-	; Calculate bottom padding: (HOST_ROWS - 1) - PLUGIN_UI_LINES - top_pad
-	LD	A,(HOST_ROWS)
-	DEC	A
-	SUB	PLUGIN_UI_LINES
-	JR	Z,RPS_BOTTOM_DONE
-	JR	C,RPS_BOTTOM_DONE
-	SRL	A
-	LD	C,A
-	LD	A,(HOST_ROWS)
-	DEC	A
-	SUB	PLUGIN_UI_LINES
-	SUB	C
-	JR	Z,RPS_BOTTOM_DONE
-	JR	C,RPS_BOTTOM_DONE
-	LD	B,A
-RPS_BOTTOM_PAD_LOOP:
-	CALL	PRINT_TILDE_CRLF
-	DJNZ	RPS_BOTTOM_PAD_LOOP
-
-RPS_BOTTOM_DONE:
+	; Row HOST_ROWS: Persistent Status bar
 	CALL	HOST_RENDER_STATUS_BAR
 	RET
 
@@ -1006,9 +992,9 @@ CONFIRM_UNLOAD_SLOT:
 	LD	DE,STR_POPUP_BORDER
 	CALL	HOST_PRINT_STR
 
-	; Line 4: Blank line
+	; Line 4: Description
 	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_SAVE_CFG_BLANK
+	LD	DE,STR_UNLOAD_DESC
 	CALL	HOST_PRINT_STR
 
 	; Line 5: Confirmation prompt with slot number
@@ -1027,11 +1013,25 @@ CONFIRM_UNLOAD_SLOT:
 	LD	DE,STR_POPUP_BORDER
 	CALL	HOST_PRINT_STR
 
+	; Position cursor inside popup on prompt line after "Unload Slot N? "
+	; Row = (POPUP_ROW) - 3, Col = (POPUP_COL) + 32
+	LD	A,(POPUP_ROW)
+	SUB	3
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,32
+	LD	L,A
+	CALL	HOST_LOCATE_RC
+	LD	DE,STR_SHOW_CURSOR
+	CALL	HOST_PRINT_STR
+
 CUS_KEY_LOOP:
 	CALL	HOST_GET_KEY
 	CP	27			; ESC
 	JR	NZ,CUS_NOT_ESC
 	CALL	DRAIN_ESC_SEQUENCE
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
 	RET
 CUS_NOT_ESC:
 	CP	'y'
@@ -1041,12 +1041,19 @@ CUS_NOT_ESC:
 	CP	13			; Enter confirms
 	JR	Z,CUS_CONFIRMED
 	CP	'n'
-	RET	Z
+	JR	Z,CUS_CANCELLED
 	CP	'N'
-	RET	Z
+	JR	Z,CUS_CANCELLED
 	JR	CUS_KEY_LOOP
 
+CUS_CANCELLED:
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
+	RET
+
 CUS_CONFIRMED:
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
 	LD	A,(SELECTED_SLOT)
 	CALL	HOST_UNLOAD_SLOT
 	RET
@@ -1214,7 +1221,14 @@ DCPP_DRAW_BOX:
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_POPUP_BORDER
 	CALL	HOST_PRINT_STR
-	JR	CPK_KEY_LOOP
+
+CPK_NOMATCH_KEY_LOOP:
+	CALL	HOST_GET_KEY
+	CP	27			; ESC
+	JR	NZ,CPK_NM_NOT_ESC
+	CALL	DRAIN_ESC_SEQUENCE
+CPK_NM_NOT_ESC:
+	JP	CPKL_DISMISS
 
 DCPP_RENDER_ITEMS:
 	LD	C,0			; Match index 0..MATCH_COUNT-1
@@ -1267,8 +1281,6 @@ CPK_KEY_LOOP:
 	JR	NC,CPKL_NOT_LOWER
 	SUB	32
 CPKL_NOT_LOWER:
-	CP	'Q'
-	JP	Z,CPKL_DISMISS
 	CP	'K'			; Vi Up
 	JP	Z,CPK_PREV_ITEM
 	CP	'J'			; Vi Down
@@ -1646,7 +1658,7 @@ STR_ABT_LINE1:	DB	"|   SE.COM Far RAM Plugin Manager (PLUGIN.PRL)   |", 0
 STR_ABT_LINE2:	DB	"| Version: v1.0.0 (2026-09-25)                   |", 0
 STR_ABT_LINE3:	DB	"| Mode   : 16KB Far RAM Modular Plugin (PRL)    |", 0
 STR_ABT_LINE4:	DB	"| Role   : Dynamic Slot Management & Pop-up UI   |", 0
-STR_ABT_LINE5:	DB	"|           [Press any key to return]            |", 0
+STR_ABT_LINE5:	DB	"|            Press any key to return             |", 0
 
 ;==============================================================================
 ; Modal Pop-up: Save Plugin Configuration Confirmation
@@ -2072,9 +2084,10 @@ STR_TITLE_PLUGIN_MGR:	DB	"            Installed Plugin Catalog            ", 0
 STR_TITLE_HELP:		DB	"       Plugins with Embedded Documentation      ", 0
 
 STR_POPUP_NO_MATCH:	DB	"    No plugins found for this screen context    ", 0
-STR_POPUP_PROMPT_NOMATCH: DB	"   Press [Esc], [q], or [Ctrl+P] to Dismiss     ", 0
+STR_POPUP_PROMPT_NOMATCH:
+	DB	"            Press any key to dismiss            ", 0
 STR_POPUP_PROMPT_MATCH:
-	DB	" [Up/Dn/0-7] Select  [Enter] Exec  [ESC/Q] Exit ", 0
+	DB	" [Up]/[Down]=Select   [Enter]=Exec   [ESC]=Exit ", 0
 
 STR_DESC_CONFIG:	DB	"Embedded Plugin Settings     ", 0
 STR_DESC_ABOUT:		DB	"Modal About & Info Dialog    ", 0
@@ -2092,17 +2105,17 @@ STR_PLUG_SYS_POST:	DB	"/8]    TPA Slot: [4KB Overlaid]", 0
 STR_PLUG_HDR:		DB	"Slot Plugin Name      Type   Size    Exec Mode  Capabilities     Status ", 0
 STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+---------------+--------", 0
 
-STR_PLUG_CMDS_PRE:	DB	"Up/Dn:select | ", 0
+STR_PLUG_CMDS_PRE:	DB	"[Up]/[Down]=Select  ", 0
 STR_PLUG_CMDS_BOTH:
-	DB	"Enter:unload | A:about | C:cfg | S:save | Q:exit", 0
+	DB	"[Enter]=Unload  [A]=About  [C]=Config  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_ABOUT:
-	DB	"Enter:unload | A:about | S:save | Q:exit", 0
+	DB	"[Enter]=Unload  [A]=About  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_CONFIG:
-	DB	"Enter:unload | C:cfg | S:save | Q:exit", 0
+	DB	"[Enter]=Unload  [C]=Config  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_PLAIN:
-	DB	"Enter:unload | S:save | Q:exit", 0
+	DB	"[Enter]=Unload  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_EMPTY:
-	DB	"Enter:load | S:save | Q:exit", 0
+	DB	"[Enter]=Load  [S]=Save  [ESC]=Exit", 0
 
 STR_MSG_NO_ABOUT:	DB	"[No About]$", 0
 STR_MSG_NO_CONFIG:	DB	"[No Config]$", 0
@@ -2111,11 +2124,12 @@ STR_SAVE_CFG_TITLE:	DB	"|           Save Plugin Configuration            |", 0
 STR_SAVE_CFG_BLANK:	DB	"|                                                |", 0
 STR_SAVE_CFG_OK:	DB	"|             [Saved to PLUGIN.CFG]              |", 0
 STR_SAVE_CFG_FAIL:	DB	"|           [Error saving PLUGIN.CFG]            |", 0
-STR_SAVE_CFG_KEY:	DB	"|           [Press any key to continue]          |", 0
+STR_SAVE_CFG_KEY:	DB	"|           Press any key to continue            |", 0
 STR_UNLOAD_TITLE:	DB	"|                 Unload Plugin                  |", 0
-STR_UNLOAD_PROMPT_PRE:	DB	"|              Unload Slot ", 0
-STR_UNLOAD_PROMPT_POST:	DB	"? [Y/N]              |", 0
-STR_UNLOAD_KEYS:	DB	"|          [Y]es / [N]o / [ESC]=Cancel           |", 0
+STR_UNLOAD_DESC:	DB	"|      Unloading plugin frees Far RAM slot       |", 0
+STR_UNLOAD_PROMPT_PRE:	DB	"|                 Unload Slot ", 0
+STR_UNLOAD_PROMPT_POST:	DB	"?                 |", 0
+STR_UNLOAD_KEYS:	DB	"|        [Y]es      [N]o      [ESC]=Cancel       |", 0
 
 STR_PLUG_EMPTY_ROW:	DB	"(empty slot)     --     --      --         --               [Free] ", 0
 STR_PLUG_TYPE_PRL:	DB	"PRL   ", 0

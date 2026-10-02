@@ -250,11 +250,12 @@ def test_config_screen_beautifier_options():
         assert b"OFF (Fast)     " in out, f"Failed toggling animation: {out}"
         print("    [+] Option 4 toggled to [OFF (Fast)]")
 
-        # Save & Exit ('q')
+        # Save & Exit (Enter)
         time.sleep(0.3)
-        os.write(master, b"q")
+        os.write(master, b"\r")
         read_until(master, b"Plugin Manager", timeout=10.0)
-        print("    [+] Exited BEAUTIFY config menu with 'q' (persisted to BEAUTIFY.CFG)")
+        print("    [+] Exited BEAUTIFY config menu with Enter "
+              "(persisted to BEAUTIFY.CFG)")
 
         # Exit Plugin Manager ('q') and exit SE.COM ('q')
         time.sleep(0.3)
@@ -318,9 +319,9 @@ def test_config_screen_beautifier_options():
         print("    [+] Verified BEAUTIFY plugin reloaded persisted settings "
               "from BEAUTIFY.CFG successfully")
 
-        # Exit
+        # Exit (ESC)
         time.sleep(0.3)
-        os.write(master2, b"q")
+        os.write(master2, b"\x1b")
         read_until(master2, b"Plugin Manager", timeout=10.0)
         time.sleep(0.3)
         os.write(master2, b"q")

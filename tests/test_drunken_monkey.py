@@ -331,7 +331,8 @@ class VT100QualityMonitor:
         # (starting with '~' or spaces). If row 0 contains document text without
         # '~', a mixed screen corruption occurred.
         full_text = "\n".join("".join(row) for row in self.buffer)
-        if "SE - Screen Editor" in full_text and "type   e" in full_text:
+        if "SE - Screen Editor" in full_text and (
+                "type   e" in full_text or "type   [E]" in full_text):
             row0_str = "".join(self.buffer[0]).strip()
             if row0_str and not row0_str.startswith("~"):
                 raise CrispLayoutError(
@@ -386,20 +387,26 @@ class VT100QualityMonitor:
             return "insert_file_prompt"
         if "Load Plugin (.PRL/.OVL):" in full_text:
             return "load_plugin_prompt"
-        if (("Unload Slot " in full_text and "[Y/N]" in full_text) or
+        if (("Unload Slot " in full_text and
+             ("?" in full_text or "[Y/N]" in full_text)) or
+                "Unload Plugin" in full_text or
                 "Unload Slot (0..7):" in full_text):
             return "unload_plugin_prompt"
         if "Goto line:" in full_text:
             return "goto_line_prompt"
         if "Replace with:" in full_text:
             return "replace_prompt"
-        if "Find (Exact):" in full_text or "Find (Insens):" in full_text:
+        if ("Find:" in full_text or "Find Text" in full_text or
+                "Find (Exact):" in full_text or "Find (Insens):" in full_text):
             return "find_prompt"
-        if "File already exists. Overwrite?" in full_text:
+        if ("File already exists. Overwrite?" in full_text or
+                "Overwrite File" in full_text):
             return "overwrite_prompt"
-        if "Replace (" in full_text and "uit/" in full_text:
+        if (("Replace (" in full_text and "uit/" in full_text) or
+                "Replace Confirmation" in full_text):
             return "replace_confirm_prompt"
         if ("[Up/Dn/0-7] Select" in full_text or
+                "[Up]/[Down]=Select" in full_text or
                 "Select [0-7] to Execute" in full_text or
                 "Plugins for Editor" in full_text or
                 "to Dismiss" in full_text):
@@ -411,11 +418,13 @@ class VT100QualityMonitor:
         if "SE - Screen Editor Configuration" in full_text:
             return "configuration_screen"
         if ("SE - Screen Editor" in full_text and
-                ("Active Screen:" in full_text or "type   e" in full_text)):
+                ("Active Screen:" in full_text or "type   e" in full_text or
+                 "type   [E]" in full_text)):
             return "splash_screen"
         if ("SE - Plugin Manager" in full_text or
                 "0..7:select" in full_text or
-                "Up/Dn:select" in full_text):
+                "Up/Dn:select" in full_text or
+                "[Up]/[Down]=Select" in full_text):
             return "plugin_manager"
         if ("Exiting SE.COM" in full_text or
                 "Returned to CP/M" in full_text or
@@ -579,7 +588,7 @@ class DrunkenMonkeyInputGenerator:
             elif screen_state == "plugin_manager":
                 return "q", 0.15, "Watchdog Breakout: 'q' (Plugin Mgr)"
             elif screen_state == "plugin_config":
-                return "q", 0.15, "Watchdog Breakout: 'q' (Plugin Config)"
+                return "\x1b", 0.15, "Watchdog Breakout: ESC (Plugin Config)"
             elif screen_state == "configuration_screen":
                 return "q", 0.15, "Watchdog Breakout: 'q' (Config)"
             else:
@@ -681,13 +690,13 @@ class DrunkenMonkeyInputGenerator:
             return choice, delay, f"Overwrite: {choice}"
 
         elif screen_state == "replace_confirm_prompt":
-            choice = self.rng.choice(["y", "n", "a", "\x1b"])
+            choice = self.rng.choice(["y", "n", "a", "q", "r", "\x1b"])
             d = max(delay, 0.15) if choice == "\x1b" else delay
             return choice, d, f"Replace confirm: {choice}"
 
         elif screen_state == "plugin_popup":
-            slot = self.rng.choice(["0", "1", "2", "\x1b", "q"])
-            d = max(delay, 0.15) if slot in ("\x1b", "q") else delay
+            slot = self.rng.choice(["0", "1", "2", "\x1b"])
+            d = max(delay, 0.15) if slot == "\x1b" else delay
             return slot, d, f"Plugin popup: {slot}"
 
         elif screen_state == "press_any_key":
@@ -715,8 +724,8 @@ class DrunkenMonkeyInputGenerator:
             return choice, d, f"Unload plugin confirm: {choice}"
 
         elif screen_state == "plugin_config":
-            choice = self.rng.choice(["1", "2", "3", "4", "q", "\r"])
-            d = max(delay, 0.15) if choice in ("q", "\r") else delay
+            choice = self.rng.choice(["1", "2", "3", "4", "\r", "\x1b"])
+            d = max(delay, 0.15) if choice in ("\r", "\x1b") else delay
             return choice, d, f"Plugin Config: {choice}"
 
         elif screen_state == "configuration_screen":
@@ -1363,9 +1372,22 @@ def run_drunken_monkey_test(
                     monitor.feed(drain.decode("latin1", errors="replace"))
                 continue
 
+            # If in plugin config, send ESC to exit
+            if state == "plugin_config":
+                if verbose:
+                    print(f"[*] Teardown: Sending ESC to {state}", flush=True)
+                os.write(master, b"\x1b")
+                time.sleep(0.15)
+                drain = read_available(master, timeout=1.5)
+                if drain:
+                    if verbose:
+                        print(f"[*] Teardown drained {len(drain)} bytes "
+                              f"after ESC", flush=True)
+                    monitor.feed(drain.decode("latin1", errors="replace"))
+                continue
+
             # If in management/workspace screen, send 'q' to exit
-            if state in ("plugin_manager", "plugin_config",
-                         "configuration_screen"):
+            if state in ("plugin_manager", "configuration_screen"):
                 if verbose:
                     print(f"[*] Teardown: Sending 'q' to {state}", flush=True)
                 os.write(master, b"q")

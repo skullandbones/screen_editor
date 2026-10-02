@@ -30,8 +30,8 @@ codebase must adhere strictly to these principles.
 3. **Strict Column 0 Tilde Discipline**:
    - Tildes (`~`) in column 0 denote background / non-document screen space
      on unallocated body and margin rows.
-   - **Tildes in col 0 are used on all screens except for file open and save
-     related screens.**
+   - **Tildes in column 0 are used on all screens without exception**
+     (including file open, save, and block screens).
    - Header rows, the status bar, and Tier 2 boxed modal pop-ups do not use
      column 0 tildes.
 4. **Dedicated Surfaces & Centered Pop-ups**:
@@ -90,7 +90,7 @@ Never blur the boundaries between these tiers.
   - **Navigation & Management Workspaces** (Plugin Manager, Config, Browsers):
     - Header (Row 1): Centered screen title and global status indicators.
     - Body: Content display with column 0 tildes (`~`) on margin rows
-      (except file open and save screens, which omit column 0 tildes).
+      across all screens (including file open, save, and directory screens).
     - Paging/Cursor: Selection indicator (e.g. `>[0]` or inverted cursor bar).
     - Footer (`HOST_ROWS - 1`: Row 23 on 80x24; Row 39 on 120x40): Dynamic,
       context-dependent command summary line.
@@ -249,15 +249,15 @@ Brackets (`[ ]`) convey structured parameters and triggers across SE.COM:
    - On full-screen workspaces, a leading tilde (`~`) in column 0 identifies
      unallocated editor buffer rows or background menu padding.
 2. **Scoping Rules**:
-   - **All screens shall use tildes in column 0**, including:
+   - **All screens shall use tildes in column 0 without exception**, including:
      - Splash Screen menu padding rows.
      - Editor Workspace (all empty rows below the end of document).
+     - File open and save screens (Open File UI, Save File UI, Block Insert UI,
+       Block Save UI, and directory browser margin rows).
      - Plugin Manager workspace padding rows.
      - Configuration Screen padding rows.
      - About, Memory, and Help screen padding rows.
-   - **Exceptions**:
-     - File open and save related screens (Open File UI, Save File UI,
-       Block Insert UI, Block Save UI) do NOT use tildes in column 0.
+   - **Applicability Boundaries**:
      - Column 0 tildes apply strictly to unallocated body and margin rows of
        Tier 1 screens; they do NOT apply to Row 1 header rows, the bottom
        status bar (`HOST_ROWS`), or Tier 2 centered boxed modal pop-ups.
@@ -321,10 +321,10 @@ agents must actively check for and refactor these non-conformances:
      user input. Ensure pop-ups with no user input (status pop-ups) are
      dismissable by any key.
 6. **Tilde Inconsistency**:
-   - *Symptom*: Omitting `~` in column 0 on non-file screens, or including `~`
-     on file open/save screens, or drawing `~` on header/status rows.
-   - *Remedy*: Use column 0 `~` on body rows of all screens except file
-     open/save screens.
+   - *Symptom*: Omitting `~` in column 0 on any screen's body/margin rows,
+     or drawing `~` on header or status rows.
+   - *Remedy*: Use column 0 `~` on unallocated body and margin rows of all
+     screens without exception.
 7. **Status Bar Squatting**:
    - *Symptom*: Drawing an interactive text input loop directly onto the
      status row.
@@ -373,4 +373,4 @@ Before submitting any UI/UX changes:
    - Pop-ups needing user input (e.g. yes/no) are cancelled solely via `ESC`.
    - Pop-ups with no user input (e.g. status pop-ups) are dismissable by
      any key.
-   - Column 0 tildes appear on body rows of all screens except file open/save.
+   - Column 0 tildes appear on body rows of all screens without exception.

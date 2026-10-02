@@ -190,7 +190,7 @@ def run_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"1")
-        ok, out_pop = read_until(master, b"Unload Slot 1? [Y/N]", timeout=4.0)
+        ok, out_pop = read_until(master, b"Unload Slot 1?", timeout=4.0)
         assert ok, "Unload confirmation prompt missing"
         os.write(master, b"y")
         ok, out_u = read_until(master, b"(empty slot)", timeout=6.0)
@@ -216,7 +216,7 @@ def run_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"s")
-        ok, out_s = read_until(master, b"[Press any key to continue]",
+        ok, out_s = read_until(master, b"Press any key to continue",
                                timeout=6.0)
         assert ok, f"Save pop-up not displayed. Buffer: {repr(out_s)}"
         assert b"Save Plugin Configuration" in out_s, \
@@ -233,11 +233,11 @@ def run_test():
               flush=True)
         time.sleep(0.2)
         os.write(master, b" ")
-        ok, _ = read_until(master, b"Up/Dn:select", timeout=5.0)
+        ok, _ = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         assert ok, "Failed to redraw Plugin Manager upon modal dismissal"
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
+        read_until(master, b"type   [E]  or  [Enter]  to edit", timeout=5.0)
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl+Q
         ok, _ = read_until(master, b"C>", timeout=6.0)
@@ -290,7 +290,7 @@ def run_test():
               flush=True)
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
+        read_until(master, b"type   [E]  or  [Enter]  to edit", timeout=5.0)
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl+Q
         ok, _ = read_until(master, b"C>", timeout=6.0)

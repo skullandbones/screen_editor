@@ -129,7 +129,7 @@ def boot_cpm(emu_bin, rom_file, img_file):
 
 def remove_cfg_from_image(cpmrm_bin, img_file):
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG", "0:se.cfg"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
 
@@ -208,19 +208,30 @@ def run_tests():
         os.write(master, b" ")
         read_until(master, b"Plugin System : [Disabled]", timeout=10.0)
 
-        # Press 'p' to request plugin manager
+        # Press 'p' to request plugin manager: shows Tier 2 modal pop-up
         time.sleep(0.3)
         os.write(master, b"p")
         out = read_until(
-            master, b"Plugin System : [Disabled]", timeout=10.0
+            master, b"Plugin Manager Missing", timeout=10.0
         )
-        assert b"Plugin System : [Disabled]" in out, (
-            f"Failed staying on splash when disabled: {out}"
+        assert b"Plugin Manager Missing" in out, (
+            f"Missing Plugin Manager Missing modal pop-up: {out}"
         )
         assert b"=== Plugin Manager ===" not in out, (
             "Plugin manager opened despite being disabled!"
         )
-        print("    [+] Pressing 'p' correctly refused launch")
+        # Dismiss pop-up with space
+        time.sleep(0.1)
+        os.write(master, b" ")
+        out_splash = read_until(
+            master, b"Plugin System : [Disabled]", timeout=10.0
+        )
+        assert b"Plugin System : [Disabled]" in out_splash, (
+            f"Failed returning to splash when disabled: {out_splash}"
+        )
+        print(
+            "    [+] Pressing 'p' correctly displayed modal and refused launch"
+        )
 
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
@@ -229,8 +240,8 @@ def run_tests():
         assert b"5. Plugin Manager  : [Disabled (Do Not Load)]" in out, (
             f"Config screen missing Disabled (Do Not Load): {out}"
         )
-        assert b"type   5                toggle Plugin Mgr" in out, (
-            "Config screen missing Option 5 command description"
+        assert b"[1-5]=Toggle Option" in out, (
+            "Config screen missing Option toggle in footer"
         )
         print(
             "    [+] Config screen displays 5. Plugin Manager : [Disabled]"
@@ -352,7 +363,7 @@ def run_tests():
         # Return to splash and exit SE
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   c", timeout=10.0)
+        read_until(master, b"type   [C]", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
         out = read_until(master, b"C>", timeout=15.0)
@@ -401,7 +412,7 @@ def run_tests():
         # Exit SE
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   c", timeout=10.0)
+        read_until(master, b"type   [C]", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
         read_until(master, b"C>", timeout=15.0)
@@ -450,7 +461,7 @@ def run_tests():
         # Exit SE
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   c", timeout=10.0)
+        read_until(master, b"type   [C]", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
         read_until(master, b"C>", timeout=15.0)
@@ -509,7 +520,7 @@ def run_tests():
         # Dismiss Plugin Manager UI ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   c", timeout=10.0)
+        read_until(master, b"type   [C]", timeout=10.0)
 
         # Exit SE
         time.sleep(0.3)

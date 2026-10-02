@@ -203,6 +203,12 @@ CFG_API_OK:
 	CP	'E'
 	JP	NZ,INIT_ERR
 
+	; Save initial config state for ESC cancel
+	LD	A,(CFG_COUNT_BLANK)
+	LD	(SAVED_COUNT_BLANK),A
+	LD	A,(CFG_COUNT_WS)
+	LD	(SAVED_COUNT_WS),A
+
 CFG_DISPLAY_LOOP:
 	LD	A,(CFG_COUNT_BLANK)
 	OR	A
@@ -238,14 +244,10 @@ PUT_WS_STR:
 	JR	Z,TOGGLE_BLANK
 	CP	'2'
 	JR	Z,TOGGLE_WS
-	CP	'Q'
+	CP	13			; CR: Save & Exit
 	JR	Z,CFG_DONE
-	CP	'q'
-	JR	Z,CFG_DONE
-	CP	13			; CR
-	JR	Z,CFG_DONE
-	CP	27			; ESC
-	JR	Z,CFG_DONE
+	CP	27			; ESC: Cancel
+	JR	Z,CFG_CANCEL
 	JR	CFG_DISPLAY_LOOP
 
 TOGGLE_BLANK:
@@ -259,6 +261,12 @@ TOGGLE_WS:
 	XOR	1
 	LD	(CFG_COUNT_WS),A
 	JR	CFG_DISPLAY_LOOP
+
+CFG_CANCEL:
+	LD	A,(SAVED_COUNT_BLANK)
+	LD	(CFG_COUNT_BLANK),A
+	LD	A,(SAVED_COUNT_WS)
+	LD	(CFG_COUNT_WS),A
 
 CFG_DONE:
 	XOR	A			; A = 0: Clean, document unmodified
@@ -433,7 +441,7 @@ STR_BOX_WORDS_VAL:	DB	"     "
 STR_BOX_CHARS:		DB	"|  Total Characters : "
 STR_BOX_CHARS_VAL:	DB	"     "
 			DB	"          |", 0
-STR_BOX_CONT:		DB	"|     [Press any key to continue]    |", 0
+STR_BOX_CONT:		DB	"|     Press any key to continue      |", 0
 
 ; About Dialog Table
 WORDCNT_ABT_TABLE:
@@ -455,7 +463,7 @@ STR_WCA_L5:		DB	"| Compatible with SE.COM >= v0.9.7   |", 0
 STR_WCA_L6:		DB	"| Mode   : TPA Overlay / Far RAM     |", 0
 STR_WCA_L7:		DB	"| Scope  : Full Document Scanner     |", 0
 STR_WCA_L8:		DB	"| Metrics: Lines, Words, Characters  |", 0
-STR_WCA_L10:		DB	"|     [Press any key to return]      |", 0
+STR_WCA_L10:		DB	"|      Press any key to return       |", 0
 
 ; Configuration Dialog Table
 WORDCNT_CFG_TABLE:
@@ -473,9 +481,11 @@ STR_WCC_L4:		DB	"|  1. Count Blank Lines  : ["
 STR_CFG_BLANK_VAL:	DB	"YES]     |", 0
 STR_WCC_L5:		DB	"|  2. Count Whitespace   : ["
 STR_CFG_WS_VAL:		DB	"YES]       |", 0
-STR_WCC_L7:		DB	"| [1-2] Toggle  [Enter/Q] Save & Exit|", 0
+STR_WCC_L7:		DB	"| [Enter]=Save & Exit   [ESC]=Cancel |", 0
 
 CFG_COUNT_BLANK:	DB	1
 CFG_COUNT_WS:		DB	1
+SAVED_COUNT_BLANK:	DB	1
+SAVED_COUNT_WS:		DB	1
 STR_VAL_YES:		DB	"YES"
 STR_VAL_NO:		DB	"NO "

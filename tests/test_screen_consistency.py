@@ -145,19 +145,24 @@ def run_screen_consistency_test(mode_name="80x24"):
                   f"{mode_name}. Buffer: {repr(out_plug)}", flush=True)
             return False
 
-        # Verify vertical padding and row above status bar has '~' in col 0
-        expected_top_pad = b"~\r\n" * (3 if mode_name == "80x24" else 11)
-        expected_bottom_pad = b"~\r\n" * (4 if mode_name == "80x24" else 12)
+        # Verify margin padding down to row HOST_ROWS - 2
+        # and footer on HOST_ROWS - 1
+        expected_margin_pad = b"~\r\n" * (8 if mode_name == "80x24" else 24)
         status_row_esc = (
             b"\x1b[24;1H" if mode_name == "80x24" else b"\x1b[40;1H"
         )
-        if expected_top_pad not in out_plug:
-            print("[-] Plugin Manager missing expected top padding tildes. "
+        if expected_margin_pad not in out_plug:
+            print("[-] Plugin Manager missing expected margin padding tildes. "
                   f"Buffer: {repr(out_plug)}", flush=True)
             return False
 
-        if (expected_bottom_pad + status_row_esc) not in out_plug:
-            print("[-] Plugin Manager missing '~' directly before status bar. "
+        if b"[Up]/[Down]=Select" not in out_plug:
+            print("[-] Plugin Manager missing footer command summary. "
+                  f"Buffer: {repr(out_plug)}", flush=True)
+            return False
+
+        if status_row_esc not in out_plug:
+            print("[-] Plugin Manager missing status bar escape code. "
                   f"Buffer: {repr(out_plug)}", flush=True)
             return False
 
@@ -186,7 +191,9 @@ def run_screen_consistency_test(mode_name="80x24"):
 
         drain_all(master)
         os.write(master, b"\x0b")  # Ctrl+K
-        out_help = read_until(master, b"Press any key to return to editor...", timeout=5.0)
+        out_help = read_until(
+            master, b"Press any key to return to editor", timeout=5.0
+        )
         out_help += read_until(master, b"\x1b[?25l", timeout=3.0)
         if b"SE.COM - EDITOR MODE KEYS" not in out_help:
             print(f"[-] Help screen missing title. Buffer: {repr(out_help)}", flush=True)
@@ -196,7 +203,10 @@ def run_screen_consistency_test(mode_name="80x24"):
         expected_rule = b"~" + (b"=" * (78 if mode_name == "80x24" else 118))
         expected_dash = b"~" + (b"-" * (78 if mode_name == "80x24" else 118))
         expected_title_pad = b"~" + (b" " * (26 if mode_name == "80x24" else 46)) + b"SE.COM - EDITOR MODE KEYS"
-        expected_prompt_pad = b"~" + (b" " * (21 if mode_name == "80x24" else 41)) + b"Press any key to return to editor..."
+        expected_prompt_pad = (
+            b"~" + (b" " * (22 if mode_name == "80x24" else 42))
+            + b"Press any key to return to editor"
+        )
 
         if expected_rule not in out_help:
             print(f"[-] Help screen missing full-width '=' rule. Buffer: {repr(out_help)}", flush=True)

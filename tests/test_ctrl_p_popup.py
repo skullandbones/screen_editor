@@ -148,7 +148,7 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=14.0)
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=14.0)
         if b"All Available Installed Plugins" not in out:
             print(f"[-] Test 1 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -199,7 +199,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if b"Plugins with Configurable Settings" not in out:
             print(f"[-] Test 2 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -220,18 +220,18 @@ def main():
             return 1
         print("    [+] Action 2 invoked: Embedded Beautifier Configuration menu opened")
 
-        # Exit Beautifier config with 'q' -> returns to Ctrl+P pop-up menu
+        # Exit Beautifier config with ESC -> returns to Ctrl+P pop-up menu
         time.sleep(0.2)
-        os.write(master, b"q")
+        os.write(master, b"\x1b")
         out = read_until(master, b"Plugins with Configurable Settings", timeout=6.0)
         if b"Plugins with Configurable Settings" not in out:
             print(f"[-] Test 2 failed: Return from Beautifier config did not restore Ctrl+P menu. Buffer: {repr(out)}")
             return 1
         print("    [+] Modal hierarchy verified: Returned cleanly to Ctrl+P Config pop-up menu")
 
-        # Dismiss Ctrl+P pop-up menu with 'q'
+        # Dismiss Ctrl+P pop-up menu with ESC
         time.sleep(0.2)
-        os.write(master, b"q")
+        os.write(master, b"\x1b")
         out = read_until(master, b"Screen Editor Configuration", timeout=6.0)
         if b"Screen Editor Configuration" not in out:
             print(f"[-] Test 2 failed: Return from Ctrl+P menu did not restore Host Config screen. Buffer: {repr(out)}")
@@ -262,7 +262,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if b"Plugins with Far RAM Memory Usage" not in out:
             print(f"[-] Test 3 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -306,7 +306,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if b"Plugins with Embedded Documentation" not in out:
             print(f"[-] Test 4 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -372,7 +372,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if b"Plugins for Editor (Run Plugin)" not in out:
             print(f"[-] Test 5 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -393,8 +393,8 @@ def main():
         # Dismiss dialog with space and verify hierarchical return to Ctrl+P
         time.sleep(0.2)
         os.write(master, b" ")
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=4.0)
-        if b"[Up/Dn/0-7] Select" not in out:
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=4.0)
+        if b"[Up]/[Down]=Select" not in out:
             print(
                 f"[-] Test 5 failed: Return from WORDCNT modal dialog did not "
                 f"restore Ctrl+P menu. Captured: {repr(out)}"
@@ -433,7 +433,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
         if b"Plugins with Embedded Documentation" not in out:
             print(f"[-] Test 5 failed: Title missing on Help screen pop-up.")
             return 1
@@ -463,7 +463,7 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x1a")  # Ctrl+Z
-        out = read_until(master, b"Plugin Manager", timeout=4.0)
+        out = read_until(master, b"[Enter]=Unload", timeout=6.0)
         if b"Plugin Manager" not in out:
             print(f"[-] Failed to open Plugin Manager via Ctrl+Z.")
             return 1
@@ -471,7 +471,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up/Dn/0-7] Select", timeout=6.0)
+        out = read_until(master, b"[Enter]=Exec", timeout=6.0)
         if b"Installed Plugin Catalog" not in out:
             print(f"[-] Test 6 failed: Title missing in Plugin Manager pop-up.")
             return 1
@@ -480,7 +480,7 @@ def main():
         # Dismiss with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        out = read_until(master, b"Plugin Manager", timeout=4.0)
+        out = read_until(master, b"[Enter]=Unload", timeout=6.0)
         if b"Plugin Manager" not in out:
             print(f"[-] Test 6 failed: Return to Plugin Manager failed.")
             return 1

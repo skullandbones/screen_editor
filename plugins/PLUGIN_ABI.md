@@ -491,7 +491,7 @@ STR_ABOUT_BOX:
     DB  13,10,"  | Version: v0.1.0 (2026-09-23)       |"
     DB  13,10,"  | Compatible with SE.COM >= v0.9.7   |"
     DB  13,10,"  +------------------------------------+"
-    DB  13,10,"  |    [Press any key to return]       |"
+    DB  13,10,"  |      Press any key to return       |"
     DB  13,10,"  +------------------------------------+",13,10,"$"
 
 STR_CONFIG_BOX:
@@ -501,7 +501,7 @@ STR_CONFIG_BOX:
     DB  13,10,"  | 1. Option A : [ON]                 |"
     DB  13,10,"  | 2. Option B : [OFF]                |"
     DB  13,10,"  +------------------------------------+"
-    DB  13,10,"  |    [Press any key to return]       |"
+    DB  13,10,"  |      Press any key to return       |"
     DB  13,10,"  +------------------------------------+",13,10,"$"
 
     END

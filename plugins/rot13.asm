@@ -242,4 +242,4 @@ STR_ROT13_L5:	DB	"| Compatible with SE.COM >= v0.9.7   |", 0
 STR_ROT13_L6:	DB	"| Mode   : 4KB TPA Overlaid Slot     |", 0
 STR_ROT13_L7:	DB	"| Scope  : Current Editor Line       |", 0
 STR_ROT13_L8:	DB	"| Action : Reversible 13-Char Shift  |", 0
-STR_ROT13_L10:	DB	"|     [Press any key to return]      |", 0
+STR_ROT13_L10:	DB	"|      Press any key to return       |", 0

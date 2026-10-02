@@ -883,12 +883,16 @@ DHS_RETRY:
 	CALL	LOAD_HELP_OVERLAY
 	JR	NC,DHS_RUN
 
-	; Help overlay missing or failed to load -> display status message
+	; Help overlay missing or failed to load -> display status modal
 	XOR	A
 	LD	(IS_SPLASH_SCREEN),A
-	LD	DE,STR_HELP_NOT_FOUND
-	CALL	HOST_SET_STATUS_MSG
-	JR	DHS_EXIT
+	CALL	RELOAD_CACHE_WINDOW_FORCE
+	CALL	SHOW_POPUP_HELP_MISSING
+	XOR	A
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_LINE_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+	JP	MAIN_LOOP
 
 DHS_RUN:
 	LD	IX,PLUGIN_HOST_API
@@ -1392,10 +1396,10 @@ DSCP_DRAIN_WAIT:
 	JR	NZ,DSCP_DRAIN_WAIT
 	; Sequence drained: reposition cursor and resume key loop
 	LD	A,(POPUP_SAVE_START_ROW)
-	ADD	A,3
+	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
-	ADD	A,16
+	ADD	A,32
 	LD	L,A
 	CALL	LOCATE_RC
 	JR	DSCP_KEY_LOOP
@@ -2250,9 +2254,7 @@ ABOUT_BOTTOM_DONE:
 ;   3. Max Doc Lines
 ;   4. Tab Width
 ;   5. Plugin Manager
-; Total menu lines: 18
 ;------------------------------------------------------------------------------
-CONFIG_MENU_LINES	EQU	18
 
 ;------------------------------------------------------------------------------
 ; PRINT_CONFIG_PREFIX: Print '~' followed by geometry-dependent left padding
@@ -2299,32 +2301,9 @@ SHOW_CONFIG_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
 
-	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - CONFIG_MENU_LINES) / 2
-	LD	A,(ACTIVE_ROWS)
-	DEC	A			; Text rows available
-	SUB	CONFIG_MENU_LINES
-	JR	Z,SCS_NO_TOP_PAD
-	JR	C,SCS_NO_TOP_PAD
-	SRL	A
-	JR	Z,SCS_NO_TOP_PAD
-	LD	(SCS_TOP_PAD_COUNT),A
-	LD	B,A
-SCS_TOP_PAD_LOOP:
-	CALL	PRINT_CONFIG_BLANK_LINE
-	DJNZ	SCS_TOP_PAD_LOOP
-	JR	SCS_MENU_START
-
-SCS_NO_TOP_PAD:
-	XOR	A
-	LD	(SCS_TOP_PAD_COUNT),A
-
-SCS_MENU_START:
-	; Row 1: Title (centered within 58-char block with 13 spaces)
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CONFIG_TITLE_PAD
-	CALL	PRINT_STR
+	; Row 1: Header (centered title)
 	LD	DE,STR_CONFIG_TITLE
-	CALL	PRINT_STR
+	CALL	PRINT_ABOUT_LINE
 
 	; Row 2: Blank line
 	CALL	PRINT_CONFIG_BLANK_LINE
@@ -2491,74 +2470,42 @@ SCS_PLUG_CHECK_MODE:
 	; Disabled by configuration
 	LD	DE,STR_PLUG_DIS_LBL
 	CALL	PRINT_STR
-	JR	SCS_CMDS_BLOCK
+	JR	SCS_MARGIN_START
 
 SCS_PLUG_ONDEMAND:
 	LD	DE,STR_PLUG_ONDEMAND_LBL
 	CALL	PRINT_STR
-	JR	SCS_CMDS_BLOCK
+	JR	SCS_MARGIN_START
 
 SCS_PLUG_NO_FAR:
 	LD	DE,STR_PLUG_NO_FAR_LBL
 	CALL	PRINT_STR
-	JR	SCS_CMDS_BLOCK
+	JR	SCS_MARGIN_START
 
 SCS_PLUG_AUTOLOAD:
 	LD	DE,STR_PLUG_AUTO_LBL
 	CALL	PRINT_STR
 
-SCS_CMDS_BLOCK:
-	; Blank line
-	CALL	PRINT_CONFIG_BLANK_LINE
-
-	; Commands
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_HEADER
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_1
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_2
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_3
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_4
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_5
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_S
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_Q
-	CALL	PRINT_STR
-
-	; Calculate bottom padding: (ACTIVE_ROWS - 1) - (SCS_TOP_PAD_COUNT + CONFIG_MENU_LINES)
-	LD	A,(SCS_TOP_PAD_COUNT)
-	ADD	A,CONFIG_MENU_LINES
-	LD	B,A
+SCS_MARGIN_START:
+	; Pad remaining rows down to ACTIVE_ROWS - 2 with blank tilde lines
+	; Rows 1..9 are header and body (9 rows)
+	; Footer is on row ACTIVE_ROWS - 1, Status bar on row ACTIVE_ROWS
+	; Number of margin rows = (ACTIVE_ROWS - 2) - 9 = ACTIVE_ROWS - 11
 	LD	A,(ACTIVE_ROWS)
-	DEC	A
-	SUB	B
-	JR	Z,CONFIG_TILDE_DONE
-	JR	C,CONFIG_TILDE_DONE
+	SUB	11
+	JR	Z,SCS_FOOTER
+	JR	C,SCS_FOOTER
 	LD	B,A
-CONFIG_TILDE_LOOP:
+SCS_MARGIN_LOOP:
 	CALL	PRINT_CONFIG_BLANK_LINE
-	DJNZ	CONFIG_TILDE_LOOP
+	DJNZ	SCS_MARGIN_LOOP
 
-CONFIG_TILDE_DONE:
+SCS_FOOTER:
+	; Row ACTIVE_ROWS - 1: Footer command summary line
+	LD	DE,STR_CONFIG_FOOTER
+	CALL	PRINT_ABOUT_LINE
+
+	; Row ACTIVE_ROWS: Status bar
 	CALL	RENDER_STATUS_BAR
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
@@ -5785,10 +5732,6 @@ SHOW_LINUX_FMT:
 
 SHOW_STATUS_REST:
 	; Field 4: Print Mode / Keys / Selection / OOM / Memory (18 chars)
-	LD	A,(IS_REPLACE_PROMPT)
-	OR	A
-	JP	NZ,SHOW_STATUS_REPLACE_PROMPT
-
 	LD	A,(IS_LOADING_FILE)
 	OR	A
 	JP	NZ,SHOW_STATUS_LOADING
@@ -6008,19 +5951,6 @@ SHOW_STATUS_OOM:
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
-
-SHOW_STATUS_REPLACE_PROMPT:
-	; Fields 4 & 5 (combined 40 chars): Print replace prompt followed by 5 spaces
-	; STR_REPLACE_CONFIRM is 35 visible characters
-	LD	DE,STR_REPLACE_CONFIRM
-	CALL	PRINT_STR
-	LD	B,5
-SSRP_PAD_LOOP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	SSRP_PAD_LOOP
-	JP	SSRC_POS_DONE
-
 SHOW_STATUS_LOADING:
 	LD	DE,STR_STATUS_LOADING
 	CALL	PRINT_STR
@@ -6165,45 +6095,7 @@ SSRC_RIGHT_PAD:
 SSRC_RIGHT_PAD_DONE:
 	LD	DE,STR_INVERSE_OFF
 	CALL	PRINT_STR
-	LD	A,(IS_REPLACE_PROMPT)
-	OR	A
-	JR	NZ,STATUS_LOCATE_REP_CURSOR
 	CALL	LOCATE_CURSOR
-	RET
-
-STATUS_LOCATE_REP_CURSOR:
-	CALL	LOCATE_REPLACE_PROMPT_CURSOR
-	RET
-
-;------------------------------------------------------------------------------
-; LOCATE_REPLACE_PROMPT_CURSOR:
-; Position cursor on status row immediately after "Replace (...)? "
-; Column = ((ACTIVE_COLS - 78) / 2) + 72
-; (Col 73 in 80x24, Col 93 in 120x40)
-; Preserves: BC, DE, HL
-;------------------------------------------------------------------------------
-LOCATE_REPLACE_PROMPT_CURSOR:
-	PUSH	BC
-	PUSH	DE
-	PUSH	HL
-	LD	A,27
-	CALL	PUTC
-	LD	A,'['
-	CALL	PUTC
-	LD	A,(ACTIVE_ROWS)
-	CALL	PRINT_DEC_BYTE
-	LD	A,';'
-	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	STATUS_ENCLOSED_WIDTH	; 80 - 78 = 2,  120 - 78 = 42
-	SRL	A			; 1 or 21
-	ADD	A,72			; Col 73 (80x24) or Col 93 (120x40)
-	CALL	PRINT_DEC_BYTE
-	LD	A,'H'
-	CALL	PUTC
-	POP	HL
-	POP	DE
-	POP	BC
 	RET
 
 MEM_FIELD_WIDTH		EQU	15
@@ -10832,16 +10724,21 @@ DRAW_FIND_POPUP_BODY:
 	LD	DE,STR_POPUP_BORDER
 	CALL	PRINT_STR
 
-	; Line 4: Prompt and input field
+	; Line 4: Match mode (Description)
 	CALL	POPUP_LOCATE_NEXT
 	LD	A,(SEARCH_CASE_SENSITIVE)
 	OR	A
-	JR	Z,DFP_INSENS
-	LD	DE,STR_FIND_POPUP_PROMPT_EXACT
-	JR	DFP_PRINT_PFX
-DFP_INSENS:
-	LD	DE,STR_FIND_POPUP_PROMPT_INSENS
-DFP_PRINT_PFX:
+	JR	Z,DFP_MODE_INSENS
+	LD	DE,STR_FIND_POPUP_MODE_EXACT
+	JR	DFP_PRINT_MODE
+DFP_MODE_INSENS:
+	LD	DE,STR_FIND_POPUP_MODE_INSENS
+DFP_PRINT_MODE:
+	CALL	PRINT_STR
+
+	; Line 5: Prompt and input field (Query Line)
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_FIND_POPUP_PROMPT
 	CALL	PRINT_STR
 	; Echo prefilled / current SEARCH_INPUT_BUF if B > 0
 	LD	A,B
@@ -10863,18 +10760,6 @@ DFP_BOX_CLOSE:
 	LD	DE,STR_FIND_POPUP_BOX_CLOSE
 	CALL	PRINT_STR
 
-	; Line 5: Match mode
-	CALL	POPUP_LOCATE_NEXT
-	LD	A,(SEARCH_CASE_SENSITIVE)
-	OR	A
-	JR	Z,DFP_MODE_INSENS
-	LD	DE,STR_FIND_POPUP_MODE_EXACT
-	JR	DFP_PRINT_MODE
-DFP_MODE_INSENS:
-	LD	DE,STR_FIND_POPUP_MODE_INSENS
-DFP_PRINT_MODE:
-	CALL	PRINT_STR
-
 	; Line 6: Keys
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_FIND_POPUP_KEYS
@@ -10886,12 +10771,12 @@ DFP_PRINT_MODE:
 	CALL	PRINT_STR
 
 	; Position cursor inside popup box at
-	; (POPUP_START_ROW + 3, POPUP_COL + 18 + B)
+	; (POPUP_START_ROW + 4, POPUP_COL + 13 + B)
 	LD	A,(POPUP_START_ROW)
-	ADD	A,3
+	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
-	ADD	A,18
+	ADD	A,13
 	ADD	A,B
 	LD	L,A
 	CALL	LOCATE_RC
@@ -10953,19 +10838,10 @@ FIND_CHECK_PREV:
 	JR	Z,FIND_UI_CANCEL	; No previous pattern, cancel
 
 FIND_EXEC_SEARCH:
-	CALL	FIND_STRING_FORWARD
-	RET	NC			; Match found: defer render to MAIN_LOOP
-
-	; Search failed: erase popup dialog by redrawing screen
+	; Erase find popup dialog before running search so screen is clean
 	CALL	RENDER_SCREEN
-	LD	A,(SEARCH_EVER_FOUND)
-	OR	A
-	LD	DE,STR_PATTERN_NOT_FOUND
-	JR	Z,FES_PRINT_MSG
-	LD	DE,STR_SEARCH_COMPLETED
-FES_PRINT_MSG:
-	CALL	S_PRINT_MSG
-	SCF
+	CALL	RENDER_STATUS_BAR
+	CALL	FIND_STRING_FORWARD
 	RET
 
 
@@ -11655,36 +11531,276 @@ SEARCH_NOT_FOUND:
 	LD	(CUR_COL),A
 	LD	(TARGET_COL),A
 
+	; Check if replace is currently active
+	LD	A,(REPLACE_ACTIVE)
+	OR	A
+	JR	NZ,SNF_RETURN_CARRY
+
 	; Check if pattern was ever found during this search session
 	LD	A,(SEARCH_EVER_FOUND)
 	OR	A
 	JR	NZ,S_SHOW_COMPLETED
 
-	; Never found: cancel block and display " Pattern not found. "
+	; Never found: cancel block and display Pattern Not Found popup
 	CALL	CANCEL_BLOCK
-	LD	DE,STR_PATTERN_NOT_FOUND
-	JR	S_PRINT_MSG
+	CALL	SHOW_POPUP_NOT_FOUND
+	SCF
+	RET
 
 S_SHOW_COMPLETED:
-	; Previously found: keep current match highlighted, display " Search completed. "
-	LD	DE,STR_SEARCH_COMPLETED
+	; Previously found: keep match highlighted, display Search Completed popup
+	CALL	SHOW_POPUP_SEARCH_COMPLETED
+	SCF
+	RET
 
-S_PRINT_MSG:
-	PUSH	DE
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	POP	DE
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+SNF_RETURN_CARRY:
+	SCF
+	RET
 
-	XOR	A
-	LD	(NEED_STATUS_RENDER),A	; Keep message visible
+;------------------------------------------------------------------------------
+; SHOW_STATUS_EVENT_POPUP:
+; Displays a centered 50x7 Tier 2 status event pop-up with "Press any key".
+; Dismissed by ANY key. Redraws screen and persistent status bar upon exit.
+; Inputs:
+;   DE = Title string pointer (50 chars null-terminated)
+;   HL = Msg1 string pointer (50 chars null-terminated)
+;   BC = Msg2 string pointer (50 chars null-terminated)
+; Returns: Carry flag set (failure convention for search routines)
+;------------------------------------------------------------------------------
+SHOW_STATUS_EVENT_POPUP:
+	CALL	SHOW_STATUS_EVENT_POPUP_MODAL
+
+	; 5. Restore screen & persistent status bar
+	LD	A,(IN_EDITOR_MODE)
+	OR	A
+	JR	Z,SSEP_NOT_EDITOR
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
 	CALL	LOCATE_CURSOR
-	SCF				; Set carry (failure)
+	SCF
+	RET
+
+SSEP_NOT_EDITOR:
+	CALL	REDRAW_BASE_SCREEN
+	SCF
+	RET
+
+SHOW_STATUS_EVENT_POPUP_MODAL:
+	PUSH	BC			; Msg2
+	PUSH	HL			; Msg1
+	PUSH	DE			; Title
+
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+
+	; 3. Hide cursor
+	LD	DE,STR_HIDE_CURSOR
+	CALL	PRINT_STR
+
+	; Line 1: Top Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Title
+	CALL	PRINT_STR
+
+	; Line 3: Separator Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 4: Msg1
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Msg1
+	CALL	PRINT_STR
+
+	; Line 5: Msg2
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Msg2
+	CALL	PRINT_STR
+
+	; Line 6: Keys
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_TRUNC_KEY
+	CALL	PRINT_STR
+
+	; Line 7: Bottom Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; 4. Wait for any key to dismiss
+	CALL	GET_KEY
+	CP	KEY_ESC
+	CALL	Z,DRAIN_ESC_SEQUENCE
+	SCF
+	RET
+
+SHOW_POPUP_NOT_FOUND:
+	LD	DE,STR_POPUP_NOT_FOUND_TITLE
+	LD	HL,STR_POPUP_NOT_FOUND_MSG1
+	LD	BC,STR_POPUP_NOT_FOUND_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_SEARCH_COMPLETED:
+	LD	DE,STR_POPUP_SEARCH_COMP_TITLE
+	LD	HL,STR_POPUP_SEARCH_COMP_MSG1
+	LD	BC,STR_POPUP_SEARCH_COMP_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_LINE_TOO_LONG:
+	LD	DE,STR_POPUP_TOO_LONG_TITLE
+	LD	HL,STR_POPUP_TOO_LONG_MSG1
+	LD	BC,STR_POPUP_TOO_LONG_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_REPLACE_DONE:
+	LD	DE,STR_POPUP_REP_DONE_TITLE
+	LD	HL,STR_POPUP_REP_DONE_MSG1
+	LD	BC,REPLACE_DONE_POPUP_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_NEED_PLUGIN_MGR:
+	LD	DE,STR_POPUP_NEED_PLUG_TITLE
+	LD	HL,STR_POPUP_NEED_PLUG_MSG1
+	LD	BC,STR_POPUP_NEED_PLUG_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_PLUG_MISSING:
+	LD	DE,STR_POPUP_PLUG_MISS_TITLE
+	LD	HL,STR_POPUP_PLUG_MISS_MSG1
+	LD	BC,STR_POPUP_PLUG_MISS_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_HELP_MISSING:
+	LD	DE,STR_POPUP_HELP_MISS_TITLE
+	LD	HL,STR_POPUP_HELP_MISS_MSG1
+	LD	BC,STR_POPUP_HELP_MISS_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
+
+SHOW_POPUP_FILE_NOT_FOUND:
+	LD	DE,STR_POPUP_FNF_TITLE
+	LD	HL,STR_POPUP_FNF_MSG1
+	LD	BC,STR_POPUP_FNF_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP_MODAL
+
+SHOW_POPUP_RAMDRV_UNAVAIL:
+	LD	DE,STR_POPUP_RAMDRV_TITLE
+	LD	HL,STR_POPUP_RAMDRV_MSG1
+	LD	BC,STR_POPUP_RAMDRV_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP_MODAL
+
+SHOW_POPUP_FAT_NO_PLUGIN:
+	LD	DE,STR_POPUP_FAT_MISS_TITLE
+	LD	HL,STR_POPUP_FAT_MISS_MSG1
+	LD	BC,STR_POPUP_FAT_MISS_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP_MODAL
+
+FORMAT_REPLACE_DONE_MSG2:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+
+	; 1. Initialize buffer with 50 spaces and borders:
+	; "|                                                |"
+	LD	HL,REPLACE_DONE_POPUP_MSG2
+	LD	(HL),'|'
+	INC	HL
+	LD	B,48
+	LD	A,' '
+FRDM_FILL_SPACES:
+	LD	(HL),A
+	INC	HL
+	DJNZ	FRDM_FILL_SPACES
+	LD	(HL),'|'
+	INC	HL
+	LD	(HL),0			; Null terminator
+
+	; 2. Determine number of digits for REPLACE_COUNT
+	LD	HL,(REPLACE_COUNT)
+	CALL	GET_DEC_WORD_DIGITS	; A = digits D (1..5)
+	; Total text length = 14 ("Replace done: ") + D + 16 (" replacement(s).")
+	; = 30 + D chars
+	; Remaining spaces inside 48 chars = 48 - (30 + D) = 18 - D
+	; Left spaces = (18 - D) / 2
+	LD	C,A			; C = D (digit count)
+	LD	A,18
+	SUB	C			; A = 18 - D
+	SRL	A			; A = (18 - D) / 2 = left spaces
+	INC	A			; +1 for leading '|' at index 0
+
+	; HL = pointer to start of text in REPLACE_DONE_POPUP_MSG2
+	LD	HL,REPLACE_DONE_POPUP_MSG2
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = target position
+
+	; 3. Copy "Replace done: " (14 chars)
+	LD	DE,STR_REP_DONE_TXT_PFX
+	LD	B,14
+FRDM_CPY_PFX:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FRDM_CPY_PFX
+
+	; 4. Format decimal count digits into buffer at HL
+	PUSH	HL			; Save target position in buffer
+	LD	HL,(REPLACE_COUNT)
+	CALL	FORMAT_DEC_WORD_RAM	; DE = pointer to first digit
+	POP	HL			; Restore target position in buffer
+	LD	B,C			; B = digit count
+FRDM_CPY_DIGITS:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FRDM_CPY_DIGITS
+
+	; 5. Copy " replacement(s)." (16 chars)
+	LD	DE,STR_REP_DONE_TXT_SFX
+	LD	B,16
+FRDM_CPY_SFX:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FRDM_CPY_SFX
+
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+FORMAT_DEC_WORD_RAM:
+	LD	DE,DEC_WORD_BUF+5
+	LD	A,0
+	LD	(DE),A
+FDWR_LOOP:
+	CALL	DIV_HL_10
+	ADD	A,'0'
+	DEC	DE
+	LD	(DE),A
+	LD	A,H
+	OR	L
+	JR	NZ,FDWR_LOOP
 	RET
 
 ;------------------------------------------------------------------------------
@@ -11864,11 +11980,12 @@ REPLACE_INPUT_CONFIRM:
 
 	; 3. Initialize replace execution
 	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	LD	(REPLACE_ALL_MODE),A
 	LD	(SEARCH_DIRECTION),A	; 0 = Forward
 	LD	HL,0
 	LD	(REPLACE_COUNT),HL
+	LD	A,1
+	LD	(REPLACE_ACTIVE),A
 
 	; Lock search wrap origin for this replace session:
 	LD	HL,(BLOCK_START_ROW)
@@ -11915,7 +12032,12 @@ DRAW_REPLACE_POPUP_FULL:
 	LD	DE,STR_POPUP_BORDER
 	CALL	PRINT_STR
 
-	; Line 4: Prompt and empty input box
+	; Line 4: Instructions (Description)
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REPLACE_POPUP_MSG
+	CALL	PRINT_STR
+
+	; Line 5: Prompt and empty input box (Query Line)
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_REPLACE_POPUP_PROMPT
 	CALL	PRINT_STR
@@ -11926,12 +12048,7 @@ DRP_PAD_LOOP:
 	CALL	PUTC
 	DEC	C
 	JR	NZ,DRP_PAD_LOOP
-	LD	DE,STR_FIND_POPUP_BOX_CLOSE
-	CALL	PRINT_STR
-
-	; Line 5: Instructions
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_REPLACE_POPUP_MSG
+	LD	DE,STR_REPLACE_POPUP_BOX_CLOSE
 	CALL	PRINT_STR
 
 	; Line 6: Keys
@@ -11944,9 +12061,9 @@ DRP_PAD_LOOP:
 	LD	DE,STR_POPUP_BORDER
 	CALL	PRINT_STR
 
-	; Position cursor inside replace box at (POPUP_START_ROW + 3, POPUP_COL + 18)
+	; Position cursor inside replace box at (POPUP_START_ROW + 4, POPUP_COL + 18)
 	LD	A,(POPUP_START_ROW)
-	ADD	A,3
+	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
 	ADD	A,18
@@ -11954,6 +12071,73 @@ DRP_PAD_LOOP:
 	CALL	LOCATE_RC
 	LD	DE,STR_SHOW_CURSOR
 	CALL	PRINT_STR
+	RET
+
+DRAW_REPLACE_CONFIRM_POPUP:
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
+
+	; Line 1: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REP_CONFIRM_TITLE
+	CALL	PRINT_STR
+
+	; Line 3: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Line 4: Description
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REP_CONFIRM_MSG1
+	CALL	PRINT_STR
+
+	; Line 5: Query Prompt
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REP_CONFIRM_MSG2
+	CALL	PRINT_STR
+
+	; Line 6: Keys
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_REP_CONFIRM_KEYS
+	CALL	PRINT_STR
+
+	; Line 7: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Position cursor inside popup on prompt line after "Replace this occurrence? "
+	CALL	LOCATE_REPLACE_CONFIRM_CURSOR
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
+	RET
+
+LOCATE_REPLACE_CONFIRM_CURSOR:
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,36
+	LD	L,A
+	CALL	LOCATE_RC
 	RET
 
 REPLACE_SEARCH_NEXT:
@@ -11979,12 +12163,13 @@ REPLACE_PROCESS_MATCH:
 	OR	A
 	JP	NZ,REPLACE_EXECUTE_SUBST
 
-	; Render screen to show match to user with prompt in status bar
-	LD	A,1
-	LD	(IS_REPLACE_PROMPT),A
+	; Render screen to show match to user with persistent status bar
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
+
+	; Render centered Tier 2 modal pop-up box
+	CALL	DRAW_REPLACE_CONFIRM_POPUP
 
 REPLACE_CONFIRM_KEY:
 	CALL	GET_KEY
@@ -12021,27 +12206,19 @@ REPLACE_CONFIRM_KEY:
 	CP	KEY_ENTER
 	JP	Z,REPLACE_DO_SUBST
 
-	CALL	LOCATE_REPLACE_PROMPT_CURSOR
+	CALL	LOCATE_REPLACE_CONFIRM_CURSOR
 	JR	REPLACE_CONFIRM_KEY
 
 REPLACE_QUIT:
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	JP	REPLACE_SUMMARY
 
 REPLACE_DO_REVERSE:
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	JR	REPLACE_REVERSE_DIR
 
 REPLACE_DO_SKIP:
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	JR	REPLACE_SKIP
 
 REPLACE_DO_SUBST:
-	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	JP	REPLACE_EXECUTE_SUBST
 
 REPLACE_REVERSE_DIR:
@@ -12069,7 +12246,6 @@ REPLACE_REV_TO_BW:
 
 REPLACE_ACTIVATE_ALL:
 	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
 	LD	(SEARCH_DIRECTION),A	; Ensure forward direction for Replace All
 	LD	A,1
 	LD	(REPLACE_ALL_MODE),A
@@ -12113,34 +12289,23 @@ REPLACE_EXECUTE_SUBST:
 	JP	REPLACE_SEARCH_NEXT
 
 REPLACE_SUMMARY:
-	; Ensure replace prompt flag is cleared
 	XOR	A
-	LD	(IS_REPLACE_PROMPT),A
+	LD	(REPLACE_ACTIVE),A
 
 	; Cancel any active block highlight
 	CALL	CANCEL_BLOCK
 
-	; Display " Replace done: N replacement(s). "
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	LD	DE,STR_REPLACE_DONE_PFX
-	CALL	PRINT_STR
-	LD	HL,(REPLACE_COUNT)
-	CALL	PRINT_DEC_WORD
-	LD	DE,STR_REPLACE_DONE_SFX
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	; Format dynamic replacement count into modal Msg2 line
+	CALL	FORMAT_REPLACE_DONE_MSG2
+
+	; Display centered Tier 2 Replace Done modal pop-up
+	CALL	SHOW_POPUP_REPLACE_DONE
 
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
-	XOR	A
-	LD	(NEED_STATUS_RENDER),A	; Keep replace done message visible
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
 	CALL	LOCATE_CURSOR
 	RET
 
@@ -12182,16 +12347,8 @@ ALR_CALC_LEN_DONE:
 	CP	MAX_LINE_STRIDE-7	; 121 (max 120 chars)
 	JR	C,ALR_LENGTH_OK
 
-	; Line would exceed 120 chars: display warning and skip
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
-	LD	DE,STR_LINE_TOO_LONG	; " Line > 120 chars - skipped. "
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	; Line would exceed 120 chars: display warning modal and skip
+	CALL	SHOW_POPUP_LINE_TOO_LONG
 
 	; Advance past match start
 	LD	A,(CUR_COL)
@@ -14061,11 +14218,8 @@ DO_CY_NEXT_SLOT:
 	CALL	LOAD_PLUGIN_BY_NAME
 	JR	NC,DO_CY_LOADED_OK
 
-	; Failed to load BEAUTIFY.PRL: report missing on status bar
-	LD	DE,STR_MSG_PLUG_MISSING
-	CALL	HOST_SET_STATUS_MSG
-	CALL	RENDER_STATUS_BAR
-	CALL	LOCATE_CURSOR
+	; Failed to load BEAUTIFY.PRL: display Tier 2 status event pop-up
+	CALL	SHOW_POPUP_PLUG_MISSING
 	JP	MAIN_LOOP
 
 DO_CY_LOADED_OK:
@@ -14214,8 +14368,6 @@ STR_HIBERN_OVL_NAME:
 	DB	"HIBERN  OVL"
 STR_HELP_OVL_NAME:
 	DB	"HELP    OVL"
-STR_HELP_NOT_FOUND:
-	DB	"[HELP.OVL not found] ",0
 
 ; Helper: Initialize SHARED_TEMP_FCB with 11-char name in DE and drive in A.
 INIT_OVERLAY_FCB:
@@ -15031,7 +15183,10 @@ RENDER_OPEN_PAGE:
 
 	; Check if user typed a FAT specification (U: or U<unit>:)
 	CALL	CHECK_FAT_INPUT_OPEN
-	JP	C,SHOW_INLINE_OPEN_ERROR
+	JR	NC,CFIO_DISPATCH_CHECK
+	CALL	SHOW_POPUP_FAT_NO_PLUGIN
+	JP	RENDER_OPEN_PAGE
+CFIO_DISPATCH_CHECK:
 	JP	NZ,HANDLE_OPEN_FAT_DISPATCH
 
 	; Check if user typed a drive specification (e.g. "A:")
@@ -15163,11 +15318,8 @@ OPEN_RAMDRV_UNAVAILABLE:
 	LDIR
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
-
-	; Display inline "  RAM drive not available"
-	LD	DE,STR_RAMDRV_UNAVAIL_INLINE
-	LD	C,25			; length of message
-	JR	SHOW_INLINE_OPEN_ERROR
+	CALL	SHOW_POPUP_RAMDRV_UNAVAIL
+	JP	RENDER_OPEN_PAGE
 
 OPEN_FILE_NOT_FOUND:
 	; Restore previous WORK_FCB from DIR_TEMP_FCB
@@ -15177,62 +15329,8 @@ OPEN_FILE_NOT_FOUND:
 	LDIR
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
-
-	; Display inline "  File not found"
-	LD	DE,STR_FNF_INLINE
-	LD	C,16			; length of message
-
-SHOW_INLINE_OPEN_ERROR:
-	LD	A,C
-	LD	(INLINE_MSG_LEN),A
-
-	; Move cursor past ']' box before printing error message
-	LD	A,(INPUT_BUF_LEN)
-	LD	B,A
-	LD	A,21
-	SUB	B
-	JR	Z,FNF_FWD_DONE
-	LD	B,A			; B = 21 - INPUT_BUF_LEN
-FNF_FWD_LOOP:
-	PUSH	BC
-	PUSH	DE
-	LD	DE,STR_CSI_C		; ESC [ C
-	CALL	PRINT_STR
-	POP	DE
-	POP	BC
-	DJNZ	FNF_FWD_LOOP
-FNF_FWD_DONE:
-
-	; Display inline message right after ']'
-	CALL	PRINT_STR
-
-	; Set flag that inline message is currently visible
-	LD	A,1
-	LD	(SHOWING_FNF_MSG),A
-
-	; Resume input loop without blanking filename in text box
-	CALL	RESUME_FILENAME_INPUT
-	JP	C,CHECK_PAGING_OR_CANCEL
-
-	; Check if user edited input to a FAT specification (U: or U<unit>:)
-	CALL	CHECK_FAT_INPUT_OPEN
-	JP	C,SHOW_INLINE_OPEN_ERROR
-	JP	NZ,HANDLE_OPEN_FAT_DISPATCH
-
-	; Check if user edited input to a drive specification (e.g. "B:")
-	CALL	CHECK_DRIVE_SWITCH
-	JP	C,HANDLE_OPEN_DRIVE_SWITCH
-
-	; Check if user edited input to a filter pattern (e.g. "*.TXT")
-	CALL	CHECK_FILTER_PATTERN
-	JP	C,HANDLE_OPEN_FILTER
-
-	; If currently browsing a FAT volume, handle relative navigation/open
-	LD	A,(CURRENT_DIR_IS_FAT)
-	OR	A
-	JP	NZ,HANDLE_OPEN_FAT_RELATIVE
-
-	JP	DO_PARSE_AND_LOAD
+	CALL	SHOW_POPUP_FILE_NOT_FOUND
+	JP	RENDER_OPEN_PAGE
 
 CHECK_PAGING_OR_CANCEL:
 	; A = return code: 0 = Cancel (ESC), 1 = Next Page (PgDn), 3 = Prev Page (PgUp)
@@ -15294,9 +15392,8 @@ DO_PARSE_AND_LOAD_PLUGIN:
 
 OPEN_PLUGIN_FAIL:
 	CALL	RESTORE_DOC_USER
-	LD	DE,STR_FNF_INLINE
-	LD	C,16			; length of message
-	JP	SHOW_INLINE_OPEN_ERROR
+	CALL	SHOW_POPUP_FILE_NOT_FOUND
+	JP	RENDER_OPEN_PAGE
 
 ;------------------------------------------------------------------------------
 ; Block Insert File UI & Execution Subsystem
@@ -16057,62 +16154,10 @@ CHECK_FILE_TRUNCATED_POPUP:
 ; Waits for any key, then restores screen and status bar.
 ;------------------------------------------------------------------------------
 SHOW_FILE_TRUNCATED_POPUP:
-	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
-	LD	A,(ACTIVE_COLS)
-	SUB	50
-	SRL	A
-	INC	A
-	LD	(POPUP_COL),A
-
-	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
-	LD	A,(ACTIVE_ROWS)
-	SUB	7
-	SRL	A
-	INC	A
-	LD	(POPUP_ROW),A
-
-	; 3. Hide cursor while drawing popup
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-
-	; 4. Render 7-line Pop-Up Box
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_POPUP_TRUNC_TITLE
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_TRUNC_MSG1
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_TRUNC_MSG2
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_TRUNC_KEY
-	CALL	PRINT_STR
-
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
-
-	; 5. Wait for any key
-	CALL	GET_KEY
-	CP	KEY_ESC
-	CALL	Z,DRAIN_ESC_SEQUENCE
-
-	; 6. Redraw editor screen and status bar
-	CALL	RENDER_SCREEN
-	CALL	RENDER_STATUS_BAR
-	RET
+	LD	HL,STR_POPUP_TRUNC_MSG1
+	LD	BC,STR_POPUP_TRUNC_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
 
 
 DO_SAVE_FILE_UI_IMPL:
@@ -16215,7 +16260,10 @@ RENDER_SAVE_PAGE:
 
 	; Check if user typed a FAT specification (U: or U<unit>:)
 	CALL	CHECK_FAT_INPUT_SAVE
-	JP	C,SHOW_INLINE_SAVE_ERROR
+	JR	NC,CFIS_DISPATCH_CHECK
+	CALL	SHOW_POPUP_FAT_NO_PLUGIN
+	JP	RENDER_SAVE_PAGE
+CFIS_DISPATCH_CHECK:
 	JP	NZ,HANDLE_SAVE_FAT_DISPATCH
 
 	; Check if user typed a drive specification (e.g. "A:")
@@ -16245,15 +16293,14 @@ DO_PARSE_AND_SAVE:
 	; Check if target drive is unavailable RAM drive
 	LD	A,(WORK_FCB)
 	CALL	CHECK_TARGET_DRIVE_UNAVAILABLE
-	JR	C,SAVE_RAMDRV_UNAVAILABLE
+	JP	C,SAVE_RAMDRV_UNAVAILABLE
 
 	; Check if file already exists on disk
 	CALL	CHECK_FILE_EXISTS
 	JR	NC,DO_ACTUAL_SAVE	; Does not exist -> save directly
 
-	; File already exists! Prompt warning
-	LD	DE,STR_OVERWRITE_WARN
-	CALL	PRINT_STR
+	; File already exists! Render Tier 2 centered modal warning popup
+	CALL	DRAW_OVERWRITE_POPUP
 
 OVERWRITE_KEY_LOOP:
 	CALL	GET_KEY
@@ -16262,8 +16309,55 @@ OVERWRITE_KEY_LOOP:
 	CP	'Y'
 	JR	Z,DO_OVERWRITE_CONFIRMED
 
-	; Any other key cancels overwrite: restore original WORK_FCB
-	CALL	PUTC			; Echo typed char
+	CP	'n'
+	JR	Z,DO_OVERWRITE_CANCELLED
+	CP	'N'
+	JR	Z,DO_OVERWRITE_CANCELLED
+
+	CP	KEY_ESC
+	JR	Z,OVERWRITE_CHECK_ESC
+
+	JR	OVERWRITE_KEY_LOOP
+
+OVERWRITE_CHECK_ESC:
+	LD	BC,ESC_TIMEOUT_LOOPS
+OW_WAIT_ESC:
+	CALL	CHECK_KEY_READY
+	JR	NZ,OW_DRAIN_ESC
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,OW_WAIT_ESC
+	; Standalone ESC key: cancel
+	JR	DO_OVERWRITE_CANCELLED
+
+OW_DRAIN_ESC:
+	CALL	GET_KEY			; Consume '[' or 'O'
+OW_DRAIN_MORE:
+	LD	BC,500
+OW_DRAIN_WAIT:
+	CALL	CHECK_KEY_READY
+	JR	NZ,OW_DRAIN_BYTE
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,OW_DRAIN_WAIT
+	; Sequence drained: reposition cursor and resume key loop
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,40
+	LD	L,A
+	CALL	LOCATE_RC
+	JR	OVERWRITE_KEY_LOOP
+
+OW_DRAIN_BYTE:
+	CALL	GET_KEY
+	JR	OW_DRAIN_MORE
+
+DO_OVERWRITE_CANCELLED:
+	; Restore original WORK_FCB
 	LD	HL,DIR_TEMP_FCB
 	LD	DE,WORK_FCB
 	LD	BC,36
@@ -16277,7 +16371,6 @@ OVERWRITE_KEY_LOOP:
 	RET
 
 DO_OVERWRITE_CONFIRMED:
-	CALL	PUTC			; Echo 'y'
 
 DO_ACTUAL_SAVE:
 	LD	A,(IS_BLOCK_SAVE_UI)
@@ -16307,6 +16400,68 @@ DO_ACTUAL_BLOCK_SAVE:
 	LD	(WORK_FCB_USER),A
 	RET
 
+;------------------------------------------------------------------------------
+; DRAW_OVERWRITE_POPUP:
+; Render centered 50x7 modal query pop-up warning of file overwrite.
+;------------------------------------------------------------------------------
+DRAW_OVERWRITE_POPUP:
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
+
+	; 3. Render 7-line Pop-Up Box
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_OVERWRITE_POPUP_TITLE
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_OVERWRITE_POPUP_MSG1
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_OVERWRITE_POPUP_MSG2
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_SAVE_KEYS
+	CALL	PRINT_STR
+
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	PRINT_STR
+
+	; Position cursor inside popup on prompt line after "Overwrite? "
+	; Row = POPUP_START_ROW + 4, Col = POPUP_COL + 40
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,40
+	LD	L,A
+	CALL	LOCATE_RC
+	LD	DE,STR_SHOW_CURSOR
+	CALL	PRINT_STR
+	RET
+
 SAVE_RAMDRV_UNAVAILABLE:
 	; Restore previous WORK_FCB from DIR_TEMP_FCB
 	LD	HL,DIR_TEMP_FCB
@@ -16315,60 +16470,8 @@ SAVE_RAMDRV_UNAVAILABLE:
 	LDIR
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
-
-	; Display inline "  RAM drive not available"
-	LD	DE,STR_RAMDRV_UNAVAIL_INLINE
-	LD	A,25
-
-SHOW_INLINE_SAVE_ERROR:
-	LD	(INLINE_MSG_LEN),A
-
-	; Move cursor past ']' box before printing error message
-	LD	A,(INPUT_BUF_LEN)
-	LD	B,A
-	LD	A,21
-	SUB	B
-	JR	Z,SRU_FWD_DONE
-	LD	B,A			; B = 21 - INPUT_BUF_LEN
-SRU_FWD_LOOP:
-	PUSH	BC
-	PUSH	DE
-	LD	DE,STR_CSI_C		; ESC [ C
-	CALL	PRINT_STR
-	POP	DE
-	POP	BC
-	DJNZ	SRU_FWD_LOOP
-SRU_FWD_DONE:
-
-	CALL	PRINT_STR
-
-	; Set flag that inline message is currently visible
-	LD	A,1
-	LD	(SHOWING_FNF_MSG),A
-
-	; Resume input loop without blanking filename in text box
-	CALL	RESUME_FILENAME_INPUT
-	JP	C,CHECK_SAVE_PAGING_OR_CANCEL
-
-	; Check if user typed a FAT specification (U: or U<unit>:)
-	CALL	CHECK_FAT_INPUT_SAVE
-	JP	C,SHOW_INLINE_SAVE_ERROR
-	JP	NZ,HANDLE_SAVE_FAT_DISPATCH
-
-	; Check if user edited input to a drive specification (e.g. "B:")
-	CALL	CHECK_DRIVE_SWITCH
-	JR	C,HANDLE_SAVE_DRIVE_SWITCH
-
-	; Check if user edited input to a filter pattern (e.g. "*.TXT")
-	CALL	CHECK_FILTER_PATTERN
-	JP	C,HANDLE_SAVE_FILTER
-
-	; If currently browsing a FAT volume, handle relative navigation/save
-	LD	A,(CURRENT_DIR_IS_FAT)
-	OR	A
-	JP	NZ,HANDLE_SAVE_FAT_RELATIVE
-
-	JP	DO_PARSE_AND_SAVE
+	CALL	SHOW_POPUP_RAMDRV_UNAVAIL
+	JP	RENDER_SAVE_PAGE
 
 HANDLE_SAVE_DRIVE_SWITCH:
 	; A = new drive (1..16 or 0), C = new user (0..15 or 0xFF)
@@ -18993,61 +19096,6 @@ IMCTE_LOOP:
 ; Preserves AF and BC
 ;------------------------------------------------------------------------------
 CHECK_CLEAR_FNF:
-	PUSH	AF
-	PUSH	BC
-	PUSH	DE
-	PUSH	HL
-	LD	A,(SHOWING_FNF_MSG)
-	OR	A
-	JR	Z,CLEAR_FNF_DONE
-
-	XOR	A
-	LD	(SHOWING_FNF_MSG),A
-
-	; Erase inline message: B backspaces, B spaces, B backspaces
-	LD	A,(INLINE_MSG_LEN)
-	LD	B,A
-ERASE_FNF_BS1:
-	LD	A,008H
-	CALL	PUTC
-	DJNZ	ERASE_FNF_BS1
-
-	LD	A,(INLINE_MSG_LEN)
-	LD	B,A
-ERASE_FNF_SP:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	ERASE_FNF_SP
-
-	LD	A,(INLINE_MSG_LEN)
-	LD	B,A
-ERASE_FNF_BS2:
-	LD	A,008H
-	CALL	PUTC
-	DJNZ	ERASE_FNF_BS2
-
-	; Reset INLINE_MSG_LEN to default 16
-	LD	A,16
-	LD	(INLINE_MSG_LEN),A
-
-	; Move cursor from after ']' box back inside to INPUT_BUF_LEN:
-	; Emit (21 - INPUT_BUF_LEN) backspaces
-	LD	A,(INPUT_BUF_LEN)
-	LD	B,A
-	LD	A,21
-	SUB	B
-	JR	Z,CLEAR_FNF_DONE
-	LD	B,A
-ERASE_FNF_RET_BOX:
-	LD	A,008H
-	CALL	PUTC
-	DJNZ	ERASE_FNF_RET_BOX
-
-CLEAR_FNF_DONE:
-	POP	HL
-	POP	DE
-	POP	BC
-	POP	AF
 	RET
 
 INPUT_CANCEL:
@@ -21117,8 +21165,7 @@ DPS_DISMISS:
 	RET
 
 DPS_MISSING:
-	LD	DE,STR_MSG_NEED_PLUGIN_MGR
-	CALL	HOST_SET_STATUS_MSG
+	CALL	SHOW_POPUP_NEED_PLUGIN_MGR
 	RET
 
 SAVE_EDITOR_PLUGIN_STATE:
@@ -21254,15 +21301,7 @@ DCPP_DISMISS:
 	RET
 
 DCPP_MISSING:
-	LD	DE,STR_MSG_NEED_PLUGIN_MGR
-	CALL	HOST_SET_STATUS_MSG
-	LD	A,(IN_EDITOR_MODE)
-	OR	A
-	JR	NZ,DCPM_ED
-	CALL	REDRAW_BASE_SCREEN
-	RET
-DCPM_ED:
-	CALL	RENDER_STATUS_BAR
+	CALL	SHOW_POPUP_NEED_PLUGIN_MGR
 	RET
 
 
@@ -21616,7 +21655,6 @@ ENSURE_VFS_PLUGIN_LOADED:
 ; Inspects INPUT_FILENAME_BUF in Open dialog.
 ; Returns:
 ;   Carry = 1: FAT path detected, but FATFS.PRL is NOT loaded.
-;              DE = STR_FAT_NO_PLUGIN_INLINE, C = 28.
 ;   Carry = 0, NZ: FAT path detected, and FATFS.PRL IS loaded!
 ;   Carry = 0, Z:  Not a FAT path.
 ;------------------------------------------------------------------------------
@@ -21643,8 +21681,6 @@ CFIO_NOT_FAT:
 	RET
 
 CFIO_NO_PLUGIN:
-	LD	DE,STR_FAT_NO_PLUGIN_INLINE
-	LD	C,28			; Message length
 	SCF				; Carry = 1
 	RET
 
@@ -21653,7 +21689,6 @@ CFIO_NO_PLUGIN:
 ; Inspects INPUT_FILENAME_BUF in Save dialog.
 ; Returns:
 ;   Carry = 1: FAT path detected, but FATFS.PRL is NOT loaded.
-;              DE = STR_FAT_NO_PLUGIN_INLINE, A = 28.
 ;   Carry = 0, NZ: FAT path detected, and FATFS.PRL IS loaded!
 ;   Carry = 0, Z:  Not a FAT path.
 ;------------------------------------------------------------------------------
@@ -21676,8 +21711,6 @@ CFIS_NOT_FAT:
 	RET
 
 CFIS_NO_PLUGIN:
-	LD	DE,STR_FAT_NO_PLUGIN_INLINE
-	LD	A,28			; Message length
 	SCF				; Carry = 1
 	RET
 
@@ -21939,10 +21972,8 @@ HOFF_DO_LOAD:
 	JP	MAIN_LOOP
 
 HOFF_LOAD_FAIL:
-	; File not found / disk error: show inline "  File not found"
-	LD	DE,STR_FNF_INLINE
-	LD	C,16
-	JP	SHOW_INLINE_OPEN_ERROR
+	CALL	SHOW_POPUP_FILE_NOT_FOUND
+	JP	RENDER_OPEN_PAGE
 
 ;------------------------------------------------------------------------------
 ; HANDLE_SAVE_FAT_DISPATCH:
@@ -22092,9 +22123,8 @@ HSFF_DO_SAVE:
 	RET
 
 HSFF_SAVE_FAIL:
-	LD	DE,STR_FNF_INLINE
-	LD	C,16
-	JP	SHOW_INLINE_SAVE_ERROR
+	CALL	SHOW_POPUP_FILE_NOT_FOUND
+	JP	RENDER_SAVE_PAGE
 
 ;------------------------------------------------------------------------------
 ; CHECK_AND_HANDLE_FAT_NAV:
@@ -23042,7 +23072,7 @@ STR_POPUP_SAVE_MSG1:
 STR_POPUP_SAVE_MSG2:
 	DB	"|                 Save changes?                  |", 0
 STR_POPUP_SAVE_KEYS:
-	DB	"|          [Y]es / [N]o / [ESC]=Cancel           |", 0
+	DB	"|        [Y]es      [N]o      [ESC]=Cancel        |", 0
 
 ; File Truncated Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_TRUNC_TITLE:
@@ -23057,28 +23087,72 @@ STR_POPUP_TRUNC_KEY:
 ; Find Modal Pop-up Strings (50 cols x 7 rows)
 STR_FIND_POPUP_TITLE:
 	DB	"|                   Find Text                    |", 0
-STR_FIND_POPUP_PROMPT_EXACT:
-	DB	"| Find (Exact):  [", 0
-STR_FIND_POPUP_PROMPT_INSENS:
-	DB	"| Find (Insens): [", 0
-STR_FIND_POPUP_BOX_CLOSE:
-	DB	"] |", 0
 STR_FIND_POPUP_MODE_EXACT:
-	DB	"| Match:   [Case Sensitive  ]                    |", 0
+	DB	"|           Match: [Case Sensitive  ]            |", 0
 STR_FIND_POPUP_MODE_INSENS:
-	DB	"| Match:   [Case Insensitive]                    |", 0
+	DB	"|           Match: [Case Insensitive]            |", 0
+STR_FIND_POPUP_PROMPT:
+	DB	"|     Find: [", 0
+STR_FIND_POPUP_BOX_CLOSE:
+	DB	"]      |", 0
 STR_FIND_POPUP_KEYS:
-	DB	"| Enter:Find       Tab:Toggle Case    ESC:Cancel |", 0
+	DB	"| [Enter]=Find  [Tab]=Toggle Case  [ESC]=Cancel  |", 0
 
 ; Replace Modal Pop-up Strings (50 cols x 7 rows)
 STR_REPLACE_POPUP_TITLE:
 	DB	"|                  Replace Text                  |", 0
 STR_REPLACE_POPUP_PROMPT:
-	DB	"| Replace with:  [", 0
+	DB	"|  Replace with: [", 0
+STR_REPLACE_POPUP_BOX_CLOSE:
+	DB	"] |", 0
 STR_REPLACE_POPUP_MSG:
 	DB	"| Enter replacement text to substitute for match |", 0
 STR_REPLACE_POPUP_KEYS:
-	DB	"| Enter:Confirm                       ESC:Cancel |", 0
+	DB	"|        [Enter]=Confirm     [ESC]=Cancel        |", 0
+
+; Replace Confirmation Modal Pop-up Strings (50 cols x 7 rows)
+STR_REP_CONFIRM_TITLE:
+	DB	"|              Replace Confirmation              |", 0
+STR_REP_CONFIRM_MSG1:
+	DB	"|     Match found for search pattern in text     |", 0
+STR_REP_CONFIRM_MSG2:
+	DB	"|            Replace this occurrence?            |", 0
+STR_REP_CONFIRM_KEYS:
+	DB	"| [Y]es [N]o [A]ll [Q]uit [R]everse [ESC]=Cancel |", 0
+
+; Pattern Not Found Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_NOT_FOUND_TITLE:
+	DB	"|               Pattern Not Found                |", 0
+STR_POPUP_NOT_FOUND_MSG1:
+	DB	"|              Pattern not found.                |", 0
+STR_POPUP_NOT_FOUND_MSG2:
+	DB	"|       Search pattern not found in file.        |", 0
+
+; Search Completed Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_SEARCH_COMP_TITLE:
+	DB	"|                Search Completed                |", 0
+STR_POPUP_SEARCH_COMP_MSG1:
+	DB	"|               Search completed.                |", 0
+STR_POPUP_SEARCH_COMP_MSG2:
+	DB	"|          No further occurrences found.         |", 0
+
+; Line Too Long Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_TOO_LONG_TITLE:
+	DB	"|                 Line Too Long                  |", 0
+STR_POPUP_TOO_LONG_MSG1:
+	DB	"|          Line > 120 chars - skipped.           |", 0
+STR_POPUP_TOO_LONG_MSG2:
+	DB	"|      Line length limit exceeded on replace.    |", 0
+
+; Replace Done Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_REP_DONE_TITLE:
+	DB	"|                  Replace Done                  |", 0
+STR_POPUP_REP_DONE_MSG1:
+	DB	"|         Search and replace completed.          |", 0
+STR_REP_DONE_TXT_PFX:
+	DB	"Replace done: "
+STR_REP_DONE_TXT_SFX:
+	DB	" replacement(s)."
 
 ; Goto Line Modal Pop-up Strings (50 cols x 7 rows)
 STR_GOTO_POPUP_TITLE:
@@ -23091,10 +23165,64 @@ STR_GOTO_POPUP_MSG:
 	DB	"|          Enter line number to jump to          |", 0
 STR_GOTO_POPUP_KEYS:
 	DB	"|       [Enter]=Goto Line     [ESC]=Cancel       |", 0
+
+; Overwrite Modal Pop-up Strings (50 cols x 7 rows)
+STR_OVERWRITE_POPUP_TITLE:
+	DB	"|                 Overwrite File                 |", 0
+STR_OVERWRITE_POPUP_MSG1:
+	DB	"|       Existing file contents will be lost      |", 0
+STR_OVERWRITE_POPUP_MSG2:
+	DB	"|        File already exists. Overwrite?         |", 0
 STR_DEF_PLUGIN_MGR:	DB	"PLUGIN.PRL", 0
-STR_MSG_NEED_PLUGIN_MGR: DB	"Feature requires PLUGIN.PRL", "$"
 STR_NAME_BEAUTIFY:	DB	"BEAUTIFY", 0
-STR_MSG_PLUG_MISSING:	DB	"[Plugin Missing]$", 0
+
+; Plugin Manager Missing Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_NEED_PLUG_TITLE:
+	DB	"|             Plugin Manager Missing             |", 0
+STR_POPUP_NEED_PLUG_MSG1:
+	DB	"|          Feature requires PLUGIN.PRL.          |", 0
+STR_POPUP_NEED_PLUG_MSG2:
+	DB	"|        Unable to load plugin subsystem.        |", 0
+
+; Plugin Missing Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_PLUG_MISS_TITLE:
+	DB	"|                 Plugin Missing                 |", 0
+STR_POPUP_PLUG_MISS_MSG1:
+	DB	"|         Required plugin was not found.         |", 0
+STR_POPUP_PLUG_MISS_MSG2:
+	DB	"|      Unable to execute requested command.      |", 0
+
+; Help Missing Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_HELP_MISS_TITLE:
+	DB	"|                  Help Missing                  |", 0
+STR_POPUP_HELP_MISS_MSG1:
+	DB	"|             HELP.OVL was not found.            |", 0
+STR_POPUP_HELP_MISS_MSG2:
+	DB	"|       Unable to load online help screen.       |", 0
+
+; File Not Found Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_FNF_TITLE:
+	DB	"|                 File Not Found                 |", 0
+STR_POPUP_FNF_MSG1:
+	DB	"|               File was not found.              |", 0
+STR_POPUP_FNF_MSG2:
+	DB	"|        Specified file not found on disk.       |", 0
+
+; RAM Drive Unavailable Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_RAMDRV_TITLE:
+	DB	"|              RAM Drive Unavailable             |", 0
+STR_POPUP_RAMDRV_MSG1:
+	DB	"|      RAM drive is not currently available.     |", 0
+STR_POPUP_RAMDRV_MSG2:
+	DB	"|   Select a valid disk drive (e.g. A: or B:).   |", 0
+
+; FAT Subsystem Missing Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_FAT_MISS_TITLE:
+	DB	"|              FAT Subsystem Missing             |", 0
+STR_POPUP_FAT_MISS_MSG1:
+	DB	"|           Feature requires FATFS.PRL.          |", 0
+STR_POPUP_FAT_MISS_MSG2:
+	DB	"|      FAT filesystem plugin is not loaded.      |", 0
 
 ;------------------------------------------------------------------------------
 ; String Constants & Data
@@ -23123,19 +23251,19 @@ STR_SPLASH_TITLE_PAD:	DB	"           ", "$"
 STR_SPLASH_TITLE:	DB	"SE - Screen Editor", 13, 10, "$"
 
 STR_SPLASH_CMDS:
-	DB	"  type   e  or  <Enter>   to edit",13,10
-	DB	"  type   n                to new file",13,10
-	DB	"  type   o                to open file",13,10
-	DB	"  type   s                to save file",13,10
-	DB	"  type   w  or  ^W        to close file",13,10
-	DB	"  type   l  or  ^L        to goto line",13,10
-	DB	"  type   a                for about",13,10
-	DB	"  type   m                for memory info",13,10
-	DB	"  type   p                for plugins",13,10
-	DB	"  type   c                to configure",13,10
-	DB	"  type   1                set 120x40",13,10
-	DB	"  type   2                set 80x24",13,10
-	DB	"  type   q  or  ^Q        to exit",13,10
+	DB	"  type   [E]  or  [Enter]  to edit",13,10
+	DB	"  type   [N]              to new file",13,10
+	DB	"  type   [O]              to open file",13,10
+	DB	"  type   [S]              to save file",13,10
+	DB	"  type   [W]  or  [^W]    to close file",13,10
+	DB	"  type   [L]  or  [^L]    to goto line",13,10
+	DB	"  type   [A]              for about",13,10
+	DB	"  type   [M]              for memory info",13,10
+	DB	"  type   [P]              for plugins",13,10
+	DB	"  type   [C]              to configure",13,10
+	DB	"  type   [1]              set 120x40",13,10
+	DB	"  type   [2]              set 80x24",13,10
+	DB	"  type   [Q]  or  [^Q]    to exit",13,10
 	DB	0
 
 STR_SPLASH_CUR_MODE:	DB	"Active Screen: [$"
@@ -23157,8 +23285,7 @@ STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
 STR_MODE_80X24_LBL:	DB	"80x24 (Classic Terminal)]          ",13,10,"$"
 
-STR_CONFIG_TITLE_PAD:	DB	"             ", "$"
-STR_CONFIG_TITLE:	DB	"SE - Screen Editor Configuration",13,10,"$"
+STR_CONFIG_TITLE:	DB	"SE - Screen Editor Configuration", "$"
 
 STR_CONFIG_STATUS_LBL:	DB	"Config Status      : [", "$"
 
@@ -23191,16 +23318,9 @@ STR_CFG_STAT_SAVED:	DB	"Saved to local drive ($"
 STR_CFG_STAT_END:	DB	":SE.CFG)]          ",13,10,"$"
 STR_CFG_STAT_ERR:	DB	"ERROR writing SE.CFG]              ",13,10,"$"
 
-STR_CMD_HEADER:		DB	"Commands:                                                   ",13,10,"$"
-STR_CMD_1:		DB	"  type   1                toggle 80x24 <-> 120x40           ",13,10,"$"
-STR_CMD_2:		DB	"  type   2                toggle RAM drive memory blocks    ",13,10,"$"
-STR_CMD_3:		DB	"  type   3                toggle Max lines (16K <-> 32K)    ",13,10,"$"
-STR_CMD_4:		DB	"  type   4                toggle Tab width (4 <-> 8)        ",13,10,"$"
-STR_CMD_5:
-	DB	"  type   5                "
-	DB	"toggle Plugin Mgr (Auto/Demand/Dis)",13,10,"$"
-STR_CMD_S:		DB	"  type   s                save config to local SE.CFG       ",13,10,"$"
-STR_CMD_Q:		DB	"  type   q  or  <ESC>     return to splash screen           ",13,10,"$"
+STR_CONFIG_FOOTER:
+	DB	"[1-5]=Toggle Option   [S]=Save Config   "
+	DB	"[Q]/[ESC]=return to splash screen", "$"
 
 STR_CFG_HDR:		DB	"# SE.CFG - Screen Editor Configuration",13,10,0
 STR_KEY_SCREEN_NAME:	DB	"SCREEN",0
@@ -23236,7 +23356,7 @@ STR_ABOUT_VERSION:	DB	"version 0.9.8 (2026-09-25)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
 STR_ABOUT_AI:		DB	"Google Antigravity 2.16.0 & Gemini FLASH 3.8 high", "$"
 STR_ABOUT_LICENSE:	DB	"Open source software under the MIT License", "$"
-STR_ABOUT_RETURN:	DB	"Press any key to return to splash...", "$"
+STR_ABOUT_RETURN:	DB	"Press any key to return to splash", "$"
 
 ;------------------------------------------------------------------------------
 ; Memory Information Screen Strings
@@ -23252,9 +23372,9 @@ STR_MEM_TABLE_HDR:
 STR_MEM_TABLE_DIV:
 	DB	"----  ----   ----   ---------------------   ----------------------------",13,10,"$"
 STR_MEM_PROMPT_PAD:
-	DB	"              ","$"		; 14 spaces to center within 72 columns
+	DB	"                ","$"		; 16 spaces to center within 72 columns
 STR_MEM_RETURN_PROMPT:
-	DB	"Press any key to return to splash screen...",13,10,"$"
+	DB	"Press any key to return to splash screen",13,10,"$"
 
 STR_MEM_SUM_PREFIX:	DB	"HBIOS: ","$"
 STR_MEM_SUM_NONE:	DB	"None","$"
@@ -23335,7 +23455,7 @@ STR_TRUNC_SAVE_BLOCKED:
 	DB	"~  Saving has been blocked to protect the unread portion of the ",13,10
 	DB	"~  file from being overwritten and permanently lost on disk.    ",13,10
 	DB	"~",13,10
-	DB	"~  Press any key to return to the editor...                     ",13,10
+	DB	"~  Press any key to return to the editor                        ",13,10
 	DB	"~  =============================================================",13,10,"$"
 
 STR_STATUS_FREE:	DB	"Free: ","$"
@@ -23402,7 +23522,6 @@ STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
 STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 
-STR_OVERWRITE_WARN:	DB	13,10,"~  File already exists. Overwrite? (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o): ","$"
 
 STR_SAVE_CANCELLED:	DB	13,10,"~  Save cancelled.",13,10,"$"
 
@@ -23411,18 +23530,6 @@ STR_TILDE_CRLF:		DB	"~",13,10,"$"
 
 STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
 STR_FILE_NOT_FOUND_SUFFIX:	DB	" file not found",13,10,"$"
-
-STR_CSI_C:		DB	27,"[C","$"
-STR_FNF_INLINE:		DB	"  File not found","$"
-STR_RAMDRV_UNAVAIL_INLINE:	DB	"  RAM drive not available","$"
-STR_FAT_NO_PLUGIN_INLINE:	DB	"  feature requires FATFS.PRL","$"
-STR_REPLACE_CONFIRM:	DB	"Replace (",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/",27,"[4m","A",27,"[24m","ll/",27,"[4m","Q",27,"[24m","uit/",27,"[4m","R",27,"[24m","everse)? ","$"
-STR_SAVE_CHANGES_PROMPT:DB	"Save changes? ",27,"[4m","Y",27,"[24m","es/",27,"[4m","N",27,"[24m","o/ESC:","$"
-STR_PATTERN_NOT_FOUND:	DB	" Pattern not found. ","$"
-STR_SEARCH_COMPLETED:	DB	" Search completed. ","$"
-STR_REPLACE_DONE_PFX:	DB	" Replace done: ","$"
-STR_REPLACE_DONE_SFX:	DB	" replacement(s). ","$"
-STR_LINE_TOO_LONG:	DB	" Line > 120 chars - skipped. ","$"
 
 ;------------------------------------------------------------------------------
 ; Variables & Stack Area
@@ -23504,7 +23611,8 @@ LOAD_PROGRESS_LINES:	DW	0		; Lines read counter for loading status bar
 SAVED_HAS_FILE_ARG:	DB	0		; Saved HAS_FILE_ARG during block insert
 INSERT_LINE_HAD_CHARS:	DB	0		; 1 if current line of inserted file had chars
 IS_EXIT_PROMPT:		DB	0		; 1 if currently in Save Changes Exit Prompt
-IS_REPLACE_PROMPT:	DB	0		; 1 if currently in Search & Replace prompt
+REPLACE_ACTIVE:		DB	0		; 1 during active Search & Replace loop
+REPLACE_DONE_POPUP_MSG2: DS	51		; 50-col Msg2 buffer for Replace Done popup
 INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0		; Streaming insert current line length
 INSERT_NEW_CUR_COL:	DW	0		; Cursor column position after insert
@@ -23667,7 +23775,6 @@ DIR_FILTER_ACTIVE:	DB	0		; 0 = *.* (all files), 1 = custom filter active
 CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
 CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
-SCS_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
 SPLASH_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on splash screen
 MEM_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on memory screen
 ABOUT_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on about screen

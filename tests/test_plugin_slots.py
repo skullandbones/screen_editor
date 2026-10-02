@@ -233,7 +233,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"a")
-        ok, out_run_mp = read_until(master, b"[Press any key to return]",
+        ok, out_run_mp = read_until(master, b"Press any key to return",
                                     timeout=8.0)
         if not ok or b"MIDPLUG 8KB Reference Plugin" not in out_run_mp:
             print(f"[-] MIDPLUG modal dialog failed to execute. "
@@ -251,9 +251,14 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\r")
-        ok, out_pop = read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        ok, out_pop = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         assert ok, "Unload modal popup prompt missing"
+        assert b"Unload Slot 3?" in out_pop, "Unload modal popup prompt missing"
         assert b"Unload Plugin" in out_pop, "Unload modal popup title missing"
+        assert b"Unloading plugin frees Far RAM slot" in out_pop, \
+            "Unload modal popup description missing"
+        assert b"[Y]es" in out_pop and b"[ESC]=Cancel" in out_pop, \
+            "Unload modal popup keys missing"
         border_line = b"+------------------------------------------------+"
         assert border_line in out_pop, "Unload modal popup border missing"
         os.write(master, b"y")
@@ -284,7 +289,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"a")
-        ok, out_run_hp = read_until(master, b"[Press any key to return]",
+        ok, out_run_hp = read_until(master, b"Press any key to return",
                                     timeout=8.0)
         if not ok or b"HALFPLUG 16KB Reference Plugin" not in out_run_hp:
             print(f"[-] HALFPLUG modal dialog failed to execute. "
@@ -302,7 +307,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"3")
-        read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        read_until(master, b"Unload Slot 3?", timeout=4.0)
         os.write(master, b"y")
         ok, out_u3 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
@@ -331,7 +336,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"a")
-        ok, out_run_bp = read_until(master, b"[Press any key to return]",
+        ok, out_run_bp = read_until(master, b"Press any key to return",
                                     timeout=8.0)
         if not ok or b"BIGPLUG 32KB Reference Plugin" not in out_run_bp:
             print(f"[-] BIGPLUG modal dialog failed to execute. "
@@ -349,7 +354,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\r")
-        read_until(master, b"Unload Slot 3? [Y/N]", timeout=4.0)
+        read_until(master, b"Unload Slot 3?", timeout=4.0)
         os.write(master, b"y")
         ok, out_u4 = read_until(master, b"(empty slot)", timeout=6.0)
         if not ok:
@@ -363,7 +368,7 @@ def run_slots_test():
         time.sleep(0.2)
         os.write(master, b"q")
         ok, out_splash = read_until(master,
-                                    b"type   e  or  <Enter>   to edit",
+                                    b"type   [E]  or  [Enter]  to edit",
                                     timeout=5.0)
         if not ok:
             print(f"[-] Exit to splash screen failed. "

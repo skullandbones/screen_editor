@@ -219,7 +219,7 @@ RENDER_HELP_FOOTER:
 	LD	A,'~'
 	CALL	API_PUTC
 	LD	A,(HELP_COLS)
-	SUB	36			; Length of STR_HELP_RETURN_PROMPT without CRLF
+	SUB	33			; Length of STR_HELP_RETURN_PROMPT without CRLF
 	SRL	A
 	DEC	A
 	LD	B,A
@@ -324,7 +324,7 @@ STR_HELP_BODY:
 	DB	"~    Ctrl+X           Move solidified block   "
 	DB	"ESC             Clear block",13,10,"$"
 
-STR_HELP_RETURN_PROMPT:	DB	"Press any key to return to editor...",13,10,"$"
+STR_HELP_RETURN_PROMPT:	DB	"Press any key to return to editor",13,10,"$"
 
 HELP_COLS:		DB	80
 HELP_ROWS:		DB	24
