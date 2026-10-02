@@ -146,6 +146,22 @@ upcoming milestones for SE.COM.
   > *"All text is centre justified."* Screen content and tabular command lists
   > shall maintain strict vertical column alignment across items.
 
+### 2.13 Configure & Plugin Screens Top-Aligned with Big Space Before Footer
+- [ ] Restore horizontal and vertical centering for Configuration and Plugin
+  Manager screens.
+  - Currently, `SHOW_CONFIG_SCREEN` (`src/se.asm:2308`) and
+    `RENDER_PLUGIN_SCREEN` (`plugins/plugin.asm:565`) top-align the title and
+    settings/slots (Rows 1..9 in Config, Rows 1..14 in Plugin Manager), followed
+    by a large gap of blank tilde lines in the middle, with the footer pinned
+    to the bottom (`ACTIVE_ROWS - 1`).
+  - Screen content and commands must be centered horizontally and vertically
+    between the top margin and status bar, with symmetrical top and bottom
+    margin padding rows, rather than top-aligning content with a large gap
+    before the bottom footer.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.1):
+  > *"Screen content shall be centered horizontally and vertically including
+  > file open, close, etc. screens."*
+
 ---
 
 ## 3. RAM Headroom & Memory Optimization
