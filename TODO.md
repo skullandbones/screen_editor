@@ -16,7 +16,7 @@ upcoming milestones for SE.COM.
 ## 2. BUGS
 
 ### 2.1 Memory Screen Misreports Loaded Plugin Banks as Free / Unallocated
-- [ ] The memory screen erroneously shows "Free / Unallocated" when a plugin
+- [x] The memory screen erroneously shows "Free / Unallocated" when a plugin
   has been loaded. Update bank role and usage detection in the memory info
   screen ('m') to indicate that the memory bank is being used for plugins.
 
