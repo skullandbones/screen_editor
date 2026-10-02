@@ -21,7 +21,7 @@ upcoming milestones for SE.COM.
   screen ('m') to indicate that the memory bank is being used for plugins.
 
 ### 2.2 System Hangs When Loading Large Files with 32K Available RAM
-- [ ] When only 32K of RAM is available (reported on the status line), loading
+- [x] When only 32K of RAM is available (reported on the status line), loading
   of large files hangs the system.
 
 ### 2.3 Status Events Displayed on Status Bar Instead of Tier 2 Modal Pop-ups

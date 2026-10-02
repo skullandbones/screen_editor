@@ -7955,6 +7955,9 @@ FPFS_DONE_SUCCESS:
 ; Preserves: None
 ;------------------------------------------------------------------------------
 SELECT_VICTIM_BANK:
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,SVB_FAIL
 	LD	C,1			; C = candidate bank index (1 .. EXT_BANK_COUNT-1)
 	LD	B,1			; B = best victim bank index
 	LD	D,0			; D = max distance found so far
@@ -7981,12 +7984,21 @@ SVB_NOT_MAX:
 SVB_DONE:
 	RET
 
+SVB_FAIL:
+	LD	B,0
+	RET
+
 ;------------------------------------------------------------------------------
 ; HANDLE_PAGE_FAULT: Evict victim bank if dirty, fetch target page into victim bank
 ; Input: SWAP_PAGE_TEMP = target page number
 ; Returns: B = allocated victim bank index (1..11), Carry = 0 on success, Carry = 1 on error
 ;------------------------------------------------------------------------------
 HANDLE_PAGE_FAULT:
+	; Paging requires at least 2 Far RAM banks (Bank 0 is pinned)
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,HPF_FAIL
+
 	; Check if swap file is active
 	LD	A,(SWAP_ACTIVE)
 	OR	A
@@ -8056,6 +8068,10 @@ HPF_UPDATE_TBL:
 	OR	A			; Carry = 0 (success)
 	RET
 
+HPF_FAIL:
+	SCF				; Carry = 1 (paging unavailable)
+	RET
+
 ;------------------------------------------------------------------------------
 ; ENSURE_PAGE_RESIDENT: Ensure 32KB page A is resident in Far RAM banks
 ; Input: A = 8-bit Page Number (0..255)
@@ -8082,6 +8098,11 @@ ENSURE_PAGE_RESIDENT:
 	RET
 
 EPR_NOT_PAGE_0:
+	; Guard: Non-zero pages require at least 2 Far RAM banks
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,EPR_FAULT_ERR
+
 	; Scan BANK_PAGE_TABLE[1..EXT_BANK_COUNT-1] for Page (SWAP_PAGE_TEMP)
 	LD	B,1			; Bank index 1..EXT_BANK_COUNT-1
 	LD	HL,BANK_PAGE_TABLE+1
@@ -8222,6 +8243,7 @@ WRITE_FAR_SLOT:
 	; Ensure Page B is resident in Far RAM and marked dirty
 	LD	A,B
 	CALL	ENSURE_PAGE_RESIDENT_DIRTY
+	JR	C,WFS_ERR
 	LD	(FAR_DEST_BANK),A
 
 	; far_offset = C * 128 = (C << 7)
@@ -8258,6 +8280,14 @@ WRITE_FAR_SLOT:
 	POP	HL
 	POP	DE
 	POP	BC
+	OR	A			; Carry = 0
+	RET
+
+WFS_ERR:
+	POP	HL
+	POP	DE
+	POP	BC
+	SCF				; Carry = 1
 	RET
 
 ;------------------------------------------------------------------------------
@@ -8276,6 +8306,7 @@ READ_FAR_SLOT:
 	; Ensure Page B is resident in Far RAM
 	LD	A,B
 	CALL	ENSURE_PAGE_RESIDENT
+	JR	C,RFS_ERR
 	LD	(FAR_SRC_BANK),A
 
 	; far_offset = C * 128
@@ -8312,6 +8343,14 @@ READ_FAR_SLOT:
 	POP	HL
 	POP	DE
 	POP	BC
+	OR	A			; Carry = 0
+	RET
+
+RFS_ERR:
+	POP	HL
+	POP	DE
+	POP	BC
+	SCF				; Carry = 1
 	RET
 
 
@@ -8749,6 +8788,7 @@ WRITE_SLOT_NEXT_TERM:
 	; Ensure Page B is resident and marked dirty
 	LD	A,B
 	CALL	ENSURE_PAGE_RESIDENT_DIRTY
+	JR	C,WSNT_ERR
 	LD	D,A			; D = Far RAM Bank ID
 	LD	A,(CPM_USER_BANK)
 	LD	E,A			; Src Bank = CPM_USER_BANK
@@ -8787,6 +8827,15 @@ WRITE_SLOT_NEXT_TERM:
 	POP	DE
 	POP	BC
 	POP	AF
+	OR	A			; Carry = 0
+	RET
+
+WSNT_ERR:
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	SCF				; Carry = 1
 	RET
 
 ;------------------------------------------------------------------------------
@@ -8818,6 +8867,7 @@ ALLOC_SLOT:
 	LD	B,H
 	LD	C,L
 	CALL	WRITE_SLOT_NEXT_TERM	; Ensure allocated slot has 0xFFFF next ptr
+	JR	C,ALLOC_FAIL
 	POP	BC
 	POP	DE
 	OR	A			; Carry = 0 (success)
@@ -8825,7 +8875,17 @@ ALLOC_SLOT:
 
 ALLOC_FRESH_SLOT:
 	LD	HL,(NEXT_FRESH_SLOT)
+	; Check if Far RAM banks are constrained (< 2 banks)
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	NC,AFS_MULTI_BANK
+	; When EXT_BANK_COUNT < 2, slots are limited to Bank 0 (max 256 slots)
+	LD	D,A
+	LD	E,0
+	JR	AFS_CHECK_LIMIT
+AFS_MULTI_BANK:
 	LD	DE,MAX_VIRTUAL_SLOTS
+AFS_CHECK_LIMIT:
 	LD	A,H
 	CP	D
 	JR	C,ALLOC_FRESH_OK
@@ -8842,6 +8902,7 @@ ALLOC_FRESH_OK:
 	LD	B,H
 	LD	C,L
 	CALL	WRITE_SLOT_NEXT_TERM	; Ensure fresh slot has 0xFFFF next ptr
+	JR	C,ALLOC_FAIL
 	POP	BC
 	POP	DE
 	OR	A			; Carry = 0 (success)
