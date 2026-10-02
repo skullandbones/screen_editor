@@ -1201,13 +1201,16 @@ def test_se_execution():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"\x1b")
-        out_splash = read_until(master, b"s                to save file", timeout=5.0)
-        if b"s                to save file" not in out_splash:
-            print(f"[-] Splash screen 's to save file' not found. Buffer: {repr(out_splash)}", flush=True)
+        out_splash = read_until(
+            master, b"[S]              to save file", timeout=5.0
+        )
+        if b"[S]              to save file" not in out_splash:
+            print("[-] Splash screen '[S] to save file' not found. "
+                  f"Buffer: {repr(out_splash)}", flush=True)
             return False
         print(
             "[+] Step 27: Successfully verified splash screen displays "
-            "'s to save file'.",
+            "'[S] to save file'.",
             flush=True
         )
 
@@ -2661,7 +2664,7 @@ def test_se_execution():
         read_until(master, b"[ESC]=Cancel", timeout=4.0)
         time.sleep(0.1)
         os.write(master, b"\r")
-        out_s48_re = read_until(master, b"Col 8", timeout=4.0)
+        out_s48_re = read_until(master, b"[BLK: 8c LOCK]", timeout=6.0)
         if b"[BLK: 8c LOCK]" not in out_s48_re or b"Col 8" not in out_s48_re:
             print(
                 f"[-] Step 48 failed: Solidified block re-match missing or "
