@@ -135,6 +135,17 @@ upcoming milestones for SE.COM.
   > the screen (hidden) and the parent pop-up is redrawn when the child pop-up
   > no longer exists (child pop-up no longer shown)."*
 
+### 2.12 Misalignment of Splash Screen Menu (First Item Extra Space)
+- [ ] Align the first splash screen command line with subsequent menu items.
+  - In `src/se.asm:23143` (`STR_SPLASH_CMDS`), the first entry
+    `"  type   [E]  or  [Enter]  to edit"` contains one extra space
+    (18 characters for `"[E]  or  [Enter]  "`) compared to the 17-character
+    target column used by all other menu entries (`"[N]              to ..."`),
+    causing `"to edit"` to be indented by one extra column.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 4.3):
+  > *"All text is centre justified."* Screen content and tabular command lists
+  > shall maintain strict vertical column alignment across items.
+
 ---
 
 ## 3. RAM Headroom & Memory Optimization
