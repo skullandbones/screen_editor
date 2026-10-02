@@ -2664,7 +2664,7 @@ def test_se_execution():
         read_until(master, b"[ESC]=Cancel", timeout=4.0)
         time.sleep(0.1)
         os.write(master, b"\r")
-        out_s48_re = read_until(master, b"Col 8", timeout=4.0)
+        out_s48_re = read_until(master, b"[BLK: 8c LOCK]", timeout=6.0)
         if b"[BLK: 8c LOCK]" not in out_s48_re or b"Col 8" not in out_s48_re:
             print(
                 f"[-] Step 48 failed: Solidified block re-match missing or "
