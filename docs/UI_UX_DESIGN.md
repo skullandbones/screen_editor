@@ -20,9 +20,12 @@ codebase must adhere strictly to these principles.
 2. **Universal Status Bar Presence**:
    - **All screens shall show the status bar.** Regardless of whether the
      active interface is the splash screen, editor workspace, plugin manager,
-     configuration screen, or directory browser, the status bar remains
-     anchored on the bottom row (`HOST_ROWS`: Row 24 for 80x24 geometry,
-     Row 40 for 120x40 geometry) to guarantee constant system state context.
+     configuration screen, directory browser, or pop-up only screens, the
+     status bar remains anchored on the bottom row (`HOST_ROWS`: Row 24 for
+     80x24 geometry, Row 40 for 120x40 geometry) to guarantee constant system
+     state context.
+   - **All screens including pop-up only screens shall have the status bar
+     present.**
    - **On non-document screens, the status bar indicates the last status of
      the editing screen.**
    - **The status bar no longer shows status events.** Pop-ups are now used
@@ -32,6 +35,8 @@ codebase must adhere strictly to these principles.
      on unallocated body and margin rows.
    - **Tildes in column 0 are used on all screens without exception**
      (including file open, save, and block screens).
+   - **All screens including pop-up only screens shall have tildes in
+     column 0.**
    - Header rows, the status bar, and Tier 2 boxed modal pop-ups do not use
      column 0 tildes.
 4. **Dedicated Surfaces & Centered Pop-ups**:
@@ -254,13 +259,15 @@ Brackets (`[ ]`) convey structured parameters and triggers across SE.COM:
      - Editor Workspace (all empty rows below the end of document).
      - File open and save screens (Open File UI, Save File UI, Block Insert UI,
        Block Save UI, and directory browser margin rows).
+     - Pop-up only screens (background margin rows).
      - Plugin Manager workspace padding rows.
      - Configuration Screen padding rows.
      - About, Memory, and Help screen padding rows.
    - **Applicability Boundaries**:
      - Column 0 tildes apply strictly to unallocated body and margin rows of
-       Tier 1 screens; they do NOT apply to Row 1 header rows, the bottom
-       status bar (`HOST_ROWS`), or Tier 2 centered boxed modal pop-ups.
+       Tier 1 screens and backgrounds of pop-up only screens; they do NOT
+       apply to Row 1 header rows, the bottom status bar (`HOST_ROWS`), or
+       the interior of Tier 2 centered boxed modal pop-ups.
 
 ---
 
