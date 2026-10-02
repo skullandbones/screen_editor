@@ -111,10 +111,15 @@ def boot_cpm(emu_bin, rom_file, img_file):
     return proc, master
 
 def remove_cfg_from_image(cpmrm_bin, img_file):
-    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:RAMDRV.IMG"],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG", "0:se.cfg"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    subprocess.run(
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file,
+         "0:RAMDRV.IMG", "0:ramdrv.img"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
 
 def put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, content_str):
     remove_cfg_from_image(cpmrm_bin, img_file)
@@ -179,9 +184,11 @@ def run_tests():
         assert b"3. Max Doc Lines   : [16K (16,384 Lines)]" in out, "Default max lines not 16K"
         assert b"4. Tab Width       : [8 Spaces (Default)]" in out, "Default tab width not 8 Spaces"
         assert b"Config Status      : [Default (No SE.CFG found)]" in out, "Config Screen wrong status"
-        assert b"type   2                toggle RAM drive memory blocks" in out, "Missing toggle command 2"
-        assert b"type   3                toggle Max lines (16K <-> 32K)" in out, "Missing toggle command 3"
-        assert b"type   4                toggle Tab width (4 <-> 8)" in out, "Missing toggle command 4"
+        assert b"[1-5]=Toggle Option" in out, "Missing toggle command in footer"
+        assert b"[S]=Save Config" in out, "Missing save command in footer"
+        assert b"return to splash screen" in out, (
+            "Missing return to splash in footer"
+        )
         print("    [+] Config screen displays 120x40, Protected RAM drive, and Default status")
 
         # Exit to splash screen ('q')

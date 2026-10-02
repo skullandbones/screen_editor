@@ -129,7 +129,7 @@ def boot_cpm(emu_bin, rom_file, img_file):
 
 def remove_cfg_from_image(cpmrm_bin, img_file):
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG", "0:se.cfg"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
 
@@ -240,8 +240,8 @@ def run_tests():
         assert b"5. Plugin Manager  : [Disabled (Do Not Load)]" in out, (
             f"Config screen missing Disabled (Do Not Load): {out}"
         )
-        assert b"type   5                toggle Plugin Mgr" in out, (
-            "Config screen missing Option 5 command description"
+        assert b"[1-5]=Toggle Option" in out, (
+            "Config screen missing Option toggle in footer"
         )
         print(
             "    [+] Config screen displays 5. Plugin Manager : [Disabled]"

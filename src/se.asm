@@ -2254,9 +2254,7 @@ ABOUT_BOTTOM_DONE:
 ;   3. Max Doc Lines
 ;   4. Tab Width
 ;   5. Plugin Manager
-; Total menu lines: 18
 ;------------------------------------------------------------------------------
-CONFIG_MENU_LINES	EQU	18
 
 ;------------------------------------------------------------------------------
 ; PRINT_CONFIG_PREFIX: Print '~' followed by geometry-dependent left padding
@@ -2303,32 +2301,9 @@ SHOW_CONFIG_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	PRINT_STR
 
-	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - CONFIG_MENU_LINES) / 2
-	LD	A,(ACTIVE_ROWS)
-	DEC	A			; Text rows available
-	SUB	CONFIG_MENU_LINES
-	JR	Z,SCS_NO_TOP_PAD
-	JR	C,SCS_NO_TOP_PAD
-	SRL	A
-	JR	Z,SCS_NO_TOP_PAD
-	LD	(SCS_TOP_PAD_COUNT),A
-	LD	B,A
-SCS_TOP_PAD_LOOP:
-	CALL	PRINT_CONFIG_BLANK_LINE
-	DJNZ	SCS_TOP_PAD_LOOP
-	JR	SCS_MENU_START
-
-SCS_NO_TOP_PAD:
-	XOR	A
-	LD	(SCS_TOP_PAD_COUNT),A
-
-SCS_MENU_START:
-	; Row 1: Title (centered within 58-char block with 13 spaces)
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CONFIG_TITLE_PAD
-	CALL	PRINT_STR
+	; Row 1: Header (centered title)
 	LD	DE,STR_CONFIG_TITLE
-	CALL	PRINT_STR
+	CALL	PRINT_ABOUT_LINE
 
 	; Row 2: Blank line
 	CALL	PRINT_CONFIG_BLANK_LINE
@@ -2495,74 +2470,42 @@ SCS_PLUG_CHECK_MODE:
 	; Disabled by configuration
 	LD	DE,STR_PLUG_DIS_LBL
 	CALL	PRINT_STR
-	JR	SCS_CMDS_BLOCK
+	JR	SCS_MARGIN_START
 
 SCS_PLUG_ONDEMAND:
 	LD	DE,STR_PLUG_ONDEMAND_LBL
 	CALL	PRINT_STR
-	JR	SCS_CMDS_BLOCK
+	JR	SCS_MARGIN_START
 
 SCS_PLUG_NO_FAR:
 	LD	DE,STR_PLUG_NO_FAR_LBL
 	CALL	PRINT_STR
-	JR	SCS_CMDS_BLOCK
+	JR	SCS_MARGIN_START
 
 SCS_PLUG_AUTOLOAD:
 	LD	DE,STR_PLUG_AUTO_LBL
 	CALL	PRINT_STR
 
-SCS_CMDS_BLOCK:
-	; Blank line
-	CALL	PRINT_CONFIG_BLANK_LINE
-
-	; Commands
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_HEADER
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_1
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_2
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_3
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_4
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_5
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_S
-	CALL	PRINT_STR
-
-	CALL	PRINT_CONFIG_PREFIX
-	LD	DE,STR_CMD_Q
-	CALL	PRINT_STR
-
-	; Calculate bottom padding: (ACTIVE_ROWS - 1) - (SCS_TOP_PAD_COUNT + CONFIG_MENU_LINES)
-	LD	A,(SCS_TOP_PAD_COUNT)
-	ADD	A,CONFIG_MENU_LINES
-	LD	B,A
+SCS_MARGIN_START:
+	; Pad remaining rows down to ACTIVE_ROWS - 2 with blank tilde lines
+	; Rows 1..9 are header and body (9 rows)
+	; Footer is on row ACTIVE_ROWS - 1, Status bar on row ACTIVE_ROWS
+	; Number of margin rows = (ACTIVE_ROWS - 2) - 9 = ACTIVE_ROWS - 11
 	LD	A,(ACTIVE_ROWS)
-	DEC	A
-	SUB	B
-	JR	Z,CONFIG_TILDE_DONE
-	JR	C,CONFIG_TILDE_DONE
+	SUB	11
+	JR	Z,SCS_FOOTER
+	JR	C,SCS_FOOTER
 	LD	B,A
-CONFIG_TILDE_LOOP:
+SCS_MARGIN_LOOP:
 	CALL	PRINT_CONFIG_BLANK_LINE
-	DJNZ	CONFIG_TILDE_LOOP
+	DJNZ	SCS_MARGIN_LOOP
 
-CONFIG_TILDE_DONE:
+SCS_FOOTER:
+	; Row ACTIVE_ROWS - 1: Footer command summary line
+	LD	DE,STR_CONFIG_FOOTER
+	CALL	PRINT_ABOUT_LINE
+
+	; Row ACTIVE_ROWS: Status bar
 	CALL	RENDER_STATUS_BAR
 	LD	DE,STR_HOME
 	CALL	PRINT_STR
@@ -23342,8 +23285,7 @@ STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
 STR_MODE_80X24_LBL:	DB	"80x24 (Classic Terminal)]          ",13,10,"$"
 
-STR_CONFIG_TITLE_PAD:	DB	"             ", "$"
-STR_CONFIG_TITLE:	DB	"SE - Screen Editor Configuration",13,10,"$"
+STR_CONFIG_TITLE:	DB	"SE - Screen Editor Configuration", "$"
 
 STR_CONFIG_STATUS_LBL:	DB	"Config Status      : [", "$"
 
@@ -23376,16 +23318,9 @@ STR_CFG_STAT_SAVED:	DB	"Saved to local drive ($"
 STR_CFG_STAT_END:	DB	":SE.CFG)]          ",13,10,"$"
 STR_CFG_STAT_ERR:	DB	"ERROR writing SE.CFG]              ",13,10,"$"
 
-STR_CMD_HEADER:		DB	"Commands:                                                   ",13,10,"$"
-STR_CMD_1:		DB	"  type   1                toggle 80x24 <-> 120x40           ",13,10,"$"
-STR_CMD_2:		DB	"  type   2                toggle RAM drive memory blocks    ",13,10,"$"
-STR_CMD_3:		DB	"  type   3                toggle Max lines (16K <-> 32K)    ",13,10,"$"
-STR_CMD_4:		DB	"  type   4                toggle Tab width (4 <-> 8)        ",13,10,"$"
-STR_CMD_5:
-	DB	"  type   5                "
-	DB	"toggle Plugin Mgr (Auto/Demand/Dis)",13,10,"$"
-STR_CMD_S:		DB	"  type   s                save config to local SE.CFG       ",13,10,"$"
-STR_CMD_Q:		DB	"  type   q  or  <ESC>     return to splash screen           ",13,10,"$"
+STR_CONFIG_FOOTER:
+	DB	"[1-5]=Toggle Option   [S]=Save Config   "
+	DB	"[Q]/[ESC]=return to splash screen", "$"
 
 STR_CFG_HDR:		DB	"# SE.CFG - Screen Editor Configuration",13,10,0
 STR_KEY_SCREEN_NAME:	DB	"SCREEN",0
@@ -23840,7 +23775,6 @@ DIR_FILTER_ACTIVE:	DB	0		; 0 = *.* (all files), 1 = custom filter active
 CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
 CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
 CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
-SCS_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
 SPLASH_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on splash screen
 MEM_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on memory screen
 ABOUT_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on about screen
