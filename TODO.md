@@ -8,7 +8,7 @@ upcoming milestones for SE.COM.
 ## 1. AGENTS.md Enhancements
 
 ### 1.1 Prohibit "python -c" in AGENTS.md
-- [ ] Enhancement: Be explicit that "python -c" shall not be used and instead
+- [x] Enhancement: Be explicit that "python -c" shall not be used and instead
   construct and run python scripts.
 
 ---
