@@ -167,7 +167,7 @@ upcoming milestones for SE.COM.
   - Retain a lightweight 128-byte trampoline in `SE.COM`.
 
 ### 3.6 Deduplicate Strings & ANSI Sequences (+0.5 KB to +1.0 KB) [PRIORITY]
-- [ ] **[PRIORITY]** Centralize repeated terminal escape sequences
+- [x] **[PRIORITY]** Centralize repeated terminal escape sequences
   (`\x1b[7m`, `\x1b[0m`, `\x1b[K`, cursor addressing) into shared helper
   routines.
 
