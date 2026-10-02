@@ -233,7 +233,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"a")
-        ok, out_run_mp = read_until(master, b"[Press any key to return]",
+        ok, out_run_mp = read_until(master, b"Press any key to return",
                                     timeout=8.0)
         if not ok or b"MIDPLUG 8KB Reference Plugin" not in out_run_mp:
             print(f"[-] MIDPLUG modal dialog failed to execute. "
@@ -289,7 +289,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"a")
-        ok, out_run_hp = read_until(master, b"[Press any key to return]",
+        ok, out_run_hp = read_until(master, b"Press any key to return",
                                     timeout=8.0)
         if not ok or b"HALFPLUG 16KB Reference Plugin" not in out_run_hp:
             print(f"[-] HALFPLUG modal dialog failed to execute. "
@@ -336,7 +336,7 @@ def run_slots_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"a")
-        ok, out_run_bp = read_until(master, b"[Press any key to return]",
+        ok, out_run_bp = read_until(master, b"Press any key to return",
                                     timeout=8.0)
         if not ok or b"BIGPLUG 32KB Reference Plugin" not in out_run_bp:
             print(f"[-] BIGPLUG modal dialog failed to execute. "

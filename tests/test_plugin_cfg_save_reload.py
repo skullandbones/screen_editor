@@ -216,7 +216,7 @@ def run_test():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"s")
-        ok, out_s = read_until(master, b"[Press any key to continue]",
+        ok, out_s = read_until(master, b"Press any key to continue",
                                timeout=6.0)
         assert ok, f"Save pop-up not displayed. Buffer: {repr(out_s)}"
         assert b"Save Plugin Configuration" in out_s, \

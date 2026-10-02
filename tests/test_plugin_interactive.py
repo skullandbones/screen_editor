@@ -255,7 +255,7 @@ def main():
         # Test Action 1: Embedded About Screen on Slot 0 (WORDCNT)
         time.sleep(0.3)
         os.write(master, b"a")
-        ok, out = read_until(master, b"[Press any key to return]", timeout=6.0)
+        ok, out = read_until(master, b"Press any key to return", timeout=6.0)
         if not ok or b"Word & Character Count Plugin" not in out:
             print(f"[-] WORDCNT About screen failed to display. Out: {repr(out)}")
             return 1
@@ -276,7 +276,7 @@ def main():
         read_until(master, b">[1]", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"a")
-        ok, out = read_until(master, b"[Press any key to return]", timeout=6.0)
+        ok, out = read_until(master, b"Press any key to return", timeout=6.0)
         if not ok or b"ROT13 Text Cipher Plugin" not in out:
             print(f"[-] ROT13 About screen failed to display. Out: {repr(out)}")
             return 1
@@ -294,7 +294,7 @@ def main():
         read_until(master, b">[2]", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"a")
-        ok, out = read_until(master, b"[Press any key to return]", timeout=6.0)
+        ok, out = read_until(master, b"Press any key to return", timeout=6.0)
         if not ok or b"Z80 Code Beautifier Plugin" not in out:
             print(f"[-] BEAUTIFY About screen failed to display. Out: {repr(out)}")
             return 1

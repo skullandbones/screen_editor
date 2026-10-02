@@ -1699,7 +1699,7 @@ STR_BTA_L6:		DB	"| Engine : Z80 Tokenizer & Lexer     |", 0
 STR_BTA_L7:		DB	"| Feat   : Column Alignment          |", 0
 STR_BTA_L8:		DB	"|        : Mnemonic/Register Casing  |", 0
 STR_BTA_L9:		DB	"|        : Block or Full Document    |", 0
-STR_BTA_L11:		DB	"|     [Press any key to return]      |", 0
+STR_BTA_L11:		DB	"|      Press any key to return       |", 0
 
 ; Configuration Dialog Table
 BEAUTIFY_CFG_TABLE:

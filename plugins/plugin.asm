@@ -1672,7 +1672,7 @@ STR_ABT_LINE1:	DB	"|   SE.COM Far RAM Plugin Manager (PLUGIN.PRL)   |", 0
 STR_ABT_LINE2:	DB	"| Version: v1.0.0 (2026-09-25)                   |", 0
 STR_ABT_LINE3:	DB	"| Mode   : 16KB Far RAM Modular Plugin (PRL)    |", 0
 STR_ABT_LINE4:	DB	"| Role   : Dynamic Slot Management & Pop-up UI   |", 0
-STR_ABT_LINE5:	DB	"|           [Press any key to return]            |", 0
+STR_ABT_LINE5:	DB	"|            Press any key to return             |", 0
 
 ;==============================================================================
 ; Modal Pop-up: Save Plugin Configuration Confirmation
@@ -2138,7 +2138,7 @@ STR_SAVE_CFG_TITLE:	DB	"|           Save Plugin Configuration            |", 0
 STR_SAVE_CFG_BLANK:	DB	"|                                                |", 0
 STR_SAVE_CFG_OK:	DB	"|             [Saved to PLUGIN.CFG]              |", 0
 STR_SAVE_CFG_FAIL:	DB	"|           [Error saving PLUGIN.CFG]            |", 0
-STR_SAVE_CFG_KEY:	DB	"|           [Press any key to continue]          |", 0
+STR_SAVE_CFG_KEY:	DB	"|           Press any key to continue            |", 0
 STR_UNLOAD_TITLE:	DB	"|                 Unload Plugin                  |", 0
 STR_UNLOAD_DESC:	DB	"|      Unloading plugin frees Far RAM slot       |", 0
 STR_UNLOAD_PROMPT_PRE:	DB	"|                 Unload Slot ", 0
