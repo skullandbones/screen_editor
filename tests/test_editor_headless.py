@@ -5729,12 +5729,14 @@ def test_se_execution():
         time.sleep(0.3)
         os.write(master, b"\x1b")
         read_until(master, b"to configure", timeout=10.0)
+        drain_all(master)
         print("    [+] ESC cancelled Open dialog back to splash screen.")
 
         # 4. Enter editor mode with 'e' and test Save File screen
         time.sleep(0.3)
         os.write(master, b"e")
-        read_until(master, b"Free:", timeout=10.0)
+        read_until(master, b"^K: Editor keys", timeout=10.0)
+        drain_all(master)
 
         # Open Save dialog with Ctrl+S
         time.sleep(0.3)
