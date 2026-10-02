@@ -4406,9 +4406,9 @@ def test_se_execution():
         # Subtest 1: File Save progress on 300-line file (BIG300.TXT)
         time.sleep(0.5)
         os.write(master, b"se BIG300.TXT\r")
-        out_s68_load = read_until(master, b"^K: Editor keys", timeout=35.0)
+        out_s68_load = read_until(master, b"1/300", timeout=35.0)
         drain_all(master)
-        if b"^K: Editor keys" not in out_s68_load:
+        if b"1/300" not in out_s68_load:
             print(
                 f"[-] Step 68 failed: Failed to open BIG300.TXT: "
                 f"{repr(out_s68_load[-200:])}",
@@ -4431,15 +4431,16 @@ def test_se_execution():
 
         if b"\x1b[?25l" not in out_s68_save:
             print(
-                "[-] Step 68 failed: Cursor hide escape sequence not found "
-                "during save.",
+                f"[-] Step 68 failed: Cursor hide escape sequence not found "
+                f"during save. Buffer: {repr(out_s68_save)}",
                 flush=True
             )
             return False
-        if b"Saving..." not in out_s68_save:
+        if (b"Saving File" not in out_s68_save and
+                b"Saving..." not in out_s68_save):
             print(
-                f"[-] Step 68 failed: 'Saving...' not found in status bar "
-                f"during save: {repr(out_s68_save[:400])}",
+                f"[-] Step 68 failed: 'Saving File' not found in progress "
+                f"modal during save: {repr(out_s68_save[:400])}",
                 flush=True
             )
             return False
@@ -4492,9 +4493,10 @@ def test_se_execution():
         out_s68_bsave = read_until(master, b"LOCK]", timeout=30.0)
         out_s68_bsave += drain_all(master)
 
-        if b"Saving..." not in out_s68_bsave:
+        if (b"Saving File" not in out_s68_bsave and
+                b"Saving..." not in out_s68_bsave):
             print(
-                f"[-] Step 68 failed: 'Saving...' not found during block "
+                f"[-] Step 68 failed: 'Saving File' not found during block "
                 f"save: {repr(out_s68_bsave[:400])}",
                 flush=True
             )
@@ -4557,9 +4559,10 @@ def test_se_execution():
         out_s68_exit = read_until(master, b"C>", timeout=35.0)
         out_s68_exit += drain_all(master)
 
-        if b"Saving..." not in out_s68_exit:
+        if (b"Saving File" not in out_s68_exit and
+                b"Saving..." not in out_s68_exit):
             print(
-                f"[-] Step 68 failed: 'Saving...' not found during exit "
+                f"[-] Step 68 failed: 'Saving File' not found during exit "
                 f"save: {repr(out_s68_exit[:400])}",
                 flush=True
             )

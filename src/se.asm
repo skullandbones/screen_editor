@@ -14960,14 +14960,17 @@ UPDATE_LOAD_PROGRESS:
 	PUSH	DE
 	PUSH	HL
 
-	; Locate cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL + 25)
+	; Locate cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL + 20)
 	LD	A,(POPUP_START_ROW)
 	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
-	ADD	A,25
+	ADD	A,20
 	LD	L,A
 	CALL	LOCATE_RC
+
+	LD	DE,STR_PROGRESS_LINE_LBL
+	CALL	PRINT_STR
 
 	; Print line number right-justified in 5 chars
 	LD	HL,(LOAD_PROGRESS_LINES)
@@ -23027,6 +23030,8 @@ STR_POPUP_SAVE_DESC:
 	DB	"|            Writing file to storage             |", 0
 
 ; Progress Modal Common Strings (50 cols x 7 rows)
+STR_PROGRESS_LINE_LBL:
+	DB	"Line ", 0
 STR_POPUP_PROGRESS_LINE:
 	DB	"|                   Line      0                  |", 0
 STR_POPUP_PROGRESS_SUB:
