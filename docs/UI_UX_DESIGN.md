@@ -39,9 +39,11 @@ codebase must adhere strictly to these principles.
      column 0.**
    - Header rows, the status bar, and Tier 2 boxed modal pop-ups do not use
      column 0 tildes.
-4. **Dedicated Surfaces & Centered Pop-ups**:
+4. **Dedicated Surfaces & Centered Content**:
    - Complex interactive tasks belong in dedicated Full-Screen Workspaces
      (Tier 1) or Centered Boxed Modal Pop-ups (Tier 2).
+   - **Screen content shall be centered horizontally and vertically
+     including file open, close, etc. screens.**
    - **All pop-ups shall be shown in the centre of the screen both
      horizontally and vertically.**
    - **Query pop-up format shall have a title line box, the pop-up body
@@ -99,6 +101,12 @@ Never blur the boundaries between these tiers.
     - Paging/Cursor: Selection indicator (e.g. `>[0]` or inverted cursor bar).
     - Footer (`HOST_ROWS - 1`: Row 23 on 80x24; Row 39 on 120x40): Dynamic,
       context-dependent command summary line.
+    - Status Bar: Anchored on the bottom row (`HOST_ROWS`: Row 24 on 80x24;
+      Row 40 on 120x40), indicating the last status of the editing screen.
+  - **Centered Form & File Screens** (Open, Close, Save, Block Screens):
+    - Body: Screen content shall be centered horizontally and vertically
+      between the header and status bar, padded with column 0 tildes (`~`)
+      on margin rows.
     - Status Bar: Anchored on the bottom row (`HOST_ROWS`: Row 24 on 80x24;
       Row 40 on 120x40), indicating the last status of the editing screen.
 
