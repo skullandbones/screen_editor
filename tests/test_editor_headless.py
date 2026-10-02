@@ -5436,8 +5436,10 @@ def test_se_execution():
 
         # Launch editor with 30.TXT
         os.write(master, b"se 30.TXT\r")
-        out_s73_ed = read_until(master, b"^K: Editor keys", timeout=30.0)
-        if b"^K: Editor keys" not in out_s73_ed:
+        out_s73_ed = read_until(master, b"1/30", timeout=30.0)
+        drain_all(master)
+        time.sleep(0.3)
+        if b"1/30" not in out_s73_ed:
             print("[-] Step 73 failed to load 30.TXT into editor.",
                   flush=True)
             return False
@@ -5542,8 +5544,10 @@ def test_se_execution():
         # Press Enter to open C0:30.TXT.
         time.sleep(0.1)
         os.write(master, b"\r")
-        out_s73_opened = read_until(master, b"^K: Editor keys", timeout=25.0)
-        if b"^K: Editor keys" not in out_s73_opened:
+        out_s73_opened = read_until(master, b"1/30", timeout=25.0)
+        drain_all(master)
+        time.sleep(0.3)
+        if b"1/30" not in out_s73_opened:
             print("[-] Step 73 failed: Open C0:30.TXT did not complete.",
                   flush=True)
             return False
