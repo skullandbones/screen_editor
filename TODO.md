@@ -24,6 +24,117 @@ upcoming milestones for SE.COM.
 - [ ] When only 32K of RAM is available (reported on the status line), loading
   of large files hangs the system.
 
+### 2.3 Status Events Displayed on Status Bar Instead of Tier 2 Modal Pop-ups
+- [ ] Refactor status event notifications to use Tier 2 centered modal
+  pop-ups instead of writing directly to the bottom status bar row.
+  - Remove `STATUS_OOM_FLAG` text ("* Out of memory *") from status bar
+    (`src/se.asm:5756, 5949`); replace with centered Tier 2 status pop-up.
+  - Remove `IS_LOADING_FILE` and `IS_SAVING_FILE` progress messages from status
+    bar (`src/se.asm:5735, 5739, 5954, 5959`).
+  - Deprecate `PLUGIN_STATUS_MSG_PTR` and `TRAMP_SET_STATUS_MSG` status bar
+    squatting (`src/se.asm:5751, 23996`); plugins (`plugins/rot13.asm:104`,
+    `plugins/beautify.asm:177`) must use Tier 2 status pop-ups.
+  - Fix `plugins/plugin.asm:399, 525, 551` which directly prints `[No About]`,
+    `[No Config]`, and `[All Slots Full]` to the status bar.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.2, 2.2, 7.1):
+  > *"The status bar no longer shows status events. Pop-ups are now used for
+  > all status events."*
+
+### 2.4 Status Bar Overwrites Last Editing Screen State on Non-Document Screens
+- [ ] Preserve and display the last known document editing status (filename,
+  geometry, format, cursor position) on the status bar when rendering
+  non-document screens.
+  - Fix `SHOW_STATUS_SPLASH_MEM` (`src/se.asm:5743, 5964`) which replaces the
+    document status line with free memory information when `IS_SPLASH_SCREEN`
+    is set (on Splash, About, Config, Mem Info, and Open/Save screens).
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.2, 2.1, 2.3):
+  > *"On non-document screens, the status bar indicates the last status of the
+  > editing screen."*
+
+### 2.5 Missing Centering on Open, Save, and Block Screens
+- [ ] Center screen content dynamically between header (Row 1) and status bar
+  (`HOST_ROWS`), with top and bottom margin rows padded with column 0 tildes.
+  - `DO_OPEN_FILE_UI` (`src/se.asm:15165`), `DO_SAVE_FILE_UI_IMPL`
+    (`src/se.asm:16242`), and Block screens are top-aligned at Row 1-3 with all
+    tildes appended at the bottom in `FINISH_UI_PAGE_AND_STATUS` (line 18551).
+  - Add top margin tildes and calculate dynamic vertical starting row.
+  - Dynamically center directory table columns horizontally for `HOST_COLS`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.1):
+  > *"Screen content shall be centered horizontally and vertically including
+  > file open, close, etc. screens."*
+
+### 2.6 Angle Bracket Hotkey Syntax (`<ESC>=Cancel`) in File/Directory Screens
+- [ ] Replace prohibited angle bracket `< >` notation with canonical `[ ]`
+  bracket notation on file open, save, and block screens.
+  - In `src/se.asm:23523` (`STR_ESC_CANCEL`), change `<ESC>=Cancel` to
+    `[ESC]=Cancel`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.6, 4.1):
+  > *"Variable parameters, slot indexes, list selectors, and action hotkeys
+  > shall be expressed inside [ ] pairs (e.g. [Y]es   [N]o   [ESC]=Cancel)."*
+
+### 2.7 Option Delimiters (`/`) in Context Pop-up Prompts
+- [ ] Remove slash delimiters (`/`) from selection hotkey options in
+  pop-ups and command bars; separate choices with whitespace.
+  - In `plugins/plugin.asm:2090` (`STR_POPUP_PROMPT_MATCH`), replace
+    `[Up]/[Down]=Select` with `[Up]   [Down]=Select`.
+  - In `plugins/plugin.asm:2108` (`STR_PLUG_CMDS_PRE`), replace
+    `[Up]/[Down]=Select` with `[Up]   [Down]=Select`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.6, 4.3, 7.4):
+  > *"Pop-up decision options shall not have any delimiters such as / and |
+  > and instead should have sufficient spaces to separate the options nicely."*
+
+### 2.8 Non-ESC Cancellation (`[Q]uit`) in Interactive Replace Confirmation
+- [ ] Remove `[Q]uit` from interactive replace confirmation pop-up so `ESC`
+  is the exclusive cancellation trigger.
+  - In `src/se.asm:23121` (`STR_REP_CONFIRM_KEYS`), update prompt from
+    `| [Y]es [N]o [A]ll [Q]uit [R]everse [ESC]=Cancel |` to space-separated
+    options omitting `[Q]uit`.
+  - Update `src/se.asm:12130` key handling to cancel solely on `ESC`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.7, 3, 7.5):
+  > *"If a pop-up needs user input such as yes or no, then only ESC can cancel
+  > the pop-up (no use of Ctrl-C or q key)."*
+
+### 2.9 Column 0 Tilde Discipline Violations on Header Rows in Help Plugin
+- [ ] Remove column 0 tildes (`~`) from header rule and title rows in
+  `plugins/help.asm`.
+  - In `plugins/help.asm:168, 203`, `PRINT_HR_EQUAL` (Row 1) and
+    `RENDER_HELP_TITLE` (Row 2) emit `'~'` in column 0. Row 1 header rows must
+    not have column 0 tildes.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.3, 5.2, 7.6):
+  > *"Header rows, the status bar, and Tier 2 boxed modal pop-ups do not use
+  > column 0 tildes."*
+
+### 2.10 Non-Standard Dismissals & Left-Justified Text in Plugin Pop-ups
+- [ ] Standardize dismissal prompts and centre-justify all content lines across
+  plugin about and information dialogs.
+  - Replace `"Press any key to return"` with `"Press any key to continue"`
+    or `"Press any key"` in `plugins/plugin.asm:1661`,
+    `plugins/beautify.asm:1702`, `plugins/bigplug.asm:194`,
+    `plugins/halfplug.asm:194`, `plugins/midplug.asm:194`,
+    `plugins/rot13.asm:245`, and `plugins/wordcnt.asm:466`.
+  - In `plugins/plugin.asm:2088`, replace `"Press any key to dismiss"` with
+    `"Press any key to continue"`.
+  - Centre-justify text body lines inside 50-col and 38-col dialog boxes
+    (currently left-justified in `plugins/plugin.asm:1658-1660`,
+    `plugins/beautify.asm:1696-1701`, etc.).
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 1.7, 4.4, 7.9):
+  > *"All text is centre justified. Every line inside the pop-up must be
+  > horizontally centered within the box borders."*
+  >
+  > *"Press any key statements must not be inside [ ] or ( ) pairs and do not
+  > have ... (Allowed: Press any key to continue, Press any key)."*
+
+### 2.11 Child Pop-ups Rendered Over Unhidden Parent Pop-ups in Plugin Manager
+- [ ] Enforce single-level pop-up visibility lifecycle in `plugins/plugin.asm`.
+  - When spawning child pop-ups (e.g. `DO_PLUGIN_ABOUT` at line 1604 or
+    `CONFIRM_UNLOAD_SLOT` at line 962) from the Ctrl+P context pop-up
+    (`DO_CONTEXT_POPUP`), hide/erase the parent pop-up first.
+  - Redraw parent pop-up upon dismissal of the child pop-up.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.5, 6.2, 7.3):
+  > *"When a child pop-up is to be shown, the parent pop-up shall be taken off
+  > the screen (hidden) and the parent pop-up is redrawn when the child pop-up
+  > no longer exists (child pop-up no longer shown)."*
+
 ---
 
 ## 3. RAM Headroom & Memory Optimization
@@ -122,7 +233,7 @@ upcoming milestones for SE.COM.
   `python3 check_tpa.py SE.COM`.
 
 ### 5.3 Periodic UI/UX Compliance Audit (`docs/UI_UX_DESIGN.md`)
-- [ ] Periodically check SE.COM complies with the `docs/UI_UX_DESIGN.md` file
+- [x] Periodically check SE.COM complies with the `docs/UI_UX_DESIGN.md` file
   and append a resolution task list into Section 2 (BUGS).
 
 ---
