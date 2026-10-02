@@ -20,9 +20,12 @@ codebase must adhere strictly to these principles.
 2. **Universal Status Bar Presence**:
    - **All screens shall show the status bar.** Regardless of whether the
      active interface is the splash screen, editor workspace, plugin manager,
-     configuration screen, or directory browser, the status bar remains
-     anchored on the bottom row (`HOST_ROWS`: Row 24 for 80x24 geometry,
-     Row 40 for 120x40 geometry) to guarantee constant system state context.
+     configuration screen, directory browser, or pop-up only screens, the
+     status bar remains anchored on the bottom row (`HOST_ROWS`: Row 24 for
+     80x24 geometry, Row 40 for 120x40 geometry) to guarantee constant system
+     state context.
+   - **All screens including pop-up only screens shall have the status bar
+     present.**
    - **On non-document screens, the status bar indicates the last status of
      the editing screen.**
    - **The status bar no longer shows status events.** Pop-ups are now used
@@ -32,11 +35,15 @@ codebase must adhere strictly to these principles.
      on unallocated body and margin rows.
    - **Tildes in column 0 are used on all screens without exception**
      (including file open, save, and block screens).
+   - **All screens including pop-up only screens shall have tildes in
+     column 0.**
    - Header rows, the status bar, and Tier 2 boxed modal pop-ups do not use
      column 0 tildes.
-4. **Dedicated Surfaces & Centered Pop-ups**:
+4. **Dedicated Surfaces & Centered Content**:
    - Complex interactive tasks belong in dedicated Full-Screen Workspaces
      (Tier 1) or Centered Boxed Modal Pop-ups (Tier 2).
+   - **Screen content shall be centered horizontally and vertically
+     including file open, close, etc. screens.**
    - **All pop-ups shall be shown in the centre of the screen both
      horizontally and vertically.**
    - **Query pop-up format shall have a title line box, the pop-up body
@@ -94,6 +101,12 @@ Never blur the boundaries between these tiers.
     - Paging/Cursor: Selection indicator (e.g. `>[0]` or inverted cursor bar).
     - Footer (`HOST_ROWS - 1`: Row 23 on 80x24; Row 39 on 120x40): Dynamic,
       context-dependent command summary line.
+    - Status Bar: Anchored on the bottom row (`HOST_ROWS`: Row 24 on 80x24;
+      Row 40 on 120x40), indicating the last status of the editing screen.
+  - **Centered Form & File Screens** (Open, Close, Save, Block Screens):
+    - Body: Screen content shall be centered horizontally and vertically
+      between the header and status bar, padded with column 0 tildes (`~`)
+      on margin rows.
     - Status Bar: Anchored on the bottom row (`HOST_ROWS`: Row 24 on 80x24;
       Row 40 on 120x40), indicating the last status of the editing screen.
 
@@ -254,13 +267,15 @@ Brackets (`[ ]`) convey structured parameters and triggers across SE.COM:
      - Editor Workspace (all empty rows below the end of document).
      - File open and save screens (Open File UI, Save File UI, Block Insert UI,
        Block Save UI, and directory browser margin rows).
+     - Pop-up only screens (background margin rows).
      - Plugin Manager workspace padding rows.
      - Configuration Screen padding rows.
      - About, Memory, and Help screen padding rows.
    - **Applicability Boundaries**:
      - Column 0 tildes apply strictly to unallocated body and margin rows of
-       Tier 1 screens; they do NOT apply to Row 1 header rows, the bottom
-       status bar (`HOST_ROWS`), or Tier 2 centered boxed modal pop-ups.
+       Tier 1 screens and backgrounds of pop-up only screens; they do NOT
+       apply to Row 1 header rows, the bottom status bar (`HOST_ROWS`), or
+       the interior of Tier 2 centered boxed modal pop-ups.
 
 ---
 
