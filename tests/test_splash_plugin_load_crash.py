@@ -90,7 +90,13 @@ def main():
         f.write("LINES=16K\r\n")
 
     try:
-        for fn, src in [("PLUGIN.CFG", plug_cfg), ("SE.CFG", se_cfg)]:
+        two_txt = os.path.join(repo_root, "2.TXT")
+        injections = [
+            ("PLUGIN.CFG", plug_cfg),
+            ("SE.CFG", se_cfg),
+            ("2.TXT", two_txt)
+        ]
+        for fn, src in injections:
             subprocess.run(
                 [cpmrm, "-f", "wbw_hd1k_0", test_img, f"0:{fn}"],
                 stderr=subprocess.DEVNULL
@@ -158,7 +164,7 @@ def main():
         time.sleep(0.3)
         print("[*] Typing BEAUTIFY.PRL and Enter...")
         os.write(master, b"BEAUTIFY.PRL\r")
-        ok, out = read_until(master, b"Up/Dn:select", timeout=15.0)
+        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=15.0)
         assert ok, f"Failed waiting for plugin manager ready: {out}"
         print("[+] Plugin BEAUTIFY.PRL loaded successfully")
 

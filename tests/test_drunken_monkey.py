@@ -421,7 +421,8 @@ class VT100QualityMonitor:
             return "splash_screen"
         if ("SE - Plugin Manager" in full_text or
                 "0..7:select" in full_text or
-                "Up/Dn:select" in full_text):
+                "Up/Dn:select" in full_text or
+                "[Up]/[Down]=Select" in full_text):
             return "plugin_manager"
         if ("Exiting SE.COM" in full_text or
                 "Returned to CP/M" in full_text or

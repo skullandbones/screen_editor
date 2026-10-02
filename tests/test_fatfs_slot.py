@@ -169,8 +169,8 @@ def run_fatfs_slot_test():
         if not ok:
             print("[-] Failed to enter Plugin Manager.", flush=True)
             return False
-        if b"Up/Dn:select" not in out:
-            read_until(master, b"Up/Dn:select", timeout=5.0)
+        if b"[Up]/[Down]=Select" not in out:
+            read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         drain_all(master)
         print("[+] Entered SE.COM Plugin Manager.", flush=True)
 
@@ -207,7 +207,7 @@ def run_fatfs_slot_test():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b" ")
-        read_until(master, b"Up/Dn:select", timeout=5.0)
+        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         drain_all(master)
 
         # 7. Test Action 2: Configuration Dialog ('c')
@@ -224,7 +224,7 @@ def run_fatfs_slot_test():
         drain_all(master)
         os.write(master, b"q")
         ok, _ = read_until(master, b"SE - Plugin Manager", timeout=6.0)
-        read_until(master, b"Up/Dn:select", timeout=5.0)
+        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         drain_all(master)
 
         # 8. Test Action 0 from Editor Context-Aware Popup (Ctrl+P -> 3)
@@ -334,7 +334,7 @@ def run_fatfs_slot_test():
         time.sleep(0.3)
         os.write(master, b"p")
         ok, _ = read_until(master, b"SE - Plugin Manager", timeout=6.0)
-        read_until(master, b"Up/Dn:select", timeout=5.0)
+        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         drain_all(master)
 
         # 10. Unload Slot 3 ('3' then 'y')

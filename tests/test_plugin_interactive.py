@@ -147,14 +147,14 @@ def main():
             return 1
         print("[+] Verified initial selection cursor on Slot 0: >[0] WORDCNT")
 
-        # Verify context help line on Slot 0 (WORDCNT: Enter:unload, A:about)
-        if b"A:about" not in out:
-            ok, out_more = read_until(master, b"A:about", timeout=3.0)
+        # Verify context help line on Slot 0 (WORDCNT: Unload, About)
+        if b"[A]=About" not in out:
+            ok, out_more = read_until(master, b"[A]=About", timeout=3.0)
             out += out_more
-        if b"A:about" not in out or b"Enter:unload" not in out:
+        if b"[A]=About" not in out or b"[Enter]=Unload" not in out:
             print(f"[-] Slot 0 missing context help. Out: {repr(out)}")
             return 1
-        print("[+] Slot 0 context help verified (Enter:unload, A:about).")
+        print("[+] Slot 0 context help verified ([Enter]=Unload, [A]=About).")
 
         # Test digit action: typing '2' triggers Unload confirmation on Slot 2
         time.sleep(0.3)
@@ -169,7 +169,7 @@ def main():
         # Cancel unload via 'n'
         time.sleep(0.2)
         os.write(master, b"n")
-        ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
+        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         if not ok or b">[2]" not in out:
             print("[-] Cancel unload failed to return to Slot 2. "
                   f"Out: {repr(out)}")
@@ -189,7 +189,7 @@ def main():
         # Cancel unload via ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
+        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         if not ok or b">[0]" not in out:
             print(f"[-] ESC cancel unload failed. Out: {repr(out)}")
             return 1
@@ -213,21 +213,22 @@ def main():
             return 1
         print("[+] Key 'j' successfully moved selection to >[2] BEAUTIFY")
 
-        # Verify context help on Slot 2 (BEAUTIFY: Enter:unload, A:about, C:cfg)
-        ok, out = read_until(master, b"C:cfg", timeout=3.0)
-        if not ok or b"Enter:unload" not in out:
-            print(f"[-] Slot 2 missing C:cfg or Enter:unload. Out: {repr(out)}")
+        # Verify context help on Slot 2 (BEAUTIFY: Unload, About, Config)
+        ok, out = read_until(master, b"[C]=Config", timeout=3.0)
+        if not ok or b"[Enter]=Unload" not in out:
+            print(f"[-] Slot 2 missing [C]=Config or [Enter]=Unload. "
+                  f"Out: {repr(out)}")
             return 1
         print("[+] Slot 2 context help verified (Unload, About, Config).")
 
         # Test navigation to empty slot (Slot 3) to verify empty context help
         time.sleep(0.3)
         os.write(master, b"j")
-        ok, out = read_until(master, b"Enter:load", timeout=3.0)
+        ok, out = read_until(master, b"[Enter]=Load", timeout=3.0)
         if not ok:
-            print(f"[-] Slot 3 missing Enter:load. Out: {repr(out)}")
+            print(f"[-] Slot 3 missing [Enter]=Load. Out: {repr(out)}")
             return 1
-        print("[+] Slot 3 (empty) context help verified (Enter:load).")
+        print("[+] Slot 3 (empty) context help verified ([Enter]=Load).")
 
         # Navigate back to Slot 2
         time.sleep(0.3)
@@ -264,9 +265,10 @@ def main():
         # Dismiss About screen with space
         time.sleep(0.3)
         os.write(master, b" ")
-        ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
+        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         if not ok or b">[0]" not in out:
-            print(f"[-] Return from WORDCNT About screen to Plugin Manager failed. out={repr(out)}")
+            print("[-] Return from WORDCNT About screen to Plugin Manager "
+                  f"failed. out={repr(out)}")
             return 1
         print("[+] Returned cleanly from About screen to Plugin Manager.")
 
@@ -285,7 +287,7 @@ def main():
         # Dismiss About screen with Enter
         time.sleep(0.3)
         os.write(master, b"\r")
-        read_until(master, b"Up/Dn:select", timeout=5.0)
+        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         print("[+] Returned cleanly from ROT13 About screen.")
 
         # Navigate to Slot 2 (BEAUTIFY) and test embedded About screen
@@ -303,7 +305,7 @@ def main():
         # Dismiss About screen with space
         time.sleep(0.3)
         os.write(master, b" ")
-        read_until(master, b"Up/Dn:select", timeout=5.0)
+        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         print("[+] Returned cleanly from BEAUTIFY About screen.")
 
         # Test Action 2: Embedded Configuration Screen on Slot 2 (BEAUTIFY)
@@ -313,7 +315,8 @@ def main():
             master, b"[Enter]=Save & Exit   [ESC]=Cancel", timeout=6.0
         )
         if not ok or b"Z80 Beautifier Configuration" not in out:
-            print(f"[-] BEAUTIFY Configuration screen failed to display. Out: {repr(out)}")
+            print("[-] BEAUTIFY Configuration screen failed to display. "
+                  f"Out: {repr(out)}")
             return 1
         print("[+] BEAUTIFY embedded Configuration screen verified!")
 
@@ -338,9 +341,10 @@ def main():
         # Exit config screen and return to Plugin Manager (Enter)
         time.sleep(0.3)
         os.write(master, b"\r")
-        ok, out = read_until(master, b"Up/Dn:select", timeout=5.0)
+        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
         if not ok or b">[2]" not in out:
-            print(f"[-] Return from BEAUTIFY config screen to Plugin Manager failed. out={repr(out)}")
+            print("[-] Return from BEAUTIFY config screen to Plugin Manager "
+                  f"failed. out={repr(out)}")
             return 1
         print("[+] Successfully exited BEAUTIFY config and returned to Plugin Manager.")
 
@@ -376,7 +380,7 @@ def main():
         # Cancel Load UI with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Up/Dn:select", timeout=5.0)
+        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
 
         # Exit Plugin Manager cleanly via 'q' back to Splash Screen
         time.sleep(0.3)

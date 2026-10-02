@@ -26,7 +26,6 @@ PLUG_CTX_MEM_INFO	EQU	3
 PLUG_CTX_PLUGIN_MGR	EQU	4
 PLUG_CTX_HELP		EQU	5
 PLUG_CTX_ABOUT		EQU	6
-PLUGIN_UI_LINES		EQU	16
 
 ;------------------------------------------------------------------------------
 ; Standard Jump Table
@@ -569,37 +568,30 @@ RENDER_PLUGIN_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	HOST_PRINT_STR
 
-	; Calculate vertical top padding: ((HOST_ROWS - 1) - PLUGIN_UI_LINES) / 2
-	LD	A,(HOST_ROWS)
-	DEC	A
-	SUB	PLUGIN_UI_LINES
-	JR	Z,RPS_NO_TOP_PAD
-	JR	C,RPS_NO_TOP_PAD
-	SRL	A
-	JR	Z,RPS_NO_TOP_PAD
-	LD	B,A
-RPS_TOP_PAD_LOOP:
-	CALL	PRINT_TILDE_CRLF
-	DJNZ	RPS_TOP_PAD_LOOP
-
-RPS_NO_TOP_PAD:
+	; Row 1: Fixed centered Header
 	LD	DE,STR_PLUG_TITLE
 	CALL	PRINT_ABOUT_LINE
 
+	; Row 2: Blank line
 	CALL	PRINT_TILDE_CRLF
 
+	; Row 3: System information line
 	CALL	FORMAT_PLUGIN_SYS_LINE
 	LD	DE,SCRATCH_BUF
 	CALL	PRINT_ABOUT_LINE
 
+	; Row 4: Blank line
 	CALL	PRINT_TILDE_CRLF
 
+	; Row 5: Table Header
 	LD	DE,STR_PLUG_HDR
 	CALL	PRINT_ABOUT_LINE
 
+	; Row 6: Table Separator
 	LD	DE,STR_PLUG_SEP
 	CALL	PRINT_ABOUT_LINE
 
+	; Rows 7..14: Slot Rows 0..7
 	LD	B,0
 RPS_ROW_LOOP:
 	PUSH	BC
@@ -612,31 +604,25 @@ RPS_ROW_LOOP:
 	CP	8
 	JR	NZ,RPS_ROW_LOOP
 
+	; Pad margin rows down to HOST_ROWS - 2
+	; Rows 1..14 are header and body (14 rows)
+	; Footer is on row HOST_ROWS - 1, Status bar on row HOST_ROWS
+	; Number of margin rows = (HOST_ROWS - 2) - 14 = HOST_ROWS - 16
+	LD	A,(HOST_ROWS)
+	SUB	16
+	JR	Z,RPS_FOOTER
+	JR	C,RPS_FOOTER
+	LD	B,A
+RPS_MARGIN_LOOP:
 	CALL	PRINT_TILDE_CRLF
+	DJNZ	RPS_MARGIN_LOOP
 
+RPS_FOOTER:
+	; Row HOST_ROWS - 1: Fixed Footer command summary line
 	CALL	FORMAT_PLUGIN_FOOTER
 	CALL	PRINT_ABOUT_LINE
 
-	; Calculate bottom padding: (HOST_ROWS - 1) - PLUGIN_UI_LINES - top_pad
-	LD	A,(HOST_ROWS)
-	DEC	A
-	SUB	PLUGIN_UI_LINES
-	JR	Z,RPS_BOTTOM_DONE
-	JR	C,RPS_BOTTOM_DONE
-	SRL	A
-	LD	C,A
-	LD	A,(HOST_ROWS)
-	DEC	A
-	SUB	PLUGIN_UI_LINES
-	SUB	C
-	JR	Z,RPS_BOTTOM_DONE
-	JR	C,RPS_BOTTOM_DONE
-	LD	B,A
-RPS_BOTTOM_PAD_LOOP:
-	CALL	PRINT_TILDE_CRLF
-	DJNZ	RPS_BOTTOM_PAD_LOOP
-
-RPS_BOTTOM_DONE:
+	; Row HOST_ROWS: Persistent Status bar
 	CALL	HOST_RENDER_STATUS_BAR
 	RET
 
@@ -2119,17 +2105,17 @@ STR_PLUG_SYS_POST:	DB	"/8]    TPA Slot: [4KB Overlaid]", 0
 STR_PLUG_HDR:		DB	"Slot Plugin Name      Type   Size    Exec Mode  Capabilities     Status ", 0
 STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+---------------+--------", 0
 
-STR_PLUG_CMDS_PRE:	DB	"Up/Dn:select | ", 0
+STR_PLUG_CMDS_PRE:	DB	"[Up]/[Down]=Select  ", 0
 STR_PLUG_CMDS_BOTH:
-	DB	"Enter:unload | A:about | C:cfg | S:save | Q:exit", 0
+	DB	"[Enter]=Unload  [A]=About  [C]=Config  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_ABOUT:
-	DB	"Enter:unload | A:about | S:save | Q:exit", 0
+	DB	"[Enter]=Unload  [A]=About  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_CONFIG:
-	DB	"Enter:unload | C:cfg | S:save | Q:exit", 0
+	DB	"[Enter]=Unload  [C]=Config  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_PLAIN:
-	DB	"Enter:unload | S:save | Q:exit", 0
+	DB	"[Enter]=Unload  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_EMPTY:
-	DB	"Enter:load | S:save | Q:exit", 0
+	DB	"[Enter]=Load  [S]=Save  [ESC]=Exit", 0
 
 STR_MSG_NO_ABOUT:	DB	"[No About]$", 0
 STR_MSG_NO_CONFIG:	DB	"[No Config]$", 0

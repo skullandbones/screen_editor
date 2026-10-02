@@ -145,19 +145,24 @@ def run_screen_consistency_test(mode_name="80x24"):
                   f"{mode_name}. Buffer: {repr(out_plug)}", flush=True)
             return False
 
-        # Verify vertical padding and row above status bar has '~' in col 0
-        expected_top_pad = b"~\r\n" * (3 if mode_name == "80x24" else 11)
-        expected_bottom_pad = b"~\r\n" * (4 if mode_name == "80x24" else 12)
+        # Verify margin padding down to row HOST_ROWS - 2
+        # and footer on HOST_ROWS - 1
+        expected_margin_pad = b"~\r\n" * (8 if mode_name == "80x24" else 24)
         status_row_esc = (
             b"\x1b[24;1H" if mode_name == "80x24" else b"\x1b[40;1H"
         )
-        if expected_top_pad not in out_plug:
-            print("[-] Plugin Manager missing expected top padding tildes. "
+        if expected_margin_pad not in out_plug:
+            print("[-] Plugin Manager missing expected margin padding tildes. "
                   f"Buffer: {repr(out_plug)}", flush=True)
             return False
 
-        if (expected_bottom_pad + status_row_esc) not in out_plug:
-            print("[-] Plugin Manager missing '~' directly before status bar. "
+        if b"[Up]/[Down]=Select" not in out_plug:
+            print("[-] Plugin Manager missing footer command summary. "
+                  f"Buffer: {repr(out_plug)}", flush=True)
+            return False
+
+        if status_row_esc not in out_plug:
+            print("[-] Plugin Manager missing status bar escape code. "
                   f"Buffer: {repr(out_plug)}", flush=True)
             return False
 
