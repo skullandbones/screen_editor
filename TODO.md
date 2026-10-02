@@ -39,6 +39,19 @@ upcoming milestones for SE.COM.
 - *Justification* (`docs/UI_UX_DESIGN.md` Section 1.2, 2.2, 7.1):
   > *"The status bar no longer shows status events. Pop-ups are now used for
   > all status events."*
+- *Clarification on Load/Save Progress & ESC Handling*:
+  - **Progress Display**: Transient Tier 2 centered modal pop-ups display
+    file loading and saving progress. The line counter increments inside the
+    pop-up box (updating line count text) rather than on the status bar.
+  - **ESC During Save**: Saving cannot be cancelled or aborted mid-stream by
+    pressing ESC (preventing disk corruption). The save runs to completion,
+    and any queued keystrokes are drained upon finish.
+  - **ESC During Load**: Loading is non-interactive batch I/O running to
+    completion. Keystrokes entered during load are drained upon finish so
+    ESC does not trigger an accidental exit to the splash screen.
+  - **ESC on Event Pop-ups**: For completion and error modals (e.g. Out of
+    Memory, File Truncated, File Not Found), ESC or any key cleanly
+    dismisses the pop-up and restores the editor screen.
 
 ### 2.4 Status Bar Overwrites Last Editing Screen State on Non-Document Screens
 - [ ] Preserve and display the last known document editing status (filename,
