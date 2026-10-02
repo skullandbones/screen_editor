@@ -125,18 +125,19 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ~
 ~                               SE - Screen Editor              
 ~
-~                         type   e  or  <Enter>   to edit       
-~                         type   n                to new file   
-~                         type   o                to open file  
-~                         type   s                to save file  
-~                         type   w  or  ^W        to close file 
-~                         type   l  or  ^L        to goto line  
-~                         type   a                for about     
-~                         type   m                for memory info
-~                         type   c                to configure  
-~                         type   1                set 120x40    
-~                         type   2                set 80x24     
-~                         type   q  or  ^Q        to exit       
+~                         type   [E]  or  [Enter]  to edit       
+~                         type   [N]              to new file   
+~                         type   [O]              to open file  
+~                         type   [S]              to save file  
+~                         type   [W]  or  [^W]    to close file 
+~                         type   [L]  or  [^L]    to goto line  
+~                         type   [A]              for about     
+~                         type   [M]              for memory info
+~                         type   [P]              for plugins   
+~                         type   [C]              to configure  
+~                         type   [1]              set 120x40    
+~                         type   [2]              set 80x24     
+~                         type   [Q]  or  [^Q]    to exit       
 ~
 ~                     Active Screen: [120x40 (Modern Default)]           
 ~

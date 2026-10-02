@@ -237,7 +237,7 @@ def run_test():
         assert ok, "Failed to redraw Plugin Manager upon modal dismissal"
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
+        read_until(master, b"type   [E]  or  [Enter]  to edit", timeout=5.0)
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl+Q
         ok, _ = read_until(master, b"C>", timeout=6.0)
@@ -290,7 +290,7 @@ def run_test():
               flush=True)
         time.sleep(0.3)
         os.write(master, b"q")
-        read_until(master, b"type   e  or  <Enter>   to edit", timeout=5.0)
+        read_until(master, b"type   [E]  or  [Enter]  to edit", timeout=5.0)
         time.sleep(0.2)
         os.write(master, b"\x11")  # Ctrl+Q
         ok, _ = read_until(master, b"C>", timeout=6.0)

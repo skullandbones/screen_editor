@@ -354,7 +354,7 @@ def run_fatfs_slot_test():
         drain_all(master)
         os.write(master, b"q")
         ok, out_sp = read_until(master,
-                                b"type   e  or  <Enter>   to edit",
+                                b"type   [E]  or  [Enter]  to edit",
                                 timeout=5.0)
         if not ok:
             print(f"[-] Exit to splash failed. Buffer: {repr(out_sp)}",

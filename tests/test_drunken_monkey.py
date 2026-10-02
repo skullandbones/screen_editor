@@ -331,7 +331,8 @@ class VT100QualityMonitor:
         # (starting with '~' or spaces). If row 0 contains document text without
         # '~', a mixed screen corruption occurred.
         full_text = "\n".join("".join(row) for row in self.buffer)
-        if "SE - Screen Editor" in full_text and "type   e" in full_text:
+        if "SE - Screen Editor" in full_text and (
+                "type   e" in full_text or "type   [E]" in full_text):
             row0_str = "".join(self.buffer[0]).strip()
             if row0_str and not row0_str.startswith("~"):
                 raise CrispLayoutError(
@@ -417,7 +418,8 @@ class VT100QualityMonitor:
         if "SE - Screen Editor Configuration" in full_text:
             return "configuration_screen"
         if ("SE - Screen Editor" in full_text and
-                ("Active Screen:" in full_text or "type   e" in full_text)):
+                ("Active Screen:" in full_text or "type   e" in full_text or
+                 "type   [E]" in full_text)):
             return "splash_screen"
         if ("SE - Plugin Manager" in full_text or
                 "0..7:select" in full_text or

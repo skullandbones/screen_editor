@@ -23251,19 +23251,19 @@ STR_SPLASH_TITLE_PAD:	DB	"           ", "$"
 STR_SPLASH_TITLE:	DB	"SE - Screen Editor", 13, 10, "$"
 
 STR_SPLASH_CMDS:
-	DB	"  type   e  or  <Enter>   to edit",13,10
-	DB	"  type   n                to new file",13,10
-	DB	"  type   o                to open file",13,10
-	DB	"  type   s                to save file",13,10
-	DB	"  type   w  or  ^W        to close file",13,10
-	DB	"  type   l  or  ^L        to goto line",13,10
-	DB	"  type   a                for about",13,10
-	DB	"  type   m                for memory info",13,10
-	DB	"  type   p                for plugins",13,10
-	DB	"  type   c                to configure",13,10
-	DB	"  type   1                set 120x40",13,10
-	DB	"  type   2                set 80x24",13,10
-	DB	"  type   q  or  ^Q        to exit",13,10
+	DB	"  type   [E]  or  [Enter]  to edit",13,10
+	DB	"  type   [N]              to new file",13,10
+	DB	"  type   [O]              to open file",13,10
+	DB	"  type   [S]              to save file",13,10
+	DB	"  type   [W]  or  [^W]    to close file",13,10
+	DB	"  type   [L]  or  [^L]    to goto line",13,10
+	DB	"  type   [A]              for about",13,10
+	DB	"  type   [M]              for memory info",13,10
+	DB	"  type   [P]              for plugins",13,10
+	DB	"  type   [C]              to configure",13,10
+	DB	"  type   [1]              set 120x40",13,10
+	DB	"  type   [2]              set 80x24",13,10
+	DB	"  type   [Q]  or  [^Q]    to exit",13,10
 	DB	0
 
 STR_SPLASH_CUR_MODE:	DB	"Active Screen: [$"

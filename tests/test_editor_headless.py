@@ -2371,8 +2371,9 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x1b")
         out_s43_splash = read_until(master, b"for about", timeout=4.0)
-        if b"type   l  or  ^L        to goto line" not in out_s43_splash:
-            print(f"[-] Step 43 failed: Splash missing goto line prompt hint. Buffer: {repr(out_s43_splash)}", flush=True)
+        if b"type   [L]  or  [^L]    to goto line" not in out_s43_splash:
+            print("[-] Step 43 failed: Splash missing goto line prompt hint. "
+                  f"Buffer: {repr(out_s43_splash)}", flush=True)
             return False
 
         # Press 'l' on splash screen -> enters editor with Goto line prompt
