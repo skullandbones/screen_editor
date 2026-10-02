@@ -463,7 +463,7 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x1a")  # Ctrl+Z
-        out = read_until(master, b"Plugin Manager", timeout=4.0)
+        out = read_until(master, b"[Enter]=Unload", timeout=6.0)
         if b"Plugin Manager" not in out:
             print(f"[-] Failed to open Plugin Manager via Ctrl+Z.")
             return 1
@@ -471,7 +471,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
+        out = read_until(master, b"[Enter]=Exec", timeout=6.0)
         if b"Installed Plugin Catalog" not in out:
             print(f"[-] Test 6 failed: Title missing in Plugin Manager pop-up.")
             return 1
@@ -480,7 +480,7 @@ def main():
         # Dismiss with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        out = read_until(master, b"Plugin Manager", timeout=4.0)
+        out = read_until(master, b"[Enter]=Unload", timeout=6.0)
         if b"Plugin Manager" not in out:
             print(f"[-] Test 6 failed: Return to Plugin Manager failed.")
             return 1
