@@ -162,6 +162,24 @@ upcoming milestones for SE.COM.
   > *"Screen content shall be centered horizontally and vertically including
   > file open, close, etc. screens."*
 
+### 2.14 Missing Estimated Maximum Editor Lines on Splash Screen
+- [ ] Add a status line on the splash screen displaying an estimate of the
+  maximum number of editor lines supported under the current configuration.
+  - In `src/se.asm` (`RENDER_SPLASH`), add a fourth configuration status row
+    (Row 20) below Plugin System status (`SPLASH_MENU_LINES` = 20) showing the
+    estimated maximum editor line capacity.
+  - Dynamically compute the line ceiling:
+    - If `EXT_BANK_COUNT < 2`: paging is inactive (Bank 0 pinned), estimating
+      256 lines (e.g. `Max Lines      : [256 lines (RAM)]`).
+    - If `EXT_BANK_COUNT >= 2`: paging into `$$$SE$$$.SWP` is active,
+      estimating either 16,384 lines (16K mode) or 32,768 lines (32K mode)
+      based on `MAX_DOC_LINES_LIMIT` (e.g. `Max Lines      : [16,384 lines]`).
+  - Align label and bracketed value with existing status rows (Screen Mode,
+    RAM Disk, Plugin System).
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.2, 2.1):
+  > Providing explicit document line capacity on the splash screen informs the
+  > user of their memory constraints and paging capabilities before loading.
+
 ---
 
 ## 3. RAM Headroom & Memory Optimization
