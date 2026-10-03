@@ -53,16 +53,18 @@ upcoming milestones for SE.COM.
     Memory, File Truncated, File Not Found), ESC or any key cleanly
     dismisses the pop-up and restores the editor screen.
 
-### 2.4 Status Bar Overwrites Last Editing Screen State on Non-Document Screens
-- [ ] Preserve and display the last known document editing status (filename,
-  geometry, format, cursor position) on the status bar when rendering
-  non-document screens.
-  - Fix `SHOW_STATUS_SPLASH_MEM` (`src/se.asm:5743, 5964`) which replaces the
-    document status line with free memory information when `IS_SPLASH_SCREEN`
-    is set (on Splash, About, Config, Mem Info, and Open/Save screens).
-- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.2, 2.1, 2.3):
-  > *"On non-document screens, the status bar indicates the last status of the
-  > editing screen."*
+### 2.4 Status Bar Free Memory Display on Non-Editing Screens
+- [x] Confirmed and closed: On non-editing screens (Splash, About, Config,
+  Memory Info, File Open, Save, and Block screens), the status bar indicates
+  the last status of the editing screen while displaying free memory in
+  Field 4.
+  - Confirmed that `SHOW_STATUS_SPLASH_MEM` (`src/se.asm:5872, 5976`) only
+    replaces Field 4 (`^K: Editor keys`) with `Free: <N> KB | `, while
+    preserving all document editing status fields (Filename, Modified `*`,
+    Geometry, Format, and Cursor Position `Line <cur>/<total> Col <col>`).
+  - Showing free memory on non-editing screens is canonical behavior per
+    `docs/UI_UX_DESIGN.md` Section 3 ("free memory") and verified by
+    automated regression tests (Steps 25, 64, 70, 74).
 
 ### 2.5 Missing Centering on Open, Save, and Block Screens
 - [ ] Center screen content dynamically between header (Row 1) and status bar
