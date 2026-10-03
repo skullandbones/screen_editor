@@ -16555,6 +16555,8 @@ INIT_DIR_LAYOUT:
 	LD	(DIR_COL_WIDTH),A
 	LD	A,60
 	LD	(DIR_PAGE_CAPACITY),A
+	LD	A,2
+	LD	(DIR_LEFT_PAD),A
 	RET
 IDL_120:
 	; 120x40 mode
@@ -16564,6 +16566,8 @@ IDL_120:
 	LD	(DIR_COL_WIDTH),A
 	LD	A,196
 	LD	(DIR_PAGE_CAPACITY),A
+	LD	A,3
+	LD	(DIR_LEFT_PAD),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -16601,12 +16605,139 @@ PHD_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Render Open/Save Screen Header (4 rows):
+; Print directory screen left prefix: '~' followed by (DIR_LEFT_PAD) spaces
+; Preserves BC, DE, HL
+;------------------------------------------------------------------------------
+PRINT_DIR_PREFIX:
+	PUSH	AF
+	PUSH	BC
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(DIR_LEFT_PAD)
+	OR	A
+	JR	Z,PDP_DONE
+	LD	B,A
+PDP_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	PDP_LOOP
+PDP_DONE:
+	POP	BC
+	POP	AF
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate start file: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
+; Preserves DE, HL
+;------------------------------------------------------------------------------
+CALC_DIR_START_FILE:
+	PUSH	BC
+	LD	A,(DIR_PAGE_INDEX)
+	OR	A
+	JR	Z,CDSF_ZERO
+	LD	B,A
+	LD	A,(DIR_PAGE_CAPACITY)
+	LD	C,A
+	XOR	A
+CDSF_LOOP:
+	ADD	A,C
+	DJNZ	CDSF_LOOP
+CDSF_ZERO:
+	LD	(DIR_START_FILE),A
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate total body rows B for the current directory page & prompt:
+; Body rows = file_rows + prompt_rows
+; Outputs: A = total body rows
+; Preserves DE
+;------------------------------------------------------------------------------
+CALC_DIR_BODY_ROWS:
+	CALL	CALC_DIR_START_FILE
+
+	; 1. Calculate file_rows
+	LD	A,(DIR_FILE_COUNT)
+	OR	A
+	JR	NZ,CDBR_HAS_FILES
+	; Zero files: 2 rows (STR_NO_FILES_FOUND + blank tilde)
+	LD	B,2
+	JR	CDBR_CALC_PROMPT
+
+CDBR_HAS_FILES:
+	; Files on page = min(DIR_PAGE_CAPACITY, DIR_FILE_COUNT - DIR_START_FILE)
+	LD	HL,DIR_START_FILE
+	SUB	(HL)
+	LD	HL,DIR_PAGE_CAPACITY
+	CP	(HL)
+	JR	C,CDBR_PAGE_FILES_OK
+	LD	A,(HL)
+CDBR_PAGE_FILES_OK:
+	; A = files on page (> 0)
+	; file_rows = ((A + DIR_COLS_PER_ROW - 1) / DIR_COLS_PER_ROW) + 1
+	LD	HL,DIR_COLS_PER_ROW
+	LD	C,(HL)
+	DEC	C
+	ADD	A,C			; A = files + cols - 1
+	LD	B,0			; Quotient (row count)
+	LD	C,(HL)
+CDBR_DIV_LOOP:
+	SUB	C
+	JR	C,CDBR_DIV_DONE
+	INC	B
+	JR	CDBR_DIV_LOOP
+CDBR_DIV_DONE:
+	INC	B			; Plus 1 for trailing blank tilde
+
+CDBR_CALC_PROMPT:
+	; B = file_rows
+	; Base prompt rows = 3
+	LD	C,3
+	LD	A,(DIR_PAGE_COUNT)
+	CP	2
+	JR	C,CDBR_CHECK_SAVE
+	INC	C			; Multi-page: +1 row
+CDBR_CHECK_SAVE:
+	LD	A,(IS_SAVE_UI)
+	OR	A
+	JR	Z,CDBR_PROMPT_DONE
+	INC	C			; Save format info: +1 row
+CDBR_PROMPT_DONE:
+	LD	A,B			; A = file_rows
+	ADD	A,C			; A = file_rows + prompt_rows
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate DIR_TOP_PAD_COUNT:
+; TOTAL_AVAIL = (ACTIVE_ROWS - 1) - 3 = ACTIVE_ROWS - 4
+; EXTRA = TOTAL_AVAIL - BodyRows
+; If EXTRA <= 0: TOP_PAD = 0
+; Else: TOP_PAD = EXTRA / 2
+; Sets DIR_TOP_PAD_COUNT
+;------------------------------------------------------------------------------
+CALC_DIR_TOP_PAD:
+	CALL	CALC_DIR_BODY_ROWS	; A = BodyRows
+	LD	B,A			; B = BodyRows
+	LD	A,(ACTIVE_ROWS)
+	SUB	4			; A = TOTAL_AVAIL
+	SUB	B			; A = TOTAL_AVAIL - BodyRows
+	JR	Z,CDTP_ZERO
+	JR	C,CDTP_ZERO
+	SRL	A			; A = EXTRA / 2
+	LD	(DIR_TOP_PAD_COUNT),A
+	RET
+CDTP_ZERO:
+	XOR	A
+	LD	(DIR_TOP_PAD_COUNT),A
+	RET
+
+;------------------------------------------------------------------------------
+; Render Open/Save Screen Header (Rows 1-3) & Top Padding:
 ; Row 1: Full-width "~====..."
 ; Row 2: Centered title: "~   SE.COM - OPEN/SAVE FILE (DIRECTORY - DRIVE X:)"
 ; Row 3: Full-width "~====..."
-; Row 4: Blank tilde row: "~"
-; Sets UI_CUR_ROW = 4.
+; Top margin: DIR_TOP_PAD_COUNT blank tildes
+; Sets UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT.
 ;------------------------------------------------------------------------------
 RENDER_DIR_TITLE:
 	LD	A,(IS_BLOCK_INSERT_UI)
@@ -16830,12 +16961,22 @@ RTC_TITLE_DONE:
 	; 4. Row 3: Horizontal Rule
 	CALL	PRINT_HR_EQUAL
 
-	; 5. Row 4: Blank Tilde Row
-	LD	DE,STR_TILDE_CRLF
-	CALL	PRINT_STR
+	; Calculate vertical top padding for directory/file screen
+	CALL	CALC_DIR_TOP_PAD
 
-	; Initialize UI_CUR_ROW = 4
-	LD	A,4
+	; Print top margin blank tilde rows (if any)
+	LD	A,(DIR_TOP_PAD_COUNT)
+	OR	A
+	JR	Z,RTC_TOP_PAD_DONE
+	LD	B,A
+RTC_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	RTC_TOP_PAD_LOOP
+RTC_TOP_PAD_DONE:
+
+	; Initialize UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT
+	LD	A,(DIR_TOP_PAD_COUNT)
+	ADD	A,3
 	LD	(UI_CUR_ROW),A
 	RET
 
@@ -17651,7 +17792,8 @@ DISPLAY_SAVE_PROMPT:
 	INC	(HL)
 	CALL	PRINT_HR_DASH
 	INC	(HL)
-	LD	DE,STR_PAGE_PREFIX
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_PAGE_PREFIX_TXT
 	CALL	PRINT_STR
 
 	LD	A,(DIR_PAGE_INDEX)
@@ -17683,10 +17825,10 @@ DISP_SAVE_PROMPT_BODY:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)			; For STR_ESC_CANCEL
 	INC	(HL)			; For Prompt line itself!
-	LD	DE,STR_ESC_CANCEL
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_ESC_CANCEL_TXT
 	CALL	PRINT_STR
-	LD	DE,STR_TILDE_INDENT
-	CALL	PRINT_STR
+	CALL	PRINT_DIR_PREFIX
 	CALL	TERM_INVERSE_ON
 	LD	DE,STR_SAVE_PROMPT_TXT	; "Enter filename to save:"
 	CALL	PRINT_STR
@@ -17697,7 +17839,8 @@ DISP_SAVE_PROMPT_BODY:
 PRINT_SAVE_FMT_INFO:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
-	LD	DE,STR_SAVE_FMT_PREFIX
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_SAVE_FMT_PREFIX_TXT
 	CALL	PRINT_STR
 	LD	A,(SAVE_FORMAT)
 	CP	FMT_CPM
@@ -18145,24 +18288,14 @@ DISPLAY_DIR_PAGE:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
 	INC	(HL)
-	LD	DE,STR_NO_FILES_FOUND
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_NO_FILES_FOUND_TXT
 	CALL	PRINT_STR
 	RET
 
 DO_SHOW_PAGE:
-	; Calculate start file index: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
-	LD	A,(DIR_PAGE_INDEX)
-	OR	A
-	JR	Z,DSP_START_ZERO
-	LD	B,A
-	LD	A,(DIR_PAGE_CAPACITY)
-	LD	C,A
-	XOR	A
-DSP_START_LOOP:
-	ADD	A,C
-	DJNZ	DSP_START_LOOP
-DSP_START_ZERO:
-	LD	(DIR_START_FILE),A
+	; Calculate start file: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
+	CALL	CALC_DIR_START_FILE
 
 	; Calculate number of files on this page:
 	; Count = min(DIR_PAGE_CAPACITY, DIR_FILE_COUNT - DIR_START_FILE)
@@ -18199,12 +18332,11 @@ DISPLAY_PAGE_LOOP:
 	PUSH	BC
 	PUSH	HL			; Save entry pointer
 
-	; If first column of row, emit "~  " prefix
+	; If first column of row, emit prefix
 	LD	A,(DIR_COL_COUNT)
 	OR	A
 	JR	NZ,DPL_NOT_FIRST_COL
-	LD	DE,STR_TILDE_INDENT
-	CALL	PRINT_STR
+	CALL	PRINT_DIR_PREFIX
 DPL_NOT_FIRST_COL:
 
 	; Format entry into a clean 16-char padded column:
@@ -18355,7 +18487,8 @@ DISPLAY_OPEN_PROMPT:
 	INC	(HL)
 	CALL	PRINT_HR_DASH
 	INC	(HL)
-	LD	DE,STR_PAGE_PREFIX
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_PAGE_PREFIX_TXT
 	CALL	PRINT_STR
 
 	LD	A,(DIR_PAGE_INDEX)
@@ -18385,10 +18518,10 @@ DISP_OPEN_PROMPT_BODY:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)			; For STR_ESC_CANCEL
 	INC	(HL)			; For Prompt line itself!
-	LD	DE,STR_ESC_CANCEL
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_ESC_CANCEL_TXT
 	CALL	PRINT_STR
-	LD	DE,STR_TILDE_INDENT
-	CALL	PRINT_STR
+	CALL	PRINT_DIR_PREFIX
 	CALL	TERM_INVERSE_ON
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
@@ -18489,17 +18622,19 @@ FUPS_STATUS:
 	CALL	RENDER_STATUS_BAR
 
 	; Reposition cursor inside filename input box on UI_CUR_ROW
-	; Col = Base + INPUT_BUF_LEN (31 insert, 30 plugin, 29 open)
+	; Col = Base + DIR_LEFT_PAD + INPUT_BUF_LEN
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
-	LD	A,31
+	LD	A,29
 	JR	NZ,FUPS_BOX_COL
 	LD	A,(IS_PLUGIN_LOAD_UI)
 	OR	A
-	LD	A,30
+	LD	A,28
 	JR	NZ,FUPS_BOX_COL
-	LD	A,29
+	LD	A,27
 FUPS_BOX_COL:
+	LD	HL,DIR_LEFT_PAD
+	ADD	A,(HL)
 	LD	HL,INPUT_BUF_LEN
 	ADD	A,(HL)
 	LD	L,A
@@ -23450,17 +23585,21 @@ STR_INSERT_PROMPT_TXT:	DB	"Enter filename to insert:","$"
 STR_TITLE_PLUG_LOAD_PRE: DB	"SE.COM - LOAD PLUGIN (DIRECTORY - DRIVE ","$"
 STR_PLUG_LOAD_PROMPT_TXT: DB	"Load Plugin (.PRL/.OVL):","$"
 
+STR_PAGE_PREFIX_TXT:	DB	"[Page ","$"
 STR_PAGE_PREFIX:	DB	"~  [Page ","$"
 
 STR_PAGE_MID:		DB	"/","$"
 
 STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
+STR_NO_FILES_FOUND_TXT:	DB	"[No files found on current drive]",13,10
+			DB	"~",13,10,"$"
 STR_NO_FILES_FOUND:	DB	"~  [No files found on current drive]",13,10
 			DB	"~",13,10,"$"
 
 DEFAULT_FCB_NAME:	DB	0,"OUTPUT  TXT",0,0,0,0
 
+STR_SAVE_FMT_PREFIX_TXT: DB	"Format: [","$"
 STR_SAVE_FMT_PREFIX:	DB	"~  Format: [","$"
 
 STR_SAVE_FMT_CPM:	DB	"CP/M","$"
@@ -23471,7 +23610,12 @@ STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
-STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
+STR_ESC_CANCEL_TXT:
+	DB	"<ESC>=Cancel  Enter [d:][u:][pattern] to list "
+	DB	"(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
+STR_ESC_CANCEL:
+	DB	"~  <ESC>=Cancel  Enter [d:][u:][pattern] to list "
+	DB	"(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 
 
 STR_SAVE_CANCELLED:	DB	13,10,"~  Save cancelled.",13,10,"$"
@@ -23712,6 +23856,8 @@ DIR_COL_COUNT:		DB	0
 DIR_COLS_PER_ROW:	DB	5
 DIR_COL_WIDTH:		DB	15
 DIR_PAGE_CAPACITY:	DB	60
+DIR_LEFT_PAD:		DB	2
+DIR_TOP_PAD_COUNT:	DB	0
 DIR_TEMP_ENTRY:		DS	16
 INPUT_BUF_LEN:		DB	0
 INPUT_CURSOR_POS:	DB	0

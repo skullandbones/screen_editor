@@ -67,7 +67,7 @@ upcoming milestones for SE.COM.
     automated regression tests (Steps 25, 64, 70, 74).
 
 ### 2.5 Missing Centering on Open, Save, and Block Screens
-- [ ] Center screen content dynamically between header (Row 1) and status bar
+- [x] Center screen content dynamically between header (Row 1) and status bar
   (`HOST_ROWS`), with top and bottom margin rows padded with column 0 tildes.
   - `DO_OPEN_FILE_UI` (`src/se.asm:15165`), `DO_SAVE_FILE_UI_IMPL`
     (`src/se.asm:16242`), and Block screens are top-aligned at Row 1-3 with all

@@ -4075,14 +4075,23 @@ def test_se_execution():
             print(f"[-] Step 66 Subtest 1 failed: Insert prompt not found: {repr(out_s66_ui)}", flush=True)
             return False
 
-        # Verify cursor position is at Column 34 (inside [ ] box after preloaded 'C0:')
+        # Verify cursor position is inside [ ] box after preloaded 'C0:'
+        # (Col 34 in 80x24 with 2-space pad, Col 35 in 120x40 with 3-space pad)
         m_s66 = re.search(rb"\x1b\[(\d+);(\d+)H\x1b\[\?25h", out_s66_ui)
         if not m_s66:
-            print(f"[-] Step 66 Subtest 1 failed: Cursor positioning escape sequence not found in UI output: {repr(out_s66_ui[-200:])}", flush=True)
+            print(
+                "[-] Step 66 Subtest 1 failed: Cursor positioning escape "
+                f"sequence not found in UI output: {repr(out_s66_ui[-200:])}",
+                flush=True
+            )
             return False
         cursor_col_s66 = int(m_s66.group(2))
-        if cursor_col_s66 != 34:
-            print(f"[-] Step 66 Subtest 1 failed: Expected cursor at column 34 inside [ ] box, got column {cursor_col_s66}", flush=True)
+        if cursor_col_s66 not in (34, 35):
+            print(
+                f"[-] Step 66 Subtest 1 failed: Expected cursor at column 34 "
+                f"or 35 inside [ ] box, got column {cursor_col_s66}",
+                flush=True
+            )
             return False
 
         # Cancel with ESC
