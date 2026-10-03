@@ -193,6 +193,39 @@ upcoming milestones for SE.COM.
   > Providing explicit document line capacity on the splash screen informs the
   > user of their memory constraints and paging capabilities before loading.
 
+### 2.15 Target Filename Missing from Open and Save Progress Pop-ups
+- [ ] Display the target filename in the Tier 2 progress modal pop-up for file
+  load, file save, block insert, and block save operations.
+  - In `src/se.asm`, update `INIT_LOAD_PROGRESS` (line 14865),
+    `INIT_SAVE_PROGRESS` (line 19546), and their block variants
+    (`DO_BLOCK_INSERT_FILE`, `DO_BLOCK_SAVE_FILE`) to format and render the
+    active target filename inside the 50x7 modal pop-up box (e.g. replacing
+    or augmenting the generic description line with
+    `File: <DRIVE>:<FILENAME>`).
+  - *Rationale*: During file open, save-as, block insert, and block save
+    operations, the target file being read from or written to storage can be
+    completely different from the currently open document. Displaying the
+    explicit target filename inside the pop-up confirms which file is actively
+    being accessed.
+
+### 2.16 Progress Pop-up Uses "Loading" Instead of "Opening" and "Inserting"
+- [ ] Update Tier 2 progress pop-up terminology to reflect the specific file
+  operation being executed ("Opening" for file open, "Inserting" for block
+  insert).
+  - In `src/se.asm`, the progress modal currently displays a generic
+    "Loading File" title in `STR_POPUP_LOAD_TITLE` (line 23021).
+  - For normal file open operations (`LOAD_FILE`, `DO_OPEN_FILE_UI`), the
+    action is an Open File operation; the pop-up should say "Opening File"
+    (or "Opening") rather than "Loading".
+  - For block file insert operations (`DO_BLOCK_INSERT_FILE`,
+    `DO_PARSE_AND_INSERT`), the action is an Insert File operation; the
+    pop-up should say "Inserting File" (or "Inserting") rather than
+    "Loading".
+  - Update `DRAW_LOADING_SCREEN` / `DO_PARSE_AND_INSERT` to pass dedicated
+    title and description strings (e.g. `STR_POPUP_OPEN_TITLE` /
+    `STR_POPUP_OPEN_DESC` for open; `STR_POPUP_INSERT_TITLE` /
+    `STR_POPUP_INSERT_DESC` for block insert).
+
 ---
 
 ## 3. RAM Headroom & Memory Optimization
@@ -300,6 +333,13 @@ upcoming milestones for SE.COM.
 ### 5.3 Periodic UI/UX Compliance Audit (`docs/UI_UX_DESIGN.md`)
 - [x] Periodically check SE.COM complies with the `docs/UI_UX_DESIGN.md` file
   and append a resolution task list into Section 2 (BUGS).
+
+### 5.4 74-Step Conformity Regression Test Suite
+- [x] Run the complete 74-step regression test suite on the RC2014 RomWBW
+  emulator (`tests/test_editor_headless.py`).
+- [x] Isolate and resolve all step failures (Steps 66, 68, 70, 73, 74) in
+  individual atomic commits adhering to <= 80 chars per line and <= 72 chars
+  commit subject line conventions, pushed to `colossus/agy1_dev_branch`.
 
 ---
 
