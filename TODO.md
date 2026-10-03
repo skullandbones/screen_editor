@@ -140,7 +140,7 @@ upcoming milestones for SE.COM.
   > have ... (Allowed: Press any key to continue, Press any key)."*
 
 ### 2.11 Child Pop-ups Rendered Over Unhidden Parent Pop-ups in Plugin Manager
-- [ ] Enforce single-level pop-up visibility lifecycle in `plugins/plugin.asm`.
+- [x] Enforce single-level pop-up visibility lifecycle in `plugins/plugin.asm`.
   - When spawning child pop-ups (e.g. `DO_PLUGIN_ABOUT` at line 1604 or
     `CONFIRM_UNLOAD_SLOT` at line 962) from the Ctrl+P context pop-up
     (`DO_CONTEXT_POPUP`), hide/erase the parent pop-up first.

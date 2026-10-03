@@ -324,6 +324,16 @@ DO_PLUGIN_MANAGER:
 	CALL	INIT_HOST_API
 	JP	C,INIT_ERR
 
+	; Check if returning from a modal child action spawned from Ctrl+P
+	LD	A,(REOPEN_CTRL_P_IN_MGR)
+	OR	A
+	JR	Z,DPM_CHECK_SLOT
+	XOR	A
+	LD	(REOPEN_CTRL_P_IN_MGR),A
+	CALL	RENDER_PLUGIN_SCREEN
+	JP	PKL_DO_CTRL_P
+
+DPM_CHECK_SLOT:
 	; Preserve SELECTED_SLOT if valid (< 8) across internal action returns
 	LD	A,(SELECTED_SLOT)
 	CP	8
@@ -343,12 +353,29 @@ PLUG_KEY_LOOP:
 	; Command: Ctrl+P -> Open Context Pop-up inside Plugin Manager
 	CP	16			; Ctrl+P
 	JR	NZ,PKL_NOT_CTRL_P
+PKL_DO_CTRL_P:
 	LD	A,PLUG_CTX_PLUGIN_MGR
 	LD	(HOST_CONTEXT_ID),A
 	CALL	DO_CONTEXT_POPUP_INTERNAL
 	JR	C,DO_PLUG_REDRAW	; If cancelled, redraw Plugin Manager
-	; Child action selected: return slot in A, action in C, CY=0
-	OR	A
+
+	; Child action selected: A = slot, C = action
+	; Step 1: Hide parent pop-up first before executing child action
+	PUSH	AF
+	PUSH	BC
+	CALL	RENDER_PLUGIN_SCREEN
+	POP	BC
+	POP	AF
+
+	; Check if action is modal; if so, set flag to reopen Ctrl+P on return
+	LD	B,A
+	CALL	IS_SLOT_MODAL_ACTION
+	JR	Z,PKL_NOT_MODAL
+	LD	A,1
+	LD	(REOPEN_CTRL_P_IN_MGR),A
+PKL_NOT_MODAL:
+	LD	A,B
+	OR	A			; Clear Carry (CY=0)
 	RET
 
 PKL_NOT_CTRL_P:
@@ -556,6 +583,7 @@ PLUG_NO_CONFIG:
 PKL_EXIT:
 	XOR	A
 	LD	(SELECTED_SLOT),A
+	LD	(REOPEN_CTRL_P_IN_MGR),A
 	SCF				; Carry = 1 (Exit / dismissed)
 	RET
 
@@ -1032,6 +1060,7 @@ CUS_KEY_LOOP:
 	CALL	DRAIN_ESC_SEQUENCE
 	LD	DE,STR_HIDE_CURSOR
 	CALL	HOST_PRINT_STR
+	SCF				; Carry = 1 (cancelled)
 	RET
 CUS_NOT_ESC:
 	CP	'y'
@@ -1049,6 +1078,7 @@ CUS_NOT_ESC:
 CUS_CANCELLED:
 	LD	DE,STR_HIDE_CURSOR
 	CALL	HOST_PRINT_STR
+	SCF				; Carry = 1 (cancelled)
 	RET
 
 CUS_CONFIRMED:
@@ -1056,6 +1086,7 @@ CUS_CONFIRMED:
 	CALL	HOST_PRINT_STR
 	LD	A,(SELECTED_SLOT)
 	CALL	HOST_UNLOAD_SLOT
+	OR	A			; Carry = 0 (unloaded)
 	RET
 
 FORMAT_UNLOAD_PROMPT:
@@ -1285,6 +1316,10 @@ CPKL_NOT_LOWER:
 	JP	Z,CPK_PREV_ITEM
 	CP	'J'			; Vi Down
 	JP	Z,CPK_NEXT_ITEM
+	CP	'A'			; Action: About
+	JP	Z,CPK_DO_ABOUT
+	CP	'U'			; Action: Unload
+	JP	Z,CPK_DO_UNLOAD
 
 	; Digit '0'..'7' selection
 	CP	'0'
@@ -1414,6 +1449,152 @@ CPEF_NOT_ABOUT:
 CPEF_RETURN:
 	POP	AF			; A = slot number
 	OR	A			; Clear Carry (CY=0)
+	RET
+
+;------------------------------------------------------------------------------
+; CPK_DO_ABOUT:
+; Spawn About child dialog from Ctrl+P context pop-up.
+; Hides parent pop-up first, displays About, and restores parent pop-up.
+;------------------------------------------------------------------------------
+CPK_DO_ABOUT:
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JP	Z,CPK_KEY_LOOP
+
+	LD	A,(POPUP_SELECTED_INDEX)
+	LD	E,A
+	LD	D,0
+	LD	HL,POPUP_MATCH_SLOTS
+	ADD	HL,DE
+	LD	A,(HL)			; A = slot number
+	LD	(SELECTED_SLOT),A
+
+	; Check if selected slot is HOST_MGR_SLOT
+	LD	B,A
+	LD	A,(HOST_MGR_SLOT)
+	CP	B
+	JR	Z,CDA_MGR_ABOUT
+
+	; Check if plugin has CAP_HAS_ABOUT (bit 4 of offset +20)
+	LD	A,(SELECTED_SLOT)
+	CALL	GET_SLOT_ENTRY_PTR
+	LD	DE,20
+	ADD	HL,DE
+	LD	A,(HL)
+	BIT	4,A			; CAP_HAS_ABOUT (10h)
+	JR	Z,CDA_ALERT_NO_ABOUT
+
+	; Plugin has About dialog
+	; Hide parent pop-up before spawning child pop-up
+	CALL	POPUP_HIDE_PARENT
+
+	LD	A,(HOST_CONTEXT_ID)
+	CP	PLUG_CTX_PLUGIN_MGR
+	JR	Z,CDA_IN_MGR
+
+	; On Host screen: return Action 1 (About) to Host DCPP_LOOP
+	LD	A,(SELECTED_SLOT)
+	LD	C,1
+	OR	A			; Carry = 0
+	RET
+
+CDA_IN_MGR:
+	; Inside Plugin Manager: return A=slot, C=1 to Host DPS_LOOP
+	LD	A,1
+	LD	(REOPEN_CTRL_P_IN_MGR),A
+	LD	A,(SELECTED_SLOT)
+	LD	C,1
+	OR	A			; Carry = 0
+	RET
+
+CDA_MGR_ABOUT:
+	; Step 1: Hide parent pop-up first
+	CALL	POPUP_HIDE_PARENT
+	; Step 2: Render child About pop-up (DO_PLUGIN_ABOUT at line 1604)
+	CALL	DO_PLUGIN_ABOUT
+	; Step 3: Clear child pop-up by redrawing base screen
+	CALL	POPUP_HIDE_PARENT
+	; Step 4: Redraw parent pop-up upon dismissal
+	JP	CPK_REDRAW
+
+CDA_ALERT_NO_ABOUT:
+	; Step 1: Hide parent pop-up first
+	CALL	POPUP_HIDE_PARENT
+	; Step 2: Render alert modal pop-up
+	LD	DE,STR_PLUG_NO_ABT_TITLE
+	LD	HL,STR_PLUG_NO_ABT_MSG
+	CALL	SHOW_ALERT_POPUP
+	; Step 3: Clear child pop-up by redrawing base screen
+	CALL	POPUP_HIDE_PARENT
+	; Step 4: Redraw parent pop-up upon dismissal
+	JP	CPK_REDRAW
+
+;------------------------------------------------------------------------------
+; CPK_DO_UNLOAD:
+; Spawn CONFIRM_UNLOAD_SLOT child modal from Ctrl+P context pop-up.
+; Hides parent pop-up first, displays child, and restores parent pop-up.
+;------------------------------------------------------------------------------
+CPK_DO_UNLOAD:
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JP	Z,CPK_KEY_LOOP
+
+	LD	A,(POPUP_SELECTED_INDEX)
+	LD	E,A
+	LD	D,0
+	LD	HL,POPUP_MATCH_SLOTS
+	ADD	HL,DE
+	LD	A,(HL)			; A = slot number
+	LD	(SELECTED_SLOT),A
+
+	; Step 1: Hide parent pop-up first by redrawing base screen
+	CALL	POPUP_HIDE_PARENT
+
+	; Step 2: Spawn child CONFIRM_UNLOAD_SLOT pop-up (line 962)
+	CALL	CONFIRM_UNLOAD_SLOT
+
+	; Step 3: Clear child pop-up by redrawing base screen
+	CALL	POPUP_HIDE_PARENT
+
+	; Step 4: Redraw parent pop-up upon dismissal of child pop-up
+	; Re-enter DO_CONTEXT_POPUP_INTERNAL to rescan slots
+	JP	DO_CONTEXT_POPUP_INTERNAL
+
+;------------------------------------------------------------------------------
+; POPUP_HIDE_PARENT:
+; Redraws base screen to completely erase parent pop-up from terminal display.
+;------------------------------------------------------------------------------
+POPUP_HIDE_PARENT:
+	LD	A,(HOST_CONTEXT_ID)
+	CP	PLUG_CTX_PLUGIN_MGR
+	JR	NZ,PHP_HOST_BASE
+	CALL	RENDER_PLUGIN_SCREEN
+	RET
+PHP_HOST_BASE:
+	CALL	HOST_REDRAW_BASE
+	RET
+
+;------------------------------------------------------------------------------
+; IS_SLOT_MODAL_ACTION:
+; Check if slot in B with action in C is a modal action.
+; Returns: NZ if modal, Z if non-modal. Preserves: B, C.
+;------------------------------------------------------------------------------
+IS_SLOT_MODAL_ACTION:
+	LD	A,C
+	OR	A
+	RET	NZ			; C != 0 (About or Config) -> Modal
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	A,B			; B = slot number
+	CALL	GET_SLOT_ENTRY_PTR
+	LD	DE,20			; Offset +20: Capabilities low byte
+	ADD	HL,DE
+	LD	A,(HL)
+	AND	08H			; CAP_MODAL_UI (08h)
+	POP	HL
+	POP	DE
+	POP	BC
 	RET
 
 POPUP_LOCATE_NEXT:
@@ -2225,6 +2406,7 @@ STR_CAP_MUTATE_TPA:	DB	"Mutate, TPA    ", 0
 STR_CAP_DEFAULT:	DB	"Standard       ", 0
 STR_PLUG_STAT_READY:	DB	"[Ready] ", 0
 AUTOLOAD_DONE:		DB	0
+REOPEN_CTRL_P_IN_MGR:	DB	0
 
 ;==============================================================================
 ; Uninitialized Variables (BSS - zero binary footprint, defined via EQU)
