@@ -88,7 +88,7 @@ upcoming milestones for SE.COM.
   > shall be expressed inside [ ] pairs (e.g. [Y]es   [N]o   [ESC]=Cancel)."*
 
 ### 2.7 Option Delimiters (`/`) in Context Pop-up Prompts
-- [ ] Remove slash delimiters (`/`) from selection hotkey options in
+- [x] Remove slash delimiters (`/`) from selection hotkey options in
   pop-ups and command bars; separate choices with whitespace.
   - In `plugins/plugin.asm:2090` (`STR_POPUP_PROMPT_MATCH`), replace
     `[Up]/[Down]=Select` with `[Up]   [Down]=Select`.

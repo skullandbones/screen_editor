@@ -2157,7 +2157,7 @@ STR_POPUP_NO_MATCH:	DB	"    No plugins found for this screen context    ", 0
 STR_POPUP_PROMPT_NOMATCH:
 	DB	"            Press any key to dismiss            ", 0
 STR_POPUP_PROMPT_MATCH:
-	DB	" [Up]/[Down]=Select   [Enter]=Exec   [ESC]=Exit ", 0
+	DB	" [Up]   [Down]=Select  [Enter]=Exec  [ESC]=Exit ", 0
 
 STR_DESC_CONFIG:	DB	"Embedded Plugin Settings     ", 0
 STR_DESC_ABOUT:		DB	"Modal About & Info Dialog    ", 0
@@ -2175,9 +2175,9 @@ STR_PLUG_SYS_POST:	DB	"/8]    TPA Slot: [4KB Overlaid]", 0
 STR_PLUG_HDR:		DB	"Slot Plugin Name      Type   Size    Exec Mode  Capabilities     Status ", 0
 STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+---------------+--------", 0
 
-STR_PLUG_CMDS_PRE:	DB	"[Up]/[Down]=Select  ", 0
+STR_PLUG_CMDS_PRE:	DB	"[Up]   [Down]=Select  ", 0
 STR_PLUG_CMDS_BOTH:
-	DB	"[Enter]=Unload  [A]=About  [C]=Config  [S]=Save  [ESC]=Exit", 0
+	DB	"[Enter]=Unload [A]=About [C]=Config [S]=Save [ESC]=Exit", 0
 STR_PLUG_CMDS_ABOUT:
 	DB	"[Enter]=Unload  [A]=About  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_CONFIG:

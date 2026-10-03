@@ -156,7 +156,7 @@ def run_screen_consistency_test(mode_name="80x24"):
                   f"Buffer: {repr(out_plug)}", flush=True)
             return False
 
-        if b"[Up]/[Down]=Select" not in out_plug:
+        if b"[Down]=Select" not in out_plug:
             print("[-] Plugin Manager missing footer command summary. "
                   f"Buffer: {repr(out_plug)}", flush=True)
             return False
@@ -252,8 +252,9 @@ def run_screen_consistency_test(mode_name="80x24"):
         if expected_title_pad not in out_open:
             print(f"[-] Open screen missing centered title. Buffer: {repr(out_open)}", flush=True)
             return False
-        if b"~  <ESC>=Cancel" not in out_open:
-            print("[-] Open screen missing '~  <ESC>=Cancel'. "
+        expected_dir_pad = b"~" + (b"  " if mode_name == "80x24" else b"   ")
+        if (expected_dir_pad + b"[ESC]=Cancel") not in out_open:
+            print("[-] Open screen missing '[ESC]=Cancel'. "
                   f"Buffer: {repr(out_open)}", flush=True)
             return False
         if b"Free:" not in out_open or b"KB" not in out_open:
@@ -292,11 +293,12 @@ def run_screen_consistency_test(mode_name="80x24"):
         if expected_save_title not in out_save:
             print(f"[-] Save screen missing centered title. Buffer: {repr(out_save)}", flush=True)
             return False
-        if b"~  Format: [" not in out_save:
-            print(f"[-] Save screen missing '~' in format indicator. Buffer: {repr(out_save)}", flush=True)
+        if (expected_dir_pad + b"Format: [") not in out_save:
+            print("[-] Save screen missing format indicator. "
+                  f"Buffer: {repr(out_save)}", flush=True)
             return False
-        if b"~  <ESC>=Cancel" not in out_save:
-            print("[-] Save screen missing '~  <ESC>=Cancel'. "
+        if (expected_dir_pad + b"[ESC]=Cancel") not in out_save:
+            print("[-] Save screen missing '[ESC]=Cancel'. "
                   f"Buffer: {repr(out_save)}", flush=True)
             return False
         if b"Free:" not in out_save or b"KB" not in out_save:

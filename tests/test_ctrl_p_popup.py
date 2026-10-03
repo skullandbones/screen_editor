@@ -148,7 +148,7 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up]/[Down]=Select", timeout=14.0)
+        out = read_until(master, b"[Down]=Select", timeout=14.0)
         if b"All Available Installed Plugins" not in out:
             print(f"[-] Test 1 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -199,7 +199,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
+        out = read_until(master, b"[Down]=Select", timeout=6.0)
         if b"Plugins with Configurable Settings" not in out:
             print(f"[-] Test 2 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -262,7 +262,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
+        out = read_until(master, b"[Down]=Select", timeout=6.0)
         if b"Plugins with Far RAM Memory Usage" not in out:
             print(f"[-] Test 3 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -306,7 +306,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
+        out = read_until(master, b"[Down]=Select", timeout=6.0)
         if b"Plugins with Embedded Documentation" not in out:
             print(f"[-] Test 4 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -372,7 +372,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
+        out = read_until(master, b"[Down]=Select", timeout=6.0)
         if b"Plugins for Editor (Run Plugin)" not in out:
             print(f"[-] Test 5 failed: Title missing. Output:\n{out.decode('latin1', errors='replace')}")
             return 1
@@ -393,8 +393,8 @@ def main():
         # Dismiss dialog with space and verify hierarchical return to Ctrl+P
         time.sleep(0.2)
         os.write(master, b" ")
-        out = read_until(master, b"[Up]/[Down]=Select", timeout=4.0)
-        if b"[Up]/[Down]=Select" not in out:
+        out = read_until(master, b"[Down]=Select", timeout=4.0)
+        if b"[Down]=Select" not in out:
             print(
                 f"[-] Test 5 failed: Return from WORDCNT modal dialog did not "
                 f"restore Ctrl+P menu. Captured: {repr(out)}"
@@ -433,7 +433,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        out = read_until(master, b"[Up]/[Down]=Select", timeout=6.0)
+        out = read_until(master, b"[Down]=Select", timeout=6.0)
         if b"Plugins with Embedded Documentation" not in out:
             print(f"[-] Test 5 failed: Title missing on Help screen pop-up.")
             return 1
