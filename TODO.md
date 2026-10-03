@@ -79,7 +79,7 @@ upcoming milestones for SE.COM.
   > file open, close, etc. screens."*
 
 ### 2.6 Angle Bracket Hotkey Syntax (`<ESC>=Cancel`) in File/Directory Screens
-- [ ] Replace prohibited angle bracket `< >` notation with canonical `[ ]`
+- [x] Replace prohibited angle bracket `< >` notation with canonical `[ ]`
   bracket notation on file open, save, and block screens.
   - In `src/se.asm:23523` (`STR_ESC_CANCEL`), change `<ESC>=Cancel` to
     `[ESC]=Cancel`.

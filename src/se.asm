@@ -23611,10 +23611,10 @@ STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
 STR_ESC_CANCEL_TXT:
-	DB	"<ESC>=Cancel  Enter [d:][u:][pattern] to list "
+	DB	"[ESC]=Cancel  Enter [d:][u:][pattern] to list "
 	DB	"(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 STR_ESC_CANCEL:
-	DB	"~  <ESC>=Cancel  Enter [d:][u:][pattern] to list "
+	DB	"~  [ESC]=Cancel  Enter [d:][u:][pattern] to list "
 	DB	"(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 
 
