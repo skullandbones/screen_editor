@@ -1655,10 +1655,10 @@ ABT_LINES_TABLE:
 	DW	STR_POPUP_BORDER
 
 STR_ABT_LINE1:	DB	"|   SE.COM Far RAM Plugin Manager (PLUGIN.PRL)   |", 0
-STR_ABT_LINE2:	DB	"| Version: v1.0.0 (2026-09-25)                   |", 0
-STR_ABT_LINE3:	DB	"| Mode   : 16KB Far RAM Modular Plugin (PRL)    |", 0
-STR_ABT_LINE4:	DB	"| Role   : Dynamic Slot Management & Pop-up UI   |", 0
-STR_ABT_LINE5:	DB	"|            Press any key to return             |", 0
+STR_ABT_LINE2:	DB	"|          Version: v1.0.0 (2026-09-25)          |", 0
+STR_ABT_LINE3:	DB	"|   Mode   : 16KB Far RAM Modular Plugin (PRL)    |", 0
+STR_ABT_LINE4:	DB	"|  Role   : Dynamic Slot Management & Pop-up UI  |", 0
+STR_ABT_LINE5:	DB	"|           Press any key to continue            |", 0
 
 ;==============================================================================
 ; Modal Pop-up: Save Plugin Configuration Confirmation
@@ -2155,7 +2155,7 @@ STR_TITLE_HELP:		DB	"       Plugins with Embedded Documentation      ", 0
 
 STR_POPUP_NO_MATCH:	DB	"    No plugins found for this screen context    ", 0
 STR_POPUP_PROMPT_NOMATCH:
-	DB	"            Press any key to dismiss            ", 0
+	DB	"           Press any key to continue            ", 0
 STR_POPUP_PROMPT_MATCH:
 	DB	" [Up]   [Down]=Select  [Enter]=Exec  [ESC]=Exit ", 0
 

@@ -1686,14 +1686,14 @@ BEAUTIFY_ABT_TABLE:
 	DW	STR_BTA_L11
 	DW	STR_BT_BORDER
 
-STR_BTA_L2:		DB	"|    Z80 Code Beautifier Plugin      |", 0
-STR_BTA_L4:		DB	"| Version: v0.1.0 (2026-09-23)       |", 0
-STR_BTA_L5:		DB	"| Compatible with SE.COM >= v0.9.7   |", 0
-STR_BTA_L6:		DB	"| Engine : Z80 Tokenizer & Lexer     |", 0
-STR_BTA_L7:		DB	"| Feat   : Column Alignment          |", 0
-STR_BTA_L8:		DB	"|        : Mnemonic/Register Casing  |", 0
-STR_BTA_L9:		DB	"|        : Block or Full Document    |", 0
-STR_BTA_L11:		DB	"|      Press any key to return       |", 0
+STR_BTA_L2:		DB	"|     Z80 Code Beautifier Plugin     |", 0
+STR_BTA_L4:		DB	"|    Version: v0.1.0 (2026-09-23)    |", 0
+STR_BTA_L5:		DB	"|  Compatible with SE.COM >= v0.9.7  |", 0
+STR_BTA_L6:		DB	"|   Engine : Z80 Tokenizer & Lexer   |", 0
+STR_BTA_L7:		DB	"|     Features: Column Alignment     |", 0
+STR_BTA_L8:		DB	"|      Mnemonic/Register Casing      |", 0
+STR_BTA_L9:		DB	"|        Block or Full Document      |", 0
+STR_BTA_L11:		DB	"|     Press any key to continue      |", 0
 
 ; Configuration Dialog Table
 BEAUTIFY_CFG_TABLE:

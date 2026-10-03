@@ -120,7 +120,7 @@ upcoming milestones for SE.COM.
   > column 0 tildes."*
 
 ### 2.10 Non-Standard Dismissals & Left-Justified Text in Plugin Pop-ups
-- [ ] Standardize dismissal prompts and centre-justify all content lines across
+- [x] Standardize dismissal prompts and centre-justify all content lines across
   plugin about and information dialogs.
   - Replace `"Press any key to return"` with `"Press any key to continue"`
     or `"Press any key"` in `plugins/plugin.asm:1661`,
