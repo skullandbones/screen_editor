@@ -12081,10 +12081,6 @@ REPLACE_CONFIRM_KEY:
 	CALL	GET_KEY
 	CP	KEY_ESC
 	JP	Z,REPLACE_QUIT
-	CP	'q'
-	JP	Z,REPLACE_QUIT
-	CP	'Q'
-	JP	Z,REPLACE_QUIT
 
 	CP	'r'
 	JR	Z,REPLACE_DO_REVERSE
@@ -23212,7 +23208,7 @@ STR_REP_CONFIRM_MSG1:
 STR_REP_CONFIRM_MSG2:
 	DB	"|            Replace this occurrence?            |", 0
 STR_REP_CONFIRM_KEYS:
-	DB	"| [Y]es [N]o [A]ll [Q]uit [R]everse [ESC]=Cancel |", 0
+	DB	"|  [Y]es  [N]o  [A]ll  [R]everse   [ESC]=Cancel  |", 0
 
 ; Pattern Not Found Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_NOT_FOUND_TITLE:

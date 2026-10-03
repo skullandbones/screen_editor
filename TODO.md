@@ -99,7 +99,7 @@ upcoming milestones for SE.COM.
   > and instead should have sufficient spaces to separate the options nicely."*
 
 ### 2.8 Non-ESC Cancellation (`[Q]uit`) in Interactive Replace Confirmation
-- [ ] Remove `[Q]uit` from interactive replace confirmation pop-up so `ESC`
+- [x] Remove `[Q]uit` from interactive replace confirmation pop-up so `ESC`
   is the exclusive cancellation trigger.
   - In `src/se.asm:23121` (`STR_REP_CONFIRM_KEYS`), update prompt from
     `| [Y]es [N]o [A]ll [Q]uit [R]everse [ESC]=Cancel |` to space-separated

@@ -2612,11 +2612,17 @@ def test_se_execution():
         if b"[Y]es" not in out_s47_keys or \
            b"[N]o" not in out_s47_keys or \
            b"[A]ll" not in out_s47_keys or \
-           b"[Q]uit" not in out_s47_keys or \
            b"[R]everse" not in out_s47_keys or \
            b"[ESC]=Cancel" not in out_s47_keys:
             print(
                 f"[-] Step 47 failed: Modal options missing. "
+                f"Buffer: {repr(out_s47_keys)}",
+                flush=True
+            )
+            return False
+        if b"[Q]uit" in out_s47_keys:
+            print(
+                f"[-] Step 47 failed: Prohibited [Q]uit option in modal. "
                 f"Buffer: {repr(out_s47_keys)}",
                 flush=True
             )
@@ -2821,8 +2827,8 @@ def test_se_execution():
         read_until(master, b"Line    1/30", timeout=4.0)
         read_until(master, b"Replace Confirmation", timeout=4.0)
 
-        # Quit replace with 'q'
-        os.write(master, b"q")
+        # Cancel replace with ESC
+        os.write(master, b"\x1b")
         out_s51_done = read_until(
             master, b"Replace done: 0 replacement(s).", timeout=4.0
         )
