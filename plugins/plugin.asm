@@ -587,6 +587,8 @@ PKL_EXIT:
 	SCF				; Carry = 1 (Exit / dismissed)
 	RET
 
+PLUG_MENU_LINES		EQU	16
+
 ;------------------------------------------------------------------------------
 ; Render Full Plugin Manager Screen
 ;------------------------------------------------------------------------------
@@ -596,6 +598,26 @@ RENDER_PLUGIN_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	HOST_PRINT_STR
 
+	; Calculate vertical top padding: ((HOST_ROWS - 1) - PLUG_MENU_LINES) / 2
+	LD	A,(HOST_ROWS)
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB	PLUG_MENU_LINES		; 23 - 16 = 7 (80x24), 39 - 16 = 23 (120x40)
+	JR	Z,PLUG_NO_TOP_PAD
+	JR	C,PLUG_NO_TOP_PAD
+	SRL	A			; 3 in 80x24, 11 in 120x40
+	JR	Z,PLUG_NO_TOP_PAD
+	LD	(PLUG_TOP_PAD_COUNT),A
+	LD	B,A
+PLUG_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	PLUG_TOP_PAD_LOOP
+	JR	PLUG_CONTENT_START
+
+PLUG_NO_TOP_PAD:
+	XOR	A
+	LD	(PLUG_TOP_PAD_COUNT),A
+
+PLUG_CONTENT_START:
 	; Row 1: Fixed centered Header
 	LD	DE,STR_PLUG_TITLE
 	CALL	PRINT_ABOUT_LINE
@@ -632,24 +654,27 @@ RPS_ROW_LOOP:
 	CP	8
 	JR	NZ,RPS_ROW_LOOP
 
-	; Pad margin rows down to HOST_ROWS - 2
-	; Rows 1..14 are header and body (14 rows)
-	; Footer is on row HOST_ROWS - 1, Status bar on row HOST_ROWS
-	; Number of margin rows = (HOST_ROWS - 2) - 14 = HOST_ROWS - 16
-	LD	A,(HOST_ROWS)
-	SUB	16
-	JR	Z,RPS_FOOTER
-	JR	C,RPS_FOOTER
-	LD	B,A
-RPS_MARGIN_LOOP:
+	; Row 15: Blank line
 	CALL	PRINT_TILDE_CRLF
-	DJNZ	RPS_MARGIN_LOOP
 
-RPS_FOOTER:
-	; Row HOST_ROWS - 1: Fixed Footer command summary line
+	; Row 16: Centered Footer command summary line
 	CALL	FORMAT_PLUGIN_FOOTER
 	CALL	PRINT_ABOUT_LINE
 
+	; Bottom padding: (HOST_ROWS - 1) - PLUG_TOP_PAD_COUNT - PLUG_MENU_LINES
+	LD	A,(HOST_ROWS)
+	DEC	A			; Text rows available
+	LD	HL,PLUG_TOP_PAD_COUNT
+	SUB	(HL)
+	SUB	PLUG_MENU_LINES
+	JR	Z,RPS_BOTTOM_DONE
+	JR	C,RPS_BOTTOM_DONE
+	LD	B,A
+RPS_BOTTOM_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	RPS_BOTTOM_LOOP
+
+RPS_BOTTOM_DONE:
 	; Row HOST_ROWS: Persistent Status bar
 	CALL	HOST_RENDER_STATUS_BAR
 	RET
@@ -2407,6 +2432,7 @@ STR_CAP_DEFAULT:	DB	"Standard       ", 0
 STR_PLUG_STAT_READY:	DB	"[Ready] ", 0
 AUTOLOAD_DONE:		DB	0
 REOPEN_CTRL_P_IN_MGR:	DB	0
+PLUG_TOP_PAD_COUNT:	DB	0
 
 ;==============================================================================
 ; Uninitialized Variables (BSS - zero binary footprint, defined via EQU)

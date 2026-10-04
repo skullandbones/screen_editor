@@ -2293,12 +2293,34 @@ PRINT_CONFIG_BLANK_LINE:
 	CALL	PUTC
 	RET
 
+CONFIG_MENU_LINES	EQU	11
+
 SHOW_CONFIG_SCREEN:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
 	CALL	TERM_HIDE_CURSOR
 	CALL	TERM_CLEAR_SCREEN
 
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - CONFIG_MENU_LINES) / 2
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB	CONFIG_MENU_LINES	; 23 - 11 = 12 (80x24), 39 - 11 = 28 (120x40)
+	JR	Z,CONFIG_NO_TOP_PAD
+	JR	C,CONFIG_NO_TOP_PAD
+	SRL	A			; 6 in 80x24, 14 in 120x40
+	JR	Z,CONFIG_NO_TOP_PAD
+	LD	(CONFIG_TOP_PAD_COUNT),A
+	LD	B,A
+CONFIG_TOP_PAD_LOOP:
+	CALL	PRINT_CONFIG_BLANK_LINE
+	DJNZ	CONFIG_TOP_PAD_LOOP
+	JR	CONFIG_CONTENT_START
+
+CONFIG_NO_TOP_PAD:
+	XOR	A
+	LD	(CONFIG_TOP_PAD_COUNT),A
+
+CONFIG_CONTENT_START:
 	; Row 1: Header (centered title)
 	LD	DE,STR_CONFIG_TITLE
 	CALL	PRINT_ABOUT_LINE
@@ -2468,46 +2490,50 @@ SCS_PLUG_CHECK_MODE:
 	; Disabled by configuration
 	LD	DE,STR_PLUG_DIS_LBL
 	CALL	PRINT_STR
-	JR	SCS_MARGIN_START
+	JR	SCS_AFTER_SETTINGS
 
 SCS_PLUG_ONDEMAND:
 	LD	DE,STR_PLUG_ONDEMAND_LBL
 	CALL	PRINT_STR
-	JR	SCS_MARGIN_START
+	JR	SCS_AFTER_SETTINGS
 
 SCS_PLUG_NO_FAR:
 	LD	DE,STR_PLUG_NO_FAR_LBL
 	CALL	PRINT_STR
-	JR	SCS_MARGIN_START
+	JR	SCS_AFTER_SETTINGS
 
 SCS_PLUG_AUTOLOAD:
 	LD	DE,STR_PLUG_AUTO_LBL
 	CALL	PRINT_STR
 
-SCS_MARGIN_START:
-	; Pad remaining rows down to ACTIVE_ROWS - 2 with blank tilde lines
-	; Rows 1..9 are header and body (9 rows)
-	; Footer is on row ACTIVE_ROWS - 1, Status bar on row ACTIVE_ROWS
-	; Number of margin rows = (ACTIVE_ROWS - 2) - 9 = ACTIVE_ROWS - 11
+SCS_AFTER_SETTINGS:
+	; Row 10: Blank line before footer
+	CALL	PRINT_CONFIG_BLANK_LINE
+
+	; Row 11: Footer command summary line
+	LD	DE,STR_CONFIG_FOOTER
+	CALL	PRINT_ABOUT_LINE
+
+	; Bottom padding: (ACTIVE_ROWS - 1) - CONFIG_TOP_PAD_COUNT - CONFIG_MENU_LINES
 	LD	A,(ACTIVE_ROWS)
-	SUB	11
-	JR	Z,SCS_FOOTER
-	JR	C,SCS_FOOTER
+	DEC	A			; Text rows available
+	LD	HL,CONFIG_TOP_PAD_COUNT
+	SUB	(HL)
+	SUB	CONFIG_MENU_LINES
+	JR	Z,SCS_FOOTER_DONE
+	JR	C,SCS_FOOTER_DONE
 	LD	B,A
 SCS_MARGIN_LOOP:
 	CALL	PRINT_CONFIG_BLANK_LINE
 	DJNZ	SCS_MARGIN_LOOP
 
-SCS_FOOTER:
-	; Row ACTIVE_ROWS - 1: Footer command summary line
-	LD	DE,STR_CONFIG_FOOTER
-	CALL	PRINT_ABOUT_LINE
-
+SCS_FOOTER_DONE:
 	; Row ACTIVE_ROWS: Status bar
 	CALL	RENDER_STATUS_BAR
 	CALL	TERM_HOME
 	CALL	TERM_HIDE_CURSOR
 	RET
+
 
 ;------------------------------------------------------------------------------
 ; QUERY_MEM_SCREEN_INFO: Dynamic detection of CP/M and HBIOS parameters
@@ -23871,6 +23897,7 @@ CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=
 SPLASH_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on splash screen
 MEM_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on memory screen
 ABOUT_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on about screen
+CONFIG_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
 CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
 CFG_TAB_WIDTH:		DB	8		; Tab width: 4 or 8 (default 8)
 CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)

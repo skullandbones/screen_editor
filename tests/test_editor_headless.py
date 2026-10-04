@@ -35,6 +35,11 @@ def find_paths():
         )
         os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
+    diskdefs_path = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "cpmtools", "diskdefs"
+    )
+    if os.path.isfile(diskdefs_path) and "DISKDEFS" not in os.environ:
+        os.environ["DISKDEFS"] = diskdefs_path
 
     return emu_bin, rom_file, img_file, se_bin
 

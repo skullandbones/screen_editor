@@ -161,7 +161,7 @@ upcoming milestones for SE.COM.
   > shall maintain strict vertical column alignment across items.
 
 ### 2.13 Configure & Plugin Screens Top-Aligned with Big Space Before Footer
-- [ ] Restore horizontal and vertical centering for Configuration and Plugin
+- [x] Restore horizontal and vertical centering for Configuration and Plugin
   Manager screens.
   - Currently, `SHOW_CONFIG_SCREEN` (`src/se.asm:2308`) and
     `RENDER_PLUGIN_SCREEN` (`plugins/plugin.asm:565`) top-align the title and
