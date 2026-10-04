@@ -23338,7 +23338,7 @@ STR_SPLASH_TITLE_PAD:	DB	"           ", "$"
 STR_SPLASH_TITLE:	DB	"SE - Screen Editor", 13, 10, "$"
 
 STR_SPLASH_CMDS:
-	DB	"  type   [E]  or  [Enter]  to edit",13,10
+	DB	"  type   [E]  or  [Enter] to edit",13,10
 	DB	"  type   [N]              to new file",13,10
 	DB	"  type   [O]              to open file",13,10
 	DB	"  type   [S]              to save file",13,10

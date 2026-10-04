@@ -386,7 +386,7 @@ def main():
         time.sleep(0.3)
         os.write(master, b"q")
         ok, out_sp = read_until(master,
-                                b"type   [E]  or  [Enter]  to edit",
+                                b"type   [E]  or  [Enter] to edit",
                                 timeout=6.0)
         if not ok:
             print(f"[-] Exit to Splash failed. Out: {repr(out_sp)}")

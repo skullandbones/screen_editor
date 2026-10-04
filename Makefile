@@ -7,6 +7,7 @@ Z80ASM ?= $(WORKSPACE_ROOT)/tools/z88dk/bin/z88dk-z80asm
 GOLDEN_IMAGE ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Binary/hd1k_combo.img
 IMAGE_DIR ?= disks
 IMAGE ?= $(IMAGE_DIR)/hd1k_combo.img
+export DISKDEFS ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Tools/cpmtools/diskdefs
 CPMCP ?= $(TOOLS_DIR)/cpmcp
 CPMRM ?= $(TOOLS_DIR)/cpmrm
 
