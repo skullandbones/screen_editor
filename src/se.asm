@@ -1900,9 +1900,9 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ; Dynamically centered both horizontally and vertically for active screen geometry.
-;; Total menu lines: 19
+; Total menu lines: 20
 ;------------------------------------------------------------------------------
-SPLASH_MENU_LINES	EQU	19
+SPLASH_MENU_LINES	EQU	20
 
 ;------------------------------------------------------------------------------
 ; PRINT_TILDE_CRLF: Print '~' followed by CRLF
@@ -1949,10 +1949,10 @@ RENDER_SPLASH:
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
 	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB	SPLASH_MENU_LINES	; 23 - 17 = 6 (80x24), 39 - 17 = 22
+	SUB	SPLASH_MENU_LINES	; 23 - 20 = 3 (80x24), 39 - 20 = 19 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	JR	C,SPLASH_NO_TOP_PAD
-	SRL	A			; 2 (80x24), 10 (120x40)
+	SRL	A			; 1 (80x24), 9 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	LD	(SPLASH_TOP_PAD_COUNT),A
 	LD	B,A
@@ -2070,15 +2070,44 @@ RENDER_SPLASH_PLUG_STATUS:
 	; Subsystem enabled (Autoload/On Demand), but not resident -> On Demand
 	LD	DE,STR_SPLASH_PLUG_ONDEMAND
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
+	JR	RENDER_SPLASH_LINES_STATUS
 
 SPLASH_PLUG_OPERATIONAL:
 	LD	DE,STR_SPLASH_PLUG_OPERATIONAL
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
+	JR	RENDER_SPLASH_LINES_STATUS
 
 SPLASH_PLUG_DISABLED:
 	LD	DE,STR_SPLASH_PLUG_DISABLED
+	CALL	PRINT_STR
+
+RENDER_SPLASH_LINES_STATUS:
+	; Row 20: Max Document Lines Status
+	CALL	PRINT_SPLASH_PREFIX
+	LD	DE,STR_SPLASH_LINES_PRE
+	CALL	PRINT_STR
+
+	; Check if paging active: EXT_BANK_COUNT >= 2
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,SPLASH_LINES_RAM
+
+	; Paging active: check MAX_DOC_LINES_LIMIT (high byte of 32768 is 0x80)
+	LD	A,(MAX_DOC_LINES_LIMIT+1)
+	CP	80H
+	JR	Z,SPLASH_LINES_32K
+
+	LD	DE,STR_SPLASH_LINES_16K
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_LINES_32K:
+	LD	DE,STR_SPLASH_LINES_32K
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_LINES_RAM:
+	LD	DE,STR_SPLASH_LINES_RAM
 	CALL	PRINT_STR
 
 RENDER_SPLASH_BOTTOM_PAD:
@@ -23393,6 +23422,10 @@ STR_SPLASH_PLUG_PRE:		DB	"Plugin System : [", "$"
 STR_SPLASH_PLUG_OPERATIONAL:	DB	"Operational]", 13, 10, "$"
 STR_SPLASH_PLUG_ONDEMAND:	DB	"On Demand]", 13, 10, "$"
 STR_SPLASH_PLUG_DISABLED:	DB	"Disabled]", 13, 10, "$"
+STR_SPLASH_LINES_PRE:		DB	"Max Lines     : [", "$"
+STR_SPLASH_LINES_RAM:		DB	"256 lines (RAM)]", 13, 10, "$"
+STR_SPLASH_LINES_16K:		DB	"16,384 lines]", 13, 10, "$"
+STR_SPLASH_LINES_32K:		DB	"32,768 lines]", 13, 10, "$"
 
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 

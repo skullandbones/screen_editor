@@ -177,7 +177,7 @@ upcoming milestones for SE.COM.
   > file open, close, etc. screens."*
 
 ### 2.14 Missing Estimated Maximum Editor Lines on Splash Screen
-- [ ] Add a status line on the splash screen displaying an estimate of the
+- [x] Add a status line on the splash screen displaying an estimate of the
   maximum number of editor lines supported under the current configuration.
   - In `src/se.asm` (`RENDER_SPLASH`), add a fourth configuration status row
     (Row 20) below Plugin System status (`SPLASH_MENU_LINES` = 20) showing the
