@@ -86,6 +86,8 @@ image: $(IMAGE) $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HIBERN.OVL 0:HIBERN.OVL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HELP.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HELP.OVL 0:HELP.OVL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:2.TXT 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) 2.TXT 0:2.TXT
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 0:se.com 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true

@@ -50,6 +50,21 @@ def find_paths():
         )
         os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
+    cpmcp_bin = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
+    )
+    diskdefs_path = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "cpmtools", "diskdefs"
+    )
+    if os.path.isfile(diskdefs_path) and "DISKDEFS" not in os.environ:
+        os.environ["DISKDEFS"] = diskdefs_path
+    two_txt_host = os.path.join(repo_root, "2.TXT")
+    if os.path.isfile(two_txt_host) and os.path.isfile(cpmcp_bin):
+        subprocess.run(
+            [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, two_txt_host, "0:2.TXT"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     return emu_bin, rom_file, img_file, se_bin
 
@@ -205,7 +220,8 @@ def main():
             return 1
         print("[+] Step 7: Entered Plugin Manager.")
 
-        # Slot 0 is selected by default (WORDCNT). Press 'j' to select slot 1 (ROT13)
+        # Slot 0 is selected by default (WORDCNT).
+        # Press 'j' to select slot 1 (ROT13)
         print("[*] Step 8: Selecting slot 1 (ROT13) via 'j'...", flush=True)
         time.sleep(0.3)
         os.write(master, b"j")

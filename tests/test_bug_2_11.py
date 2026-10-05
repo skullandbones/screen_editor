@@ -101,9 +101,9 @@ def main():
             print(f"[-] Error: {name} not found at {p}")
             sys.exit(1)
 
-    print("=================================================================")
+    print("=" * 65)
     print("  Bug 2.11: Child Pop-up Lifecycle in Plugin Manager Regression  ")
-    print("=================================================================")
+    print("=" * 65)
 
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -153,7 +153,8 @@ def main():
         os.write(master, b"\x10")  # Ctrl+P
         ok, out = read_until(master, b"Installed Plugin Catalog", timeout=6.0)
         if not ok or b"[Down]=Select" not in out:
-            print(f"[-] Failed to open Ctrl+P pop-up in Plugin Manager. Out: {repr(out)}")
+            print("[-] Failed to open Ctrl+P pop-up in Plugin Manager.")
+            print(f"    Out: {repr(out)}")
             return 1
         print("[+] Step 2 PASSED: Parent Ctrl+P context pop-up displayed.")
 
@@ -163,13 +164,17 @@ def main():
         os.write(master, b"u")
         ok, out = read_until(master, b"Unload Slot 0?", timeout=6.0)
         if not ok:
-            print(f"[-] 'u' failed to spawn Unload child pop-up. Out: {repr(out)}")
+            print("[-] 'u' failed to spawn Unload child pop-up.")
+            print(f"    Out: {repr(out)}")
             return 1
-        # Verify parent Ctrl+P pop-up was hidden (title no longer present on active screen)
+        # Verify parent Ctrl+P pop-up was hidden
+        # (title no longer present on active screen)
         if b"Installed Plugin Catalog" in out:
-            print("[-] Ghosting detected: parent pop-up title found in unload render!")
+            print("[-] Ghosting detected: parent pop-up title found "
+                      "in unload render!")
             return 1
-        print("[+] Step 3 PASSED: Child Unload pop-up displayed; parent pop-up hidden.")
+        print("[+] Step 3 PASSED: Child Unload pop-up displayed; "
+                  "parent pop-up hidden.")
 
         # 4. Cancel unload via 'n' -> parent Ctrl+P pop-up must be redrawn
         time.sleep(0.3)
@@ -177,19 +182,25 @@ def main():
         os.write(master, b"n")
         ok, out = read_until(master, b"Installed Plugin Catalog", timeout=6.0)
         if not ok or b"[Down]=Select" not in out:
-            print(f"[-] Parent Ctrl+P pop-up not redrawn after unload cancel. Out: {repr(out)}")
+            print("[-] Parent Ctrl+P pop-up not redrawn after unload cancel.")
+            print(f"    Out: {repr(out)}")
             return 1
-        print("[+] Step 4 PASSED: Parent Ctrl+P pop-up redrawn cleanly after unload cancel.")
+        print("[+] Step 4 PASSED: Parent Ctrl+P pop-up redrawn cleanly "
+                  "after unload cancel.")
 
         # 5. Press 'A' to trigger child About modal pop-up for WORDCNT
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"a")
-        ok, out = read_until(master, b"Word & Character Count Plugin", timeout=6.0)
+        ok, out = read_until(
+            master, b"Word & Character Count Plugin", timeout=6.0
+        )
         if not ok:
-            print(f"[-] 'a' failed to spawn About child pop-up. Out: {repr(out)}")
+            print("[-] 'a' failed to spawn About child pop-up.")
+            print(f"    Out: {repr(out)}")
             return 1
-        print("[+] Step 5 PASSED: Child About pop-up displayed; parent pop-up hidden.")
+        print("[+] Step 5 PASSED: Child About pop-up displayed; "
+                  "parent pop-up hidden.")
 
         # 6. Dismiss About (press space) -> parent Ctrl+P pop-up must be redrawn
         time.sleep(0.3)
@@ -197,9 +208,11 @@ def main():
         os.write(master, b" ")
         ok, out = read_until(master, b"Installed Plugin Catalog", timeout=6.0)
         if not ok or b"[Down]=Select" not in out:
-            print(f"[-] Parent Ctrl+P pop-up not redrawn after About dismiss. Out: {repr(out)}")
+            print("[-] Parent Ctrl+P pop-up not redrawn after About dismiss.")
+            print(f"    Out: {repr(out)}")
             return 1
-        print("[+] Step 6 PASSED: Parent Ctrl+P pop-up redrawn cleanly after About dismiss.")
+        print("[+] Step 6 PASSED: Parent Ctrl+P pop-up redrawn cleanly "
+                  "after About dismiss.")
 
         # 7. Select slot 0 (WORDCNT) and press Enter to execute modal action
         time.sleep(0.3)
@@ -207,19 +220,24 @@ def main():
         os.write(master, b"\r")
         ok, out = read_until(master, b"Document Statistics", timeout=6.0)
         if not ok:
-            print(f"[-] Enter failed to execute WORDCNT modal dialog. Out: {repr(out)}")
+            print("[-] Enter failed to execute WORDCNT modal dialog.")
+            print(f"    Out: {repr(out)}")
             return 1
-        print("[+] Step 7 PASSED: WORDCNT child modal dialog displayed; parent pop-up hidden.")
+        print("[+] Step 7 PASSED: WORDCNT child modal dialog displayed; "
+              "parent hidden.")
 
-        # 8. Dismiss WORDCNT dialog (press space) -> parent Ctrl+P pop-up must be redrawn
+        # 8. Dismiss WORDCNT dialog (press space) -> parent Ctrl+P pop-up
+        # must be redrawn
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b" ")
         ok, out = read_until(master, b"Installed Plugin Catalog", timeout=6.0)
         if not ok or b"[Down]=Select" not in out:
-            print(f"[-] Parent Ctrl+P pop-up not redrawn after modal action dismiss. Out: {repr(out)}")
+            print("[-] Parent Ctrl+P pop-up not redrawn after modal dismiss.")
+            print(f"    Out: {repr(out)}")
             return 1
-        print("[+] Step 8 PASSED: Parent Ctrl+P pop-up redrawn cleanly after modal action dismiss.")
+        print("[+] Step 8 PASSED: Parent Ctrl+P pop-up redrawn cleanly "
+              "after modal dismiss.")
 
         # 9. Dismiss Ctrl+P pop-up via ESC -> return to Plugin Manager
         time.sleep(0.3)
@@ -227,7 +245,8 @@ def main():
         os.write(master, b"\x1b")
         ok, out = read_until(master, b"[Enter]=Unload", timeout=6.0)
         if not ok:
-            print(f"[-] ESC failed to return cleanly to Plugin Manager. Out: {repr(out)}")
+            print("[-] ESC failed to return cleanly to Plugin Manager.")
+            print(f"    Out: {repr(out)}")
             return 1
         print("[+] Step 9 PASSED: Returned cleanly to Plugin Manager.")
 
@@ -249,9 +268,9 @@ def main():
             return 1
         print("[+] Step 10 PASSED: Clean exit to CP/M prompt.")
 
-        print("=================================================================")
-        print("  ALL BUG 2.11 REGRESSION TESTS PASSED SUCCESSFULLY (100%)!      ")
-        print("=================================================================")
+        print("=" * 65)
+        print("  ALL BUG 2.11 REGRESSION TESTS PASSED (100%)!")
+        print("=" * 65)
         return 0
 
     finally:

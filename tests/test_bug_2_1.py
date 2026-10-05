@@ -11,7 +11,8 @@ Verifies:
   3. Launch SE.COM and verify splash shows [Operational].
   4. Enter Memory Information screen ('m').
   5. Assert that the memory bank allocated to Far RAM plugins is reported
-     with SE.COM Usage indicating active plugins (e.g. 'Active: Far RAM Plugins')
+     with SE.COM Usage indicating active plugins
+     (e.g. 'Active: Far RAM Plugins')
      and NOT as 'Free / Unallocated' or 'Preserved: RAM Disk Active'.
   6. Return to splash screen via ESC and exit cleanly to CP/M with 'q'.
 """
