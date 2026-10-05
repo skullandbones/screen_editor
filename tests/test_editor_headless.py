@@ -35,6 +35,11 @@ def find_paths():
         )
         os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
+    diskdefs_path = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "cpmtools", "diskdefs"
+    )
+    if os.path.isfile(diskdefs_path) and "DISKDEFS" not in os.environ:
+        os.environ["DISKDEFS"] = diskdefs_path
 
     return emu_bin, rom_file, img_file, se_bin
 
@@ -2612,11 +2617,17 @@ def test_se_execution():
         if b"[Y]es" not in out_s47_keys or \
            b"[N]o" not in out_s47_keys or \
            b"[A]ll" not in out_s47_keys or \
-           b"[Q]uit" not in out_s47_keys or \
            b"[R]everse" not in out_s47_keys or \
            b"[ESC]=Cancel" not in out_s47_keys:
             print(
                 f"[-] Step 47 failed: Modal options missing. "
+                f"Buffer: {repr(out_s47_keys)}",
+                flush=True
+            )
+            return False
+        if b"[Q]uit" in out_s47_keys:
+            print(
+                f"[-] Step 47 failed: Prohibited [Q]uit option in modal. "
                 f"Buffer: {repr(out_s47_keys)}",
                 flush=True
             )
@@ -2821,8 +2832,8 @@ def test_se_execution():
         read_until(master, b"Line    1/30", timeout=4.0)
         read_until(master, b"Replace Confirmation", timeout=4.0)
 
-        # Quit replace with 'q'
-        os.write(master, b"q")
+        # Cancel replace with ESC
+        os.write(master, b"\x1b")
         out_s51_done = read_until(
             master, b"Replace done: 0 replacement(s).", timeout=4.0
         )
@@ -4075,14 +4086,23 @@ def test_se_execution():
             print(f"[-] Step 66 Subtest 1 failed: Insert prompt not found: {repr(out_s66_ui)}", flush=True)
             return False
 
-        # Verify cursor position is at Column 34 (inside [ ] box after preloaded 'C0:')
+        # Verify cursor position is inside [ ] box after preloaded 'C0:'
+        # (Col 34 in 80x24 with 2-space pad, Col 35 in 120x40 with 3-space pad)
         m_s66 = re.search(rb"\x1b\[(\d+);(\d+)H\x1b\[\?25h", out_s66_ui)
         if not m_s66:
-            print(f"[-] Step 66 Subtest 1 failed: Cursor positioning escape sequence not found in UI output: {repr(out_s66_ui[-200:])}", flush=True)
+            print(
+                "[-] Step 66 Subtest 1 failed: Cursor positioning escape "
+                f"sequence not found in UI output: {repr(out_s66_ui[-200:])}",
+                flush=True
+            )
             return False
         cursor_col_s66 = int(m_s66.group(2))
-        if cursor_col_s66 != 34:
-            print(f"[-] Step 66 Subtest 1 failed: Expected cursor at column 34 inside [ ] box, got column {cursor_col_s66}", flush=True)
+        if cursor_col_s66 not in (34, 35):
+            print(
+                f"[-] Step 66 Subtest 1 failed: Expected cursor at column 34 "
+                f"or 35 inside [ ] box, got column {cursor_col_s66}",
+                flush=True
+            )
             return False
 
         # Cancel with ESC
@@ -4146,8 +4166,13 @@ def test_se_execution():
         out_s66_ins1 = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
         out_s66_ins1 += drain_all(master)
 
-        if b"Loading..." not in out_s66_ins1:
-            print(f"[-] Step 66 Subtest 3 failed: 'Loading...' not found during insert: {repr(out_s66_ins1)}", flush=True)
+        if (b"Loading File" not in out_s66_ins1 and
+                b"Loading..." not in out_s66_ins1):
+            print(
+                f"[-] Step 66 Subtest 3 failed: 'Loading File' not found "
+                f"during insert: {repr(out_s66_ins1)}",
+                flush=True
+            )
             return False
         if b"~" not in out_s66_ins1:
             print(f"[-] Step 66 Subtest 3 failed: '~' not found during insert: {repr(out_s66_ins1)}", flush=True)
@@ -4196,8 +4221,13 @@ def test_se_execution():
         out_s66_ins2 = read_until(master, b"[BLK: 2L LOCK]", timeout=8.0)
         out_s66_ins2 += drain_all(master)
 
-        if b"Loading..." not in out_s66_ins2:
-            print(f"[-] Step 66 Subtest 4 failed: 'Loading...' not found during insert: {repr(out_s66_ins2)}", flush=True)
+        if (b"Loading File" not in out_s66_ins2 and
+                b"Loading..." not in out_s66_ins2):
+            print(
+                f"[-] Step 66 Subtest 4 failed: 'Loading File' not found "
+                f"during insert: {repr(out_s66_ins2)}",
+                flush=True
+            )
             return False
         if b"~" not in out_s66_ins2:
             print(f"[-] Step 66 Subtest 4 failed: '~' not found during insert: {repr(out_s66_ins2)}", flush=True)
@@ -4396,9 +4426,9 @@ def test_se_execution():
         # Subtest 1: File Save progress on 300-line file (BIG300.TXT)
         time.sleep(0.5)
         os.write(master, b"se BIG300.TXT\r")
-        out_s68_load = read_until(master, b"^K: Editor keys", timeout=35.0)
+        out_s68_load = read_until(master, b"1/300", timeout=35.0)
         drain_all(master)
-        if b"^K: Editor keys" not in out_s68_load:
+        if b"1/300" not in out_s68_load:
             print(
                 f"[-] Step 68 failed: Failed to open BIG300.TXT: "
                 f"{repr(out_s68_load[-200:])}",
@@ -4421,15 +4451,16 @@ def test_se_execution():
 
         if b"\x1b[?25l" not in out_s68_save:
             print(
-                "[-] Step 68 failed: Cursor hide escape sequence not found "
-                "during save.",
+                f"[-] Step 68 failed: Cursor hide escape sequence not found "
+                f"during save. Buffer: {repr(out_s68_save)}",
                 flush=True
             )
             return False
-        if b"Saving..." not in out_s68_save:
+        if (b"Saving File" not in out_s68_save and
+                b"Saving..." not in out_s68_save):
             print(
-                f"[-] Step 68 failed: 'Saving...' not found in status bar "
-                f"during save: {repr(out_s68_save[:400])}",
+                f"[-] Step 68 failed: 'Saving File' not found in progress "
+                f"modal during save: {repr(out_s68_save[:400])}",
                 flush=True
             )
             return False
@@ -4482,9 +4513,10 @@ def test_se_execution():
         out_s68_bsave = read_until(master, b"LOCK]", timeout=30.0)
         out_s68_bsave += drain_all(master)
 
-        if b"Saving..." not in out_s68_bsave:
+        if (b"Saving File" not in out_s68_bsave and
+                b"Saving..." not in out_s68_bsave):
             print(
-                f"[-] Step 68 failed: 'Saving...' not found during block "
+                f"[-] Step 68 failed: 'Saving File' not found during block "
                 f"save: {repr(out_s68_bsave[:400])}",
                 flush=True
             )
@@ -4547,9 +4579,10 @@ def test_se_execution():
         out_s68_exit = read_until(master, b"C>", timeout=35.0)
         out_s68_exit += drain_all(master)
 
-        if b"Saving..." not in out_s68_exit:
+        if (b"Saving File" not in out_s68_exit and
+                b"Saving..." not in out_s68_exit):
             print(
-                f"[-] Step 68 failed: 'Saving...' not found during exit "
+                f"[-] Step 68 failed: 'Saving File' not found during exit "
                 f"save: {repr(out_s68_exit[:400])}",
                 flush=True
             )
@@ -4882,8 +4915,9 @@ def test_se_execution():
         read_until(master, b"Enter filename to save:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"TESTF.TXT\r")
-        read_until(master, b"Line    1/1", timeout=8.0)
+        read_until(master, b"C:TESTF.TXT", timeout=8.0)
         time.sleep(0.3)
+        drain_all(master)
 
         # Modify document
         os.write(master, b" more text")
@@ -4934,7 +4968,7 @@ def test_se_execution():
         if b"Overwrite?" in out_s70_ow:
             time.sleep(0.2)
             os.write(master, b"y")
-        out_s70_saved = read_until(master, b"Line    1/1", timeout=8.0)
+        out_s70_saved = read_until(master, b"TESTF.TXT", timeout=8.0)
         if b"TESTF.TXT" not in out_s70_saved:
             print(
                 f"[-] Step 70 failed: Return did not save file. "
@@ -5422,8 +5456,10 @@ def test_se_execution():
 
         # Launch editor with 30.TXT
         os.write(master, b"se 30.TXT\r")
-        out_s73_ed = read_until(master, b"^K: Editor keys", timeout=30.0)
-        if b"^K: Editor keys" not in out_s73_ed:
+        out_s73_ed = read_until(master, b"1/30", timeout=30.0)
+        drain_all(master)
+        time.sleep(0.3)
+        if b"1/30" not in out_s73_ed:
             print("[-] Step 73 failed to load 30.TXT into editor.",
                   flush=True)
             return False
@@ -5528,8 +5564,10 @@ def test_se_execution():
         # Press Enter to open C0:30.TXT.
         time.sleep(0.1)
         os.write(master, b"\r")
-        out_s73_opened = read_until(master, b"^K: Editor keys", timeout=25.0)
-        if b"^K: Editor keys" not in out_s73_opened:
+        out_s73_opened = read_until(master, b"1/30", timeout=25.0)
+        drain_all(master)
+        time.sleep(0.3)
+        if b"1/30" not in out_s73_opened:
             print("[-] Step 73 failed: Open C0:30.TXT did not complete.",
                   flush=True)
             return False
@@ -5711,12 +5749,14 @@ def test_se_execution():
         time.sleep(0.3)
         os.write(master, b"\x1b")
         read_until(master, b"to configure", timeout=10.0)
+        drain_all(master)
         print("    [+] ESC cancelled Open dialog back to splash screen.")
 
         # 4. Enter editor mode with 'e' and test Save File screen
         time.sleep(0.3)
         os.write(master, b"e")
-        read_until(master, b"Free:", timeout=10.0)
+        read_until(master, b"^K: Editor keys", timeout=10.0)
+        drain_all(master)
 
         # Open Save dialog with Ctrl+S
         time.sleep(0.3)

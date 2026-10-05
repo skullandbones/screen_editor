@@ -98,10 +98,12 @@ NEXT_BYTE:
 	JR	NZ,ROT13_LOOP
 
 FINISH_SUCCESS:
-	; Set status message using Host API callback at IX+31
-	; Notice: MSG_SUCCESS address requires PRL page relocation!
-	LD	DE,MSG_SUCCESS
-	CALL	CALL_HOST_STATUS
+	; Display Tier 2 modal completion pop-up
+	LD	HL,ROT13_DONE_TABLE
+	LD	B,7
+	LD	C,38
+	CALL	RENDER_CENTERED_BOX
+	CALL	CALL_HOST_GETKEY
 
 	LD	A,1			; A = 1: Active line modified
 	OR	A			; Clear Carry (CY=0)
@@ -219,8 +221,14 @@ CALL_HOST_LOCATE:
 ;------------------------------------------------------------------------------
 ; Relocatable Data
 ;------------------------------------------------------------------------------
-MSG_SUCCESS:
-	DB	"[ROT13 Applied]$", 0
+ROT13_DONE_TABLE:
+	DW	STR_ROT13_BORDER
+	DW	STR_ROT13_L2
+	DW	STR_ROT13_BORDER
+	DW	STR_ROT13_DONE_MSG
+	DW	STR_ROT13_DONE_BLANK
+	DW	STR_ROT13_L10
+	DW	STR_ROT13_BORDER
 
 ROT13_ABT_TABLE:
 	DW	STR_ROT13_BORDER
@@ -236,10 +244,14 @@ ROT13_ABT_TABLE:
 	DW	STR_ROT13_BORDER
 
 STR_ROT13_BORDER: DB	"+------------------------------------+", 0
-STR_ROT13_L2:	DB	"|       ROT13 Text Cipher Plugin     |", 0
-STR_ROT13_L4:	DB	"| Version: v0.1.0 (2026-09-23)       |", 0
-STR_ROT13_L5:	DB	"| Compatible with SE.COM >= v0.9.7   |", 0
-STR_ROT13_L6:	DB	"| Mode   : 4KB TPA Overlaid Slot     |", 0
-STR_ROT13_L7:	DB	"| Scope  : Current Editor Line       |", 0
-STR_ROT13_L8:	DB	"| Action : Reversible 13-Char Shift  |", 0
-STR_ROT13_L10:	DB	"|      Press any key to return       |", 0
+STR_ROT13_L2:	DB	"|      ROT13 Text Cipher Plugin      |", 0
+STR_ROT13_DONE_MSG:
+	DB	"|        ROT13 Cipher Applied        |", 0
+STR_ROT13_DONE_BLANK:
+	DB	"|                                    |", 0
+STR_ROT13_L4:	DB	"|    Version: v0.1.0 (2026-09-23)    |", 0
+STR_ROT13_L5:	DB	"|  Compatible with SE.COM >= v0.9.7  |", 0
+STR_ROT13_L6:	DB	"|   Mode   : 4KB TPA Overlaid Slot   |", 0
+STR_ROT13_L7:	DB	"|    Scope  : Current Editor Line    |", 0
+STR_ROT13_L8:	DB	"|  Action : Reversible 13-Char Shift |", 0
+STR_ROT13_L10:	DB	"|     Press any key to continue      |", 0

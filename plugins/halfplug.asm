@@ -170,9 +170,9 @@ HALF_EXEC_TABLE:
 	DW	STR_HALF_EXEC_L7
 	DW	STR_HALF_BORDER
 
-STR_HALF_EXEC_L2:	DB	"|      HALFPLUG (16KB Far RAM Plugin)|", 0
-STR_HALF_EXEC_L4:	DB	"| Mode   : Far RAM Direct Execution  |", 0
-STR_HALF_EXEC_L5:	DB	"| Size   : 16KB Modular Slot Class   |", 0
+STR_HALF_EXEC_L2:	DB	"|   HALFPLUG (16KB Far RAM Plugin)   |", 0
+STR_HALF_EXEC_L4:	DB	"|  Mode   : Far RAM Direct Execution  |", 0
+STR_HALF_EXEC_L5:	DB	"|  Size   : 16KB Modular Slot Class   |", 0
 STR_HALF_EXEC_L7:	DB	"|     Press any key to continue      |", 0
 
 ; About Dialog Table
@@ -188,10 +188,10 @@ HALF_ABT_TABLE:
 	DW	STR_HALF_BORDER
 
 STR_HALF_ABT_L2:	DB	"|   HALFPLUG 16KB Reference Plugin   |", 0
-STR_HALF_ABT_L4:	DB	"| Version: v0.1.0 (2026-09-24)       |", 0
-STR_HALF_ABT_L5:	DB	"| Size   : 16KB Far RAM Slot Class   |", 0
-STR_HALF_ABT_L6:	DB	"| Mode   : Far RAM Direct Execution  |", 0
-STR_HALF_ABT_L8:	DB	"|      Press any key to return       |", 0
+STR_HALF_ABT_L4:	DB	"|    Version: v0.1.0 (2026-09-24)    |", 0
+STR_HALF_ABT_L5:	DB	"|  Size   : 16KB Far RAM Slot Class   |", 0
+STR_HALF_ABT_L6:	DB	"|  Mode   : Far RAM Direct Execution  |", 0
+STR_HALF_ABT_L8:	DB	"|     Press any key to continue      |", 0
 
 ;------------------------------------------------------------------------------
 ; 16KB Slot Padding Payload (> 8192 bytes and <= 16384 bytes)

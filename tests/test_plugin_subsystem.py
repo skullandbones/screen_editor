@@ -215,7 +215,7 @@ def run_plugin_test():
         time.sleep(0.2)
         os.write(master, b"q")
         ok, out_splash = read_until(master,
-                                    b"type   [E]  or  [Enter]  to edit",
+                                    b"type   [E]  or  [Enter] to edit",
                                     timeout=5.0)
         if not ok:
             print(f"[-] Step 6: Return to splash screen failed. "
@@ -261,25 +261,27 @@ def run_plugin_test():
         print("[*] Step 9: Executing ROT13.PRL in TPA slot...", flush=True)
         time.sleep(0.2)
         os.write(master, b"1\r")
-        ok, out_rot = read_until(master, b"[ROT13 Applied]", timeout=8.0)
-        if not ok or b"URYYB JBEYQ" not in out_rot:
+        ok, out_pop = read_until(master, b"ROT13 Cipher Applied", timeout=8.0)
+        if not ok:
+            print(f"[-] Step 9: ROT13 modal pop-up failed. Buffer: "
+                  f"{repr(out_pop)}", flush=True)
+            return False
+        # Dismiss Tier 2 modal pop-up
+        time.sleep(0.2)
+        os.write(master, b" ")
+        ok, out_rot = read_until(master, b"URYYB JBEYQ", timeout=8.0)
+        if not ok:
             print(f"[-] Step 9: ROT13 transformation failed. Buffer: "
                   f"{repr(out_rot)}", flush=True)
             return False
         print("[+] Step 9: ROT13 executed in TPA slot with PRL relocation: "
               "transformed to 'URYYB JBEYQ'.", flush=True)
 
-        # Verify keypress clears status message
+        # Type character to test editing
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"!")
-        ok, out_clr = read_until(master, b"^K: Editor keys", timeout=6.0)
-        if not ok or b"[ROT13 Applied]" in out_clr:
-            print(f"[-] Step 9: Status message was not cleared on keypress. "
-                  f"Buffer: {repr(out_clr)}", flush=True)
-            return False
-        print("[+] Step 9: Status bar message cleared on subsequent keypress.",
-              flush=True)
+        time.sleep(0.2)
 
         # 10. Execute ROT13 a 2nd time via Ctrl+P + 1 + Enter (round-trip)
         print("[*] Step 10: Executing ROT13 second invocation (round-trip)...",
@@ -290,8 +292,17 @@ def run_plugin_test():
         read_until(master, b"Plugins for Editor", timeout=6.0)
         time.sleep(0.2)
         os.write(master, b"1\r")
-        ok, out_hw2 = read_until(master, b"[ROT13 Applied]", timeout=8.0)
-        if not ok or b"HELLO WORLD!" not in out_hw2:
+        ok, out_pop2 = read_until(master, b"ROT13 Cipher Applied",
+                                  timeout=8.0)
+        if not ok:
+            print(f"[-] Step 10: ROT13 second modal pop-up failed. Buffer: "
+                  f"{repr(out_pop2)}", flush=True)
+            return False
+        # Dismiss modal pop-up
+        time.sleep(0.2)
+        os.write(master, b" ")
+        ok, out_hw2 = read_until(master, b"HELLO WORLD!", timeout=8.0)
+        if not ok:
             print(f"[-] Step 10: ROT13 second invocation round-trip failed. "
                   f"Buffer: {repr(out_hw2)}", flush=True)
             return False

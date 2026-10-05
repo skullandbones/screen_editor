@@ -173,14 +173,24 @@ How:
      6. *Buffer Pointer Clobber* (overwriting DE during string formatting).
    * When touching legacy UI routines, agents must remediate existing
      anti-patterns rather than perpetuating them.
-7. **Scratch Python Scripts Over Ad-Hoc Snippets (MANDATORY)**:
-   * Scratch python scripts should be used instead of ad-hoc python code
-     snippets (`python3 -c '...'`).
-   * Executing a standalone scratch python script by filename allows the user
-     to grant the agent permission to run the python script by name only
-     once for the project (via command prefix matching).
-   * In contrast, inline ad-hoc snippets generate novel command strings each
-     time, disabling prefix auto-approval and repeatedly prompting the user.
+7. **Prohibition of "python -c" & Mandatory Script Files (MANDATORY)**:
+   * **Absolute Prohibition**: Invoking inline Python code via `python -c` or
+     `python3 -c` (whether single-line or multi-line) is strictly prohibited
+     under all circumstances without exception.
+   * **Mandatory Script Construction**: Whenever Python execution is required
+     for diagnostics, probing, test isolation, data parsing, or validation,
+     agents MUST construct and save a standalone `.py` script to disk (e.g. in
+     the persistent scratch directory or `tests/`) and execute it by filename:
+     ```bash
+     python3 /path/to/scratch/script.py
+     ```
+   * **Rationale**:
+     - Executing standalone scripts by filename allows the user to grant command
+       prefix permission once for the project (e.g. `python3 ...`).
+     - In contrast, inline `-c` snippets generate unique command strings on
+       every invocation, breaking command prefix matching and repeatedly
+       forcing the user to manually approve interactive modal prompts.
+     - Standalone scripts leave an auditable, reproducible trail for debugging.
 8. **Pre-Merge Validation & Test Summaries (MANDATORY)**:
    * Agents must not merge unvalidated commits into the `master` branch.
    * All changes must undergo rigorous local validation (sanity checks,
@@ -379,16 +389,17 @@ Linux commands. Any attempt to use these commands is a critical violation.
   - Installing system-wide packages (`apt-get install`, `rpm`, `dnf`, `pacman`).
   - Executing untrusted remote scripts or downloading unverified binaries.
 
-### 6. Scratch Python Scripts vs. Ad-Hoc Python Code Snippets
+### 6. Absolute Prohibition of "python -c" & Use of Python Scripts
 * **Prohibited**:
-  - Ad-hoc python code snippets (`python3 -c "..."` or multi-line
-    `python3 -c '...'`).
-  - Arbitrary python evaluation one-liners embedded in shell commands.
+  - `python -c "..."`, `python3 -c "..."`, or any variant of inline Python
+    command-line evaluation strings (both single-line and multi-line).
+  - Arbitrary Python evaluation one-liners embedded in shell commands or
+    command chains.
 * **Required**:
-  - Scratch python scripts should be used instead of ad-hoc python code
-    snippets.
-  - Always write a persistent scratch script to disk (e.g. in the scratch
-    directory or `tests/`) and execute it by filename:
+  - Standalone Python scripts MUST always be constructed and executed instead
+    of inline `-c` snippets.
+  - Always write a persistent script to disk (in the scratch directory or
+    `tests/`) and execute it by filename:
     ```bash
     python3 tests/scratch_probe.py
     ```
@@ -397,12 +408,12 @@ Linux commands. Any attempt to use these commands is a critical violation.
   - For TPA and plugin checks, use `python3 check_tpa.py` and
     `python3 check_plugin.py`.
 * **Rationale**:
-  - Using scratch python scripts allows the user to grant the agent
-    permission to run the python script by name only once for the project
+  - Constructing and executing scripts by filename allows the user to grant
+    the agent permission to run Python scripts by name only once for the project
     (command prefix auto-approval).
-  - In contrast, ad-hoc inline code snippets create unique command strings on
-    every invocation, which breaks tool approval prefix matching and repeatedly
-    forces the user to manually review and approve modal prompts.
+  - In contrast, `python -c` inline code snippets create unique command strings
+    on every invocation, which breaks tool approval prefix matching and
+    repeatedly forces the user to manually review and approve modal prompts.
 
 ---
 

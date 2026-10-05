@@ -57,6 +57,11 @@ def find_paths():
     cpmrm_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm"
     )
+    diskdefs_path = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "cpmtools", "diskdefs"
+    )
+    if os.path.isfile(diskdefs_path) and "DISKDEFS" not in os.environ:
+        os.environ["DISKDEFS"] = diskdefs_path
 
     return emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
 
@@ -874,7 +879,8 @@ def run_tests():
         print("    [+] Opened TABTEST.TXT in 4-space tab mode at Col 0")
 
         # Move right onto Tab (index 1) -> visual column should be 1
-        time.sleep(0.2)
+        time.sleep(0.5)
+        drain_all(master)
         os.write(master, b"\x1b[C")
         out = read_until(master, b"Col 1", timeout=10.0)
         assert b"Col 1" in out, f"Cursor not at Col 1: {out}"
@@ -914,7 +920,8 @@ def run_tests():
         assert b"Col 0" in out
 
         # Move right onto Tab (index 1)
-        time.sleep(0.2)
+        time.sleep(0.5)
+        drain_all(master)
         os.write(master, b"\x1b[C")
         out = read_until(master, b"Col 1", timeout=10.0)
         assert b"Col 1" in out

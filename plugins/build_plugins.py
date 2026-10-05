@@ -83,7 +83,7 @@ def main():
                     "-o", os.path.join(plugin_dir, "BEAUTIFY.PRL"),
                     "--size", "8k",
                     "--tpa", "--mutate", "--has-about", "--has-config",
-                    "--bss", "324",
+                    "--bss", "292",
                     os.path.join(plugin_dir, "beautify_100.bin"),
                     os.path.join(plugin_dir, "beautify_200.bin")], check=True)
 
