@@ -227,6 +227,24 @@ upcoming milestones for SE.COM.
     `STR_POPUP_OPEN_DESC` for open; `STR_POPUP_INSERT_TITLE` /
     `STR_POPUP_INSERT_DESC` for block insert).
 
+### 2.17 Plugin Screen 'A' (About) Clears Screen Instead of Centered Pop-up
+- [ ] On the Plugin Manager screen, pressing 'A' for plugin about erroneously
+  clears the screen (`TERM_CLEAR_SCREEN` in `DO_PLUGIN_SCREEN` at
+  `src/se.asm:21226`) and renders the about text at the top-left rather than
+  displaying a centered Tier 2 modal pop-up over the current screen.
+  - Pressing 'A' must render the plugin about dialog as a Tier 2 modal pop-up
+    in the centre of the screen without clearing the Plugin Manager background.
+  - Upon dismissal, the Plugin Manager screen must remain intact or be redrawn
+    cleanly.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.2, 7.2):
+  > *"All pop-ups shall be shown in the centre of the screen both
+  > horizontally and vertically, calculated dynamically from HOST_COLS and
+  > HOST_ROWS in 1-based ANSI coordinates."*
+  >
+  > Embedded about dialogs belong to Tier 2 centered boxed modal pop-ups;
+  > clearing the screen background or displaying dialogs in the top-left
+  > violates modal presentation standards.
+
 ---
 
 ## 3. RAM Headroom & Memory Optimization
