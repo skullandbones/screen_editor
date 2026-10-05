@@ -67,7 +67,7 @@ upcoming milestones for SE.COM.
     automated regression tests (Steps 25, 64, 70, 74).
 
 ### 2.5 Missing Centering on Open, Save, and Block Screens
-- [x] Center screen content dynamically between header (Row 1) and status bar
+- [x] Center screen content dynamically vertically above the status bar
   (`HOST_ROWS`), with top and bottom margin rows padded with column 0 tildes.
   - `DO_OPEN_FILE_UI` (`src/se.asm:15165`), `DO_SAVE_FILE_UI_IMPL`
     (`src/se.asm:16242`), and Block screens are top-aligned at Row 1-3 with all
@@ -110,14 +110,12 @@ upcoming milestones for SE.COM.
   > the pop-up (no use of Ctrl-C or q key)."*
 
 ### 2.9 Column 0 Tilde Discipline Violations on Header Rows in Help Plugin
-- [ ] Remove column 0 tildes (`~`) from header rule and title rows in
-  `plugins/help.asm`.
-  - In `plugins/help.asm:168, 203`, `PRINT_HR_EQUAL` (Row 1) and
-    `RENDER_HELP_TITLE` (Row 2) emit `'~'` in column 0. Row 1 header rows must
-    not have column 0 tildes.
-- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.3, 5.2, 7.6):
-  > *"Header rows, the status bar, and Tier 2 boxed modal pop-ups do not use
-  > column 0 tildes."*
+- [x] Closed: The requirement for fixed non-tilde header rows was deleted from
+  `docs/UI_UX_DESIGN.md`. Non-editor full-screen workspaces use centered
+  content blocks with centered screen titles; only the bottom status bar
+  (`HOST_ROWS`) is strictly non-tilde.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.3, 5.2):
+  > *"Note that the status bar does not have a column 0 tilde."*
 
 ### 2.10 Non-Standard Dismissals & Left-Justified Text in Plugin Pop-ups
 - [x] Standardize dismissal prompts and centre-justify all content lines across
@@ -289,7 +287,7 @@ upcoming milestones for SE.COM.
 - [ ] Verify column 0 tildes (`~`) are rendered on all unallocated margin
   rows across Open File, Save File, and Block selection screens.
   - *Identified Bug*: Bug 2.5 (Open, Save, and Block screens missing top
-    margin tildes); see also Bug 2.9 (Help plugin header row tildes).
+    margin tildes).
 - *Justification* (`docs/UI_UX_DESIGN.md` Section 1.3):
   > *"Tildes in column 0 are used on all screens without exception
   > (including file open, save, and block screens)."*
