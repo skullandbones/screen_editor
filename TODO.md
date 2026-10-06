@@ -638,7 +638,7 @@ upcoming milestones for SE.COM.
   > positions from static background templates.
 
 ### 2.35 "File Not Found" Modal Pop-up Omits Target Filename
-- [ ] Dynamically display the target filename enclosed in single quotes `' '` in
+- [x] Dynamically display the target filename enclosed in single quotes `' '` in
   the "File Not Found" status modal pop-up.
   - In `src/se.asm:11673-11677` (`SHOW_POPUP_FILE_NOT_FOUND`), when a file
     fails to open in `DO_OPEN_FILE_UI` (`src/se.asm:15547`), plugin loading

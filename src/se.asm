@@ -11656,8 +11656,8 @@ SHOW_POPUP_HELP_MISSING:
 	JP	SHOW_STATUS_EVENT_POPUP
 
 SHOW_POPUP_FILE_NOT_FOUND:
+	CALL	FORMAT_FNF_MSG1
 	LD	DE,STR_POPUP_FNF_TITLE
-	LD	HL,STR_POPUP_FNF_MSG1
 	LD	BC,STR_POPUP_FNF_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP_MODAL
 
@@ -11672,6 +11672,152 @@ SHOW_POPUP_FAT_NO_PLUGIN:
 	LD	HL,STR_POPUP_FAT_MISS_MSG1
 	LD	BC,STR_POPUP_FAT_MISS_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP_MODAL
+
+;------------------------------------------------------------------------------
+; FORMAT_FNF_MSG1:
+; Formats Line 4 of "File Not Found" status modal pop-up:
+;   "|          '<FILENAME>' was not found.           |"
+; centered horizontally inside 50-column box borders (| ... |).
+; Output: HL = pointer to 50-character null-terminated string
+;              (either FNF_POPUP_MSG1 or STR_POPUP_FNF_MSG1 on empty fallback)
+; Preserves: BC, DE, IX
+;------------------------------------------------------------------------------
+FORMAT_FNF_MSG1:
+	PUSH	BC
+	PUSH	DE
+	PUSH	IX
+
+	; Step 1: Scan INPUT_FILENAME_BUF skipping leading spaces
+	LD	HL,INPUT_FILENAME_BUF
+FFNF_SKIP_SP:
+	LD	A,(HL)
+	CP	' '
+	JR	NZ,FFNF_CHECK_EMPTY
+	INC	HL
+	JR	FFNF_SKIP_SP
+
+FFNF_CHECK_EMPTY:
+	OR	A
+	JR	Z,FFNF_FALLBACK		; Empty buffer -> use static template
+
+	; Save pointer to start of filename in IX
+	PUSH	HL
+	POP	IX
+
+	; Check for drive/user prefix in INPUT_FILENAME_BUF
+	LD	HL,INPUT_FILENAME_BUF
+	CALL	PARSE_DRIVE_USER_PREFIX
+	JR	C,FFNF_PREFIX_OK
+	; No prefix matched: any colon is a line colon
+	LD	DE,0
+	JR	FFNF_PREFIX_DONE
+FFNF_PREFIX_OK:
+	; Prefix matched: HL points past drive colon (DE = pointer past colon)
+	EX	DE,HL
+FFNF_PREFIX_DONE:
+
+	; Now scan from IX to determine length L (max 28 chars)
+	PUSH	IX
+	POP	HL			; HL = start of filename
+	LD	B,0			; B = length counter
+
+FFNF_SCAN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,FFNF_SCAN_DONE	; Null terminator -> end of filename
+	CP	' '
+	JR	Z,FFNF_SCAN_DONE	; Space -> end of filename
+	CP	':'
+	JR	NZ,FFNF_CHAR_OK
+
+	; Colon found: check if HL < DE (part of prefix) or HL >= DE (line colon)
+	CALL	CMP_HL_DE
+	JR	C,FFNF_CHAR_OK		; Colon is part of prefix!
+	JR	FFNF_SCAN_DONE		; Colon is at or after DE -> line colon! Stop.
+
+FFNF_CHAR_OK:
+	INC	B
+	INC	HL
+	LD	A,B
+	CP	28			; Limit filename to 28 chars
+	JR	C,FFNF_SCAN_LOOP
+
+FFNF_SCAN_DONE:
+	LD	A,B
+	OR	A
+	JR	Z,FFNF_FALLBACK		; 0 chars scanned -> fallback
+
+	; Length L is in B (1..28)
+	LD	C,B			; C = L
+
+	; Step 2: Initialize FNF_POPUP_MSG1 buffer with '|', 48 spaces, '|', 0
+	LD	HL,FNF_POPUP_MSG1
+	LD	(HL),'|'
+	INC	HL
+	LD	B,48
+	LD	A,' '
+FFNF_FILL_SP:
+	LD	(HL),A
+	INC	HL
+	DJNZ	FFNF_FILL_SP
+	LD	(HL),'|'
+	INC	HL
+	LD	(HL),0
+
+	; Step 3: Compute centering offset
+	; Total text length T = 1 ("'") + C (filename) + 16 ("' was not found.")
+	; T = C + 17
+	; Remaining spaces = 48 - (C + 17) = 31 - C
+	; Left spaces = (31 - C) / 2
+	LD	A,31
+	SUB	C
+	SRL	A			; A = left spaces
+
+	; Target pointer in buffer = FNF_POPUP_MSG1 + 1 + left spaces
+	LD	HL,FNF_POPUP_MSG1 + 1
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = destination in FNF_POPUP_MSG1
+
+	; Step 4: Write opening quote "'" (ASCII 39)
+	LD	(HL),39
+	INC	HL
+
+	; Step 5: Copy C characters from IX to HL, converting to upper
+	PUSH	IX
+	POP	DE			; DE = source filename
+	LD	B,C			; B = character count
+FFNF_COPY_NAME:
+	LD	A,(DE)
+	CALL	TO_UPPER
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FFNF_COPY_NAME
+
+	; Step 6: Copy 16 characters of suffix ("' was not found.")
+	LD	DE,STR_FNF_MSG1_SFX
+	LD	B,16
+FFNF_COPY_SFX:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FFNF_COPY_SFX
+
+	; Return HL = FNF_POPUP_MSG1
+	LD	HL,FNF_POPUP_MSG1
+	POP	IX
+	POP	DE
+	POP	BC
+	RET
+
+FFNF_FALLBACK:
+	LD	HL,STR_POPUP_FNF_MSG1
+	POP	IX
+	POP	DE
+	POP	BC
+	RET
 
 FORMAT_REPLACE_DONE_MSG2:
 	PUSH	BC
@@ -23518,6 +23664,8 @@ STR_POPUP_FNF_MSG1:
 	DB	"|               File was not found.              |", 0
 STR_POPUP_FNF_MSG2:
 	DB	"|        Specified file not found on disk.       |", 0
+STR_FNF_MSG1_SFX:
+	DB	"' was not found.", 0
 
 ; RAM Drive Unavailable Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_RAMDRV_TITLE:
@@ -25048,5 +25196,6 @@ SWAP_IO_BUF	EQU	SPLIT_LINE_TEMP + 768
 ; Overlaid on top 128 bytes of SPLIT_LINE_TEMP to keep binary within page
 PROGRESS_FILENAME_STR	EQU	SPLIT_LINE_TEMP + 896
 STR_POPUP_PROGRESS_FILE	EQU	SPLIT_LINE_TEMP + 928
+FNF_POPUP_MSG1		EQU	SPLIT_LINE_TEMP + 928
 
 BSS_END		EQU	LINE_STORAGE + LINE_STORAGE_SIZE
