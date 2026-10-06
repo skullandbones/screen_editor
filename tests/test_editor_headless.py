@@ -1168,13 +1168,20 @@ def test_se_execution():
         # Test canceling overwrite with 'n'
         time.sleep(0.2)
         os.write(master, b"n")
-        out_cancel = read_until(master, b"Save cancelled.", timeout=3.0)
-        if b"Save cancelled." not in out_cancel:
-            print(f"[-] 'Save cancelled.' message missing. Buffer: {repr(out_cancel)}", flush=True)
-            return False
         out_back = read_until(master, b"C:2.TXT", timeout=4.0)
         if b"C:2.TXT" not in out_back:
-            print(f"[-] Editor mode not restored after cancelling save. Buffer: {repr(out_back)}", flush=True)
+            print(
+                "[-] Editor mode not restored after cancelling save. "
+                f"Buffer: {repr(out_back)}",
+                flush=True
+            )
+            return False
+        if b"Save cancelled" in out_back:
+            print(
+                "[-] Prohibited raw 'Save cancelled' printed. "
+                f"Buffer: {repr(out_back)}",
+                flush=True
+            )
             return False
         print(
             "[+] Step 27: Successfully verified cancelling overwrite "
@@ -1189,12 +1196,16 @@ def test_se_execution():
         read_until(master, b"2.TXT", timeout=3.0)
         time.sleep(0.2)
         os.write(master, b"\r")
-        read_until(master, b"o): ", timeout=4.0)
+        read_until(master, b"[Y]es", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"y")
-        out_saved = read_until(master, b"C:2.TXT", timeout=5.0)
+        out_saved = read_until(master, b"^K: Editor keys", timeout=8.0)
         if b"C:2.TXT" not in out_saved:
-            print(f"[-] Editor mode not restored after confirming save. Buffer: {repr(out_saved)}", flush=True)
+            print(
+                "[-] Editor mode not restored after confirming save. "
+                f"Buffer: {repr(out_saved)}",
+                flush=True
+            )
             return False
         print(
             "[+] Step 27: Successfully verified confirming overwrite ('y') "
