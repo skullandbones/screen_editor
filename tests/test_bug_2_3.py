@@ -195,6 +195,8 @@ def main():
                 "[+] Step 5: Tier 2 modal 'Saving File' popup detected!",
                 flush=True,
             )
+        # Wait for file save to complete and editor to return to main loop
+        save_out += read_until(master, b"Editor keys", timeout=15.0)
         # Check status bar does NOT contain "Saving..."
         if b"Saving...       " in save_out:
             print("[-] FAIL: Status bar shows 'Saving...'.")

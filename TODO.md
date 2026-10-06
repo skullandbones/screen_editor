@@ -195,7 +195,7 @@ upcoming milestones for SE.COM.
   > user of their memory constraints and paging capabilities before loading.
 
 ### 2.15 Target Filename Missing from Open and Save Progress Pop-ups
-- [ ] Display the target filename in the Tier 2 progress modal pop-up for file
+- [x] Display the target filename in the Tier 2 progress modal pop-up for file
   load, file save, block insert, and block save operations.
   - In `src/se.asm`, update `INIT_LOAD_PROGRESS` (line 14865),
     `INIT_SAVE_PROGRESS` (line 19546), and their block variants
