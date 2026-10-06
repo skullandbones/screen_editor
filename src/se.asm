@@ -23385,7 +23385,7 @@ STR_POPUP_PROGRESS_PFX:
 STR_PROGRESS_LINE_LBL:
 	DB	"Line ", 0
 STR_POPUP_PROGRESS_LINE:
-	DB	"|                   Line      0                  |", 0
+	DB	"|                   Line     0                   |", 0
 STR_POPUP_PROGRESS_SUB:
 	DB	"|           Please wait for completion           |", 0
 

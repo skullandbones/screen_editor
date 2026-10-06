@@ -601,7 +601,7 @@ upcoming milestones for SE.COM.
   > must be discoverable and documented in the screen command list.
 
 ### 2.34 "Opening File" Progress Dialog Line Counter Leaks Debris Trailing Zero
-- [ ] Fix unoverwritten trailing zero debris causing 1,000-line counter jumps in
+- [x] Fix unoverwritten trailing zero debris causing 1,000-line counter jumps in
   file progress modal dialogs.
   - In `src/se.asm:23402-23403`, the initial modal line template is defined
     in `STR_POPUP_PROGRESS_LINE`:
