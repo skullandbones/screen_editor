@@ -65,6 +65,8 @@ typedef struct {
 void host_putc(char c);
 char host_get_key(void);
 unsigned char host_check_key(void);
+unsigned char host_get_cols(void);
+unsigned char host_get_rows(void);
 unsigned int host_get_total_lines(void);
 unsigned int host_checkout_line(unsigned int line_num, char *buf);
 void host_commit_line(unsigned int line_num, const char *buf, unsigned int len);

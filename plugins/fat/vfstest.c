@@ -33,6 +33,14 @@ unsigned char host_check_key(void) {
     return 0;
 }
 
+unsigned char host_get_cols(void) {
+    return 80;
+}
+
+unsigned char host_get_rows(void) {
+    return 24;
+}
+
 unsigned int host_get_total_lines(void) {
     return s_mock_total;
 }

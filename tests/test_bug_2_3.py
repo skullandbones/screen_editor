@@ -50,6 +50,21 @@ def find_paths():
         )
         os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
+    cpmcp_bin = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
+    )
+    diskdefs_path = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "cpmtools", "diskdefs"
+    )
+    if os.path.isfile(diskdefs_path) and "DISKDEFS" not in os.environ:
+        os.environ["DISKDEFS"] = diskdefs_path
+    two_txt_host = os.path.join(repo_root, "2.TXT")
+    if os.path.isfile(two_txt_host) and os.path.isfile(cpmcp_bin):
+        subprocess.run(
+            [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, two_txt_host, "0:2.TXT"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     return emu_bin, rom_file, img_file, se_bin
 
@@ -180,6 +195,8 @@ def main():
                 "[+] Step 5: Tier 2 modal 'Saving File' popup detected!",
                 flush=True,
             )
+        # Wait for file save to complete and editor to return to main loop
+        save_out += read_until(master, b"Editor keys", timeout=15.0)
         # Check status bar does NOT contain "Saving..."
         if b"Saving...       " in save_out:
             print("[-] FAIL: Status bar shows 'Saving...'.")

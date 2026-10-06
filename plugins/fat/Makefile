@@ -3,12 +3,40 @@
 # Target: CP/M 3 Page-Relocatable 32KB Far RAM Executable
 #==============================================================================
 
-ZCC ?= ../../../../tools/z88dk/bin/zcc
+# Support absolute or relative TOOLS_DIR or TOOL_DIR
+ifeq ($(TOOLS_DIR),)
+  TOOLS_DIR := $(TOOL_DIR)
+endif
+ifeq ($(TOOLS_DIR),)
+  ifneq ($(wildcard ../../../../../tools/z88dk),)
+    TOOLS_DIR := ../../../../../tools
+  else ifneq ($(wildcard ../../../../tools/z88dk),)
+    TOOLS_DIR := ../../../../tools
+  else ifneq ($(wildcard ../../tools/z88dk),)
+    TOOLS_DIR := ../../tools
+  else
+    TOOLS_DIR := ../../../../tools
+  endif
+endif
+
+override TOOLS_DIR := $(abspath $(TOOLS_DIR))
+
+# If TOOLS_DIR was pointed directly at romwbw_src/Tools/Linux, navigate up
+ifeq ($(wildcard $(TOOLS_DIR)/z88dk),)
+  ifneq ($(wildcard $(TOOLS_DIR)/../../z88dk),)
+    TOOLS_ROOT := $(abspath $(TOOLS_DIR)/../..)
+  else
+    TOOLS_ROOT := $(TOOLS_DIR)
+  endif
+else
+  TOOLS_ROOT := $(TOOLS_DIR)
+endif
+
+TOOLS_BIN ?= $(TOOLS_ROOT)/z88dk/bin
+TOOLS_CFG ?= $(TOOLS_ROOT)/z88dk/lib/config
+ZCC ?= $(TOOLS_BIN)/zcc
 MKPRL ?= ../../tools/mkprl.py
 PYTHON ?= python3
-
-TOOLS_BIN = $(abspath ../../../../tools/z88dk/bin)
-TOOLS_CFG = $(abspath ../../../../tools/z88dk/lib/config)
 
 ZCC_FLAGS = +cpm -Isource -SO3 --opt-code-size
 

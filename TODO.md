@@ -175,7 +175,7 @@ upcoming milestones for SE.COM.
   > file open, close, etc. screens."*
 
 ### 2.14 Missing Estimated Maximum Editor Lines on Splash Screen
-- [ ] Add a status line on the splash screen displaying an estimate of the
+- [x] Add a status line on the splash screen displaying an estimate of the
   maximum number of editor lines supported under the current configuration.
   - In `src/se.asm` (`RENDER_SPLASH`), add a fourth configuration status row
     below Plugin System status (`SPLASH_MENU_LINES` = 20) in the centered splash
@@ -195,7 +195,7 @@ upcoming milestones for SE.COM.
   > user of their memory constraints and paging capabilities before loading.
 
 ### 2.15 Target Filename Missing from Open and Save Progress Pop-ups
-- [ ] Display the target filename in the Tier 2 progress modal pop-up for file
+- [x] Display the target filename in the Tier 2 progress modal pop-up for file
   load, file save, block insert, and block save operations.
   - In `src/se.asm`, update `INIT_LOAD_PROGRESS` (line 14865),
     `INIT_SAVE_PROGRESS` (line 19546), and their block variants
@@ -212,7 +212,7 @@ upcoming milestones for SE.COM.
     being accessed.
 
 ### 2.16 Progress Pop-up Uses "Loading" Instead of "Opening" and "Inserting"
-- [ ] Update Tier 2 progress pop-up terminology to reflect the specific file
+- [x] Update Tier 2 progress pop-up terminology to reflect the specific file
   operation being executed ("Opening" for file open, "Inserting" for block
   insert).
   - In `src/se.asm`, the progress modal currently displays a generic
@@ -230,7 +230,7 @@ upcoming milestones for SE.COM.
     `STR_POPUP_INSERT_DESC` for block insert).
 
 ### 2.17 Plugin Screen 'A' (About) Clears Screen Instead of Centered Pop-up
-- [ ] On the Plugin Manager screen, pressing 'A' for plugin about erroneously
+- [x] On the Plugin Manager screen, pressing 'A' for plugin about erroneously
   clears the screen (`TERM_CLEAR_SCREEN` in `DO_PLUGIN_SCREEN` at
   `src/se.asm:21226`) and renders the about text at the top-left rather than
   displaying a centered Tier 2 modal pop-up over the current screen.
@@ -248,7 +248,7 @@ upcoming milestones for SE.COM.
   > violates modal presentation standards.
 
 ### 2.18 Pinned Top Header Rows 1-3 on File Open, Save, and Block Screens
-- [ ] Unify screen title, directory listing, and input prompt into a centered
+- [x] Unify screen title, directory listing, and input prompt into a centered
   content block on File Open, Save, and Block selection screens.
   - Currently in `src/se.asm:16740, 16764, 16783, 16794`, `RENDER_TITLE_COMMON`
     pins a 3-row header (`=`, centered title, `=`) at Rows 1-3, inserting
@@ -264,7 +264,7 @@ upcoming milestones for SE.COM.
   > no fixed Row 1 header row on any screen."*
 
 ### 2.19 Help Screen Top-Aligned at Row 1 Without Symmetrical Margins
-- [ ] Restore horizontal and vertical centering for Help workspace.
+- [x] Restore horizontal and vertical centering for Help workspace.
   - In `plugins/help.asm:116` (`RENDER_HELP_SCREEN`), the help screen starts
     at Row 1 with zero top margin padding, dumping all unused rows (1 row on
     80x24, 17 rows on 120x40) at the bottom.
@@ -279,7 +279,7 @@ upcoming milestones for SE.COM.
   > top and bottom margin rows."*
 
 ### 2.20 Truncated File Save Blocked Uses Screen Dump Instead of Pop-up
-- [ ] Replace full-screen error dump with a Tier 2 centered modal pop-up when
+- [x] Replace full-screen error dump with a Tier 2 centered modal pop-up when
   save is blocked on a truncated document.
   - In `src/se.asm:16049` (`DO_SAVE_FILE_UI`), detecting
     `FILE_IS_TRUNCATED != 0` invokes `SHOW_TRUNCATED_SAVE_BLOCKED`
@@ -294,7 +294,7 @@ upcoming milestones for SE.COM.
   > centered boxed modal pop-ups rather than screen clears or text dumps.
 
 ### 2.21 Overwrite Cancellation Emits Raw CRLF Text Causing Display Corruption
-- [ ] Eliminate raw terminal text printing upon overwrite cancellation.
+- [x] Eliminate raw terminal text printing upon overwrite cancellation.
   - In `src/se.asm:16322` (`DO_OVERWRITE_CANCELLED`), cancelling overwrite
     emits `STR_SAVE_CANCELLED` (`13, 10, "~  Save cancelled.", 13, 10`)
     directly from the pop-up cursor coordinates without redrawing the screen.
@@ -306,7 +306,7 @@ upcoming milestones for SE.COM.
   > the screen."*
 
 ### 2.22 Non-Standard Dismissal Prompts in About, Memory, Help, and FAT Plugin
-- [ ] Standardize single-key dismissal statements across all full-screen and
+- [x] Standardize single-key dismissal statements across all full-screen and
   modal surfaces.
   - Update `STR_ABOUT_RETURN` (`src/se.asm:23472`: `"Press any key to return
     to splash"`), `STR_MEM_RETURN_PROMPT` (`src/se.asm:23490`: `"Press any key
@@ -320,7 +320,7 @@ upcoming milestones for SE.COM.
   > not have ... (Allowed: Press any key to continue, Press any key)."*
 
 ### 2.23 FAT Plugin Dialogs Use Hardcoded Coords, Screen Clears, and Delimiters
-- [ ] Bring FAT plugin about and configuration dialogs into compliance with
+- [x] Bring FAT plugin about and configuration dialogs into compliance with
   UI/UX design system specifications.
   - In `plugins/fat/fat_plugin.c:140-218` (`fat_plugin_about` and
     `fat_plugin_config`):

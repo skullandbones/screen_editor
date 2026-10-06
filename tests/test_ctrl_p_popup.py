@@ -420,7 +420,7 @@ def main():
         time.sleep(0.2)
         drain_all(master)
         os.write(master, b"\x0b")  # Ctrl+K
-        out = read_until(master, b"return to editor", timeout=4.0)
+        out = read_until(master, b"Press any key to continue", timeout=4.0)
         if b"EDITOR MODE KEYS" not in out:
             print(f"[-] Failed to open Help Screen via Ctrl+K.")
             return 1
@@ -442,7 +442,7 @@ def main():
         # Dismiss with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        out = read_until(master, b"return to editor", timeout=4.0)
+        out = read_until(master, b"Press any key to continue", timeout=4.0)
         if b"EDITOR MODE KEYS" not in out:
             print(f"[-] Test 5 failed: Return to Help Screen failed.")
             return 1

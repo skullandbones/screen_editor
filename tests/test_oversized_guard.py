@@ -139,14 +139,16 @@ def main():
         print("[*] Attempting Ctrl+S save on truncated document...")
         time.sleep(0.3)
         os.write(master, b"\x13")  # Ctrl+S
-        out_save = read_until(master, b"ERROR: SAVE DISABLED", timeout=6.0)
+        out_save = read_until(master, b"File Truncated", timeout=6.0)
         time.sleep(0.2)
         out_save += drain_all(master)
 
-        if b"ERROR: SAVE DISABLED" not in out_save:
-            print(f"[-] Save protection banner not shown: {repr(out_save[-300:])}")
+        if b"File Truncated" not in out_save:
+            print("[-] Save protection pop-up not shown: "
+                  f"{repr(out_save[-300:])}")
             return False
-        print("[+] SAVE PROTECTION ACTIVE: Screen displayed 'ERROR: SAVE DISABLED (PROTECTION)'!")
+        print("[+] SAVE PROTECTION ACTIVE: Screen displayed File Truncated "
+              "modal pop-up!")
 
         # Dismiss warning with Enter
         time.sleep(0.2)

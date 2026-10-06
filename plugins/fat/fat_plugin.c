@@ -133,40 +133,44 @@ static int get_nav_key(void) {
 /---------------------------------------------------------------------------*/
 
 int fat_plugin_about(void) {
-    vt_clear_screen();
-    vt_cursor(5, 16);
+    int rows = (int)host_get_rows();
+    int cols = (int)host_get_cols();
+    int top_row = ((rows - 15) / 2) + 1;
+    int left_col = ((cols - 50) / 2) + 1;
+    int r = top_row;
+
+    vt_cursor(r++, left_col);
     host_print("+------------------------------------------------+");
-    vt_cursor(6, 16);
+    vt_cursor(r++, left_col);
     host_print("|          FAT Filesystem Plugin v0.1.0          |");
-    vt_cursor(7, 16);
+    vt_cursor(r++, left_col);
     host_print("|        Compatible with SE.COM >= v0.9.7        |");
-    vt_cursor(8, 16);
+    vt_cursor(r++, left_col);
     host_print("+------------------------------------------------+");
-    vt_cursor(9, 16);
+    vt_cursor(r++, left_col);
     host_print("| Features:                                      |");
-    vt_cursor(10, 16);
+    vt_cursor(r++, left_col);
     host_print("|  - FAT12 / FAT16 / FAT32 Filesystem Support    |");
-    vt_cursor(11, 16);
+    vt_cursor(r++, left_col);
     host_print("|  - Direct SD Card & CF Access via RomWBW HBIOS |");
-    vt_cursor(12, 16);
+    vt_cursor(r++, left_col);
     host_print("|  - MBR Partition Auto-Detection                |");
-    vt_cursor(13, 16);
+    vt_cursor(r++, left_col);
     host_print("|  - Seamless Editor Text Import and Export      |");
-    vt_cursor(14, 16);
+    vt_cursor(r++, left_col);
     host_print("|                                                |");
-    vt_cursor(15, 16);
+    vt_cursor(r++, left_col);
     host_print("| Engine: Elm-Chan FatFs R0.15 (1-Clause BSD)    |");
-    vt_cursor(16, 16);
+    vt_cursor(r++, left_col);
     host_print("| Driver: RomWBW HBIOS by Dean Jenkins           |");
-    vt_cursor(17, 16);
+    vt_cursor(r++, left_col);
     host_print("+------------------------------------------------+");
-    vt_cursor(18, 16);
-    host_print("|             Press any key to close             |");
-    vt_cursor(19, 16);
+    vt_cursor(r++, left_col);
+    host_print("|           Press any key to continue            |");
+    vt_cursor(r++, left_col);
     host_print("+------------------------------------------------+");
 
     host_get_key();
-    vt_clear_screen();
     return PLUG_RET_CLEAN;
 }
 
@@ -175,45 +179,48 @@ int fat_plugin_about(void) {
 /---------------------------------------------------------------------------*/
 
 int fat_plugin_config(void) {
-    vt_clear_screen();
+    int rows = (int)host_get_rows();
+    int cols = (int)host_get_cols();
+    int top_row = ((rows - 11) / 2) + 1;
+    int left_col = ((cols - 50) / 2) + 1;
+
     while (1) {
         unsigned char cur_unit = get_hbios_disk_unit();
         int key;
+        int r = top_row;
 
-        vt_cursor(6, 16);
+        vt_cursor(r++, left_col);
         host_print("+------------------------------------------------+");
-        vt_cursor(7, 16);
+        vt_cursor(r++, left_col);
         host_print("|           FAT Plugin Configuration             |");
-        vt_cursor(8, 16);
+        vt_cursor(r++, left_col);
         host_print("+------------------------------------------------+");
-        vt_cursor(9, 16);
+        vt_cursor(r++, left_col);
         host_print("| Current HBIOS Disk Unit: [ Unit ");
         host_print_num(cur_unit);
         host_print(" ]             |");
-        vt_cursor(10, 16);
+        vt_cursor(r++, left_col);
         host_print("|                                                |");
-        vt_cursor(11, 16);
+        vt_cursor(r++, left_col);
         host_print("|  [0] Unit 0 (Primary CF/IDE)  [1] Unit 1 (SD)  |");
-        vt_cursor(12, 16);
+        vt_cursor(r++, left_col);
         host_print("|  [2] Unit 2 (Secondary IDE)   [3] Unit 3 (Ext) |");
-        vt_cursor(13, 16);
+        vt_cursor(r++, left_col);
         host_print("|  [4] Unit 4 (RC2014 SD0)      [5..7] Extended  |");
-        vt_cursor(14, 16);
+        vt_cursor(r++, left_col);
         host_print("|                                                |");
-        vt_cursor(15, 16);
-        host_print("| Select (0-7) to change, or [ESC]/[Q] to exit:  |");
-        vt_cursor(16, 16);
+        vt_cursor(r++, left_col);
+        host_print("|     Select [0-7] to change    [ESC]=Cancel     |");
+        vt_cursor(r++, left_col);
         host_print("+------------------------------------------------+");
 
         key = host_get_key();
         if (key >= '0' && key <= '7') {
             set_hbios_disk_unit((unsigned char)(key - '0'));
-        } else if (key == 0x1B || key == 'q' || key == 'Q' ||
-                   key == '\r' || key == '\n') {
+        } else if (key == 0x1B) {
             break;
         }
     }
-    vt_clear_screen();
     return PLUG_RET_CLEAN;
 }
 

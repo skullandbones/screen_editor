@@ -114,54 +114,132 @@ DO_HELP_CONFIG:
 ; Screen Rendering Routines
 ;------------------------------------------------------------------------------
 RENDER_HELP_SCREEN:
+	; Calculate vertical top padding: ((HELP_ROWS - 1) - HELP_LINES) / 2
+	LD	A,(HELP_ROWS)
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB	HELP_LINES		; 23 - 22 = 1 (80x24), 39 - 22 = 17 (120x40)
+	JR	Z,RHS_NO_TOP_PAD
+	JR	C,RHS_NO_TOP_PAD
+	SRL	A			; 0 in 80x24, 8 in 120x40
+	LD	(HELP_TOP_PAD_COUNT),A
+	JR	RHS_TOP_PAD_DONE
+RHS_NO_TOP_PAD:
+	XOR	A
+	LD	(HELP_TOP_PAD_COUNT),A
+RHS_TOP_PAD_DONE:
+
+	; Calculate horizontal left padding for help body table:
+	; ((HELP_COLS - 80) / 2)
+	LD	A,(HELP_COLS)
+	SUB	80
+	JR	Z,RHS_NO_LEFT_PAD
+	JR	C,RHS_NO_LEFT_PAD
+	SRL	A			; 0 in 80x24, 20 in 120x40
+	LD	(HELP_LEFT_PAD),A
+	JR	RHS_LEFT_PAD_DONE
+RHS_NO_LEFT_PAD:
+	XOR	A
+	LD	(HELP_LEFT_PAD),A
+RHS_LEFT_PAD_DONE:
+
 	LD	DE,STR_HIDE_CURSOR
 	CALL	API_PRINT_STR
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	API_PRINT_STR
 
-	; 1. Row 1: Horizontal Rule ('=')
+	; 1. Top margin blank tildes (if any)
+	LD	A,(HELP_TOP_PAD_COUNT)
+	OR	A
+	JR	Z,RHS_TOP_PADDING_DONE
+	LD	B,A
+RHS_TOP_PADDING_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	RHS_TOP_PADDING_LOOP
+RHS_TOP_PADDING_DONE:
+
+	; 2. Content Block Row 1: Horizontal Rule ('=')
 	CALL	PRINT_HR_EQUAL
 
-	; 2. Row 2: Centered Title
+	; 3. Content Block Row 2: Centered Title
 	CALL	RENDER_HELP_TITLE
 
-	; 3. Row 3: Horizontal Rule ('=')
+	; 4. Content Block Row 3: Horizontal Rule ('=')
 	CALL	PRINT_HR_EQUAL
 
-	; 4. Rows 4..20: Help Key Descriptions (17 lines)
-	LD	DE,STR_HELP_BODY
-	CALL	API_PRINT_STR
+	; 5. Content Block Rows 4..20: Help Key Descriptions (17 lines)
+	CALL	RENDER_HELP_BODY
 
-	; 5. Row 21: Horizontal Dash Rule ('-')
+	; 6. Content Block Row 21: Horizontal Dash Rule ('-')
 	CALL	PRINT_HR_DASH
 
-	; 6. Row 22: Centered Return Prompt
+	; 7. Content Block Row 22: Centered Return Prompt
 	CALL	RENDER_HELP_FOOTER
 
-	; 7. Fill remaining rows down to status row with '~'
+	; 8. Bottom margin blank tildes:
+	; (HELP_ROWS - 1) - HELP_TOP_PAD_COUNT - HELP_LINES
 	LD	A,(HELP_ROWS)
-	DEC	A			; Last text row (HELP_ROWS - 1)
-	SUB	HELP_LINES		; Remaining rows
-	JR	Z,HELP_TILDE_DONE
-	JR	C,HELP_TILDE_DONE
+	DEC	A			; Text rows available
+	LD	HL,HELP_TOP_PAD_COUNT
+	SUB	(HL)
+	SUB	HELP_LINES
+	JR	Z,RHS_BOTTOM_DONE
+	JR	C,RHS_BOTTOM_DONE
 	LD	B,A
-HELP_TILDE_LOOP:
-	LD	A,'~'
-	CALL	API_PUTC
-	LD	A,13
-	CALL	API_PUTC
-	LD	A,10
-	CALL	API_PUTC
-	DJNZ	HELP_TILDE_LOOP
+RHS_BOTTOM_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	RHS_BOTTOM_LOOP
+RHS_BOTTOM_DONE:
 
-HELP_TILDE_DONE:
-	; Call Host API to render status bar on row HELP_ROWS
+	; 9. Row HELP_ROWS: Status Bar
 	CALL	API_RENDER_STATUS_BAR
 	LD	DE,STR_HOME
 	CALL	API_PRINT_STR
 	LD	DE,STR_HIDE_CURSOR
 	CALL	API_PRINT_STR
 	RET
+
+; Print '~' followed by CRLF
+PRINT_TILDE_CRLF:
+	LD	A,'~'
+	CALL	API_PUTC
+	LD	A,13
+	CALL	API_PUTC
+	LD	A,10
+	CALL	API_PUTC
+	RET
+
+; Render Rows 4..20: Help Key Descriptions (17 lines)
+; Prefixes each line with '~' in column 0, followed by HELP_LEFT_PAD spaces,
+; followed by the line text, followed by CRLF.
+RENDER_HELP_BODY:
+	LD	HL,STR_HELP_BODY
+RHB_LINE_START:
+	LD	A,(HL)
+	CP	'$'
+	RET	Z			; End of help body
+
+	; Column 0: '~'
+	LD	A,'~'
+	CALL	API_PUTC
+
+	; Left horizontal padding spaces (if any)
+	LD	A,(HELP_LEFT_PAD)
+	OR	A
+	JR	Z,RHB_CHAR_LOOP
+	LD	B,A
+RHB_PAD_LOOP:
+	LD	A,' '
+	CALL	API_PUTC
+	DJNZ	RHB_PAD_LOOP
+
+RHB_CHAR_LOOP:
+	LD	A,(HL)
+	INC	HL
+	CALL	API_PUTC
+	CP	10			; Line Feed ends current line
+	JR	NZ,RHB_CHAR_LOOP
+	JR	RHB_LINE_START
+
 
 ; Render Row 1 & 3: Horizontal Rule of '=' across HELP_COLS
 PRINT_HR_EQUAL:
@@ -219,7 +297,7 @@ RENDER_HELP_FOOTER:
 	LD	A,'~'
 	CALL	API_PUTC
 	LD	A,(HELP_COLS)
-	SUB	33			; Length of STR_HELP_RETURN_PROMPT without CRLF
+	SUB	25			; Length of STR_HELP_RETURN_PROMPT without CRLF
 	SRL	A
 	DEC	A
 	LD	B,A
@@ -292,39 +370,41 @@ STR_HOME:		DB	27,"[H","$"
 STR_HELP_TITLE:		DB	"SE.COM - EDITOR MODE KEYS",13,10,"$"
 
 STR_HELP_BODY:
-	DB	"~  FILE & SYSTEM:",13,10
-	DB	"~    Ctrl+O           Open file screen        "
+	DB	"  FILE & SYSTEM:",13,10
+	DB	"    Ctrl+O           Open file screen        "
 	DB	"Ctrl+S          Save file screen",13,10
-	DB	"~    Ctrl+W           Close file to splash    "
+	DB	"    Ctrl+W           Close file to splash    "
 	DB	"Ctrl+Q          Quit to CP/M",13,10
-	DB	"~    Ctrl+K           Help / Solidify block   "
+	DB	"    Ctrl+K           Help / Solidify block   "
 	DB	"Ctrl+P          Plugins pop-up",13,10
-	DB	"~  NAVIGATION & SEARCH:",13,10
-	DB	"~    Arrow Keys       Move Up/Down/Left/Right "
+	DB	"  NAVIGATION & SEARCH:",13,10
+	DB	"    Arrow Keys       Move Up/Down/Left/Right "
 	DB	"Ctrl+A / Home   Start of line",13,10
-	DB	"~    Ctrl+U / PgUp    Page Up                 "
+	DB	"    Ctrl+U / PgUp    Page Up                 "
 	DB	"Ctrl+E / End    End of line",13,10
-	DB	"~    Ctrl+V / PgDn    Page Down               "
+	DB	"    Ctrl+V / PgDn    Page Down               "
 	DB	"Ctrl+T / ^Home  Top of file",13,10
-	DB	"~    Ctrl+L           Goto line number        "
+	DB	"    Ctrl+L           Goto line number        "
 	DB	"Ctrl+G / ^End   Bottom of file",13,10
-	DB	"~    Ctrl+F           Find text               "
+	DB	"    Ctrl+F           Find text               "
 	DB	"Ctrl+N          Find next",13,10
-	DB	"~    Ctrl+R           Search and Replace      "
+	DB	"    Ctrl+R           Search and Replace      "
 	DB	"Ctrl+I / Tab    Toggle find case",13,10
-	DB	"~  EDITING & BLOCK:",13,10
-	DB	"~    Insert           Toggle Insert/Overwrite "
+	DB	"  EDITING & BLOCK:",13,10
+	DB	"    Insert           Toggle Insert/Overwrite "
 	DB	"Enter           New line",13,10
-	DB	"~    ASCII 32..126    Insert/Overwrite text   "
+	DB	"    ASCII 32..126    Insert/Overwrite text   "
 	DB	"Backspace       Delete left / join",13,10
-	DB	"~    Delete / Ctrl+D  Delete char or block    "
+	DB	"    Delete / Ctrl+D  Delete char or block    "
 	DB	"Ctrl+B          Start/Toggle block",13,10
-	DB	"~    Ctrl+C           Copy solidified block   "
+	DB	"    Ctrl+C           Copy solidified block   "
 	DB	"Ctrl+K          Solidify block",13,10
-	DB	"~    Ctrl+X           Move solidified block   "
+	DB	"    Ctrl+X           Move solidified block   "
 	DB	"ESC             Clear block",13,10,"$"
 
-STR_HELP_RETURN_PROMPT:	DB	"Press any key to return to editor",13,10,"$"
+STR_HELP_RETURN_PROMPT:	DB	"Press any key to continue",13,10,"$"
 
 HELP_COLS:		DB	80
 HELP_ROWS:		DB	24
+HELP_TOP_PAD_COUNT:	DB	0
+HELP_LEFT_PAD:		DB	0

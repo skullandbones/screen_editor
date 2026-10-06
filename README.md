@@ -26,76 +26,122 @@
 * **Multi-Line Block Highlighting**: Live visual block selection (toggle with
   `Ctrl+B`) supporting dynamic expansion/contraction across lines in reverse
   video, with status bar line-count reporting.
-* **Pure Z80 Assembly Implementation**: Self-contained, zero-dependency
-  assembly codebase (`src/se.asm`) assembled directly into `SE.COM` via `uz80as`.
+* **Pure Z80 Assembly Implementation**: Self-contained assembly codebase
+  (`src/se.asm`) assembled into `SE.COM` via `z88dk-z80asm`.
 
 ---
 
 ## Toolchain & Build Environment
 
-`SE.COM` is assembled using **`uz80as`** (the micro Z80 assembler included with RomWBW tools or available as a standalone utility). No C cross-compiler or external runtime libraries are required.
+`SE.COM` and its companion plugin subsystem are built using the following
+tools:
+* **`z88dk-z80asm`**: Z80 macro assembler used to assemble `SE.COM` and
+  assembly plugins (4K, 8K, 16K, 32K classes).
+* **`z88dk` (`zcc`)**: ANSI C cross-compiler used to build the FAT filesystem
+  plugin (`plugins/fat/FATFS.PRL`).
+* **RomWBW Tools & `cpmtools`**: Host Linux tools (`cpmcp`, `cpmrm`, and
+  `diskdefs`) used to create and manipulate CP/M disk images (`hd1k_combo.img`).
 
-The `uz80as` binary for Linux host systems is located in the repository under:
-```
-tools/romwbw_src/Tools/Linux/uz80as
+### Tools Directory Structure
+
+The build system expects the tools to be arranged in a standard layout:
+
+```text
+<tools_directory>/
+├── z88dk/
+│   ├── bin/ (z88dk-z80asm, zcc)
+│   └── lib/config/
+├── romwbw_src/
+│   ├── Binary/ (hd1k_combo.img, RC2014_std.rom)
+│   └── Tools/
+│       ├── Linux/ (cpmcp, cpmrm, uz80as)
+│       └── cpmtools/diskdefs
+└── rc2014_emu/
+    └── rc2014 (hardware emulator for tests)
 ```
 
 ---
 
-## Building `SE.COM`
+## Specifying the Tools Location (`TOOLS_DIR` / `TOOL_DIR`)
 
-You can build `SE.COM` either using `make` or manually invoking `uz80as` directly.
+When cloning the repository outside the default workspace, specify the
+location of your tools directory using `TOOLS_DIR` (or `TOOL_DIR`). Both
+absolute and relative paths are fully supported.
 
-### Option 1: Using `make` (from `src/screen_editor/`)
+### Option 1: Pass on the `make` Command Line (Recommended)
 
-Navigate to `src/screen_editor` and run `make`:
+You can pass `TOOLS_DIR` directly on any make target:
 
 ```bash
-cd src/screen_editor
+# Build SE.COM and all plugins using an absolute path:
+make TOOLS_DIR=/tools
 
-# Assemble SE.COM:
+# Build using a relative path:
+make TOOLS_DIR=../../tools
+
+# Either TOOLS_DIR or TOOL_DIR may be used:
+make TOOL_DIR=/opt/retro_tools
+```
+
+### Option 2: Set in Environment
+
+Export `TOOLS_DIR` in your terminal session to avoid specifying it on every
+command:
+
+```bash
+export TOOLS_DIR=/tools
+
+# Standard make targets now automatically use /tools:
 make
+make image
+make check-plugins
+```
 
-# Assemble SE.COM and inject into workspace disk (disks/hd1k_combo.img):
+### Option 3: Monorepo Workspace Default
+
+If neither `TOOLS_DIR` nor `TOOL_DIR` is set, `make` defaults to:
+`$(WORKSPACE_ROOT)/tools` (default: `../../tools`).
+
+---
+
+## Building `SE.COM` & Plugins
+
+### Standard Make Targets
+
+From the repository root:
+
+```bash
+# 1. Build SE.COM and all plugins (default target):
+make
+# or
+make all
+
+# 2. Build plugins only (ROT13, WORDCNT, BEAUTIFY, FATFS, etc.):
+make plugins
+
+# 3. Create CP/M disk image and inject SE.COM and plugins:
 make image
 
-# Run automated headless integration tests:
-make test
+# 4. Check binary footprints and ABI conformance:
+make check-tpa
+make check-plugins
+make check-lines
 
-# Clean build artifacts:
+# 5. Run test suites:
+make test          # Fast sanity integration test
+make test-conformity  # Full regression suite
+
+# 6. Clean build artifacts:
 make clean
 ```
 
-### Option 2: Manual Assembly using `uz80as` directly (without `make`)
+### Running Python Build Scripts Standalone
 
-You can assemble `SE.COM` directly from the command line without invoking `make`.
-
-* **From inside `src/screen_editor/`**:
-  ```bash
-  cd src/screen_editor
-  ../../tools/romwbw_src/Tools/Linux/uz80as -q src/se.asm SE.COM
-  ```
-
-* **From the workspace root**:
-  ```bash
-  tools/romwbw_src/Tools/Linux/uz80as -q src/screen_editor/src/se.asm src/screen_editor/SE.COM
-  ```
-
-#### Command Options & Disassembly Listings
-* **`-q` (Quiet)**: Suppresses generating the `.lst` listing file for faster assembly.
-* **Generating a Listing File**: Omit `-q` or provide a 3rd argument to produce an assembly listing with symbol addresses and opcodes:
-  ```bash
-  ../../tools/romwbw_src/Tools/Linux/uz80as src/se.asm SE.COM SE.lst
-  ```
-
-### Option 3: Using `make` (from workspace root)
-
-From the project root directory, the top-level Makefile provides convenient targets:
+When invoking Python build utilities directly outside of `make`, provide
+`TOOLS_DIR` or `TOOL_DIR` via the environment:
 
 ```bash
-make editor   # Assembles SE.COM
-make image    # Assembles SE.COM and injects it into hd1k_combo.img
-make run      # Assembles, injects, and boots the RC2014 hardware emulator
+TOOLS_DIR=/tools python3 plugins/build_plugins.py
 ```
 
 ---
@@ -208,7 +254,7 @@ between CP/M User RAM and upper 32KB RAM banks:
 [*] Testing Inter-Bank Far Memory Transfer (Bank 0 <-> Bank 1)...
 [+] 512KB Far Memory Banking Test: PASSED! (Pattern 0xAA55 Verified)
 
-Press any key to return to Splash Screen
+Press any key to continue
 ```
 
 ---
@@ -259,17 +305,26 @@ make run
 ## Project Structure
 
 ```
-src/screen_editor/
-├── Makefile                # Build targets (SE.COM, image, test, clean)
+screen_editor/
+├── Makefile                # Build targets (SE.COM, plugins, image, test)
 ├── README.md               # Toolchain setup, build guide & documentation
-├── CODING_GUIDELINES.md    # Z80 assembly coding standards
+├── CODING_GUIDELINES.md    # Coding and formatting standards
 ├── requirements.txt        # Python dependencies for tests & tools
 ├── SE.COM                  # Assembled CP/M binary
 ├── src/
 │   └── se.asm              # 100% Z80 assembly editor implementation
-└── tests/
+├── plugins/                # Modular CP/M 3 plugin subsystem (PRL / OVL)
+│   ├── build_plugins.py    # Reference plugin packaging script
+│   ├── PLUGIN_ABI.md       # Plugin architecture and ABI specification
+│   └── fat/                # 32KB Far-RAM FAT filesystem plugin & tests
+├── tools/                  # Host development and packaging utilities
+│   ├── mkprl.py            # CP/M 3 PRL and OVL binary packager
+│   └── z80_beautifier/     # Multi-dialect Z80 assembly reformatter
+├── docs/                   # Architecture, UI/UX, and reference specs
+│   ├── UI_UX_DESIGN.md     # Visual hierarchy and screen design rules
+│   └── KEYBINDINGS.md      # Complete editor and splash key reference
+└── tests/                  # Automated integration and regression suites
     ├── README.md           # Test suite documentation
-    ├── test_editor_headless.py # Automated PTY integration test runner
-    ├── send_xmodem.py      # Serial XMODEM file sender for real hardware
-    └── sample_large.asm    # Large assembly file for tab/paging tests
+    ├── test_sanity.py      # Fast integration sanity test
+    └── test_editor_headless.py # Full PTY emulator conformity suite
 ```

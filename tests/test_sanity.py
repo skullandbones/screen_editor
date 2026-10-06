@@ -194,7 +194,7 @@ def run_sanity_test():
               flush=True)
         os.write(master, b"\x0b")
         out_help = read_until(master,
-                              b"Press any key to return to editor",
+                              b"Press any key to continue",
                               timeout=3.0)
         if b"EDITOR MODE KEYS" not in out_help:
             print(f"[-] Step 7: Help screen failed. Buffer: {repr(out_help)}",

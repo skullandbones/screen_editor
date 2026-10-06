@@ -1900,9 +1900,9 @@ NOT_ALPHA:
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ; Dynamically centered both horizontally and vertically for active screen geometry.
-;; Total menu lines: 19
+; Total menu lines: 20
 ;------------------------------------------------------------------------------
-SPLASH_MENU_LINES	EQU	19
+SPLASH_MENU_LINES	EQU	20
 
 ;------------------------------------------------------------------------------
 ; PRINT_TILDE_CRLF: Print '~' followed by CRLF
@@ -1949,10 +1949,10 @@ RENDER_SPLASH:
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
 	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB	SPLASH_MENU_LINES	; 23 - 17 = 6 (80x24), 39 - 17 = 22
+	SUB	SPLASH_MENU_LINES	; 23 - 20 = 3 (80x24), 39 - 20 = 19 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	JR	C,SPLASH_NO_TOP_PAD
-	SRL	A			; 2 (80x24), 10 (120x40)
+	SRL	A			; 1 (80x24), 9 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	LD	(SPLASH_TOP_PAD_COUNT),A
 	LD	B,A
@@ -2070,15 +2070,44 @@ RENDER_SPLASH_PLUG_STATUS:
 	; Subsystem enabled (Autoload/On Demand), but not resident -> On Demand
 	LD	DE,STR_SPLASH_PLUG_ONDEMAND
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
+	JR	RENDER_SPLASH_LINES_STATUS
 
 SPLASH_PLUG_OPERATIONAL:
 	LD	DE,STR_SPLASH_PLUG_OPERATIONAL
 	CALL	PRINT_STR
-	JR	RENDER_SPLASH_BOTTOM_PAD
+	JR	RENDER_SPLASH_LINES_STATUS
 
 SPLASH_PLUG_DISABLED:
 	LD	DE,STR_SPLASH_PLUG_DISABLED
+	CALL	PRINT_STR
+
+RENDER_SPLASH_LINES_STATUS:
+	; Row 20: Max Document Lines Status
+	CALL	PRINT_SPLASH_PREFIX
+	LD	DE,STR_SPLASH_LINES_PRE
+	CALL	PRINT_STR
+
+	; Check if paging active: EXT_BANK_COUNT >= 2
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,SPLASH_LINES_RAM
+
+	; Paging active: check MAX_DOC_LINES_LIMIT (high byte of 32768 is 0x80)
+	LD	A,(MAX_DOC_LINES_LIMIT+1)
+	CP	80H
+	JR	Z,SPLASH_LINES_32K
+
+	LD	DE,STR_SPLASH_LINES_16K
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_LINES_32K:
+	LD	DE,STR_SPLASH_LINES_32K
+	CALL	PRINT_STR
+	JR	RENDER_SPLASH_BOTTOM_PAD
+
+SPLASH_LINES_RAM:
+	LD	DE,STR_SPLASH_LINES_RAM
 	CALL	PRINT_STR
 
 RENDER_SPLASH_BOTTOM_PAD:
@@ -14912,19 +14941,22 @@ DLS_TILDE_LOOP:
 	; Render initial status bar on row ACTIVE_ROWS
 	CALL	RENDER_STATUS_BAR
 
-	; Render centered Tier 2 loading modal dialog box
-	LD	DE,STR_POPUP_LOAD_TITLE
-	LD	HL,STR_POPUP_LOAD_DESC
+	; Determine modal title: "Inserting File" if block insert, else "Opening File"
+	LD	DE,STR_POPUP_OPEN_TITLE
+	LD	A,(IS_BLOCK_INSERT_UI)
+	OR	A
+	JR	Z,DLS_SHOW_MODAL
+	LD	DE,STR_POPUP_INSERT_TITLE
+DLS_SHOW_MODAL:
 	JP	DRAW_PROGRESS_MODAL
 
 ;------------------------------------------------------------------------------
 ; DRAW_PROGRESS_MODAL:
 ; Render centered 50x7 Tier 2 progress modal box for file loading / saving.
-; Input: DE = Title string (50 cols), HL = Description string (50 cols)
+; Input: DE = Title string (50 cols)
 ; Preserves: none
 ;------------------------------------------------------------------------------
 DRAW_PROGRESS_MODAL:
-	PUSH	HL			; Save description pointer
 	PUSH	DE			; Save title pointer
 
 	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
@@ -14953,9 +14985,10 @@ DRAW_PROGRESS_MODAL:
 	; Line 3: Separator Border
 	CALL	POPUP_PRINT_BORDER
 
-	; Line 4: Description
+	; Line 4: Target Filename (centered "File: <NAME>")
 	CALL	POPUP_LOCATE_NEXT
-	POP	DE			; DE = description pointer
+	CALL	FORMAT_PROGRESS_FILE_LINE
+	EX	DE,HL			; DE = STR_POPUP_PROGRESS_FILE
 	CALL	PRINT_STR
 
 	; Line 5: Progress Line
@@ -14970,6 +15003,216 @@ DRAW_PROGRESS_MODAL:
 
 	; Line 7: Bottom Border
 	JP	POPUP_PRINT_BORDER
+
+;------------------------------------------------------------------------------
+; FORMAT_PROGRESS_FILE_LINE:
+; Formats Line 4 of progress modal:
+;   "|                  File: <DRIVE>:<FILENAME>                  |"
+; centered horizontally inside 50-column box borders (| ... |).
+; Output: HL = STR_POPUP_PROGRESS_FILE
+; Preserves: none
+;------------------------------------------------------------------------------
+FORMAT_PROGRESS_FILE_LINE:
+	; Step 1: Format "File: <TARGET>" into PROGRESS_FILENAME_STR
+	LD	DE,PROGRESS_FILENAME_STR
+	LD	HL,STR_POPUP_PROGRESS_PFX	; "File: "
+	LD	C,6				; C = length counter
+
+FPFL_CPY_PFX:
+	LD	A,(HL)
+	OR	A
+	JR	Z,FPFL_PFX_DONE
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	JR	FPFL_CPY_PFX
+
+FPFL_PFX_DONE:
+	; Check if FAT file (block insert or document)
+	LD	A,(BLOCK_INSERT_IS_FAT)
+	OR	A
+	JR	NZ,FPFL_FAT_INS
+	LD	A,(DOC_IS_FAT)
+	OR	A
+	JR	Z,FPFL_CPM_FILE
+	LD	A,(FAT_DOC_UNIT)
+	JR	FPFL_FAT_FMT
+FPFL_FAT_INS:
+	LD	A,(VFS_REQ_UNIT)
+FPFL_FAT_FMT:
+	PUSH	AF
+	LD	A,'U'
+	LD	(DE),A
+	INC	DE
+	INC	C
+	POP	AF
+	CP	0FFH
+	JR	Z,FPFL_FAT_COLON
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+FPFL_FAT_COLON:
+	LD	A,':'
+	LD	(DE),A
+	INC	DE
+	INC	C
+	LD	HL,FAT_DOC_FNAME
+FPFL_FAT_NAME_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,FPFL_STR_DONE
+	CP	' '
+	JR	Z,FPFL_STR_DONE
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	C
+	LD	A,C
+	CP	44				; Keep within 48 max
+	JR	C,FPFL_FAT_NAME_LOOP
+	JR	FPFL_STR_DONE
+
+FPFL_CPM_FILE:
+	; CP/M file: check if filename is empty / Untitled
+	LD	A,(WORK_FCB+1)
+	CP	' '
+	JR	Z,FPFL_UNTITLED
+	OR	A
+	JR	Z,FPFL_UNTITLED
+
+	; Determine drive letter
+	LD	A,(WORK_FCB)
+	OR	A
+	JR	NZ,FPFL_USE_DRIVE
+	LD	A,(CURRENT_DIR_DRIVE)
+FPFL_USE_DRIVE:
+	ADD	A,'A'-1
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+	; Check user area in WORK_FCB_USER
+	LD	A,(WORK_FCB_USER)
+	OR	A
+	JR	Z,FPFL_EMIT_COLON
+	CP	10
+	JR	C,FPFL_USER_1DIGIT
+	PUSH	AF
+	LD	A,'1'
+	LD	(DE),A
+	INC	DE
+	INC	C
+	POP	AF
+	SUB	10
+FPFL_USER_1DIGIT:
+	ADD	A,'0'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+FPFL_EMIT_COLON:
+	LD	A,':'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+	; Copy filename (WORK_FCB+1..8)
+	LD	HL,WORK_FCB+1
+	LD	B,8
+	CALL	FPFL_COPY_FCB_FIELD
+
+	; Check extension (WORK_FCB+9..11)
+	LD	HL,WORK_FCB+9
+	LD	A,(HL)
+	CP	' '
+	JR	Z,FPFL_STR_DONE
+	OR	A
+	JR	Z,FPFL_STR_DONE
+
+	LD	A,'.'
+	LD	(DE),A
+	INC	DE
+	INC	C
+
+	LD	B,3
+	CALL	FPFL_COPY_FCB_FIELD
+	JR	FPFL_STR_DONE
+
+FPFL_COPY_FCB_FIELD:
+	LD	A,(HL)
+	CP	' '
+	RET	Z
+	OR	A
+	RET	Z
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	C
+	DJNZ	FPFL_COPY_FCB_FIELD
+	RET
+
+FPFL_UNTITLED:
+	LD	HL,STR_NO_NAME			; "(Untitled)"
+FPFL_UNTITLED_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,FPFL_STR_DONE
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	C
+	JR	FPFL_UNTITLED_LOOP
+
+FPFL_STR_DONE:
+	XOR	A
+	LD	(DE),A				; Null terminate string
+
+	; Step 2: Initialize STR_POPUP_PROGRESS_FILE with '|', 48 spaces, '|', 0
+	LD	HL,STR_POPUP_PROGRESS_FILE
+	LD	(HL),'|'
+	INC	HL
+	LD	B,48
+	LD	A,' '
+FPFL_FILL_SPACES:
+	LD	(HL),A
+	INC	HL
+	DJNZ	FPFL_FILL_SPACES
+	LD	(HL),'|'
+	INC	HL
+	LD	(HL),0
+
+	; Step 3: Compute centering offset: left_spaces = (48 - C) / 2
+	LD	A,C
+	CP	48
+	JR	C,FPFL_CALC_PAD
+	LD	A,48
+	LD	C,A
+FPFL_CALC_PAD:
+	LD	A,48
+	SUB	C
+	SRL	A				; A = left spaces
+
+	; Target offset = STR_POPUP_PROGRESS_FILE + 1 + left spaces
+	LD	HL,STR_POPUP_PROGRESS_FILE+1
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE				; HL = destination in buffer
+
+	; Step 4: Copy C characters from PROGRESS_FILENAME_STR into HL
+	LD	DE,PROGRESS_FILENAME_STR
+	LD	B,C
+FPFL_COPY_TEXT:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FPFL_COPY_TEXT
+
+	; Return HL = STR_POPUP_PROGRESS_FILE
+	LD	HL,STR_POPUP_PROGRESS_FILE
+	RET
 
 ;------------------------------------------------------------------------------
 ; UPDATE_LOAD_PROGRESS:
@@ -15434,6 +15677,9 @@ DPAI_PROBE_OK:
 	LD	BC,36
 	LDIR
 
+	LD	A,(BLOCK_IO_USER)
+	LD	(WORK_FCB_USER),A
+
 	LD	A,1
 	LD	(HAS_FILE_ARG),A
 	LD	(IS_LOADING_FILE),A
@@ -15456,6 +15702,9 @@ DPAI_CLEANUP:
 	LD	DE,WORK_FCB
 	LD	BC,36
 	LDIR
+
+	LD	A,(DOC_USER_NUM)
+	LD	(WORK_FCB_USER),A
 
 	; Restore original HAS_FILE_ARG
 	LD	A,(SAVED_HAS_FILE_ARG)
@@ -16049,7 +16298,7 @@ DO_SAVE_FILE_UI:
 	LD	A,(FILE_IS_TRUNCATED)
 	OR	A
 	JR	Z,DO_SAVE_FILE_OK
-	CALL	SHOW_TRUNCATED_SAVE_BLOCKED
+	CALL	SHOW_FILE_TRUNCATED_POPUP
 	RET
 
 DO_SAVE_FILE_OK:
@@ -16067,38 +16316,6 @@ DO_SAVE_FILE_OK:
 	LD	(IS_SAVE_UI),A
 	LD	HL,0FFFFH
 	LD	(CACHE_START_ROW),HL
-	RET
-
-TRUNC_LINES	EQU	12
-
-SHOW_TRUNCATED_SAVE_BLOCKED:
-	LD	A,1
-	LD	(IS_SPLASH_SCREEN),A
-	CALL	TERM_HIDE_CURSOR
-	CALL	TERM_CLEAR_SCREEN
-	LD	DE,STR_TRUNC_SAVE_BLOCKED
-	CALL	PRINT_STR
-
-	; Fill remaining rows down to status row with '~'
-	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1
-	SUB	TRUNC_LINES
-	JR	Z,TRUNC_TILDE_DONE
-	JR	C,TRUNC_TILDE_DONE
-	LD	B,A
-TRUNC_TILDE_LOOP:
-	CALL	PRINT_TILDE_CRLF
-	DJNZ	TRUNC_TILDE_LOOP
-
-TRUNC_TILDE_DONE:
-	CALL	RENDER_STATUS_BAR
-	CALL	TERM_HOME
-	CALL	TERM_HIDE_CURSOR
-	CALL	GET_KEY
-	CP	KEY_ESC
-	CALL	Z,DRAIN_ESC_SEQUENCE
-	XOR	A
-	LD	(IS_SPLASH_SCREEN),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -16327,10 +16544,7 @@ DO_OVERWRITE_CANCELLED:
 	LDIR
 	LD	A,(DOC_USER_NUM)
 	LD	(WORK_FCB_USER),A
-
-	LD	DE,STR_SAVE_CANCELLED
-	CALL	PRINT_STR
-	CALL	DELAY_BRIEF
+	CALL	RESTORE_DOC_USER
 	RET
 
 DO_OVERWRITE_CONFIRMED:
@@ -16754,11 +16968,11 @@ CDTP_ZERO:
 	RET
 
 ;------------------------------------------------------------------------------
-; Render Open/Save Screen Header (Rows 1-3) & Top Padding:
-; Row 1: Full-width "~====..."
-; Row 2: Centered title: "~   SE.COM - OPEN/SAVE FILE (DIRECTORY - DRIVE X:)"
-; Row 3: Full-width "~====..."
-; Top margin: DIR_TOP_PAD_COUNT blank tildes
+; Render Open/Save Screen Top Margin & Centered Header:
+; Rows 1 .. DIR_TOP_PAD_COUNT: Top margin blank tildes
+; Row DIR_TOP_PAD_COUNT + 1: Full-width "~====..."
+; Row DIR_TOP_PAD_COUNT + 2: Centered title: "~   SE.COM - OPEN/SAVE FILE ..."
+; Row DIR_TOP_PAD_COUNT + 3: Full-width "~====..."
 ; Sets UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT.
 ;------------------------------------------------------------------------------
 RENDER_DIR_TITLE:
@@ -16798,7 +17012,20 @@ RENDER_TITLE_COMMON:
 	; 1. Clear Screen (ESC [ 2 J, ESC [ H)
 	CALL	TERM_CLEAR_SCREEN
 
-	; 2. Row 1: Horizontal Rule
+	; Calculate vertical top padding for directory/file screen
+	CALL	CALC_DIR_TOP_PAD
+
+	; 2. Print top margin blank tilde rows before title block (if any)
+	LD	A,(DIR_TOP_PAD_COUNT)
+	OR	A
+	JR	Z,RTC_TOP_PAD_DONE
+	LD	B,A
+RTC_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	RTC_TOP_PAD_LOOP
+RTC_TOP_PAD_DONE:
+
+	; 3. Row DIR_TOP_PAD_COUNT + 1: Horizontal Rule
 	CALL	PRINT_HR_EQUAL
 
 	; 3. Row 2: Centered Title
@@ -16980,21 +17207,8 @@ RTC_PRINT_FILTERED:
 
 RTC_TITLE_DONE:
 
-	; 4. Row 3: Horizontal Rule
+	; Row DIR_TOP_PAD_COUNT + 3: Horizontal Rule
 	CALL	PRINT_HR_EQUAL
-
-	; Calculate vertical top padding for directory/file screen
-	CALL	CALC_DIR_TOP_PAD
-
-	; Print top margin blank tilde rows (if any)
-	LD	A,(DIR_TOP_PAD_COUNT)
-	OR	A
-	JR	Z,RTC_TOP_PAD_DONE
-	LD	B,A
-RTC_TOP_PAD_LOOP:
-	CALL	PRINT_TILDE_CRLF
-	DJNZ	RTC_TOP_PAD_LOOP
-RTC_TOP_PAD_DONE:
 
 	; Initialize UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT
 	LD	A,(DIR_TOP_PAD_COUNT)
@@ -19713,7 +19927,6 @@ INIT_SAVE_PROGRESS:
 	LD	A,100
 	LD	(LOAD_PROGRESS_COUNT),A
 	LD	DE,STR_POPUP_SAVING_TITLE
-	LD	HL,STR_POPUP_SAVE_DESC
 	CALL	DRAW_PROGRESS_MODAL
 	POP	HL
 	POP	DE
@@ -21216,17 +21429,7 @@ DPS_LOOP:
 	CALL	EXEC_PLUGIN_MGR_ACTION
 	JR	C,DPS_DISMISS		; Carry = 1: user pressed Q or ESC
 
-	; Carry = 0: user ran a slot or selected about/config
-	; A = slot number (0..7), C = action index (0..2)
-	LD	B,A
-	LD	A,C
-	OR	A
-	JR	Z,DPS_NO_CLEAR
-	PUSH	BC
-	CALL	TERM_CLEAR_SCREEN
-	POP	BC
-DPS_NO_CLEAR:
-	LD	A,B
+	; Carry = 0: user selected slot A with action C (about/config)
 	CALL	EXEC_PLUGIN_SLOT_ACTION
 	LD	A,(PLUGIN_RET_CODE)
 	CP	2
@@ -21955,6 +22158,10 @@ HBIF_DO_STREAM_OPEN:
 	; File opened! Set BLOCK_INSERT_IS_FAT = 1
 	LD	A,1
 	LD	(BLOCK_INSERT_IS_FAT),A
+
+	; Extract base filename into FAT_DOC_FNAME for progress display
+	LD	HL,FAT_INSERT_PATH
+	CALL	EXTRACT_BASE_FILENAME
 
 	; Setup loading UI for block insert
 	LD	A,(HAS_FILE_ARG)
@@ -23174,17 +23381,20 @@ STR_POPUP_OOM_MSG1:
 STR_POPUP_OOM_MSG2:
 	DB	"|      Free memory or reduce document size       |", 0
 
-; File Loading Modal Pop-up Strings (50 cols x 7 rows)
-STR_POPUP_LOAD_TITLE:
-	DB	"|                  Loading File                  |", 0
-STR_POPUP_LOAD_DESC:
-	DB	"|            Reading file into memory            |", 0
+; File Opening Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_OPEN_TITLE:
+	DB	"|                  Opening File                  |", 0
+STR_POPUP_LOAD_TITLE	EQU	STR_POPUP_OPEN_TITLE
+
+; File Inserting Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_INSERT_TITLE:
+	DB	"|                 Inserting File                 |", 0
 
 ; File Saving Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_SAVING_TITLE:
 	DB	"|                  Saving File                   |", 0
-STR_POPUP_SAVE_DESC:
-	DB	"|            Writing file to storage             |", 0
+STR_POPUP_PROGRESS_PFX:
+	DB	"File: ", 0
 
 ; Progress Modal Common Strings (50 cols x 7 rows)
 STR_PROGRESS_LINE_LBL:
@@ -23393,6 +23603,10 @@ STR_SPLASH_PLUG_PRE:		DB	"Plugin System : [", "$"
 STR_SPLASH_PLUG_OPERATIONAL:	DB	"Operational]", 13, 10, "$"
 STR_SPLASH_PLUG_ONDEMAND:	DB	"On Demand]", 13, 10, "$"
 STR_SPLASH_PLUG_DISABLED:	DB	"Disabled]", 13, 10, "$"
+STR_SPLASH_LINES_PRE:		DB	"Max Lines     : [", "$"
+STR_SPLASH_LINES_RAM:		DB	"256 lines (RAM)]", 13, 10, "$"
+STR_SPLASH_LINES_16K:		DB	"16,384 lines]", 13, 10, "$"
+STR_SPLASH_LINES_32K:		DB	"32,768 lines]", 13, 10, "$"
 
 STR_MODE_120X40_LBL:	DB	"120x40 (Modern Default)]           ",13,10,"$"
 
@@ -23469,7 +23683,7 @@ STR_ABOUT_VERSION:	DB	"version 0.9.8 (2026-09-25)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
 STR_ABOUT_AI:		DB	"Google Antigravity 2.16.0 & Gemini FLASH 3.8 high", "$"
 STR_ABOUT_LICENSE:	DB	"Open source software under the MIT License", "$"
-STR_ABOUT_RETURN:	DB	"Press any key to return to splash", "$"
+STR_ABOUT_RETURN:	DB	"Press any key to continue", "$"
 
 ;------------------------------------------------------------------------------
 ; Memory Information Screen Strings
@@ -23484,10 +23698,11 @@ STR_MEM_TABLE_HDR:
 	DB	"Bank  Phys   Size   System / OS Role        SE.COM Usage",13,10,"$"
 STR_MEM_TABLE_DIV:
 	DB	"----  ----   ----   ---------------------   ----------------------------",13,10,"$"
+; 23 spaces to center within 72 columns
 STR_MEM_PROMPT_PAD:
-	DB	"                ","$"		; 16 spaces to center within 72 columns
+	DB	"                       ","$"
 STR_MEM_RETURN_PROMPT:
-	DB	"Press any key to return to splash screen",13,10,"$"
+	DB	"Press any key to continue",13,10,"$"
 
 STR_MEM_SUM_PREFIX:	DB	"HBIOS: ","$"
 STR_MEM_SUM_NONE:	DB	"None","$"
@@ -23551,20 +23766,6 @@ STR_FMT_LINUX:	DB	"Linux | ","$"
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 STR_STATUS_OVR:		DB	"Overwrite mode  | ","$"
 STR_PAN_PREFIX:		DB	"[Pan +","$"
-
-STR_TRUNC_SAVE_BLOCKED:
-	DB	"~",13,10
-	DB	"~  =============================================================",13,10
-	DB	"~                 ERROR: SAVE DISABLED (PROTECTION)             ",13,10
-	DB	"~  =============================================================",13,10
-	DB	"~  This file was truncated upon loading because it exceeds the  ",13,10
-	DB	"~  editor's current RAM capacity.                               ",13,10
-	DB	"~",13,10
-	DB	"~  Saving has been blocked to protect the unread portion of the ",13,10
-	DB	"~  file from being overwritten and permanently lost on disk.    ",13,10
-	DB	"~",13,10
-	DB	"~  Press any key to return to the editor                        ",13,10
-	DB	"~  =============================================================",13,10,"$"
 
 STR_STATUS_FREE:	DB	"Free: ","$"
 
@@ -23638,9 +23839,6 @@ STR_ESC_CANCEL_TXT:
 STR_ESC_CANCEL:
 	DB	"~  [ESC]=Cancel  Enter [d:][u:][pattern] to list "
 	DB	"(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
-
-
-STR_SAVE_CANCELLED:	DB	13,10,"~  Save cancelled.",13,10,"$"
 
 STR_TILDE_INDENT:	DB	"~  ","$"
 STR_TILDE_CRLF:		DB	"~",13,10,"$"
@@ -24827,7 +25025,7 @@ SPSP_COPY_LOOP:
 	RET
 
 LOCAL_STACK_TOP:
-	DS	256
+	DS	128
 LOCAL_STACK:
 
 ;==============================================================================
@@ -24860,5 +25058,10 @@ LINE_SHIFT_BUF	EQU	SPLIT_LINE_TEMP + 512
 ; Overlaid on upper half of SPLIT_LINE_TEMP to keep BSS strictly below CCP
 SWAP_IO_BUF_SIZE EQU	128
 SWAP_IO_BUF	EQU	SPLIT_LINE_TEMP + 768
+
+; Scratch buffers for Tier 2 progress modal target filename
+; Overlaid on top 128 bytes of SPLIT_LINE_TEMP to keep binary within page
+PROGRESS_FILENAME_STR	EQU	SPLIT_LINE_TEMP + 896
+STR_POPUP_PROGRESS_FILE	EQU	SPLIT_LINE_TEMP + 928
 
 BSS_END		EQU	LINE_STORAGE + LINE_STORAGE_SIZE

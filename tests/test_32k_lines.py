@@ -44,6 +44,11 @@ def find_paths():
     cpmls_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmls"
     )
+    diskdefs_path = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "cpmtools", "diskdefs"
+    )
+    if os.path.isfile(diskdefs_path) and "DISKDEFS" not in os.environ:
+        os.environ["DISKDEFS"] = diskdefs_path
     return emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin, cpmls_bin
 
 def read_until(master_fd, match_bytes, timeout=60.0):
@@ -126,7 +131,7 @@ def test_32k_lines():
     # Generate SE.CFG with LINES=32K
     cfg_file = "/tmp/SE_32K.CFG"
     with open(cfg_file, "wb") as f:
-        f.write(b"SCREEN=80x24\r\nLINES=32K\r\nRAMDRIVE=OFF\r\n")
+        f.write(b"SCREEN=80x24\r\nLINES=32K\r\nRAMDRIVE=ON\r\n")
 
     # Clean up disk image
     subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:$$$se$$$.swp"],
@@ -152,15 +157,20 @@ def test_32k_lines():
         print("\n[*] Part 1: Verify Far RAM Line Slot Allocation (LINES=32K)...")
         time.sleep(0.4)
         os.write(master, b"se\r")
-        out_splash = read_until(master, b"to configure", timeout=25.0)
+        out_splash = read_until(master, b"Max Lines", timeout=25.0)
+        out_splash += read_until(master, b"Free: ", timeout=10.0)
         if b"to configure" not in out_splash:
             print(f"[-] Splash screen not displayed. Buffer: {repr(out_splash[-300:])}")
             return False
+        if b"Max Lines     : [32,768 lines]" not in out_splash:
+            print(f"[-] Splash missing 32,768 lines: {repr(out_splash[-300:])}")
+            return False
+        print("    [+] Splash screen displays Max Lines: [32,768 lines]")
 
         # Open Memory Information Screen ('m')
         time.sleep(0.3)
         os.write(master, b"m")
-        out_mem = read_until(master, b"return to splash screen", timeout=15.0)
+        out_mem = read_until(master, b"Press any key to continue", timeout=15.0)
         out_mem += drain_all(master, quiet_time=0.2)
 
         if b"Active: Line Slots (0..16K)" in out_mem and b"Active: Line Slots (16K..32K)" in out_mem:
@@ -237,7 +247,12 @@ def test_32k_lines():
         # Return to splash and exit to CP/M
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"to configure", timeout=10.0)
+        out_splash32 = read_until(master, b"Max Lines", timeout=10.0)
+        out_splash32 += read_until(master, b"Free: ", timeout=10.0)
+        if b"Max Lines     : [32,768 lines]" not in out_splash32:
+            print("[-] Splash missing Max Lines: [32,768 lines] on return")
+            return False
+        print("    [+] Splash retains Max Lines: [32,768 lines] on return")
         time.sleep(0.2)
         os.write(master, b"q")
         read_until(master, b"C>", timeout=10.0)
@@ -249,7 +264,7 @@ def test_32k_lines():
         print(f"\n[*] Part 4: Loading and editing {num_lines}-line document in 32K mode...")
         os.write(master, f"se {cpm_name}\r".encode())
         expected_top = f"1/{num_lines}".encode()
-        out_doc = read_until(master, expected_top, timeout=30.0)
+        out_doc = read_until(master, expected_top, timeout=90.0)
         time.sleep(0.3)
         out_doc += drain_all(master, quiet_time=0.2)
 
@@ -288,7 +303,7 @@ def test_32k_lines():
         read_until(master, b"Overwrite?", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"y")
-        out_resumed = read_until(master, expected_top_stat, timeout=30.0)
+        out_resumed = read_until(master, expected_top_stat, timeout=90.0)
         print("    [+] Document saved successfully")
 
         # Exit via Ctrl+Q

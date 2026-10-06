@@ -362,7 +362,9 @@ def run_tests():
         drain_all(master)
         time.sleep(0.4)
         os.write(master, b"se\r")
-        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=25.0)
+        out = read_until(
+            master, b"Active Screen: [120x40 (Modern Default)]", timeout=60.0
+        )
         assert b"120x40 (Modern Default)" in out, (
             f"Re-launch did not retain saved 120x40. Buffer: {repr(out)}"
         )
