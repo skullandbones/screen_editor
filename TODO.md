@@ -264,7 +264,7 @@ upcoming milestones for SE.COM.
   > no fixed Row 1 header row on any screen."*
 
 ### 2.19 Help Screen Top-Aligned at Row 1 Without Symmetrical Margins
-- [ ] Restore horizontal and vertical centering for Help workspace.
+- [x] Restore horizontal and vertical centering for Help workspace.
   - In `plugins/help.asm:116` (`RENDER_HELP_SCREEN`), the help screen starts
     at Row 1 with zero top margin padding, dumping all unused rows (1 row on
     80x24, 17 rows on 120x40) at the bottom.
