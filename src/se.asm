@@ -1286,6 +1286,8 @@ SHOW_EXIT_PROMPT:
 ;   Carry = 1: User cancelled (ESC / Ctrl-C)
 ;------------------------------------------------------------------------------
 DO_SAVE_CHANGES_POPUP:
+	CALL	TERM_HIDE_CURSOR
+
 	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
 	LD	A,(ACTIVE_COLS)
 	SUB	50
@@ -1323,17 +1325,6 @@ DO_SAVE_CHANGES_POPUP:
 	CALL	PRINT_STR
 
 	CALL	POPUP_PRINT_BORDER
-
-	; Position cursor inside popup on prompt line after "Save changes? "
-	; Row = POPUP_SAVE_START_ROW + 4, Col = POPUP_COL + 32
-	LD	A,(POPUP_SAVE_START_ROW)
-	ADD	A,4
-	LD	H,A
-	LD	A,(POPUP_COL)
-	ADD	A,32
-	LD	L,A
-	CALL	LOCATE_RC
-	CALL	TERM_SHOW_CURSOR
 
 DSCP_KEY_LOOP:
 	CALL	GET_KEY
@@ -1376,14 +1367,7 @@ DSCP_DRAIN_WAIT:
 	LD	A,B
 	OR	C
 	JR	NZ,DSCP_DRAIN_WAIT
-	; Sequence drained: reposition cursor and resume key loop
-	LD	A,(POPUP_SAVE_START_ROW)
-	ADD	A,4
-	LD	H,A
-	LD	A,(POPUP_COL)
-	ADD	A,32
-	LD	L,A
-	CALL	LOCATE_RC
+	; Sequence drained: resume key loop
 	JR	DSCP_KEY_LOOP
 
 DSCP_DRAIN_BYTE:

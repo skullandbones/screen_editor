@@ -508,7 +508,7 @@ upcoming milestones for SE.COM.
   > strict vertical column alignment across rows.
 
 ### 2.31 Remove Visible Cursor from Save Changes and Unload Plugin Modals
-- [ ] Suppress visible blinking cursor in single-keystroke choice pop-ups.
+- [x] Suppress visible blinking cursor in single-keystroke choice pop-ups.
   - In `src/se.asm:1326-1335` and `1379-1385` (`DO_SAVE_CHANGES_POPUP`), the
     "Unsaved Modifications" modal explicitly positions and enables the
     terminal cursor on the query line after `"Save changes? "`
