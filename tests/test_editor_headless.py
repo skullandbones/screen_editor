@@ -4932,7 +4932,14 @@ def test_se_execution():
         read_until(master, b"Enter filename to save:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"TESTF.TXT\r")
-        read_until(master, b"C:TESTF.TXT", timeout=8.0)
+        out_saved = read_until(master, b"^K: Editor keys", timeout=8.0)
+        if b"C:TESTF.TXT" not in out_saved:
+            print(
+                "[-] Step 70 failed: Editor mode not restored after save. "
+                f"Buffer: {repr(out_saved)}",
+                flush=True
+            )
+            return False
         time.sleep(0.3)
         drain_all(master)
 
@@ -4985,7 +4992,7 @@ def test_se_execution():
         if b"Overwrite?" in out_s70_ow:
             time.sleep(0.2)
             os.write(master, b"y")
-        out_s70_saved = read_until(master, b"TESTF.TXT", timeout=8.0)
+        out_s70_saved = read_until(master, b"^K: Editor keys", timeout=8.0)
         if b"TESTF.TXT" not in out_s70_saved:
             print(
                 f"[-] Step 70 failed: Return did not save file. "

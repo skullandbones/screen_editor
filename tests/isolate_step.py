@@ -492,7 +492,9 @@ def run_step_70(master):
     read_until(master, b"Enter filename to save:", timeout=8.0)
     time.sleep(0.2)
     os.write(master, b"TESTF.TXT\r")
-    read_until(master, b"C:TESTF.TXT", timeout=8.0)
+    ok, _ = read_until(master, b"^K: Editor keys", timeout=8.0)
+    if not ok:
+        return False, "Failed to return to editor after saving TESTF.TXT"
     time.sleep(0.3)
     drain_all(master)
 
@@ -500,8 +502,9 @@ def run_step_70(master):
     os.write(master, b" more")
     time.sleep(0.3)
     os.write(master, b"\x13")
-    out_save2 = read_until(master, b"Enter filename to save:", timeout=8.0)
-    out_save2 += read_until(master, b"TESTF.TXT", timeout=6.0)
+    ok1, out1 = read_until(master, b"Enter filename to save:", timeout=8.0)
+    ok2, out2 = read_until(master, b"TESTF.TXT", timeout=6.0)
+    out_save2 = out1 + out2
     if b"TESTF.TXT" not in out_save2:
         return False, f"Save prompt did not prefill TESTF.TXT: {out_save2}"
 
@@ -517,11 +520,13 @@ def run_step_70(master):
     # Save and clean exit
     time.sleep(0.2)
     os.write(master, b"\x08" * 20 + b"TESTF.TXT\r")
-    out_ow = read_until(master, b"Overwrite?", timeout=6.0)
+    _, out_ow = read_until(master, b"Overwrite?", timeout=6.0)
     if b"Overwrite?" in out_ow:
         time.sleep(0.1)
         os.write(master, b"y")
-    read_until(master, b"TESTF.TXT", timeout=8.0)
+    ok, _ = read_until(master, b"^K: Editor keys", timeout=8.0)
+    if not ok:
+        return False, "Failed to return to editor after overwrite TESTF.TXT"
 
     time.sleep(0.2)
     os.write(master, b"\x11")  # Ctrl+Q
