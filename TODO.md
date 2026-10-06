@@ -320,7 +320,7 @@ upcoming milestones for SE.COM.
   > not have ... (Allowed: Press any key to continue, Press any key)."*
 
 ### 2.23 FAT Plugin Dialogs Use Hardcoded Coords, Screen Clears, and Delimiters
-- [ ] Bring FAT plugin about and configuration dialogs into compliance with
+- [x] Bring FAT plugin about and configuration dialogs into compliance with
   UI/UX design system specifications.
   - In `plugins/fat/fat_plugin.c:140-218` (`fat_plugin_about` and
     `fat_plugin_config`):

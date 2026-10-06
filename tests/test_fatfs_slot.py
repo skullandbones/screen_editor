@@ -44,8 +44,14 @@ def find_paths():
         os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
     fatfs_prl = os.path.join(repo_root, "plugins", "FATFS.PRL")
+    cpmcp_bin = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
+    )
+    cpmrm_bin = os.path.join(
+        workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm"
+    )
 
-    return emu_bin, rom_file, img_file, se_bin, fatfs_prl
+    return emu_bin, rom_file, img_file, se_bin, fatfs_prl, cpmcp_bin, cpmrm_bin
 
 
 def read_until(master_fd, match_bytes, timeout=6.0):
@@ -85,8 +91,6 @@ def ensure_fat_test_image(img_file):
     if os.path.getsize(img_file) < target_size:
         with open(img_file, "a") as f:
             f.truncate(target_size)
-        subprocess.run(["/usr/sbin/mkfs.vfat", "-F", "16", "--offset=1050624", img_file, "393216"],
-                       check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     part_offset = 1050624 * 512
     slices_content = (
         b"Slice 0: CP/M 2.2 System\r\n"
@@ -97,14 +101,46 @@ def ensure_fat_test_image(img_file):
         b"Slice 5: WordStar & Utilities\r\n"
     )
     import struct
+    vbr = bytearray(512)
+    vbr[0:3] = b"\xeb\x3c\x90"
+    vbr[3:11] = b"MSDOS5.0"
+    struct.pack_into("<H", vbr, 11, 512)
+    vbr[13] = 8
+    struct.pack_into("<H", vbr, 14, 16)
+    vbr[16] = 2
+    struct.pack_into("<H", vbr, 17, 512)
+    struct.pack_into("<H", vbr, 19, 0)
+    vbr[21] = 0xF8
+    struct.pack_into("<H", vbr, 22, 192)
+    struct.pack_into("<H", vbr, 24, 63)
+    struct.pack_into("<H", vbr, 26, 255)
+    struct.pack_into("<I", vbr, 28, 1050624)
+    struct.pack_into("<I", vbr, 32, 393216)
+    vbr[36] = 0x80
+    vbr[38] = 0x29
+    struct.pack_into("<I", vbr, 39, 0x12345678)
+    vbr[43:54] = b"NO NAME    "
+    vbr[54:62] = b"FAT16   "
+    vbr[510:512] = b"\x55\xaa"
+
     with open(img_file, "r+b") as f:
+        f.seek(part_offset)
+        f.write(vbr)
+        fat_init = struct.pack("<HH", 0xFFF8, 0xFFFF)
+        f.seek(part_offset + 16 * 512)
+        f.write(fat_init)
+        f.seek(part_offset + (16 + 192) * 512)
+        f.write(fat_init)
         fat_entry_2 = struct.pack("<H", 0xFFFF)
         f.seek(part_offset + 16 * 512 + 4)
         f.write(fat_entry_2)
         f.seek(part_offset + (16 + 192) * 512 + 4)
         f.write(fat_entry_2)
-        dirent = struct.pack("<11sBBBHHHHHHHI",
-            b"SLICES  TXT", 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 2, len(slices_content))
+        dirent = struct.pack(
+            "<11sBBBHHHHHHHI",
+            b"SLICES  TXT", 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+            len(slices_content),
+        )
         f.seek(part_offset + 400 * 512)
         f.write(dirent)
         f.seek(part_offset + 432 * 512)
@@ -112,23 +148,52 @@ def ensure_fat_test_image(img_file):
 
 
 def run_fatfs_slot_test():
-    emu_bin, rom_file, img_file, se_bin, fatfs_prl = find_paths()
+    paths = find_paths()
+    emu_bin, rom_file, img_file, se_bin, fatfs_prl, cpmcp_bin, cpmrm_bin = paths
 
-    for p, name in [(emu_bin, "RC2014 emulator"), (rom_file, "ROM file"),
-                    (img_file, "Disk image"), (se_bin, "SE.COM"), (fatfs_prl, "FATFS.PRL")]:
+    for p, name in [
+        (emu_bin, "RC2014 emulator"),
+        (rom_file, "ROM file"),
+        (img_file, "Disk image"),
+        (se_bin, "SE.COM"),
+        (fatfs_prl, "FATFS.PRL"),
+        (cpmcp_bin, "cpmcp"),
+        (cpmrm_bin, "cpmrm"),
+    ]:
         if not os.path.isfile(p):
             print(f"[-] Required file not found: {name} ({p})")
             return False
 
     ensure_fat_test_image(img_file)
+    subprocess.run(
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM", "0:se.com"],
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        check=True,
+    )
+    subprocess.run(
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:FATFS.PRL", "0:fatfs.prl"],
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, fatfs_prl, "0:FATFS.PRL"],
+        check=True,
+    )
 
-    print("[*] Launching RomWBW on RC2014 emulator (FATFS 32KB Slot Test)...", flush=True)
+    print(
+        "[*] Launching RomWBW on RC2014 emulator (FATFS 32KB Slot Test)...",
+        flush=True,
+    )
     master, slave = os.openpty()
     tty.setraw(slave)
     os.set_blocking(master, False)
 
     cmd = [emu_bin, "-b", "-r", rom_file, "-1", "-S", img_file]
-    proc = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True)
+    proc = subprocess.Popen(
+        cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True
+    )
     os.close(slave)
 
     try:
@@ -215,16 +280,31 @@ def run_fatfs_slot_test():
         # 7. Test Action 2: Configuration Dialog ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        ok, out_cfg = read_until(master, b"Select (0-7) to change", timeout=6.0)
+        ok, out_cfg = read_until(master, b"Select [0-7] to change", timeout=6.0)
         if not ok or b"FAT Plugin Configuration" not in out_cfg:
-            print(f"[-] Config dialog failed to display. Buffer: {repr(out_cfg)}", flush=True)
+            print(
+                f"[-] Config dialog failed to display. Buffer: {repr(out_cfg)}",
+                flush=True,
+            )
             return False
-        print("[+] Action 2 (Config Screen) verified: Displayed HBIOS disk unit selector.", flush=True)
+        print(
+            "[+] Action 2 (Config Screen) verified: Displayed HBIOS disk "
+            "unit selector.",
+            flush=True,
+        )
 
-        # Dismiss config dialog ('q')
+        # Verify 'q' is prohibited from dismissing config dialog
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"q")
+        ok_dismiss, _ = read_until(
+            master, b"SE - Plugin Manager", timeout=0.5
+        )
+        assert not ok_dismiss, "Config dialog erroneously dismissed on 'q'!"
+
+        # Dismiss config dialog via ESC
+        time.sleep(0.2)
+        os.write(master, b"\x1b")
         ok, _ = read_until(master, b"SE - Plugin Manager", timeout=6.0)
         read_until(master, b"[Down]=Select", timeout=5.0)
         drain_all(master)

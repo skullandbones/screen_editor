@@ -141,7 +141,7 @@ Invoked from the `SE.COM` Plugin Manager (`Config` action) or dynamically by pre
                 ~ |  [2] Unit 2 (Secondary IDE)   [3] Unit 3 (Ext) |
                 ~ |  [4] Unit 4 (RC2014 SD0)      [5..7] Extended  |
                 ~ |                                                |
-                ~ | Select (0-7) to change, or [ESC]/[Q] to exit:  |
+                ~ |     Select [0-7] to change    [ESC]=Cancel     |
                 ~ +------------------------------------------------+
 ```
 
