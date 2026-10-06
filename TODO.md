@@ -336,6 +336,336 @@ upcoming milestones for SE.COM.
   > options must be space-separated without slash delimiters, and interactive
   > dialogs must be cancellable only by ESC.
 
+### 2.24 Right-Border Misalignment & Overflow in Save & Overwrite Modals
+- [ ] Correct string length and trailing margin in `STR_POPUP_SAVE_KEYS`.
+  - In `src/se.asm:23364`, `STR_POPUP_SAVE_KEYS` is defined as:
+    `"|        [Y]es      [N]o      [ESC]=Cancel        |"`
+    which contains 51 characters (8 leading spaces, 33 characters of option
+    text, 8 trailing spaces, plus 2 border characters).
+  - The standard modal pop-up box width is strictly 50 columns (defined by
+    `STR_POPUP_BORDER` at `src/se.asm:23354`).
+  - Emitting `STR_POPUP_SAVE_KEYS` in `DO_SAVE_CHANGES_POPUP`
+    (`src/se.asm:1321`) and `DRAW_OVERWRITE_POPUP` (`src/se.asm:16618`) causes
+    the closing `|` border on Row 6 to print at column 51, pushing 1 column
+    past the right edge of all other rows and corrupting the vertical border
+    alignment.
+  - Reduce trailing padding by 1 space (from 8 spaces to 7 spaces) so the
+    string is exactly 50 characters, matching `STR_UNLOAD_KEYS` in
+    `plugins/plugin.asm:2417`.
+- *Key Sequence (from splash)*:
+  - Sequence A (Overwrite pop-up): Press `S` -> type `TODO.MD` -> `Enter`.
+    Observe the "Overwrite File" pop-up: on Row 6, the right border `|`
+    protrudes 1 column past rows 1-5 and 7.
+  - Sequence B (Save Changes pop-up): Press `E` -> type `X` -> `Ctrl+Q`.
+    Observe the "Unsaved Modifications" pop-up: on Row 6, the right border `|`
+    protrudes 1 column past rows 1-5 and 7.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.1, 2.2, 7.8):
+  > Pop-up boxes belong to Tier 2 centered boxed modal pop-ups with exact ASCII
+  > frame dimensions. Character emissions must not exceed budgeted geometry or
+  > distort modal border boundaries.
+
+### 2.25 Missing Description Line and Asymmetric Spacing in Find Modal Pop-up
+- [ ] Bring Find modal pop-up layout and alignment into compliance with query
+  pop-up design standards.
+  - In `src/se.asm:10714-10754` (`DRAW_FIND_POPUP_BODY`) and
+    `src/se.asm:23414-23425` (`STR_FIND_POPUP_*`):
+    - Row 4 (first body line) renders match mode (`Match: [Case Sensitive  ]`)
+      instead of a descriptive query explanation (e.g.
+      `Enter search pattern to find in document`), omitting the required
+      description line that exists in Replace (`STR_REPLACE_POPUP_MSG`) and Goto
+      Line (`STR_GOTO_POPUP_MSG`).
+    - Row 5 (query line) uses `|     Find: [` (5 leading spaces) and `]      |`
+      (6 trailing spaces), resulting in 1-space horizontal asymmetry around the
+      29-character input box. Symmetrical centering requires 6 spaces on both
+      sides.
+    - Row 6 (query options) `| [Enter]=Find  [Tab]=Toggle Case  [ESC]=Cancel  |`
+      has 1 leading space and 2 trailing spaces, violating horizontal
+      center-justification.
+- *Key Sequence (from splash)*:
+  - Press `E` -> `Ctrl+F`.
+  - Observe the "Find Text" pop-up: Row 4 shows match mode instead of query
+    description, Row 5 has asymmetric padding (`Find: [` 5 spaces left vs 6
+    right), and Row 6 has asymmetric padding (1 space left vs 2 right).
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.2, 7.9):
+  > *"Query pop-up format shall have a title line box, the pop-up body first
+  > line shall be the description, then the query line followed by the query
+  > options. All text is centre justified."*
+
+### 2.26 Asymmetric Left-Aligned Messages in Truncated & Error Modal Pop-ups
+- [ ] Horizontally center informational messages in Tier 2 status and error
+  pop-ups.
+  - In `src/se.asm:23372` (`STR_POPUP_TRUNC_MSG2`):
+    `"| Save is disabled to protect data on disk.      |"` has 1 leading space
+    and 6 trailing spaces for a 41-character message inside a 48-column
+    interior. It is heavily left-biased by 5 characters instead of centered
+    with 3 leading and 4 trailing spaces.
+  - In `src/se.asm:23453` (`STR_POPUP_NOT_FOUND_MSG1`):
+    `"|              Pattern not found.                |"` has 14 leading spaces
+    and 16 trailing spaces for an 18-character message. The 30 remaining spaces
+    divide evenly into 15 leading and 15 trailing spaces.
+  - In `src/se.asm:23471` (`STR_POPUP_TOO_LONG_MSG2`):
+    `"|      Line length limit exceeded on replace.    |"` has 6 leading spaces
+    and 4 trailing spaces for a 38-character message. The 10 remaining spaces
+    divide evenly into 5 leading and 5 trailing spaces.
+- *Key Sequence (from splash)*:
+  - Press `E` -> `Ctrl+F` -> type `ZZZ` -> `Enter`.
+  - Observe the "Pattern Not Found" pop-up: Row 4 (`Pattern not found.`) has
+    14 spaces left and 16 spaces right, left-biased instead of 15 and 15.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.2, 7.9):
+  > *"All text is centre justified. Every line inside the pop-up (title,
+  > description, query line, and query options) must be horizontally centered
+  > within the box borders."*
+
+### 2.27 Configuration Screen Footer Uses Prohibited Slash Delimiter
+- [ ] Replace slash delimiter and non-standard casing in Configuration screen
+  footer.
+  - In `src/se.asm:23648-23650` (`STR_CONFIG_FOOTER`):
+    `"[1-5]=Toggle Option   [S]=Save Config   [Q]/[ESC]=return to splash..."`
+  - Remove prohibited slash delimiter in `[Q]/[ESC]` in favor of space-separated
+    triggers or canonical exit command `[ESC]=Exit` (matching splash and
+    plugin screens).
+  - Update `return to splash screen` to standard Title Case (e.g.
+    `Return to Splash` or `Exit`).
+- *Key Sequence (from splash)*:
+  - Press `C`.
+  - Observe Configuration screen footer:
+    `[1-5]=Toggle Option   [S]=Save Config   [Q]/[ESC]=return to splash screen`
+    contains prohibited slash delimiter `[Q]/[ESC]` and lowercase text.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.6, 4.3, 7.4):
+  > *"Pop-up decision options shall not have any delimiters such as `/` and `|`
+  > and instead should have sufficient spaces to separate the options nicely
+  > (e.g. `[Y]es   [N]o   [ESC]=Cancel`)."*
+
+### 2.28 Save File UI Format Option Uses Parenthesized Colon Hotkey
+- [ ] Standardize Save File UI line ending format hotkey into bracket notation.
+  - In `src/se.asm:23832` (`STR_SAVE_FMT_SUFFIX`), rendered by
+    `PRINT_SAVE_FMT_INFO` (`src/se.asm:18075-18094`):
+    `"]  (^F: toggle format)"` prints `Format: [CP/M]  (^F: toggle format)`.
+  - This uses parentheses `( )` and legacy colon syntax `^F: toggle format`.
+  - Refactor to canonical bracket notation:
+    `Format: [CP/M]   [^F]=Toggle Format` (or `[^F]=Toggle`).
+- *Key Sequence (from splash)*:
+  - Press `S`.
+  - Observe Save File screen: the format row displays
+    `Format: [CP/M]  (^F: toggle format)` using parenthesized colon syntax
+    `(^F: toggle format)` rather than bracket notation `[^F]=Toggle Format`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.6, 4.1, 7.4):
+  > *"Action hotkeys shall be expressed inside `[ ]` pairs (e.g. `[Y]es   [N]o
+  > [ESC]=Cancel`). The `Y:Yes, N:No` forms are no longer allowed."* Action
+  > triggers must not use `( )` or colon syntax.
+
+### 2.29 Plugin Configuration Pop-ups Omit Toggle Hotkeys and Delimiters
+- [ ] Bring plugin configuration dialog footers and option labels into UI/UX
+  compliance.
+  - In `plugins/beautify.asm:1711-1724` (`STR_BTC_L4`..`STR_BTC_L9`) and
+    `plugins/wordcnt.asm:480-484` (`STR_WCC_L4`..`STR_WCC_L7`):
+    - Footers (`STR_BTC_L9`, `STR_WCC_L7`) display
+      `| [Enter]=Save & Exit   [ESC]=Cancel |` but omit the numeric hotkeys
+      (`[1]`, `[2]`, `[3]`, `[4]`) used to toggle individual settings.
+    - Setting rows use unbracketed labels (`1. Columns   : [`,
+      `1. Count Blank Lines  : [`) rather than bracketed option selectors
+      (`[1] Columns: [`, `[1] Count Blank: [`).
+    - In `plugins/wordcnt.asm:480-483`, closing brackets on setting rows
+      (`YES]     |` vs `YES]       |`) are horizontally misaligned.
+- *Key Sequence (from splash)*:
+  - Press `P` -> `C` (with Beautify in Slot 0).
+  - Observe Beautify configuration pop-up: footer displays
+    `| [Enter]=Save & Exit   [ESC]=Cancel |` omitting toggle keys `[1]`-`[4]`,
+    and option rows use unbracketed labels `1.`, `2.`, `3.`, `4.`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.6, 2.2, 4.1, 7.4):
+  > Selectors and action hotkeys must be bracketed (`[1]`), options footers
+  > must document valid hotkeys, and dialog fields must maintain clean
+  > vertical column alignment.
+
+### 2.30 Misalignment of Splash Screen "Active Screen" Status Bracket
+- [ ] Align opening bracket of "Active Screen" status row with subsequent
+  status lines on splash screen.
+  - In `src/se.asm:23592`, `STR_SPLASH_CUR_MODE` is defined as:
+    `STR_SPLASH_CUR_MODE: DB "Active Screen: [$"`
+    which contains 15 characters before the opening bracket `[` (13 characters
+    for `"Active Screen"`, 1 colon, and 1 space).
+  - In contrast, all subsequent status rows rendered by `RENDER_SPLASH`
+    (`src/se.asm:2014-2112`) contain exactly 16 characters before the opening
+    bracket `[`:
+    - `STR_SPLASH_RAM_PRE` + `STR_SPLASH_RAM_LTR`: `"RAM Drive (A:): ["` (16)
+    - `STR_SPLASH_RAM_NONE`: `"RAM Drive     : ["` (16)
+    - `STR_SPLASH_PLUG_PRE`: `"Plugin System : ["` (16)
+    - `STR_SPLASH_LINES_PRE`: `"Max Lines     : ["` (16)
+  - Because `STR_SPLASH_CUR_MODE` has no space before the colon
+    (`"Active Screen: ["` instead of `"Active Screen : ["`), the opening
+    bracket `[` on the Active Screen row starts at column 16 instead of column
+    17, starting 1 space to the left of all subsequent status indicators and
+    breaking vertical column alignment.
+  - Add 1 space before the colon (`"Active Screen : [$"`) so the label is 16
+    characters and the bracket aligns with column 17 matching all status rows.
+- *Key Sequence (from splash)*:
+  - Launch `SE.COM` (or return to splash screen).
+  - Observe the four status rows beneath the command list: the opening bracket
+    `[` on `Active Screen: [` starts 1 character to the left of the brackets on
+    `RAM Drive (A:): [`, `Plugin System : [`, and `Max Lines     : [`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 4.3):
+  > Screen content, tabular command lists, and parameter fields shall maintain
+  > strict vertical column alignment across rows.
+
+### 2.31 Remove Visible Cursor from Save Changes and Unload Plugin Modals
+- [ ] Suppress visible blinking cursor in single-keystroke choice pop-ups.
+  - In `src/se.asm:1326-1335` and `1379-1385` (`DO_SAVE_CHANGES_POPUP`), the
+    "Unsaved Modifications" modal explicitly positions and enables the
+    terminal cursor on the query line after `"Save changes? "`
+    (`Row = POPUP_SAVE_START_ROW + 4, Col = POPUP_COL + 32`, followed by
+    `CALL TERM_SHOW_CURSOR`).
+  - In `plugins/plugin.asm:1069-1080` (`SHOW_UNLOAD_CONFIRM`), the "Unload
+    Plugin" modal similarly positions the cursor after `"Unload Slot N? "`
+    and emits `STR_SHOW_CURSOR`.
+  - Unlike text-entry dialogs (Find, Replace, Goto Line) where an active
+    cursor is required inside a bracketed input field, both "Unsaved
+    Modifications" and "Unload Plugin" are single-keystroke choice dialogs
+    (`[Y]es   [N]o   [ESC]=Cancel`).
+  - Displaying a blinking cursor on the prompt line creates visual clutter
+    and is inconsistent with other modal query and status dialogs.
+  - Remove `TERM_SHOW_CURSOR` emissions and ensure the terminal cursor remains
+    hidden throughout both modal query loops.
+- *Key Sequence (from splash)*:
+  - Sequence A (Unsaved Modifications): Press `E` -> type `X` -> `Ctrl+Q`.
+    Observe Row 5: a blinking cursor appears after `"Save changes? "`.
+  - Sequence B (Unload Plugin): Press `P` -> `Enter` (on occupied slot).
+    Observe Row 5: a blinking cursor appears after `"Unload Slot 0? "`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.2):
+  > Modal presentation for single-key decision pop-ups must eliminate visual
+  > clutter. Blinking cursors belong inside or adjacent to text input fields,
+  > not trailing static query prompts.
+
+### 2.32 Redundant "SE.COM" Prefix in Open, Save, Help, Insert & Block Screens
+- [ ] Remove "SE.COM" from screen titles in file open, save, help, insert, and
+  block selection workspaces.
+  - In `src/se.asm:23796-23808`, directory screen title prefixes include the
+    executable binary filename `"SE.COM - "`:
+    - `STR_TITLE_OPEN_PRE`: `"SE.COM - OPEN FILE (DIRECTORY - DRIVE "`
+    - `STR_TITLE_SAVE_PRE`: `"SE.COM - SAVE FILE (DIRECTORY - DRIVE "`
+    - `STR_TITLE_BLOCK_SAVE_PRE`: `"SE.COM - SAVE BLOCK (DIRECTORY - DRIVE "`
+    - `STR_TITLE_INSERT_PRE`: `"SE.COM - INSERT FILE (DIRECTORY - DRIVE "`
+    - `STR_TITLE_PLUG_LOAD_PRE`: `"SE.COM - LOAD PLUGIN (DIRECTORY - DRIVE "`
+  - In `plugins/help.asm:370`, the Ctrl+K editor keys help screen title
+    `STR_HELP_TITLE` is defined as `"SE.COM - EDITOR MODE KEYS"`, and centered
+    via hardcoded length `SUB 25` in `RENDER_HELP_TITLE`
+    (`plugins/help.asm:283`).
+  - Displaying the binary program filename `"SE.COM"` in workspace headers is
+    redundant and inconsistent with other screens (e.g. Splash:
+    `"SE - Screen Editor"`, Config: `"SE - Screen Editor Configuration"`,
+    Plugin Manager: `"SE - Plugin Manager"`). It also consumes horizontal
+    space needed for directory paths and filters.
+  - Remove `"SE.COM - "` from the title string constants, and adjust base
+    title length constants in `RENDER_TITLE_COMMON` (`src/se.asm:17031-17049`)
+    from 41..43 down to 32..34 and in `plugins/help.asm:283` from 25 to 16
+    so dynamic horizontal centering remains exact.
+- *Key Sequence (from splash)*:
+  - Sequence A (Open File screen): Press `O`.
+    Observe screen title: `SE.COM - OPEN FILE (DIRECTORY - DRIVE A:)`
+    redundantly displays `"SE.COM - "`.
+  - Sequence B (Save File screen): Press `S`.
+    Observe screen title: `SE.COM - SAVE FILE (DIRECTORY - DRIVE A:)`
+    redundantly displays `"SE.COM - "`.
+  - Sequence C (Insert File screen): Press `E` -> `Ctrl+R`.
+    Observe screen title: `SE.COM - INSERT FILE (DIRECTORY - DRIVE A:)`.
+  - Sequence D (Block Save screen): Press `E` -> `Ctrl+K` -> `Ctrl+S`.
+    Observe screen title: `SE.COM - SAVE BLOCK (DIRECTORY - DRIVE A:)`.
+  - Sequence E (Help screen): Press `E` -> `Ctrl+K` (without block selection).
+    Observe screen title: `SE.COM - EDITOR MODE KEYS`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2):
+  > Screen titles must be concise and uncluttered, centered as the top element
+  > of the content block without redundant executable binary artifacts.
+
+### 2.33 Splash Screen Omits Ctrl+P Context-Aware Plugin Menu Command
+- [ ] Document `[^P]` context-aware plugin menu shortcut in splash screen
+  command list.
+  - In `src/se.asm:398-406`, the splash screen event loop already supports
+    `Ctrl+P` (`KEY_CTRL_P`) to open the context-aware plugin modal menu
+    (`DO_CONTEXT_PLUGIN_POPUP` with `PLUG_CTX_SPLASH`).
+  - However, in `src/se.asm:23576-23590` (`STR_SPLASH_CMDS`), the splash
+    command menu only documents `[P]` (`"  type   [P]              for plugins"`
+    to open the Plugin Manager), completely omitting the `[^P]` shortcut that
+    opens the context-aware plugin menu palette.
+  - Users on the splash screen are given no visual indication that `Ctrl+P` is
+    an available command.
+  - Add an entry in `STR_SPLASH_CMDS` for `[^P]` (e.g.
+    `"  type   [^P]             for context plugin menu"`), and update
+    `SPLASH_MENU_LINES` (`src/se.asm:1905`) from 20 to 21 to maintain dynamic
+    vertical centering with symmetrical 1-row padding on 80x24 geometry.
+- *Key Sequence (from splash)*:
+  - Launch `SE.COM` (or return to splash screen).
+  - Observe the command list: `[P]` is shown for plugins, but `[^P]` is absent.
+  - Press `Ctrl+P`: the context-aware plugin menu pop-up appears immediately,
+    demonstrating that the feature exists but is omitted from the splash menu.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.1):
+  > Primary actions and modal shortcuts supported by full-screen workspaces
+  > must be discoverable and documented in the screen command list.
+
+### 2.34 "Opening File" Progress Dialog Line Counter Leaks Debris Trailing Zero
+- [ ] Fix unoverwritten trailing zero debris causing 1,000-line counter jumps in
+  file progress modal dialogs.
+  - In `src/se.asm:23402-23403`, the initial modal line template is defined
+    in `STR_POPUP_PROGRESS_LINE`:
+    `"|                   Line      0                  |"`
+    The `"Line "` prefix occupies box columns 21..25, followed by 5 spaces
+    (columns 26..30) and an initial `'0'` at column 31 (box relative offset 30).
+  - In `src/se.asm:15228-15256` (`UPDATE_LOAD_PROGRESS`), dynamic progress
+    updates locate the cursor at box column 21 (`POPUP_COL + 20`), print
+    `STR_PROGRESS_LINE_LBL` (`"Line "`), and right-justify the line count in
+    a 5-character field (`5 - digits` spaces + decimal digits).
+  - This 5-character field strictly spans columns 26..30. The routine never
+    overwrites or clears column 31.
+  - When loading a file, `FILE_LOAD_LOOP` (`src/se.asm:14800-14807`) triggers
+    an update every 100 lines. At 100 lines, `UPDATE_LOAD_PROGRESS` writes
+    `"  100"` across columns 26..30. Because column 31 retains the initial
+    template `'0'`, the screen displays `"  1000"`.
+  - At 200 lines, it writes `"  200"`, which combines with the trailing debris
+    zero to display as `"  2000"`. The counter appears to count up in jumps of
+    1000 instead of 100. The same defect affects file insertion
+    (`src/se.asm:16234`) and file saving (`src/se.asm:19947`).
+  - Adjust `STR_POPUP_PROGRESS_LINE` to align the initial `'0'` at column 30
+    (4 spaces after `"Line "` instead of 5) or blank the field with spaces, and
+    ensure `UPDATE_LOAD_PROGRESS` clears/overwrites the entire field width.
+- *Key Sequence (from splash)*:
+  - Press `O` -> select or type a file with >= 200 lines (e.g. `A:SE.ASM`) ->
+    press `Enter`.
+  - Observe the centered "Opening File" progress modal dialog: during load,
+    the counter increments in apparent steps of 1000 (`1000`, `2000`, `3000`...)
+    instead of 100 (`100`, `200`, `300`...) due to the unoverwritten trailing
+    zero at column 31.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.2):
+  > Modal dialogs and status displays must present accurate numerical values
+  > without residual visual artifacts, character debris, or unoverwritten
+  > positions from static background templates.
+
+### 2.35 "File Not Found" Modal Pop-up Omits Target Filename
+- [ ] Dynamically display the target filename enclosed in single quotes `' '` in
+  the "File Not Found" status modal pop-up.
+  - In `src/se.asm:11673-11677` (`SHOW_POPUP_FILE_NOT_FOUND`), when a file
+    fails to open in `DO_OPEN_FILE_UI` (`src/se.asm:15547`), plugin loading
+    (`src/se.asm:15610`), or document loading (`src/se.asm:22264`), the modal
+    displays static pre-baked strings from `src/se.asm:23529-23535`:
+    - Title: `"|                 File Not Found                 |"`
+    - Msg 1: `"|               File was not found.              |"`
+    - Msg 2: `"|        Specified file not found on disk.       |"`
+  - Both message lines are completely generic boilerplate and provide no
+    feedback as to which file could not be located.
+  - In contrast, other error dialogs (such as `HELP.OVL was not found.` in
+    `STR_POPUP_HELP_MISS_MSG1` and file progress headers formatted by
+    `FORMAT_PROGRESS_FILE_LINE`) explicitly state the filename.
+  - Update `SHOW_POPUP_FILE_NOT_FOUND` to dynamically format the requested
+    target filename (from `INPUT_FILENAME_BUF` / `WORK_FCB` / `FAT_DOC_FNAME`)
+    enclosed in single quotes (e.g. `'NOFILE.TXT' was not found.` or
+    `File 'NOFILE.TXT' was not found.`), centered horizontally within the
+    50-column Tier 2 modal box.
+- *Key Sequence (from splash)*:
+  - Press `O` -> type `NOFILE.TXT` in the filename edit box -> press `Enter`.
+  - Observe the centered "File Not Found" pop-up: Line 4 displays generic
+    `File was not found.` without showing `'NOFILE.TXT'`.
+- *Justification* (`docs/UI_UX_DESIGN.md` Section 1.4, 2.2):
+  > Status event pop-ups must provide meaningful, specific context for the
+  > failed operation. Error notifications for missing files must identify
+  > the target resource by name rather than generic static boilerplate.
+
 ---
 
 ## 3. RAM Headroom & Memory Optimization
