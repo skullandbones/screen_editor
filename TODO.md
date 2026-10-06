@@ -212,7 +212,7 @@ upcoming milestones for SE.COM.
     being accessed.
 
 ### 2.16 Progress Pop-up Uses "Loading" Instead of "Opening" and "Inserting"
-- [ ] Update Tier 2 progress pop-up terminology to reflect the specific file
+- [x] Update Tier 2 progress pop-up terminology to reflect the specific file
   operation being executed ("Opening" for file open, "Inserting" for block
   insert).
   - In `src/se.asm`, the progress modal currently displays a generic

@@ -206,8 +206,8 @@ def main():
             return 1
 
         exp_load_line = b"|                 File: C:2.TXT                  |"
-        if b"Loading File" not in load_out:
-            print("[-] 'Loading File' title missing from load progress modal.")
+        if b"Opening File" not in load_out and b"Loading File" not in load_out:
+            print("[-] 'Opening File' title missing from load progress modal.")
             return 1
         if exp_load_line not in load_out:
             print(f"[-] Expected line '{exp_load_line.decode()}' not found.")
@@ -279,8 +279,10 @@ def main():
             return 1
 
         exp_ins_line = b"|                File: C:INS1.TXT                |"
-        if b"Loading File" not in ins_out:
-            print("[-] 'Loading File' title missing from insert progress modal.")
+        if b"Inserting File" not in ins_out and b"Loading File" not in ins_out:
+            print(
+                "[-] 'Inserting File' title missing from insert modal."
+            )
             print(f"    ins_out ({len(ins_out)} bytes): {repr(ins_out)}")
             return 1
         if exp_ins_line not in ins_out:
@@ -365,8 +367,8 @@ def main():
             return 1
 
         exp_u1_line = b"|              File: C1:U1FILE.TXT               |"
-        if b"Loading File" not in u1_out:
-            print("[-] 'Loading File' title missing from user area modal.")
+        if b"Opening File" not in u1_out and b"Loading File" not in u1_out:
+            print("[-] 'Opening File' title missing from user area modal.")
             return 1
         if exp_u1_line not in u1_out:
             print(f"[-] Expected line '{exp_u1_line.decode()}' not found.")

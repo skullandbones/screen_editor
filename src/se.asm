@@ -14941,8 +14941,13 @@ DLS_TILDE_LOOP:
 	; Render initial status bar on row ACTIVE_ROWS
 	CALL	RENDER_STATUS_BAR
 
-	; Render centered Tier 2 loading modal dialog box
-	LD	DE,STR_POPUP_LOAD_TITLE
+	; Determine modal title: "Inserting File" if block insert, else "Opening File"
+	LD	DE,STR_POPUP_OPEN_TITLE
+	LD	A,(IS_BLOCK_INSERT_UI)
+	OR	A
+	JR	Z,DLS_SHOW_MODAL
+	LD	DE,STR_POPUP_INSERT_TITLE
+DLS_SHOW_MODAL:
 	JP	DRAW_PROGRESS_MODAL
 
 ;------------------------------------------------------------------------------
@@ -23421,9 +23426,14 @@ STR_POPUP_OOM_MSG1:
 STR_POPUP_OOM_MSG2:
 	DB	"|      Free memory or reduce document size       |", 0
 
-; File Loading Modal Pop-up Strings (50 cols x 7 rows)
-STR_POPUP_LOAD_TITLE:
-	DB	"|                  Loading File                  |", 0
+; File Opening Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_OPEN_TITLE:
+	DB	"|                  Opening File                  |", 0
+STR_POPUP_LOAD_TITLE	EQU	STR_POPUP_OPEN_TITLE
+
+; File Inserting Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_INSERT_TITLE:
+	DB	"|                 Inserting File                 |", 0
 
 ; File Saving Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_SAVING_TITLE:
