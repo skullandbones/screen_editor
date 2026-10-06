@@ -206,7 +206,8 @@ def main():
         exp_msg1_c0 = b"'C0:NOFILE.TXT' was not found."
         if exp_msg1_c0 not in out:
             print(
-                f"[-] Expected '{exp_msg1_c0.decode()}' in modal, got: {repr(out)}"
+                f"[-] Expected '{exp_msg1_c0.decode()}' in modal, "
+                f"got: {repr(out)}"
             )
             return 1
 
@@ -244,7 +245,8 @@ def main():
         exp_msg1_bare = b"'NOFILE.TXT' was not found."
         if exp_msg1_bare not in out:
             print(
-                f"[-] Expected '{exp_msg1_bare.decode()}' in modal, got: {repr(out)}"
+                f"[-] Expected '{exp_msg1_bare.decode()}' in modal, "
+                f"got: {repr(out)}"
             )
             return 1
         print(f"[+] Subtest 2 PASSED: Found '{exp_msg1_bare.decode()}'.")
@@ -274,7 +276,8 @@ def main():
         exp_msg1_b = b"'B:MISSING.DAT' was not found."
         if exp_msg1_b not in out:
             print(
-                f"[-] Expected '{exp_msg1_b.decode()}' in modal, got: {repr(out)}"
+                f"[-] Expected '{exp_msg1_b.decode()}' in modal, "
+                f"got: {repr(out)}"
             )
             return 1
         print(f"[+] Subtest 3 PASSED: Found '{exp_msg1_b.decode()}'.")
@@ -336,7 +339,7 @@ def main():
             return 1
 
         print("\n" + "=" * 65)
-        print("  [SUCCESS] All 'File Not Found' Target Filename Subtests PASSED!")
+        print("  [SUCCESS] All 'File Not Found' Filename Subtests PASSED!")
         print("=" * 65)
         return 0
 
