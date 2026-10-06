@@ -230,7 +230,7 @@ upcoming milestones for SE.COM.
     `STR_POPUP_INSERT_DESC` for block insert).
 
 ### 2.17 Plugin Screen 'A' (About) Clears Screen Instead of Centered Pop-up
-- [ ] On the Plugin Manager screen, pressing 'A' for plugin about erroneously
+- [x] On the Plugin Manager screen, pressing 'A' for plugin about erroneously
   clears the screen (`TERM_CLEAR_SCREEN` in `DO_PLUGIN_SCREEN` at
   `src/se.asm:21226`) and renders the about text at the top-left rather than
   displaying a centered Tier 2 modal pop-up over the current screen.

@@ -21464,17 +21464,7 @@ DPS_LOOP:
 	CALL	EXEC_PLUGIN_MGR_ACTION
 	JR	C,DPS_DISMISS		; Carry = 1: user pressed Q or ESC
 
-	; Carry = 0: user ran a slot or selected about/config
-	; A = slot number (0..7), C = action index (0..2)
-	LD	B,A
-	LD	A,C
-	OR	A
-	JR	Z,DPS_NO_CLEAR
-	PUSH	BC
-	CALL	TERM_CLEAR_SCREEN
-	POP	BC
-DPS_NO_CLEAR:
-	LD	A,B
+	; Carry = 0: user selected slot A with action C (about/config)
 	CALL	EXEC_PLUGIN_SLOT_ACTION
 	LD	A,(PLUGIN_RET_CODE)
 	CP	2
