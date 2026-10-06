@@ -3,7 +3,10 @@
 # Target: CP/M 3 Page-Relocatable 32KB Far RAM Executable
 #==============================================================================
 
-# Support absolute or relative TOOLS_DIR
+# Support absolute or relative TOOLS_DIR or TOOL_DIR
+ifeq ($(TOOLS_DIR),)
+  TOOLS_DIR := $(TOOL_DIR)
+endif
 ifeq ($(TOOLS_DIR),)
   ifneq ($(wildcard ../../../../../tools/z88dk),)
     TOOLS_DIR := ../../../../../tools

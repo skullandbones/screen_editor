@@ -25,9 +25,12 @@ def find_z80asm(repo_root):
         elif os.path.isfile(env_z80asm) and os.access(env_z80asm, os.X_OK):
             return env_z80asm
 
-    # 2. Determine tools directory from TOOLS_DIR or WORKSPACE_ROOT
+    # 2. Determine tools directory from TOOLS_DIR, TOOL_DIR, or WORKSPACE_ROOT
     tools_roots = []
-    env_tools_dir = os.environ.get("TOOLS_DIR", "").strip()
+    env_tools_dir = (
+        os.environ.get("TOOLS_DIR", "").strip()
+        or os.environ.get("TOOL_DIR", "").strip()
+    )
     if env_tools_dir:
         if os.path.isabs(env_tools_dir):
             tools_roots.append(env_tools_dir)
@@ -76,8 +79,8 @@ def find_z80asm(repo_root):
         return sys_z80asm
 
     raise FileNotFoundError(
-        "Could not locate 'z88dk-z80asm'. Please set TOOLS_DIR or Z80ASM "
-        "environment variable or pass TOOLS_DIR to make."
+        "Could not locate 'z88dk-z80asm'. Please set TOOLS_DIR, TOOL_DIR, "
+        "or Z80ASM_BIN environment variable or pass TOOLS_DIR to make."
     )
 
 
@@ -86,6 +89,7 @@ def main():
     repo_root = os.path.dirname(plugin_dir)
 
     z80asm_bin = find_z80asm(repo_root)
+    print(f"[*] Using assembler: {z80asm_bin}")
     mkprl_bin = os.path.join(repo_root, "tools", "mkprl.py")
 
     # 1. Build ROT13.PRL
