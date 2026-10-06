@@ -23361,7 +23361,7 @@ STR_POPUP_SAVE_MSG1:
 STR_POPUP_SAVE_MSG2:
 	DB	"|                 Save changes?                  |", 0
 STR_POPUP_SAVE_KEYS:
-	DB	"|        [Y]es      [N]o      [ESC]=Cancel        |", 0
+	DB	"|        [Y]es      [N]o      [ESC]=Cancel       |", 0
 
 ; File Truncated Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_TRUNC_TITLE:

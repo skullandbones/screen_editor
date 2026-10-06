@@ -337,7 +337,7 @@ upcoming milestones for SE.COM.
   > dialogs must be cancellable only by ESC.
 
 ### 2.24 Right-Border Misalignment & Overflow in Save & Overwrite Modals
-- [ ] Correct string length and trailing margin in `STR_POPUP_SAVE_KEYS`.
+- [x] Correct string length and trailing margin in `STR_POPUP_SAVE_KEYS`.
   - In `src/se.asm:23364`, `STR_POPUP_SAVE_KEYS` is defined as:
     `"|        [Y]es      [N]o      [ESC]=Cancel        |"`
     which contains 51 characters (8 leading spaces, 33 characters of option
