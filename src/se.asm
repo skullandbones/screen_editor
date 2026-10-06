@@ -1887,7 +1887,7 @@ NOT_ALPHA:
 ; Dynamically centered both horizontally and vertically for active screen geometry.
 ; Total menu lines: 20
 ;------------------------------------------------------------------------------
-SPLASH_MENU_LINES	EQU	20
+SPLASH_MENU_LINES	EQU	21
 
 ;------------------------------------------------------------------------------
 ; PRINT_TILDE_CRLF: Print '~' followed by CRLF
@@ -1934,7 +1934,7 @@ RENDER_SPLASH:
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
 	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB	SPLASH_MENU_LINES	; 23 - 20 = 3 (80x24), 39 - 20 = 19 (120x40)
+	SUB	SPLASH_MENU_LINES	; 23 - 21 = 2 (80x24), 39 - 21 = 18 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	JR	C,SPLASH_NO_TOP_PAD
 	SRL	A			; 1 (80x24), 9 (120x40)
@@ -1961,7 +1961,7 @@ SPLASH_CONTENT_START:
 	; Row 2: Blank line
 	CALL	PRINT_TILDE_CRLF
 
-	; Rows 3..15: 13 Commands
+	; Rows 3..16: 14 Commands
 	LD	HL,STR_SPLASH_CMDS
 SPLASH_CMDS_LINE:
 	LD	A,(HL)
@@ -1977,7 +1977,7 @@ SPLASH_CMDS_CHAR:
 	JR	SPLASH_CMDS_LINE
 SPLASH_CMDS_DONE:
 
-	; Row 16: Blank line
+	; Row 17: Blank line
 	CALL	PRINT_TILDE_CRLF
 
 	; Row 17: Active Screen Mode
@@ -23568,6 +23568,7 @@ STR_SPLASH_CMDS:
 	DB	"  type   [A]              for about",13,10
 	DB	"  type   [M]              for memory info",13,10
 	DB	"  type   [P]              for plugins",13,10
+	DB	"  type   [^P]             for context plugin menu",13,10
 	DB	"  type   [C]              to configure",13,10
 	DB	"  type   [1]              set 120x40",13,10
 	DB	"  type   [2]              set 80x24",13,10

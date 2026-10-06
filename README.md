@@ -180,6 +180,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ~                         type   [A]              for about     
 ~                         type   [M]              for memory info
 ~                         type   [P]              for plugins   
+~                         type   [^P]             for context plugin menu
 ~                         type   [C]              to configure  
 ~                         type   [1]              set 120x40    
 ~                         type   [2]              set 80x24     

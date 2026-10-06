@@ -576,7 +576,7 @@ upcoming milestones for SE.COM.
   > of the content block without redundant executable binary artifacts.
 
 ### 2.33 Splash Screen Omits Ctrl+P Context-Aware Plugin Menu Command
-- [ ] Document `[^P]` context-aware plugin menu shortcut in splash screen
+- [x] Document `[^P]` context-aware plugin menu shortcut in splash screen
   command list.
   - In `src/se.asm:398-406`, the splash screen event loop already supports
     `Ctrl+P` (`KEY_CTRL_P`) to open the context-aware plugin modal menu
