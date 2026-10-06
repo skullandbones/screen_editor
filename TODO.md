@@ -417,7 +417,7 @@ upcoming milestones for SE.COM.
   > within the box borders."*
 
 ### 2.27 Configuration Screen Footer Uses Prohibited Slash Delimiter
-- [ ] Replace slash delimiter and non-standard casing in Configuration screen
+- [x] Replace slash delimiter and non-standard casing in Configuration screen
   footer.
   - In `src/se.asm:23648-23650` (`STR_CONFIG_FOOTER`):
     `"[1-5]=Toggle Option   [S]=Save Config   [Q]/[ESC]=return to splash..."`

@@ -5693,8 +5693,7 @@ def test_se_execution():
         # 2. Enter configuration screen with 'c'
         time.sleep(0.3)
         os.write(master, b"c")
-        out_s74_cfg = read_until(master, b"return to splash screen",
-                                 timeout=10.0)
+        out_s74_cfg = read_until(master, b"[ESC]=Exit", timeout=10.0)
         if b"Preserve (RAM Drive Active, 128KB)]" not in out_s74_cfg:
             print("[-] Step 74 failed: Config screen label 'Preserve' "
                   f"missing. Buffer: {repr(out_s74_cfg)}", flush=True)
@@ -5730,7 +5729,7 @@ def test_se_execution():
         time.sleep(0.3)
         os.write(master, b"s")
         read_until(master, b"Saved to local drive", timeout=10.0)
-        read_until(master, b"return to splash screen", timeout=10.0)
+        read_until(master, b"[ESC]=Exit", timeout=10.0)
         time.sleep(0.3)
         os.write(master, b"q")
         out_s74_splash2 = read_until(

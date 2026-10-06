@@ -236,7 +236,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=15.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=15.0)
         assert b"5. Plugin Manager  : [Disabled (Do Not Load)]" in out, (
             f"Config screen missing Disabled (Do Not Load): {out}"
         )
@@ -295,7 +295,7 @@ def run_tests():
         # Re-enter configuration screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=15.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=15.0)
 
         # Toggle '5': Autoload -> On Demand
         time.sleep(0.3)
@@ -338,7 +338,7 @@ def run_tests():
         # Re-enter configuration screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        read_until(master, b"return to splash screen", timeout=15.0)
+        read_until(master, b"[ESC]=Exit", timeout=15.0)
 
         # Toggle '5': On Demand -> Disabled
         time.sleep(0.3)
@@ -392,7 +392,7 @@ def run_tests():
 
         time.sleep(0.3)
         os.write(master, b"c")
-        read_until(master, b"return to splash screen", timeout=15.0)
+        read_until(master, b"[ESC]=Exit", timeout=15.0)
 
         # Toggle to Autoload, then On Demand
         time.sleep(0.3)
@@ -441,7 +441,7 @@ def run_tests():
         print("\n[*] TEST 4: Toggle to Autoload and Save...", flush=True)
         time.sleep(0.3)
         os.write(master, b"c")
-        read_until(master, b"return to splash screen", timeout=15.0)
+        read_until(master, b"[ESC]=Exit", timeout=15.0)
 
         # Toggle '5': On Demand -> Disabled -> Autoload
         time.sleep(0.3)

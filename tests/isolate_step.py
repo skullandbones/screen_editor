@@ -634,7 +634,7 @@ def run_step_74(master):
     # Enter config with 'c'
     time.sleep(0.3)
     os.write(master, b"c")
-    ok, out_cfg = read_until(master, b"return to splash screen", timeout=10.0)
+    ok, out_cfg = read_until(master, b"[ESC]=Exit", timeout=10.0)
     if b"Preserve (RAM Drive Active, 128KB)]" not in out_cfg:
         return False, f"Config Preserve missing: {out_cfg}"
 

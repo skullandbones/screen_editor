@@ -23647,8 +23647,7 @@ STR_CFG_STAT_END:	DB	":SE.CFG)]          ",13,10,"$"
 STR_CFG_STAT_ERR:	DB	"ERROR writing SE.CFG]              ",13,10,"$"
 
 STR_CONFIG_FOOTER:
-	DB	"[1-5]=Toggle Option   [S]=Save Config   "
-	DB	"[Q]/[ESC]=return to splash screen", "$"
+	DB	"[1-5]=Toggle Option   [S]=Save Config   [ESC]=Exit", "$"
 
 STR_CFG_HDR:		DB	"# SE.CFG - Screen Editor Configuration",13,10,0
 STR_KEY_SCREEN_NAME:	DB	"SCREEN",0

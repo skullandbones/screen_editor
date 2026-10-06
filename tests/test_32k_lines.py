@@ -211,7 +211,7 @@ def test_32k_lines():
         print("\n[*] Part 3: Configuration Screen Option 3 Toggle & Persistence...")
         time.sleep(0.3)
         os.write(master, b"c")
-        out_cfg = read_until(master, b"return to splash screen", timeout=10.0)
+        out_cfg = read_until(master, b"[ESC]=Exit", timeout=10.0)
         if b"3. Max Doc Lines   : [32K (32,768 Lines)]" in out_cfg:
             print("    [+] Option 3 displays 32K (32,768 Lines) active from SE.CFG")
         else:

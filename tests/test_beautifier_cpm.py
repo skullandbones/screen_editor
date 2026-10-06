@@ -176,7 +176,7 @@ def test_config_screen_beautifier_options():
         # 1. Enter SE.COM Config Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=15.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=15.0)
 
         # Verify Options 5 and 6 are stripped from SE.COM config screen
         assert b"5. Beautify Columns" not in out, f"Option 5 should not be in SE.COM menu: {out}"
