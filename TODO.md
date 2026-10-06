@@ -279,7 +279,7 @@ upcoming milestones for SE.COM.
   > top and bottom margin rows."*
 
 ### 2.20 Truncated File Save Blocked Uses Screen Dump Instead of Pop-up
-- [ ] Replace full-screen error dump with a Tier 2 centered modal pop-up when
+- [x] Replace full-screen error dump with a Tier 2 centered modal pop-up when
   save is blocked on a truncated document.
   - In `src/se.asm:16049` (`DO_SAVE_FILE_UI`), detecting
     `FILE_IS_TRUNCATED != 0` invokes `SHOW_TRUNCATED_SAVE_BLOCKED`

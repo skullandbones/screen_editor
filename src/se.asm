@@ -16298,7 +16298,7 @@ DO_SAVE_FILE_UI:
 	LD	A,(FILE_IS_TRUNCATED)
 	OR	A
 	JR	Z,DO_SAVE_FILE_OK
-	CALL	SHOW_TRUNCATED_SAVE_BLOCKED
+	CALL	SHOW_FILE_TRUNCATED_POPUP
 	RET
 
 DO_SAVE_FILE_OK:
@@ -16316,38 +16316,6 @@ DO_SAVE_FILE_OK:
 	LD	(IS_SAVE_UI),A
 	LD	HL,0FFFFH
 	LD	(CACHE_START_ROW),HL
-	RET
-
-TRUNC_LINES	EQU	12
-
-SHOW_TRUNCATED_SAVE_BLOCKED:
-	LD	A,1
-	LD	(IS_SPLASH_SCREEN),A
-	CALL	TERM_HIDE_CURSOR
-	CALL	TERM_CLEAR_SCREEN
-	LD	DE,STR_TRUNC_SAVE_BLOCKED
-	CALL	PRINT_STR
-
-	; Fill remaining rows down to status row with '~'
-	LD	A,(ACTIVE_ROWS)
-	DEC	A			; A = ACTIVE_ROWS - 1
-	SUB	TRUNC_LINES
-	JR	Z,TRUNC_TILDE_DONE
-	JR	C,TRUNC_TILDE_DONE
-	LD	B,A
-TRUNC_TILDE_LOOP:
-	CALL	PRINT_TILDE_CRLF
-	DJNZ	TRUNC_TILDE_LOOP
-
-TRUNC_TILDE_DONE:
-	CALL	RENDER_STATUS_BAR
-	CALL	TERM_HOME
-	CALL	TERM_HIDE_CURSOR
-	CALL	GET_KEY
-	CP	KEY_ESC
-	CALL	Z,DRAIN_ESC_SEQUENCE
-	XOR	A
-	LD	(IS_SPLASH_SCREEN),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -23800,20 +23768,6 @@ STR_FMT_LINUX:	DB	"Linux | ","$"
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 STR_STATUS_OVR:		DB	"Overwrite mode  | ","$"
 STR_PAN_PREFIX:		DB	"[Pan +","$"
-
-STR_TRUNC_SAVE_BLOCKED:
-	DB	"~",13,10
-	DB	"~  =============================================================",13,10
-	DB	"~                 ERROR: SAVE DISABLED (PROTECTION)             ",13,10
-	DB	"~  =============================================================",13,10
-	DB	"~  This file was truncated upon loading because it exceeds the  ",13,10
-	DB	"~  editor's current RAM capacity.                               ",13,10
-	DB	"~",13,10
-	DB	"~  Saving has been blocked to protect the unread portion of the ",13,10
-	DB	"~  file from being overwritten and permanently lost on disk.    ",13,10
-	DB	"~",13,10
-	DB	"~  Press any key to return to the editor                        ",13,10
-	DB	"~  =============================================================",13,10,"$"
 
 STR_STATUS_FREE:	DB	"Free: ","$"
 
