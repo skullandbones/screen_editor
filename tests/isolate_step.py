@@ -134,6 +134,10 @@ def setup_disk_files(img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root):
                 [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, fname],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_1", img_file, "0:30.TXT"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
 
     two_txt = os.path.join(repo_root, "2.TXT")
     thirty_txt = os.path.join(repo_root, "30.TXT")
@@ -381,9 +385,14 @@ def run_step_66(master):
     # Clean exit to CP/M
     time.sleep(0.3)
     os.write(master, b"\x1b")  # Unlock block
-    time.sleep(0.2)
+    read_until(master, b"^K: Editor keys", timeout=6.0)
+    time.sleep(0.3)
+    drain_all(master)
     os.write(master, b"\x11")  # Ctrl+Q
-    read_until(master, b"Save changes?", timeout=4.0)
+    ok, out_sc = read_until(master, b"Save changes?", timeout=6.0)
+    if not ok:
+        return False, f"Save changes prompt missing: {out_sc}"
+    time.sleep(0.2)
     os.write(master, b"n")  # Don't save
     ok, out_cpm = read_until(master, b"C>", timeout=6.0)
     if not ok:
@@ -417,7 +426,10 @@ def run_step_68(master):
     if b"SAV300.TXT" not in out_save:
         return False, f"Target filename 'SAV300.TXT' missing: {out_save[:400]}"
 
-    found_ticks = re.findall(rb"Line\s+(\d+)/300", out_save)
+    found_ticks = [
+        t for t in [b"Line   100", b"Line   200", b"Line   300"]
+        if t in out_save
+    ]
     if len(found_ticks) < 3:
         return False, f"Missing save progress ticks: {found_ticks}"
 
@@ -612,7 +624,8 @@ def run_step_74(master):
     time.sleep(0.3)
     os.write(master, b"se\r")
     ok, out_sp = read_until(master, b"RAM Drive (", timeout=35.0)
-    out_sp += read_until(master, b"Free: ", timeout=10.0)
+    ok2, out_sp_free = read_until(master, b"Free: ", timeout=10.0)
+    out_sp += out_sp_free
     if not ok or b"RAM Drive (A:): [Preserved (Active)]" not in out_sp:
         return False, f"RAM Drive (A:) Preserved missing: {out_sp}"
     if b"Max Lines     : [16,384 lines]" not in out_sp:
@@ -621,11 +634,7 @@ def run_step_74(master):
     # Enter config with 'c'
     time.sleep(0.3)
     os.write(master, b"c")
-    ok, out_cfg = read_until(master, b"[ESC]=Cancel", timeout=10.0)
-    if not ok:
-        ok, out_cfg = read_until(
-            master, b"return to splash", timeout=10.0
-        )
+    ok, out_cfg = read_until(master, b"return to splash screen", timeout=10.0)
     if b"Preserve (RAM Drive Active, 128KB)]" not in out_cfg:
         return False, f"Config Preserve missing: {out_cfg}"
 
@@ -654,7 +663,8 @@ def run_step_74(master):
     time.sleep(0.3)
     os.write(master, b"q")
     ok, out_sp2 = read_until(master, b"SE - Screen Editor", timeout=15.0)
-    out_sp2 += read_until(master, b"Free: ", timeout=10.0)
+    ok2, out_free = read_until(master, b"Free: ", timeout=10.0)
+    out_sp2 += out_free
     if not ok or b"RAM Drive (A:): [Overwritten (Max RAM)]" not in out_sp2:
         return False, f"Splash did not update to Overwritten: {out_sp2}"
 
