@@ -248,7 +248,7 @@ upcoming milestones for SE.COM.
   > violates modal presentation standards.
 
 ### 2.18 Pinned Top Header Rows 1-3 on File Open, Save, and Block Screens
-- [ ] Unify screen title, directory listing, and input prompt into a centered
+- [x] Unify screen title, directory listing, and input prompt into a centered
   content block on File Open, Save, and Block selection screens.
   - Currently in `src/se.asm:16740, 16764, 16783, 16794`, `RENDER_TITLE_COMMON`
     pins a 3-row header (`=`, centered title, `=`) at Rows 1-3, inserting

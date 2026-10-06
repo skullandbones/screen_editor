@@ -17003,11 +17003,11 @@ CDTP_ZERO:
 	RET
 
 ;------------------------------------------------------------------------------
-; Render Open/Save Screen Header (Rows 1-3) & Top Padding:
-; Row 1: Full-width "~====..."
-; Row 2: Centered title: "~   SE.COM - OPEN/SAVE FILE (DIRECTORY - DRIVE X:)"
-; Row 3: Full-width "~====..."
-; Top margin: DIR_TOP_PAD_COUNT blank tildes
+; Render Open/Save Screen Top Margin & Centered Header:
+; Rows 1 .. DIR_TOP_PAD_COUNT: Top margin blank tildes
+; Row DIR_TOP_PAD_COUNT + 1: Full-width "~====..."
+; Row DIR_TOP_PAD_COUNT + 2: Centered title: "~   SE.COM - OPEN/SAVE FILE ..."
+; Row DIR_TOP_PAD_COUNT + 3: Full-width "~====..."
 ; Sets UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT.
 ;------------------------------------------------------------------------------
 RENDER_DIR_TITLE:
@@ -17047,7 +17047,20 @@ RENDER_TITLE_COMMON:
 	; 1. Clear Screen (ESC [ 2 J, ESC [ H)
 	CALL	TERM_CLEAR_SCREEN
 
-	; 2. Row 1: Horizontal Rule
+	; Calculate vertical top padding for directory/file screen
+	CALL	CALC_DIR_TOP_PAD
+
+	; 2. Print top margin blank tilde rows before title block (if any)
+	LD	A,(DIR_TOP_PAD_COUNT)
+	OR	A
+	JR	Z,RTC_TOP_PAD_DONE
+	LD	B,A
+RTC_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	RTC_TOP_PAD_LOOP
+RTC_TOP_PAD_DONE:
+
+	; 3. Row DIR_TOP_PAD_COUNT + 1: Horizontal Rule
 	CALL	PRINT_HR_EQUAL
 
 	; 3. Row 2: Centered Title
@@ -17229,21 +17242,8 @@ RTC_PRINT_FILTERED:
 
 RTC_TITLE_DONE:
 
-	; 4. Row 3: Horizontal Rule
+	; Row DIR_TOP_PAD_COUNT + 3: Horizontal Rule
 	CALL	PRINT_HR_EQUAL
-
-	; Calculate vertical top padding for directory/file screen
-	CALL	CALC_DIR_TOP_PAD
-
-	; Print top margin blank tilde rows (if any)
-	LD	A,(DIR_TOP_PAD_COUNT)
-	OR	A
-	JR	Z,RTC_TOP_PAD_DONE
-	LD	B,A
-RTC_TOP_PAD_LOOP:
-	CALL	PRINT_TILDE_CRLF
-	DJNZ	RTC_TOP_PAD_LOOP
-RTC_TOP_PAD_DONE:
 
 	; Initialize UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT
 	LD	A,(DIR_TOP_PAD_COUNT)
