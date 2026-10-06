@@ -455,7 +455,7 @@ upcoming milestones for SE.COM.
   > triggers must not use `( )` or colon syntax.
 
 ### 2.29 Plugin Configuration Pop-ups Omit Toggle Hotkeys and Delimiters
-- [ ] Bring plugin configuration dialog footers and option labels into UI/UX
+- [x] Bring plugin configuration dialog footers and option labels into UI/UX
   compliance.
   - In `plugins/beautify.asm:1711-1724` (`STR_BTC_L4`..`STR_BTC_L9`) and
     `plugins/wordcnt.asm:480-484` (`STR_WCC_L4`..`STR_WCC_L7`):

@@ -215,11 +215,18 @@ def test_config_screen_beautifier_options():
         out = read_until(master, b"Save & Exit", timeout=10.0)
         assert b"Z80 Beautifier Configuration" in out, f"Failed opening BEAUTIFY config: {out}"
 
-        # Check default settings
-        assert b"1. Columns   : [Standard (9/17)]" in out, f"Default columns missing: {out}"
-        assert b"2. Mnemonics : [UPPERCASE      ]" in out, f"Default mnemonics missing: {out}"
-        assert b"3. Registers : [UPPERCASE      ]" in out, f"Default registers missing: {out}"
-        assert b"4. Animation : [ON (Real-Time) ]" in out, f"Default animation missing: {out}"
+        assert (b"[1] Columns   : [Standard (9/17)]" in out), (
+            f"Default columns missing: {out}"
+        )
+        assert (b"[2] Mnemonics : [UPPERCASE      ]" in out), (
+            f"Default mnemonics missing: {out}"
+        )
+        assert (b"[3] Registers : [UPPERCASE      ]" in out), (
+            f"Default registers missing: {out}"
+        )
+        assert (b"[4] Animation : [ON (Real-Time) ]" in out), (
+            f"Default animation missing: {out}"
+        )
         print("    [+] Verified BEAUTIFY embedded config menu default values")
 
         # Toggle Option 1 (Columns) -> Compact (8/16)
@@ -373,7 +380,10 @@ def test_ctrl_y_whole_file_beautify():
         # Press Ctrl+Y (ASCII 25 / 0x19) -> Beautifies whole file
         time.sleep(0.3)
         os.write(master, b"\x19")
-        out_cy = read_until(master, b"^K: Editor keys", timeout=20.0)
+        read_until(master, b"Beautification Complete", timeout=20.0)
+        time.sleep(0.2)
+        os.write(master, b" ")
+        out_cy = read_until(master, b"^K: Editor keys", timeout=10.0)
         assert b"^K: Editor keys" in out_cy, f"Beautify did not complete: {out_cy}"
         drain_all(master, 0.2)
         print("    [+] Sent Ctrl+Y (Whole-file Beautify completed)")
@@ -491,6 +501,9 @@ def test_ctrl_y_block_beautify():
         # Press Ctrl+Y (\x19) -> Beautifies ONLY block [row 1 .. row 2]
         time.sleep(0.3)
         os.write(master, b"\x19")
+        read_until(master, b"Beautification Complete", timeout=15.0)
+        time.sleep(0.2)
+        os.write(master, b" ")
         out_cy = read_until(master, b"^K: Editor keys", timeout=15.0)
         assert b"^K: Editor keys" in out_cy, f"Block beautify did not complete: {out_cy}"
         drain_all(master, 0.2)
@@ -645,6 +658,9 @@ def test_compact_beautification():
         # Send Ctrl+Y (whole-file beautify)
         time.sleep(0.3)
         os.write(master, b"\x19")
+        read_until(master, b"Beautification Complete", timeout=20.0)
+        time.sleep(0.2)
+        os.write(master, b" ")
         read_until(master, b"^K: Editor keys", timeout=20.0)
         drain_all(master, 0.2)
 

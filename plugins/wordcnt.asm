@@ -235,7 +235,7 @@ PUT_WS_STR:
 	LDIR
 
 	LD	HL,WORDCNT_CFG_TABLE
-	LD	B,8
+	LD	B,9
 	LD	C,38
 	CALL	RENDER_CENTERED_BOX
 	CALL	CALL_HOST_GETKEY
@@ -473,14 +473,16 @@ WORDCNT_CFG_TABLE:
 	DW	STR_WCC_L4
 	DW	STR_WCC_L5
 	DW	STR_WORDCNT_BORDER
+	DW	STR_WCC_L6
 	DW	STR_WCC_L7
 	DW	STR_WORDCNT_BORDER
 
 STR_WCC_L2:		DB	"|     Word Count Configuration       |", 0
-STR_WCC_L4:		DB	"|  1. Count Blank Lines  : ["
+STR_WCC_L4:		DB	"| [1] Count Blank Lines  : ["
 STR_CFG_BLANK_VAL:	DB	"YES]     |", 0
-STR_WCC_L5:		DB	"|  2. Count Whitespace   : ["
-STR_CFG_WS_VAL:		DB	"YES]       |", 0
+STR_WCC_L5:		DB	"| [2] Count Whitespace   : ["
+STR_CFG_WS_VAL:		DB	"YES]     |", 0
+STR_WCC_L6:		DB	"|        [1-2]=Toggle Option         |", 0
 STR_WCC_L7:		DB	"| [Enter]=Save & Exit   [ESC]=Cancel |", 0
 
 CFG_COUNT_BLANK:	DB	1
