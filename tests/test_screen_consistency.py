@@ -199,14 +199,17 @@ def run_screen_consistency_test(mode_name="80x24"):
             master, b"Press any key to continue", timeout=5.0
         )
         out_help += read_until(master, b"\x1b[?25l", timeout=3.0)
-        if b"SE.COM - EDITOR MODE KEYS" not in out_help:
+        if b"EDITOR MODE KEYS" not in out_help:
             print(f"[-] Help screen missing title. Buffer: {repr(out_help)}", flush=True)
             return False
 
         # Verify full-width rules, dash rule, and centered title/footer on Help screen
         expected_rule = b"~" + (b"=" * (78 if mode_name == "80x24" else 118))
         expected_dash = b"~" + (b"-" * (78 if mode_name == "80x24" else 118))
-        expected_title_pad = b"~" + (b" " * (26 if mode_name == "80x24" else 46)) + b"SE.COM - EDITOR MODE KEYS"
+        expected_title_pad = (
+            b"~" + (b" " * (31 if mode_name == "80x24" else 51))
+            + b"EDITOR MODE KEYS"
+        )
         expected_prompt_pad = (
             b"~" + (b" " * (26 if mode_name == "80x24" else 46))
             + b"Press any key to continue"
@@ -252,7 +255,10 @@ def run_screen_consistency_test(mode_name="80x24"):
         if expected_rule not in out_open:
             print(f"[-] Open screen missing full-width rule (len {len(expected_rule)}). Buffer: {repr(out_open)}", flush=True)
             return False
-        expected_title_pad = b"~" + (b" " * (18 if mode_name == "80x24" else 38)) + b"SE.COM - OPEN FILE"
+        expected_title_pad = (
+            b"~" + (b" " * (23 if mode_name == "80x24" else 43))
+            + b"OPEN FILE"
+        )
         if expected_title_pad not in out_open:
             print(f"[-] Open screen missing centered title. Buffer: {repr(out_open)}", flush=True)
             return False
@@ -293,7 +299,10 @@ def run_screen_consistency_test(mode_name="80x24"):
         if expected_rule not in out_save:
             print(f"[-] Save screen missing full-width rule (len {len(expected_rule)}). Buffer: {repr(out_save)}", flush=True)
             return False
-        expected_save_title = b"~" + (b" " * (18 if mode_name == "80x24" else 38)) + b"SE.COM - SAVE FILE"
+        expected_save_title = (
+            b"~" + (b" " * (23 if mode_name == "80x24" else 43))
+            + b"SAVE FILE"
+        )
         if expected_save_title not in out_save:
             print(f"[-] Save screen missing centered title. Buffer: {repr(out_save)}", flush=True)
             return False

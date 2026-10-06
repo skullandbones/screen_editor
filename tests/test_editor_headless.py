@@ -1258,7 +1258,7 @@ def test_se_execution():
         out_keys = read_until(
             master, b"Press any key to continue", timeout=4.0
         )
-        if b"SE.COM - EDITOR MODE KEYS" not in out_keys:
+        if b"EDITOR MODE KEYS" not in out_keys:
             print(f"[-] Help screen not reached via Ctrl+K. Buffer: {repr(out_keys)}", flush=True)
             return False
         if b"Ctrl+O           Open file screen" not in out_keys:
@@ -4090,12 +4090,14 @@ def test_se_execution():
 
         # Press Ctrl-O -> opens Block Insert File screen
         os.write(master, b"\x0f")
-        out_s66_ui = read_until(master, b"SE.COM - INSERT FILE (DIRECTORY - DRIVE", timeout=6.0)
+        out_s66_ui = read_until(
+            master, b"INSERT FILE (DIRECTORY - DRIVE", timeout=6.0
+        )
         out_s66_ui += read_until(master, b"Enter filename to insert:", timeout=4.0)
         out_s66_ui += read_until(master, b"\x1b[?25h", timeout=4.0)
         out_s66_ui += drain_all(master)
 
-        if b"SE.COM - INSERT FILE (DIRECTORY - DRIVE" not in out_s66_ui:
+        if b"INSERT FILE (DIRECTORY - DRIVE" not in out_s66_ui:
             print(f"[-] Step 66 Subtest 1 failed: Insert File title not found: {repr(out_s66_ui)}", flush=True)
             return False
         if b"Enter filename to insert:" not in out_s66_ui:

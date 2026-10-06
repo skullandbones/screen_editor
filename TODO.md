@@ -536,7 +536,7 @@ upcoming milestones for SE.COM.
   > not trailing static query prompts.
 
 ### 2.32 Redundant "SE.COM" Prefix in Open, Save, Help, Insert & Block Screens
-- [ ] Remove "SE.COM" from screen titles in file open, save, help, insert, and
+- [x] Remove "SE.COM" from screen titles in file open, save, help, insert, and
   block selection workspaces.
   - In `src/se.asm:23796-23808`, directory screen title prefixes include the
     executable binary filename `"SE.COM - "`:
