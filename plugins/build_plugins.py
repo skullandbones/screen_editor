@@ -7,17 +7,85 @@ Generates:
 """
 
 import os
+import shutil
 import subprocess
 import sys
+
+
+def find_z80asm(repo_root):
+    """Locate z88dk-z80asm binary honoring environment variables and paths."""
+    # 1. Direct environment variable Z80ASM_BIN
+    env_z80asm = os.environ.get("Z80ASM_BIN", "").strip()
+    if env_z80asm:
+        if not os.path.isabs(env_z80asm):
+            for base in [os.getcwd(), repo_root]:
+                cand = os.path.abspath(os.path.join(base, env_z80asm))
+                if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                    return cand
+        elif os.path.isfile(env_z80asm) and os.access(env_z80asm, os.X_OK):
+            return env_z80asm
+
+    # 2. Determine tools directory from TOOLS_DIR or WORKSPACE_ROOT
+    tools_roots = []
+    env_tools_dir = os.environ.get("TOOLS_DIR", "").strip()
+    if env_tools_dir:
+        if os.path.isabs(env_tools_dir):
+            tools_roots.append(env_tools_dir)
+        else:
+            tools_roots.append(os.path.abspath(env_tools_dir))
+            tools_roots.append(
+                os.path.abspath(os.path.join(repo_root, env_tools_dir))
+            )
+
+    env_ws = os.environ.get("WORKSPACE_ROOT", "").strip()
+    if env_ws:
+        if os.path.isabs(env_ws):
+            tools_roots.append(os.path.join(env_ws, "tools"))
+        else:
+            tools_roots.append(
+                os.path.abspath(os.path.join(env_ws, "tools"))
+            )
+            tools_roots.append(
+                os.path.abspath(os.path.join(repo_root, env_ws, "tools"))
+            )
+
+    # Default fallback search locations relative to repo_root
+    tools_roots.extend([
+        os.path.abspath(os.path.join(repo_root, "..", "..", "tools")),
+        os.path.abspath(os.path.join(repo_root, "..", "..", "..", "tools")),
+        os.path.abspath(os.path.join(repo_root, "..", "tools")),
+        os.path.abspath(os.path.join(repo_root, "tools")),
+    ])
+
+    for tr in tools_roots:
+        candidates = [
+            os.path.join(tr, "z88dk", "bin", "z88dk-z80asm"),
+            os.path.join(tr, "bin", "z88dk-z80asm"),
+            os.path.join(tr, "z88dk-z80asm"),
+            os.path.abspath(
+                os.path.join(tr, "..", "..", "z88dk", "bin", "z88dk-z80asm")
+            ),
+        ]
+        for c in candidates:
+            if os.path.isfile(c) and os.access(c, os.X_OK):
+                return c
+
+    # 3. Check system PATH
+    sys_z80asm = shutil.which("z88dk-z80asm")
+    if sys_z80asm:
+        return sys_z80asm
+
+    raise FileNotFoundError(
+        "Could not locate 'z88dk-z80asm'. Please set TOOLS_DIR or Z80ASM "
+        "environment variable or pass TOOLS_DIR to make."
+    )
+
 
 def main():
     plugin_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(plugin_dir)
-    workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
 
-    z80asm_bin = os.path.join(
-        workspace_root, "tools", "z88dk", "bin", "z88dk-z80asm"
-    )
+    z80asm_bin = find_z80asm(repo_root)
     mkprl_bin = os.path.join(repo_root, "tools", "mkprl.py")
 
     # 1. Build ROT13.PRL
