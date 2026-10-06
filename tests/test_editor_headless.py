@@ -2904,8 +2904,8 @@ def test_se_execution():
         # 4. From editor, press ESC to switch to splash screen
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        out_splash = read_until(master, b"Active Screen:", timeout=4.0)
-        if b"Active Screen:" not in out_splash:
+        out_splash = read_until(master, b"Active Screen :", timeout=4.0)
+        if b"Active Screen :" not in out_splash:
             print(f"[-] Step 52 failed: ESC did not display splash screen. Buffer: {repr(out_splash)}", flush=True)
             return False
         print("[+] Switched to splash screen with modified document.", flush=True)
@@ -2962,8 +2962,8 @@ def test_se_execution():
 
         # 3. Discard changes with 'n' and verify return to splash screen
         os.write(master, b"n")
-        out_s53_splash1 = read_until(master, b"Active Screen:", timeout=4.0)
-        if b"Active Screen:" not in out_s53_splash1:
+        out_s53_splash1 = read_until(master, b"Active Screen :", timeout=4.0)
+        if b"Active Screen :" not in out_s53_splash1:
             print(f"[-] Step 53 failed: Ctrl+W did not return to splash screen. Buffer: {repr(out_s53_splash1)}", flush=True)
             return False
         print("[+] Ctrl+W in editor prompted and returned to splash screen on discard.", flush=True)
@@ -2982,7 +2982,7 @@ def test_se_execution():
         os.write(master, b"TESTING BLANK")
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=4.0)
+        read_until(master, b"Active Screen :", timeout=4.0)
 
         # 6. On splash screen with modified document, test ':w'
         time.sleep(0.2)
@@ -2999,13 +2999,13 @@ def test_se_execution():
         # 7. Return to splash screen again, test Ctrl+W and discard with 'n'
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=4.0)
+        read_until(master, b"Active Screen :", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"\x17")
         read_until(master, b"[ESC]=Cancel", timeout=4.0)
         os.write(master, b"n")
-        out_s53_splash2 = read_until(master, b"Active Screen:", timeout=4.0)
-        if b"Active Screen:" not in out_s53_splash2:
+        out_s53_splash2 = read_until(master, b"Active Screen :", timeout=4.0)
+        if b"Active Screen :" not in out_s53_splash2:
             print(f"[-] Step 53 failed: Splash Ctrl+W did not return to splash screen. Buffer: {repr(out_s53_splash2)}", flush=True)
             return False
         print("[+] Splash Ctrl+W discarded changes and unloaded document.", flush=True)
@@ -3021,8 +3021,9 @@ def test_se_execution():
         # 9. In unmodified editor, test Ctrl+W: closes immediately to splash without prompt
         time.sleep(0.2)
         os.write(master, b"\x17")
-        out_s53_unmod = read_until(master, b"Active Screen:", timeout=4.0)
-        if b"Save changes" in out_s53_unmod or b"Active Screen:" not in out_s53_unmod:
+        out_s53_unmod = read_until(master, b"Active Screen :", timeout=4.0)
+        if (b"Save changes" in out_s53_unmod or
+                b"Active Screen :" not in out_s53_unmod):
             print(f"[-] Step 53 failed: Unmodified Ctrl+W did not close immediately. Buffer: {repr(out_s53_unmod)}", flush=True)
             return False
         print("[+] Unmodified document closed immediately with Ctrl+W to splash screen.", flush=True)
@@ -3103,7 +3104,7 @@ def test_se_execution():
         os.write(master, b"M")
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=4.0)
+        read_until(master, b"Active Screen :", timeout=4.0)
 
         # 8. On splash screen with modified document, test ':o'
         time.sleep(0.2)
@@ -3120,7 +3121,7 @@ def test_se_execution():
         # 9. Return to splash screen again (ESC), test ':o' and discard with 'n'
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=4.0)
+        read_until(master, b"Active Screen :", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"o")
         read_until(master, b"[ESC]=Cancel", timeout=4.0)
@@ -3199,7 +3200,7 @@ def test_se_execution():
         # 5. Return to splash screen (ESC) and open '30.TXT:10' from splash ':o'
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=8.0)
+        read_until(master, b"Active Screen :", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"o")
         read_until(master, b"Enter filename to open:", timeout=8.0)
@@ -4911,7 +4912,7 @@ def test_se_execution():
         # Press ESC to return to splash
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"Active Screen:", timeout=6.0)
+        read_until(master, b"Active Screen :", timeout=6.0)
         print(
             "[+] Step 70 Subtest 1 PASSED: Open File directory filter and "
             "FNF recovery verified.",

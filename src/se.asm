@@ -23590,7 +23590,7 @@ STR_SPLASH_CMDS:
 	DB	"  type   [Q]  or  [^Q]    to exit",13,10
 	DB	0
 
-STR_SPLASH_CUR_MODE:	DB	"Active Screen: [$"
+STR_SPLASH_CUR_MODE:	DB	"Active Screen : [$"
 STR_SPLASH_120X40_LBL:	DB	"120x40 (Modern Default)]",13,10,"$"
 STR_SPLASH_80X24_LBL:	DB	"80x24 (Classic Terminal)] ",13,10,"$"
 

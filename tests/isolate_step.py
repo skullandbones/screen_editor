@@ -489,7 +489,7 @@ def run_step_70(master):
     # ESC to splash
     time.sleep(0.2)
     os.write(master, b"\x1b")
-    read_until(master, b"Active Screen:", timeout=6.0)
+    read_until(master, b"Active Screen :", timeout=6.0)
 
     # Subtest 2: Save File Screen Filter & Filename Preservation
     time.sleep(0.2)

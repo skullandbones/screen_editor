@@ -199,7 +199,9 @@ def run_tests():
         # Exit to splash screen ('q')
         time.sleep(0.2)
         os.write(master, b"q")
-        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=15.0)
+        out = read_until(
+            master, b"Active Screen : [120x40 (Modern Default)]", timeout=15.0
+        )
         assert b"120x40 (Modern Default)" in out, "Failed returning to splash"
 
         # Exit SE ('q')
@@ -330,7 +332,9 @@ def run_tests():
         # Return to splash screen ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=10.0)
+        out = read_until(
+            master, b"Active Screen : [120x40 (Modern Default)]", timeout=10.0
+        )
         assert b"120x40 (Modern Default)" in out, "Splash screen did not reflect newly saved geometry"
         print("    [+] Returned to splash screen with active 120x40 geometry")
         drain_all(master)
@@ -361,7 +365,7 @@ def run_tests():
         time.sleep(0.4)
         os.write(master, b"se\r")
         out = read_until(
-            master, b"Active Screen: [120x40 (Modern Default)]", timeout=60.0
+            master, b"Active Screen : [120x40 (Modern Default)]", timeout=60.0
         )
         assert b"120x40 (Modern Default)" in out, (
             f"Re-launch did not retain saved 120x40. Buffer: {repr(out)}"
@@ -379,7 +383,7 @@ def run_tests():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"Active Screen:", timeout=10.0)
+        read_until(master, b"Active Screen :", timeout=10.0)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
@@ -802,7 +806,7 @@ def run_tests():
         # Exit to CP/M
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"Active Screen:", timeout=10.0)
+        read_until(master, b"Active Screen :", timeout=10.0)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
@@ -820,7 +824,9 @@ def run_tests():
         drain_all(master)
         time.sleep(0.4)
         os.write(master, b"se\r")
-        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=25.0)
+        out = read_until(
+            master, b"Active Screen : [120x40 (Modern Default)]", timeout=25.0
+        )
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"c")
@@ -832,7 +838,7 @@ def run_tests():
         # Exit SE
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"Active Screen:", timeout=10.0)
+        read_until(master, b"Active Screen :", timeout=10.0)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
@@ -1001,7 +1007,7 @@ def run_tests():
         # Return to splash screen ('q') and exit ('q')
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"Active Screen:", timeout=10.0)
+        read_until(master, b"Active Screen :", timeout=10.0)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")

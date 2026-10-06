@@ -478,7 +478,7 @@ upcoming milestones for SE.COM.
   > vertical column alignment.
 
 ### 2.30 Misalignment of Splash Screen "Active Screen" Status Bracket
-- [ ] Align opening bracket of "Active Screen" status row with subsequent
+- [x] Align opening bracket of "Active Screen" status row with subsequent
   status lines on splash screen.
   - In `src/se.asm:23592`, `STR_SPLASH_CUR_MODE` is defined as:
     `STR_SPLASH_CUR_MODE: DB "Active Screen: [$"`

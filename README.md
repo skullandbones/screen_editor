@@ -185,7 +185,7 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 ~                         type   [2]              set 80x24     
 ~                         type   [Q]  or  [^Q]    to exit       
 ~
-~                     Active Screen: [120x40 (Modern Default)]           
+~                     Active Screen : [120x40 (Modern Default)]          
 ~
  | (Untitled)    | 120x40 | CP/M  | Free: 416 KB    | Line    1/1   Col 0   | 
 ```
