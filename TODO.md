@@ -294,7 +294,7 @@ upcoming milestones for SE.COM.
   > centered boxed modal pop-ups rather than screen clears or text dumps.
 
 ### 2.21 Overwrite Cancellation Emits Raw CRLF Text Causing Display Corruption
-- [ ] Eliminate raw terminal text printing upon overwrite cancellation.
+- [x] Eliminate raw terminal text printing upon overwrite cancellation.
   - In `src/se.asm:16322` (`DO_OVERWRITE_CANCELLED`), cancelling overwrite
     emits `STR_SAVE_CANCELLED` (`13, 10, "~  Save cancelled.", 13, 10`)
     directly from the pop-up cursor coordinates without redrawing the screen.
