@@ -101,9 +101,9 @@ def main():
             print(f"[-] Error: {name} not found at {p}")
             sys.exit(1)
 
-        print("=" * 65)
+    print("=" * 65)
     print("  Bug 2.11: Child Pop-up Lifecycle in Plugin Manager Regression  ")
-        print("=" * 65)
+    print("=" * 65)
 
     master, slave = os.openpty()
     tty.setraw(slave)

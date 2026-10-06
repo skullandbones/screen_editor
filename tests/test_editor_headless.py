@@ -4166,7 +4166,8 @@ def test_se_execution():
         out_s66_ins1 = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
         out_s66_ins1 += drain_all(master)
 
-        if (b"Loading File" not in out_s66_ins1 and
+        if (b"Inserting File" not in out_s66_ins1 and
+                b"Loading File" not in out_s66_ins1 and
                 b"Loading..." not in out_s66_ins1):
             print(
                 f"[-] Step 66 Subtest 3 failed: 'Loading File' not found "
@@ -4221,7 +4222,8 @@ def test_se_execution():
         out_s66_ins2 = read_until(master, b"[BLK: 2L LOCK]", timeout=8.0)
         out_s66_ins2 += drain_all(master)
 
-        if (b"Loading File" not in out_s66_ins2 and
+        if (b"Inserting File" not in out_s66_ins2 and
+                b"Loading File" not in out_s66_ins2 and
                 b"Loading..." not in out_s66_ins2):
             print(
                 f"[-] Step 66 Subtest 4 failed: 'Loading File' not found "
@@ -5642,6 +5644,13 @@ def test_se_execution():
             return False
         print("    [+] Splash screen shows "
               "'RAM Drive (A:): [Preserved (Active)]'.")
+        if b"Max Lines     : [16,384 lines]" not in out_s74_splash:
+            print("[-] Step 74 failed: Splash screen missing 'Max Lines     : "
+                  f"[16,384 lines]'. Buffer: {repr(out_s74_splash)}",
+                  flush=True)
+            return False
+        print("    [+] Splash screen shows "
+              "'Max Lines     : [16,384 lines]'.")
 
         # 2. Enter configuration screen with 'c'
         time.sleep(0.3)
@@ -5696,6 +5705,13 @@ def test_se_execution():
             return False
         print("    [+] Splash screen updated to "
               "'RAM Drive (A:): [Overwritten (Max RAM)]'.")
+        if b"Max Lines     : [16,384 lines]" not in out_s74_splash2:
+            print("[-] Step 74 failed: Splash screen missing 'Max Lines     : "
+                  f"[16,384 lines]'. Buffer: {repr(out_s74_splash2)}",
+                  flush=True)
+            return False
+        print("    [+] Splash screen shows "
+              "'Max Lines     : [16,384 lines]'.")
 
         # 3. Test Open File screen with unavailable RAM drive
         time.sleep(0.3)
