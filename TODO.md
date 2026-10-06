@@ -392,7 +392,7 @@ upcoming milestones for SE.COM.
   > options. All text is centre justified."*
 
 ### 2.26 Asymmetric Left-Aligned Messages in Truncated & Error Modal Pop-ups
-- [ ] Horizontally center informational messages in Tier 2 status and error
+- [x] Horizontally center informational messages in Tier 2 status and error
   pop-ups.
   - In `src/se.asm:23372` (`STR_POPUP_TRUNC_MSG2`):
     `"| Save is disabled to protect data on disk.      |"` has 1 leading space

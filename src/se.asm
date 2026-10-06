@@ -23370,7 +23370,7 @@ STR_POPUP_TRUNC_TITLE:
 STR_POPUP_TRUNC_MSG1:
 	DB	"| File exceeded capacity and has been truncated. |", 0
 STR_POPUP_TRUNC_MSG2:
-	DB	"| Save is disabled to protect data on disk.      |", 0
+	DB	"|   Save is disabled to protect data on disk.    |", 0
 STR_POPUP_TRUNC_KEY:
 	DB	"|           Press any key to continue            |", 0
 
@@ -23451,7 +23451,7 @@ STR_REP_CONFIRM_KEYS:
 STR_POPUP_NOT_FOUND_TITLE:
 	DB	"|               Pattern Not Found                |", 0
 STR_POPUP_NOT_FOUND_MSG1:
-	DB	"|              Pattern not found.                |", 0
+	DB	"|               Pattern not found.               |", 0
 STR_POPUP_NOT_FOUND_MSG2:
 	DB	"|       Search pattern not found in file.        |", 0
 
@@ -23469,7 +23469,7 @@ STR_POPUP_TOO_LONG_TITLE:
 STR_POPUP_TOO_LONG_MSG1:
 	DB	"|          Line > 120 chars - skipped.           |", 0
 STR_POPUP_TOO_LONG_MSG2:
-	DB	"|      Line length limit exceeded on replace.    |", 0
+	DB	"|     Line length limit exceeded on replace.     |", 0
 
 ; Replace Done Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_REP_DONE_TITLE:
