@@ -121,7 +121,7 @@ Invoked from the `SE.COM` Plugin Manager (`About` action) or directly via entry 
                 ~ | Engine: Elm-Chan FatFs R0.15 (1-Clause BSD)    |
                 ~ | Driver: RomWBW RST 08H by Dean Jenkins         |
                 ~ +------------------------------------------------+
-                ~ |             Press any key to close             |
+                ~ |           Press any key to continue            |
                 ~ +------------------------------------------------+
 ```
 

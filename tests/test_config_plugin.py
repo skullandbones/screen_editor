@@ -196,7 +196,7 @@ def run_tests():
         time.sleep(0.3)
         os.write(master, b"m")
         out = read_until(
-            master, b"Press any key to return to editor", timeout=15.0
+            master, b"Press any key to continue", timeout=15.0
         )
         assert b"Active: PLUGIN.PRL Subsystem" not in out, (
             "Memory screen unexpectedly showed active plugin subsystem!"
@@ -278,7 +278,7 @@ def run_tests():
         time.sleep(0.3)
         os.write(master, b"m")
         out = read_until(
-            master, b"Press any key to return to editor", timeout=15.0
+            master, b"Press any key to continue", timeout=15.0
         )
         assert b"Active: PLUGIN.PRL Subsystem" in out, (
             f"Memory screen missing Active: PLUGIN.PRL Subsystem:\n{out}"
@@ -323,7 +323,7 @@ def run_tests():
         time.sleep(0.3)
         os.write(master, b"m")
         out = read_until(
-            master, b"Press any key to return to editor", timeout=15.0
+            master, b"Press any key to continue", timeout=15.0
         )
         assert b"Active: PLUGIN.PRL Subsystem" not in out, (
             "Memory screen unexpectedly showed active plugin subsystem!"
@@ -494,7 +494,7 @@ def run_tests():
         time.sleep(0.3)
         os.write(master, b"m")
         out = read_until(
-            master, b"Press any key to return to editor", timeout=15.0
+            master, b"Press any key to continue", timeout=15.0
         )
         assert b"Active: PLUGIN.PRL Subsystem" in out, (
             f"Memory screen missing Active: PLUGIN.PRL Subsystem:\n{out}"

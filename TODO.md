@@ -306,7 +306,7 @@ upcoming milestones for SE.COM.
   > the screen."*
 
 ### 2.22 Non-Standard Dismissal Prompts in About, Memory, Help, and FAT Plugin
-- [ ] Standardize single-key dismissal statements across all full-screen and
+- [x] Standardize single-key dismissal statements across all full-screen and
   modal surfaces.
   - Update `STR_ABOUT_RETURN` (`src/se.asm:23472`: `"Press any key to return
     to splash"`), `STR_MEM_RETURN_PROMPT` (`src/se.asm:23490`: `"Press any key

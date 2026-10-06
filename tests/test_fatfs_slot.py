@@ -197,7 +197,9 @@ def run_fatfs_slot_test():
         # 6. Test Action 1: About Dialog ('a')
         time.sleep(0.3)
         os.write(master, b"a")
-        ok, out_about = read_until(master, b"Press any key to close", timeout=6.0)
+        ok, out_about = read_until(
+            master, b"Press any key to continue", timeout=6.0
+        )
         if not ok or b"FAT Filesystem Plugin" not in out_about:
             print(f"[-] About dialog check failed. Buffer: {repr(out_about)}", flush=True)
             return False

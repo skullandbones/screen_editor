@@ -173,7 +173,7 @@ def test_bug_2_1():
         # Open Memory Info screen ('m')
         time.sleep(0.4)
         os.write(master, b"m")
-        out_mem = read_until(master, b"return to splash", timeout=15.0)
+        out_mem = read_until(master, b"Press any key to continue", timeout=15.0)
         time.sleep(0.2)
         out_mem += drain_all(master)
 

@@ -189,7 +189,7 @@ def test_help_screen_centering():
         time.sleep(0.3)
         os.write(master, b"\x0b")  # Ctrl+K
         ok, out = read_until(
-            master, b"Press any key to return to editor", timeout=8.0
+            master, b"Press any key to continue", timeout=8.0
         )
         assert ok, f"Help screen not loaded in 80x24: {out}"
         ok, out_more = read_until(master, b"\x1b[0m", timeout=3.0)
@@ -216,7 +216,7 @@ def test_help_screen_centering():
         )
         # Symmetrical bottom margin: 1 row of '~' before status bar
         expected_bottom_80 = (
-            b"~" + (b" " * 22) + b"Press any key to return to editor\r\n"
+            b"~" + (b" " * 26) + b"Press any key to continue\r\n"
             + b"~\r\n"
         )
         assert expected_bottom_80 in out, (
@@ -262,7 +262,7 @@ def test_help_screen_centering():
         time.sleep(0.3)
         os.write(master, b"\x0b")  # Ctrl+K
         ok, out = read_until(
-            master, b"Press any key to return to editor", timeout=8.0
+            master, b"Press any key to continue", timeout=8.0
         )
         assert ok, f"Help screen not loaded in 120x40: {out}"
         ok, out_more = read_until(master, b"\x1b[0m", timeout=3.0)
@@ -310,7 +310,7 @@ def test_help_screen_centering():
 
         # Symmetrical bottom margin: exactly 9 rows of '~' before status bar
         expected_prompt_120 = (
-            b"~" + (b" " * 42) + b"Press any key to return to editor\r\n"
+            b"~" + (b" " * 46) + b"Press any key to continue\r\n"
         )
         assert expected_prompt_120 in out, (
             f"120x40 Help missing centered return prompt: {out}"
