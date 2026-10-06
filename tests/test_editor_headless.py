@@ -5169,16 +5169,30 @@ def test_se_execution():
             print(f"[-] Step 71 Subtest 4 failed: Save prompt not reached. Buffer: {repr(out_s71_save)}", flush=True)
             return False
         if b"DRIVE C1:)" not in out_s71_save:
-            print(f"[-] Step 71 Subtest 4 failed: Save screen title does not show 'DRIVE C1:)'. Buffer: {repr(out_s71_save)}", flush=True)
+            print(
+                "[-] Step 71 Subtest 4 failed: Save screen title does not "
+                f"show 'DRIVE C1:)'. Buffer: {repr(out_s71_save)}",
+                flush=True
+            )
             return False
 
         time.sleep(0.1)
         os.write(master, b"\x08" * 20 + b"1C:SAVEU1.TXT\r")
-        out_s71_saved = read_until(master, b"C1:SAVEU1.TXT", timeout=8.0)
+        out_s71_saved = read_until(master, b"^K: Editor keys", timeout=8.0)
         if b"C1:SAVEU1.TXT" not in out_s71_saved:
-            print(f"[-] Step 71 Subtest 4 failed: Save did not return to editor with status bar. Buffer: {repr(out_s71_saved)}", flush=True)
+            print(
+                "[-] Step 71 Subtest 4 failed: Save did not return to editor "
+                f"with status bar. Buffer: {repr(out_s71_saved)}",
+                flush=True
+            )
             return False
-        print("[+] Step 71 Subtest 4 PASSED: Saved as '1C:SAVEU1.TXT' into User 1.", flush=True)
+        time.sleep(0.3)
+        drain_all(master)
+        print(
+            "[+] Step 71 Subtest 4 PASSED: Saved as '1C:SAVEU1.TXT' into "
+            "User 1.",
+            flush=True
+        )
 
         # Subtest 5: Directory screen interactive switching: C0:, 1:, 1C:*.TXT
         time.sleep(0.2)
