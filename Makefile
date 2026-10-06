@@ -7,6 +7,7 @@ Z80ASM ?= $(WORKSPACE_ROOT)/tools/z88dk/bin/z88dk-z80asm
 GOLDEN_IMAGE ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Binary/hd1k_combo.img
 IMAGE_DIR ?= disks
 IMAGE ?= $(IMAGE_DIR)/hd1k_combo.img
+export DISKDEFS ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Tools/cpmtools/diskdefs
 CPMCP ?= $(TOOLS_DIR)/cpmcp
 CPMRM ?= $(TOOLS_DIR)/cpmrm
 
@@ -113,6 +114,8 @@ image: $(IMAGE) $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HIBERN.OVL 0:HIBERN.OVL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:HELP.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HELP.OVL 0:HELP.OVL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:2.TXT 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) 2.TXT 0:2.TXT
 
 test: test-sanity
 

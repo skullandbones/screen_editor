@@ -458,12 +458,12 @@ WORDCNT_ABT_TABLE:
 	DW	STR_WORDCNT_BORDER
 
 STR_WCA_L2:		DB	"|   Word & Character Count Plugin    |", 0
-STR_WCA_L4:		DB	"| Version: v0.1.0 (2026-09-23)       |", 0
-STR_WCA_L5:		DB	"| Compatible with SE.COM >= v0.9.7   |", 0
-STR_WCA_L6:		DB	"| Mode   : TPA Overlay / Far RAM     |", 0
-STR_WCA_L7:		DB	"| Scope  : Full Document Scanner     |", 0
+STR_WCA_L4:		DB	"|    Version: v0.1.0 (2026-09-23)    |", 0
+STR_WCA_L5:		DB	"|  Compatible with SE.COM >= v0.9.7  |", 0
+STR_WCA_L6:		DB	"|   Mode   : TPA Overlay / Far RAM   |", 0
+STR_WCA_L7:		DB	"|   Scope  : Full Document Scanner   |", 0
 STR_WCA_L8:		DB	"| Metrics: Lines, Words, Characters  |", 0
-STR_WCA_L10:		DB	"|      Press any key to return       |", 0
+STR_WCA_L10:		DB	"|     Press any key to continue      |", 0
 
 ; Configuration Dialog Table
 WORDCNT_CFG_TABLE:

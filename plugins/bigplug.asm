@@ -170,9 +170,9 @@ BIG_EXEC_TABLE:
 	DW	STR_BIG_EXEC_L7
 	DW	STR_BIG_BORDER
 
-STR_BIG_EXEC_L2:	DB	"|       BIGPLUG (32KB Far RAM Plugin)|", 0
-STR_BIG_EXEC_L4:	DB	"| Mode   : Far RAM Direct Execution  |", 0
-STR_BIG_EXEC_L5:	DB	"| Size   : 32KB Modular Slot Class   |", 0
+STR_BIG_EXEC_L2:	DB	"|   BIGPLUG (32KB Far RAM Plugin)    |", 0
+STR_BIG_EXEC_L4:	DB	"|  Mode   : Far RAM Direct Execution  |", 0
+STR_BIG_EXEC_L5:	DB	"|  Size   : 32KB Modular Slot Class   |", 0
 STR_BIG_EXEC_L7:	DB	"|     Press any key to continue      |", 0
 
 ; About Dialog Table
@@ -187,11 +187,11 @@ BIG_ABT_TABLE:
 	DW	STR_BIG_ABT_L8
 	DW	STR_BIG_BORDER
 
-STR_BIG_ABT_L2:		DB	"|    BIGPLUG 32KB Reference Plugin   |", 0
-STR_BIG_ABT_L4:		DB	"| Version: v0.1.0 (2026-09-24)       |", 0
-STR_BIG_ABT_L5:		DB	"| Size   : 32KB Far RAM Slot Class   |", 0
-STR_BIG_ABT_L6:		DB	"| Mode   : Far RAM Direct Execution  |", 0
-STR_BIG_ABT_L8:		DB	"|      Press any key to return       |", 0
+STR_BIG_ABT_L2:		DB	"|   BIGPLUG 32KB Reference Plugin    |", 0
+STR_BIG_ABT_L4:		DB	"|    Version: v0.1.0 (2026-09-24)    |", 0
+STR_BIG_ABT_L5:		DB	"|  Size   : 32KB Far RAM Slot Class   |", 0
+STR_BIG_ABT_L6:		DB	"|  Mode   : Far RAM Direct Execution  |", 0
+STR_BIG_ABT_L8:		DB	"|     Press any key to continue      |", 0
 
 ;------------------------------------------------------------------------------
 ; 32KB Slot Padding Payload (> 16384 bytes and <= 32768 bytes)

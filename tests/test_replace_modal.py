@@ -113,8 +113,8 @@ def main():
         # 3. Launch SE.COM with 30.TXT
         time.sleep(0.5)
         os.write(master, b"se 30.TXT\r")
-        out = read_until(master, b"C:30.TXT", timeout=45.0)
-        if b"C:30.TXT" not in out:
+        out = read_until(master, b"Line    1/30", timeout=45.0)
+        if b"Line    1/30" not in out:
             print(f"[-] Failed to load 30.TXT. Buffer: {repr(out)}")
             return 1
         print("[+] Successfully opened 30.TXT in SE.COM.")
@@ -163,12 +163,15 @@ def main():
             return 1
         print("[+] Modal query prompt ('Replace this occurrence?') verified.")
 
-        for opt in [b"[Y]es", b"[N]o", b"[A]ll", b"[Q]uit", b"[R]everse",
+        for opt in [b"[Y]es", b"[N]o", b"[A]ll", b"[R]everse",
                     b"[ESC]=Cancel"]:
             if opt not in out_modal:
                 print(f"[-] Modal option {repr(opt)} missing from keys line!")
                 return 1
-        print("[+] All bracketed modal options verified.")
+        if b"[Q]uit" in out_modal:
+            print("[-] Prohibited [Q]uit option present in modal keys line!")
+            return 1
+        print("[+] All bracketed modal options verified (no [Q]uit).")
 
         # Verify status bar does NOT contain old squatting string
         if b"Replace (Yes/No/All/Quit/Reverse)?" in out_modal:
@@ -233,16 +236,20 @@ def main():
         read_until(master, b"Replace Confirmation", timeout=4.0)
         print("[+] Reverse ('r') moved backwards to line 1.")
 
-        # Quit replace with 'q'
+        # Verify 'q' is ignored (non-ESC cancellation prohibited)
         time.sleep(0.1)
         os.write(master, b"q")
+        time.sleep(0.2)
+
+        # Cancel replace with ESC
+        os.write(master, b"\x1b")
         out_quit = read_until(
             master, b"Replace done: 0 replacement(s).", timeout=4.0
         )
         if b"Replace done: 0 replacement(s)." not in out_quit:
-            print(f"[-] Quit replace failed. Buffer: {repr(out_quit)}")
+            print(f"[-] Cancel replace failed. Buffer: {repr(out_quit)}")
             return 1
-        print("[+] Quit ('q') terminated interactive replace cleanly.")
+        print("[+] ESC cancelled interactive replace cleanly ('q' ignored).")
         # Dismiss Replace Done modal
         time.sleep(0.1)
         os.write(master, b" ")

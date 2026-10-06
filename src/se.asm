@@ -750,26 +750,14 @@ MAIN_LOOP:
 MAIN_LOOP_GET_KEY:
 	CALL	GET_KEY
 
-	; If OOM status was displayed on status bar, revert upon any keypress
+	; If OOM flag was set during operation, clear upon any keypress
 	LD	B,A
 	LD	A,(STATUS_OOM_FLAG)
 	OR	A
 	JR	Z,ML_NO_OOM_CLEAR
 	XOR	A
 	LD	(STATUS_OOM_FLAG),A
-	LD	A,1
-	LD	(NEED_STATUS_RENDER),A
 ML_NO_OOM_CLEAR:
-	; If plugin status message was displayed on status bar, clear upon keypress
-	LD	HL,(PLUGIN_STATUS_MSG_PTR)
-	LD	A,H
-	OR	L
-	JR	Z,ML_NO_PLUG_CLEAR
-	LD	HL,0
-	LD	(PLUGIN_STATUS_MSG_PTR),HL
-	LD	A,1
-	LD	(NEED_STATUS_RENDER),A
-ML_NO_PLUG_CLEAR:
 	LD	A,B
 
 	; Command: Ctrl+Q -> Exit
@@ -1313,17 +1301,13 @@ DO_SAVE_CHANGES_POPUP:
 	LD	(POPUP_SAVE_START_ROW),A
 
 	; 3. Render 7-line Pop-Up Box
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_POPUP_SAVE_TITLE
 	CALL	PRINT_STR
 
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_POPUP_SAVE_MSG1
@@ -1337,9 +1321,7 @@ DO_SAVE_CHANGES_POPUP:
 	LD	DE,STR_POPUP_SAVE_KEYS
 	CALL	PRINT_STR
 
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Position cursor inside popup on prompt line after "Save changes? "
 	; Row = POPUP_SAVE_START_ROW + 4, Col = POPUP_COL + 32
@@ -1350,8 +1332,7 @@ DO_SAVE_CHANGES_POPUP:
 	ADD	A,32
 	LD	L,A
 	CALL	LOCATE_RC
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 
 DSCP_KEY_LOOP:
 	CALL	GET_KEY
@@ -1538,8 +1519,7 @@ EXIT_PROGRAM:
 	CALL	TERM_INIT
 	LD	DE,MSG_EXIT
 	CALL	PRINT_STR
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 
 	; Restore original CP/M user area
 	LD	A,(ORIG_CPM_USER)
@@ -1589,13 +1569,41 @@ SET_MODE_80X24:
 ; Terminal / VT100 I/O Routines
 ;------------------------------------------------------------------------------
 TERM_INIT:
+	CALL	TERM_INVERSE_OFF
+	CALL	TERM_SHOW_CURSOR
+	JP	TERM_CLEAR_SCREEN
+
+;------------------------------------------------------------------------------
+; Centralized ANSI Terminal Escape Sequences
+; Preserves all registers except AF (matching PRINT_STR conventions)
+;------------------------------------------------------------------------------
+TERM_INVERSE_ON:
+	LD	DE,STR_INVERSE_ON
+	JP	PRINT_STR
+
+TERM_INVERSE_OFF:
 	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	JP	PRINT_STR
+
+TERM_HIDE_CURSOR:
+	LD	DE,STR_HIDE_CURSOR
+	JP	PRINT_STR
+
+TERM_SHOW_CURSOR:
 	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	JP	PRINT_STR
+
+TERM_CLEAR_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
-	RET
+	JP	PRINT_STR
+
+TERM_CLEAR_EOL:
+	LD	DE,STR_CLEAR_EOL
+	JP	PRINT_STR
+
+TERM_HOME:
+	LD	DE,STR_HOME
+	JP	PRINT_STR
 
 INIT_BIOS_JUMPS:
 	LD	HL,(0001H)		; HL = Address of BIOS WBOOT (+3)
@@ -1935,10 +1943,8 @@ PSP_LOOP:
 RENDER_SPLASH:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
+	CALL	TERM_CLEAR_SCREEN
 
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
@@ -2091,10 +2097,8 @@ SPLASH_BOTTOM_LOOP:
 
 SPLASH_BOTTOM_DONE:
 	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HOME
+	CALL	TERM_HIDE_CURSOR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -2161,10 +2165,8 @@ PAL_NO_PAD:
 SHOW_ABOUT_SCREEN:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
+	CALL	TERM_CLEAR_SCREEN
 
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - ABOUT_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
@@ -2234,10 +2236,8 @@ ABOUT_BOTTOM_LOOP:
 
 ABOUT_BOTTOM_DONE:
 	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HOME
+	CALL	TERM_HIDE_CURSOR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -2293,14 +2293,34 @@ PRINT_CONFIG_BLANK_LINE:
 	CALL	PUTC
 	RET
 
+CONFIG_MENU_LINES	EQU	11
+
 SHOW_CONFIG_SCREEN:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
+	CALL	TERM_CLEAR_SCREEN
 
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - CONFIG_MENU_LINES) / 2
+	LD	A,(ACTIVE_ROWS)
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB	CONFIG_MENU_LINES	; 23 - 11 = 12 (80x24), 39 - 11 = 28 (120x40)
+	JR	Z,CONFIG_NO_TOP_PAD
+	JR	C,CONFIG_NO_TOP_PAD
+	SRL	A			; 6 in 80x24, 14 in 120x40
+	JR	Z,CONFIG_NO_TOP_PAD
+	LD	(CONFIG_TOP_PAD_COUNT),A
+	LD	B,A
+CONFIG_TOP_PAD_LOOP:
+	CALL	PRINT_CONFIG_BLANK_LINE
+	DJNZ	CONFIG_TOP_PAD_LOOP
+	JR	CONFIG_CONTENT_START
+
+CONFIG_NO_TOP_PAD:
+	XOR	A
+	LD	(CONFIG_TOP_PAD_COUNT),A
+
+CONFIG_CONTENT_START:
 	; Row 1: Header (centered title)
 	LD	DE,STR_CONFIG_TITLE
 	CALL	PRINT_ABOUT_LINE
@@ -2470,48 +2490,50 @@ SCS_PLUG_CHECK_MODE:
 	; Disabled by configuration
 	LD	DE,STR_PLUG_DIS_LBL
 	CALL	PRINT_STR
-	JR	SCS_MARGIN_START
+	JR	SCS_AFTER_SETTINGS
 
 SCS_PLUG_ONDEMAND:
 	LD	DE,STR_PLUG_ONDEMAND_LBL
 	CALL	PRINT_STR
-	JR	SCS_MARGIN_START
+	JR	SCS_AFTER_SETTINGS
 
 SCS_PLUG_NO_FAR:
 	LD	DE,STR_PLUG_NO_FAR_LBL
 	CALL	PRINT_STR
-	JR	SCS_MARGIN_START
+	JR	SCS_AFTER_SETTINGS
 
 SCS_PLUG_AUTOLOAD:
 	LD	DE,STR_PLUG_AUTO_LBL
 	CALL	PRINT_STR
 
-SCS_MARGIN_START:
-	; Pad remaining rows down to ACTIVE_ROWS - 2 with blank tilde lines
-	; Rows 1..9 are header and body (9 rows)
-	; Footer is on row ACTIVE_ROWS - 1, Status bar on row ACTIVE_ROWS
-	; Number of margin rows = (ACTIVE_ROWS - 2) - 9 = ACTIVE_ROWS - 11
+SCS_AFTER_SETTINGS:
+	; Row 10: Blank line before footer
+	CALL	PRINT_CONFIG_BLANK_LINE
+
+	; Row 11: Footer command summary line
+	LD	DE,STR_CONFIG_FOOTER
+	CALL	PRINT_ABOUT_LINE
+
+	; Bottom padding: (ACTIVE_ROWS - 1) - CONFIG_TOP_PAD_COUNT - CONFIG_MENU_LINES
 	LD	A,(ACTIVE_ROWS)
-	SUB	11
-	JR	Z,SCS_FOOTER
-	JR	C,SCS_FOOTER
+	DEC	A			; Text rows available
+	LD	HL,CONFIG_TOP_PAD_COUNT
+	SUB	(HL)
+	SUB	CONFIG_MENU_LINES
+	JR	Z,SCS_FOOTER_DONE
+	JR	C,SCS_FOOTER_DONE
 	LD	B,A
 SCS_MARGIN_LOOP:
 	CALL	PRINT_CONFIG_BLANK_LINE
 	DJNZ	SCS_MARGIN_LOOP
 
-SCS_FOOTER:
-	; Row ACTIVE_ROWS - 1: Footer command summary line
-	LD	DE,STR_CONFIG_FOOTER
-	CALL	PRINT_ABOUT_LINE
-
+SCS_FOOTER_DONE:
 	; Row ACTIVE_ROWS: Status bar
 	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HOME
+	CALL	TERM_HIDE_CURSOR
 	RET
+
 
 ;------------------------------------------------------------------------------
 ; QUERY_MEM_SCREEN_INFO: Dynamic detection of CP/M and HBIOS parameters
@@ -2633,10 +2655,8 @@ SHOW_MEM_INFO_SCREEN:
 	CALL	QUERY_MEM_SCREEN_INFO
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
+	CALL	TERM_CLEAR_SCREEN
 
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - MEM_INFO_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
@@ -2717,10 +2737,8 @@ MEM_INFO_BOTTOM_LOOP:
 
 MEM_INFO_BOTTOM_DONE:
 	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HOME
+	CALL	TERM_HIDE_CURSOR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -2836,6 +2854,8 @@ PMIS_NO_LINE_BANK_1:
 	JR	Z,PMIS_NO_PLUG_BANK
 	INC	A
 PMIS_NO_PLUG_BANK:
+	LD	HL,BORROWED_BANKS_CNT
+	ADD	A,(HL)
 	LD	HL,EXT_BANK_COUNT
 	ADD	A,(HL)			; A = total SE 32KB banks
 	LD	L,A
@@ -2952,7 +2972,7 @@ PMBR_EXT_PRINT_ROLE:
 	CALL	PRINT_STR
 	LD	A,C
 	CALL	PRINT_2DIGIT_DEC
-	LD	DE,STR_USAGE_DOC_SFX
+	LD	DE,STR_MEM_SPACES_2
 	CALL	PRINT_STR
 	CALL	PRINT_CRLF
 	RET
@@ -2964,12 +2984,35 @@ PMBR_NOT_IN_EXT:
 	LD	E,A
 	LD	A,(PLUGIN_MGR_LOADED)
 	OR	A
-	JR	Z,PMBR_CHK_LINE_0
+	JR	Z,PMBR_CHK_PLUGINS
 	LD	A,(PLUGIN_MGR_BANK)
 	CP	E
-	JR	NZ,PMBR_CHK_LINE_0
+	JR	NZ,PMBR_CHK_PLUGINS
 
 	; Bank is active PLUGIN.PRL! Determine Role and Usage
+	LD	BC,STR_USAGE_PLUGIN_MGR
+	JR	PMBR_PRINT_PLUG_BANK
+
+PMBR_CHK_PLUGINS:
+	; Check if bank E is borrowed for loaded plugins
+	LD	A,(BORROWED_BANKS_CNT)
+	OR	A
+	JR	Z,PMBR_CHK_LINE_0
+	LD	B,A
+	LD	HL,BORROWED_BANKS_TBL
+PMBR_BORROW_LOOP:
+	LD	A,(HL)
+	CP	E
+	JR	Z,PMBR_BORROW_FOUND
+	INC	HL
+	DJNZ	PMBR_BORROW_LOOP
+	JR	PMBR_CHK_LINE_0
+
+PMBR_BORROW_FOUND:
+	LD	BC,STR_USAGE_FAR_PLUGINS
+
+PMBR_PRINT_PLUG_BANK:
+	PUSH	BC			; Save usage string pointer
 	LD	A,(HBIOS_APP_BANK)
 	CP	E
 	JR	C,PMBR_PLUG_ROLE_APP
@@ -2982,7 +3025,7 @@ PMBR_PLUG_PRINT_ROLE:
 	CALL	PRINT_STR
 	LD	DE,STR_MEM_SPACES_3
 	CALL	PRINT_STR
-	LD	DE,STR_USAGE_PLUGIN_MGR
+	POP	DE			; DE = usage string pointer
 	CALL	PRINT_STR
 	CALL	PRINT_CRLF
 	RET
@@ -4849,10 +4892,8 @@ RENDER_SCREEN:
 	CALL	ADJUST_HORIZ_VIEWPORT
 	XOR	A
 	LD	(IS_SPLASH_SCREEN),A
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
+	CALL	TERM_HOME
 
 	LD	C,0			; Screen row index (0 .. ACTIVE_ROWS-2)
 RENDER_ROW_LOOP:
@@ -4881,8 +4922,7 @@ DO_RENDER_DOC_ROW:
 	JR	RENDER_ROW_NEXT
 
 RENDER_TILDE_ROW:
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
+	CALL	TERM_CLEAR_EOL
 	LD	A,'~'
 	CALL	PUTC
 	LD	A,13
@@ -5058,26 +5098,13 @@ RENDER_CURRENT_LINE:
 	CALL	CMP_HL_DE
 	RET	NC			; Outside viewport: do not emit out-of-bounds row
 
-	; Move to start of current screen line: ESC [ <(CUR_DOC_ROW - TOP_DOC_ROW) + 1> ; 1 H
-	LD	A,27
-	CALL	PUTC
-	LD	A,'['
-	CALL	PUTC
-
+	; Move to start of current screen line and clear to EOL
 	LD	A,L
 	INC	A			; Screen row (1-indexed for terminal)
-	CALL	PRINT_DEC_BYTE
-
-	LD	A,';'
-	CALL	PUTC
-	LD	A,'1'
-	CALL	PUTC
-	LD	A,'H'
-	CALL	PUTC
-
-	; Clear to EOL
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
+	LD	H,A
+	LD	L,1
+	CALL	LOCATE_RC
+	CALL	TERM_CLEAR_EOL
 
 	LD	BC,(CUR_DOC_ROW)
 	CALL	GET_LINE_BLOCK_RANGE
@@ -5099,12 +5126,10 @@ RCL_LOAD_LINE:
 	LD	A,H
 	OR	L
 	JP	NZ,PRINT_CUR_LINE_DONE
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 	LD	A,' '
 	CALL	PUTC
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	JP	PRINT_CUR_LINE_DONE
 
 RCL_START_CHARS:
@@ -5144,8 +5169,7 @@ PCL_CHK_BLK:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5187,8 +5211,7 @@ PCL_EMIT_CONT:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5197,8 +5220,7 @@ PCL_EMIT_CONT:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5259,8 +5281,7 @@ PCT_SPACE_CONT:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5269,8 +5290,7 @@ PCT_SPACE_CONT:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5300,8 +5320,7 @@ PCL_AFTER_CHAR:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5316,8 +5335,7 @@ PRINT_CUR_LINE_DONE:
 	LD	A,(LINE_IN_INVERSE)
 	OR	A
 	JR	Z,RCL_DONE_RESTORE
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	XOR	A
 	LD	(LINE_IN_INVERSE),A
 
@@ -5392,8 +5410,7 @@ CHECK_DEFERRED_STATUS:
 
 
 RENDER_BUFFER_LINE:
-	LD	DE,STR_CLEAR_EOL
-	CALL	PRINT_STR
+	CALL	TERM_CLEAR_EOL
 
 	; BC has target doc_line
 	CALL	GET_LINE_BLOCK_RANGE
@@ -5429,12 +5446,10 @@ RBL_GOT_LINE_PTR:
 	LD	A,H
 	OR	L
 	JP	NZ,PRINT_LINE_END
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 	LD	A,' '
 	CALL	PUTC
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	JP	PRINT_LINE_END
 
 RBL_START_CHARS:
@@ -5474,8 +5489,7 @@ PLC_CHK_BLK:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5517,8 +5531,7 @@ PLC_EMIT_CONT:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5527,8 +5540,7 @@ PLC_EMIT_CONT:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5589,8 +5601,7 @@ PLT_SPACE_CONT:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5599,8 +5610,7 @@ PLT_SPACE_CONT:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5630,8 +5640,7 @@ PLC_AFTER_CHAR:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	POP	HL
 	POP	DE
 	POP	BC
@@ -5646,8 +5655,7 @@ PRINT_LINE_END:
 	LD	A,(LINE_IN_INVERSE)
 	OR	A
 	JR	Z,RBL_DONE_CRLF
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	XOR	A
 	LD	(LINE_IN_INVERSE),A
 
@@ -5659,20 +5667,10 @@ RBL_DONE_CRLF:
 	RET
 
 LOCATE_STATUS_ROW:
-	; Move cursor to status row: ESC [ <ACTIVE_ROWS> ; 1 H
-	LD	A,27
-	CALL	PUTC
-	LD	A,'['
-	CALL	PUTC
 	LD	A,(ACTIVE_ROWS)
-	CALL	PRINT_DEC_BYTE
-	LD	A,';'
-	CALL	PUTC
-	LD	A,'1'
-	CALL	PUTC
-	LD	A,'H'
-	CALL	PUTC
-	RET
+	LD	H,A
+	LD	L,1
+	JP	LOCATE_RC
 
 STATUS_ENCLOSED_WIDTH	EQU	78
 POS_FIELD_WIDTH		EQU	22
@@ -5680,8 +5678,7 @@ POS_FIELD_WIDTH		EQU	22
 RENDER_STATUS_BAR:
 	CALL	LOCATE_STATUS_ROW
 
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_ON
 
 	; Symmetrical Left Margin: (ACTIVE_COLS - STATUS_ENCLOSED_WIDTH) / 2
 	LD	A,(ACTIVE_COLS)
@@ -5731,15 +5728,7 @@ SHOW_LINUX_FMT:
 	CALL	PRINT_STR
 
 SHOW_STATUS_REST:
-	; Field 4: Print Mode / Keys / Selection / OOM / Memory (18 chars)
-	LD	A,(IS_LOADING_FILE)
-	OR	A
-	JP	NZ,SHOW_STATUS_LOADING
-
-	LD	A,(IS_SAVING_FILE)
-	OR	A
-	JP	NZ,SHOW_STATUS_SAVING
-
+	; Field 4: Print Mode / Keys / Selection / Memory (18 chars)
 	LD	A,(IS_SPLASH_SCREEN)
 	OR	A
 	JP	NZ,SHOW_STATUS_SPLASH_MEM
@@ -5747,15 +5736,6 @@ SHOW_STATUS_REST:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
 	JP	NZ,SHOW_STATUS_SPLASH_MEM
-
-	LD	HL,(PLUGIN_STATUS_MSG_PTR)
-	LD	A,H
-	OR	L
-	JP	NZ,SHOW_STATUS_PLUGIN_MSG
-
-	LD	A,(STATUS_OOM_FLAG)
-	OR	A
-	JP	NZ,SHOW_STATUS_OOM
 
 	LD	A,(BLOCK_ACTIVE)
 	OR	A
@@ -5873,37 +5853,6 @@ STATUS_BLOCK_PAD_DONE:
 	CALL	PRINT_STR
 	JP	SHOW_STATUS_ROWCOL
 
-SHOW_STATUS_PLUGIN_MSG:
-	LD	HL,(PLUGIN_STATUS_MSG_PTR)
-	LD	B,0			; char count
-SSPM_LOOP:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SSPM_PAD
-	CP	'$'
-	JR	Z,SSPM_PAD
-	CALL	PUTC
-	INC	HL
-	INC	B
-	LD	A,B
-	CP	15
-	JR	C,SSPM_LOOP
-	JR	SSPM_DONE
-
-SSPM_PAD:
-	LD	A,B
-	CP	15
-	JR	NC,SSPM_DONE
-	LD	A,' '
-	CALL	PUTC
-	INC	B
-	JR	SSPM_PAD
-
-SSPM_DONE:
-	LD	DE,STR_STATUS_SEP
-	CALL	PRINT_STR
-	JP	SHOW_STATUS_ROWCOL
-
 SHOW_STATUS_NORMAL_KEYS:
 	; Check if viewport is panned horizontally (VIEW_LEFT_COL > 0)
 	LD	HL,(VIEW_LEFT_COL)
@@ -5946,21 +5895,6 @@ SSPO_PAD_LOOP:
 	CALL	PRINT_STR
 	JR	SHOW_STATUS_ROWCOL
 
-SHOW_STATUS_OOM:
-	LD	DE,STR_STATUS_OOM
-	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
-
-SHOW_STATUS_LOADING:
-	LD	DE,STR_STATUS_LOADING
-	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
-
-SHOW_STATUS_SAVING:
-	LD	DE,STR_STATUS_SAVING
-	CALL	PRINT_STR
-	JR	SHOW_STATUS_ROWCOL
-
 SHOW_STATUS_SPLASH_MEM:
 	CALL	PRINT_STATUS_FREE_MEM
 	JR	SHOW_STATUS_ROWCOL
@@ -5968,48 +5902,9 @@ SHOW_STATUS_SPLASH_MEM:
 SHOW_STATUS_ROWCOL:
 	; Field 5: Print fixed-position cursor position (POS_FIELD_WIDTH = 22 chars)
 	; "Line <cur:4>/<total:4> Col <col:3>"
-	LD	A,(IS_LOADING_FILE)
-	OR	A
-	JR	NZ,SHOW_STATUS_LOADING_POS
-
-	LD	A,(IS_SAVING_FILE)
-	OR	A
-	JR	NZ,SHOW_STATUS_LOADING_POS
-
 	; 1. Prefix: "Line " (5 chars)
 	LD	DE,STR_STATUS_POS	; "Line "
 	CALL	PRINT_STR
-	JR	SSRC_NORMAL_POS
-
-SHOW_STATUS_LOADING_POS:
-	; 1. Prefix: "Line " (5 chars)
-	LD	DE,STR_STATUS_POS	; "Line "
-	CALL	PRINT_STR
-
-	; 2. Line number: right-justified in 5 chars
-	LD	HL,(LOAD_PROGRESS_LINES)
-	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
-	LD	C,A
-	LD	A,5
-	SUB	C
-	JR	C,SSLP_NUM
-	JR	Z,SSLP_NUM
-	LD	B,A
-SSLP_PAD:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	SSLP_PAD
-SSLP_NUM:
-	LD	HL,(LOAD_PROGRESS_LINES)
-	CALL	PRINT_DEC_WORD
-
-	; 3. Trailing spaces: POS_FIELD_WIDTH (22) - 10 = 12 spaces
-	LD	B,12
-SSLP_TRAIL_PAD:
-	LD	A,' '
-	CALL	PUTC
-	DJNZ	SSLP_TRAIL_PAD
-	JP	SSRC_POS_DONE
 
 SSRC_NORMAL_POS:
 
@@ -6093,8 +5988,7 @@ SSRC_RIGHT_PAD:
 	CALL	PUTC
 	DJNZ	SSRC_RIGHT_PAD
 SSRC_RIGHT_PAD_DONE:
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	CALL	LOCATE_CURSOR
 	RET
 
@@ -6139,7 +6033,7 @@ PSFM_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; SET_OOM_STATUS: Record Out of Memory condition and update status bar if displayed
+; SET_OOM_STATUS: Record Out of Memory condition and display modal pop-up
 ;------------------------------------------------------------------------------
 SET_OOM_STATUS:
 	PUSH	AF
@@ -6148,21 +6042,26 @@ SET_OOM_STATUS:
 	PUSH	HL
 	LD	A,1
 	LD	(STATUS_OOM_FLAG),A
-	LD	(NEED_STATUS_RENDER),A
-	; Only update status bar if in editor mode and not splash screen
+	; Only display modal pop-up if in editor mode and not splash screen
 	LD	A,(IN_EDITOR_MODE)
 	OR	A
 	JR	Z,SOS_DONE
 	LD	A,(IS_SPLASH_SCREEN)
 	OR	A
 	JR	NZ,SOS_DONE
-	CALL	RENDER_STATUS_BAR
+	CALL	SHOW_OOM_POPUP
 SOS_DONE:
 	POP	HL
 	POP	DE
 	POP	BC
 	POP	AF
 	RET
+
+SHOW_OOM_POPUP:
+	LD	DE,STR_POPUP_OOM_TITLE
+	LD	HL,STR_POPUP_OOM_MSG1
+	LD	BC,STR_POPUP_OOM_MSG2
+	JP	SHOW_STATUS_EVENT_POPUP
 
 ;------------------------------------------------------------------------------
 ; Calculate Free Memory in Whole KB
@@ -6725,12 +6624,6 @@ CALC_VIS_NO_CLAMP:
 	RET
 
 LOCATE_CURSOR:
-	; Emit ESC [ <ScreenRow+1> ; <ScreenCol+1> H
-	LD	A,27
-	CALL	PUTC
-	LD	A,'['
-	CALL	PUTC
-
 	; Screen Row = CUR_DOC_ROW - TOP_DOC_ROW + 1 (1-indexed for terminal)
 	LD	HL,(CUR_DOC_ROW)
 	LD	DE,(TOP_DOC_ROW)
@@ -6749,10 +6642,7 @@ LC_ROW_POS:
 LC_ROW_OK:
 	LD	A,L
 	INC	A
-	CALL	PRINT_DEC_BYTE
-
-	LD	A,';'
-	CALL	PUTC
+	PUSH	AF			; Save Screen Row on stack
 
 	; Screen Column (1-indexed) = (Visual Col - VIEW_LEFT_COL) + 1
 	CALL	CALC_VISUAL_COL		; HL = visual column (16-bit)
@@ -6772,11 +6662,10 @@ LC_COL_POS:
 LC_COL_OK:
 	LD	A,L
 	INC	A
-	CALL	PRINT_DEC_BYTE
-
-	LD	A,'H'
-	CALL	PUTC
-	RET
+	LD	L,A			; L = Screen Column (1-indexed)
+	POP	AF
+	LD	H,A			; H = Screen Row (1-indexed)
+	JP	LOCATE_RC
 
 ;------------------------------------------------------------------------------
 ; 512KB HBIOS RAM Far-Banking Multi-Bank Document Engine
@@ -7983,6 +7872,9 @@ FPFS_DONE_SUCCESS:
 ; Preserves: None
 ;------------------------------------------------------------------------------
 SELECT_VICTIM_BANK:
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,SVB_FAIL
 	LD	C,1			; C = candidate bank index (1 .. EXT_BANK_COUNT-1)
 	LD	B,1			; B = best victim bank index
 	LD	D,0			; D = max distance found so far
@@ -8009,12 +7901,21 @@ SVB_NOT_MAX:
 SVB_DONE:
 	RET
 
+SVB_FAIL:
+	LD	B,0
+	RET
+
 ;------------------------------------------------------------------------------
 ; HANDLE_PAGE_FAULT: Evict victim bank if dirty, fetch target page into victim bank
 ; Input: SWAP_PAGE_TEMP = target page number
 ; Returns: B = allocated victim bank index (1..11), Carry = 0 on success, Carry = 1 on error
 ;------------------------------------------------------------------------------
 HANDLE_PAGE_FAULT:
+	; Paging requires at least 2 Far RAM banks (Bank 0 is pinned)
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,HPF_FAIL
+
 	; Check if swap file is active
 	LD	A,(SWAP_ACTIVE)
 	OR	A
@@ -8084,6 +7985,10 @@ HPF_UPDATE_TBL:
 	OR	A			; Carry = 0 (success)
 	RET
 
+HPF_FAIL:
+	SCF				; Carry = 1 (paging unavailable)
+	RET
+
 ;------------------------------------------------------------------------------
 ; ENSURE_PAGE_RESIDENT: Ensure 32KB page A is resident in Far RAM banks
 ; Input: A = 8-bit Page Number (0..255)
@@ -8110,6 +8015,11 @@ ENSURE_PAGE_RESIDENT:
 	RET
 
 EPR_NOT_PAGE_0:
+	; Guard: Non-zero pages require at least 2 Far RAM banks
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	C,EPR_FAULT_ERR
+
 	; Scan BANK_PAGE_TABLE[1..EXT_BANK_COUNT-1] for Page (SWAP_PAGE_TEMP)
 	LD	B,1			; Bank index 1..EXT_BANK_COUNT-1
 	LD	HL,BANK_PAGE_TABLE+1
@@ -8250,6 +8160,7 @@ WRITE_FAR_SLOT:
 	; Ensure Page B is resident in Far RAM and marked dirty
 	LD	A,B
 	CALL	ENSURE_PAGE_RESIDENT_DIRTY
+	JR	C,WFS_ERR
 	LD	(FAR_DEST_BANK),A
 
 	; far_offset = C * 128 = (C << 7)
@@ -8286,6 +8197,14 @@ WRITE_FAR_SLOT:
 	POP	HL
 	POP	DE
 	POP	BC
+	OR	A			; Carry = 0
+	RET
+
+WFS_ERR:
+	POP	HL
+	POP	DE
+	POP	BC
+	SCF				; Carry = 1
 	RET
 
 ;------------------------------------------------------------------------------
@@ -8304,6 +8223,7 @@ READ_FAR_SLOT:
 	; Ensure Page B is resident in Far RAM
 	LD	A,B
 	CALL	ENSURE_PAGE_RESIDENT
+	JR	C,RFS_ERR
 	LD	(FAR_SRC_BANK),A
 
 	; far_offset = C * 128
@@ -8340,6 +8260,14 @@ READ_FAR_SLOT:
 	POP	HL
 	POP	DE
 	POP	BC
+	OR	A			; Carry = 0
+	RET
+
+RFS_ERR:
+	POP	HL
+	POP	DE
+	POP	BC
+	SCF				; Carry = 1
 	RET
 
 
@@ -8777,6 +8705,7 @@ WRITE_SLOT_NEXT_TERM:
 	; Ensure Page B is resident and marked dirty
 	LD	A,B
 	CALL	ENSURE_PAGE_RESIDENT_DIRTY
+	JR	C,WSNT_ERR
 	LD	D,A			; D = Far RAM Bank ID
 	LD	A,(CPM_USER_BANK)
 	LD	E,A			; Src Bank = CPM_USER_BANK
@@ -8815,6 +8744,15 @@ WRITE_SLOT_NEXT_TERM:
 	POP	DE
 	POP	BC
 	POP	AF
+	OR	A			; Carry = 0
+	RET
+
+WSNT_ERR:
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	SCF				; Carry = 1
 	RET
 
 ;------------------------------------------------------------------------------
@@ -8846,6 +8784,7 @@ ALLOC_SLOT:
 	LD	B,H
 	LD	C,L
 	CALL	WRITE_SLOT_NEXT_TERM	; Ensure allocated slot has 0xFFFF next ptr
+	JR	C,ALLOC_FAIL
 	POP	BC
 	POP	DE
 	OR	A			; Carry = 0 (success)
@@ -8853,7 +8792,17 @@ ALLOC_SLOT:
 
 ALLOC_FRESH_SLOT:
 	LD	HL,(NEXT_FRESH_SLOT)
+	; Check if Far RAM banks are constrained (< 2 banks)
+	LD	A,(EXT_BANK_COUNT)
+	CP	2
+	JR	NC,AFS_MULTI_BANK
+	; When EXT_BANK_COUNT < 2, slots are limited to Bank 0 (max 256 slots)
+	LD	D,A
+	LD	E,0
+	JR	AFS_CHECK_LIMIT
+AFS_MULTI_BANK:
 	LD	DE,MAX_VIRTUAL_SLOTS
+AFS_CHECK_LIMIT:
 	LD	A,H
 	CP	D
 	JR	C,ALLOC_FRESH_OK
@@ -8870,6 +8819,7 @@ ALLOC_FRESH_OK:
 	LD	B,H
 	LD	C,L
 	CALL	WRITE_SLOT_NEXT_TERM	; Ensure fresh slot has 0xFFFF next ptr
+	JR	C,ALLOC_FAIL
 	POP	BC
 	POP	DE
 	OR	A			; Carry = 0 (success)
@@ -9368,6 +9318,27 @@ DES_DRAIN_WAIT:
 DES_DRAIN_BYTE:
 	CALL	GET_KEY
 	JR	DES_DRAIN_MORE
+
+;------------------------------------------------------------------------------
+; DRAIN_INPUT_BUFFER: Consume and discard all pending keystrokes in input buffer
+; Preserves: none
+;------------------------------------------------------------------------------
+DRAIN_INPUT_BUFFER:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+DIB_LOOP:
+	CALL	CHECK_KEY_READY
+	JR	Z,DIB_DONE
+	CALL	GET_KEY
+	JR	DIB_LOOP
+DIB_DONE:
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
 
 HANDLE_VT100_ESC:
 	; Check if a character follows ESC within a short timeout
@@ -10529,13 +10500,10 @@ GOTO_UI_CANCEL:
 	RET
 
 DRAW_GOTO_POPUP_BODY:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
 
 	; Line 1: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 2: Title
 	CALL	POPUP_LOCATE_NEXT
@@ -10543,9 +10511,7 @@ DRAW_GOTO_POPUP_BODY:
 	CALL	PRINT_STR
 
 	; Line 3: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 4: Description
 	CALL	POPUP_LOCATE_NEXT
@@ -10572,9 +10538,7 @@ DGP_PAD_LOOP:
 	CALL	PRINT_STR
 
 	; Line 7: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Position cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL + 28)
 	LD	A,(POPUP_START_ROW)
@@ -10584,8 +10548,7 @@ DGP_PAD_LOOP:
 	ADD	A,28
 	LD	L,A
 	CALL	LOCATE_RC
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -10706,13 +10669,10 @@ DRAW_FIND_POPUP_FULL:
 	LD	(POPUP_START_ROW),A
 
 DRAW_FIND_POPUP_BODY:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
 
 	; Line 1: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 2: Title
 	CALL	POPUP_LOCATE_NEXT
@@ -10720,9 +10680,7 @@ DRAW_FIND_POPUP_BODY:
 	CALL	PRINT_STR
 
 	; Line 3: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 4: Match mode (Description)
 	CALL	POPUP_LOCATE_NEXT
@@ -10766,9 +10724,7 @@ DFP_BOX_CLOSE:
 	CALL	PRINT_STR
 
 	; Line 7: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Position cursor inside popup box at
 	; (POPUP_START_ROW + 4, POPUP_COL + 13 + B)
@@ -10780,8 +10736,7 @@ DFP_BOX_CLOSE:
 	ADD	A,B
 	LD	L,A
 	CALL	LOCATE_RC
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 	RET
 
 FIND_UI_CHECK_ESC:
@@ -11576,8 +11531,7 @@ SHOW_STATUS_EVENT_POPUP:
 	JR	Z,SSEP_NOT_EDITOR
 	CALL	RENDER_SCREEN
 	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 	CALL	LOCATE_CURSOR
 	SCF
 	RET
@@ -11607,13 +11561,10 @@ SHOW_STATUS_EVENT_POPUP_MODAL:
 	LD	(POPUP_ROW),A
 
 	; 3. Hide cursor
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
 
 	; Line 1: Top Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 2: Title
 	CALL	POPUP_LOCATE_NEXT
@@ -11621,9 +11572,7 @@ SHOW_STATUS_EVENT_POPUP_MODAL:
 	CALL	PRINT_STR
 
 	; Line 3: Separator Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 4: Msg1
 	CALL	POPUP_LOCATE_NEXT
@@ -11641,9 +11590,7 @@ SHOW_STATUS_EVENT_POPUP_MODAL:
 	CALL	PRINT_STR
 
 	; Line 7: Bottom Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; 4. Wait for any key to dismiss
 	CALL	GET_KEY
@@ -12014,13 +11961,10 @@ DRAW_REPLACE_POPUP_FULL:
 	LD	(POPUP_ROW),A
 	LD	(POPUP_START_ROW),A
 
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
 
 	; Line 1: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 2: Title
 	CALL	POPUP_LOCATE_NEXT
@@ -12028,9 +11972,7 @@ DRAW_REPLACE_POPUP_FULL:
 	CALL	PRINT_STR
 
 	; Line 3: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 4: Instructions (Description)
 	CALL	POPUP_LOCATE_NEXT
@@ -12057,9 +11999,7 @@ DRP_PAD_LOOP:
 	CALL	PRINT_STR
 
 	; Line 7: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Position cursor inside replace box at (POPUP_START_ROW + 4, POPUP_COL + 18)
 	LD	A,(POPUP_START_ROW)
@@ -12069,8 +12009,7 @@ DRP_PAD_LOOP:
 	ADD	A,18
 	LD	L,A
 	CALL	LOCATE_RC
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 	RET
 
 DRAW_REPLACE_CONFIRM_POPUP:
@@ -12090,9 +12029,7 @@ DRAW_REPLACE_CONFIRM_POPUP:
 	LD	(POPUP_START_ROW),A
 
 	; Line 1: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 2: Title
 	CALL	POPUP_LOCATE_NEXT
@@ -12100,9 +12037,7 @@ DRAW_REPLACE_CONFIRM_POPUP:
 	CALL	PRINT_STR
 
 	; Line 3: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Line 4: Description
 	CALL	POPUP_LOCATE_NEXT
@@ -12120,14 +12055,11 @@ DRAW_REPLACE_CONFIRM_POPUP:
 	CALL	PRINT_STR
 
 	; Line 7: Border
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Position cursor inside popup on prompt line after "Replace this occurrence? "
 	CALL	LOCATE_REPLACE_CONFIRM_CURSOR
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 	RET
 
 LOCATE_REPLACE_CONFIRM_CURSOR:
@@ -12174,10 +12106,6 @@ REPLACE_PROCESS_MATCH:
 REPLACE_CONFIRM_KEY:
 	CALL	GET_KEY
 	CP	KEY_ESC
-	JP	Z,REPLACE_QUIT
-	CP	'q'
-	JP	Z,REPLACE_QUIT
-	CP	'Q'
 	JP	Z,REPLACE_QUIT
 
 	CP	'r'
@@ -14936,6 +14864,7 @@ LOAD_INIT_CACHE:
 	LD	(BLOCK_ACTIVE),A
 	LD	(DOC_MODIFIED),A
 	LD	(STATUS_OOM_FLAG),A
+	CALL	DRAIN_INPUT_BUFFER
 	CALL	INVALIDATE_ACTIVE_LINE
 	CALL	CHECKOUT_ACTIVE_LINE
 	CALL	RELOAD_CACHE_WINDOW_FORCE
@@ -14950,22 +14879,22 @@ LOAD_FILE_NOT_FOUND:
 	CALL	BDOS_ENTRY
 	XOR	A
 	LD	(IS_LOADING_FILE),A
+	CALL	DRAIN_INPUT_BUFFER
 	SCF				; Carry = 1 (error: file not found)
 	RET
 
 ;------------------------------------------------------------------------------
 ; DRAW_LOADING_SCREEN:
-; Clear screen, fill column 0 with tildes '~', and draw initial status bar.
+; Clear screen, fill column 0 with tildes '~', draw initial status bar,
+; and display centered Tier 2 loading modal box.
 ; Preserves: none
 ;------------------------------------------------------------------------------
 DRAW_LOADING_SCREEN:
 	; Hide cursor during load
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
 
 	; Clear screen (cursor moves to row 1, col 1)
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	TERM_CLEAR_SCREEN
 
 	; Fill rows 1 to ACTIVE_ROWS - 1 with '~' in column 0
 	LD	A,(ACTIVE_ROWS)
@@ -14982,12 +14911,69 @@ DLS_TILDE_LOOP:
 
 	; Render initial status bar on row ACTIVE_ROWS
 	CALL	RENDER_STATUS_BAR
-	RET
+
+	; Render centered Tier 2 loading modal dialog box
+	LD	DE,STR_POPUP_LOAD_TITLE
+	LD	HL,STR_POPUP_LOAD_DESC
+	JP	DRAW_PROGRESS_MODAL
+
+;------------------------------------------------------------------------------
+; DRAW_PROGRESS_MODAL:
+; Render centered 50x7 Tier 2 progress modal box for file loading / saving.
+; Input: DE = Title string (50 cols), HL = Description string (50 cols)
+; Preserves: none
+;------------------------------------------------------------------------------
+DRAW_PROGRESS_MODAL:
+	PUSH	HL			; Save description pointer
+	PUSH	DE			; Save title pointer
+
+	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; 2. Calculate POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+	LD	(POPUP_START_ROW),A
+
+	; Line 1: Top Border
+	CALL	POPUP_PRINT_BORDER
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = title pointer
+	CALL	PRINT_STR
+
+	; Line 3: Separator Border
+	CALL	POPUP_PRINT_BORDER
+
+	; Line 4: Description
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = description pointer
+	CALL	PRINT_STR
+
+	; Line 5: Progress Line
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_PROGRESS_LINE
+	CALL	PRINT_STR
+
+	; Line 6: Subtext
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_PROGRESS_SUB
+	CALL	PRINT_STR
+
+	; Line 7: Bottom Border
+	JP	POPUP_PRINT_BORDER
 
 ;------------------------------------------------------------------------------
 ; UPDATE_LOAD_PROGRESS:
-; Update line field on status bar during file loading.
-; Positions cursor directly to Field 5 and prints "Line <lines:5>" in inverse video.
+; Update line counter inside centered Tier 2 progress modal dialog.
 ; Preserves all registers (AF, BC, DE, HL).
 ;------------------------------------------------------------------------------
 UPDATE_LOAD_PROGRESS:
@@ -14996,30 +14982,19 @@ UPDATE_LOAD_PROGRESS:
 	PUSH	DE
 	PUSH	HL
 
-	; Locate cursor at (ACTIVE_ROWS, Field 5 Col)
-	; ESC [ <ACTIVE_ROWS> ; <Col> H
-	LD	A,27
-	CALL	PUTC
-	LD	A,'['
-	CALL	PUTC
-	LD	A,(ACTIVE_ROWS)
-	CALL	PRINT_DEC_BYTE
-	LD	A,';'
-	CALL	PUTC
-	LD	A,(ACTIVE_COLS)
-	SUB	STATUS_ENCLOSED_WIDTH	; 80 - 78 = 2,  120 - 78 = 42
-	SRL	A			; 1 or 21
-	ADD	A,55			; Col 56 (80x24) or Col 76 (120x40)
-	CALL	PRINT_DEC_BYTE
-	LD	A,'H'
-	CALL	PUTC
+	; Locate cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL + 20)
+	LD	A,(POPUP_START_ROW)
+	ADD	A,4
+	LD	H,A
+	LD	A,(POPUP_COL)
+	ADD	A,20
+	LD	L,A
+	CALL	LOCATE_RC
 
-	LD	DE,STR_INVERSE_ON
+	LD	DE,STR_PROGRESS_LINE_LBL
 	CALL	PRINT_STR
 
-	LD	DE,STR_STATUS_POS	; "Line " (5 chars)
-	CALL	PRINT_STR
-
+	; Print line number right-justified in 5 chars
 	LD	HL,(LOAD_PROGRESS_LINES)
 	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
 	LD	C,A
@@ -15035,9 +15010,6 @@ ULP_PAD:
 ULP_NUM:
 	LD	HL,(LOAD_PROGRESS_LINES)
 	CALL	PRINT_DEC_WORD
-
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
 
 	POP	HL
 	POP	DE
@@ -16102,10 +16074,8 @@ TRUNC_LINES	EQU	12
 SHOW_TRUNCATED_SAVE_BLOCKED:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
+	CALL	TERM_CLEAR_SCREEN
 	LD	DE,STR_TRUNC_SAVE_BLOCKED
 	CALL	PRINT_STR
 
@@ -16117,20 +16087,13 @@ SHOW_TRUNCATED_SAVE_BLOCKED:
 	JR	C,TRUNC_TILDE_DONE
 	LD	B,A
 TRUNC_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
+	CALL	PRINT_TILDE_CRLF
 	DJNZ	TRUNC_TILDE_LOOP
 
 TRUNC_TILDE_DONE:
 	CALL	RENDER_STATUS_BAR
-	LD	DE,STR_HOME
-	CALL	PRINT_STR
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HOME
+	CALL	TERM_HIDE_CURSOR
 	CALL	GET_KEY
 	CP	KEY_ESC
 	CALL	Z,DRAIN_ESC_SEQUENCE
@@ -16421,17 +16384,13 @@ DRAW_OVERWRITE_POPUP:
 	LD	(POPUP_START_ROW),A
 
 	; 3. Render 7-line Pop-Up Box
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_OVERWRITE_POPUP_TITLE
 	CALL	PRINT_STR
 
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_OVERWRITE_POPUP_MSG1
@@ -16445,9 +16404,7 @@ DRAW_OVERWRITE_POPUP:
 	LD	DE,STR_POPUP_SAVE_KEYS
 	CALL	PRINT_STR
 
-	CALL	POPUP_LOCATE_NEXT
-	LD	DE,STR_POPUP_BORDER
-	CALL	PRINT_STR
+	CALL	POPUP_PRINT_BORDER
 
 	; Position cursor inside popup on prompt line after "Overwrite? "
 	; Row = POPUP_START_ROW + 4, Col = POPUP_COL + 40
@@ -16458,8 +16415,7 @@ DRAW_OVERWRITE_POPUP:
 	ADD	A,40
 	LD	L,A
 	CALL	LOCATE_RC
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 	RET
 
 SAVE_RAMDRV_UNAVAILABLE:
@@ -16621,6 +16577,8 @@ INIT_DIR_LAYOUT:
 	LD	(DIR_COL_WIDTH),A
 	LD	A,60
 	LD	(DIR_PAGE_CAPACITY),A
+	LD	A,2
+	LD	(DIR_LEFT_PAD),A
 	RET
 IDL_120:
 	; 120x40 mode
@@ -16630,6 +16588,8 @@ IDL_120:
 	LD	(DIR_COL_WIDTH),A
 	LD	A,196
 	LD	(DIR_PAGE_CAPACITY),A
+	LD	A,3
+	LD	(DIR_LEFT_PAD),A
 	RET
 
 ;------------------------------------------------------------------------------
@@ -16646,8 +16606,7 @@ PHE_LOOP:
 	LD	A,'='
 	CALL	PUTC
 	DJNZ	PHE_LOOP
-	LD	DE,STR_CRLF
-	CALL	PRINT_STR
+	CALL	PRINT_CRLF
 	RET
 
 ;------------------------------------------------------------------------------
@@ -16664,17 +16623,143 @@ PHD_LOOP:
 	LD	A,'-'
 	CALL	PUTC
 	DJNZ	PHD_LOOP
-	LD	DE,STR_CRLF
-	CALL	PRINT_STR
+	CALL	PRINT_CRLF
 	RET
 
 ;------------------------------------------------------------------------------
-; Render Open/Save Screen Header (4 rows):
+; Print directory screen left prefix: '~' followed by (DIR_LEFT_PAD) spaces
+; Preserves BC, DE, HL
+;------------------------------------------------------------------------------
+PRINT_DIR_PREFIX:
+	PUSH	AF
+	PUSH	BC
+	LD	A,'~'
+	CALL	PUTC
+	LD	A,(DIR_LEFT_PAD)
+	OR	A
+	JR	Z,PDP_DONE
+	LD	B,A
+PDP_LOOP:
+	LD	A,' '
+	CALL	PUTC
+	DJNZ	PDP_LOOP
+PDP_DONE:
+	POP	BC
+	POP	AF
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate start file: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
+; Preserves DE, HL
+;------------------------------------------------------------------------------
+CALC_DIR_START_FILE:
+	PUSH	BC
+	LD	A,(DIR_PAGE_INDEX)
+	OR	A
+	JR	Z,CDSF_ZERO
+	LD	B,A
+	LD	A,(DIR_PAGE_CAPACITY)
+	LD	C,A
+	XOR	A
+CDSF_LOOP:
+	ADD	A,C
+	DJNZ	CDSF_LOOP
+CDSF_ZERO:
+	LD	(DIR_START_FILE),A
+	POP	BC
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate total body rows B for the current directory page & prompt:
+; Body rows = file_rows + prompt_rows
+; Outputs: A = total body rows
+; Preserves DE
+;------------------------------------------------------------------------------
+CALC_DIR_BODY_ROWS:
+	CALL	CALC_DIR_START_FILE
+
+	; 1. Calculate file_rows
+	LD	A,(DIR_FILE_COUNT)
+	OR	A
+	JR	NZ,CDBR_HAS_FILES
+	; Zero files: 2 rows (STR_NO_FILES_FOUND + blank tilde)
+	LD	B,2
+	JR	CDBR_CALC_PROMPT
+
+CDBR_HAS_FILES:
+	; Files on page = min(DIR_PAGE_CAPACITY, DIR_FILE_COUNT - DIR_START_FILE)
+	LD	HL,DIR_START_FILE
+	SUB	(HL)
+	LD	HL,DIR_PAGE_CAPACITY
+	CP	(HL)
+	JR	C,CDBR_PAGE_FILES_OK
+	LD	A,(HL)
+CDBR_PAGE_FILES_OK:
+	; A = files on page (> 0)
+	; file_rows = ((A + DIR_COLS_PER_ROW - 1) / DIR_COLS_PER_ROW) + 1
+	LD	HL,DIR_COLS_PER_ROW
+	LD	C,(HL)
+	DEC	C
+	ADD	A,C			; A = files + cols - 1
+	LD	B,0			; Quotient (row count)
+	LD	C,(HL)
+CDBR_DIV_LOOP:
+	SUB	C
+	JR	C,CDBR_DIV_DONE
+	INC	B
+	JR	CDBR_DIV_LOOP
+CDBR_DIV_DONE:
+	INC	B			; Plus 1 for trailing blank tilde
+
+CDBR_CALC_PROMPT:
+	; B = file_rows
+	; Base prompt rows = 3
+	LD	C,3
+	LD	A,(DIR_PAGE_COUNT)
+	CP	2
+	JR	C,CDBR_CHECK_SAVE
+	INC	C			; Multi-page: +1 row
+CDBR_CHECK_SAVE:
+	LD	A,(IS_SAVE_UI)
+	OR	A
+	JR	Z,CDBR_PROMPT_DONE
+	INC	C			; Save format info: +1 row
+CDBR_PROMPT_DONE:
+	LD	A,B			; A = file_rows
+	ADD	A,C			; A = file_rows + prompt_rows
+	RET
+
+;------------------------------------------------------------------------------
+; Calculate DIR_TOP_PAD_COUNT:
+; TOTAL_AVAIL = (ACTIVE_ROWS - 1) - 3 = ACTIVE_ROWS - 4
+; EXTRA = TOTAL_AVAIL - BodyRows
+; If EXTRA <= 0: TOP_PAD = 0
+; Else: TOP_PAD = EXTRA / 2
+; Sets DIR_TOP_PAD_COUNT
+;------------------------------------------------------------------------------
+CALC_DIR_TOP_PAD:
+	CALL	CALC_DIR_BODY_ROWS	; A = BodyRows
+	LD	B,A			; B = BodyRows
+	LD	A,(ACTIVE_ROWS)
+	SUB	4			; A = TOTAL_AVAIL
+	SUB	B			; A = TOTAL_AVAIL - BodyRows
+	JR	Z,CDTP_ZERO
+	JR	C,CDTP_ZERO
+	SRL	A			; A = EXTRA / 2
+	LD	(DIR_TOP_PAD_COUNT),A
+	RET
+CDTP_ZERO:
+	XOR	A
+	LD	(DIR_TOP_PAD_COUNT),A
+	RET
+
+;------------------------------------------------------------------------------
+; Render Open/Save Screen Header (Rows 1-3) & Top Padding:
 ; Row 1: Full-width "~====..."
 ; Row 2: Centered title: "~   SE.COM - OPEN/SAVE FILE (DIRECTORY - DRIVE X:)"
 ; Row 3: Full-width "~====..."
-; Row 4: Blank tilde row: "~"
-; Sets UI_CUR_ROW = 4.
+; Top margin: DIR_TOP_PAD_COUNT blank tildes
+; Sets UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT.
 ;------------------------------------------------------------------------------
 RENDER_DIR_TITLE:
 	LD	A,(IS_BLOCK_INSERT_UI)
@@ -16711,8 +16796,7 @@ RENDER_TITLE_COMMON:
 	PUSH	DE
 
 	; 1. Clear Screen (ESC [ 2 J, ESC [ H)
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	TERM_CLEAR_SCREEN
 
 	; 2. Row 1: Horizontal Rule
 	CALL	PRINT_HR_EQUAL
@@ -16899,12 +16983,22 @@ RTC_TITLE_DONE:
 	; 4. Row 3: Horizontal Rule
 	CALL	PRINT_HR_EQUAL
 
-	; 5. Row 4: Blank Tilde Row
-	LD	DE,STR_TILDE_CRLF
-	CALL	PRINT_STR
+	; Calculate vertical top padding for directory/file screen
+	CALL	CALC_DIR_TOP_PAD
 
-	; Initialize UI_CUR_ROW = 4
-	LD	A,4
+	; Print top margin blank tilde rows (if any)
+	LD	A,(DIR_TOP_PAD_COUNT)
+	OR	A
+	JR	Z,RTC_TOP_PAD_DONE
+	LD	B,A
+RTC_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	RTC_TOP_PAD_LOOP
+RTC_TOP_PAD_DONE:
+
+	; Initialize UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT
+	LD	A,(DIR_TOP_PAD_COUNT)
+	ADD	A,3
 	LD	(UI_CUR_ROW),A
 	RET
 
@@ -17720,7 +17814,8 @@ DISPLAY_SAVE_PROMPT:
 	INC	(HL)
 	CALL	PRINT_HR_DASH
 	INC	(HL)
-	LD	DE,STR_PAGE_PREFIX
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_PAGE_PREFIX_TXT
 	CALL	PRINT_STR
 
 	LD	A,(DIR_PAGE_INDEX)
@@ -17752,23 +17847,22 @@ DISP_SAVE_PROMPT_BODY:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)			; For STR_ESC_CANCEL
 	INC	(HL)			; For Prompt line itself!
-	LD	DE,STR_ESC_CANCEL
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_ESC_CANCEL_TXT
 	CALL	PRINT_STR
-	LD	DE,STR_TILDE_INDENT
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	PRINT_DIR_PREFIX
+	CALL	TERM_INVERSE_ON
 	LD	DE,STR_SAVE_PROMPT_TXT	; "Enter filename to save:"
 	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	CALL	DRAW_FILENAME_BOX
 	RET
 
 PRINT_SAVE_FMT_INFO:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
-	LD	DE,STR_SAVE_FMT_PREFIX
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_SAVE_FMT_PREFIX_TXT
 	CALL	PRINT_STR
 	LD	A,(SAVE_FORMAT)
 	CP	FMT_CPM
@@ -18216,24 +18310,14 @@ DISPLAY_DIR_PAGE:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
 	INC	(HL)
-	LD	DE,STR_NO_FILES_FOUND
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_NO_FILES_FOUND_TXT
 	CALL	PRINT_STR
 	RET
 
 DO_SHOW_PAGE:
-	; Calculate start file index: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
-	LD	A,(DIR_PAGE_INDEX)
-	OR	A
-	JR	Z,DSP_START_ZERO
-	LD	B,A
-	LD	A,(DIR_PAGE_CAPACITY)
-	LD	C,A
-	XOR	A
-DSP_START_LOOP:
-	ADD	A,C
-	DJNZ	DSP_START_LOOP
-DSP_START_ZERO:
-	LD	(DIR_START_FILE),A
+	; Calculate start file: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
+	CALL	CALC_DIR_START_FILE
 
 	; Calculate number of files on this page:
 	; Count = min(DIR_PAGE_CAPACITY, DIR_FILE_COUNT - DIR_START_FILE)
@@ -18270,12 +18354,11 @@ DISPLAY_PAGE_LOOP:
 	PUSH	BC
 	PUSH	HL			; Save entry pointer
 
-	; If first column of row, emit "~  " prefix
+	; If first column of row, emit prefix
 	LD	A,(DIR_COL_COUNT)
 	OR	A
 	JR	NZ,DPL_NOT_FIRST_COL
-	LD	DE,STR_TILDE_INDENT
-	CALL	PRINT_STR
+	CALL	PRINT_DIR_PREFIX
 DPL_NOT_FIRST_COL:
 
 	; Format entry into a clean 16-char padded column:
@@ -18370,8 +18453,7 @@ DISP_COL_TERMINATE:
 	LD	(DIR_COL_COUNT),A
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
-	LD	DE,STR_CRLF
-	CALL	PRINT_STR
+	CALL	PRINT_CRLF
 
 NO_ROW_WRAP:
 	POP	HL			; Restore entry pointer
@@ -18387,8 +18469,7 @@ NO_ROW_WRAP:
 	JR	Z,DISP_PAGE_DONE
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
-	LD	DE,STR_CRLF
-	CALL	PRINT_STR
+	CALL	PRINT_CRLF
 
 DISP_PAGE_DONE:
 	LD	HL,UI_CUR_ROW
@@ -18428,7 +18509,8 @@ DISPLAY_OPEN_PROMPT:
 	INC	(HL)
 	CALL	PRINT_HR_DASH
 	INC	(HL)
-	LD	DE,STR_PAGE_PREFIX
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_PAGE_PREFIX_TXT
 	CALL	PRINT_STR
 
 	LD	A,(DIR_PAGE_INDEX)
@@ -18458,12 +18540,11 @@ DISP_OPEN_PROMPT_BODY:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)			; For STR_ESC_CANCEL
 	INC	(HL)			; For Prompt line itself!
-	LD	DE,STR_ESC_CANCEL
+	CALL	PRINT_DIR_PREFIX
+	LD	DE,STR_ESC_CANCEL_TXT
 	CALL	PRINT_STR
-	LD	DE,STR_TILDE_INDENT
-	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_ON
-	CALL	PRINT_STR
+	CALL	PRINT_DIR_PREFIX
+	CALL	TERM_INVERSE_ON
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
 	JR	NZ,DOP_SHOW_INSERT
@@ -18479,8 +18560,7 @@ DOP_SHOW_PLUGIN:
 	LD	DE,STR_PLUG_LOAD_PROMPT_TXT ; "Load Plugin (.PRL/.OVL):"
 DOP_SHOW_TXT:
 	CALL	PRINT_STR
-	LD	DE,STR_INVERSE_OFF
-	CALL	PRINT_STR
+	CALL	TERM_INVERSE_OFF
 	CALL	DRAW_FILENAME_BOX
 	RET
 
@@ -18557,37 +18637,33 @@ FINISH_UI_PAGE_AND_STATUS:
 	JR	C,FUPS_STATUS
 	LD	B,A
 FUPS_TILDE_LOOP:
-	LD	A,'~'
-	CALL	PUTC
-	LD	A,13
-	CALL	PUTC
-	LD	A,10
-	CALL	PUTC
+	CALL	PRINT_TILDE_CRLF
 	DJNZ	FUPS_TILDE_LOOP
 
 FUPS_STATUS:
 	CALL	RENDER_STATUS_BAR
 
 	; Reposition cursor inside filename input box on UI_CUR_ROW
-	; Col = Base + INPUT_BUF_LEN (31 insert, 30 plugin, 29 open)
+	; Col = Base + DIR_LEFT_PAD + INPUT_BUF_LEN
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
-	LD	A,31
+	LD	A,29
 	JR	NZ,FUPS_BOX_COL
 	LD	A,(IS_PLUGIN_LOAD_UI)
 	OR	A
-	LD	A,30
+	LD	A,28
 	JR	NZ,FUPS_BOX_COL
-	LD	A,29
+	LD	A,27
 FUPS_BOX_COL:
+	LD	HL,DIR_LEFT_PAD
+	ADD	A,(HL)
 	LD	HL,INPUT_BUF_LEN
 	ADD	A,(HL)
 	LD	L,A
 	LD	A,(UI_CUR_ROW)
 	LD	H,A
 	CALL	LOCATE_RC
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 	RET
 
 ;------------------------------------------------------------------------------
@@ -19629,15 +19705,16 @@ INIT_SAVE_PROGRESS:
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	LD	DE,STR_HIDE_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_HIDE_CURSOR
 	LD	A,1
 	LD	(IS_SAVING_FILE),A
 	LD	HL,0
 	LD	(LOAD_PROGRESS_LINES),HL
 	LD	A,100
 	LD	(LOAD_PROGRESS_COUNT),A
-	CALL	RENDER_STATUS_BAR
+	LD	DE,STR_POPUP_SAVING_TITLE
+	LD	HL,STR_POPUP_SAVE_DESC
+	CALL	DRAW_PROGRESS_MODAL
 	POP	HL
 	POP	DE
 	POP	BC
@@ -19664,16 +19741,17 @@ FINISH_SAVE_PROGRESS:
 	PUSH	AF
 	PUSH	DE
 	CALL	UPDATE_LOAD_PROGRESS
+	CALL	DRAIN_INPUT_BUFFER
 	JR	CSP_COMMON
 
 CLEANUP_SAVE_PROGRESS:
 	PUSH	AF
 	PUSH	DE
+	CALL	DRAIN_INPUT_BUFFER
 CSP_COMMON:
 	XOR	A
 	LD	(IS_SAVING_FILE),A
-	LD	DE,STR_SHOW_CURSOR
-	CALL	PRINT_STR
+	CALL	TERM_SHOW_CURSOR
 	POP	DE
 	POP	AF
 	RET
@@ -21145,8 +21223,7 @@ DPS_LOOP:
 	OR	A
 	JR	Z,DPS_NO_CLEAR
 	PUSH	BC
-	LD	DE,STR_CLEAR_SCREEN
-	CALL	PRINT_STR
+	CALL	TERM_CLEAR_SCREEN
 	POP	BC
 DPS_NO_CLEAR:
 	LD	A,B
@@ -21320,6 +21397,11 @@ POPUP_LOCATE_NEXT:
 	POP	DE
 	POP	BC
 	RET
+
+POPUP_PRINT_BORDER:
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	JP	PRINT_STR
 
 
 
@@ -23084,6 +23166,40 @@ STR_POPUP_TRUNC_MSG2:
 STR_POPUP_TRUNC_KEY:
 	DB	"|           Press any key to continue            |", 0
 
+; Out of Memory Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_OOM_TITLE:
+	DB	"|                 Out of Memory                  |", 0
+STR_POPUP_OOM_MSG1:
+	DB	"|      Not enough memory for this operation      |", 0
+STR_POPUP_OOM_MSG2:
+	DB	"|      Free memory or reduce document size       |", 0
+
+; File Loading Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_LOAD_TITLE:
+	DB	"|                  Loading File                  |", 0
+STR_POPUP_LOAD_DESC:
+	DB	"|            Reading file into memory            |", 0
+
+; File Saving Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_SAVING_TITLE:
+	DB	"|                  Saving File                   |", 0
+STR_POPUP_SAVE_DESC:
+	DB	"|            Writing file to storage             |", 0
+
+; Progress Modal Common Strings (50 cols x 7 rows)
+STR_PROGRESS_LINE_LBL:
+	DB	"Line ", 0
+STR_POPUP_PROGRESS_LINE:
+	DB	"|                   Line      0                  |", 0
+STR_POPUP_PROGRESS_SUB:
+	DB	"|           Please wait for completion           |", 0
+
+; Plugin Notification Modal Pop-up Strings (50 cols x 7 rows)
+STR_POPUP_PLUGIN_TITLE:
+	DB	"|              Plugin Notification               |", 0
+STR_POPUP_BLANK_ROW:
+	DB	"|                                                |", 0
+
 ; Find Modal Pop-up Strings (50 cols x 7 rows)
 STR_FIND_POPUP_TITLE:
 	DB	"|                   Find Text                    |", 0
@@ -23118,7 +23234,7 @@ STR_REP_CONFIRM_MSG1:
 STR_REP_CONFIRM_MSG2:
 	DB	"|            Replace this occurrence?            |", 0
 STR_REP_CONFIRM_KEYS:
-	DB	"| [Y]es [N]o [A]ll [Q]uit [R]everse [ESC]=Cancel |", 0
+	DB	"|  [Y]es  [N]o  [A]ll  [R]everse   [ESC]=Cancel  |", 0
 
 ; Pattern Not Found Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_NOT_FOUND_TITLE:
@@ -23231,9 +23347,6 @@ STR_CLEAR_SCREEN:	DB	27,"[2J",27,"[H","$"
 
 STR_HOME:	DB	27,"[H","$"
 
-STR_GOTO_ROW_24:	DB	27,"[24;1H","$"
-
-STR_GOTO_ROW_40:	DB	27,"[40;1H","$"
 
 STR_CLEAR_EOL:	DB	27,"[K","$"
 
@@ -23251,7 +23364,7 @@ STR_SPLASH_TITLE_PAD:	DB	"           ", "$"
 STR_SPLASH_TITLE:	DB	"SE - Screen Editor", 13, 10, "$"
 
 STR_SPLASH_CMDS:
-	DB	"  type   [E]  or  [Enter]  to edit",13,10
+	DB	"  type   [E]  or  [Enter] to edit",13,10
 	DB	"  type   [N]              to new file",13,10
 	DB	"  type   [O]              to open file",13,10
 	DB	"  type   [S]              to save file",13,10
@@ -23410,8 +23523,8 @@ STR_USAGE_LINE_TABLE:	DB	"Active: 16K Line Slot Table ","$"
 STR_USAGE_LINE_TABLE_0:	DB	"Active: Line Slots (0..16K) ","$"
 STR_USAGE_LINE_TABLE_1:	DB	"Active: Line Slots (16K..32K)","$"
 STR_USAGE_PLUGIN_MGR:	DB	"Active: PLUGIN.PRL Subsystem","$"
+STR_USAGE_FAR_PLUGINS:	DB	"Active: Far RAM Plugins     ","$"
 STR_USAGE_DOC_PFX:	DB	"Active: Doc Buffer Bank ","$"
-STR_USAGE_DOC_SFX:	DB	"  ","$"
 STR_USAGE_OS:		DB	"Reserved: Operating System  ","$"
 STR_USAGE_CPM3_BUFS:	DB	"Reserved: CP/M 3 Buffers    ","$"
 STR_USAGE_FREE:		DB	"Free / Unallocated          ","$"
@@ -23420,10 +23533,9 @@ STR_USAGE_NOT_PRES:	DB	"Not Present                 ","$"
 STR_MEM_SIZE_32K:	DB	"32K ","$"
 STR_MEM_SIZE_NONE:	DB	" -- ","$"
 STR_MEM_SIZE_64K:	DB	"64K ","$"
-STR_MEM_SPACES_4:	DB	"    ","$"
-STR_MEM_SPACES_3:	DB	"   ","$"
-STR_MEM_SPACES_2:	DB	"  ","$"
-STR_MEM_ROW_PREFIX:	DB	"~   ","$"
+STR_MEM_SPACES_4:	DB	' '
+STR_MEM_SPACES_3:	DB	' '
+STR_MEM_SPACES_2:	DB	' ', ' ', '$'
 
 
 STR_STATUS_PREFIX:	DB	" SE v0.9.8 | ","$"
@@ -23438,11 +23550,7 @@ STR_FMT_LINUX:	DB	"Linux | ","$"
 
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 STR_STATUS_OVR:		DB	"Overwrite mode  | ","$"
-STR_STATUS_LOADING:	DB	"Loading...      | ","$"
-STR_STATUS_SAVING:	DB	"Saving...       | ","$"
 STR_PAN_PREFIX:		DB	"[Pan +","$"
-
-STR_STATUS_OOM:		DB	"Out of memory   | ","$"
 
 STR_TRUNC_SAVE_BLOCKED:
 	DB	"~",13,10
@@ -23499,17 +23607,21 @@ STR_INSERT_PROMPT_TXT:	DB	"Enter filename to insert:","$"
 STR_TITLE_PLUG_LOAD_PRE: DB	"SE.COM - LOAD PLUGIN (DIRECTORY - DRIVE ","$"
 STR_PLUG_LOAD_PROMPT_TXT: DB	"Load Plugin (.PRL/.OVL):","$"
 
+STR_PAGE_PREFIX_TXT:	DB	"[Page ","$"
 STR_PAGE_PREFIX:	DB	"~  [Page ","$"
 
 STR_PAGE_MID:		DB	"/","$"
 
 STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
+STR_NO_FILES_FOUND_TXT:	DB	"[No files found on current drive]",13,10
+			DB	"~",13,10,"$"
 STR_NO_FILES_FOUND:	DB	"~  [No files found on current drive]",13,10
 			DB	"~",13,10,"$"
 
 DEFAULT_FCB_NAME:	DB	0,"OUTPUT  TXT",0,0,0,0
 
+STR_SAVE_FMT_PREFIX_TXT: DB	"Format: [","$"
 STR_SAVE_FMT_PREFIX:	DB	"~  Format: [","$"
 
 STR_SAVE_FMT_CPM:	DB	"CP/M","$"
@@ -23520,7 +23632,12 @@ STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
-STR_ESC_CANCEL:		DB	"~  <ESC>=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
+STR_ESC_CANCEL_TXT:
+	DB	"[ESC]=Cancel  Enter [d:][u:][pattern] to list "
+	DB	"(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
+STR_ESC_CANCEL:
+	DB	"~  [ESC]=Cancel  Enter [d:][u:][pattern] to list "
+	DB	"(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 
 
 STR_SAVE_CANCELLED:	DB	13,10,"~  Save cancelled.",13,10,"$"
@@ -23761,6 +23878,8 @@ DIR_COL_COUNT:		DB	0
 DIR_COLS_PER_ROW:	DB	5
 DIR_COL_WIDTH:		DB	15
 DIR_PAGE_CAPACITY:	DB	60
+DIR_LEFT_PAD:		DB	2
+DIR_TOP_PAD_COUNT:	DB	0
 DIR_TEMP_ENTRY:		DS	16
 INPUT_BUF_LEN:		DB	0
 INPUT_CURSOR_POS:	DB	0
@@ -23778,6 +23897,7 @@ CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=
 SPLASH_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on splash screen
 MEM_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on memory screen
 ABOUT_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on about screen
+CONFIG_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
 CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
 CFG_TAB_WIDTH:		DB	8		; Tab width: 4 or 8 (default 8)
 CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)
@@ -23810,7 +23930,7 @@ PLUGIN_ACTION_INDEX:	DB	0
 PLUGIN_IS_FAR_EXEC:	DB	0
 PLUGIN_RET_CODE:	DB	0
 PLUGIN_STATUS_MSG_PTR:	DW	0
-PLUGIN_STATUS_MSG_BUF:	DS	16
+PLUGIN_POPUP_MSG_BUF:	DS	52
 PLUGIN_ORIG_USER:	DB	0
 PLUGIN_USER_AREA:	DB	0
 PLUGIN_FCB:		DS	36
@@ -24629,36 +24749,81 @@ HCL_ACTIVE:
 HOST_SET_STATUS_MSG:
 	LD	A,D
 	OR	E
-	JR	NZ,HSSM_COPY
-	LD	(PLUGIN_STATUS_MSG_PTR),DE
-	RET
-HSSM_COPY:
+	RET	Z
+	; Display plugin notification in centered Tier 2 modal pop-up
 	PUSH	AF
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
-	EX	DE,HL			; HL = source string
-	LD	DE,PLUGIN_STATUS_MSG_BUF
-	LD	B,15
-HSSM_LOOP:
-	LD	A,(HL)
-	OR	A
-	JR	Z,HSSM_PAD
-	CP	'$'
-	JR	Z,HSSM_PAD
-	LD	(DE),A
-	INC	HL
-	INC	DE
-	DJNZ	HSSM_LOOP
-HSSM_PAD:
-	XOR	A
-	LD	(DE),A			; Zero terminate
-	LD	HL,PLUGIN_STATUS_MSG_BUF
-	LD	(PLUGIN_STATUS_MSG_PTR),HL
+	CALL	SHOW_PLUGIN_STATUS_POPUP
 	POP	HL
 	POP	DE
 	POP	BC
 	POP	AF
+	RET
+
+SHOW_PLUGIN_STATUS_POPUP:
+	; DE = pointer to plugin status string
+	; Copy and center inside PLUGIN_POPUP_MSG_BUF (50 chars: "| ... |", 0)
+	PUSH	DE
+
+	; 1. Initialize buffer with spaces enclosed in '|'
+	LD	HL,PLUGIN_POPUP_MSG_BUF
+	LD	(HL),'|'
+	INC	HL
+	LD	B,48
+SPSP_INIT_SPACE:
+	LD	(HL),' '
+	INC	HL
+	DJNZ	SPSP_INIT_SPACE
+	LD	(HL),'|'
+	INC	HL
+	LD	(HL),0
+
+	; 2. Measure string length in DE (max 46 chars)
+	POP	HL			; HL = source string
+	PUSH	HL
+	LD	C,0
+SPSP_LEN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SPSP_LEN_DONE
+	CP	'$'
+	JR	Z,SPSP_LEN_DONE
+	INC	HL
+	INC	C
+	LD	A,C
+	CP	46
+	JR	C,SPSP_LEN_LOOP
+SPSP_LEN_DONE:
+	LD	A,C
+	OR	A
+	JR	NZ,SPSP_CALC_PAD
+	INC	C			; at least 1
+SPSP_CALC_PAD:
+	; Calculate left offset: ((48 - C) / 2) + 1
+	LD	A,48
+	SUB	C
+	SRL	A
+	INC	A
+	LD	E,A
+	LD	D,0
+	LD	HL,PLUGIN_POPUP_MSG_BUF
+	ADD	HL,DE			; HL = target in buffer
+	POP	DE			; DE = source string
+	LD	B,C
+SPSP_COPY_LOOP:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	SPSP_COPY_LOOP
+
+	; 3. Invoke Tier 2 status event pop-up
+	LD	DE,STR_POPUP_PLUGIN_TITLE
+	LD	HL,PLUGIN_POPUP_MSG_BUF
+	LD	BC,STR_POPUP_BLANK_ROW
+	CALL	SHOW_STATUS_EVENT_POPUP
 	RET
 
 LOCAL_STACK_TOP:

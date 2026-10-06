@@ -690,7 +690,7 @@ class DrunkenMonkeyInputGenerator:
             return choice, delay, f"Overwrite: {choice}"
 
         elif screen_state == "replace_confirm_prompt":
-            choice = self.rng.choice(["y", "n", "a", "q", "r", "\x1b"])
+            choice = self.rng.choice(["y", "n", "a", "r", "\x1b"])
             d = max(delay, 0.15) if choice == "\x1b" else delay
             return choice, d, f"Replace confirm: {choice}"
 

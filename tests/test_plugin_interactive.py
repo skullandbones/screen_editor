@@ -169,7 +169,7 @@ def main():
         # Cancel unload via 'n'
         time.sleep(0.2)
         os.write(master, b"n")
-        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
+        ok, out = read_until(master, b"[Down]=Select", timeout=5.0)
         if not ok or b">[2]" not in out:
             print("[-] Cancel unload failed to return to Slot 2. "
                   f"Out: {repr(out)}")
@@ -189,7 +189,7 @@ def main():
         # Cancel unload via ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
+        ok, out = read_until(master, b"[Down]=Select", timeout=5.0)
         if not ok or b">[0]" not in out:
             print(f"[-] ESC cancel unload failed. Out: {repr(out)}")
             return 1
@@ -256,7 +256,7 @@ def main():
         # Test Action 1: Embedded About Screen on Slot 0 (WORDCNT)
         time.sleep(0.3)
         os.write(master, b"a")
-        ok, out = read_until(master, b"Press any key to return", timeout=6.0)
+        ok, out = read_until(master, b"Press any key to continue", timeout=6.0)
         if not ok or b"Word & Character Count Plugin" not in out:
             print(f"[-] WORDCNT About screen failed to display. Out: {repr(out)}")
             return 1
@@ -265,7 +265,7 @@ def main():
         # Dismiss About screen with space
         time.sleep(0.3)
         os.write(master, b" ")
-        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
+        ok, out = read_until(master, b"[Down]=Select", timeout=5.0)
         if not ok or b">[0]" not in out:
             print("[-] Return from WORDCNT About screen to Plugin Manager "
                   f"failed. out={repr(out)}")
@@ -278,7 +278,7 @@ def main():
         read_until(master, b">[1]", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"a")
-        ok, out = read_until(master, b"Press any key to return", timeout=6.0)
+        ok, out = read_until(master, b"Press any key to continue", timeout=6.0)
         if not ok or b"ROT13 Text Cipher Plugin" not in out:
             print(f"[-] ROT13 About screen failed to display. Out: {repr(out)}")
             return 1
@@ -287,7 +287,7 @@ def main():
         # Dismiss About screen with Enter
         time.sleep(0.3)
         os.write(master, b"\r")
-        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
+        read_until(master, b"[Down]=Select", timeout=5.0)
         print("[+] Returned cleanly from ROT13 About screen.")
 
         # Navigate to Slot 2 (BEAUTIFY) and test embedded About screen
@@ -296,7 +296,7 @@ def main():
         read_until(master, b">[2]", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"a")
-        ok, out = read_until(master, b"Press any key to return", timeout=6.0)
+        ok, out = read_until(master, b"Press any key to continue", timeout=6.0)
         if not ok or b"Z80 Code Beautifier Plugin" not in out:
             print(f"[-] BEAUTIFY About screen failed to display. Out: {repr(out)}")
             return 1
@@ -305,7 +305,7 @@ def main():
         # Dismiss About screen with space
         time.sleep(0.3)
         os.write(master, b" ")
-        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
+        read_until(master, b"[Down]=Select", timeout=5.0)
         print("[+] Returned cleanly from BEAUTIFY About screen.")
 
         # Test Action 2: Embedded Configuration Screen on Slot 2 (BEAUTIFY)
@@ -341,7 +341,7 @@ def main():
         # Exit config screen and return to Plugin Manager (Enter)
         time.sleep(0.3)
         os.write(master, b"\r")
-        ok, out = read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
+        ok, out = read_until(master, b"[Down]=Select", timeout=5.0)
         if not ok or b">[2]" not in out:
             print("[-] Return from BEAUTIFY config screen to Plugin Manager "
                   f"failed. out={repr(out)}")
@@ -380,13 +380,13 @@ def main():
         # Cancel Load UI with ESC
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        read_until(master, b"[Up]/[Down]=Select", timeout=5.0)
+        read_until(master, b"[Down]=Select", timeout=5.0)
 
         # Exit Plugin Manager cleanly via 'q' back to Splash Screen
         time.sleep(0.3)
         os.write(master, b"q")
         ok, out_sp = read_until(master,
-                                b"type   [E]  or  [Enter]  to edit",
+                                b"type   [E]  or  [Enter] to edit",
                                 timeout=6.0)
         if not ok:
             print(f"[-] Exit to Splash failed. Out: {repr(out_sp)}")

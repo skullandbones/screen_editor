@@ -324,6 +324,16 @@ DO_PLUGIN_MANAGER:
 	CALL	INIT_HOST_API
 	JP	C,INIT_ERR
 
+	; Check if returning from a modal child action spawned from Ctrl+P
+	LD	A,(REOPEN_CTRL_P_IN_MGR)
+	OR	A
+	JR	Z,DPM_CHECK_SLOT
+	XOR	A
+	LD	(REOPEN_CTRL_P_IN_MGR),A
+	CALL	RENDER_PLUGIN_SCREEN
+	JP	PKL_DO_CTRL_P
+
+DPM_CHECK_SLOT:
 	; Preserve SELECTED_SLOT if valid (< 8) across internal action returns
 	LD	A,(SELECTED_SLOT)
 	CP	8
@@ -343,12 +353,29 @@ PLUG_KEY_LOOP:
 	; Command: Ctrl+P -> Open Context Pop-up inside Plugin Manager
 	CP	16			; Ctrl+P
 	JR	NZ,PKL_NOT_CTRL_P
+PKL_DO_CTRL_P:
 	LD	A,PLUG_CTX_PLUGIN_MGR
 	LD	(HOST_CONTEXT_ID),A
 	CALL	DO_CONTEXT_POPUP_INTERNAL
 	JR	C,DO_PLUG_REDRAW	; If cancelled, redraw Plugin Manager
-	; Child action selected: return slot in A, action in C, CY=0
-	OR	A
+
+	; Child action selected: A = slot, C = action
+	; Step 1: Hide parent pop-up first before executing child action
+	PUSH	AF
+	PUSH	BC
+	CALL	RENDER_PLUGIN_SCREEN
+	POP	BC
+	POP	AF
+
+	; Check if action is modal; if so, set flag to reopen Ctrl+P on return
+	LD	B,A
+	CALL	IS_SLOT_MODAL_ACTION
+	JR	Z,PKL_NOT_MODAL
+	LD	A,1
+	LD	(REOPEN_CTRL_P_IN_MGR),A
+PKL_NOT_MODAL:
+	LD	A,B
+	OR	A			; Clear Carry (CY=0)
 	RET
 
 PKL_NOT_CTRL_P:
@@ -396,10 +423,10 @@ PKL_DO_L:
 	LD	A,(FPSL_LOADED_CNT)
 	CP	8
 	JR	NZ,PKL_DO_L_OPEN
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_MSG_SLOTS_FULL
-	CALL	HOST_PRINT_STR
-	JP	PLUG_KEY_LOOP
+	LD	DE,STR_PLUG_FULL_TITLE
+	LD	HL,STR_PLUG_FULL_MSG
+	CALL	SHOW_ALERT_POPUP
+	JP	DO_PLUG_REDRAW
 
 PKL_DO_L_OPEN:
 	CALL	PROMPT_LOAD_PLUGIN
@@ -522,10 +549,10 @@ PDA_CHECK_CAP:
 	RET
 
 PLUG_NO_ABOUT:
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_MSG_NO_ABOUT
-	CALL	HOST_PRINT_STR
-	JP	PLUG_KEY_LOOP
+	LD	DE,STR_PLUG_NO_ABT_TITLE
+	LD	HL,STR_PLUG_NO_ABT_MSG
+	CALL	SHOW_ALERT_POPUP
+	JP	DO_PLUG_REDRAW
 
 PLUG_DO_CONFIG:
 	LD	A,(SELECTED_SLOT)
@@ -548,16 +575,19 @@ PLUG_DO_CONFIG:
 	RET
 
 PLUG_NO_CONFIG:
-	CALL	LOCATE_STATUS_ROW
-	LD	DE,STR_MSG_NO_CONFIG
-	CALL	HOST_PRINT_STR
-	JP	PLUG_KEY_LOOP
+	LD	DE,STR_PLUG_NO_CFG_TITLE
+	LD	HL,STR_PLUG_NO_CFG_MSG
+	CALL	SHOW_ALERT_POPUP
+	JP	DO_PLUG_REDRAW
 
 PKL_EXIT:
 	XOR	A
 	LD	(SELECTED_SLOT),A
+	LD	(REOPEN_CTRL_P_IN_MGR),A
 	SCF				; Carry = 1 (Exit / dismissed)
 	RET
+
+PLUG_MENU_LINES		EQU	16
 
 ;------------------------------------------------------------------------------
 ; Render Full Plugin Manager Screen
@@ -568,6 +598,26 @@ RENDER_PLUGIN_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	HOST_PRINT_STR
 
+	; Calculate vertical top padding: ((HOST_ROWS - 1) - PLUG_MENU_LINES) / 2
+	LD	A,(HOST_ROWS)
+	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB	PLUG_MENU_LINES		; 23 - 16 = 7 (80x24), 39 - 16 = 23 (120x40)
+	JR	Z,PLUG_NO_TOP_PAD
+	JR	C,PLUG_NO_TOP_PAD
+	SRL	A			; 3 in 80x24, 11 in 120x40
+	JR	Z,PLUG_NO_TOP_PAD
+	LD	(PLUG_TOP_PAD_COUNT),A
+	LD	B,A
+PLUG_TOP_PAD_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	PLUG_TOP_PAD_LOOP
+	JR	PLUG_CONTENT_START
+
+PLUG_NO_TOP_PAD:
+	XOR	A
+	LD	(PLUG_TOP_PAD_COUNT),A
+
+PLUG_CONTENT_START:
 	; Row 1: Fixed centered Header
 	LD	DE,STR_PLUG_TITLE
 	CALL	PRINT_ABOUT_LINE
@@ -604,24 +654,27 @@ RPS_ROW_LOOP:
 	CP	8
 	JR	NZ,RPS_ROW_LOOP
 
-	; Pad margin rows down to HOST_ROWS - 2
-	; Rows 1..14 are header and body (14 rows)
-	; Footer is on row HOST_ROWS - 1, Status bar on row HOST_ROWS
-	; Number of margin rows = (HOST_ROWS - 2) - 14 = HOST_ROWS - 16
-	LD	A,(HOST_ROWS)
-	SUB	16
-	JR	Z,RPS_FOOTER
-	JR	C,RPS_FOOTER
-	LD	B,A
-RPS_MARGIN_LOOP:
+	; Row 15: Blank line
 	CALL	PRINT_TILDE_CRLF
-	DJNZ	RPS_MARGIN_LOOP
 
-RPS_FOOTER:
-	; Row HOST_ROWS - 1: Fixed Footer command summary line
+	; Row 16: Centered Footer command summary line
 	CALL	FORMAT_PLUGIN_FOOTER
 	CALL	PRINT_ABOUT_LINE
 
+	; Bottom padding: (HOST_ROWS - 1) - PLUG_TOP_PAD_COUNT - PLUG_MENU_LINES
+	LD	A,(HOST_ROWS)
+	DEC	A			; Text rows available
+	LD	HL,PLUG_TOP_PAD_COUNT
+	SUB	(HL)
+	SUB	PLUG_MENU_LINES
+	JR	Z,RPS_BOTTOM_DONE
+	JR	C,RPS_BOTTOM_DONE
+	LD	B,A
+RPS_BOTTOM_LOOP:
+	CALL	PRINT_TILDE_CRLF
+	DJNZ	RPS_BOTTOM_LOOP
+
+RPS_BOTTOM_DONE:
 	; Row HOST_ROWS: Persistent Status bar
 	CALL	HOST_RENDER_STATUS_BAR
 	RET
@@ -1032,6 +1085,7 @@ CUS_KEY_LOOP:
 	CALL	DRAIN_ESC_SEQUENCE
 	LD	DE,STR_HIDE_CURSOR
 	CALL	HOST_PRINT_STR
+	SCF				; Carry = 1 (cancelled)
 	RET
 CUS_NOT_ESC:
 	CP	'y'
@@ -1049,6 +1103,7 @@ CUS_NOT_ESC:
 CUS_CANCELLED:
 	LD	DE,STR_HIDE_CURSOR
 	CALL	HOST_PRINT_STR
+	SCF				; Carry = 1 (cancelled)
 	RET
 
 CUS_CONFIRMED:
@@ -1056,6 +1111,7 @@ CUS_CONFIRMED:
 	CALL	HOST_PRINT_STR
 	LD	A,(SELECTED_SLOT)
 	CALL	HOST_UNLOAD_SLOT
+	OR	A			; Carry = 0 (unloaded)
 	RET
 
 FORMAT_UNLOAD_PROMPT:
@@ -1285,6 +1341,10 @@ CPKL_NOT_LOWER:
 	JP	Z,CPK_PREV_ITEM
 	CP	'J'			; Vi Down
 	JP	Z,CPK_NEXT_ITEM
+	CP	'A'			; Action: About
+	JP	Z,CPK_DO_ABOUT
+	CP	'U'			; Action: Unload
+	JP	Z,CPK_DO_UNLOAD
 
 	; Digit '0'..'7' selection
 	CP	'0'
@@ -1414,6 +1474,152 @@ CPEF_NOT_ABOUT:
 CPEF_RETURN:
 	POP	AF			; A = slot number
 	OR	A			; Clear Carry (CY=0)
+	RET
+
+;------------------------------------------------------------------------------
+; CPK_DO_ABOUT:
+; Spawn About child dialog from Ctrl+P context pop-up.
+; Hides parent pop-up first, displays About, and restores parent pop-up.
+;------------------------------------------------------------------------------
+CPK_DO_ABOUT:
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JP	Z,CPK_KEY_LOOP
+
+	LD	A,(POPUP_SELECTED_INDEX)
+	LD	E,A
+	LD	D,0
+	LD	HL,POPUP_MATCH_SLOTS
+	ADD	HL,DE
+	LD	A,(HL)			; A = slot number
+	LD	(SELECTED_SLOT),A
+
+	; Check if selected slot is HOST_MGR_SLOT
+	LD	B,A
+	LD	A,(HOST_MGR_SLOT)
+	CP	B
+	JR	Z,CDA_MGR_ABOUT
+
+	; Check if plugin has CAP_HAS_ABOUT (bit 4 of offset +20)
+	LD	A,(SELECTED_SLOT)
+	CALL	GET_SLOT_ENTRY_PTR
+	LD	DE,20
+	ADD	HL,DE
+	LD	A,(HL)
+	BIT	4,A			; CAP_HAS_ABOUT (10h)
+	JR	Z,CDA_ALERT_NO_ABOUT
+
+	; Plugin has About dialog
+	; Hide parent pop-up before spawning child pop-up
+	CALL	POPUP_HIDE_PARENT
+
+	LD	A,(HOST_CONTEXT_ID)
+	CP	PLUG_CTX_PLUGIN_MGR
+	JR	Z,CDA_IN_MGR
+
+	; On Host screen: return Action 1 (About) to Host DCPP_LOOP
+	LD	A,(SELECTED_SLOT)
+	LD	C,1
+	OR	A			; Carry = 0
+	RET
+
+CDA_IN_MGR:
+	; Inside Plugin Manager: return A=slot, C=1 to Host DPS_LOOP
+	LD	A,1
+	LD	(REOPEN_CTRL_P_IN_MGR),A
+	LD	A,(SELECTED_SLOT)
+	LD	C,1
+	OR	A			; Carry = 0
+	RET
+
+CDA_MGR_ABOUT:
+	; Step 1: Hide parent pop-up first
+	CALL	POPUP_HIDE_PARENT
+	; Step 2: Render child About pop-up (DO_PLUGIN_ABOUT at line 1604)
+	CALL	DO_PLUGIN_ABOUT
+	; Step 3: Clear child pop-up by redrawing base screen
+	CALL	POPUP_HIDE_PARENT
+	; Step 4: Redraw parent pop-up upon dismissal
+	JP	CPK_REDRAW
+
+CDA_ALERT_NO_ABOUT:
+	; Step 1: Hide parent pop-up first
+	CALL	POPUP_HIDE_PARENT
+	; Step 2: Render alert modal pop-up
+	LD	DE,STR_PLUG_NO_ABT_TITLE
+	LD	HL,STR_PLUG_NO_ABT_MSG
+	CALL	SHOW_ALERT_POPUP
+	; Step 3: Clear child pop-up by redrawing base screen
+	CALL	POPUP_HIDE_PARENT
+	; Step 4: Redraw parent pop-up upon dismissal
+	JP	CPK_REDRAW
+
+;------------------------------------------------------------------------------
+; CPK_DO_UNLOAD:
+; Spawn CONFIRM_UNLOAD_SLOT child modal from Ctrl+P context pop-up.
+; Hides parent pop-up first, displays child, and restores parent pop-up.
+;------------------------------------------------------------------------------
+CPK_DO_UNLOAD:
+	LD	A,(POPUP_MATCH_COUNT)
+	OR	A
+	JP	Z,CPK_KEY_LOOP
+
+	LD	A,(POPUP_SELECTED_INDEX)
+	LD	E,A
+	LD	D,0
+	LD	HL,POPUP_MATCH_SLOTS
+	ADD	HL,DE
+	LD	A,(HL)			; A = slot number
+	LD	(SELECTED_SLOT),A
+
+	; Step 1: Hide parent pop-up first by redrawing base screen
+	CALL	POPUP_HIDE_PARENT
+
+	; Step 2: Spawn child CONFIRM_UNLOAD_SLOT pop-up (line 962)
+	CALL	CONFIRM_UNLOAD_SLOT
+
+	; Step 3: Clear child pop-up by redrawing base screen
+	CALL	POPUP_HIDE_PARENT
+
+	; Step 4: Redraw parent pop-up upon dismissal of child pop-up
+	; Re-enter DO_CONTEXT_POPUP_INTERNAL to rescan slots
+	JP	DO_CONTEXT_POPUP_INTERNAL
+
+;------------------------------------------------------------------------------
+; POPUP_HIDE_PARENT:
+; Redraws base screen to completely erase parent pop-up from terminal display.
+;------------------------------------------------------------------------------
+POPUP_HIDE_PARENT:
+	LD	A,(HOST_CONTEXT_ID)
+	CP	PLUG_CTX_PLUGIN_MGR
+	JR	NZ,PHP_HOST_BASE
+	CALL	RENDER_PLUGIN_SCREEN
+	RET
+PHP_HOST_BASE:
+	CALL	HOST_REDRAW_BASE
+	RET
+
+;------------------------------------------------------------------------------
+; IS_SLOT_MODAL_ACTION:
+; Check if slot in B with action in C is a modal action.
+; Returns: NZ if modal, Z if non-modal. Preserves: B, C.
+;------------------------------------------------------------------------------
+IS_SLOT_MODAL_ACTION:
+	LD	A,C
+	OR	A
+	RET	NZ			; C != 0 (About or Config) -> Modal
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	A,B			; B = slot number
+	CALL	GET_SLOT_ENTRY_PTR
+	LD	DE,20			; Offset +20: Capabilities low byte
+	ADD	HL,DE
+	LD	A,(HL)
+	AND	08H			; CAP_MODAL_UI (08h)
+	POP	HL
+	POP	DE
+	POP	BC
 	RET
 
 POPUP_LOCATE_NEXT:
@@ -1655,10 +1861,10 @@ ABT_LINES_TABLE:
 	DW	STR_POPUP_BORDER
 
 STR_ABT_LINE1:	DB	"|   SE.COM Far RAM Plugin Manager (PLUGIN.PRL)   |", 0
-STR_ABT_LINE2:	DB	"| Version: v1.0.0 (2026-09-25)                   |", 0
-STR_ABT_LINE3:	DB	"| Mode   : 16KB Far RAM Modular Plugin (PRL)    |", 0
-STR_ABT_LINE4:	DB	"| Role   : Dynamic Slot Management & Pop-up UI   |", 0
-STR_ABT_LINE5:	DB	"|            Press any key to return             |", 0
+STR_ABT_LINE2:	DB	"|          Version: v1.0.0 (2026-09-25)          |", 0
+STR_ABT_LINE3:	DB	"|   Mode   : 16KB Far RAM Modular Plugin (PRL)    |", 0
+STR_ABT_LINE4:	DB	"|  Role   : Dynamic Slot Management & Pop-up UI  |", 0
+STR_ABT_LINE5:	DB	"|           Press any key to continue            |", 0
 
 ;==============================================================================
 ; Modal Pop-up: Save Plugin Configuration Confirmation
@@ -1726,6 +1932,76 @@ SSCP_PRINT_MSG:
 
 	; Wait for keypress to dismiss
 	CALL	HOST_GET_KEY
+	RET
+
+;------------------------------------------------------------------------------
+; SHOW_ALERT_POPUP:
+; Render centered 50x7 Tier 2 alert modal pop-up; wait for any key to dismiss.
+; Input: DE = Title string (50 cols), HL = Msg string (50 cols)
+; Preserves: none
+;------------------------------------------------------------------------------
+SHOW_ALERT_POPUP:
+	PUSH	HL			; Save Msg pointer
+	PUSH	DE			; Save Title pointer
+
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
+
+	; Center 7-line dialog box vertically: ((HOST_ROWS - 7) / 2) + 1
+	LD	A,(HOST_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+
+	; Center 50-col box horizontally: ((HOST_COLS - 50) / 2) + 1
+	LD	A,(HOST_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; Line 1: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Title
+	CALL	HOST_PRINT_STR
+
+	; Line 3: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Line 4: Blank line
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_SAVE_CFG_BLANK
+	CALL	HOST_PRINT_STR
+
+	; Line 5: Msg
+	CALL	POPUP_LOCATE_NEXT
+	POP	DE			; DE = Msg
+	CALL	HOST_PRINT_STR
+
+	; Line 6: Instructions
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_SAVE_CFG_KEY
+	CALL	HOST_PRINT_STR
+
+	; Line 7: Border
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_POPUP_BORDER
+	CALL	HOST_PRINT_STR
+
+	; Wait for keypress to dismiss
+	CALL	HOST_GET_KEY
+	CP	27
+	JR	NZ,SAP_NOT_ESC
+	CALL	DRAIN_ESC_SEQUENCE
+SAP_NOT_ESC:
 	RET
 
 ;==============================================================================
@@ -2085,9 +2361,9 @@ STR_TITLE_HELP:		DB	"       Plugins with Embedded Documentation      ", 0
 
 STR_POPUP_NO_MATCH:	DB	"    No plugins found for this screen context    ", 0
 STR_POPUP_PROMPT_NOMATCH:
-	DB	"            Press any key to dismiss            ", 0
+	DB	"           Press any key to continue            ", 0
 STR_POPUP_PROMPT_MATCH:
-	DB	" [Up]/[Down]=Select   [Enter]=Exec   [ESC]=Exit ", 0
+	DB	" [Up]   [Down]=Select  [Enter]=Exec  [ESC]=Exit ", 0
 
 STR_DESC_CONFIG:	DB	"Embedded Plugin Settings     ", 0
 STR_DESC_ABOUT:		DB	"Modal About & Info Dialog    ", 0
@@ -2105,9 +2381,9 @@ STR_PLUG_SYS_POST:	DB	"/8]    TPA Slot: [4KB Overlaid]", 0
 STR_PLUG_HDR:		DB	"Slot Plugin Name      Type   Size    Exec Mode  Capabilities     Status ", 0
 STR_PLUG_SEP:		DB	"----+----------------+------+-------+----------+---------------+--------", 0
 
-STR_PLUG_CMDS_PRE:	DB	"[Up]/[Down]=Select  ", 0
+STR_PLUG_CMDS_PRE:	DB	"[Up]   [Down]=Select  ", 0
 STR_PLUG_CMDS_BOTH:
-	DB	"[Enter]=Unload  [A]=About  [C]=Config  [S]=Save  [ESC]=Exit", 0
+	DB	"[Enter]=Unload [A]=About [C]=Config [S]=Save [ESC]=Exit", 0
 STR_PLUG_CMDS_ABOUT:
 	DB	"[Enter]=Unload  [A]=About  [S]=Save  [ESC]=Exit", 0
 STR_PLUG_CMDS_CONFIG:
@@ -2117,9 +2393,18 @@ STR_PLUG_CMDS_PLAIN:
 STR_PLUG_CMDS_EMPTY:
 	DB	"[Enter]=Load  [S]=Save  [ESC]=Exit", 0
 
-STR_MSG_NO_ABOUT:	DB	"[No About]$", 0
-STR_MSG_NO_CONFIG:	DB	"[No Config]$", 0
-STR_MSG_SLOTS_FULL:	DB	"[All Slots Full]$", 0
+STR_PLUG_NO_ABT_TITLE:
+	DB	"|               Plugin Information               |", 0
+STR_PLUG_NO_ABT_MSG:
+	DB	"|        This plugin has no about dialog         |", 0
+STR_PLUG_NO_CFG_TITLE:
+	DB	"|              Plugin Configuration              |", 0
+STR_PLUG_NO_CFG_MSG:
+	DB	"|    This plugin has no configuration screen     |", 0
+STR_PLUG_FULL_TITLE:
+	DB	"|               Plugin Load Error                |", 0
+STR_PLUG_FULL_MSG:
+	DB	"|      All plugin slots are currently full       |", 0
 STR_SAVE_CFG_TITLE:	DB	"|           Save Plugin Configuration            |", 0
 STR_SAVE_CFG_BLANK:	DB	"|                                                |", 0
 STR_SAVE_CFG_OK:	DB	"|             [Saved to PLUGIN.CFG]              |", 0
@@ -2146,6 +2431,8 @@ STR_CAP_MUTATE_TPA:	DB	"Mutate, TPA    ", 0
 STR_CAP_DEFAULT:	DB	"Standard       ", 0
 STR_PLUG_STAT_READY:	DB	"[Ready] ", 0
 AUTOLOAD_DONE:		DB	0
+REOPEN_CTRL_P_IN_MGR:	DB	0
+PLUG_TOP_PAD_COUNT:	DB	0
 
 ;==============================================================================
 ; Uninitialized Variables (BSS - zero binary footprint, defined via EQU)

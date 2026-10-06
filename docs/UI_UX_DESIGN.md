@@ -15,8 +15,8 @@ codebase must adhere strictly to these principles.
    - The target environment is a standard 80x24 VT100 / ANSI terminal on
      RomWBW / CP/M hardware (Z80 / Z180), scalable to 120x40.
    - **Zero Unplanned Scrolling**: No screen, dialog, or prompt may ever
-     exceed terminal bounds or emit unchecked line feeds that push headers off
-     the screen. Every character position is budgeted.
+     exceed terminal bounds or emit unchecked line feeds that push screen
+     content off the screen. Every character position is budgeted.
 2. **Universal Status Bar Presence**:
    - **All screens shall show the status bar.** Regardless of whether the
      active interface is the splash screen, editor workspace, plugin manager,
@@ -37,8 +37,7 @@ codebase must adhere strictly to these principles.
      (including file open, save, and block screens).
    - **All screens including pop-up only screens shall have tildes in
      column 0.**
-   - Header rows, the status bar, and Tier 2 boxed modal pop-ups do not use
-     column 0 tildes.
+   - Note that the status bar does not have a column 0 tilde.
 4. **Dedicated Surfaces & Centered Content**:
    - Complex interactive tasks belong in dedicated Full-Screen Workspaces
      (Tier 1) or Centered Boxed Modal Pop-ups (Tier 2).
@@ -88,27 +87,19 @@ Never blur the boundaries between these tiers.
     - Status Bar: **All screens shall show the status bar** on the bottom row
       (`HOST_ROWS`: Row 24 on 80x24; Row 40 on 120x40).
     - Note: The editor workspace contains no separate header or footer row.
-  - **Centered Information & Splash Screens** (Splash, About, Memory Info):
-    - Body: Vertically and horizontally centered content block with top and
-      bottom margin rows padded with column 0 tildes (`~`).
+  - **Centered Full-Screen Workspaces** (Splash, File Open/Save, Block Screens,
+    Plugin Manager, Configuration Screen, Memory Info, Help):
+    - Layout: Screen content is a unified content block centered horizontally
+      and vertically above the status bar, padded with column 0 tildes (`~`)
+      on top and bottom margin rows.
+    - Screen Title: Centered as the top element of the content block (not as
+      a fixed Row 1 header row).
+    - Commands / Footer: Dynamic, context-dependent command summary line
+      positioned at the base of the content block.
     - Status Bar: Anchored on the bottom row (`HOST_ROWS`: Row 24 on 80x24;
       Row 40 on 120x40), indicating the last status of the editing screen.
-    - Note: Contains no fixed Row 1 header or bottom footer row.
-  - **Navigation & Management Workspaces** (Plugin Manager, Config, Browsers):
-    - Header (Row 1): Centered screen title and global status indicators.
-    - Body: Content display with column 0 tildes (`~`) on margin rows
-      across all screens (including file open, save, and directory screens).
-    - Paging/Cursor: Selection indicator (e.g. `>[0]` or inverted cursor bar).
-    - Footer (`HOST_ROWS - 1`: Row 23 on 80x24; Row 39 on 120x40): Dynamic,
-      context-dependent command summary line.
-    - Status Bar: Anchored on the bottom row (`HOST_ROWS`: Row 24 on 80x24;
-      Row 40 on 120x40), indicating the last status of the editing screen.
-  - **Centered Form & File Screens** (Open, Close, Save, Block Screens):
-    - Body: Screen content shall be centered horizontally and vertically
-      between the header and status bar, padded with column 0 tildes (`~`)
-      on margin rows.
-    - Status Bar: Anchored on the bottom row (`HOST_ROWS`: Row 24 on 80x24;
-      Row 40 on 120x40), indicating the last status of the editing screen.
+    - Note: There is no fixed Row 1 header row on any screen. The status bar
+      is the sole fixed screen anchor.
 
 ### Tier 2: Centered Boxed Modal Pop-ups
 * **Examples**: Status Event Notifications (Save Confirmation, File Not Found,
@@ -274,8 +265,8 @@ Brackets (`[ ]`) convey structured parameters and triggers across SE.COM:
    - **Applicability Boundaries**:
      - Column 0 tildes apply strictly to unallocated body and margin rows of
        Tier 1 screens and backgrounds of pop-up only screens; they do NOT
-       apply to Row 1 header rows, the bottom status bar (`HOST_ROWS`), or
-       the interior of Tier 2 centered boxed modal pop-ups.
+       apply to the bottom status bar (`HOST_ROWS`) or the interior of
+       Tier 2 centered boxed modal pop-ups.
 
 ---
 
@@ -337,7 +328,7 @@ agents must actively check for and refactor these non-conformances:
      dismissable by any key.
 6. **Tilde Inconsistency**:
    - *Symptom*: Omitting `~` in column 0 on any screen's body/margin rows,
-     or drawing `~` on header or status rows.
+     or drawing `~` on the status bar row.
    - *Remedy*: Use column 0 `~` on unallocated body and margin rows of all
      screens without exception.
 7. **Status Bar Squatting**:
