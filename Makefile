@@ -4,8 +4,13 @@
 # Support absolute or relative tools directory (TOOLS_DIR or TOOL_DIR).
 # If neither is set, fall back to $(WORKSPACE_ROOT)/tools.
 WORKSPACE_ROOT ?= ../..
-TOOLS_DIR ?= $(or $(TOOL_DIR),$(WORKSPACE_ROOT)/tools)
-TOOL_DIR ?= $(TOOLS_DIR)
+
+ifeq ($(TOOLS_DIR),)
+  TOOLS_DIR := $(TOOL_DIR)
+endif
+ifeq ($(TOOLS_DIR),)
+  TOOLS_DIR := $(WORKSPACE_ROOT)/tools
+endif
 
 # Convert TOOLS_DIR to an absolute path relative to current directory
 override TOOLS_DIR := $(abspath $(TOOLS_DIR))

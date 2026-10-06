@@ -183,7 +183,7 @@ def test_ramdrive_detection_and_mem_screen(
         # Open Memory Map Screen ('m')
         time.sleep(0.3)
         os.write(master, b"m")
-        ok, out = read_until(master, b"return to splash screen", timeout=10.0)
+        ok, out = read_until(master, b"Press any key to continue", timeout=10.0)
         if not ok:
             print("[-] Failed to open Memory Map screen.", flush=True)
             return False

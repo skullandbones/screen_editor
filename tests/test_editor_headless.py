@@ -1245,7 +1245,7 @@ def test_se_execution():
         time.sleep(0.2)
         os.write(master, b"\x0b")  # Ctrl+K
         out_keys = read_until(
-            master, b"Press any key to return to editor", timeout=4.0
+            master, b"Press any key to continue", timeout=4.0
         )
         if b"SE.COM - EDITOR MODE KEYS" not in out_keys:
             print(f"[-] Help screen not reached via Ctrl+K. Buffer: {repr(out_keys)}", flush=True)
@@ -3244,7 +3244,9 @@ def test_se_execution():
         # View memory info map ('m')
         time.sleep(0.5)
         os.write(master, b"m")
-        out_diag = read_until(master, b"return to splash screen", timeout=15.0)
+        out_diag = read_until(
+            master, b"Press any key to continue", timeout=15.0
+        )
         if (b"80h" not in out_diag or b"Protected HBIOS" not in out_diag or
                 b"Line Slot Table" not in out_diag):
             print(f"[-] Step 56 failed: Memory map did not display. "
@@ -3990,7 +3992,9 @@ def test_se_execution():
 
         # 2. Press 'a' to enter About Screen
         os.write(master, b"a")
-        out_s65_about = read_until(master, b"Press any key to return", timeout=6.0)
+        out_s65_about = read_until(
+            master, b"Press any key to continue", timeout=6.0
+        )
         time.sleep(0.2)
         out_s65_about += drain_all(master)
 
@@ -4015,7 +4019,7 @@ def test_se_execution():
         if b"Architecture:" in out_s65_about or b"Features:" in out_s65_about:
             print(f"[-] Step 65 failed: Bloated Architecture/Features unexpectedly found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        if b"Press any key to return to splash" not in out_s65_about:
+        if b"Press any key to continue" not in out_s65_about:
             print(f"[-] Step 65 failed: Return prompt not found on About screen: {repr(out_s65_about)}", flush=True)
             return False
         print("[+] Verified About screen contents: essential details, Antigravity 2.16.0, Gemini FLASH 3.8, MIT License, and Return prompt.", flush=True)
@@ -5307,7 +5311,9 @@ def test_se_execution():
         # Navigate to memory info screen using 'm'
         time.sleep(0.3)
         os.write(master, b"m")
-        out_s72_mem = read_until(master, b"return to splash", timeout=20.0)
+        out_s72_mem = read_until(
+            master, b"Press any key to continue", timeout=20.0
+        )
         time.sleep(0.2)
         out_s72_mem += drain_all(master)
         if b"SE.COM - Extended Memory Map" not in out_s72_mem:

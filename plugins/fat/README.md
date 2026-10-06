@@ -121,7 +121,7 @@ Invoked from the `SE.COM` Plugin Manager (`About` action) or directly via entry 
                 ~ | Engine: Elm-Chan FatFs R0.15 (1-Clause BSD)    |
                 ~ | Driver: RomWBW RST 08H by Dean Jenkins         |
                 ~ +------------------------------------------------+
-                ~ |             Press any key to close             |
+                ~ |           Press any key to continue            |
                 ~ +------------------------------------------------+
 ```
 
@@ -141,7 +141,7 @@ Invoked from the `SE.COM` Plugin Manager (`Config` action) or dynamically by pre
                 ~ |  [2] Unit 2 (Secondary IDE)   [3] Unit 3 (Ext) |
                 ~ |  [4] Unit 4 (RC2014 SD0)      [5..7] Extended  |
                 ~ |                                                |
-                ~ | Select (0-7) to change, or [ESC]/[Q] to exit:  |
+                ~ |     Select [0-7] to change    [ESC]=Cancel     |
                 ~ +------------------------------------------------+
 ```
 

@@ -170,7 +170,7 @@ def test_32k_lines():
         # Open Memory Information Screen ('m')
         time.sleep(0.3)
         os.write(master, b"m")
-        out_mem = read_until(master, b"return to splash screen", timeout=15.0)
+        out_mem = read_until(master, b"Press any key to continue", timeout=15.0)
         out_mem += drain_all(master, quiet_time=0.2)
 
         if b"Active: Line Slots (0..16K)" in out_mem and b"Active: Line Slots (16K..32K)" in out_mem:

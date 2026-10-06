@@ -254,7 +254,7 @@ between CP/M User RAM and upper 32KB RAM banks:
 [*] Testing Inter-Bank Far Memory Transfer (Bank 0 <-> Bank 1)...
 [+] 512KB Far Memory Banking Test: PASSED! (Pattern 0xAA55 Verified)
 
-Press any key to return to Splash Screen
+Press any key to continue
 ```
 
 ---

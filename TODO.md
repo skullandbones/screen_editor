@@ -279,7 +279,7 @@ upcoming milestones for SE.COM.
   > top and bottom margin rows."*
 
 ### 2.20 Truncated File Save Blocked Uses Screen Dump Instead of Pop-up
-- [ ] Replace full-screen error dump with a Tier 2 centered modal pop-up when
+- [x] Replace full-screen error dump with a Tier 2 centered modal pop-up when
   save is blocked on a truncated document.
   - In `src/se.asm:16049` (`DO_SAVE_FILE_UI`), detecting
     `FILE_IS_TRUNCATED != 0` invokes `SHOW_TRUNCATED_SAVE_BLOCKED`
@@ -294,7 +294,7 @@ upcoming milestones for SE.COM.
   > centered boxed modal pop-ups rather than screen clears or text dumps.
 
 ### 2.21 Overwrite Cancellation Emits Raw CRLF Text Causing Display Corruption
-- [ ] Eliminate raw terminal text printing upon overwrite cancellation.
+- [x] Eliminate raw terminal text printing upon overwrite cancellation.
   - In `src/se.asm:16322` (`DO_OVERWRITE_CANCELLED`), cancelling overwrite
     emits `STR_SAVE_CANCELLED` (`13, 10, "~  Save cancelled.", 13, 10`)
     directly from the pop-up cursor coordinates without redrawing the screen.
@@ -306,7 +306,7 @@ upcoming milestones for SE.COM.
   > the screen."*
 
 ### 2.22 Non-Standard Dismissal Prompts in About, Memory, Help, and FAT Plugin
-- [ ] Standardize single-key dismissal statements across all full-screen and
+- [x] Standardize single-key dismissal statements across all full-screen and
   modal surfaces.
   - Update `STR_ABOUT_RETURN` (`src/se.asm:23472`: `"Press any key to return
     to splash"`), `STR_MEM_RETURN_PROMPT` (`src/se.asm:23490`: `"Press any key
@@ -320,7 +320,7 @@ upcoming milestones for SE.COM.
   > not have ... (Allowed: Press any key to continue, Press any key)."*
 
 ### 2.23 FAT Plugin Dialogs Use Hardcoded Coords, Screen Clears, and Delimiters
-- [ ] Bring FAT plugin about and configuration dialogs into compliance with
+- [x] Bring FAT plugin about and configuration dialogs into compliance with
   UI/UX design system specifications.
   - In `plugins/fat/fat_plugin.c:140-218` (`fat_plugin_about` and
     `fat_plugin_config`):

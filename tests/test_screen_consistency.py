@@ -196,7 +196,7 @@ def run_screen_consistency_test(mode_name="80x24"):
         drain_all(master)
         os.write(master, b"\x0b")  # Ctrl+K
         out_help = read_until(
-            master, b"Press any key to return to editor", timeout=5.0
+            master, b"Press any key to continue", timeout=5.0
         )
         out_help += read_until(master, b"\x1b[?25l", timeout=3.0)
         if b"SE.COM - EDITOR MODE KEYS" not in out_help:
@@ -208,8 +208,8 @@ def run_screen_consistency_test(mode_name="80x24"):
         expected_dash = b"~" + (b"-" * (78 if mode_name == "80x24" else 118))
         expected_title_pad = b"~" + (b" " * (26 if mode_name == "80x24" else 46)) + b"SE.COM - EDITOR MODE KEYS"
         expected_prompt_pad = (
-            b"~" + (b" " * (22 if mode_name == "80x24" else 42))
-            + b"Press any key to return to editor"
+            b"~" + (b" " * (26 if mode_name == "80x24" else 46))
+            + b"Press any key to continue"
         )
 
         if expected_rule not in out_help:

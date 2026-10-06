@@ -18,6 +18,8 @@
     PUBLIC _host_clear_document
     PUBLIC _host_set_status_raw
     PUBLIC _host_check_key
+    PUBLIC _host_get_cols
+    PUBLIC _host_get_rows
 
     EXTERN _fat_plugin_run
     EXTERN _fat_plugin_about
@@ -272,6 +274,42 @@ _host_check_key:
     CALL l_dcal
     LD   L,A
     LD   H,0
+    RET
+
+; unsigned char host_get_cols(void)
+_host_get_cols:
+    LD   HL,(_host_api_ptr)
+    LD   A,H
+    OR   L
+    JR   Z,_dflt_cols
+    LD   DE,14          ; Offset to HOST_API_COLS
+    ADD  HL,DE
+    LD   A,(HL)
+    OR   A
+    JR   Z,_dflt_cols
+    LD   L,A
+    LD   H,0
+    RET
+_dflt_cols:
+    LD   HL,80
+    RET
+
+; unsigned char host_get_rows(void)
+_host_get_rows:
+    LD   HL,(_host_api_ptr)
+    LD   A,H
+    OR   L
+    JR   Z,_dflt_rows
+    LD   DE,16          ; Offset to HOST_API_ROWS
+    ADD  HL,DE
+    LD   A,(HL)
+    OR   A
+    JR   Z,_dflt_rows
+    LD   L,A
+    LD   H,0
+    RET
+_dflt_rows:
+    LD   HL,24
     RET
 
 _call_iy:
