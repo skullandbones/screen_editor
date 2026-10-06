@@ -77,7 +77,8 @@ ESC_TIMEOUT_LOOPS EQU	5000		; VT100 escape debounce timeout loops (~15-20ms)
 KEY_DEL		EQU	127
 
 SEARCH_BUF_MAX	EQU	64
-FIND_POPUP_FIELD_LEN	EQU	29
+FIND_POPUP_FIELD_LEN	EQU	28
+REPLACE_POPUP_FIELD_LEN	EQU	29
 
 ; Line ending modes
 FMT_CPM		EQU	0		; CR/LF (0x0D, 0x0A)
@@ -10756,12 +10757,12 @@ DFP_BOX_CLOSE:
 	CALL	POPUP_PRINT_BORDER
 
 	; Position cursor inside popup box at
-	; (POPUP_START_ROW + 4, POPUP_COL + 13 + B)
+	; (POPUP_START_ROW + 4, POPUP_COL + 14 + B)
 	LD	A,(POPUP_START_ROW)
 	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
-	ADD	A,13
+	ADD	A,14
 	ADD	A,B
 	LD	L,A
 	CALL	LOCATE_RC
@@ -11885,7 +11886,7 @@ REPLACE_INPUT_LOOP:
 	; Check max length
 	LD	C,A
 	LD	A,B
-	CP	FIND_POPUP_FIELD_LEN
+	CP	REPLACE_POPUP_FIELD_LEN
 	JR	NC,REPLACE_INPUT_LOOP
 
 	LD	HL,REPLACE_BUF
@@ -12013,7 +12014,7 @@ DRAW_REPLACE_POPUP_FULL:
 	LD	DE,STR_REPLACE_POPUP_PROMPT
 	CALL	PRINT_STR
 	; Pad 29 spaces for empty box
-	LD	C,FIND_POPUP_FIELD_LEN
+	LD	C,REPLACE_POPUP_FIELD_LEN
 DRP_PAD_LOOP:
 	LD	A,' '
 	CALL	PUTC
@@ -23414,15 +23415,15 @@ STR_POPUP_BLANK_ROW:
 STR_FIND_POPUP_TITLE:
 	DB	"|                   Find Text                    |", 0
 STR_FIND_POPUP_MODE_EXACT:
-	DB	"|           Match: [Case Sensitive  ]            |", 0
+	DB	"|       Search Pattern: [Case Sensitive  ]       |", 0
 STR_FIND_POPUP_MODE_INSENS:
-	DB	"|           Match: [Case Insensitive]            |", 0
+	DB	"|       Search Pattern: [Case Insensitive]       |", 0
 STR_FIND_POPUP_PROMPT:
-	DB	"|     Find: [", 0
+	DB	"|      Find: [", 0
 STR_FIND_POPUP_BOX_CLOSE:
 	DB	"]      |", 0
 STR_FIND_POPUP_KEYS:
-	DB	"| [Enter]=Find  [Tab]=Toggle Case  [ESC]=Cancel  |", 0
+	DB	"| [Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel |", 0
 
 ; Replace Modal Pop-up Strings (50 cols x 7 rows)
 STR_REPLACE_POPUP_TITLE:

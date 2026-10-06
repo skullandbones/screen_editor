@@ -365,7 +365,7 @@ upcoming milestones for SE.COM.
   > distort modal border boundaries.
 
 ### 2.25 Missing Description Line and Asymmetric Spacing in Find Modal Pop-up
-- [ ] Bring Find modal pop-up layout and alignment into compliance with query
+- [x] Bring Find modal pop-up layout and alignment into compliance with query
   pop-up design standards.
   - In `src/se.asm:10714-10754` (`DRAW_FIND_POPUP_BODY`) and
     `src/se.asm:23414-23425` (`STR_FIND_POPUP_*`):
