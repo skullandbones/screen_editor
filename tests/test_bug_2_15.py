@@ -345,7 +345,9 @@ def main():
             time.sleep(0.3)
             os.write(master, b"n")  # Don't save
         else:
-            print(f"[-] 'Save changes?' prompt not seen. Buffer: {repr(sc_buf)}")
+            print(
+                f"[-] 'Save changes?' prompt not seen. Buffer: {repr(sc_buf)}"
+            )
         ok_cpm, cpm_buf = read_until(master, b"C>", timeout=8.0)
         if not ok_cpm:
             print(
@@ -389,7 +391,7 @@ def main():
         read_until(master, b"C>", timeout=6.0)
 
         print("\n" + "=" * 65)
-        print("  [SUCCESS] All 5 Progress Modal Filename Subtests PASSED!      ")
+        print("  [SUCCESS] All 5 Progress Modal Filename Subtests PASSED!")
         print("=" * 65)
         return 0
 

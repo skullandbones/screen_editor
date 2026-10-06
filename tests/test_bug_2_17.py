@@ -111,7 +111,10 @@ def setup_disk_files(repo_root, cpmcp_bin, cpmrm_bin, img_file, se_bin):
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
             subprocess.run(
-                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, plug_path, f"0:{plug}"],
+                [
+                    cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                    plug_path, f"0:{plug}"
+                ],
                 check=True
             )
     # Remove existing BEAUTIFY.CFG to ensure defaults
@@ -202,7 +205,7 @@ def test_plugin_about_modal():
         time.sleep(0.3)
         os.write(master, b" ")
         wait_for_plugin_manager(master, b">[0]")
-        print("[+] Verified Plugin Manager screen cleanly restored after dismiss.")
+        print("[+] Verified Plugin Manager cleanly restored after dismiss.")
 
         # ---------------------------------------------------------------------
         # Case 2: Slot 1 (ROT13.PRL) - Navigate down and press 'A'
@@ -233,7 +236,7 @@ def test_plugin_about_modal():
         time.sleep(0.3)
         os.write(master, b"\r")
         wait_for_plugin_manager(master, b">[1]")
-        print("[+] Verified Plugin Manager screen cleanly restored after dismiss.")
+        print("[+] Verified Plugin Manager cleanly restored after dismiss.")
 
         # ---------------------------------------------------------------------
         # Case 3: Slot 2 (BEAUTIFY.PRL) - Navigate down and press 'A'
@@ -264,7 +267,7 @@ def test_plugin_about_modal():
         time.sleep(0.3)
         os.write(master, b" ")
         wait_for_plugin_manager(master, b">[2]")
-        print("[+] Verified Plugin Manager screen cleanly restored after dismiss.")
+        print("[+] Verified Plugin Manager cleanly restored after dismiss.")
 
         # ---------------------------------------------------------------------
         # Case 4: Slot 2 (BEAUTIFY.PRL) - Press 'C' for Config modal

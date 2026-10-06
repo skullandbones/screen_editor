@@ -343,7 +343,7 @@ def main():
         read_until(master, b"C>", timeout=6.0)
 
         print("\n" + "=" * 65)
-        print("  [SUCCESS] All 4 Progress Modal Terminology Subtests PASSED!   ")
+        print("  [SUCCESS] All 4 Progress Modal Terminology Subtests PASSED!")
         print("=" * 65)
         return 0
 

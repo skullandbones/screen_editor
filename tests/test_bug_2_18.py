@@ -190,7 +190,10 @@ def test_open_save_header_centering():
         assert first_rule_idx is not None, (
             f"Horizontal rule not found in lines: {lines[:10]}"
         )
-        print(f"[+] First rule found at index {first_rule_idx} (1-based Row {first_rule_idx + 1}).")
+        print(
+            f"[+] First rule found at index {first_rule_idx} "
+            f"(Row {first_rule_idx + 1})."
+        )
 
         # Verify Row 1 is a margin tilde row ('~'), NOT pinned header
         assert first_rule_idx > 0, (
@@ -199,9 +202,10 @@ def test_open_save_header_centering():
         for r in range(first_rule_idx):
             clean_r = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", lines[r]).strip()
             assert clean_r == "~", (
-                f"Row {r + 1} before header is not blank tilde '~': {repr(clean_r)}"
+                f"Row {r + 1} before header not blank tilde '~': "
+                f"{repr(clean_r)}"
             )
-        print(f"[+] Verified {first_rule_idx} top margin tilde rows precede header.")
+        print(f"[+] Verified {first_rule_idx} margin tildes precede header.")
 
         # Verify Title immediately follows first rule
         title_idx = first_rule_idx + 1
@@ -209,15 +213,23 @@ def test_open_save_header_centering():
         assert "OPEN FILE" in clean_title, (
             f"Row {title_idx + 1} is not title: {clean_title}"
         )
-        print(f"[+] Verified Title immediately follows first rule at Row {title_idx + 1}.")
+        print(
+            f"[+] Verified Title follows first rule at Row "
+            f"{title_idx + 1}."
+        )
 
         # Verify second rule immediately follows title
         second_rule_idx = title_idx + 1
-        clean_second_rule = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", lines[second_rule_idx])
-        assert clean_second_rule.startswith("~==="), (
-            f"Row {second_rule_idx + 1} is not closing rule: {clean_second_rule}"
+        clean_second_rule = re.sub(
+            r"\x1b\[[0-9;]*[a-zA-Z]", "", lines[second_rule_idx]
         )
-        print(f"[+] Verified second rule immediately follows Title at Row {second_rule_idx + 1}.")
+        assert clean_second_rule.startswith("~==="), (
+            f"Row {second_rule_idx + 1} not closing rule: {clean_second_rule}"
+        )
+        print(
+            f"[+] Verified second rule follows Title at Row "
+            f"{second_rule_idx + 1}."
+        )
 
         # Verify directory entries immediately follow second rule
         dir_start_idx = second_rule_idx + 1
@@ -264,14 +276,15 @@ def test_open_save_header_centering():
 
         # Verify Row 1 is a margin tilde row ('~'), NOT pinned header
         assert first_rule_idx > 0, (
-            f"ERROR: Header is pinned at Row 1 on Save screen! Lines: {lines[:5]}"
+            f"ERROR: Pinned at Row 1 on Save screen! Lines: {lines[:5]}"
         )
         for r in range(first_rule_idx):
             clean_r = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", lines[r]).strip()
             assert clean_r == "~", (
-                f"Row {r + 1} before header is not blank tilde '~': {repr(clean_r)}"
+                f"Row {r + 1} before header not blank tilde '~': "
+                f"{repr(clean_r)}"
             )
-        print(f"[+] Verified {first_rule_idx} top margin tilde rows precede Save header.")
+        print(f"[+] Verified {first_rule_idx} margin tildes precede Save.")
 
         # Verify Title immediately follows first rule
         title_idx = first_rule_idx + 1
@@ -279,7 +292,10 @@ def test_open_save_header_centering():
         assert "SAVE FILE" in clean_title, (
             f"Row {title_idx + 1} is not title: {clean_title}"
         )
-        print(f"[+] Verified Title immediately follows first rule at Row {title_idx + 1}.")
+        print(
+            f"[+] Verified Title follows first rule at Row "
+            f"{title_idx + 1}."
+        )
 
         # Cancel Save screen via ESC
         time.sleep(0.3)

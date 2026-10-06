@@ -1,15 +1,43 @@
 # Makefile for CP/M Full-Screen Editor (SE.COM)
 # Assembler: z88dk-z80asm (Z80 Macro Assembler from z88dk)
 
+# Support absolute or relative tools directory (TOOLS_DIR or TOOL_DIR).
+# If neither is set, fall back to $(WORKSPACE_ROOT)/tools.
 WORKSPACE_ROOT ?= ../..
-TOOLS_DIR ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Tools/Linux
-Z80ASM ?= $(WORKSPACE_ROOT)/tools/z88dk/bin/z88dk-z80asm
-GOLDEN_IMAGE ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Binary/hd1k_combo.img
+
+ifeq ($(TOOLS_DIR),)
+  TOOLS_DIR := $(TOOL_DIR)
+endif
+ifeq ($(TOOLS_DIR),)
+  TOOLS_DIR := $(WORKSPACE_ROOT)/tools
+endif
+
+# Convert TOOLS_DIR to an absolute path relative to current directory
+override TOOLS_DIR := $(abspath $(TOOLS_DIR))
+override TOOL_DIR := $(TOOLS_DIR)
+
+# If TOOLS_DIR was pointed directly at romwbw_src/Tools/Linux, navigate up
+ifeq ($(wildcard $(TOOLS_DIR)/z88dk),)
+  ifneq ($(wildcard $(TOOLS_DIR)/../../z88dk),)
+    TOOLS_ROOT := $(abspath $(TOOLS_DIR)/../..)
+  else
+    TOOLS_ROOT := $(TOOLS_DIR)
+  endif
+else
+  TOOLS_ROOT := $(TOOLS_DIR)
+endif
+
+export TOOLS_DIR := $(TOOLS_ROOT)
+export TOOL_DIR := $(TOOLS_ROOT)
+
+ROMWBW_TOOLS ?= $(TOOLS_ROOT)/romwbw_src/Tools/Linux
+Z80ASM ?= $(TOOLS_ROOT)/z88dk/bin/z88dk-z80asm
+GOLDEN_IMAGE ?= $(TOOLS_ROOT)/romwbw_src/Binary/hd1k_combo.img
 IMAGE_DIR ?= disks
 IMAGE ?= $(IMAGE_DIR)/hd1k_combo.img
-export DISKDEFS ?= $(WORKSPACE_ROOT)/tools/romwbw_src/Tools/cpmtools/diskdefs
-CPMCP ?= $(TOOLS_DIR)/cpmcp
-CPMRM ?= $(TOOLS_DIR)/cpmrm
+export DISKDEFS ?= $(TOOLS_ROOT)/romwbw_src/Tools/cpmtools/diskdefs
+CPMCP ?= $(ROMWBW_TOOLS)/cpmcp
+CPMRM ?= $(ROMWBW_TOOLS)/cpmrm
 
 TARGET = SE.COM
 ASM_SRC = src/se.asm
@@ -40,9 +68,11 @@ check-lines:
 
 plugins:
 	@echo "==> Building plugins (4K, 8K, 16K, 32K)..."
-	python3 plugins/build_plugins.py
+	TOOLS_DIR="$(TOOLS_ROOT)" TOOL_DIR="$(TOOLS_ROOT)" \
+		python3 plugins/build_plugins.py
 	@echo "==> Building FAT plugin (FATFS.PRL, FATTEST.COM)..."
-	$(MAKE) -C plugins/fat all
+	$(MAKE) -C plugins/fat TOOLS_DIR="$(TOOLS_ROOT)" \
+		TOOL_DIR="$(TOOLS_ROOT)" all
 	cp -f plugins/fat/FATFS.PRL plugins/FATFS.PRL
 
 $(IMAGE):
