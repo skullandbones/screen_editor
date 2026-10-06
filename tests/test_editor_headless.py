@@ -1168,13 +1168,20 @@ def test_se_execution():
         # Test canceling overwrite with 'n'
         time.sleep(0.2)
         os.write(master, b"n")
-        out_cancel = read_until(master, b"Save cancelled.", timeout=3.0)
-        if b"Save cancelled." not in out_cancel:
-            print(f"[-] 'Save cancelled.' message missing. Buffer: {repr(out_cancel)}", flush=True)
-            return False
         out_back = read_until(master, b"C:2.TXT", timeout=4.0)
         if b"C:2.TXT" not in out_back:
-            print(f"[-] Editor mode not restored after cancelling save. Buffer: {repr(out_back)}", flush=True)
+            print(
+                "[-] Editor mode not restored after cancelling save. "
+                f"Buffer: {repr(out_back)}",
+                flush=True
+            )
+            return False
+        if b"Save cancelled" in out_back:
+            print(
+                "[-] Prohibited raw 'Save cancelled' printed. "
+                f"Buffer: {repr(out_back)}",
+                flush=True
+            )
             return False
         print(
             "[+] Step 27: Successfully verified cancelling overwrite "
@@ -1189,12 +1196,16 @@ def test_se_execution():
         read_until(master, b"2.TXT", timeout=3.0)
         time.sleep(0.2)
         os.write(master, b"\r")
-        read_until(master, b"o): ", timeout=4.0)
+        read_until(master, b"[Y]es", timeout=4.0)
         time.sleep(0.2)
         os.write(master, b"y")
-        out_saved = read_until(master, b"C:2.TXT", timeout=5.0)
+        out_saved = read_until(master, b"^K: Editor keys", timeout=8.0)
         if b"C:2.TXT" not in out_saved:
-            print(f"[-] Editor mode not restored after confirming save. Buffer: {repr(out_saved)}", flush=True)
+            print(
+                "[-] Editor mode not restored after confirming save. "
+                f"Buffer: {repr(out_saved)}",
+                flush=True
+            )
             return False
         print(
             "[+] Step 27: Successfully verified confirming overwrite ('y') "
@@ -4921,7 +4932,14 @@ def test_se_execution():
         read_until(master, b"Enter filename to save:", timeout=8.0)
         time.sleep(0.2)
         os.write(master, b"TESTF.TXT\r")
-        read_until(master, b"C:TESTF.TXT", timeout=8.0)
+        out_saved = read_until(master, b"^K: Editor keys", timeout=8.0)
+        if b"C:TESTF.TXT" not in out_saved:
+            print(
+                "[-] Step 70 failed: Editor mode not restored after save. "
+                f"Buffer: {repr(out_saved)}",
+                flush=True
+            )
+            return False
         time.sleep(0.3)
         drain_all(master)
 
@@ -4974,7 +4992,7 @@ def test_se_execution():
         if b"Overwrite?" in out_s70_ow:
             time.sleep(0.2)
             os.write(master, b"y")
-        out_s70_saved = read_until(master, b"TESTF.TXT", timeout=8.0)
+        out_s70_saved = read_until(master, b"^K: Editor keys", timeout=8.0)
         if b"TESTF.TXT" not in out_s70_saved:
             print(
                 f"[-] Step 70 failed: Return did not save file. "
@@ -5151,16 +5169,30 @@ def test_se_execution():
             print(f"[-] Step 71 Subtest 4 failed: Save prompt not reached. Buffer: {repr(out_s71_save)}", flush=True)
             return False
         if b"DRIVE C1:)" not in out_s71_save:
-            print(f"[-] Step 71 Subtest 4 failed: Save screen title does not show 'DRIVE C1:)'. Buffer: {repr(out_s71_save)}", flush=True)
+            print(
+                "[-] Step 71 Subtest 4 failed: Save screen title does not "
+                f"show 'DRIVE C1:)'. Buffer: {repr(out_s71_save)}",
+                flush=True
+            )
             return False
 
         time.sleep(0.1)
         os.write(master, b"\x08" * 20 + b"1C:SAVEU1.TXT\r")
-        out_s71_saved = read_until(master, b"C1:SAVEU1.TXT", timeout=8.0)
+        out_s71_saved = read_until(master, b"^K: Editor keys", timeout=8.0)
         if b"C1:SAVEU1.TXT" not in out_s71_saved:
-            print(f"[-] Step 71 Subtest 4 failed: Save did not return to editor with status bar. Buffer: {repr(out_s71_saved)}", flush=True)
+            print(
+                "[-] Step 71 Subtest 4 failed: Save did not return to editor "
+                f"with status bar. Buffer: {repr(out_s71_saved)}",
+                flush=True
+            )
             return False
-        print("[+] Step 71 Subtest 4 PASSED: Saved as '1C:SAVEU1.TXT' into User 1.", flush=True)
+        time.sleep(0.3)
+        drain_all(master)
+        print(
+            "[+] Step 71 Subtest 4 PASSED: Saved as '1C:SAVEU1.TXT' into "
+            "User 1.",
+            flush=True
+        )
 
         # Subtest 5: Directory screen interactive switching: C0:, 1:, 1C:*.TXT
         time.sleep(0.2)
