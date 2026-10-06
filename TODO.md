@@ -437,7 +437,7 @@ upcoming milestones for SE.COM.
   > (e.g. `[Y]es   [N]o   [ESC]=Cancel`)."*
 
 ### 2.28 Save File UI Format Option Uses Parenthesized Colon Hotkey
-- [ ] Standardize Save File UI line ending format hotkey into bracket notation.
+- [x] Standardize Save File UI line ending format hotkey into bracket notation.
   - In `src/se.asm:23832` (`STR_SAVE_FMT_SUFFIX`), rendered by
     `PRINT_SAVE_FMT_INFO` (`src/se.asm:18075-18094`):
     `"]  (^F: toggle format)"` prints `Format: [CP/M]  (^F: toggle format)`.

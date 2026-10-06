@@ -23829,7 +23829,7 @@ STR_SAVE_FMT_CPM:	DB	"CP/M","$"
 
 STR_SAVE_FMT_LINUX:	DB	"Linux","$"
 
-STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
+STR_SAVE_FMT_SUFFIX:	DB	"]   [^F]=Toggle Format",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
