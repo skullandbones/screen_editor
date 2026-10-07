@@ -786,8 +786,18 @@ upcoming milestones for SE.COM.
 ## 6. Preparations for Releasing SE.COM v1.0.0
 
 ### 6.1 Create Documentation Suite
-- [ ] Create documents including architecture, setup build environment, and
+- [x] Create documents including architecture, setup build environment, and
   user guide.
+  - `docs/ARCHITECTURE.md`: Technical specification covering CP/M TPA budget,
+    RomWBW Far RAM banking (`RST 08H`), virtual swap paging, visual block
+    state machine, terminal geometry (120x40 & 80x24), and modular plugin ABI.
+  - `docs/BUILD_SETUP.md`: Comprehensive setup and developer guide covering
+    `z88dk-z80asm`, `cpmtools`, RC2014 emulator, make targets, static audits
+    (`check-tpa`, `check-lines`), and automated regression test harnesses.
+  - `docs/USER_GUIDE.md`: Full end-user manual covering invocation syntax,
+    splash screen, editor navigation, visual block workflow (Option A,
+    Point 4, Point 5), search/replace, configuration, and plugins.
+  - Updated `docs/KEYBINDINGS.md` to document new block mode controls.
 
 ### 6.2 Review and Enhance Subroutine Comments in `SE.ASM`
 - [ ] Review and enhance the comments in `SE.ASM` to provide information on
