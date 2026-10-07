@@ -89,17 +89,23 @@ and `z88dk-z80asm`.
 
 ### 3.2 Operand Spacing & Formatting
 * **Indentation**: Indent instruction mnemonics by 8 columns (or 1 tab).
+* **Opcode to Operand Spacing**: Use a **single space** between the opcode /
+  instruction mnemonic and its operand(s), **not a tab** (e.g. `CALL PRINT`,
+  `LD A,0`, `JP MAIN_LOOP`).
 * **Comma Spacing**: **NO space** after commas between operands (e.g. `LD A,0`,
   `LD B,0F3H`, `LD D,(IX+4)`, `ADD HL,BC`).
 
 ```z80
-; Good Z80 formatting:
-	LD	A,0		; Clear accumulator
-	LD	B,0F3H		; HBIOS function code
-	LD	D,(IX+4)	; Fetch destination bank parameter
-	RST	08H		; Execute HBIOS system call
+; Good Z80 formatting (single space between opcode and operand):
+	LD A,0			; Clear accumulator
+	LD B,0F3H		; HBIOS function code
+	LD D,(IX+4)		; Fetch destination bank parameter
+	CALL PRINT		; Call print routine (space, not tab)
+	RST 08H			; Execute HBIOS system call
 
 ; Avoid:
+	LD	A,0		; (Avoid tab between opcode and operand)
+	CALL	PRINT		; (Avoid tab between opcode and operand)
 	ld	a, 0		; (Avoid lowercase and spaced commas)
 ```
 
@@ -120,21 +126,21 @@ and `z88dk-z80asm`.
 ; HBIOS Bank Copy Primitive
 ;------------------------------------------------------------------------------
 HBIOS_COPY:
-	PUSH	BC
-	PUSH	DE
-	LD	B,0F4H		; SYSSETCPY
-	RST	08H
-	OR	A
-	JR	NZ,.copy_error
-	LD	HL,1
-	JR	.copy_done
+	PUSH BC
+	PUSH DE
+	LD B,0F4H		; SYSSETCPY
+	RST 08H
+	OR A
+	JR NZ,.copy_error
+	LD HL,1
+	JR .copy_done
 
 .copy_error:
-	LD	HL,0
+	LD HL,0
 
 .copy_done:
-	POP	DE
-	POP	BC
+	POP DE
+	POP BC
 	RET
 ```
 
@@ -147,7 +153,8 @@ HBIOS_COPY:
 | **Line Ending** | Unix `LF` (`\n`) | Unix `LF` (`\n`) |
 | **Max Width** | 80 columns | 80 columns |
 | **Keyword Case**| lowercase (`int`, `void`, `for`) | UPPERCASE (`LD`, `CALL`, `RET`) |
-| **Operand Spacing** | `func(a, b)` | `LD A,0` (no space after comma) |
+| **Opcode Separator** | N/A | Space, not tab (`CALL PRINT`) |
+| **Operand Comma** | `func(a, b)` | `LD A,0` (no comma space) |
 | **Indentation** | 4 spaces | 8 spaces / 1 tab for mnemonics |
 | **Hex Format** | `0xF3`, `0x0080` | `0F3H` or `$F3` |
 | **Types** | `uint8_t`, `uint16_t`, `bool` | Byte (`.DB`), Word (`.DW`) |
