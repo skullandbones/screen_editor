@@ -45,12 +45,16 @@ When launched without arguments, `SE.COM` presents a startup landing screen:
 
 `SE.COM` implements an intuitive visual block highlighting mechanism:
 
-- **<kbd>Ctrl+B</kbd>**: Anchor selection at cursor; dynamic highlight.
-- **<kbd>Ctrl+K</kbd>**: Freeze highlight in place, allowing free travel.
+- **<kbd>Ctrl+B</kbd>**: Toggle block selection (starts dynamic highlight if
+  inactive; cancels/clears selection if active).
+- **<kbd>Enter</kbd>**: Lock/solidify block in editor, allowing free travel.
+- **<kbd>Ctrl+K</kbd>**: Open centered 50x7 Block Operations Modal dialog.
+  - In modal: **<kbd>Enter</kbd>** locks block, **<kbd>ESC</kbd>** safely
+    closes modal without clearing selection, **<kbd>^B</kbd>** clears block.
 - **<kbd>Ctrl+C</kbd>**: Copy selected/solidified text to cursor.
 - **<kbd>Ctrl+X</kbd>**: Cut / move selected/solidified text to cursor.
 - **<kbd>Ctrl+D</kbd> / <kbd>Del</kbd>**: Delete block selection (or character).
-- **<kbd>ESC</kbd>**: Clear active or solidified block highlight.
+- **<kbd>Ctrl+S</kbd>**: Save active block to disk file.
 
 ---
 

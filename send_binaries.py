@@ -145,8 +145,10 @@ def ping_cpm_drive(ser, target_drive="J:", max_retries=3, timeout=3.0):
         print(f"[-] Ping attempt {attempt}/{max_retries} timed out waiting for '{drv}>'. Retrying...")
         ser.reset_input_buffer()
 
-    print(f"[-] Error: Could not confirm CP/M prompt at {drv}: drive after {max_retries} attempts.")
-    print("    Tip: Check serial cable, baud rate (115200), and ensure SBC is powered on and at CP/M prompt.")
+    print(f"[-] Error: Could not confirm CP/M prompt at {drv}: drive after"
+          f" {max_retries} attempts.")
+    print("    Tip: Check serial cable, speed (115200 bps), and ensure"
+          " SBC is powered on and at CP/M prompt.")
     return False
 
 
@@ -248,8 +250,8 @@ def send_batch(port="/dev/ttyUSB0", baudrate=115200, target_drive="J:",
     print("   SC131 / RomWBW CP/M 2.2 Serial Binary Batch Uploader")
     print("============================================================")
     print(f"[*] Serial Port          : {port}")
-    print(f"[*] Baud Rate            : {baudrate} bps")
-    print(f"[*] Hardware Flow Control: ENABLED (RTS/CTS = True)")
+    print(f"[*] Serial Speed         : {baudrate} bps")
+    print(f"[*] Hardware Flow Control: Full-duplex RTR/CTS (RTS/CTS = True)")
     print(f"[*] Target Drive         : {target_drive}")
     print(f"[*] XM Utility Drive     : {xm_drive}")
     print(f"[*] Erase Existing Files : {'YES' if erase else 'NO'}")
@@ -401,7 +403,7 @@ def main():
         "-b", "--baud",
         type=int,
         default=115200,
-        help="Baud rate (default: 115200)"
+        help="Serial communication speed in bps (default: 115200)"
     )
     parser.add_argument(
         "-d", "--drive",
