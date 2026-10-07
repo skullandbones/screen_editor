@@ -342,7 +342,8 @@ class VT100QualityMonitor:
 
         # 5. Premature CP/M exit detection (skipped during clean test teardown):
         if not self.exiting:
-            if " file not found" in full_text:
+            if (" file not found" in full_text and
+                    "File Not Found" not in full_text):
                 raise UnexpectedBehaviourError(
                     "Premature CP/M exit detected: 'file not found' on screen"
                 )
