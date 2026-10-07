@@ -106,13 +106,33 @@ tasks have been archived.
 
 - [ ] Define feature scope and architectural targets for SE.COM v1.1.0 release.
 - [ ] Milestone: Modularize `se.asm` into functional sub-systems and port to
-  ZX Spectrum Next (detailed in Section 7).
+  ZX Spectrum Next (supporting both Native Next and CP/M on the Next,
+  detailed in Section 7).
 
 ---
 
 ## 7. Modular Architecture Refactoring & ZX Spectrum Next Port Plan
 
-### 7.1 Architecture & Header API Strategy
+### 7.1 Target Architecture & Port Variants
+The refactoring defines a clean separation between core editor logic and
+platform hardware abstraction, targeting three primary operating profiles:
+- **Profile 1: Standard CP/M 2.2 / 3.0** (RomWBW / RC2014 / Standard TPA):
+  Standard CP/M `.COM` binary using BDOS calls, VT100/ANSI terminal over
+  serial/console, RomWBW HBIOS bank switching, and BDOS FCB storage.
+- **Profile 2: CP/M on ZX Spectrum Next** (NextCPM / CP/M 2.2 / CP/M Plus):
+  CP/M `.COM` binary running inside the Next's CP/M environments (e.g.
+  NextCPM by Garry Lancaster). Uses CP/M TPA and BDOS vectors ($0005), but
+  leverages Next-adapted console drivers (NextCPM 80-column text mode,
+  VT52/ANSI, or direct screen RAM), Next keyboard mapping, and NextCPM
+  banked memory extensions if available.
+- **Profile 3: Native ZX Spectrum Next** (NextZXOS / ESXDOS / Standalone):
+  Native Next binary running without CP/M. Directly leverages Next hardware:
+  hardware tile/text mode (80x25 or 80x32) or Layer 2 (640x256), Next MMU
+  8KB banking (NextRegs `0x50`–`0x57`) across 1MB/2MB SRAM, and NextZXOS
+  filesystem API (`RST 08h`). Packaged as both a standalone `SE.NEX` and a
+  `/dot` command (e.g. `.se <filename>`).
+
+### 7.2 Architecture & Header API Strategy
 - [ ] Define sub-system API header standards (`include/*.inc`) with clear
   register calling conventions (inputs, outputs, clobbered registers).
 - [ ] Establish strict data encapsulation so platform-agnostic core logic
@@ -120,7 +140,7 @@ tasks have been archived.
 - [ ] Maintain deterministic memory layout across modules to preserve TPA
   headroom margins on CP/M while allowing flexible banking on other targets.
 
-### 7.2 Sub-system API Header Specifications (`include/`)
+### 7.3 Sub-system API Header Specifications (`include/`)
 - [ ] `include/config.inc`: Global editor constants, keycodes, geometry,
   line limits, and configuration defaults.
 - [ ] `include/hal.inc`: Hardware Abstraction Layer API defining console,
@@ -140,30 +160,43 @@ tasks have been archived.
   and Upper Memory Host API vector definitions (`PLUGIN_HOST_API`).
 - [ ] `include/beautify.inc`: Z80 assembly formatter & alignment engine API.
 
-### 7.3 Platform Abstraction Layer (HAL / PAL) Architecture
+### 7.4 Platform Abstraction Layer (HAL / PAL) Architecture
 - [ ] Decouple all BDOS calls, VT100 ANSI sequences, and RomWBW HBIOS bank
   switching from core editor logic into platform-specific HAL modules.
-- [ ] Implement CP/M Platform Layer (`hal/cpm/`):
+- [ ] Implement Standard CP/M Platform Layer (`hal/cpm/`):
   - `hal/cpm/hal_cpm_console.asm`: VT100 / ANSI terminal escape sequences,
     cursor positioning, attribute styling, and BDOS console character I/O.
   - `hal/cpm/hal_cpm_memory.asm`: RomWBW HBIOS 512K bank switching and CP/M 3
     banked memory drivers for Far RAM paging.
   - `hal/cpm/hal_cpm_storage.asm`: BDOS FCB operations, CP/M drive & user
     area switching, and swap file (`$$$SE$$$.SWP`) random record I/O.
-- [ ] Implement ZX Spectrum Next Platform Layer (`hal/next/`):
-  - `hal/next/hal_next_console.asm`: Hardware text mode driver (80x25 or
-    80x32 using Next hardware tile/text layer or Layer 2 640x256 font
-    rendering) providing instant flicker-free updates without VT100 overhead.
-  - `hal/next/hal_next_keyboard.asm`: Next matrix / PS/2 keyboard scanner
-    supporting true dedicated arrow keys, PageUp/PageDown, Home, and End.
-  - `hal/next/hal_next_memory.asm`: Next MMU memory management via NextRegs
-    `0x50`–`0x57` mapping 8KB SRAM pages into upper slots ($8000–$FFFF or
-    $4000–$7FFF) to access 1024 KB / 2048 KB on-board SRAM.
-  - `hal/next/hal_next_storage.asm`: NextZXOS / ESXDOS storage driver via
-    `RST 08h` (`M_GETSETDRV`, `F_OPEN`, `F_READ`, `F_WRITE`, `F_CLOSE`,
+- [ ] Implement CP/M on ZX Spectrum Next Platform Layer (`hal/next_cpm/`):
+  - `hal/next_cpm/hal_nextcpm_console.asm`: NextCPM-optimized console driver
+    utilizing NextCPM 80-column display modes, fast screen updates, and
+    Next terminal escape codes.
+  - `hal/next_cpm/hal_nextcpm_keyboard.asm`: Key translation adapter for
+    Next keyboard layouts and extra function/cursor keys under NextCPM.
+  - `hal/next_cpm/hal_nextcpm_memory.asm`: Far RAM paging adapter using
+    NextCPM banked memory services or direct Next MMU paging when permitted
+    by the host CP/M environment.
+  - `hal/next_cpm/hal_nextcpm_storage.asm`: Standard CP/M BDOS FCB storage
+    operating across NextCPM virtual and physical SD card drive mappings.
+- [ ] Implement Native ZX Spectrum Next Platform Layer (`hal/next_native/`):
+  - `hal/next_native/hal_next_console.asm`: Direct hardware text mode driver
+    (80x25 or 80x32 using Next tile/text layer or Layer 2 640x256 font
+    rendering) providing instant flicker-free updates without terminal
+    overhead.
+  - `hal/next_native/hal_next_keyboard.asm`: Native Next matrix and PS/2
+    keyboard scanner supporting dedicated arrow keys, PageUp, PageDown,
+    Home, and End.
+  - `hal/next_native/hal_next_memory.asm`: Next MMU memory management via
+    NextRegs `0x50`–`0x57` mapping 8KB SRAM pages into upper slots
+    ($8000–$FFFF or $4000–$7FFF) to access 1024 KB / 2048 KB on-board SRAM.
+  - `hal/next_native/hal_next_storage.asm`: NextZXOS / ESXDOS storage driver
+    via `RST 08h` (`M_GETSETDRV`, `F_OPEN`, `F_READ`, `F_WRITE`, `F_CLOSE`,
     `F_SEEK`, `F_OPENDIR`) supporting native FAT16/FAT32 paths on SD card.
 
-### 7.4 Core Editor Sub-system Decomposition (`src/core/`)
+### 7.5 Core Editor Sub-system Decomposition (`src/core/`)
 - [ ] `src/core/buffer.asm`: Extract line cache (`LINE_STORAGE`), line split
   and join operations, and virtual slot index tables from `se.asm`.
 - [ ] `src/core/memory.asm`: Extract virtual memory paging coordinator,
@@ -187,18 +220,22 @@ tasks have been archived.
 - [ ] `src/core/beautify.asm`: Extract Z80 code beautifier and column
   alignment subsystem (`DO_CTRL_Y_BEAUTIFY`).
 
-### 7.5 Target Coordinators & Build Pipeline
-- [ ] `src/se.asm`: Refactor top-level CP/M coordinator to include
+### 7.6 Target Coordinators & Build Pipeline
+- [ ] `src/se.asm`: Refactor top-level Standard CP/M coordinator to include
   headers (`include/*.inc`), CP/M HAL (`hal/cpm/*.asm`), and core
   modules (`core/*.asm`).
 - [ ] Verify binary invariance: Ensure modular CP/M build matches original
   monolithic `SE.COM` functionality and preserves TPA headroom (+2,048 B).
-- [ ] `src/se_next.asm`: Create top-level ZX Spectrum Next coordinator
-  combining Next HAL (`hal/next/*.asm`) with core modules (`core/*.asm`).
+- [ ] `src/se_next_cpm.asm`: Create top-level CP/M on Next coordinator
+  combining NextCPM HAL (`hal/next_cpm/*.asm`) with core modules.
+  Produces `SE_NEXT.COM` for deployment under NextCPM.
+- [ ] `src/se_next.asm`: Create top-level Native ZX Spectrum Next coordinator
+  combining Next Native HAL (`hal/next_native/*.asm`) with core modules.
 - [ ] Create Next build targets in `Makefile` to produce:
+  - `SE_NEXT.COM`: CP/M executable tailored for NextCPM environment.
   - `SE.NEX`: Standalone ZX Spectrum Next executable runnable from NextZXOS
     browser (setting CPU speed to 14/28 MHz and configuring MMU).
   - `.se` / `SE`: NextZXOS dot command installed into `/dot` on SD card
     allowing direct CLI invocation (e.g. `.se readme.txt`).
-- [ ] Establish automated testing for Next target using CSpect or ZEsarUX
+- [ ] Establish automated testing for Next targets using CSpect or ZEsarUX
   emulator harnesses.
