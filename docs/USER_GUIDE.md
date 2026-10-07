@@ -291,6 +291,14 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 * **Solution**: Press **`2`** on the splash screen to select `80x24 (Classic
   Mode)`, then press **`c`** and **`s`** to save.
 
+### 9.4 Serial Communications & Flow Control (115200 bps)
+
+* **Speed & Framing**: Set terminal emulator to **115200 bps 8N1**.
+* **Hardware Flow Control**: Enable hardware flow control using full-duplex
+  RTR/CTS operation via the physical RTS/CTS pins (where each device's RTS pin
+  signals Ready To Receive into the peer's CTS pin). Software flow control
+  (XON/XOFF) must be disabled to avoid buffer overflow and dropped characters.
+
 For deep-dive diagnostics, flow control setup, and swap file management,
 consult the complete [Troubleshooting Guide](TROUBLESHOOTING.md).
 

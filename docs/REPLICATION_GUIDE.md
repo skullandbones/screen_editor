@@ -271,8 +271,8 @@ python3 tests/test_editor_headless.py
 If running on real hardware (RC2014, SC126, SC130, SC131):
 
 1. **Connect Serial Console**:
-   - Baud Rate: `115200 8N1`
-   - Flow Control: Hardware RTS/CTS
+   - Speed / Framing: `115200 bps 8N1`
+   - Flow Control: Full-duplex RTR/CTS hardware flow control via RTS/CTS pins
    - Emulation: `VT100` / `ANSI` (e.g. Minicom:
      `minicom -D /dev/ttyUSB0 -b 115200`).
 2. **Transfer Binary**:

@@ -126,15 +126,20 @@ Choose one of the following:
 
 ---
 
-### 2.2 Ghost Characters or Screen Corruption Over Serial (115200 Baud)
+### 2.2 Ghost Characters or Screen Corruption Over Serial (115200 bps)
 
 #### Symptom
 During fast scrolling or continuous cursor movement, characters appear dropped,
 escape sequences leak as raw characters (`[1;1H`), or screen updates jitter.
 
 #### Cause
-At 115200 baud, high-speed ANSI escape sequences overwhelm the serial buffer
-unless hardware flow control is active.
+At 115200 bps, high-speed ANSI escape sequences overwhelm the serial buffer
+unless hardware flow control is active. Full-duplex hardware flow control
+operates as RTR/CTS (Ready To Receive / Clear To Send) by utilizing the
+physical RTS/CTS pins. Each endpoint asserts its RTS pin as an RTR signal
+to indicate that its local receive FIFO/buffer has space; this signal
+connects to the CTS pin of the transmitting peer to grant permission to
+send.
 
 #### Solution
 1. **Enable Hardware Flow Control (RTS/CTS)** in your terminal program:
@@ -143,7 +148,10 @@ unless hardware flow control is active.
      `Software Flow Control: No`.
    - In PuTTY: Connection $\rightarrow$ Serial $\rightarrow$ Flow control:
      `RTS/CTS`.
-2. Ensure serial cabling connects RTS and CTS lines between host and SBC.
+2. **Verify Full-Duplex RTR/CTS Cabling**:
+   Ensure null-modem serial cabling cross-connects TX and RX, and
+   cross-connects RTS (acting as RTR) to CTS in both directions between
+   host and SBC for unthrottled, bidirectional hardware flow control.
 
 ---
 
@@ -208,7 +216,7 @@ reset or power interruption.
 | **Max lines: 256** | RAM disk preserved | Use `Hibernate` (`[C]` -> `[2]`) |
 | **32K fallback** | < 3 banks free | Unload plugins, hibernate RAM disk |
 | **Screen wraps** | 120x40 on 80x24 term | Press `[2]` on splash for 80x24 |
-| **Dropped chars** | No flow control | Enable RTS/CTS flow control |
+| **Dropped chars** | Missing RTR/CTS | Enable RTS/CTS flow control |
 | **RAM disk lost** | `Overwrite` active | Switch to `Preserve` or `Hibernate` |
 | **Plugin error** | Far RAM slots full | Unload plugins with `[U]` in `[P]` |
 | **Paging OOM** | Drive disk full | Free space on drive for `SE.SWP` |

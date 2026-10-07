@@ -308,8 +308,8 @@ make run
 
 #### Option A: Direct Minicom XMODEM Transfer
 
-1. Connect to your RC2014 serial port at `115200 8N1` with hardware flow
-   control:
+1. Connect to your RC2014 serial port at `115200 bps 8N1` with full-duplex
+   RTR/CTS hardware flow control (via RTS/CTS pins):
    ```bash
    minicom -b 115200 -D /dev/ttyUSB0
    ```

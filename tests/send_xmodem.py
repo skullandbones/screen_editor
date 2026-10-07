@@ -19,7 +19,7 @@ def send_file(port="/dev/ttyUSB0", baudrate=115200, filepath=None):
         print(f"[-] File not found: {filepath}")
         return False
 
-    print(f"[*] Opening serial port {port} at {baudrate} baud...")
+    print(f"[*] Opening serial port {port} at {baudrate} bps...")
     ser = serial.Serial(port, baudrate, timeout=3.0)
 
     def getc(size, timeout=1):

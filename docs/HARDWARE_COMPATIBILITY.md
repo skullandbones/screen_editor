@@ -92,7 +92,7 @@ causes:
 
 - **RC2014 Pro / Classic II / Micro**:
   - Full support with RomWBW HBIOS 512KB RAM/ROM modules.
-  - Dual ACIA serial or SIO/2 serial interfaces at 115200 baud.
+  - Dual ACIA serial or SIO/2 serial interfaces at 115200 bps.
 - **Small Computer Central SC126 / SC130 / SC131**:
   - Z180 / Z80 motherboards running RomWBW v3.6.0+ firmware.
 - **Zeta 2 SBC**:
@@ -133,8 +133,9 @@ For optimal full-screen editing over serial connections, configure your
 terminal emulator (Minicom, PuTTY, TeraTerm, screen, or Windows Terminal)
 as follows:
 
-- **Baud Rate**: `115200 8N1` (or SBC default speed).
-- **Flow Control**: Hardware (RTS/CTS) strongly recommended.
+- **Speed / Framing**: `115200 bps 8N1` (or SBC default speed).
+- **Flow Control**: Full-duplex RTR/CTS hardware flow control via the
+  RTS/CTS pins (strongly recommended).
 - **Terminal Emulation**: `VT100`, `VT102`, or `ANSI`.
 - **Screen Geometry**:
   - Modern Default: **120 columns $\times$ 40 rows** (`SE` splash mode `1`).
