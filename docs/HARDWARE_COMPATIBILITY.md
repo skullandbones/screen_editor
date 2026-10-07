@@ -141,3 +141,12 @@ as follows:
   - Classic Retro: **80 columns $\times$ 24 rows** (`SE` splash mode `2`).
 - **Backspace Key**: Set to emit `BS` (`0x08`) or `DEL` (`0x7F`).
 - **Character Encoding**: Standard 7-bit ASCII or ISO-8859-1 (Latin-1).
+
+---
+
+## 6. Operational Troubleshooting & Diagnostics
+
+If your system displays `[256 lines (RAM)]` or encounters serial flow control
+issues, consult the dedicated [Troubleshooting Guide](TROUBLESHOOTING.md) for
+step-by-step resolution procedures.
+

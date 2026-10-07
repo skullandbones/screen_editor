@@ -359,6 +359,11 @@ screen_editor/
 │   ├── mkprl.py            # CP/M 3 PRL and OVL binary packager
 │   └── z80_beautifier/     # Multi-dialect Z80 assembly reformatter
 ├── docs/                   # Architecture, UI/UX, and reference specs
+│   ├── ARCHITECTURE.md     # Technical specification & memory layout
+│   ├── BUILD_SETUP.md      # Toolchain setup and verification
+│   ├── USER_GUIDE.md       # Complete user guide and manual
+│   ├── TROUBLESHOOTING.md  # Diagnostic & troubleshooting guide
+│   ├── HARDWARE_COMPATIBILITY.md # Hardware & RomWBW requirements
 │   ├── UI_UX_DESIGN.md     # Visual hierarchy and screen design rules
 │   └── KEYBINDINGS.md      # Complete editor and splash key reference
 └── tests/                  # Automated integration and regression suites

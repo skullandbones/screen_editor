@@ -257,3 +257,40 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
   - `ROT13.PRL`: Caesar cipher text transform.
   - `WORDCNT.OVL`: Document word, line, and character counter.
   - `FATFS.PRL`: Direct FAT32 SD-card filesystem reader/writer.
+
+---
+
+## 9. Troubleshooting & Common Questions
+
+### 9.1 Splash Screen Shows "Max Lines: [256 lines (RAM)]"
+
+* **Cause**: By default, `SE.COM` runs in `Preserve` mode to protect RomWBW RAM
+  disk `A:`. When all upper RAM banks are reserved for `Drive A:`, `SE.COM`
+  detects no free Far RAM banks and falls back to conventional 64KB RAM mode.
+* **Solution**:
+  1. From the splash screen, press **`c`** to enter Configuration.
+  2. Press **`2`** to set **RAM Drive** to `Hibernate` (swaps RAM disk to disk
+     during editing) or `Overwrite` (reclaims all upper banks).
+  3. Press **`s`** to save to `SE.CFG`.
+  4. Return to the splash screen; line capacity will now show `[16,384 lines]`.
+
+### 9.2 How to Maximise the Number of Editor Lines (Up to 32,768 Lines)
+
+* **Step 1**: Press **`c`** for Configuration, then press **`3`** to set
+  **Max Document Lines** to `32,768 lines`.
+* **Step 2**: Ensure at least 3 Far RAM banks are available (set RAM Drive to
+  `Hibernate` or `Overwrite`, and unload unused resident plugins via `[P]`).
+* **Step 3**: Press **`s`** to save to `SE.CFG`.
+* **Step 4**: Press **`m`** on splash to inspect bank allocations in the
+  **Memory Map**.
+
+### 9.3 Garbled Pop-ups or Screen Wrapping at 80 Columns
+
+* **Cause**: Terminal emulator is set to standard 80x24, while `SE.COM` defaults
+  to 120x40 widescreen mode.
+* **Solution**: Press **`2`** on the splash screen to select `80x24 (Classic
+  Mode)`, then press **`c`** and **`s`** to save.
+
+For deep-dive diagnostics, flow control setup, and swap file management,
+consult the complete [Troubleshooting Guide](TROUBLESHOOTING.md).
+

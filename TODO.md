@@ -799,6 +799,9 @@ upcoming milestones for SE.COM.
     Point 4, Point 5), search/replace, configuration, and plugins.
   - `docs/REPLICATION_GUIDE.md`: Step-by-step from-scratch setup recipe covering
     host packages, z88dk/emulator builds, RomWBW binaries, and verification.
+  - `docs/TROUBLESHOOTING.md`: Operational guide covering document capacity
+    maximization, 256-line RAM mode recovery, display geometry, flow control,
+    and swap management.
   - Updated `docs/KEYBINDINGS.md` to document new block mode controls.
 
 ### 6.2 Review and Enhance Subroutine Comments in `SE.ASM`
