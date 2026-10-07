@@ -8,6 +8,7 @@
 *.tmp
 *.bak
 *.COM
+!SE.COM
 *.bin
 *.PRL
 *.OVL

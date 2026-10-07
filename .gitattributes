@@ -1,2 +1,15 @@
 # Ensure all text files use Unix/Linux LF line endings
 * text eol=lf
+
+# Binary files must not undergo newline conversion
+*.COM binary
+*.bin binary
+*.PRL binary
+*.OVL binary
+*.prl binary
+*.ovl binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
