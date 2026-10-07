@@ -48,15 +48,11 @@ If running on RomWBW hardware with 512KB RAM:
    - Return to the splash screen. The **Max Lines** field will now display
      `[16,384 lines]` or `[32,768 lines]`.
 
-2. **Verify Memory Hardware with the Built-In Diagnostic**:
-   - On the splash screen, press **`t`** or **`T`** to launch the **512KB
-     Extended Memory Diagnostic**.
-   - Verify that RomWBW HBIOS is detected and that inter-bank copy tests pass:
-     ```text
-     [+] RomWBW HBIOS API (RST 08H): DETECTED
-     [*] Installed RAM Banks: 16 x 32KB (512KB Total RAM)
-     [+] 512KB Far Memory Banking Test: PASSED!
-     ```
+2. **Verify Memory Allocation on the Memory Info Screen**:
+   - On the splash screen, press **`m`** or **`M`** to open the **Memory Map &
+     Bank Allocation Screen**.
+   - Verify that RomWBW HBIOS Far RAM banks are detected and that document
+     buffer banks are active.
 
 ---
 
