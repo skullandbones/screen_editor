@@ -851,12 +851,9 @@ CHECK_CTRL_K:
 	JR	NZ,CHECK_CTRL_D
 
 	LD	A,(BLOCK_ACTIVE)
-	CP	1			; Is dynamic block selection active?
-	JR	NZ,DO_HELP_SCREEN	; If not in selection mode, show help screen!
-
-	; Solidify active block
-	CALL	SOLIDIFY_BLOCK
-	JP	MAIN_LOOP
+	OR	A
+	JP	NZ,DO_BLOCK_MENU_POPUP	; Block active: show block modal!
+	JP	DO_HELP_SCREEN		; Inactive: show help screen!
 
 DO_HELP_SCREEN:
 	CALL	FLUSH_DEFERRED_RENDER
@@ -1033,12 +1030,12 @@ DO_PAGE_DOWN:
 	JP	MAIN_LOOP
 
 CHECK_ENTER:
-	; Enter -> Insert new line at CUR_ROW+1
+	; Enter -> Solidify selection if dynamic, else insert new line
 	CP	KEY_ENTER
 	JR	NZ,CHECK_BACKSPACE
 	LD	A,(BLOCK_ACTIVE)
 	CP	1
-	JR	Z,DO_ENTER_CANCEL_SETUP
+	JR	Z,DO_ENTER_SOLIDIFY_SETUP
 	CALL	CANCEL_BLOCK
 	CALL	DO_INSERT_LINE
 	JR	C,ENTER_INS_DONE
@@ -1047,8 +1044,8 @@ CHECK_ENTER:
 ENTER_INS_DONE:
 	JP	MAIN_LOOP
 
-DO_ENTER_CANCEL_SETUP:
-	CALL	CANCEL_BLOCK
+DO_ENTER_SOLIDIFY_SETUP:
+	CALL	SOLIDIFY_BLOCK
 	JP	MAIN_LOOP
 
 CHECK_BACKSPACE:
@@ -3348,10 +3345,8 @@ PRINT_DIGIT:
 ;------------------------------------------------------------------------------
 TOGGLE_BLOCK_MODE:
 	LD	A,(BLOCK_ACTIVE)
-	CP	2
-	JR	Z,CANCEL_BLOCK		; Solidified block: Ctrl-B cancels
-	CP	1
-	JR	Z,TBM_CHECK_MOVED
+	OR	A
+	JR	NZ,CANCEL_BLOCK		; Active (1 or 2): Ctrl-B cancels/clears
 
 	; Block inactive (0): activate and anchor at current cursor
 START_NEW_BLOCK_AT_CURSOR:
@@ -3364,28 +3359,6 @@ START_NEW_BLOCK_AT_CURSOR:
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
 	RET
-
-TBM_CHECK_MOVED:
-	; BLOCK_ACTIVE == 1: check if cursor moved away from anchor
-	LD	HL,(BLOCK_ANCHOR_ROW)
-	LD	DE,(CUR_DOC_ROW)
-	LD	A,H
-	CP	D
-	JR	NZ,START_NEW_BLOCK_AT_CURSOR
-	LD	A,L
-	CP	E
-	JR	NZ,START_NEW_BLOCK_AT_CURSOR
-	LD	HL,(BLOCK_ANCHOR_COL)
-	LD	DE,(CUR_COL)
-	LD	A,H
-	CP	D
-	JR	NZ,START_NEW_BLOCK_AT_CURSOR
-	LD	A,L
-	CP	E
-	JR	NZ,START_NEW_BLOCK_AT_CURSOR
-
-	; Cursor did not move: toggle off (cancel)
-	JR	CANCEL_BLOCK
 
 ;------------------------------------------------------------------------------
 ; CANCEL_BLOCK: Cancel active block selection (state 1 or 2), refresh screen
@@ -3413,6 +3386,325 @@ SOLIDIFY_BLOCK:
 	LD	(BLOCK_ACTIVE),A	; State 2 = Solidified / Locked
 	LD	A,1
 	LD	(NEED_SCREEN_RENDER),A
+	RET
+
+;------------------------------------------------------------------------------
+; DO_BLOCK_MENU_POPUP: Centered Tier 2 Modal Dialog for Block Operations (^K)
+; Dimensions: 50 columns x 7 rows.
+; Line 1: Top border (+------------------------------------------------+)
+; Line 2: Title      (|                Block Operations                |)
+; Line 3: Separator  (+------------------------------------------------+)
+; Line 4: Status     (|              Selection: 5 lines                |)
+; Line 5: Actions    (|  [Enter]=Lock/Set    [^C]=Copy    [^X]=Move    |)
+;         or         (|      [^C]=Copy Block      [^X]=Move Block      |)
+; Line 6: Commands   (|  [^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close  |)
+; Line 7: Bottom border (+------------------------------------------------+)
+;------------------------------------------------------------------------------
+DO_BLOCK_MENU_POPUP:
+	CALL	FLUSH_DEFERRED_RENDER
+	CALL	NORMALIZE_BLOCK_BOUNDS
+
+	; Calculate centering: POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
+	LD	A,(ACTIVE_COLS)
+	SUB	50
+	SRL	A
+	INC	A
+	LD	(POPUP_COL),A
+
+	; POPUP_ROW = ((ACTIVE_ROWS - 7) / 2) + 1
+	LD	A,(ACTIVE_ROWS)
+	SUB	7
+	SRL	A
+	INC	A
+	LD	(POPUP_ROW),A
+
+	CALL	TERM_HIDE_CURSOR
+
+	; Line 1: Top border
+	CALL	POPUP_PRINT_BORDER
+
+	; Line 2: Title
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_BLOCK_POPUP_TITLE
+	CALL	PRINT_STR
+
+	; Line 3: Separator border
+	CALL	POPUP_PRINT_BORDER
+
+	; Line 4: Dynamic Selection / Block count
+	CALL	FORMAT_BLOCK_POPUP_LINE4
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,BLOCK_POPUP_LINE4_BUF
+	CALL	PRINT_STR
+
+	; Line 5: Primary Actions (Dynamic vs Solidified)
+	CALL	POPUP_LOCATE_NEXT
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	Z,BMP_DRAW_SOLID_LINE5
+	LD	DE,STR_BLOCK_POPUP_KEYS_SEL
+	JR	BMP_DRAW_LINE5
+BMP_DRAW_SOLID_LINE5:
+	LD	DE,STR_BLOCK_POPUP_KEYS_BLK
+BMP_DRAW_LINE5:
+	CALL	PRINT_STR
+
+	; Line 6: Commands
+	CALL	POPUP_LOCATE_NEXT
+	LD	DE,STR_BLOCK_POPUP_CMDS
+	CALL	PRINT_STR
+
+	; Line 7: Bottom border
+	CALL	POPUP_PRINT_BORDER
+
+BMP_KEY_LOOP:
+	CALL	GET_KEY
+	CP	KEY_ESC
+	JR	Z,BMP_ESC
+	CP	KEY_ENTER
+	JR	Z,BMP_ENTER
+	CP	KEY_CTRL_B
+	JR	Z,BMP_CLEAR
+	CP	'b'
+	JR	Z,BMP_CLEAR
+	CP	'B'
+	JR	Z,BMP_CLEAR
+	CP	KEY_CTRL_C
+	JR	Z,BMP_COPY
+	CP	'c'
+	JR	Z,BMP_COPY
+	CP	'C'
+	JR	Z,BMP_COPY
+	CP	KEY_CTRL_X
+	JR	Z,BMP_MOVE
+	CP	'x'
+	JR	Z,BMP_MOVE
+	CP	'X'
+	JR	Z,BMP_MOVE
+	CP	KEY_CTRL_D
+	JR	Z,BMP_DEL
+	CP	'd'
+	JR	Z,BMP_DEL
+	CP	'D'
+	JR	Z,BMP_DEL
+	CP	KEY_DEL
+	JR	Z,BMP_DEL
+	CP	KEY_CTRL_S
+	JR	Z,BMP_SAVE
+	CP	's'
+	JR	Z,BMP_SAVE
+	CP	'S'
+	JR	Z,BMP_SAVE
+	JR	BMP_KEY_LOOP
+
+BMP_ESC:
+	CALL	DRAIN_ESC_SEQUENCE
+	CALL	BMP_RESTORE_SCREEN
+	JP	MAIN_LOOP
+
+BMP_CLEAR:
+	CALL	CANCEL_BLOCK
+	CALL	BMP_RESTORE_SCREEN
+	JP	MAIN_LOOP
+
+BMP_ENTER:
+	CALL	SOLIDIFY_BLOCK
+	CALL	BMP_RESTORE_SCREEN
+	JP	MAIN_LOOP
+
+BMP_COPY:
+	CALL	SOLIDIFY_BLOCK
+	CALL	BMP_RESTORE_SCREEN
+	CALL	DO_COPY_BLOCK
+	JP	MAIN_LOOP
+
+BMP_MOVE:
+	CALL	SOLIDIFY_BLOCK
+	CALL	BMP_RESTORE_SCREEN
+	CALL	DO_MOVE_BLOCK
+	JP	MAIN_LOOP
+
+BMP_DEL:
+	CALL	SOLIDIFY_BLOCK
+	CALL	BMP_RESTORE_SCREEN
+	CALL	DO_DELETE_BLOCK
+	JP	MAIN_LOOP
+
+BMP_SAVE:
+	CALL	SOLIDIFY_BLOCK
+	CALL	DO_BLOCK_SAVE_FILE
+	JP	MAIN_LOOP
+
+BMP_RESTORE_SCREEN:
+	CALL	TERM_INIT
+	CALL	RENDER_SCREEN
+	CALL	RENDER_STATUS_BAR
+	CALL	TERM_SHOW_CURSOR
+	CALL	LOCATE_CURSOR
+	XOR	A
+	LD	(NEED_SCREEN_RENDER),A
+	LD	(NEED_LINE_RENDER),A
+	LD	(NEED_STATUS_RENDER),A
+	RET
+
+;------------------------------------------------------------------------------
+; FORMAT_BLOCK_POPUP_LINE4:
+; Formats Line 4 of Block Operations modal:
+;   "|             Selection: 5 lines                 |"
+; or
+;   "|            Marked Block: 5 lines               |"
+; Centered horizontally inside 50-column box borders (| ... |).
+; Output: BLOCK_POPUP_LINE4_BUF populated with 50 chars + null terminator.
+; Preserves: None
+;------------------------------------------------------------------------------
+FORMAT_BLOCK_POPUP_LINE4:
+	PUSH	BC
+	PUSH	DE
+	PUSH	IX
+
+	; 1. Pre-fill BLOCK_POPUP_LINE4_BUF with '|', 48 spaces, '|', 0
+	LD	HL,BLOCK_POPUP_LINE4_BUF
+	LD	(HL),'|'
+	INC	HL
+	LD	B,48
+	LD	A,' '
+FBPL_FILL:
+	LD	(HL),A
+	INC	HL
+	DJNZ	FBPL_FILL
+	LD	(HL),'|'
+	INC	HL
+	LD	(HL),0
+
+	; 2. Check if single-line or multi-line
+	CALL	NORMALIZE_BLOCK_BOUNDS
+	LD	HL,(BLOCK_START_ROW)
+	LD	DE,(BLOCK_END_ROW)
+	LD	A,H
+	CP	D
+	JR	NZ,FBPL_MULTILINE
+	LD	A,L
+	CP	E
+	JR	NZ,FBPL_MULTILINE
+
+	; Single line: char count = BLOCK_END_COL - BLOCK_START_COL
+	LD	A,(BLOCK_END_COL)
+	LD	HL,BLOCK_START_COL
+	SUB	(HL)				; A = char count
+	LD	L,A
+	LD	H,0
+	PUSH	HL				; Save count on stack
+	CALL	GET_DEC_WORD_DIGITS		; A = digits (1..5)
+	LD	B,A				; B = digits
+	; Suffix: if count == 1, " char" (5 chars); else " chars" (6 chars)
+	POP	HL				; HL = count
+	PUSH	HL				; Keep count on stack
+	LD	A,H
+	OR	A
+	JR	NZ,FBPL_CHARS
+	LD	A,L
+	CP	1
+	JR	NZ,FBPL_CHARS
+	LD	IY,STR_STAT_CHAR_S		; " char"
+	LD	E,5				; suffix len in E
+	JR	FBPL_GET_PREFIX
+FBPL_CHARS:
+	LD	IY,STR_STAT_CHARS_S		; " chars"
+	LD	E,6				; suffix len in E
+	JR	FBPL_GET_PREFIX
+
+FBPL_MULTILINE:
+	CALL	GET_BLOCK_BOUNDS		; BC = line count
+	LD	L,C
+	LD	H,B
+	PUSH	HL				; Save count on stack
+	CALL	GET_DEC_WORD_DIGITS		; A = digits (1..5)
+	LD	B,A				; B = digits
+	; Suffix: if count == 1, " line" (5 chars); else " lines" (6 chars)
+	POP	HL				; HL = count
+	PUSH	HL				; Keep count on stack
+	LD	A,H
+	OR	A
+	JR	NZ,FBPL_LINES
+	LD	A,L
+	CP	1
+	JR	NZ,FBPL_LINES
+	LD	IY,STR_STAT_LINE_S		; " line"
+	LD	E,5				; suffix len in E
+	JR	FBPL_GET_PREFIX
+FBPL_LINES:
+	LD	IY,STR_STAT_LINES_S		; " lines"
+	LD	E,6				; suffix len in E
+
+FBPL_GET_PREFIX:
+	; 3. Determine prefix pointer and length (safe after GET_BLOCK_BOUNDS)
+	LD	A,(BLOCK_ACTIVE)
+	CP	2
+	JR	Z,FBPL_PRE_BLK
+	LD	IX,STR_BLOCK_POPUP_SEL_PRE	; "Selection: "
+	LD	C,11				; prefix len in C
+	JR	FBPL_CALC_LEN
+FBPL_PRE_BLK:
+	LD	IX,STR_BLOCK_POPUP_BLK_PRE	; "Marked Block: "
+	LD	C,14				; prefix len in C
+
+FBPL_CALC_LEN:
+	; Total length L = C (prefix) + B (digits) + E (suffix)
+	LD	A,C
+	ADD	A,B
+	ADD	A,E				; A = total text length L
+	; Left spaces = (48 - L) / 2
+	LD	D,A				; D = L
+	LD	A,48
+	SUB	D				; A = 48 - L
+	SRL	A				; A = (48 - L) / 2
+	INC	A				; + 1 for initial '|'
+	; Target destination in HL = BLOCK_POPUP_LINE4_BUF + A
+	LD	HL,BLOCK_POPUP_LINE4_BUF
+	LD	D,0
+	LD	E,A
+	ADD	HL,DE				; HL = target destination
+
+	; 4. Copy prefix (C chars from IX to HL)
+	PUSH	BC				; Save B=digits, C=prefix len
+	LD	B,C
+FBPL_CPY_PRE:
+	LD	A,(IX)
+	LD	(HL),A
+	INC	IX
+	INC	HL
+	DJNZ	FBPL_CPY_PRE
+	POP	BC				; Restore B=digits
+
+	; 5. Format digits and copy to HL
+	EX	DE,HL				; DE = dest
+	POP	HL				; HL = count (from stack)
+	PUSH	DE				; Save dest on stack
+	CALL	FORMAT_DEC_WORD_RAM		; DE = pointer to first digit
+	POP	HL				; HL = dest
+FBPL_CPY_DIG:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FBPL_CPY_DIG
+
+	; 6. Copy suffix from IY until '$' or 0
+FBPL_CPY_SUF:
+	LD	A,(IY)
+	CP	'$'
+	JR	Z,FBPL_DONE
+	OR	A
+	JR	Z,FBPL_DONE
+	LD	(HL),A
+	INC	IY
+	INC	HL
+	JR	FBPL_CPY_SUF
+
+FBPL_DONE:
+	POP	IX
+	POP	DE
+	POP	BC
 	RET
 
 ;------------------------------------------------------------------------------
@@ -5761,10 +6053,10 @@ SHOW_STATUS_REST:
 	CP	2
 	JR	Z,STATUS_SOLIDIFIED
 
-	; Dynamic selection active: "[SEL: "
+	; Dynamic selection active: "Sel: " (5 chars)
 	LD	DE,STR_SEL_PREFIX
 	CALL	PRINT_STR
-	LD	C,6			; 6 chars for "[SEL: "
+	LD	C,5			; 5 chars for "Sel: "
 
 	; Check if single-line or multi-line
 	LD	HL,(BLOCK_START_ROW)
@@ -5779,8 +6071,10 @@ SHOW_STATUS_REST:
 	; Single-line selection: chars count
 	LD	A,(BLOCK_END_COL)
 	LD	HL,BLOCK_START_COL
-	SUB	(HL)			; A = char count (BLOCK_END_COL - BLOCK_START_COL)
+	SUB	(HL)			; A = char count (0..120)
+	PUSH	AF
 	CALL	PRINT_DEC_BYTE
+	POP	AF
 	INC	C			; at least 1 digit
 	CP	10
 	JR	C,S_SEL_DIG_DONE
@@ -5789,29 +6083,58 @@ SHOW_STATUS_REST:
 	JR	C,S_SEL_DIG_DONE
 	INC	C
 S_SEL_DIG_DONE:
-	LD	DE,STR_CHAR_SUFFIX	; "c]"
+	CP	1
+	JR	NZ,S_SEL_CHARS
+	LD	DE,STR_STAT_CHAR_S	; " char"
 	CALL	PRINT_STR
-	INC	C
-	INC	C			; + 2 for "c]"
-	JR	STATUS_BLOCK_PAD
+	LD	A,C
+	ADD	A,5
+	LD	C,A
+	JP	STATUS_BLOCK_PAD
+S_SEL_CHARS:
+	LD	DE,STR_STAT_CHARS_S	; " chars"
+	CALL	PRINT_STR
+	LD	A,C
+	ADD	A,6
+	LD	C,A
+	JP	STATUS_BLOCK_PAD
 
 STATUS_SEL_MULTILINE:
 	CALL	GET_BLOCK_BOUNDS	; BC = line count
 	LD	L,C
 	LD	H,B
 	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
-	ADD	A,6+2			; 6 ("[SEL: ") + digits + 2 ("L]")
+	ADD	A,5			; A = digits + 5 ("Sel: ")
 	LD	C,A
+	PUSH	HL			; Save line count
 	CALL	PRINT_DEC_WORD
-	LD	DE,STR_LINE_SUFFIX	; "L]"
+	POP	HL			; Restore line count
+	; Check if line count is 1
+	LD	A,H
+	OR	A
+	JR	NZ,S_SEL_LINES
+	LD	A,L
+	CP	1
+	JR	NZ,S_SEL_LINES
+	LD	DE,STR_STAT_LINE_S	; " line"
 	CALL	PRINT_STR
-	JR	STATUS_BLOCK_PAD
+	LD	A,C
+	ADD	A,5
+	LD	C,A
+	JP	STATUS_BLOCK_PAD
+S_SEL_LINES:
+	LD	DE,STR_STAT_LINES_S	; " lines"
+	CALL	PRINT_STR
+	LD	A,C
+	ADD	A,6
+	LD	C,A
+	JP	STATUS_BLOCK_PAD
 
 STATUS_SOLIDIFIED:
-	; Solidified block: "[BLK: "
+	; Solidified block: "Block: " (7 chars)
 	LD	DE,STR_BLK_PREFIX
 	CALL	PRINT_STR
-	LD	C,6			; 6 for "[BLK: "
+	LD	C,7			; 7 for "Block: "
 
 	LD	HL,(BLOCK_START_ROW)
 	LD	DE,(BLOCK_END_ROW)
@@ -5825,8 +6148,10 @@ STATUS_SOLIDIFIED:
 	; Single-line solidified: chars count
 	LD	A,(BLOCK_END_COL)
 	LD	HL,BLOCK_START_COL
-	SUB	(HL)			; A = char count (BLOCK_END_COL - BLOCK_START_COL)
+	SUB	(HL)			; A = char count
+	PUSH	AF
 	CALL	PRINT_DEC_BYTE
+	POP	AF
 	INC	C			; at least 1 digit
 	CP	10
 	JR	C,S_SOL_DIG_DONE
@@ -5835,23 +6160,65 @@ STATUS_SOLIDIFIED:
 	JR	C,S_SOL_DIG_DONE
 	INC	C
 S_SOL_DIG_DONE:
-	LD	DE,STR_CHAR_LOCK_SUFFIX	; "c LOCK]"
+	CP	1
+	JR	NZ,S_SOL_CHARS
+	LD	DE,STR_STAT_CHAR_S	; " char"
 	CALL	PRINT_STR
 	LD	A,C
-	ADD	A,7			; + 7 for "c LOCK]"
+	ADD	A,5
 	LD	C,A
-	JR	STATUS_BLOCK_PAD
+	JP	STATUS_BLOCK_PAD
+S_SOL_CHARS:
+	CP	100
+	JR	NC,S_SOL_C_SFX
+	LD	DE,STR_STAT_CHARS_S	; " chars"
+	CALL	PRINT_STR
+	LD	A,C
+	ADD	A,6
+	LD	C,A
+	JP	STATUS_BLOCK_PAD
+S_SOL_C_SFX:
+	LD	DE,STR_STAT_C_SUFFIX	; "c"
+	CALL	PRINT_STR
+	INC	C
+	JP	STATUS_BLOCK_PAD
 
 STATUS_SOLID_MULTILINE:
 	CALL	GET_BLOCK_BOUNDS	; BC = line count
 	LD	L,C
 	LD	H,B
 	CALL	GET_DEC_WORD_DIGITS	; A = digits (1..5)
-	ADD	A,6+7			; 6 ("[BLK: ") + digits + 7 ("L LOCK]")
+	ADD	A,7			; A = digits + 7 ("Block: ")
 	LD	C,A
+	PUSH	HL			; Save line count
 	CALL	PRINT_DEC_WORD
-	LD	DE,STR_LINE_LOCK_SUFFIX	; "L LOCK]"
+	POP	HL			; Restore line count
+	LD	A,H
+	OR	A
+	JR	NZ,S_SOL_L_SFX		; >= 256 lines -> "L"
+	LD	A,L
+	CP	100
+	JR	NC,S_SOL_L_SFX		; >= 100 lines -> "L"
+	CP	1
+	JR	NZ,S_SOL_LINES
+	LD	DE,STR_STAT_LINE_S	; " line"
 	CALL	PRINT_STR
+	LD	A,C
+	ADD	A,5
+	LD	C,A
+	JP	STATUS_BLOCK_PAD
+S_SOL_LINES:
+	LD	DE,STR_STAT_LINES_S	; " lines"
+	CALL	PRINT_STR
+	LD	A,C
+	ADD	A,6
+	LD	C,A
+	JP	STATUS_BLOCK_PAD
+S_SOL_L_SFX:
+	LD	DE,STR_STAT_L_SUFFIX	; "L"
+	CALL	PRINT_STR
+	INC	C
+	JR	STATUS_BLOCK_PAD
 
 STATUS_BLOCK_PAD:
 	LD	A,C
@@ -23683,6 +24050,20 @@ STR_POPUP_FAT_MISS_MSG1:
 STR_POPUP_FAT_MISS_MSG2:
 	DB	"|      FAT filesystem plugin is not loaded.      |", 0
 
+; Block Operations Modal Pop-up Strings (50 cols x 7 rows)
+STR_BLOCK_POPUP_TITLE:
+	DB	"|                Block Operations                |", 0
+STR_BLOCK_POPUP_SEL_PRE:
+	DB	"Selection: "
+STR_BLOCK_POPUP_BLK_PRE:
+	DB	"Marked Block: "
+STR_BLOCK_POPUP_KEYS_SEL:
+	DB	"|  [Enter]=Lock/Set    [^C]=Copy    [^X]=Move    |", 0
+STR_BLOCK_POPUP_KEYS_BLK:
+	DB	"|      [^C]=Copy Block      [^X]=Move Block      |", 0
+STR_BLOCK_POPUP_CMDS:
+	DB	"|  [^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close  |", 0
+
 ;------------------------------------------------------------------------------
 ; String Constants & Data
 ;------------------------------------------------------------------------------
@@ -23904,17 +24285,14 @@ STR_STATUS_FREE:	DB	"Free: ","$"
 
 STR_STATUS_KB:		DB	" KB","$"
 
-STR_SEL_PREFIX:	DB	"[SEL: ","$"
-
-STR_BLK_PREFIX:	DB	"[BLK: ","$"
-
-STR_CHAR_SUFFIX:	DB	"c]","$"
-
-STR_LINE_SUFFIX:	DB	"L]","$"
-
-STR_CHAR_LOCK_SUFFIX:	DB	"c LOCK]","$"
-
-STR_LINE_LOCK_SUFFIX:	DB	"L LOCK]","$"
+STR_SEL_PREFIX:		DB	"Sel: ","$"
+STR_BLK_PREFIX:		DB	"Block: ","$"
+STR_STAT_LINE_S:	DB	" line","$"
+STR_STAT_LINES_S:	DB	" lines","$"
+STR_STAT_CHAR_S:	DB	" char","$"
+STR_STAT_CHARS_S:	DB	" chars","$"
+STR_STAT_L_SUFFIX:	DB	"L","$"
+STR_STAT_C_SUFFIX:	DB	"c","$"
 
 STR_STATUS_SEP:	DB	" | ","$"
 
@@ -24061,6 +24439,7 @@ INSERT_LINE_HAD_CHARS:	DB	0		; 1 if current line of inserted file had chars
 IS_EXIT_PROMPT:		DB	0		; 1 if currently in Save Changes Exit Prompt
 REPLACE_ACTIVE:		DB	0		; 1 during active Search & Replace loop
 REPLACE_DONE_POPUP_MSG2: DS	51		; 50-col Msg2 buffer for Replace Done popup
+BLOCK_POPUP_LINE4_BUF:	DS	51		; 50-col Line 4 buffer for Block modal
 INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0		; Streaming insert current line length
 INSERT_NEW_CUR_COL:	DW	0		; Cursor column position after insert
