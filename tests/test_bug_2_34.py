@@ -6,7 +6,7 @@ Progress Dialog Line Counter Leaks Debris Trailing Zero.
 Verifies:
   1. Boot CP/M and copy a multi-hundred line file (e.g. 250 lines) to disk.
   2. Launch 'se LONG.TXT' and capture the progress modal output.
-  3. Verify the initial progress line template has initial '0' aligned at col 30:
+  3. Verify initial progress line template has initial '0' aligned at col 30:
      "|                   Line     0                   |"
   4. Verify the line counter updates correctly:
      - Shows "Line   100" at 100 lines (NOT "Line   1000")
