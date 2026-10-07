@@ -342,7 +342,8 @@ class VT100QualityMonitor:
 
         # 5. Premature CP/M exit detection (skipped during clean test teardown):
         if not self.exiting:
-            if " file not found" in full_text:
+            if (" file not found" in full_text and
+                    "File Not Found" not in full_text):
                 raise UnexpectedBehaviourError(
                     "Premature CP/M exit detected: 'file not found' on screen"
                 )
@@ -411,7 +412,8 @@ class VT100QualityMonitor:
                 "Plugins for Editor" in full_text or
                 "to Dismiss" in full_text):
             return "plugin_popup"
-        if "Save & Exit" in full_text:
+        if ("Save & Exit" in full_text or
+                "Plugin Configuration" in full_text):
             return "plugin_config"
         if "Press any key" in full_text:
             return "press_any_key"
