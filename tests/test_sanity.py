@@ -6,7 +6,7 @@ Verifies the core lifecycle of SE.COM:
   2. Verify Splash Screen rendering
   3. Enter Editor Mode and verify Status Bar
   4. Type text and verify character buffer rendering
-  5. Toggle Block Selection (Ctrl+B) and verify [SEL: 0c]
+  5. Toggle Block Selection (Ctrl+B) and verify Sel: 0 chars
   6. Cancel Block Selection (Ctrl+B)
   7. Open Editor Mode Keys Help (Ctrl+K) and return to editor
   8. Clean exit (Ctrl+Q) back to CP/M prompt (C>)
@@ -99,13 +99,15 @@ def run_sanity_test():
                        stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL)
 
-    print("[*] Launching RomWBW on RC2014 emulator (Sanity Suite)...", flush=True)
+    print("[*] Launching RomWBW on RC2014 emulator (Sanity Suite)...",
+          flush=True)
     master, slave = os.openpty()
     tty.setraw(slave)
     os.set_blocking(master, False)
 
     cmd = [emu_bin, "-b", "-r", rom_file, "-1", "-S", img_file]
-    proc = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True)
+    proc = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=slave,
+                            close_fds=True)
     os.close(slave)
 
     try:
@@ -173,11 +175,11 @@ def run_sanity_test():
         print("[+] Step 5: Text insertion and cursor tracking verified.",
               flush=True)
 
-        # 6. Test Block Mode toggle: Ctrl+B to start, verify [SEL: 0c]
+        # 6. Test Block Mode toggle: Ctrl+B to start, verify Sel: 0 chars
         print("[*] Step 6: Testing Block Mode toggle (Ctrl+B)...", flush=True)
         os.write(master, b"\x02")
-        out_blk = read_until(master, b"[SEL: 0c]", timeout=3.0)
-        if b"[SEL: 0c]" not in out_blk:
+        out_blk = read_until(master, b"Sel: 0 chars", timeout=3.0)
+        if b"Sel: 0 chars" not in out_blk:
             print(f"[-] Step 6: Block mode activation failed. Buffer: "
                   f"{repr(out_blk)}", flush=True)
             return False
@@ -268,7 +270,8 @@ def run_sanity_test():
         print("[+] Step 9: Clean exit back to CP/M prompt.", flush=True)
 
         elapsed = time.time() - t_start
-        print(f"[+] All SE.COM sanity tests PASSED in {elapsed:.2f}s!", flush=True)
+        print(f"[+] All SE.COM sanity tests PASSED in {elapsed:.2f}s!",
+              flush=True)
         return True
 
     finally:

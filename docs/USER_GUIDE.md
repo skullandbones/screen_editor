@@ -2,7 +2,15 @@
 
 **`SE.COM`** is a high-performance full-screen text editor written in 100% Z80
 assembly language for CP/M 2.2 and CP/M 3.0 systems running the **RomWBW**
-firmware platform (RC2014, SC126, SC130, SC131, Zeta 2, and compatibles).
+firmware platform (specifically **RomWBW v3.6.0 or later** on RC2014, SC126,
+SC130, SC131, Zeta 2, and compatibles).
+
+> [!IMPORTANT]
+> **Firmware Requirement**: `SE.COM` is strictly designed to run on **RomWBW
+> v3.6.0 and later**. Earlier versions and generic CP/M BIOSes lack the
+> standardized HBIOS `RST 08H` Far RAM memory management and RAM drive
+> introspection services required by the editor. See
+> [HARDWARE_COMPATIBILITY.md](HARDWARE_COMPATIBILITY.md) for details.
 
 ---
 

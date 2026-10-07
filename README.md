@@ -1,11 +1,19 @@
 # SE: CP/M Full-Screen Text Editor for RomWBW / RC2014
 
-**SE** (`SE.COM`) is a high-performance, full-screen text editor written in 100% Z80 assembly, specifically designed for CP/M 2.2 / 3.0 systems running the **RomWBW** firmware (e.g. RC2014, SC126, Zeta 2, SBC) communicating over **Minicom** or any standard VT100/ANSI terminal emulator.
+**SE** (`SE.COM`) is a high-performance, full-screen text editor written in 100%
+Z80 assembly, specifically designed and supported to run on CP/M 2.2 / 3.0
+systems running **RomWBW v3.6.0 or later** (e.g. RC2014, SC126, Zeta 2, SBC)
+communicating over **Minicom** or any standard VT100/ANSI terminal emulator.
 
 ---
 
 ## Key Features
 
+* **RomWBW v3.6.0+ Firmware Requirement**: Engineered strictly for RomWBW
+  v3.6.0 and later. Interfaces directly with standardized HBIOS `RST 08H`
+  vectors for Far RAM bank discovery, fast memory copying, and RAM drive
+  protection. See
+  [docs/HARDWARE_COMPATIBILITY.md](docs/HARDWARE_COMPATIBILITY.md).
 * **Vim-Style Splash Screen & Diagnostics**: Clean startup landing screen
   with keyboard navigation, memory diagnostics, and direct editor entry.
 * **512KB Extended Memory Buffer**: Breaks the classic 64KB CP/M memory ceiling
@@ -191,12 +199,15 @@ Launching `SE` without arguments displays the Vim-style splash screen:
  | (Untitled)    | 120x40 | CP/M  | Free: 416 KB    | Line    1/1   Col 0   | 
 ```
 
-* Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter/resume full-screen editing mode.
+* Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter/resume full-screen
+  editing mode.
 * Press **`n`** or **`N`** to start editing a new blank file (`(Untitled)`).
-* Press **`w`**, **`W`**, or <kbd>Ctrl+W</kbd> to close the current file to splash screen.
-* Press **`o`** or **`O`** to open the interactive **Open File** directory browser.
+* Press **`w`**, **`W`**, or <kbd>Ctrl+W</kbd> to close current file to splash.
+* Press **`o`** or **`O`** to open the interactive **Open File** directory
+  browser.
 * Press **`s`** or **`S`** to open the interactive **Save File** screen.
-* Press **`a`** or **`A`** to view the **About** screen (version, author, tools, license).
+* Press **`a`** or **`A`** to view the **About** screen (version, author,
+  tools, license).
 * Press **`m`** or **`M`** to view the interactive **Memory Info** table.
 * Press **`c`** or **`C`** to open the interactive **Configuration** screen.
 * Press **`1`** to set modern **120 columns x 40 rows** mode (Default).
@@ -204,36 +215,58 @@ Launching `SE` without arguments displays the Vim-style splash screen:
 * Press **`q`**, **`Q`**, or <kbd>Ctrl+Q</kbd> to return cleanly to CP/M.
 
 ### 2. Command-Line Launch & Goto Line
-`SE.COM` can be launched directly from the CP/M command line with an optional target filename and line number:
+
+`SE.COM` can be launched directly from the CP/M command line with an optional
+target filename and line number:
 ```text
 C>SE <filename>[:<line>]
 ```
 Examples:
 * `C>SE 30.TXT` — Opens `30.TXT` directly in the editor at Line 1.
-* `C>SE 30.TXT:15` — Opens `30.TXT` with the viewport centered on Line 15.
-* `C>SE B:MYFILE.ASM:42` — Opens file on Drive B: centered on Line 42 (matching compiler error output).
+* `C>SE 30.TXT:15` — Opens `30.TXT` with viewport centered on Line 15.
+* `C>SE B:MYFILE.ASM:42` — Opens file on Drive B: centered on Line 42
+  (matching compiler error output).
 
 ### 3. Editor Mode Keybindings & Hybrid Block Highlighting
-* <kbd>Ctrl+F</kbd>: Find text (forward search with document wrap; highlights match as solidified block; pre-fills from active block; displays `Find [Exact] : ` on status bar).
-* <kbd>Ctrl+N</kbd>: Find Next (repeats search forward without re-prompting; reports "Search completed." on wrap loop completion).
-* <kbd>Ctrl+P</kbd>: Find Previous (repeats search backward with document wrap; reports "Search completed." on wrap loop completion).
-* <kbd>Ctrl+R</kbd>: Search and Replace (prompts for find & replacement strings; pre-fills from active block; interactive confirmation `Replace (Yes/No/All/Quit/Reverse)?`: `y`=yes, `n`=no, `a`=all, `q`=quit, `r`/`p`=reverse direction; guards 120-character line length limit).
-* <kbd>Ctrl+I</kbd> / <kbd>Tab</kbd>: Toggle case sensitivity in Find/Replace prompt between `[Exact]` (session default) and `[Insens]`.
-* <kbd>Ctrl+L</kbd>: Goto line number (prompts on status line; centers viewport on target line).
-* <kbd>Ctrl+B</kbd>: Start / toggle block selection mode (anchors at cursor row & character column).
-* <kbd>Ctrl+K</kbd>: Solidify (lock/freeze) active block selection, or show Editor Keys Reference Screen if no block active.
-* <kbd>Ctrl+C</kbd>: Copy solidified block to current cursor position (or solidify dynamic block).
-* <kbd>Ctrl+X</kbd>: Move solidified block to current cursor position (or solidify dynamic block).
-* <kbd>Ctrl+D</kbd> / <kbd>Delete</kbd>: Forward delete character under cursor (or delete selected/solidified block).
-* <kbd>Insert</kbd>: Toggle between Insert mode (default) and Overwrite mode (status bar displays `Overwrite mode  | `).
-* <kbd>ESC</kbd>: Dismiss active or solidified block highlight (or return to splash screen if no block active).
-* <kbd>Arrow Keys</kbd> / <kbd>Home</kbd> / <kbd>End</kbd> / <kbd>PgUp</kbd> / <kbd>PgDn</kbd>: Move cursor and dynamically expand or contract block highlight (partial lines, single lines, or multi-lines).
+
+* <kbd>Ctrl+F</kbd>: Find text (forward search with document wrap; highlights
+  match as solidified block; pre-fills from active block).
+* <kbd>Ctrl+N</kbd>: Find Next (repeats search forward without re-prompting;
+  reports "Search completed." on wrap loop completion).
+* <kbd>Ctrl+P</kbd>: Find Previous (repeats search backward with document wrap;
+  reports "Search completed." on wrap loop completion).
+* <kbd>Ctrl+R</kbd>: Search and Replace (prompts for find & replace strings;
+  pre-fills from active block; interactive confirmation: `y`=yes, `n`=no,
+  `a`=all, `q`=quit, `r`/`p`=reverse direction).
+* <kbd>Ctrl+I</kbd> / <kbd>Tab</kbd>: Toggle case sensitivity in Find/Replace
+  prompt between `[Exact]` (session default) and `[Insens]`.
+* <kbd>Ctrl+L</kbd>: Goto line number (prompts on status line; centers viewport
+  on target line).
+* <kbd>Ctrl+B</kbd>: Start / toggle block selection mode (anchors at cursor row
+  and character column).
+* <kbd>Ctrl+K</kbd>: Solidify (lock/freeze) active block selection, or show
+  Editor Keys Reference Screen if no block active.
+* <kbd>Ctrl+C</kbd>: Copy solidified block to current cursor position (or
+  solidify dynamic block).
+* <kbd>Ctrl+X</kbd>: Move solidified block to current cursor position (or
+  solidify dynamic block).
+* <kbd>Ctrl+D</kbd> / <kbd>Delete</kbd>: Forward delete character under cursor
+  (or delete selected/solidified block).
+* <kbd>Insert</kbd>: Toggle between Insert mode (default) and Overwrite mode
+  (status bar displays `Overwrite mode  | `).
+* <kbd>ESC</kbd>: Dismiss active or solidified block highlight (or return to
+  splash screen if no block active).
+* <kbd>Arrow Keys</kbd> / <kbd>Home</kbd> / <kbd>End</kbd> / <kbd>PgUp</kbd> /
+  <kbd>PgDn</kbd>: Move cursor and dynamically expand or contract block
+  highlight (partial lines, single lines, or multi-lines).
 * <kbd>Ctrl+O</kbd>: Open interactive file browser.
 * <kbd>Ctrl+S</kbd>: Open save file screen.
-* <kbd>Ctrl+W</kbd>: Close file and return to splash screen (prompts to save if modified).
+* <kbd>Ctrl+W</kbd>: Close file and return to splash screen (prompts to save
+  if modified).
 * <kbd>Ctrl+Q</kbd>: Clean exit to CP/M (prompts to save if modified).
 
 ### 4. Screen Size Configurations
+
 `SE.COM` supports both modern widescreen and retro terminal geometries:
 * **Modern Mode (120x40 - Default)**: Uses 120 columns by 40 rows, ideal for
   modern terminal emulators (e.g. Minicom, GNOME Terminal, Windows Terminal,
@@ -241,10 +274,11 @@ Examples:
 * **Classic Mode (80x24)**: Uses 80 columns by 24 rows, ideal for classic VT100
   hardware terminals or 80x24 serial windows.
 
-### 4. 512KB Extended Memory Diagnostic
-Pressing `t` on the splash screen queries the RomWBW HBIOS API (`RST 08H`), reports
-hardware memory capacity, and runs an inter-bank DMA transfer (`SYSSETCPY` / `SYSBNKCPY`)
-between CP/M User RAM and upper 32KB RAM banks:
+### 5. 512KB Extended Memory Diagnostic
+
+Pressing `t` on the splash screen queries the RomWBW HBIOS API (`RST 08H`),
+reports hardware memory capacity, and runs an inter-bank DMA transfer
+(`SYSSETCPY` / `SYSBNKCPY`) between CP/M User RAM and upper 32KB RAM banks:
 
 ```text
 === SE.COM 512KB Extended Memory Diagnostic ===
@@ -263,6 +297,7 @@ Press any key to continue
 ## Deploying & Running on RC2014
 
 ### 1. In the Local RC2014 Hardware Emulator
+
 From the project workspace root:
 ```bash
 # Build SE.COM, inject into modern hd1k image, and launch emulator
@@ -272,7 +307,9 @@ make run
 ### 2. On Real Hardware (RC2014 via Minicom & XM.COM)
 
 #### Option A: Direct Minicom XMODEM Transfer
-1. Connect to your RC2014 serial port at `115200 8N1` with hardware flow control:
+
+1. Connect to your RC2014 serial port at `115200 8N1` with hardware flow
+   control:
    ```bash
    minicom -b 115200 -D /dev/ttyUSB0
    ```

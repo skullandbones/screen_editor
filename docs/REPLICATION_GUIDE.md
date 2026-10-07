@@ -150,14 +150,15 @@ cd ~/experiment/tools
 
 ### 4.3 RomWBW Firmware & Master Disk Image (`romwbw_src`)
 
-Obtain the official RomWBW release package (v3.x) containing standard RC2014
+Obtain the official RomWBW release package (**v3.6.0 or later**, strictly
+required for `SE.COM` runtime and banking support) containing standard RC2014
 ROM binaries, master disk images, and disk definitions:
 
 ```bash
 mkdir -p romwbw_src
 cd romwbw_src
 
-# Download RomWBW distribution package (e.g. v3.4.0 or v3.6.0)
+# Download RomWBW distribution package (v3.6.0 or later)
 curl -L -o romwbw.zip \
   https://github.com/wwarthen/RomWBW/releases/latest/download/RomWBW.zip
 

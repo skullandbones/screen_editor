@@ -3,7 +3,7 @@
 This document provides a comprehensive technical overview of the architecture,
 subsystems, memory organization, and data flows of **`SE.COM`** (Screen
 Editor), a high-performance text editor for CP/M 2.2 / 3.0 systems running on
-the **RomWBW** firmware platform (Z80 and Z180 processors).
+the **RomWBW v3.6.0+** firmware platform (Z80 and Z180 processors).
 
 ---
 
@@ -71,10 +71,11 @@ subsystem state:
 
 ---
 
-## 3. Banked Memory Subsystem (RomWBW HBIOS)
+## 3. Banked Memory Subsystem (RomWBW HBIOS v3.6.0+)
 
 To overcome the 64KB Z80 address barrier, `SE.COM` interfaces directly with
-RomWBW HBIOS firmware services via `RST 08H`.
+RomWBW HBIOS firmware services via `RST 08H` (strictly requiring RomWBW v3.6.0
+or later).
 
 ### 3.1 HBIOS Bank Operations
 
