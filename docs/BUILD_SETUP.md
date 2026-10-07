@@ -38,6 +38,24 @@ Debian, Fedora, or equivalent) with the following tools:
      `python3 -c` is strictly prohibited by project guidelines. Always create
      and invoke Python script files.
 
+### 1.2 Verified Tool & Component Versions
+
+The environment has been verified with the following tool versions:
+
+| Component | Version / Commit | Purpose / Origin |
+| :--- | :--- | :--- |
+| **Antigravity** | `2.19.1` | Agentic AI coding environment |
+| **`z88dk-z80asm`** | `v2.4+` (`b9b1d45`) | Z80 Macro Assembler (z88dk/z88dk) |
+| **`rc2014` Emulator** | Master (`b145b90`) | RC2014 hardware emulator |
+| **RomWBW** | `v3.6.0` (2026-03-28) | RC2014 ROM and master disk images |
+| **`cpmtools`** | RomWBW bundle | `cpmcp` / `cpmrm` disk utilities |
+| **`diskdefs`** | `wbw_hd1k_0` format | RomWBW 512B/sector disk geometry |
+| **Python** | `3.12.3` | Test harness & automation runner |
+| **`pyserial`** | `3.5` | Serial terminal emulation library |
+| **`xmodem`** | `0.5.0` | Hardware binary transfer protocol |
+| **GCC** | `13.3.0` | C compiler for emulator & plugins |
+| **GNU Make** | `4.3` | Build orchestration engine |
+
 ---
 
 ## 2. Directory Structure & Environment Configuration

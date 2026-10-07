@@ -35,7 +35,27 @@ sudo apt-get install -y \
 
 ---
 
-## 2. Directory Layout & Repository Setup
+## 2. Verified Tool & Component Versions
+
+The complete development stack is verified against these tool versions:
+
+| Component | Version / Commit | Purpose / Origin |
+| :--- | :--- | :--- |
+| **Antigravity** | `2.19.1` | Agentic AI coding environment |
+| **`z88dk-z80asm`** | `v2.4+` (`b9b1d45`) | Z80 Macro Assembler (z88dk/z88dk) |
+| **`rc2014` Emulator** | Master (`b145b90`) | RC2014 hardware emulator |
+| **RomWBW** | `v3.6.0` (2026-03-28) | RC2014 ROM and master disk images |
+| **`cpmtools`** | RomWBW bundle | `cpmcp` / `cpmrm` disk utilities |
+| **`diskdefs`** | `wbw_hd1k_0` format | RomWBW 512B/sector disk geometry |
+| **Python** | `3.12.3` | Test harness & automation runner |
+| **`pyserial`** | `3.5` | Serial terminal emulation library |
+| **`xmodem`** | `0.5.0` | Hardware binary transfer protocol |
+| **GCC** | `13.3.0` | C compiler for emulator & plugins |
+| **GNU Make** | `4.3` | Build orchestration engine |
+
+---
+
+## 3. Directory Layout & Repository Setup
 
 The project uses a structured workspace where toolchains reside in `tools/` and
 isolated development branches reside in `src/se.com_dev/`:
@@ -78,7 +98,7 @@ git config core.hooksPath .githooks
 
 ---
 
-## 3. Bootstrapping Toolchains in `tools/`
+## 4. Bootstrapping Toolchains in `tools/`
 
 Return to `~/experiment` to set up the four core external tool components:
 
@@ -86,7 +106,7 @@ Return to `~/experiment` to set up the four core external tool components:
 cd ~/experiment/tools
 ```
 
-### 3.1 Z88DK (Z80 Macro Assembler: `z88dk-z80asm`)
+### 4.1 Z88DK (Z80 Macro Assembler: `z88dk-z80asm`)
 
 `SE.COM` relies on `z88dk-z80asm` for assembly, symbol map generation, and
 binary generation.
@@ -112,7 +132,7 @@ export ZCCCFG="$EXP_ROOT/tools/z88dk/lib/config"
 EOF
 ```
 
-### 3.2 RC2014 Hardware Emulator (`rc2014`)
+### 4.2 RC2014 Hardware Emulator (`rc2014`)
 
 The automated regression test suite executes against Alan Cox's multi-system
 RC2014 emulator with RomWBW HBIOS bank-switching support:
@@ -128,7 +148,7 @@ make rc2014
 cd ~/experiment/tools
 ```
 
-### 3.3 RomWBW Firmware & Master Disk Image (`romwbw_src`)
+### 4.3 RomWBW Firmware & Master Disk Image (`romwbw_src`)
 
 Obtain the official RomWBW release package (v3.x) containing standard RC2014
 ROM binaries, master disk images, and disk definitions:
@@ -154,7 +174,7 @@ chmod +x Tools/Linux/cpm* 2>/dev/null || true
 cd ~/experiment/tools
 ```
 
-### 3.4 CP/M Disk Definitions Setup
+### 4.4 CP/M Disk Definitions Setup
 
 Ensure the RomWBW disk definition for `wbw_hd1k_0` is accessible:
 
@@ -166,7 +186,7 @@ export DISKDEFS="$HOME/experiment/tools/cpmtools/diskdefs"
 
 ---
 
-## 4. Python Virtual Environment Setup
+## 5. Python Virtual Environment Setup
 
 Set up a Python 3 virtual environment for serial interaction and test harness
 support:
@@ -181,7 +201,7 @@ pip install pyserial xmodem
 
 ---
 
-## 5. Verification Checklist: Testing the Fresh Environment
+## 6. Verification Checklist: Testing the Fresh Environment
 
 Execute these sanity checks in sequence to verify that every component is
 correctly installed and functional:
@@ -245,7 +265,7 @@ python3 tests/test_editor_headless.py
 
 ---
 
-## 6. Physical Hardware Deployment (Optional)
+## 7. Physical Hardware Deployment (Optional)
 
 If running on real hardware (RC2014, SC126, SC130, SC131):
 
