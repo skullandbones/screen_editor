@@ -412,7 +412,8 @@ class VT100QualityMonitor:
                 "Plugins for Editor" in full_text or
                 "to Dismiss" in full_text):
             return "plugin_popup"
-        if "Save & Exit" in full_text:
+        if ("Save & Exit" in full_text or
+                "Plugin Configuration" in full_text):
             return "plugin_config"
         if "Press any key" in full_text:
             return "press_any_key"
