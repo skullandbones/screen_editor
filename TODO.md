@@ -105,3 +105,100 @@ tasks have been archived.
 ## 6. Post-v1.0.0 Milestones & Roadmap
 
 - [ ] Define feature scope and architectural targets for SE.COM v1.1.0 release.
+- [ ] Milestone: Modularize `se.asm` into functional sub-systems and port to
+  ZX Spectrum Next (detailed in Section 7).
+
+---
+
+## 7. Modular Architecture Refactoring & ZX Spectrum Next Port Plan
+
+### 7.1 Architecture & Header API Strategy
+- [ ] Define sub-system API header standards (`include/*.inc`) with clear
+  register calling conventions (inputs, outputs, clobbered registers).
+- [ ] Establish strict data encapsulation so platform-agnostic core logic
+  never accesses platform-specific hardware registers or BDOS calls directly.
+- [ ] Maintain deterministic memory layout across modules to preserve TPA
+  headroom margins on CP/M while allowing flexible banking on other targets.
+
+### 7.2 Sub-system API Header Specifications (`include/`)
+- [ ] `include/config.inc`: Global editor constants, keycodes, geometry,
+  line limits, and configuration defaults.
+- [ ] `include/hal.inc`: Hardware Abstraction Layer API defining console,
+  keyboard, memory banking, and storage function signatures.
+- [ ] `include/buffer.inc`: Document buffer engine API (line cache indexing,
+  line split/join, active line unpacking, virtual slot mapping).
+- [ ] `include/editor.inc`: Core editor command dispatch API, cursor
+  movement, character insertion, deletion, and word-wrap primitives.
+- [ ] `include/block.inc`: Block selection, copy/cut/paste, and clipboard
+  buffer management API.
+- [ ] `include/search.inc`: Text search, replace, and case-sensitivity API.
+- [ ] `include/ui.inc`: Modal dialog engine, Tier 1 status alerts, Tier 2
+  query pop-ups, status bar rendering, and frame styling API.
+- [ ] `include/file_io.inc`: High-level file open, save, backup, and
+  directory enumeration API.
+- [ ] `include/plugin.inc`: Far RAM plugin manager, slot allocation table,
+  and Upper Memory Host API vector definitions (`PLUGIN_HOST_API`).
+- [ ] `include/beautify.inc`: Z80 assembly formatter & alignment engine API.
+
+### 7.3 Platform Abstraction Layer (HAL / PAL) Architecture
+- [ ] Decouple all BDOS calls, VT100 ANSI sequences, and RomWBW HBIOS bank
+  switching from core editor logic into platform-specific HAL modules.
+- [ ] Implement CP/M Platform Layer (`hal/cpm/`):
+  - `hal/cpm/hal_cpm_console.asm`: VT100 / ANSI terminal escape sequences,
+    cursor positioning, attribute styling, and BDOS console character I/O.
+  - `hal/cpm/hal_cpm_memory.asm`: RomWBW HBIOS 512K bank switching and CP/M 3
+    banked memory drivers for Far RAM paging.
+  - `hal/cpm/hal_cpm_storage.asm`: BDOS FCB operations, CP/M drive & user
+    area switching, and swap file (`$$$SE$$$.SWP`) random record I/O.
+- [ ] Implement ZX Spectrum Next Platform Layer (`hal/next/`):
+  - `hal/next/hal_next_console.asm`: Hardware text mode driver (80x25 or
+    80x32 using Next hardware tile/text layer or Layer 2 640x256 font
+    rendering) providing instant flicker-free updates without VT100 overhead.
+  - `hal/next/hal_next_keyboard.asm`: Next matrix / PS/2 keyboard scanner
+    supporting true dedicated arrow keys, PageUp/PageDown, Home, and End.
+  - `hal/next/hal_next_memory.asm`: Next MMU memory management via NextRegs
+    `0x50`–`0x57` mapping 8KB SRAM pages into upper slots ($8000–$FFFF or
+    $4000–$7FFF) to access 1024 KB / 2048 KB on-board SRAM.
+  - `hal/next/hal_next_storage.asm`: NextZXOS / ESXDOS storage driver via
+    `RST 08h` (`M_GETSETDRV`, `F_OPEN`, `F_READ`, `F_WRITE`, `F_CLOSE`,
+    `F_SEEK`, `F_OPENDIR`) supporting native FAT16/FAT32 paths on SD card.
+
+### 7.4 Core Editor Sub-system Decomposition (`src/core/`)
+- [ ] `src/core/buffer.asm`: Extract line cache (`LINE_STORAGE`), line split
+  and join operations, and virtual slot index tables from `se.asm`.
+- [ ] `src/core/memory.asm`: Extract virtual memory paging coordinator,
+  cache eviction logic, and swap page tracking.
+- [ ] `src/core/editor.asm`: Extract interactive key dispatch table, cursor
+  navigation, text editing primitives, and auto-indent.
+- [ ] `src/core/block.asm`: Extract block highlight calculations, clipboard
+  buffering, block cut/copy/paste, and block indentation.
+- [ ] `src/core/search.asm`: Extract search string matching, forward find,
+  and search-and-replace loop.
+- [ ] `src/core/ui_render.asm`: Extract screen repaint engine, status bar
+  rendering (`STR_STATUS_PREFIX`), and column 0 tilde margin discipline.
+- [ ] `src/core/ui_modal.asm`: Extract Tier 1 notification pop-ups, Tier 2
+  query pop-ups, centered frame drawing, and button selectors.
+- [ ] `src/core/ui_browser.asm`: Extract file selection and directory
+  browser modal screens.
+- [ ] `src/core/config.asm`: Extract `SE.CFG` reader, parser, serializer, and
+  default settings table.
+- [ ] `src/core/plugin_mgr.asm`: Extract PRL/OVL relocation loader, Far RAM
+  slot manager, and Host API trampoline table.
+- [ ] `src/core/beautify.asm`: Extract Z80 code beautifier and column
+  alignment subsystem (`DO_CTRL_Y_BEAUTIFY`).
+
+### 7.5 Target Coordinators & Build Pipeline
+- [ ] `src/se.asm`: Refactor top-level CP/M coordinator to include
+  headers (`include/*.inc`), CP/M HAL (`hal/cpm/*.asm`), and core
+  modules (`core/*.asm`).
+- [ ] Verify binary invariance: Ensure modular CP/M build matches original
+  monolithic `SE.COM` functionality and preserves TPA headroom (+2,048 B).
+- [ ] `src/se_next.asm`: Create top-level ZX Spectrum Next coordinator
+  combining Next HAL (`hal/next/*.asm`) with core modules (`core/*.asm`).
+- [ ] Create Next build targets in `Makefile` to produce:
+  - `SE.NEX`: Standalone ZX Spectrum Next executable runnable from NextZXOS
+    browser (setting CPU speed to 14/28 MHz and configuring MMU).
+  - `.se` / `SE`: NextZXOS dot command installed into `/dot` on SD card
+    allowing direct CLI invocation (e.g. `.se readme.txt`).
+- [ ] Establish automated testing for Next target using CSpect or ZEsarUX
+  emulator harnesses.
