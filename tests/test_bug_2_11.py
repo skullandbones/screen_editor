@@ -141,7 +141,7 @@ def main():
         # 1. Enter Plugin Manager ('p')
         time.sleep(0.3)
         os.write(master, b"p")
-        ok, out = read_until(master, b"SE - Plugin Manager", timeout=8.0)
+        ok, out = read_until(master, b"[Enter]=Unload", timeout=8.0)
         if not ok:
             print("[-] Plugin Manager screen not seen")
             return 1
@@ -151,8 +151,8 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"\x10")  # Ctrl+P
-        ok, out = read_until(master, b"Installed Plugin Catalog", timeout=6.0)
-        if not ok or b"[Down]=Select" not in out:
+        ok, out = read_until(master, b"[Enter]=Exec", timeout=6.0)
+        if not ok or b"Installed Plugin Catalog" not in out:
             print("[-] Failed to open Ctrl+P pop-up in Plugin Manager.")
             print(f"    Out: {repr(out)}")
             return 1
@@ -180,8 +180,8 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b"n")
-        ok, out = read_until(master, b"Installed Plugin Catalog", timeout=6.0)
-        if not ok or b"[Down]=Select" not in out:
+        ok, out = read_until(master, b"[Enter]=Exec", timeout=6.0)
+        if not ok or b"Installed Plugin Catalog" not in out:
             print("[-] Parent Ctrl+P pop-up not redrawn after unload cancel.")
             print(f"    Out: {repr(out)}")
             return 1
@@ -206,8 +206,8 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b" ")
-        ok, out = read_until(master, b"Installed Plugin Catalog", timeout=6.0)
-        if not ok or b"[Down]=Select" not in out:
+        ok, out = read_until(master, b"[Enter]=Exec", timeout=6.0)
+        if not ok or b"Installed Plugin Catalog" not in out:
             print("[-] Parent Ctrl+P pop-up not redrawn after About dismiss.")
             print(f"    Out: {repr(out)}")
             return 1
@@ -231,8 +231,8 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         os.write(master, b" ")
-        ok, out = read_until(master, b"Installed Plugin Catalog", timeout=6.0)
-        if not ok or b"[Down]=Select" not in out:
+        ok, out = read_until(master, b"[Enter]=Exec", timeout=6.0)
+        if not ok or b"Installed Plugin Catalog" not in out:
             print("[-] Parent Ctrl+P pop-up not redrawn after modal dismiss.")
             print(f"    Out: {repr(out)}")
             return 1
