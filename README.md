@@ -226,6 +226,8 @@ Examples:
 * `C>SE 30.TXT:15` — Opens `30.TXT` with viewport centered on Line 15.
 * `C>SE B:MYFILE.ASM:42` — Opens file on Drive B: centered on Line 42
   (matching compiler error output).
+* `C>SE 1C:SOURCE.C` — Opens `SOURCE.C` on Drive C: in User Area 1.
+* `C>SE C1:SOURCE.C:42` — Opens `SOURCE.C` in User Area 1 on Line 42.
 
 ### 3. Editor Mode Keybindings & Hybrid Block Highlighting
 

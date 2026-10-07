@@ -91,3 +91,5 @@ Examples:
 - `C>SE MAIN.C` — Opens `MAIN.C` at line 1.
 - `C>SE MAIN.C:42` — Opens `MAIN.C` centered on line 42 (compiler lint jump).
 - `C>SE B:TEST.ASM:100` — Opens file on Drive B: at line 100.
+- `C>SE 1C:SOURCE.C` — Opens `SOURCE.C` on Drive C: in User Area 1.
+- `C>SE C1:SOURCE.C:42` — Opens `SOURCE.C` in User Area 1 on line 42.

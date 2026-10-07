@@ -209,7 +209,112 @@ non-interruptible to protect disk integrity.
 
 ---
 
-## 6. Search and Replace
+## 6. Working with CP/M Drive User Areas
+
+In classic CP/M 2.2 and CP/M 3.0 systems, storage drives do not have
+hierarchical directories or subdirectories. Instead, files are organized into
+up to 16 logical partitions called **User Areas** (numbered `0` through `15`).
+Each user area maintains an isolated directory of files on the same physical
+drive, allowing projects, system utilities, and data files to be cleanly
+separated.
+
+`SE.COM` provides comprehensive support for navigating, loading, editing,
+saving, and transferring files across CP/M user areas.
+
+### 6.1 Supported Drive and User Area Prefix Formats
+
+When entering filenames on the CP/M command line, in the Open File browser, in
+the Save File dialog, or during Block operations, `SE.COM` recognizes flexible,
+bidirectional prefix notations:
+
+| Prefix Format | Example | Drive | User | Description |
+| :--- | :--- | :---: | :---: | :--- |
+| **Digit-First** | `1C:SOURCE.C` | `C:` | `1` | Digit before drive letter |
+| **Two-Digit First** | `15A:BIG.TXT` | `A:` | `15` | Two digits before drive |
+| **Letter-First** | `C1:SOURCE.C` | `C:` | `1` | Drive letter before digit |
+| **Letter + 2-Digit**| `A15:BIG.TXT` | `A:` | `15` | Drive before two digits |
+| **User-Only** | `2:TEST.ASM` | Active | `2` | Operates on active drive |
+| **Drive-Only** | `B:TEST.ASM` | `B:` | Active | Operates on active user |
+
+> [!NOTE]
+> CP/M user numbers range from `0` to `15`. Numbers greater than 15 are
+> rejected as invalid by `SE.COM`'s prefix parser.
+
+### 6.2 Command-Line Invocation with User Areas
+
+You can launch `SE.COM` directly into any drive and user area from the CP/M
+prompt:
+
+```text
+C>SE 1C:SOURCE.C            # Open SOURCE.C in User Area 1 on Drive C:
+C>SE C1:SOURCE.C:42         # Open SOURCE.C in User Area 1 and jump to Line 42
+C>SE 3:README.TXT           # Open README.TXT in User Area 3 on current drive
+C>SE 15A:KERNEL.ASM         # Open KERNEL.ASM in User Area 15 on Drive A:
+```
+
+### 6.3 Browsing & Filtering User Areas (Open File Screen)
+
+From the Open File directory browser (<kbd>Ctrl+O</kbd> in editor, or
+**`[O]`** on splash):
+
+1. **Switch User Areas**:
+   - Type the desired prefix into the filename edit box (for example, `1C:`,
+     `C1:`, or `2:`) and press <kbd>Enter</kbd>.
+   - The directory listing refreshes immediately to display all files in the
+     specified drive and user area.
+2. **Wildcard Filtering in User Areas**:
+   - Combine user prefixes with standard CP/M wildcards (e.g. `1C:*.C`,
+     `3A:*.ASM`, or `2:*.TXT`) and press <kbd>Enter</kbd>.
+   - Only files matching the wildcard within that user area are displayed.
+3. **Opening Files**:
+   - Select the desired file using arrow keys and press <kbd>Enter</kbd>, or
+     type the full filename with prefix (e.g. `1C:SOURCE.C`) and press
+     <kbd>Enter</kbd>.
+
+### 6.4 Saving Files Across User Areas (Save File Screen)
+
+In the Save File screen (<kbd>Ctrl+S</kbd> in editor, or **`[S]`** on splash):
+
+* Prepending a drive/user prefix to the filename writes the file directly into
+  that target user area.
+* For example, typing `2C:PROJECT.C` saves the document into User Area 2 on
+  Drive C:, regardless of which user area the file was originally opened from.
+* If a file with the same name already exists in the destination user area,
+  `SE.COM` prompts with the standard overwrite confirmation modal before
+  replacing it.
+
+### 6.5 Transferring Text Blocks Across User Areas
+
+The visual block manager (<kbd>Ctrl+K</kbd>) fully supports user area prefixes
+for inter-project code sharing:
+
+* **Block Save**: Marking a block and choosing Save (<kbd>Ctrl+S</kbd> from the
+  Block Menu) allows specifying a destination user area (e.g. `1C:SNIPPET.LIB`).
+* **Block Insert**: Choosing Insert File (<kbd>Ctrl+I</kbd>) allows specifying a
+  source user area (e.g. `1C:HEADER.H`) to splice text directly into the active
+  editor buffer at the current cursor position.
+
+### 6.6 Status Bar Indication
+
+The status bar indicates the active file's drive and user area:
+
+* **User Area 0 (Default)**: Omitted for conciseness (e.g. `| C:MAIN.C     |`).
+* **User Areas 1 to 15**: Explicitly displayed between the drive letter and
+  colon (e.g. `| C1:MAIN.C      |` or `| A15:KERNEL.ASM |`).
+
+### 6.7 Automatic Session & User Area Restoration
+
+When you launch `SE.COM`, the editor queries and records your starting CP/M
+logged-in drive and user area via BDOS Function 32 (`Get/Set User Number`).
+
+Regardless of how many drives or user areas you navigate while editing,
+exiting `SE.COM` via <kbd>Ctrl+Q</kbd> automatically restores your original
+logged-in drive and user area before returning to the CP/M command line prompt,
+preventing unintentional disorientation in your CP/M shell session.
+
+---
+
+## 7. Search and Replace
 
 * **Find Text (<kbd>Ctrl+F</kbd>)**: Opens centered Find modal dialog.
   - Type search pattern and press <kbd>Enter</kbd>.
@@ -224,9 +329,9 @@ non-interruptible to protect disk integrity.
 
 ---
 
-## 7. Configuration & System Diagnostics
+## 8. Configuration & System Diagnostics
 
-### 7.1 Configuration Screen (`[C]` from Splash)
+### 8.1 Configuration Screen (`[C]` from Splash)
 
 * **[1] Screen Geometry**: Toggle between `120x40 (Widescreen)` and `80x24`.
 * **[2] RAM Drive**:
@@ -238,14 +343,14 @@ non-interruptible to protect disk integrity.
 * **[5] Plugin System**: Toggle plugin autoloading on or off.
 * **`[S]`**: Save configuration permanently to `SE.CFG`.
 
-### 7.2 Memory Map Screen (`[M]` from Splash)
+### 8.2 Memory Map Screen (`[M]` from Splash)
 
 Displays detailed hardware diagnostics, RomWBW HBIOS bank allocations, system
 roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 
 ---
 
-## 8. Modular Plugin System
+## 9. Modular Plugin System
 
 * **Context Plugin Pop-up (<kbd>Ctrl+P</kbd>)**: Displays a quick menu of
   active plugins relevant to the current screen context.
@@ -260,9 +365,9 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 
 ---
 
-## 9. Troubleshooting & Common Questions
+## 10. Troubleshooting & Common Questions
 
-### 9.1 Splash Screen Shows "Max Lines: [256 lines (RAM)]"
+### 10.1 Splash Screen Shows "Max Lines: [256 lines (RAM)]"
 
 * **Cause**: By default, `SE.COM` runs in `Preserve` mode to protect RomWBW RAM
   disk `A:`. When all upper RAM banks are reserved for `Drive A:`, `SE.COM`
@@ -274,7 +379,7 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
   3. Press **`s`** to save to `SE.CFG`.
   4. Return to the splash screen; line capacity will now show `[16,384 lines]`.
 
-### 9.2 How to Maximise the Number of Editor Lines (Up to 32,768 Lines)
+### 10.2 How to Maximise the Number of Editor Lines (Up to 32,768 Lines)
 
 * **Step 1**: Press **`c`** for Configuration, then press **`3`** to set
   **Max Document Lines** to `32,768 lines`.
@@ -284,14 +389,14 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 * **Step 4**: Press **`m`** on splash to inspect bank allocations in the
   **Memory Map**.
 
-### 9.3 Garbled Pop-ups or Screen Wrapping at 80 Columns
+### 10.3 Garbled Pop-ups or Screen Wrapping at 80 Columns
 
 * **Cause**: Terminal emulator is set to standard 80x24, while `SE.COM` defaults
   to 120x40 widescreen mode.
 * **Solution**: Press **`2`** on the splash screen to select `80x24 (Classic
   Mode)`, then press **`c`** and **`s`** to save.
 
-### 9.4 Serial Communications & Flow Control (115200 bps)
+### 10.4 Serial Communications & Flow Control (115200 bps)
 
 * **Speed & Framing**: Set terminal emulator to **115200 bps 8N1**.
 * **Hardware Flow Control**: Enable hardware flow control using full-duplex
@@ -301,4 +406,5 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 
 For deep-dive diagnostics, flow control setup, and swap file management,
 consult the complete [Troubleshooting Guide](TROUBLESHOOTING.md).
+
 
