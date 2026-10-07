@@ -677,12 +677,60 @@ def run_step_74(master):
     return True, "Step 74 PASSED"
 
 
+def run_step_65(master):
+    """Step 65: Verifying About Screen ('a' key on splash screen)..."""
+    time.sleep(0.5)
+    os.write(master, b"se\r")
+    ok, out_sp = read_until(master, b"Free:", timeout=30.0)
+    time.sleep(0.2)
+    out_sp += drain_all(master)
+    if not ok or b"for about" not in out_sp:
+        return False, f"'for about' not on splash screen: {out_sp}"
+    if b"version" in out_sp or b"Dean Jenkins" in out_sp:
+        return False, f"Splash screen unexpectedly contains version/author"
+
+    os.write(master, b"a")
+    ok, out_about = read_until(
+        master, b"Press any key to continue", timeout=6.0
+    )
+    time.sleep(0.2)
+    out_about += drain_all(master)
+    if not ok:
+        return False, f"Return prompt not found on About screen: {out_about}"
+    if b"SE - Screen Editor" not in out_about:
+        return False, f"'SE - Screen Editor' title not found: {out_about}"
+    if b"version 0.9.9" not in out_about:
+        return False, f"Version details not found on About screen: {out_about}"
+    if b"by Dean Jenkins" not in out_about:
+        return False, f"Author attribution not found on About: {out_about}"
+    if b"Google Antigravity 2.19.1" not in out_about:
+        return False, f"Antigravity 2.19.1 not found on About: {out_about}"
+    if b"Gemini FLASH 3.8 high" not in out_about:
+        return False, f"Gemini FLASH 3.8 high not found on About: {out_about}"
+    if b"MIT License" not in out_about:
+        return False, f"MIT License not found on About screen: {out_about}"
+
+    os.write(master, b"\r")
+    ok, out_back = read_until(master, b"for about", timeout=6.0)
+    time.sleep(0.2)
+    out_back += drain_all(master)
+    if not ok:
+        return False, f"Return to splash screen failed: {out_back}"
+
+    os.write(master, b"q")
+    ok, out_cpm = read_until(master, b"C>", timeout=6.0)
+    if not ok:
+        return False, f"Exit to CP/M prompt failed: {out_cpm}"
+    return True, "Step 65 PASSED"
+
+
 # =============================================================================
 # Dispatcher
 # =============================================================================
 
 STEP_HANDLERS = {
     27: run_step_27,
+    65: run_step_65,
     66: run_step_66,
     68: run_step_68,
     70: run_step_70,
