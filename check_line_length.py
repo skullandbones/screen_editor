@@ -19,6 +19,7 @@ import subprocess
 import sys
 
 DEFAULT_MAX_LEN = 80
+DEFAULT_TAB_WIDTH = 8
 
 BINARY_OR_IGNORED_EXTENSIONS = {
     ".img", ".rom", ".com", ".prl", ".ovl", ".bin", ".o", ".obj",
@@ -30,6 +31,16 @@ IGNORED_DIRECTORIES = {
     ".git", ".venv", "venv", ".build", "__pycache__", "build", "scratch",
     "tools", ".githooks"
 }
+
+
+def visual_length(line: str, tab_width: int = DEFAULT_TAB_WIDTH) -> int:
+    col = 0
+    for ch in line:
+        if ch == '\t':
+            col += tab_width - (col % tab_width)
+        else:
+            col += 1
+    return col
 
 
 def is_ignored_file(filepath: str) -> bool:
@@ -48,7 +59,11 @@ def is_binary_content(raw_bytes: bytes) -> bool:
     return b"\x00" in raw_bytes[:1024]
 
 
-def parse_diff_violations(diff_text: str, max_len: int = DEFAULT_MAX_LEN):
+def parse_diff_violations(
+    diff_text: str,
+    max_len: int = DEFAULT_MAX_LEN,
+    tab_width: int = DEFAULT_TAB_WIDTH
+):
     violations = []
     current_file = None
     line_num = 0
@@ -74,11 +89,12 @@ def parse_diff_violations(diff_text: str, max_len: int = DEFAULT_MAX_LEN):
             if current_file and is_ignored_file(current_file):
                 continue
             content = raw_line[1:]
-            if len(content) > max_len:
+            vlen = visual_length(content, tab_width)
+            if vlen > max_len:
                 violations.append((
                     current_file or "diff",
                     line_num,
-                    len(content),
+                    vlen,
                     content
                 ))
         elif not raw_line.startswith("-"):
@@ -87,7 +103,11 @@ def parse_diff_violations(diff_text: str, max_len: int = DEFAULT_MAX_LEN):
     return violations
 
 
-def check_file(filepath: str, max_len: int = DEFAULT_MAX_LEN):
+def check_file(
+    filepath: str,
+    max_len: int = DEFAULT_MAX_LEN,
+    tab_width: int = DEFAULT_TAB_WIDTH
+):
     if is_ignored_file(filepath) or not os.path.isfile(filepath):
         return []
 
@@ -109,8 +129,9 @@ def check_file(filepath: str, max_len: int = DEFAULT_MAX_LEN):
     violations = []
     for idx, line in enumerate(text.splitlines(), start=1):
         clean_line = line.rstrip("\r\n")
-        if len(clean_line) > max_len:
-            violations.append((filepath, idx, len(clean_line), clean_line))
+        vlen = visual_length(clean_line, tab_width)
+        if vlen > max_len:
+            violations.append((filepath, idx, vlen, clean_line))
 
     return violations
 
@@ -166,15 +187,22 @@ def main():
         "--max-len", type=int, default=DEFAULT_MAX_LEN,
         help=f"Maximum permitted line length (default: {DEFAULT_MAX_LEN})"
     )
+    parser.add_argument(
+        "--tab-width", type=int, default=DEFAULT_TAB_WIDTH,
+        help=f"Tab width for column calculation (default: {DEFAULT_TAB_WIDTH})"
+    )
 
     args = parser.parse_args()
     max_len = args.max_len
+    tab_width = args.tab_width
     all_violations = []
 
     if args.files:
         # Check explicit files
         for f in args.files:
-            all_violations.extend(check_file(f, max_len=max_len))
+            all_violations.extend(
+                check_file(f, max_len=max_len, tab_width=tab_width)
+            )
     elif args.all:
         # Check all tracked files
         tracked = get_tracked_files()
@@ -182,29 +210,41 @@ def main():
             print("[-] No tracked git files found.", file=sys.stderr)
             return 1
         for f in tracked:
-            all_violations.extend(check_file(f, max_len=max_len))
+            all_violations.extend(
+                check_file(f, max_len=max_len, tab_width=tab_width)
+            )
     elif args.staged:
         diff_text = get_git_diff(cached=True)
-        all_violations.extend(parse_diff_violations(diff_text, max_len))
+        all_violations.extend(
+            parse_diff_violations(diff_text, max_len, tab_width)
+        )
     elif args.diff:
         diff_text = get_git_diff(cached=False)
-        all_violations.extend(parse_diff_violations(diff_text, max_len))
+        all_violations.extend(
+            parse_diff_violations(diff_text, max_len, tab_width)
+        )
     elif args.commit:
         diff_text = get_git_diff(commit_ref=args.commit)
-        all_violations.extend(parse_diff_violations(diff_text, max_len))
+        all_violations.extend(
+            parse_diff_violations(diff_text, max_len, tab_width)
+        )
     else:
         # Default mode: check unstaged + staged diffs
         unstaged_diff = get_git_diff(cached=False)
         staged_diff = get_git_diff(cached=True)
-        diff_violations = parse_diff_violations(unstaged_diff, max_len)
-        diff_violations.extend(parse_diff_violations(staged_diff, max_len))
+        diff_violations = parse_diff_violations(
+            unstaged_diff, max_len, tab_width
+        )
+        diff_violations.extend(
+            parse_diff_violations(staged_diff, max_len, tab_width)
+        )
 
         # If working tree is clean, inspect latest commit
         if not unstaged_diff.strip() and not staged_diff.strip():
             head_diff = get_git_diff(commit_ref="HEAD~1..HEAD")
             if head_diff.strip():
                 diff_violations.extend(
-                    parse_diff_violations(head_diff, max_len)
+                    parse_diff_violations(head_diff, max_len, tab_width)
                 )
 
         all_violations.extend(diff_violations)
