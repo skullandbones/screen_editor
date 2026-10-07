@@ -104,6 +104,30 @@ RAMDRV_END_BANK		EQU	088H	; RomWBW MD0:0 ends at bank 0x88 (8 banks, 256KB)
 ;------------------------------------------------------------------------------
 ; Main Entry Point
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; START: Main program entry point from CP/M console
+;
+; Purpose:
+;   Initializes runtime environment, local stack, direct BIOS console vectors,
+;   and terminal geometry. Queries CP/M version, user number, and current
+;   drive. Parses command line parameters, loads configuration from SE.CFG,
+;   detects and configures RAM drive via HIBERN.OVL, probes memory banking,
+;   and dispatches to either CLI file autoload or splash screen.
+;
+; Call Usage / Protocol:
+;   Executed directly by CP/M transient program loader at TPA address $0100.
+;   Never called via CALL; exits to CP/M via JP 0000H (or EXIT_PROGRAM).
+;
+; Inputs:
+;   Default DMA buffer at 0080H (command tail), FCB1 at 005CH.
+;
+; Outputs:
+;   None (transfers control to DO_AUTO_LOAD or SHOW_SPLASH_SCREEN).
+;
+; Preserves / Modifies:
+;   Initializes SP to LOCAL_STACK; clobbers all working registers.
+;------------------------------------------------------------------------------
 START:
 	LD	(SAVED_SP),SP
 	LD	SP,LOCAL_STACK
@@ -199,6 +223,28 @@ START_RAMDRV_DONE:
 	; Otherwise show splash screen
 	JP	SHOW_SPLASH_SCREEN
 
+;------------------------------------------------------------------------------
+; DO_AUTO_LOAD: Load document file specified on command line
+;
+; Purpose:
+;   Loads target file specified on the CLI into memory (handling either
+;   native CP/M filesystem or VFS FAT filesystem), transitions to editor
+;   mode, positions cursor at requested goto line if specified, renders
+;   initial screen, and jumps to MAIN_LOOP.
+;
+; Call Usage / Protocol:
+;   Jumped to from START when HAS_FILE_ARG is non-zero.
+;
+; Inputs:
+;   WORK_FCB / FAT_DOC_PATH populated by CHECK_COMMAND_LINE.
+;   CMDLINE_GOTO_LINE = target line number (0 if default line 1).
+;
+; Outputs:
+;   Document loaded into Far RAM line table / cache; enters MAIN_LOOP.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 DO_AUTO_LOAD:
 	LD	A,(CMDLINE_IS_FAT)
 	OR	A
@@ -217,6 +263,25 @@ DO_AUTO_LOAD:
 	CALL	GOTO_LINE_HL
 	JR	AUTO_LOAD_RENDER
 
+;------------------------------------------------------------------------------
+; AUTO_LOAD_LINE_DEFAULT: Initialize cursor to line 1 for autoloaded file
+;
+; Purpose:
+;   Sets document row and column positions to top-left (0,0) when no
+;   explicit line number was supplied on the command line.
+;
+; Call Usage / Protocol:
+;   Jumped to from DO_AUTO_LOAD when CMDLINE_GOTO_LINE is 0.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   CUR_DOC_ROW, TOP_DOC_ROW, CUR_COL, TARGET_COL initialized to 0.
+;
+; Preserves / Modifies:
+;   Clobbers HL.
+;------------------------------------------------------------------------------
 AUTO_LOAD_LINE_DEFAULT:
 	LD	HL,0
 	LD	(CUR_DOC_ROW),HL
@@ -310,8 +375,23 @@ ALNF_EXPLICIT_DRIVE:
 
 ;------------------------------------------------------------------------------
 ; ENTER_EDITOR: Top-level entry into editor mode from splash screen loop
-; Resets stack, initializes or resumes editor document, renders screen and
-; status bar, positions cursor, and enters main editor event loop.
+;
+; Purpose:
+;   Resets stack pointer to LOCAL_STACK, ensures document structures and
+;   viewport are initialized, renders screen and status bar, positions
+;   cursor, and enters main editor event loop.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP when user selects 'E' (Edit).
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Transitions directly into MAIN_LOOP; does not return.
+;
+; Preserves / Modifies:
+;   Resets SP to LOCAL_STACK; clobbers all working registers.
 ;------------------------------------------------------------------------------
 ENTER_EDITOR:
 	LD	SP,LOCAL_STACK
@@ -322,9 +402,23 @@ ENTER_EDITOR:
 
 ;------------------------------------------------------------------------------
 ; SETUP_EDITOR_STATE: Ensure editor document buffers and viewport are valid
-; Initializes empty doc if none open, constrains cursor, and renders screen.
-; Preserves return address for callers (e.g. DO_SPLASH_GOTO_LINE,
-; RESUME_EDITOR).
+;
+; Purpose:
+;   Checks if an active document exists; if not, initializes a new empty
+;   document. Constrains cursor within document bounds, clears splash screen
+;   flag, and renders initial editor viewport.
+;
+; Call Usage / Protocol:
+;   Called via CALL from ENTER_EDITOR, RESUME_EDITOR, DO_SPLASH_GOTO_LINE.
+;
+; Inputs:
+;   IN_EDITOR_MODE, DOC_MODIFIED, DOC_TOTAL_LINES.
+;
+; Outputs:
+;   IN_EDITOR_MODE set to 1; document initialized and viewport rendered.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 SETUP_EDITOR_STATE:
 	LD	A,(IN_EDITOR_MODE)
@@ -347,6 +441,26 @@ SETUP_EDITOR_STATE:
 	LD	(CUR_COL),HL
 	LD	(TARGET_COL),HL
 
+;------------------------------------------------------------------------------
+; RESUME_EDITOR: Return to active editor mode from modal/auxiliary screens
+;
+; Purpose:
+;   Re-activates editor mode without re-initializing document content.
+;   Clears splash flag, constrains cursor to active viewport, reinitializes
+;   terminal display, and renders current editor view.
+;
+; Call Usage / Protocol:
+;   Called via CALL or jumped to from modal dialog dismissals or pop-ups.
+;
+; Inputs:
+;   None (uses current editor session state).
+;
+; Outputs:
+;   IN_EDITOR_MODE = 1, IS_SPLASH_SCREEN = 0; screen repainted.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 RESUME_EDITOR:
 	LD	A,1
 	LD	(IN_EDITOR_MODE),A
@@ -359,7 +473,23 @@ RESUME_EDITOR:
 
 ;------------------------------------------------------------------------------
 ; ENTER_EDITOR_WITH_ACTIVE_LINE: Force transition to editor after plugin mutate
-; Resets stack, enables editor mode, refreshes cache, and renders editor screen
+;
+; Purpose:
+;   Resets stack pointer, checks out active line buffer, forces working
+;   cache window reload, constrains viewport, and renders complete editor
+;   screen and status bar following external plugin mutation.
+;
+; Call Usage / Protocol:
+;   Jumped to from plugin execution return path when plugin modified text.
+;
+; Inputs:
+;   CUR_LINE_IDX = active line number.
+;
+; Outputs:
+;   Transitions into MAIN_LOOP; does not return.
+;
+; Preserves / Modifies:
+;   Resets SP to LOCAL_STACK; clobbers all working registers.
 ;------------------------------------------------------------------------------
 ENTER_EDITOR_WITH_ACTIVE_LINE:
 	LD	SP,LOCAL_STACK
@@ -378,6 +508,26 @@ ENTER_EDITOR_WITH_ACTIVE_LINE:
 	CALL	LOCATE_CURSOR
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; SHOW_SPLASH_SCREEN: Reset UI state and display splash screen
+;
+; Purpose:
+;   Resets stack pointer to LOCAL_STACK, clears block selection and OOM
+;   flags, renders full splash screen banner, and enters SPLASH_LOOP.
+;
+; Call Usage / Protocol:
+;   Jumped to from START (when no file arg), or when returning from close,
+;   modal dismissals, or auxiliary tools.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Transitions into SPLASH_LOOP; does not return.
+;
+; Preserves / Modifies:
+;   Resets SP to LOCAL_STACK; clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_SPLASH_SCREEN:
 	LD	SP,LOCAL_STACK
 	XOR	A
@@ -386,6 +536,27 @@ SHOW_SPLASH_SCREEN:
 SPLASH_START:
 	CALL	RENDER_SPLASH
 
+;------------------------------------------------------------------------------
+; SPLASH_LOOP: Interactive event loop for splash screen
+;
+; Purpose:
+;   Polls console keyboard input and dispatches single-key commands:
+;   'E'=Edit, 'N'=New, 'O'=Open, 'S'=Save, 'C'=Config, 'M'=Memory Info,
+;   'A'=About, 'H'=Help, 'P'=Plugins, 'X'/'Q'=Exit.
+;
+; Call Usage / Protocol:
+;   Entered directly following SHOW_SPLASH_SCREEN. Runs indefinitely until
+;   user selects an action or exits.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Dispatches to corresponding command handler.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 SPLASH_LOOP:
 	CALL	GET_KEY
 
@@ -530,8 +701,48 @@ MIS_NOT_CTRL_P:
 	CALL	Z,DRAIN_ESC_SEQUENCE
 	JP	SHOW_SPLASH_SCREEN
 
+;------------------------------------------------------------------------------
+; DO_CONFIG_SCREEN: Render configuration manager and enter event loop
+;
+; Purpose:
+;   Displays configuration options screen and transitions into CONFIG_LOOP.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP when user selects 'C' (Config).
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Transitions into CONFIG_LOOP; does not return directly.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_CONFIG_SCREEN:
 	CALL	SHOW_CONFIG_SCREEN
+
+;------------------------------------------------------------------------------
+; CONFIG_LOOP: Interactive event loop for configuration manager
+;
+; Purpose:
+;   Processes user options in configuration screen:
+;   '1'=Screen geometry (80x24 / 120x40), '2'=RAM drive mode,
+;   '3'=Max lines (16K / 32K), '4'=Tab size (4 / 8), '5'=Plugin Manager mode,
+;   'S'=Save config to SE.CFG, 'Q'/Enter/ESC=Return to splash.
+;
+; Call Usage / Protocol:
+;   Entered from DO_CONFIG_SCREEN. Loops until user exits or toggles setting.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Updates configuration variables; returns to SHOW_SPLASH_SCREEN on exit.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 CONFIG_LOOP:
 	CALL	GET_KEY
 
@@ -706,6 +917,25 @@ CTP_TO_DISABLED:
 	CALL	CTP_UNLOAD_IF_LOADED
 	JR	CTP_DONE
 
+;------------------------------------------------------------------------------
+; CTP_UNLOAD_IF_LOADED: Unload Plugin Manager if currently resident in RAM
+;
+; Purpose:
+;   Checks if the Plugin Manager overlay is currently resident in Far RAM.
+;   If resident, releases its allocated Far RAM bank and clears loaded flags.
+;
+; Call Usage / Protocol:
+;   Called via CALL from CONFIG_LOOP when disabling Plugin Manager.
+;
+; Inputs:
+;   PLUGIN_MGR_LOADED flag, PLUGIN_MGR_BANK ID.
+;
+; Outputs:
+;   PLUGIN_MGR_LOADED set to 0, bank released.
+;
+; Preserves / Modifies:
+;   Clobbers AF. Preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 CTP_UNLOAD_IF_LOADED:
 	LD	A,(PLUGIN_MGR_LOADED)
 	OR	A
@@ -726,14 +956,71 @@ CONFIG_DO_SAVE:
 	CALL	SHOW_CONFIG_SCREEN
 	JP	CONFIG_LOOP
 
+;------------------------------------------------------------------------------
+; DO_SPLASH_SAVE: Handle Save File command from splash screen
+;
+; Purpose:
+;   Invokes Save File modal UI from splash screen, then returns to splash.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP on 'S' key.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Returns to SHOW_SPLASH_SCREEN.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_SPLASH_SAVE:
 	CALL	DO_SAVE_FILE_UI
 	JP	SHOW_SPLASH_SCREEN
 
+;------------------------------------------------------------------------------
+; DO_SPLASH_PLUGIN_SCREEN: Handle Plugin screen command from splash screen
+;
+; Purpose:
+;   Invokes plugin manager / plugin selection UI from splash screen,
+;   then returns to splash screen.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP on 'P' key.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Returns to SHOW_SPLASH_SCREEN.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_SPLASH_PLUGIN_SCREEN:
 	CALL	DO_PLUGIN_SCREEN
 	JP	SHOW_SPLASH_SCREEN
 
+;------------------------------------------------------------------------------
+; DO_SPLASH_GOTO_LINE: Handle Goto Line command from splash screen
+;
+; Purpose:
+;   Switches from splash screen into editor mode, prompts user for target
+;   line number via modal pop-up, navigates to target line, and enters
+;   MAIN_LOOP.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP on 'G' key.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Transitions into MAIN_LOOP.
+;
+; Preserves / Modifies:
+;   Resets SP to LOCAL_STACK; clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_SPLASH_GOTO_LINE:
 	LD	SP,LOCAL_STACK
 	CALL	SETUP_EDITOR_STATE
@@ -741,6 +1028,28 @@ DO_SPLASH_GOTO_LINE:
 	CALL	DO_GOTO_LINE_UI
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; MAIN_LOOP: Central interactive editor event loop
+;
+; Purpose:
+;   Core editor processing loop. Checks serial buffer for pending keystrokes;
+;   flushes deferred screen rendering when idle; reads keystrokes and
+;   dispatches typing, cursor movements, paging, editing actions, block
+;   marking, search/replace, and modal pop-ups.
+;
+; Call Usage / Protocol:
+;   Jumped to after editor initialization or returning from command execution.
+;   Runs continuously until exit or mode switch.
+;
+; Inputs:
+;   Current editor state (CUR_ROW, CUR_COL, TOP_DOC_ROW, etc.).
+;
+; Outputs:
+;   None (loops indefinitely).
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 MAIN_LOOP:
 	; If no key is immediately ready in serial buffer, flush deferred render!
 	CALL	CHECK_KEY_READY
@@ -855,6 +1164,26 @@ CHECK_CTRL_K:
 	JP	NZ,DO_BLOCK_MENU_POPUP	; Block active: show block modal!
 	JP	DO_HELP_SCREEN		; Inactive: show help screen!
 
+;------------------------------------------------------------------------------
+; DO_HELP_SCREEN: Display editor help and keybindings screen
+;
+; Purpose:
+;   Flushes deferred rendering and dirty cache lines, loads HELP.OVL overlay
+;   into transient execution memory, and runs the help viewer. Restores
+;   editor state and cache window upon dismissal.
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP on Ctrl+K (when no block is active).
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Returns to MAIN_LOOP.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_HELP_SCREEN:
 	CALL	FLUSH_DEFERRED_RENDER
 	CALL	INVALIDATE_ACTIVE_LINE
@@ -1135,7 +1464,23 @@ DO_CHAR_CANCEL_SETUP:
 	JP	MAIN_LOOP
 
 ;------------------------------------------------------------------------------
-; Tab Key Insertion at (CUR_ROW, CUR_COL) - Inserts real ASCII 0x09 TAB byte
+; DO_TAB_INSERT: Insert ASCII Tab character at cursor position
+;
+; Purpose:
+;   Inserts literal ASCII 0x09 TAB byte into active line buffer at current
+;   cursor column and advances cursor accordingly.
+;
+; Call Usage / Protocol:
+;   Called via CALL from MAIN_LOOP when user presses Tab key (0x09).
+;
+; Inputs:
+;   ACTIVE_LINE_BUF, CUR_COL.
+;
+; Outputs:
+;   Active line buffer updated; DIRTY_ACTIVE_LINE set; cursor updated.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 DO_TAB_INSERT:
 	LD	A,KEY_TAB		; Insert literal ASCII 0x09 Tab byte
@@ -1144,6 +1489,27 @@ DO_TAB_INSERT:
 
 ;------------------------------------------------------------------------------
 ; Exit, Close & New Document Handling with Unsaved Changes Protection
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; HANDLE_SPLASH_EXIT: Process exit request from splash screen
+;
+; Purpose:
+;   Checks if active document has unsaved modifications. If clean, exits
+;   immediately to CP/M. If modified, switches to editor and displays
+;   save confirmation modal dialog.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP on 'X' or 'Q'.
+;
+; Inputs:
+;   DOC_MODIFIED flag.
+;
+; Outputs:
+;   Exits program or prompts user.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_SPLASH_EXIT:
 	LD	A,ACTION_EXIT
@@ -1158,6 +1524,25 @@ HANDLE_SPLASH_EXIT:
 	CALL	RESUME_EDITOR
 	JP	SHOW_EXIT_PROMPT
 
+;------------------------------------------------------------------------------
+; HANDLE_CTRL_Q: Process exit request from editor mode (Ctrl+Q)
+;
+; Purpose:
+;   Checks if active document has unsaved modifications. If clean, exits
+;   immediately to CP/M. If modified, displays save confirmation pop-up.
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP on Ctrl+Q.
+;
+; Inputs:
+;   DOC_MODIFIED flag.
+;
+; Outputs:
+;   Exits program or displays prompt.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HANDLE_CTRL_Q:
 	LD	A,ACTION_EXIT
 	LD	(CONFIRM_ACTION),A
@@ -1166,6 +1551,25 @@ HANDLE_CTRL_Q:
 	JP	Z,EXIT_PROGRAM
 	JP	SHOW_EXIT_PROMPT
 
+;------------------------------------------------------------------------------
+; HANDLE_CTRL_W: Process close document request from editor mode (Ctrl+W)
+;
+; Purpose:
+;   Checks if active document has unsaved modifications. If clean, closes
+;   document and returns to splash. If modified, prompts user to save.
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP on Ctrl+W.
+;
+; Inputs:
+;   DOC_MODIFIED flag.
+;
+; Outputs:
+;   Closes document or prompts user.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HANDLE_CTRL_W:
 	LD	A,ACTION_CLOSE
 	LD	(CONFIRM_ACTION),A
@@ -1174,6 +1578,25 @@ HANDLE_CTRL_W:
 	JP	Z,DO_EXEC_CLOSE
 	JP	SHOW_EXIT_PROMPT
 
+;------------------------------------------------------------------------------
+; HANDLE_SPLASH_CLOSE: Process close document request from splash screen ('W')
+;
+; Purpose:
+;   If editor session is active, checks for unsaved modifications and closes
+;   document (prompting user if modified). If no session active, ignores.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP on 'W'.
+;
+; Inputs:
+;   IN_EDITOR_MODE, DOC_MODIFIED flags.
+;
+; Outputs:
+;   Closes document or returns to splash loop.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HANDLE_SPLASH_CLOSE:
 	; If no editor session is active, ignore close
 	LD	A,(IN_EDITOR_MODE)
@@ -1189,6 +1612,25 @@ HANDLE_SPLASH_CLOSE:
 SPLASH_CLOSE_NOP:
 	JP	SPLASH_LOOP
 
+;------------------------------------------------------------------------------
+; HANDLE_SPLASH_NEW: Process new document request from splash screen ('N')
+;
+; Purpose:
+;   Checks if existing document has unsaved modifications (prompting if needed),
+;   then initializes an empty document and switches to editor.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP on 'N'.
+;
+; Inputs:
+;   DOC_MODIFIED flag.
+;
+; Outputs:
+;   Initializes new document and enters editor.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HANDLE_SPLASH_NEW:
 	LD	A,ACTION_NEW
 	LD	(CONFIRM_ACTION),A
@@ -1198,6 +1640,25 @@ HANDLE_SPLASH_NEW:
 	CALL	RESUME_EDITOR
 	JP	SHOW_EXIT_PROMPT
 
+;------------------------------------------------------------------------------
+; HANDLE_CTRL_O: Process open file request from editor mode (Ctrl+O)
+;
+; Purpose:
+;   Checks if active document has unsaved modifications. If clean, opens
+;   file dialog. If modified, prompts user to save before proceeding.
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP on Ctrl+O.
+;
+; Inputs:
+;   DOC_MODIFIED flag.
+;
+; Outputs:
+;   Opens file dialog or prompts user.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HANDLE_CTRL_O:
 	LD	A,ACTION_OPEN
 	LD	(CONFIRM_ACTION),A
@@ -1206,6 +1667,27 @@ HANDLE_CTRL_O:
 	JP	Z,DO_EXEC_OPEN
 	JP	SHOW_EXIT_PROMPT
 
+;------------------------------------------------------------------------------
+; DO_BLOCK_SAVE_FILE: Save highlighted visual block to disk file
+;
+; Purpose:
+;   Flushes active line and cache, solidifies dynamic block selection,
+;   normalizes block boundaries, displays save file modal UI, and writes
+;   block text to selected file.
+;
+; Call Usage / Protocol:
+;   Called via CALL from block pop-up menu or shortcut (Ctrl+K S).
+;
+; Inputs:
+;   BLOCK_ACTIVE, BLOCK_START_ROW, BLOCK_START_COL, BLOCK_END_ROW,
+;   BLOCK_END_COL.
+;
+; Outputs:
+;   Block written to disk; redraws editor viewport and status bar.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_BLOCK_SAVE_FILE:
 	CALL	INVALIDATE_ACTIVE_LINE
 	CALL	FLUSH_DIRTY_CACHE
@@ -1233,6 +1715,25 @@ DO_BLOCK_SAVE_FILE:
 	LD	(NEED_STATUS_RENDER),A
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; DO_BLOCK_INSERT_FILE: Insert disk file contents into document at cursor
+;
+; Purpose:
+;   Solidifies and normalizes any active block, displays open file dialog
+;   in insert mode, and inserts disk file lines at cursor position.
+;
+; Call Usage / Protocol:
+;   Jumped to or called from block menu or shortcut (Ctrl+K R).
+;
+; Inputs:
+;   Current cursor position (CUR_DOC_ROW, CUR_COL).
+;
+; Outputs:
+;   File contents inserted into document; redraws editor screen.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_BLOCK_INSERT_FILE:
 	; Implied Ctrl-K: solidify dynamic block selection if state 1
 	LD	A,(BLOCK_ACTIVE)
@@ -1251,6 +1752,25 @@ DO_BLOCK_INSERT_FILE:
 	CALL	RENDER_STATUS_BAR
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; HANDLE_SPLASH_OPEN: Process open file request from splash screen ('O')
+;
+; Purpose:
+;   Checks if active document has unsaved modifications. If clean, opens
+;   file dialog directly. If modified, resumes editor and prompts user.
+;
+; Call Usage / Protocol:
+;   Jumped to from SPLASH_LOOP on 'O'.
+;
+; Inputs:
+;   DOC_MODIFIED flag.
+;
+; Outputs:
+;   Opens file dialog or prompts user.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HANDLE_SPLASH_OPEN:
 	LD	A,ACTION_OPEN
 	LD	(CONFIRM_ACTION),A
@@ -1260,10 +1780,47 @@ HANDLE_SPLASH_OPEN:
 	CALL	RESUME_EDITOR
 	JR	SHOW_EXIT_PROMPT
 
+;------------------------------------------------------------------------------
+; DO_SPLASH_OPEN_DIRECT: Invoke open file dialog directly from splash screen
+;
+; Purpose:
+;   Displays Open File modal dialog and returns to splash screen when done.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_SPLASH_OPEN when document is not modified.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Returns to SHOW_SPLASH_SCREEN.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_SPLASH_OPEN_DIRECT:
 	CALL	DO_OPEN_FILE_UI
 	JP	SHOW_SPLASH_SCREEN
 
+;------------------------------------------------------------------------------
+; SHOW_EXIT_PROMPT: Display unsaved modifications confirmation pop-up
+;
+; Purpose:
+;   Renders modal dialog asking user whether to save changes before exit,
+;   close, or new document action. Dispatches based on response ('Y', 'N', ESC).
+;
+; Call Usage / Protocol:
+;   Jumped to from exit/close/open handlers when DOC_MODIFIED is non-zero.
+;
+; Inputs:
+;   CONFIRM_ACTION indicates pending operation (ACTION_EXIT/CLOSE/NEW/OPEN).
+;
+; Outputs:
+;   Executes confirmed action, saves file, or cancels back to editor.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_EXIT_PROMPT:
 	CALL	DO_SAVE_CHANGES_POPUP
 	JP	C,EXIT_CANCEL
@@ -1274,13 +1831,27 @@ SHOW_EXIT_PROMPT:
 	JP	EXEC_CONFIRM_ACTION
 
 ;------------------------------------------------------------------------------
-; DO_SAVE_CHANGES_POPUP:
-; Display centered modal pop-up dialog querying user whether to save changes.
-; Dimensions: 50 columns wide x 7 rows high.
-; Returns:
-;   Carry = 0, A = 'Y': User confirmed save
-;   Carry = 0, A = 'N': User chose discard / proceed without saving
-;   Carry = 1: User cancelled (ESC / Ctrl-C)
+; DO_SAVE_CHANGES_POPUP: Centered modal dialog querying user to save changes
+;
+; Purpose:
+;   Displays 50x7 centered modal pop-up box with message:
+;     "Save modified document before proceeding?"
+;     "[Y]es      [N]o      [ESC]=Cancel"
+;   Waits for valid keystroke and drains multi-byte escape sequences.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SHOW_EXIT_PROMPT.
+;
+; Inputs:
+;   ACTIVE_COLS, ACTIVE_ROWS (for dialog centering).
+;
+; Outputs:
+;   Carry = 0, A = 'Y': User confirmed save.
+;   Carry = 0, A = 'N': User chose discard / proceed without saving.
+;   Carry = 1: User cancelled (ESC).
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 DO_SAVE_CHANGES_POPUP:
 	CALL	TERM_HIDE_CURSOR
@@ -1385,6 +1956,25 @@ DSCP_CANCEL:
 	SCF				; Carry = 1
 	RET
 
+;------------------------------------------------------------------------------
+; EXIT_CANCEL: Cancel exit/close prompt and return to active editor
+;
+; Purpose:
+;   Restores stack pointer, forces cache reload, re-renders screen and status
+;   bar, locates cursor, and resumes MAIN_LOOP after user presses ESC in prompt.
+;
+; Call Usage / Protocol:
+;   Jumped to from SHOW_EXIT_PROMPT when DO_SAVE_CHANGES_POPUP returns Carry=1.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Returns to MAIN_LOOP.
+;
+; Preserves / Modifies:
+;   Resets SP to LOCAL_STACK; clobbers all working registers.
+;------------------------------------------------------------------------------
 EXIT_CANCEL:
 	XOR	A
 	LD	(IS_EXIT_PROMPT),A
@@ -1399,6 +1989,25 @@ EXIT_CANCEL:
 	LD	(NEED_STATUS_RENDER),A
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; EXIT_SAVE_AND_QUIT: Save document changes and execute pending action
+;
+; Purpose:
+;   Saves modified document to disk (prompting for filename if unnamed),
+;   then proceeds to execute confirmed action (exit, close, new, or open).
+;
+; Call Usage / Protocol:
+;   Jumped to from SHOW_EXIT_PROMPT when user answers 'Y'.
+;
+; Inputs:
+;   WORK_FCB, HAS_FILE_ARG, CONFIRM_ACTION.
+;
+; Outputs:
+;   Saves file and jumps to EXEC_CONFIRM_ACTION.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 EXIT_SAVE_AND_QUIT:
 	XOR	A
 	LD	(IS_EXIT_PROMPT),A
@@ -1433,6 +2042,26 @@ EXIT_SAVE_PROMPT_NAME:
 	LD	(NEED_STATUS_RENDER),A
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; EXEC_CONFIRM_ACTION: Dispatch confirmed exit/close/new/open action
+;
+; Purpose:
+;   Dispatches execution based on value in CONFIRM_ACTION:
+;   ACTION_CLOSE -> DO_EXEC_CLOSE, ACTION_NEW -> DO_EXEC_NEW,
+;   ACTION_OPEN -> DO_EXEC_OPEN, otherwise -> EXIT_PROGRAM.
+;
+; Call Usage / Protocol:
+;   Jumped to after unsaved changes prompt is satisfied or bypassed.
+;
+; Inputs:
+;   CONFIRM_ACTION (ACTION_EXIT, ACTION_CLOSE, ACTION_NEW, ACTION_OPEN).
+;
+; Outputs:
+;   Transfers control to appropriate action handler.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 EXEC_CONFIRM_ACTION:
 	XOR	A
 	LD	(IS_EXIT_PROMPT),A
@@ -1466,6 +2095,25 @@ DO_EXEC_OPEN:
 	LD	(NEED_STATUS_RENDER),A
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; DO_CLOSE_DOCUMENT: Close active document and free associated resources
+;
+; Purpose:
+;   Re-initializes empty document state, clears filename, modification flags,
+;   cache dirty flags, block selection, and zero-fills WORK_FCB.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_EXEC_CLOSE or DO_NEW_DOCUMENT.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Document reset; WORK_FCB cleared.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B, HL. Preserves C, DE.
+;------------------------------------------------------------------------------
 DO_CLOSE_DOCUMENT:
 	XOR	A
 	LD	(PLUGIN_RET_CODE),A
@@ -1487,6 +2135,25 @@ CLOSE_FCB_LOOP:
 	DJNZ	CLOSE_FCB_LOOP
 	RET
 
+;------------------------------------------------------------------------------
+; DO_NEW_DOCUMENT: Create a fresh empty document and initialize editor view
+;
+; Purpose:
+;   Closes any active document, sets editor mode flag, clears screen,
+;   and renders empty editor workspace with status bar.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_EXEC_NEW.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   IN_EDITOR_MODE = 1; fresh workspace rendered.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 DO_NEW_DOCUMENT:
 	CALL	DO_CLOSE_DOCUMENT
 	LD	A,1
@@ -1496,6 +2163,27 @@ DO_NEW_DOCUMENT:
 	CALL	RENDER_STATUS_BAR
 	RET
 
+;------------------------------------------------------------------------------
+; EXIT_PROGRAM: Clean up system state and exit cleanly to CP/M
+;
+; Purpose:
+;   Deletes temporary swap file from disk, resets terminal video attributes,
+;   restores cursor visibility, displays exit message, restores original
+;   CP/M user number, unmounts/restores RAM drive if modified, restores
+;   initial stack pointer, and returns to CP/M CCP.
+;
+; Call Usage / Protocol:
+;   Jumped to when terminating application.
+;
+; Inputs:
+;   SAVED_SP, ORIG_CPM_USER.
+;
+; Outputs:
+;   Returns to CP/M CCP via RET with restored SP.
+;
+; Preserves / Modifies:
+;   Restores entry SP; clobbers working registers.
+;------------------------------------------------------------------------------
 EXIT_PROGRAM:
 	CALL	CLEANUP_SWAP_FILE
 	CALL	TERM_INIT
@@ -1517,6 +2205,27 @@ EXIT_PROGRAM:
 ;------------------------------------------------------------------------------
 ; Screen Geometry Setup
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; SET_MODE_120X40: Configure display geometry for 120 columns x 40 rows
+;
+; Purpose:
+;   Configures screen geometry variables to 120 columns by 40 rows,
+;   setting horizontal viewport bounds to [0..120].
+;
+; Call Usage / Protocol:
+;   Called via CALL during startup initialization or from configuration menu.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   SCREEN_MODE = MODE_120X40, ACTIVE_ROWS = 40, ACTIVE_COLS = 120,
+;   VIEW_LEFT_COL = 0, VIEW_RIGHT_COL = 120.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF, HL.
+;------------------------------------------------------------------------------
 SET_MODE_120X40:
 	LD	A,MODE_120X40
 	LD	(SCREEN_MODE),A
@@ -1532,6 +2241,26 @@ SET_MODE_120X40:
 	LD	(VIEW_RIGHT_COL),HL
 	RET
 
+;------------------------------------------------------------------------------
+; SET_MODE_80X24: Configure display geometry for 80 columns x 24 rows
+;
+; Purpose:
+;   Configures screen geometry variables to 80 columns by 24 rows,
+;   setting horizontal viewport bounds to [0..80].
+;
+; Call Usage / Protocol:
+;   Called via CALL during startup or from configuration menu.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   SCREEN_MODE = MODE_80X24, ACTIVE_ROWS = 24, ACTIVE_COLS = 80,
+;   VIEW_LEFT_COL = 0, VIEW_RIGHT_COL = 80.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF, HL.
+;------------------------------------------------------------------------------
 SET_MODE_80X24:
 	LD	A,MODE_80X24
 	LD	(SCREEN_MODE),A
@@ -1550,6 +2279,25 @@ SET_MODE_80X24:
 ;------------------------------------------------------------------------------
 ; Terminal / VT100 I/O Routines
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; TERM_INIT: Initialize terminal display attributes and clear screen
+;
+; Purpose:
+;   Disables reverse video, restores cursor visibility, and clears screen.
+;
+; Call Usage / Protocol:
+;   Called via CALL before repainting screen views.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Terminal attributes reset; screen cleared; cursor at (1,1).
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
+;------------------------------------------------------------------------------
 TERM_INIT:
 	CALL	TERM_INVERSE_OFF
 	CALL	TERM_SHOW_CURSOR
@@ -1559,34 +2307,184 @@ TERM_INIT:
 ; Centralized ANSI Terminal Escape Sequences
 ; Preserves all registers except AF (matching PRINT_STR conventions)
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; TERM_INVERSE_ON: Enable reverse video text attribute
+;
+; Purpose:
+;   Transmits ANSI escape sequence ESC[7m to enable reverse video mode.
+;
+; Call Usage / Protocol:
+;   Called via CALL before rendering status bar or highlighted elements.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Terminal attribute changed to inverse video.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
+;------------------------------------------------------------------------------
 TERM_INVERSE_ON:
 	LD	DE,STR_INVERSE_ON
 	JP	PRINT_STR
 
+;------------------------------------------------------------------------------
+; TERM_INVERSE_OFF: Disable reverse video text attribute
+;
+; Purpose:
+;   Transmits ANSI escape sequence ESC[0m to restore normal video attributes.
+;
+; Call Usage / Protocol:
+;   Called via CALL after rendering status bar or highlighted elements.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Terminal attributes reset to normal.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
+;------------------------------------------------------------------------------
 TERM_INVERSE_OFF:
 	LD	DE,STR_INVERSE_OFF
 	JP	PRINT_STR
 
+;------------------------------------------------------------------------------
+; TERM_HIDE_CURSOR: Hide hardware terminal cursor
+;
+; Purpose:
+;   Transmits ANSI escape sequence ESC[?25l to hide the hardware cursor
+;   during screen updates and dialog rendering to eliminate cursor flicker.
+;
+; Call Usage / Protocol:
+;   Called via CALL before redrawing screen regions or modal pop-ups.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Hardware cursor hidden.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
+;------------------------------------------------------------------------------
 TERM_HIDE_CURSOR:
 	LD	DE,STR_HIDE_CURSOR
 	JP	PRINT_STR
 
+;------------------------------------------------------------------------------
+; TERM_SHOW_CURSOR: Restore hardware terminal cursor visibility
+;
+; Purpose:
+;   Transmits ANSI escape sequence ESC[?25h to re-enable hardware cursor
+;   visibility after screen redraw operations are complete.
+;
+; Call Usage / Protocol:
+;   Called via CALL after completing screen updates.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Hardware cursor visible.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
+;------------------------------------------------------------------------------
 TERM_SHOW_CURSOR:
 	LD	DE,STR_SHOW_CURSOR
 	JP	PRINT_STR
 
+;------------------------------------------------------------------------------
+; TERM_CLEAR_SCREEN: Clear entire terminal display screen
+;
+; Purpose:
+;   Transmits ANSI escape sequence ESC[2J to erase the entire terminal screen.
+;
+; Call Usage / Protocol:
+;   Called via CALL when performing complete full-screen repaints.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Terminal screen cleared.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
+;------------------------------------------------------------------------------
 TERM_CLEAR_SCREEN:
 	LD	DE,STR_CLEAR_SCREEN
 	JP	PRINT_STR
 
+;------------------------------------------------------------------------------
+; TERM_CLEAR_EOL: Clear from cursor position to end of current line
+;
+; Purpose:
+;   Transmits ANSI escape sequence ESC[K to clear characters from the current
+;   cursor column to the right margin of the terminal row.
+;
+; Call Usage / Protocol:
+;   Called via CALL during line rendering and dialog line clearing.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Remainder of current terminal row erased.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
+;------------------------------------------------------------------------------
 TERM_CLEAR_EOL:
 	LD	DE,STR_CLEAR_EOL
 	JP	PRINT_STR
 
+;------------------------------------------------------------------------------
+; TERM_HOME: Position cursor at top-left home position (row 1, col 1)
+;
+; Purpose:
+;   Transmits ANSI escape sequence ESC[H to place cursor at row 1, col 1.
+;
+; Call Usage / Protocol:
+;   Called via CALL prior to sequential top-down screen rendering.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   Hardware cursor relocated to home position.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
+;------------------------------------------------------------------------------
 TERM_HOME:
 	LD	DE,STR_HOME
 	JP	PRINT_STR
 
+;------------------------------------------------------------------------------
+; INIT_BIOS_JUMPS: Resolve direct CP/M BIOS console jump table vectors
+;
+; Purpose:
+;   Queries CP/M BIOS warm boot vector at 0001H to compute base addresses
+;   for direct BIOS console routines (CONST=+6, CONIN=+9, CONOUT=+12),
+;   bypassing BDOS console overhead and control-character filtering.
+;
+; Call Usage / Protocol:
+;   Called via CALL once during START initialization.
+;
+; Inputs:
+;   Memory address 0001H (pointer to BIOS WBOOT).
+;
+; Outputs:
+;   BIOS_CONST_VEC, BIOS_CONIN_VEC, BIOS_CONOUT_VEC initialized.
+;
+; Preserves / Modifies:
+;   Preserves BC; clobbers AF, DE, HL.
+;------------------------------------------------------------------------------
 INIT_BIOS_JUMPS:
 	LD	HL,(0001H)		; HL = Address of BIOS WBOOT (+3)
 	DEC	HL
@@ -1605,6 +2503,25 @@ INIT_BIOS_JUMPS:
 	LD	(BIOS_CONOUT_VEC),HL
 	RET
 
+;------------------------------------------------------------------------------
+; PRINT_STR: Print null-terminated or '$'-terminated string to console
+;
+; Purpose:
+;   Iterates through string pointed to by DE, outputting characters via PUTC
+;   until encountering a null (0x00) or '$' character.
+;
+; Call Usage / Protocol:
+;   Standard string printing routine invoked throughout SE.COM.
+;
+; Inputs:
+;   DE = Pointer to null-terminated or '$'-terminated ASCII string.
+;
+; Outputs:
+;   String emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
+;------------------------------------------------------------------------------
 PRINT_STR:
 	PUSH	BC
 	PUSH	DE
@@ -1625,6 +2542,24 @@ PRINT_STR_DONE:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; PUTC: Emit single character to console via direct BIOS CONOUT
+;
+; Purpose:
+;   Sends byte in register A directly to BIOS CONOUT jump vector.
+;
+; Call Usage / Protocol:
+;   Fundamental character output primitive called throughout SE.COM.
+;
+; Inputs:
+;   A = ASCII character byte to output.
+;
+; Outputs:
+;   Character transmitted to console.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 PUTC:
 	PUSH	AF
 	PUSH	BC
@@ -1639,6 +2574,24 @@ PUTC:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; GET_KEY: Wait for and read single keystroke from console via direct BIOS CONIN
+;
+; Purpose:
+;   Invokes BIOS CONIN jump vector, blocking until a key is pressed.
+;
+; Call Usage / Protocol:
+;   Fundamental blocking keyboard input primitive.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   A = ASCII character or scan code byte received.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
+;------------------------------------------------------------------------------
 GET_KEY:
 	PUSH	BC
 	PUSH	DE
@@ -1650,11 +2603,52 @@ GET_KEY:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; CALL_HL: Indirect subroutine call helper
+;
+; Purpose:
+;   Performs JP (HL) to execute a subroutine whose address is loaded in HL.
+;   Allows callers using CALL CALL_HL to effectively perform CALL (HL).
+;
+; Call Usage / Protocol:
+;   Called via CALL CALL_HL.
+;
+; Inputs:
+;   HL = Target subroutine entry address.
+;
+; Outputs:
+;   Returns whatever target subroutine produces.
+;
+; Preserves / Modifies:
+;   Stack return address preserved; registers modified per target subroutine.
+;------------------------------------------------------------------------------
 CALL_HL:
 	JP	(HL)
 
 ;------------------------------------------------------------------------------
 ; Command Line & FCB Initialization
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; CHECK_COMMAND_LINE: Parse CP/M command line buffer into WORK_FCB
+;
+; Purpose:
+;   Examines default DMA buffer at 0080H. If an argument is present, parses
+;   optional FAT path prefix, drive/user prefix, and optional :<line> goto
+;   suffix, populating WORK_FCB, DOC_USER_NUM, and CMDLINE_GOTO_LINE.
+;   If empty, defaults WORK_FCB to "OUTPUT.TXT".
+;
+; Call Usage / Protocol:
+;   Called via CALL once during START initialization.
+;
+; Inputs:
+;   Default DMA buffer at 0080H.
+;
+; Outputs:
+;   HAS_FILE_ARG = 0 or 1; WORK_FCB populated; CMDLINE_GOTO_LINE set.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 CHECK_COMMAND_LINE:
 	LD	HL,0
@@ -1785,9 +2779,24 @@ NO_FILE_ARG:
 	RET
 
 ;------------------------------------------------------------------------------
-; Parse optional :<line> suffix from command line buffer (DEFAULT_DMA = $0080)
-; If found, stores 16-bit line number in (CMDLINE_GOTO_LINE).
-; Format: [drive:]filename[:line]
+; PARSE_CMDLINE_LINE_NUM: Parse optional :<line> suffix from command line tail
+;
+; Purpose:
+;   Scans backward from end of command line in DEFAULT_DMA to detect trailing
+;   numeric line argument (e.g. "FILE.TXT:150"). Differentiates from drive/user
+;   prefix colon. If found, stores 16-bit line number in CMDLINE_GOTO_LINE.
+;
+; Call Usage / Protocol:
+;   Called via CALL from CHECK_COMMAND_LINE.
+;
+; Inputs:
+;   DEFAULT_DMA buffer at 0080H.
+;
+; Outputs:
+;   CMDLINE_GOTO_LINE updated with parsed integer value (or left unchanged).
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PARSE_CMDLINE_LINE_NUM:
 	LD	A,(DEFAULT_DMA)		; A = length of command line tail
@@ -1862,7 +2871,25 @@ FCLN_IS_DRIVE:
 	POP	HL			; Restore colon pointer
 	RET
 
-; Helper: Return Carry=1 if A is 'A'..'Z' or 'a'..'z'
+;------------------------------------------------------------------------------
+; IS_ALPHA_CHAR: Test if character in A is alphabetic ('A'..'Z' or 'a'..'z')
+;
+; Purpose:
+;   Validates whether ASCII byte in register A is an uppercase or lowercase
+;   alphabetic character.
+;
+; Call Usage / Protocol:
+;   Called via CALL from command line and FCB parsers.
+;
+; Inputs:
+;   A = Character byte to test.
+;
+; Outputs:
+;   Carry = 1 if alphabetic ('A'..'Z' or 'a'..'z'); Carry = 0 otherwise.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; modifies AF (flags).
+;------------------------------------------------------------------------------
 IS_ALPHA_CHAR:
 	CP	'A'
 	JR	C,NOT_ALPHA
@@ -1887,8 +2914,23 @@ NOT_ALPHA:
 SPLASH_MENU_LINES	EQU	21
 
 ;------------------------------------------------------------------------------
-; PRINT_TILDE_CRLF: Print '~' followed by CRLF
-; Preserves: All registers except AF
+; PRINT_TILDE_CRLF: Output '~' character followed by carriage return and newline
+;
+; Purpose:
+;   Prints "~" followed by CR (0x0D) and LF (0x0A) to indicate empty lines
+;   beyond end of document or in splash top margin.
+;
+; Call Usage / Protocol:
+;   Called via CALL during screen viewport rendering.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   "~<CR><LF>" transmitted to console.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 PRINT_TILDE_CRLF:
 	LD	A,'~'
@@ -1901,10 +2943,22 @@ PRINT_TILDE_CRLF:
 
 ;------------------------------------------------------------------------------
 ; PRINT_SPLASH_PREFIX: Print '~' followed by geometry-dependent left padding
-; Total visual block width: 41 columns.
-; 80x24: 19 spaces left padding (19 + 41 = 60 columns).
-; 120x40: 39 spaces left padding (39 + 41 = 80 columns).
-; Preserves: All registers except AF and BC
+;
+; Purpose:
+;   Outputs "~" in column 0 followed by horizontal centering spaces budgeted
+;   for splash/about screens (19 spaces in 80x24, 39 spaces in 120x40).
+;
+; Call Usage / Protocol:
+;   Called via CALL before printing each line of splash, about, or config.
+;
+; Inputs:
+;   SCREEN_MODE (MODE_80X24 or MODE_120X40).
+;
+; Outputs:
+;   Centering prefix emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves DE, HL; clobbers AF, BC.
 ;------------------------------------------------------------------------------
 PRINT_SPLASH_PREFIX:
 	LD	A,'~'
@@ -1922,6 +2976,26 @@ PSP_LOOP:
 	DJNZ	PSP_LOOP
 	RET
 
+;------------------------------------------------------------------------------
+; RENDER_SPLASH: Draw splash screen logo, version info, and menu options
+;
+; Purpose:
+;   Hides cursor, clears screen, calculates vertical top padding to center
+;   content vertically, renders title logo, memory capacity, loaded plugins,
+;   and menu shortcut guide.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SHOW_SPLASH_SCREEN.
+;
+; Inputs:
+;   ACTIVE_ROWS, ACTIVE_COLS, SCREEN_MODE.
+;
+; Outputs:
+;   Splash screen rendered on terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 RENDER_SPLASH:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
@@ -2120,11 +3194,24 @@ SPLASH_BOTTOM_DONE:
 ABOUT_MENU_LINES	EQU	9
 
 ;------------------------------------------------------------------------------
-; PRINT_ABOUT_LINE: Print '~', center the string at DE horizontally, then CRLF
-; In: DE = pointer to '$' or null-terminated string
-; Calculates string length, computes padding = ((ACTIVE_COLS - 1 - length) / 2)
-; Emits '~', padding spaces, string, and CRLF
-; Preserves: All registers
+; PRINT_ABOUT_LINE: Print string horizontally centered with column 0 tilde
+;
+; Purpose:
+;   Measures length of string pointed to by DE, outputs '~' in column 0,
+;   computes and emits symmetrical left margin spaces, prints string via
+;   PRINT_STR, and emits CRLF.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SHOW_ABOUT_SCREEN for each text row.
+;
+; Inputs:
+;   DE = Pointer to null-terminated or '$'-terminated string.
+;
+; Outputs:
+;   Centered line with '~' margin emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 PRINT_ABOUT_LINE:
 	PUSH	AF
@@ -2173,6 +3260,26 @@ PAL_NO_PAD:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; SHOW_ABOUT_SCREEN: Render About information screen
+;
+; Purpose:
+;   Hides cursor, clears screen, computes vertical top padding to center
+;   content vertically, renders title, version, author, AI attribution,
+;   license, return prompt, status bar, and homes cursor.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SPLASH_LOOP when user selects 'A' (About).
+;
+; Inputs:
+;   ACTIVE_ROWS, ACTIVE_COLS.
+;
+; Outputs:
+;   About screen rendered on console.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_ABOUT_SCREEN:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
@@ -2268,11 +3375,24 @@ ABOUT_BOTTOM_DONE:
 ;------------------------------------------------------------------------------
 
 ;------------------------------------------------------------------------------
-; PRINT_CONFIG_PREFIX: Print '~' followed by geometry-dependent left padding
-; Padding: ((ACTIVE_COLS - 59) / 2) spaces
-; 80x24:  10 spaces
-; 120x40: 30 spaces
-; Preserves: All registers except AF
+; PRINT_CONFIG_PREFIX: Print '~' followed by config menu left padding
+;
+; Purpose:
+;   Outputs '~' in column 0 followed by ((ACTIVE_COLS - 59) / 2) spaces
+;   (10 spaces in 80x24 mode, 30 spaces in 120x40 mode) to horizontally
+;   center the configuration options block.
+;
+; Call Usage / Protocol:
+;   Called via CALL before each option row in SHOW_CONFIG_SCREEN.
+;
+; Inputs:
+;   ACTIVE_COLS.
+;
+; Outputs:
+;   Centering prefix emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 PRINT_CONFIG_PREFIX:
 	PUSH	BC
@@ -2292,8 +3412,22 @@ PCP_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; PRINT_CONFIG_BLANK_LINE: Print '~' followed by CRLF
-; Preserves: All registers except AF
+; PRINT_CONFIG_BLANK_LINE: Output '~' followed by CRLF for config screen
+;
+; Purpose:
+;   Emits "~" followed by CR (0x0D) and LF (0x0A) for empty margin lines.
+;
+; Call Usage / Protocol:
+;   Called via CALL during configuration screen vertical padding.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   "~<CR><LF>" emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 PRINT_CONFIG_BLANK_LINE:
 	LD	A,'~'
@@ -2306,6 +3440,26 @@ PRINT_CONFIG_BLANK_LINE:
 
 CONFIG_MENU_LINES	EQU	11
 
+;------------------------------------------------------------------------------
+; SHOW_CONFIG_SCREEN: Render Configuration Manager screen
+;
+; Purpose:
+;   Hides cursor, clears screen, computes vertical top padding, renders
+;   current configuration settings (geometry, RAM drive, max lines, tab width,
+;   plugin manager mode), option key legend, and status bar.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_CONFIG_SCREEN and CONFIG_LOOP.
+;
+; Inputs:
+;   ACTIVE_ROWS, ACTIVE_COLS, configuration variables.
+;
+; Outputs:
+;   Configuration screen displayed on console.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_CONFIG_SCREEN:
 	LD	A,1
 	LD	(IS_SPLASH_SCREEN),A
@@ -2547,8 +3701,25 @@ SCS_FOOTER_DONE:
 
 
 ;------------------------------------------------------------------------------
-; QUERY_MEM_SCREEN_INFO: Dynamic detection of CP/M and HBIOS parameters
-; Called prior to rendering the memory information screen.
+; QUERY_MEM_SCREEN_INFO: Detect CP/M version and RomWBW HBIOS memory parameters
+;
+; Purpose:
+;   Queries CP/M version via BDOS function 12, probes HBIOS presence via
+;   HBIOS_DETECT, and if present queries HBIOS version (BF_SYSVER), system
+;   BIOS bank (SYSGET 0xF2), and available application banks (SYSGET 0xF5).
+;
+; Call Usage / Protocol:
+;   Called via CALL from SHOW_MEM_INFO_SCREEN prior to rendering table.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   CPM_VERSION_ID, HBIOS_PRESENT, HBIOS_VER_MAJ/MIN/PATCH,
+;   HBIOS_BIOS_BANK, HBIOS_APP_BANK, HBIOS_APP_COUNT populated.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL. Preserves IX, IY.
 ;------------------------------------------------------------------------------
 QUERY_MEM_SCREEN_INFO:
 	; 1. Query CP/M Version via BDOS 12
@@ -2641,6 +3812,27 @@ QMSI_SAVE_APP_DEFAULT:
 ; 120x40: 23 spaces (1 + 23 + 72 + 24 = 120)
 ; Preserves: All registers except AF
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; PRINT_MEM_PREFIX: Print '~' followed by left padding for 72-column table
+;
+; Purpose:
+;   Outputs '~' in column 0 followed by ((ACTIVE_COLS - 74) / 2) spaces
+;   (3 spaces in 80x24 mode, 23 spaces in 120x40 mode) to horizontally
+;   center the 72-column memory information table.
+;
+; Call Usage / Protocol:
+;   Called via CALL before each row of the memory screen table.
+;
+; Inputs:
+;   ACTIVE_COLS.
+;
+; Outputs:
+;   Centering prefix emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
+;------------------------------------------------------------------------------
 PRINT_MEM_PREFIX:
 	PUSH	BC
 	LD	A,'~'
@@ -2662,6 +3854,27 @@ PMP_DONE:
 
 MEM_INFO_LINES	EQU	23
 
+;------------------------------------------------------------------------------
+; SHOW_MEM_INFO_SCREEN: Render 16-row 32KB memory bank map and system summary
+;
+; Purpose:
+;   Queries memory configuration, hides cursor, clears screen, calculates
+;   vertical top padding, displays title, summary line, 16 individual bank
+;   rows detailing physical bank IDs, roles, and usages, return prompt,
+;   and status bar.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SPLASH_LOOP on 'M' (Memory Info).
+;
+; Inputs:
+;   ACTIVE_ROWS, ACTIVE_COLS.
+;
+; Outputs:
+;   Memory information screen rendered on console.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_MEM_INFO_SCREEN:
 	CALL	QUERY_MEM_SCREEN_INFO
 	LD	A,1
@@ -2753,7 +3966,24 @@ MEM_INFO_BOTTOM_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; PRINT_MEM_INFO_SUMMARY: Print system summary row (HBIOS, OS, RAM, SE RAM)
+; PRINT_MEM_INFO_SUMMARY: Print memory screen system summary row
+;
+; Purpose:
+;   Outputs prefix followed by formatted summary line containing RomWBW
+;   HBIOS version, operating system name (CP/M 2.2 / CP/M 3.0 / CP/M 3.1 /
+;   Z-System), total hardware RAM capacity, and SE RAM allocation total.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SHOW_MEM_INFO_SCREEN.
+;
+; Inputs:
+;   HBIOS_PRESENT, CPM_VERSION_ID, RAM_BANK_COUNT, EXT_BANK_COUNT.
+;
+; Outputs:
+;   Summary line emitted to console.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 PRINT_MEM_INFO_SUMMARY:
 	CALL	PRINT_MEM_PREFIX
@@ -2882,7 +4112,24 @@ PMIS_NO_PLUG_BANK:
 	RET
 
 ;------------------------------------------------------------------------------
-; PRINT_MEM_BANK_ROW: Print single bank row for MEM_BANK_LOOP_IDX (0..15)
+; PRINT_MEM_BANK_ROW: Print single 32KB memory bank status row (0..15)
+;
+; Purpose:
+;   Formats and prints bank index (00..15), physical bank address (80h..8Fh),
+;   size (32K/64K/--), architectural role (HBIOS, CP/M, RAM Disk, App RAM),
+;   and specific SE or system usage (Document Buffer, Far Plugins, etc.).
+;
+; Call Usage / Protocol:
+;   Called via CALL in a loop (0..15) from SHOW_MEM_INFO_SCREEN.
+;
+; Inputs:
+;   MEM_BANK_LOOP_IDX = bank index (0..15).
+;
+; Outputs:
+;   Formatted table row emitted to console.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 PRINT_MEM_BANK_ROW:
 	; Column 0 Tilde and geometry padding
@@ -3214,8 +4461,23 @@ PMBR_NOT_INSTALLED:
 	RET
 
 ;------------------------------------------------------------------------------
-; PRINT_2DIGIT_DEC: Print 2-digit decimal number (00..99) in A
-; Preserves: BC, DE, HL
+; PRINT_2DIGIT_DEC: Print 2-digit decimal number (00..99) in register A
+;
+; Purpose:
+;   Prints unsigned value in A as two decimal digits with leading zero
+;   if < 10.
+;
+; Call Usage / Protocol:
+;   Called via CALL for line numbers, bank indices, and table counts.
+;
+; Inputs:
+;   A = Unsigned integer (0..99).
+;
+; Outputs:
+;   Two ASCII digits emitted via PUTC.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 PRINT_2DIGIT_DEC:
 	PUSH	AF
@@ -3237,8 +4499,22 @@ P2D_TEN_PLUS:
 	RET
 
 ;------------------------------------------------------------------------------
-; PRINT_CRLF: Print CR, LF
-; Preserves: BC, DE, HL
+; PRINT_CRLF: Output carriage return and line feed to console
+;
+; Purpose:
+;   Emits ASCII CR (0x0D) followed by LF (0x0A) via PUTC.
+;
+; Call Usage / Protocol:
+;   Called via CALL across table and screen formatting routines.
+;
+; Inputs:
+;   None
+;
+; Outputs:
+;   CRLF sequence emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 PRINT_CRLF:
 	LD	A,13
@@ -3252,7 +4528,23 @@ PRINT_CRLF:
 
 
 ;------------------------------------------------------------------------------
-; Print 8-bit number in decimal (0 .. 255)
+; PRINT_DEC_BYTE: Print 8-bit unsigned integer in decimal (0..255)
+;
+; Purpose:
+;   Decomposes byte in register A into hundreds, tens, and units digits,
+;   suppressing leading zeroes.
+;
+; Call Usage / Protocol:
+;   Called via CALL for version numbers, line counts, and memory sizes.
+;
+; Inputs:
+;   A = Unsigned 8-bit integer (0..255).
+;
+; Outputs:
+;   1 to 3 decimal digits emitted via PUTC.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 PRINT_DEC_BYTE:
 	PUSH	AF
@@ -3315,6 +4607,24 @@ PRINT_ONES_DIGIT:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; PRINT_HEX_BYTE: Print 8-bit byte as two hexadecimal digits
+;
+; Purpose:
+;   Outputs high nibble and low nibble of register A as ASCII hex digits.
+;
+; Call Usage / Protocol:
+;   Called via CALL for bank numbers, memory addresses, and debug dumps.
+;
+; Inputs:
+;   A = 8-bit value to display.
+;
+; Outputs:
+;   Two hex digits ('0'..'9', 'A'..'F') emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
+;------------------------------------------------------------------------------
 PRINT_HEX_BYTE:
 	PUSH	AF
 	RRA
@@ -3323,6 +4633,25 @@ PRINT_HEX_BYTE:
 	RRA
 	CALL	PRINT_NIBBLE
 	POP	AF
+
+;------------------------------------------------------------------------------
+; PRINT_NIBBLE: Print lower 4 bits of register A as single hexadecimal digit
+;
+; Purpose:
+;   Masks lower 4 bits of A and converts to ASCII hex ('0'..'9', 'A'..'F').
+;
+; Call Usage / Protocol:
+;   Called via CALL from PRINT_HEX_BYTE.
+;
+; Inputs:
+;   A = Lower 4 bits contain nibble to display (0x0..0xF).
+;
+; Outputs:
+;   Single ASCII digit emitted via PUTC.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
+;------------------------------------------------------------------------------
 PRINT_NIBBLE:
 	AND	0FH
 	CP	10
@@ -3330,6 +4659,25 @@ PRINT_NIBBLE:
 	ADD	A,'A'-10
 	CALL	PUTC
 	RET
+
+;------------------------------------------------------------------------------
+; PRINT_DIGIT: Print single decimal digit (0..9) in register A
+;
+; Purpose:
+;   Adds ASCII '0' to value in register A and transmits via PUTC.
+;
+; Call Usage / Protocol:
+;   Called via CALL from number formatting routines.
+;
+; Inputs:
+;   A = Integer value (0..9).
+;
+; Outputs:
+;   Single ASCII digit emitted to console.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
+;------------------------------------------------------------------------------
 PRINT_DIGIT:
 	ADD	A,'0'
 	CALL	PUTC
@@ -3341,7 +4689,24 @@ PRINT_DIGIT:
 ;------------------------------------------------------------------------------
 
 ;------------------------------------------------------------------------------
-; TOGGLE_BLOCK_MODE: Toggle block selection on/off at (CUR_DOC_ROW, CUR_COL)
+; TOGGLE_BLOCK_MODE: Toggle block selection on/off at current cursor position
+;
+; Purpose:
+;   Toggles visual block selection between inactive (0) and dynamic marking
+;   (state 1), anchoring selection at (CUR_DOC_ROW, CUR_COL). If block is
+;   already active (state 1 or 2), cancels block selection.
+;
+; Call Usage / Protocol:
+;   Called via CALL from MAIN_LOOP when user presses Ctrl+B.
+;
+; Inputs:
+;   BLOCK_ACTIVE, CUR_DOC_ROW, CUR_COL.
+;
+; Outputs:
+;   BLOCK_ACTIVE updated (0 or 1); NEED_SCREEN_RENDER set to 1.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF, HL.
 ;------------------------------------------------------------------------------
 TOGGLE_BLOCK_MODE:
 	LD	A,(BLOCK_ACTIVE)
@@ -3361,8 +4726,23 @@ START_NEW_BLOCK_AT_CURSOR:
 	RET
 
 ;------------------------------------------------------------------------------
-; CANCEL_BLOCK: Cancel active block selection (state 1 or 2), refresh screen
-; Preserves: BC, DE, HL
+; CANCEL_BLOCK: Cancel active block selection and refresh screen
+;
+; Purpose:
+;   Resets BLOCK_ACTIVE state to 0 and flags screen for re-rendering,
+;   clearing visual highlight attributes.
+;
+; Call Usage / Protocol:
+;   Called via CALL on typing, navigation, ESC keys, or clear commands.
+;
+; Inputs:
+;   BLOCK_ACTIVE.
+;
+; Outputs:
+;   BLOCK_ACTIVE = 0; NEED_SCREEN_RENDER = 1.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 CANCEL_BLOCK:
 	LD	A,(BLOCK_ACTIVE)
@@ -3375,7 +4755,24 @@ CANCEL_BLOCK:
 	RET
 
 ;------------------------------------------------------------------------------
-; SOLIDIFY_BLOCK: Lock/freeze active block selection coordinates with Ctrl+K
+; SOLIDIFY_BLOCK: Lock and freeze dynamic block selection coordinates
+;
+; Purpose:
+;   Transitions active block selection from dynamic tracking (state 1) to
+;   locked/solidified (state 2). Normalizes anchor and cursor coordinates
+;   into immutable START and END boundaries.
+;
+; Call Usage / Protocol:
+;   Called via CALL from Ctrl+K menu or before copy, move, delete, and save.
+;
+; Inputs:
+;   BLOCK_ACTIVE (only acts if value is 1).
+;
+; Outputs:
+;   BLOCK_ACTIVE = 2; NEED_SCREEN_RENDER = 1; block bounds normalized.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 SOLIDIFY_BLOCK:
 	LD	A,(BLOCK_ACTIVE)
@@ -3389,16 +4786,24 @@ SOLIDIFY_BLOCK:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_BLOCK_MENU_POPUP: Centered Tier 2 Modal Dialog for Block Operations (^K)
-; Dimensions: 50 columns x 7 rows.
-; Line 1: Top border (+------------------------------------------------+)
-; Line 2: Title      (|                Block Operations                |)
-; Line 3: Separator  (+------------------------------------------------+)
-; Line 4: Status     (|              Selection: 5 lines                |)
-; Line 5: Actions    (|  [Enter]=Lock/Set    [^C]=Copy    [^X]=Move    |)
-;         or         (|      [^C]=Copy Block      [^X]=Move Block      |)
-; Line 6: Commands   (|  [^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close  |)
-; Line 7: Bottom border (+------------------------------------------------+)
+; DO_BLOCK_MENU_POPUP: Centered modal dialog for block operations (Ctrl+K)
+;
+; Purpose:
+;   Flushes deferred rendering, normalizes block bounds, centers and draws
+;   50x7 modal pop-up box displaying selection metrics, action shortcuts
+;   (Lock, Copy, Move, Del, Save, Clear), and dispatches user key commands.
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP on Ctrl+K when BLOCK_ACTIVE is non-zero.
+;
+; Inputs:
+;   ACTIVE_COLS, ACTIVE_ROWS, BLOCK_ACTIVE.
+;
+; Outputs:
+;   Executes selected block operation and resumes editor.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_BLOCK_MENU_POPUP:
 	CALL	FLUSH_DEFERRED_RENDER
@@ -3535,6 +4940,25 @@ BMP_SAVE:
 	CALL	DO_BLOCK_SAVE_FILE
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; BMP_RESTORE_SCREEN: Restore editor screen and cursor after block modal exit
+;
+; Purpose:
+;   Reinitializes terminal attributes, redraws editor viewport and status
+;   bar, restores cursor visibility, and positions cursor at active text column.
+;
+; Call Usage / Protocol:
+;   Called via CALL upon dismissing or executing actions in DO_BLOCK_MENU_POPUP.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Screen repainted and cursor positioned.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 BMP_RESTORE_SCREEN:
 	CALL	TERM_INIT
 	CALL	RENDER_SCREEN
@@ -3548,14 +4972,24 @@ BMP_RESTORE_SCREEN:
 	RET
 
 ;------------------------------------------------------------------------------
-; FORMAT_BLOCK_POPUP_LINE4:
-; Formats Line 4 of Block Operations modal:
-;   "|             Selection: 5 lines                 |"
-; or
-;   "|            Marked Block: 5 lines               |"
-; Centered horizontally inside 50-column box borders (| ... |).
-; Output: BLOCK_POPUP_LINE4_BUF populated with 50 chars + null terminator.
-; Preserves: None
+; FORMAT_BLOCK_POPUP_LINE4: Format selection status line for block modal dialog
+;
+; Purpose:
+;   Constructs centered message string for row 4 of the block menu dialog
+;   (e.g. "| Selection: 5 lines |" or "| Marked Block: 12 chars |"), centered
+;   symmetrically within the 50-column dialog box frame.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_BLOCK_MENU_POPUP.
+;
+; Inputs:
+;   BLOCK_ACTIVE, normalized block bounds.
+;
+; Outputs:
+;   BLOCK_POPUP_LINE4_BUF populated with 50 characters plus null terminator.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FORMAT_BLOCK_POPUP_LINE4:
 	PUSH	BC
@@ -3708,8 +5142,24 @@ FBPL_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; NORMALIZE_BLOCK_BOUNDS: Normalize (anchor, cursor) into (START, END) bounds
-; Preserves: BC, DE, HL
+; NORMALIZE_BLOCK_BOUNDS: Normalize block coordinates into canonical START/END
+;
+; Purpose:
+;   Ensures (BLOCK_START_ROW, BLOCK_START_COL) precedes (BLOCK_END_ROW,
+;   BLOCK_END_COL) in document reading order, accounting for both forward
+;   and backward cursor selection across single or multiple lines.
+;
+; Call Usage / Protocol:
+;   Called via CALL prior to block operations, rendering, and dialog queries.
+;
+; Inputs:
+;   BLOCK_ANCHOR_ROW, BLOCK_ANCHOR_COL, CUR_DOC_ROW, CUR_COL.
+;
+; Outputs:
+;   BLOCK_START_ROW, BLOCK_START_COL, BLOCK_END_ROW, BLOCK_END_COL populated.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 NORMALIZE_BLOCK_BOUNDS:
 	LD	A,(BLOCK_ACTIVE)
@@ -3793,10 +5243,24 @@ NBB_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; GET_BLOCK_BOUNDS: Return normalized bounds and line count of active block
-; Returns: Carry=0, HL = start doc line, DE = end doc line, BC = line count
-;          Carry=1 if no block active
-; Preserves: None
+; GET_BLOCK_BOUNDS: Retrieve normalized boundaries and line count of block
+;
+; Purpose:
+;   Returns starting and ending document row indices along with total number
+;   of lines spanned by the active block selection.
+;
+; Call Usage / Protocol:
+;   Called via CALL by block formatting and manipulation routines.
+;
+; Inputs:
+;   BLOCK_ACTIVE.
+;
+; Outputs:
+;   Carry = 0, HL = start doc row, DE = end doc row, BC = line count;
+;   Carry = 1 if no block active.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 GET_BLOCK_BOUNDS:
 	LD	A,(BLOCK_ACTIVE)
@@ -3832,11 +5296,25 @@ GBB_DONE_LINE:
 	RET
 
 ;------------------------------------------------------------------------------
-; GET_LINE_BLOCK_RANGE: Compute character highlight range for document row BC
-; Inputs: BC = 16-bit Document Line Index (0..3583)
-; Returns: Carry=0: D = start character col, E = end character col (254=to EOL)
-;          Carry=1: no highlight on this line
-; Preserves: BC, HL
+; GET_LINE_BLOCK_RANGE: Compute character highlight column span for document row
+;
+; Purpose:
+;   Determines whether document row BC intersects active visual block, and
+;   if so, computes the first and last character columns that must be drawn
+;   with reverse video highlighting.
+;
+; Call Usage / Protocol:
+;   Called via CALL by line rendering loops and single-line block delete.
+;
+; Inputs:
+;   BC = 16-bit Document Line Index (0..3583).
+;
+; Outputs:
+;   Carry = 0: D = start char col, E = end char col (254 = to end of line);
+;   Carry = 1: row contains no highlighted characters.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; clobbers AF, DE.
 ;------------------------------------------------------------------------------
 GET_LINE_BLOCK_RANGE:
 	LD	A,(BLOCK_ACTIVE)
@@ -4015,7 +5493,25 @@ GCTE_NO_CHARS:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_DELETE_BLOCK: Delete solidified block selection
+; DO_DELETE_BLOCK: Delete text within solidified block selection
+;
+; Purpose:
+;   Deletes highlighted block (state 2). For single-line blocks, shifts
+;   trailing characters left. For multi-line blocks, truncates start row,
+;   concatenates end row tail, frees intermediate line slots, shifts line
+;   table entries downwards, adjusts total lines, and updates cursor.
+;
+; Call Usage / Protocol:
+;   Called via CALL from block pop-up or on Ctrl+D / Del key.
+;
+; Inputs:
+;   BLOCK_ACTIVE (must be 2), normalized block bounds.
+;
+; Outputs:
+;   Block deleted; BLOCK_ACTIVE = 0; DOC_MODIFIED = 1; cursor updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_DELETE_BLOCK:
 	LD	A,(BLOCK_ACTIVE)
@@ -4275,10 +5771,24 @@ DO_DEL_BLK_FINISH:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_CURSOR_IN_BLOCK: Check if (CUR_DOC_ROW, CUR_COL) is inside solidified block
-; Returns: Carry = 1 if cursor is inside block (or on boundary)
-;          Carry = 0 if cursor is outside block
-; Preserves: BC, DE, HL
+; CHECK_CURSOR_IN_BLOCK: Test if cursor coordinates lie within active block
+;
+; Purpose:
+;   Compares (CUR_DOC_ROW, CUR_COL) against normalized block bounds to detect
+;   whether cursor is situated inside the selection (or on its boundary).
+;
+; Call Usage / Protocol:
+;   Called via CALL before DO_COPY_BLOCK and DO_MOVE_BLOCK to prevent
+;   illegal insertion into the block itself.
+;
+; Inputs:
+;   CUR_DOC_ROW, CUR_COL, normalized block bounds.
+;
+; Outputs:
+;   Carry = 1 if cursor is inside block; Carry = 0 if cursor is outside.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; modifies AF (flags).
 ;------------------------------------------------------------------------------
 CHECK_CURSOR_IN_BLOCK:
 	PUSH	HL
@@ -4389,7 +5899,24 @@ CCIB_OUTSIDE:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_COPY_BLOCK: Copy solidified block (Ctrl+C) to (CUR_DOC_ROW, CUR_COL)
+; DO_COPY_BLOCK: Copy solidified block selection to current cursor position
+;
+; Purpose:
+;   Copies selected text to current cursor location (CUR_DOC_ROW, CUR_COL).
+;   Supports single-line insertion or multi-line block expansion, allocating
+;   new Far RAM line slots and shifting line table entries upwards as needed.
+;
+; Call Usage / Protocol:
+;   Called via CALL on Ctrl+C when block is solidified (state 2).
+;
+; Inputs:
+;   BLOCK_ACTIVE = 2, CUR_DOC_ROW, CUR_COL.
+;
+; Outputs:
+;   Block copied into document; DOC_MODIFIED = 1; cursor updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_COPY_BLOCK:
 	LD	A,(BLOCK_ACTIVE)
@@ -4965,7 +6492,25 @@ COPY_ML_FINISH:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_MOVE_BLOCK: Move solidified block (Ctrl+X) to (CUR_DOC_ROW, CUR_COL)
+; DO_MOVE_BLOCK: Move solidified block selection to current cursor position
+;
+; Purpose:
+;   Relocates selected text to current cursor position (CUR_DOC_ROW, CUR_COL).
+;   Copies block to destination, deletes original block, computes shifted
+;   coordinates, and updates block selection around newly moved text.
+;
+; Call Usage / Protocol:
+;   Called via CALL on Ctrl+X when block is solidified (state 2).
+;
+; Inputs:
+;   BLOCK_ACTIVE = 2, CUR_DOC_ROW, CUR_COL.
+;
+; Outputs:
+;   Block text relocated; block bounds updated around destination;
+;   DOC_MODIFIED = 1.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_MOVE_BLOCK:
 	LD	A,(BLOCK_ACTIVE)
@@ -5194,6 +6739,28 @@ MOVE_FINISH:
 ;------------------------------------------------------------------------------
 ; Editor Screen Renderer
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; RENDER_SCREEN: Full editor screen and status bar redraw
+;
+; Purpose:
+;   Adjusts horizontal viewport, clears splash flag, disables inverse video,
+;   homes cursor, iterates through all visible rows (0..ACTIVE_ROWS-2) drawing
+;   cached document lines or empty line tildes, updates status bar, and
+;   relocates hardware cursor.
+;
+; Call Usage / Protocol:
+;   Called via CALL when initiating editor or after full-screen operations.
+;
+; Inputs:
+;   TOP_DOC_ROW, DOC_TOTAL_LINES, ACTIVE_ROWS, ACTIVE_COLS.
+;
+; Outputs:
+;   Full workspace rendered; NEED_SCREEN_RENDER set to 0.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 RENDER_SCREEN:
 	CALL	ADJUST_HORIZ_VIEWPORT
 	XOR	A
@@ -5374,10 +6941,23 @@ CT16_NO:
 	RET
 
 ;------------------------------------------------------------------------------
-; GET_TAB_SPACES: Compute spaces to next tab stop (1..CFG_TAB_WIDTH)
-; Input: A = Visual Column (low byte, 0..255)
-; Returns: A = Spaces to advance (1..4 or 1..8)
-; Preserves: BC, DE, HL
+; GET_TAB_SPACES: Compute spaces needed to advance to next tab stop
+;
+; Purpose:
+;   Calculates number of space characters (1..CFG_TAB_WIDTH) required to
+;   advance from visual column in register A to the next tab stop.
+;
+; Call Usage / Protocol:
+;   Called via CALL during line rendering and visual column calculation.
+;
+; Inputs:
+;   A = Visual column index (0..255).
+;
+; Outputs:
+;   A = Number of spaces to next tab stop (1..4 or 1..8).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 GET_TAB_SPACES:
 	PUSH	BC
@@ -5389,7 +6969,27 @@ GET_TAB_SPACES:
 	POP	BC
 	RET
 
-; Fast single line refresh: rewrites current line and restores cursor
+;------------------------------------------------------------------------------
+; RENDER_CURRENT_LINE: Fast single-line refresh for active document row
+;
+; Purpose:
+;   Verifies CUR_DOC_ROW is within visible viewport, positions cursor at
+;   start of screen row, clears row to EOL, renders line characters from
+;   ACTIVE_LINE_BUF with visual block highlighting and tab expansion,
+;   and updates status bar.
+;
+; Call Usage / Protocol:
+;   Called via CALL after character insertion, deletion, or in-line typing.
+;
+; Inputs:
+;   CUR_DOC_ROW, TOP_DOC_ROW, ACTIVE_LINE_BUF, ACTIVE_ROWS.
+;
+; Outputs:
+;   Current screen row repainted; status bar refreshed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 RENDER_CURRENT_LINE:
 	; Defensive check: ensure CUR_DOC_ROW is within visible viewport bounds
 	LD	HL,(CUR_DOC_ROW)
@@ -5650,7 +7250,24 @@ RCL_DONE_RESTORE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Flush any pending deferred screen, line, or status bar rendering
+; FLUSH_DEFERRED_RENDER: Flush pending deferred screen, line, or status updates
+;
+; Purpose:
+;   Evaluates deferred render flags (NEED_SCREEN_RENDER, NEED_LINE_RENDER,
+;   NEED_STATUS_RENDER). If keyboard buffer is idle, executes the minimal
+;   necessary redraw action to keep screen display synchronized.
+;
+; Call Usage / Protocol:
+;   Called via CALL at start of MAIN_LOOP and before opening modal dialogs.
+;
+; Inputs:
+;   NEED_SCREEN_RENDER, NEED_LINE_RENDER, NEED_STATUS_RENDER flags.
+;
+; Outputs:
+;   Executes required redraw and clears corresponding flags.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FLUSH_DEFERRED_RENDER:
 	CALL	ADJUST_HORIZ_VIEWPORT
@@ -5715,6 +7332,26 @@ CHECK_DEFERRED_STATUS:
 	RET
 
 
+;------------------------------------------------------------------------------
+; RENDER_BUFFER_LINE: Render individual document row with block highlighting
+;
+; Purpose:
+;   Clears current terminal row to EOL, queries block highlight range for
+;   doc line BC, checks out line from ACTIVE_LINE_BUF or working cache,
+;   and emits characters with tab expansion and reverse video styling.
+;
+; Call Usage / Protocol:
+;   Called via CALL for each row in RENDER_SCREEN loop.
+;
+; Inputs:
+;   BC = 16-bit document row index.
+;
+; Outputs:
+;   Document line rendered on screen followed by CRLF.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 RENDER_BUFFER_LINE:
 	CALL	TERM_CLEAR_EOL
 
@@ -5972,6 +7609,25 @@ RBL_DONE_CRLF:
 	CALL	PUTC
 	RET
 
+;------------------------------------------------------------------------------
+; LOCATE_STATUS_ROW: Position cursor at column 1 of bottom status bar row
+;
+; Purpose:
+;   Loads ACTIVE_ROWS into row coordinate and 1 into column coordinate,
+;   then jumps to LOCATE_RC to position hardware cursor at status row.
+;
+; Call Usage / Protocol:
+;   Called via CALL prior to rendering status bar.
+;
+; Inputs:
+;   ACTIVE_ROWS.
+;
+; Outputs:
+;   Hardware cursor positioned at row ACTIVE_ROWS, col 1.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF, HL.
+;------------------------------------------------------------------------------
 LOCATE_STATUS_ROW:
 	LD	A,(ACTIVE_ROWS)
 	LD	H,A
@@ -5981,6 +7637,27 @@ LOCATE_STATUS_ROW:
 STATUS_ENCLOSED_WIDTH	EQU	78
 POS_FIELD_WIDTH		EQU	22
 
+;------------------------------------------------------------------------------
+; RENDER_STATUS_BAR: Render complete reverse-video status bar on bottom row
+;
+; Purpose:
+;   Enables reverse video, emits symmetrical left margin padding, filename,
+;   screen geometry (80x24 / 120x40), file format (CP/M / Linux), edit mode
+;   or block selection metrics or pan offset or free memory, line and column
+;   indices, right margin padding, disables reverse video, and restores cursor.
+;
+; Call Usage / Protocol:
+;   Called via CALL across editing operations, modals, and screen redraws.
+;
+; Inputs:
+;   Editor session and configuration variables.
+;
+; Outputs:
+;   Bottom status bar emitted to terminal; cursor restored.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 RENDER_STATUS_BAR:
 	CALL	LOCATE_STATUS_ROW
 
@@ -6376,9 +8053,23 @@ SSRC_RIGHT_PAD_DONE:
 MEM_FIELD_WIDTH		EQU	15
 
 ;------------------------------------------------------------------------------
-; Print Free Memory in Status Bar (Fixed Width: MEM_FIELD_WIDTH = 15 chars)
-; Formats as "Free: <N> KB   " followed by " | ".
-; Replaces "^K: Editor keys" when rendering status bar on splash screen.
+; PRINT_STATUS_FREE_MEM: Format free memory field for status bar on splash
+;
+; Purpose:
+;   Calculates free document memory in whole KB and emits formatted string
+;   "Free: <N> KB" padded to 15 columns, followed by field separator " | ".
+;
+; Call Usage / Protocol:
+;   Called via CALL from RENDER_STATUS_BAR on splash screen or Far plugin run.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Free memory field emitted to console.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PRINT_STATUS_FREE_MEM:
 	CALL	CALC_FREE_MEM_KB	; HL = Free memory in whole KB
@@ -6414,7 +8105,24 @@ PSFM_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; SET_OOM_STATUS: Record Out of Memory condition and display modal pop-up
+; SET_OOM_STATUS: Flag out-of-memory condition and display error modal
+;
+; Purpose:
+;   Sets STATUS_OOM_FLAG to 1 and, if currently in active editor mode,
+;   displays a centered modal pop-up error box notifying the user that
+;   available RAM capacity has been exhausted.
+;
+; Call Usage / Protocol:
+;   Called via CALL when memory allocation or line insertion fails.
+;
+; Inputs:
+;   IN_EDITOR_MODE, IS_SPLASH_SCREEN.
+;
+; Outputs:
+;   STATUS_OOM_FLAG = 1; modal pop-up rendered if in editor.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 SET_OOM_STATUS:
 	PUSH	AF
@@ -6438,6 +8146,25 @@ SOS_DONE:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; SHOW_OOM_POPUP: Display centered Out of Memory modal pop-up
+;
+; Purpose:
+;   Sets up title and message pointers and invokes SHOW_STATUS_EVENT_POPUP
+;   to present an Out of Memory alert dialog.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SET_OOM_STATUS.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog rendered on screen.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_OOM_POPUP:
 	LD	DE,STR_POPUP_OOM_TITLE
 	LD	HL,STR_POPUP_OOM_MSG1
@@ -6445,8 +8172,24 @@ SHOW_OOM_POPUP:
 	JP	SHOW_STATUS_EVENT_POPUP
 
 ;------------------------------------------------------------------------------
-; Calculate Free Memory in Whole KB
-; Returns: HL = Free Memory in whole KB (slots / 8)
+; CALC_FREE_MEM_KB: Calculate available document memory in whole kilobytes
+;
+; Purpose:
+;   Computes total Far RAM slot capacity (EXT_BANK_COUNT * 256), subtracts
+;   currently allocated document lines, and divides by 8 to obtain whole
+;   kilobytes of remaining text storage capacity.
+;
+; Call Usage / Protocol:
+;   Called via CALL by status bar and memory summary routines.
+;
+; Inputs:
+;   EXT_BANK_COUNT, DOC_TOTAL_LINES, IN_EDITOR_MODE.
+;
+; Outputs:
+;   HL = Free memory in whole KB (slots / 8).
+;
+; Preserves / Modifies:
+;   Preserves AF, BC, DE; returns value in HL.
 ;------------------------------------------------------------------------------
 CALC_FREE_MEM_KB:
 	PUSH	AF
@@ -6479,9 +8222,23 @@ CFM_DIV8:
 	RET
 
 ;------------------------------------------------------------------------------
-; Count Decimal Digits in 16-bit Word (HL)
-; Returns: A = digit count (1..5)
-; Preserves: BC, DE, HL
+; GET_DEC_WORD_DIGITS: Count decimal digits needed for 16-bit value in HL
+;
+; Purpose:
+;   Compares 16-bit integer in HL against decimal threshold magnitudes
+;   (10, 100, 1000, 10000) to determine number of decimal digits (1..5).
+;
+; Call Usage / Protocol:
+;   Called via CALL by status bar, dialog formatters, and line number printers.
+;
+; Inputs:
+;   HL = 16-bit unsigned integer (0..65535).
+;
+; Outputs:
+;   A = Number of decimal digits (1..5).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; modifies AF.
 ;------------------------------------------------------------------------------
 GET_DEC_WORD_DIGITS:
 	PUSH	DE
@@ -6506,6 +8263,26 @@ GDWD_DONE:
 	POP	DE
 	RET
 
+;------------------------------------------------------------------------------
+; CMP_HL_DE: Compare 16-bit unsigned word in HL with DE
+;
+; Purpose:
+;   Performs unsigned subtraction (HL - DE) to set processor condition flags
+;   without modifying either register operand.
+;
+; Call Usage / Protocol:
+;   General 16-bit comparison primitive called throughout SE.COM.
+;
+; Inputs:
+;   HL, DE = 16-bit values to compare.
+;
+; Outputs:
+;   Carry = 1 if HL < DE; Carry = 0, Zero = 1 if HL == DE;
+;   Carry = 0, Zero = 0 if HL > DE.
+;
+; Preserves / Modifies:
+;   Preserves HL, DE; modifies AF (flags).
+;------------------------------------------------------------------------------
 CMP_HL_DE:
 	; Compare HL with DE: Carry=1 if HL < DE. Preserves HL, DE.
 	PUSH	HL
@@ -6518,11 +8295,24 @@ FILENAME_FIELD_WIDTH	EQU	14
 PSF_MAX_LEN:		DB	14
 
 ;------------------------------------------------------------------------------
-; Print Filename in Status Bar (Fixed Width: FILENAME_FIELD_WIDTH characters)
-; If filename is unknown (HAS_FILE_ARG == 0), prints "(Untitled)" padded.
-; If filename is known, prints full filename "Drive letter: filename" padded.
-; Takes care not to duplicate drive letter if filename already contains it.
-; Always outputs exactly FILENAME_FIELD_WIDTH characters, followed by " | ".
+; PRINT_STATUS_FILENAME: Format and print document filename in status bar
+;
+; Purpose:
+;   Outputs active file specification (or "(Untitled)") padded to exactly
+;   14 characters, followed by " | ". Handles CP/M drive prefix, user area,
+;   and VFS FAT path display without duplicate drive letters.
+;
+; Call Usage / Protocol:
+;   Called via CALL from RENDER_STATUS_BAR.
+;
+; Inputs:
+;   WORK_FCB, HAS_FILE_ARG, DOC_IS_FAT, DOC_USER_NUM.
+;
+; Outputs:
+;   14-character filename field + " | " emitted to console.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PRINT_STATUS_FILENAME:
 	LD	C,0			; C = characters printed so far
@@ -6737,10 +8527,24 @@ PSF_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; ADJUST_HORIZ_VIEWPORT: Auto-scroll horizontal viewport in 80- and 120-column modes
-; Evaluates cursor visual column against VIEW_LEFT_COL and VIEW_RIGHT_COL.
-; If viewport shifts, sets NEED_SCREEN_RENDER = 1.
-; Preserves: AF, BC, DE, HL
+; ADJUST_HORIZ_VIEWPORT: Auto-scroll horizontal viewport in 40-column steps
+;
+; Purpose:
+;   Compares cursor visual column against current viewport window bounds
+;   (VIEW_LEFT_COL and VIEW_RIGHT_COL). Pans horizontal viewport left or right
+;   in 40-column increments when cursor moves past margins.
+;
+; Call Usage / Protocol:
+;   Called via CALL before rendering and during cursor navigation.
+;
+; Inputs:
+;   CUR_COL, VIEW_LEFT_COL, VIEW_RIGHT_COL, ACTIVE_COLS.
+;
+; Outputs:
+;   VIEW_LEFT_COL, VIEW_RIGHT_COL updated; sets NEED_SCREEN_RENDER if panned.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 ADJUST_HORIZ_VIEWPORT:
 	PUSH	AF
@@ -6862,13 +8666,24 @@ AHV_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; CONSTRAIN_CURSOR_VIEWPORT: Ensure cursor row is strictly within active viewport
-; When switching screen modes (e.g. 120x40 -> 80x24) or reentering the editor,
-; prevents the cursor from being located below the status bar.
-; Moves cursor up if out-of-bounds, realigning CUR_COL to TARGET_COL on row change.
-; Note: Horizontal position is managed dynamically by ADJUST_HORIZ_VIEWPORT,
-; supporting up to 120-char lines without horizontal column truncation.
-; Preserves: AF, BC, DE, HL
+; CONSTRAIN_CURSOR_VIEWPORT: Constrain cursor row within active viewport bounds
+;
+; Purpose:
+;   Prevents cursor from pointing outside visible document area or below the
+;   status bar when switching geometries (120x40 <-> 80x24) or loading files.
+;   Adjusts CUR_DOC_ROW, TOP_DOC_ROW, and realigns CUR_COL to TARGET_COL.
+;
+; Call Usage / Protocol:
+;   Called via CALL when switching geometries, resizing, or switching modes.
+;
+; Inputs:
+;   CUR_DOC_ROW, TOP_DOC_ROW, ACTIVE_ROWS, DOC_TOTAL_LINES.
+;
+; Outputs:
+;   CUR_DOC_ROW and TOP_DOC_ROW constrained within valid screen bounds.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 CONSTRAIN_CURSOR_VIEWPORT:
 	PUSH	AF
@@ -6943,9 +8758,24 @@ CCV_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Calculate Visual Document Column from (CUR_DOC_ROW, CUR_COL)
-; Returns: HL = 16-bit Visual Column (0-indexed, 0..MAX_LINE_CHARS-1)
-; Preserves: BC, DE
+; CALC_VISUAL_COL: Calculate visual display column from character offset
+;
+; Purpose:
+;   Scans characters in ACTIVE_LINE_BUF from column 0 up to CUR_COL, expanding
+;   tab characters according to CFG_TAB_WIDTH, to compute the true 0-indexed
+;   visual terminal column.
+;
+; Call Usage / Protocol:
+;   Called via CALL for cursor positioning, status bar, and viewport panning.
+;
+; Inputs:
+;   CUR_COL, ACTIVE_LINE_BUF.
+;
+; Outputs:
+;   HL = 16-bit Visual Column (0-indexed, 0..MAX_LINE_CHARS-1).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF; returns value in HL.
 ;------------------------------------------------------------------------------
 CALC_VISUAL_COL:
 	PUSH	BC
@@ -7004,6 +8834,26 @@ CALC_VIS_NO_CLAMP:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; LOCATE_CURSOR: Reposition hardware terminal cursor at current editor position
+;
+; Purpose:
+;   Computes 1-indexed terminal screen row (CUR_DOC_ROW - TOP_DOC_ROW + 1)
+;   and 1-indexed terminal screen column (Visual Col - VIEW_LEFT_COL + 1),
+;   clamping to visible bounds, and repositions hardware cursor via LOCATE_RC.
+;
+; Call Usage / Protocol:
+;   Called via CALL at end of editing operations and screen redraws.
+;
+; Inputs:
+;   CUR_DOC_ROW, TOP_DOC_ROW, CUR_COL, VIEW_LEFT_COL, ACTIVE_ROWS, ACTIVE_COLS.
+;
+; Outputs:
+;   Hardware cursor located at active text position.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 LOCATE_CURSOR:
 	; Screen Row = CUR_DOC_ROW - TOP_DOC_ROW + 1 (1-indexed for terminal)
 	LD	HL,(CUR_DOC_ROW)
@@ -7051,6 +8901,28 @@ LC_COL_OK:
 ;------------------------------------------------------------------------------
 ; 512KB HBIOS RAM Far-Banking Multi-Bank Document Engine
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; BUFFER_INIT: Initialize document buffers, Far RAM banking, and empty document
+;
+; Purpose:
+;   Clears working cache (LINE_STORAGE), temporary line buffer (LOAD_LINE_TEMP),
+;   and Far RAM I/O buffer (FAR_IO_BUF). Probes memory banking via
+;   INIT_FAR_RAM_BANKS, resets slot allocator via INIT_SLOT_SYSTEM,
+;   invalidates active line buffer, and creates initial empty document.
+;
+; Call Usage / Protocol:
+;   Called via CALL during START initialization.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Buffer memory cleared, Far RAM banks configured, empty doc ready.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 BUFFER_INIT:
 	; Clear LINE_STORAGE with 0
 	LD	HL,LINE_STORAGE
@@ -7086,6 +8958,27 @@ BUFFER_INIT:
 	CALL	INIT_EMPTY_DOCUMENT
 	RET
 
+;------------------------------------------------------------------------------
+; INIT_FAR_RAM_BANKS: Probe RomWBW HBIOS banking and allocate Far RAM banks
+;
+; Purpose:
+;   Queries RomWBW HBIOS for active CP/M bank, total RAM banks, and BIOS bank.
+;   Determines safe RAM banking boundaries respecting protected or hibernated
+;   RAM drives. Allocates 1 or 2 Line Table banks (for 16K or 32K doc lines)
+;   and populates EXT_BANK_TABLE with available Far RAM text banks.
+;
+; Call Usage / Protocol:
+;   Called via CALL from BUFFER_INIT.
+;
+; Inputs:
+;   CFG_RAMDRIVE_FLAG, CFG_LINES_MODE.
+;
+; Outputs:
+;   LINE_TABLE_BANK, LINE_TABLE_BANK_1, EXT_BANK_TABLE, EXT_BANK_COUNT.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 INIT_FAR_RAM_BANKS:
 	; 1. Query CP/M Active User Bank
 	PUSH	IX
@@ -7256,9 +9149,23 @@ IFRB_NO_BANKS:
 
 ;------------------------------------------------------------------------------
 ; GET_LINE_SLOT: Retrieve 16-bit slot ID for document line BC from Far RAM
-; Inputs: BC = Document Line Index (0..MAX_DOC_LINES-1)
-; Returns: HL = 16-bit physical slot ID
-; Preserves: BC, DE
+;
+; Purpose:
+;   Retrieves the 16-bit physical slot ID associated with document line BC
+;   from the Far RAM Line Table. Handles bank selection (Bank 0 for lines
+;   0..16383, Bank 1 for lines 16384..32767).
+;
+; Call Usage / Protocol:
+;   Fundamental line table lookup called across line retrieval and editing.
+;
+; Inputs:
+;   BC = 16-bit Document Line Index (0..MAX_DOC_LINES-1).
+;
+; Outputs:
+;   HL = 16-bit physical slot ID.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; returns value in HL; clobbers AF.
 ;------------------------------------------------------------------------------
 GET_LINE_SLOT:
 	PUSH	BC
@@ -7309,9 +9216,22 @@ GLS_GOT_BANK:
 
 ;------------------------------------------------------------------------------
 ; SET_LINE_SLOT: Store 16-bit slot ID for document line BC into Far RAM
-; Inputs: BC = Document Line Index (0..MAX_DOC_LINES-1)
-;         HL = 16-bit physical slot ID
-; Preserves: BC, DE, HL
+;
+; Purpose:
+;   Stores 16-bit physical slot ID HL into the Far RAM Line Table at document
+;   line index BC. Dispatches to Bank 0 or Bank 1 according to line index.
+;
+; Call Usage / Protocol:
+;   Called when allocating, reassigning, or clearing line slots.
+;
+; Inputs:
+;   BC = 16-bit Document Line Index; HL = 16-bit physical slot ID.
+;
+; Outputs:
+;   Line table entry updated in Far RAM.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 SET_LINE_SLOT:
 	PUSH	BC
@@ -7364,11 +9284,24 @@ SLS_GOT_BANK:
 	RET
 
 ;------------------------------------------------------------------------------
-; SHIFT_LINE_SLOTS_UP: Shift W line slots upward from higher to lower line indices
-; Inputs: DE = Destination Line Index
-;         HL = Source Line Index (DE < HL)
-;         BC = Word Count (W lines to shift)
-; Preserves: All registers except AF
+; SHIFT_LINE_SLOTS_UP: Shift W line slots upward from higher to lower lines
+;
+; Purpose:
+;   Shifts W consecutive line slot entries upward from higher to lower line
+;   indices (DE < HL), copying in 128-entry chunks across the 16K line boundary
+;   between Far RAM Bank 0 and Bank 1.
+;
+; Call Usage / Protocol:
+;   Called when deleting document lines or visual blocks.
+;
+; Inputs:
+;   DE = Destination Line Index, HL = Source Line Index, BC = Word Count (W).
+;
+; Outputs:
+;   Line table entries shifted.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 SHIFT_LINE_SLOTS_UP:
 	LD	A,B
@@ -7526,11 +9459,24 @@ SLOTS_UP_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; SHIFT_LINE_SLOTS_DOWN: Shift W line slots downward from lower to higher indices
-; Inputs: DE = Destination Line Index
-;         HL = Source Line Index (DE > HL)
-;         BC = Word Count (W lines to shift)
-; Preserves: All registers except AF
+; SHIFT_LINE_SLOTS_DOWN: Shift W line slots downward from lower to higher lines
+;
+; Purpose:
+;   Shifts W consecutive line slot entries downward from lower to higher line
+;   indices (DE > HL), copying backwards in 128-entry chunks across the 16K
+;   line boundary between Bank 0 and Bank 1.
+;
+; Call Usage / Protocol:
+;   Called when inserting lines or inserting blocks into document.
+;
+; Inputs:
+;   DE = Destination Line Index, HL = Source Line Index, BC = Word Count (W).
+;
+; Outputs:
+;   Line table entries shifted.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 SHIFT_LINE_SLOTS_DOWN:
 	LD	A,B
@@ -7700,12 +9646,26 @@ SLOTS_DOWN_DONE:
 	POP	BC
 	RET
 
-; Subroutine: WRITE_SLOTS_TO_ONE_BANK
-; Inputs: A = Line Table Bank ID
-;         BC = In-Bank Destination Line Index (0..16383)
-;         HL = Source Buffer in RAM
-;         DE = Line Count (K lines)
-; Destroys: AF, BC, DE, HL
+;------------------------------------------------------------------------------
+; WRITE_SLOTS_TO_ONE_BANK: Copy K slot values from local RAM to single bank
+;
+; Purpose:
+;   Copies K 16-bit line slot values from local memory buffer HL to Far RAM
+;   Line Table bank A starting at in-bank line index BC.
+;
+; Call Usage / Protocol:
+;   Internal helper called by WRITE_LINE_SLOTS_FROM_RAM.
+;
+; Inputs:
+;   A = Line Table Bank ID, BC = In-Bank Destination Line Index (0..16383),
+;   HL = Source buffer in RAM, DE = Line count (K).
+;
+; Outputs:
+;   K words copied to Far RAM Line Table bank.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 WRITE_SLOTS_TO_ONE_BANK:
 	LD	(FAR_DEST_BANK),A
 	PUSH	HL			; Save Source Buffer address
@@ -7740,11 +9700,24 @@ WRITE_SLOTS_TO_ONE_BANK:
 	RET
 
 ;------------------------------------------------------------------------------
-; WRITE_LINE_SLOTS_FROM_RAM: Copy K words from local RAM buffer into Line Table
-; Inputs: BC = Destination Line Index (0..32767)
-;         HL = Source Buffer in RAM (e.g. COPY_SLOTS_BUF)
-;         DE = Word Count (K lines)
-; Preserves: None
+; WRITE_LINE_SLOTS_FROM_RAM: Copy K line slots from local RAM into Line Table
+;
+; Purpose:
+;   Transfers a block of K 16-bit line slots from local RAM into the Far RAM
+;   Line Table starting at destination line BC, splitting across Bank 0 and
+;   Bank 1 boundaries if the range crosses line 16384.
+;
+; Call Usage / Protocol:
+;   Called when pasting multi-line clipboard blocks.
+;
+; Inputs:
+;   BC = Destination Line Index, HL = Source buffer in RAM, DE = Line count (K).
+;
+; Outputs:
+;   Slots written to Far RAM Line Table.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 WRITE_LINE_SLOTS_FROM_RAM:
 	LD	A,D
@@ -7829,10 +9802,23 @@ BIT_MASK_TABLE:
 	DB	001H, 002H, 004H, 008H, 010H, 020H, 040H, 080H
 
 ;------------------------------------------------------------------------------
-; TEST_PAGE_ON_DISK: Test if page A has been written to swap file
-; Input: A = 8-bit Page Number (0..255)
-; Returns: Z flag set if bit is 0 (not on disk), NZ flag set if bit is 1 (on disk)
-; Preserves: BC, DE, HL
+; TEST_PAGE_ON_DISK: Test if virtual page A has been written to swap file
+;
+; Purpose:
+;   Tests whether virtual swap page A has already been committed to the swap
+;   file ($$$SE$$$.SWP) by checking bit A in PAGE_ON_DISK_BITMAP.
+;
+; Call Usage / Protocol:
+;   Called by virtual swap engine before issuing swap reads.
+;
+; Inputs:
+;   A = 8-bit Page Number (0..255).
+;
+; Outputs:
+;   Zero flag set if bit is 0 (not on disk); Non-zero if bit is 1 (on disk).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; modifies AF (flags).
 ;------------------------------------------------------------------------------
 TEST_PAGE_ON_DISK:
 	PUSH	BC
@@ -7862,9 +9848,23 @@ TEST_PAGE_ON_DISK:
 	RET
 
 ;------------------------------------------------------------------------------
-; SET_PAGE_ON_DISK: Mark page A as written to swap file in PAGE_ON_DISK_BITMAP
-; Input: A = 8-bit Page Number (0..255)
-; Preserves: BC, DE, HL
+; SET_PAGE_ON_DISK: Mark page A as written to swap file in bitmap
+;
+; Purpose:
+;   Marks virtual swap page A as written to disk by setting bit A in
+;   PAGE_ON_DISK_BITMAP.
+;
+; Call Usage / Protocol:
+;   Called after writing a virtual page to $$$SE$$$.SWP.
+;
+; Inputs:
+;   A = 8-bit Page Number (0..255).
+;
+; Outputs:
+;   Bitmap updated.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; modifies AF.
 ;------------------------------------------------------------------------------
 SET_PAGE_ON_DISK:
 	PUSH	BC
@@ -7895,10 +9895,23 @@ SET_PAGE_ON_DISK:
 	RET
 
 ;------------------------------------------------------------------------------
-; CALC_PAGE_SLOT_COUNT: Determine number of active slots in page A
-; Input: A = 8-bit Page Number (0..255)
-; Returns: Z flag set if 0 slots; NZ set with B = loop count (0 for 256, or 1..255)
-; Preserves: DE
+; CALC_PAGE_SLOT_COUNT: Determine number of active 128-byte slots in page A
+;
+; Purpose:
+;   Computes the number of active 128-byte slots in virtual page A based on
+;   NEXT_FRESH_SLOT high and low bytes.
+;
+; Call Usage / Protocol:
+;   Called before swapping a bank to disk or fetching from disk.
+;
+; Inputs:
+;   A = 8-bit Page Number (0..255).
+;
+; Outputs:
+;   Zero flag set if 0 slots; NZ set with B = loop count (0 for 256, 1..255).
+;
+; Preserves / Modifies:
+;   Preserves DE; clobbers AF, BC, HL.
 ;------------------------------------------------------------------------------
 CALC_PAGE_SLOT_COUNT:
 	PUSH	HL
@@ -7928,8 +9941,23 @@ CPSC_EMPTY:
 	RET
 
 ;------------------------------------------------------------------------------
-; CREATE_SWAP_FILE: Create temporary swap file $$$SE$$$.SWP on current drive
-; Returns: Carry = 0 on success, Carry = 1 on failure
+; CREATE_SWAP_FILE: Create temporary virtual swap file $$$SE$$$.SWP on disk
+;
+; Purpose:
+;   Initializes SWAP_FCB on active document drive, deletes any preexisting
+;   temporary swap file, and creates a fresh $$$SE$$$.SWP via BDOS function 22.
+;
+; Call Usage / Protocol:
+;   Called when first virtual page fault occurs.
+;
+; Inputs:
+;   WORK_FCB (determines target drive).
+;
+; Outputs:
+;   Carry = 0 on success (SWAP_ACTIVE = 1); Carry = 1 on error.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 CREATE_SWAP_FILE:
 	PUSH	BC
@@ -8008,6 +10036,22 @@ CSF_FAIL:
 
 ;------------------------------------------------------------------------------
 ; CLEANUP_SWAP_FILE: Close and delete temporary swap file $$$SE$$$.SWP
+;
+; Purpose:
+;   Closes and deletes temporary virtual swap file $$$SE$$$.SWP via BDOS
+;   functions 16 and 19 if swap is active.
+;
+; Call Usage / Protocol:
+;   Called on exit, close document, or paging initialization.
+;
+; Inputs:
+;   SWAP_ACTIVE.
+;
+; Outputs:
+;   Swap file deleted; SWAP_ACTIVE cleared to 0.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 CLEANUP_SWAP_FILE:
 	LD	A,(SWAP_ACTIVE)
@@ -8037,9 +10081,23 @@ CLEANUP_SWAP_FILE:
 	RET
 
 ;------------------------------------------------------------------------------
-; FLUSH_BANK_TO_SWAP: Flush Far RAM bank B to $$$SE$$$.SWP
-; Inputs: B = bank index (1..11), SWAP_PAGE_OLD = page number
-; Returns: Carry = 0 on success, Carry = 1 on error
+; FLUSH_BANK_TO_SWAP: Flush Far RAM bank B to $$$SE$$$.SWP on disk
+;
+; Purpose:
+;   Flushes all active 128-byte slots from Far RAM bank B to temporary swap
+;   file $$$SE$$$.SWP using BDOS Random Write (function 34).
+;
+; Call Usage / Protocol:
+;   Called by page fault handler when evicting a dirty bank.
+;
+; Inputs:
+;   B = bank index (1..11), SWAP_PAGE_OLD = page number.
+;
+; Outputs:
+;   Carry = 0 on success; Carry = 1 on write error (triggers OOM).
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 FLUSH_BANK_TO_SWAP:
 	; Determine Far RAM bank ID
@@ -8147,9 +10205,23 @@ FBTS_WRITE_ERR:
 	RET
 
 ;------------------------------------------------------------------------------
-; FETCH_PAGE_FROM_SWAP: Fetch page from $$$SE$$$.SWP into Far RAM bank B
-; Inputs: B = bank index (1..11), SWAP_PAGE_NEW = page number
-; Returns: Carry = 0 on success, Carry = 1 on error
+; FETCH_PAGE_FROM_SWAP: Read page from $$$SE$$$.SWP into Far RAM bank B
+;
+; Purpose:
+;   Reads 128-byte slots from temporary swap file $$$SE$$$.SWP into Far RAM
+;   bank B using BDOS Random Read (function 33).
+;
+; Call Usage / Protocol:
+;   Called by page fault handler when paging in an on-disk page.
+;
+; Inputs:
+;   B = bank index (1..11), SWAP_PAGE_NEW = page number.
+;
+; Outputs:
+;   Carry = 0 on success; Carry = 1 on read error.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 FETCH_PAGE_FROM_SWAP:
 	; Determine Far RAM bank ID
@@ -8247,10 +10319,24 @@ FPFS_DONE_SUCCESS:
 	RET
 
 ;------------------------------------------------------------------------------
-; SELECT_VICTIM_BANK: Select victim bank with maximum distance from SWAP_PAGE_TEMP
-; Inputs: SWAP_PAGE_TEMP = target page number (0..255)
-; Returns: B = victim bank index (1..11)
-; Preserves: None
+; SELECT_VICTIM_BANK: Select resident bank with maximum distance from target
+;
+; Purpose:
+;   Selects a resident Far RAM bank (1..EXT_BANK_COUNT-1) to evict, choosing
+;   the bank whose resident page has maximum numerical distance from target
+;   page. Bank 0 is pinned and never evicted.
+;
+; Call Usage / Protocol:
+;   Called by page fault handler.
+;
+; Inputs:
+;   SWAP_PAGE_TEMP = target page number (0..255).
+;
+; Outputs:
+;   B = selected victim bank index (1..11).
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 SELECT_VICTIM_BANK:
 	LD	A,(EXT_BANK_COUNT)
@@ -8287,9 +10373,25 @@ SVB_FAIL:
 	RET
 
 ;------------------------------------------------------------------------------
-; HANDLE_PAGE_FAULT: Evict victim bank if dirty, fetch target page into victim bank
-; Input: SWAP_PAGE_TEMP = target page number
-; Returns: B = allocated victim bank index (1..11), Carry = 0 on success, Carry = 1 on error
+; HANDLE_PAGE_FAULT: Resolve virtual page fault by evicting and loading page
+;
+; Purpose:
+;   Handles a page fault for non-resident virtual page SWAP_PAGE_TEMP.
+;   Ensures swap file exists, selects a victim bank, flushes victim bank
+;   if dirty, reads target page from disk if present, and updates tables.
+;
+; Call Usage / Protocol:
+;   Called from ENSURE_PAGE_RESIDENT on cache miss.
+;
+; Inputs:
+;   SWAP_PAGE_TEMP = target page number.
+;
+; Outputs:
+;   B = allocated victim bank index (1..11), Carry = 0 on success,
+;   Carry = 1 on error.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 HANDLE_PAGE_FAULT:
 	; Paging requires at least 2 Far RAM banks (Bank 0 is pinned)
@@ -8371,10 +10473,24 @@ HPF_FAIL:
 	RET
 
 ;------------------------------------------------------------------------------
-; ENSURE_PAGE_RESIDENT: Ensure 32KB page A is resident in Far RAM banks
-; Input: A = 8-bit Page Number (0..255)
-; Returns: A = Far RAM Bank ID (e.g. 0x8C), Carry = 0 on success, Carry = 1 on error
-; Preserves: BC, DE, HL
+; ENSURE_PAGE_RESIDENT: Ensure 32KB virtual page A is resident in Far RAM
+;
+; Purpose:
+;   Ensures 32KB virtual page A is mapped into a physical Far RAM bank.
+;   Page 0 is permanently pinned in Bank 0. If non-zero page is not resident,
+;   triggers page fault resolution.
+;
+; Call Usage / Protocol:
+;   Called before accessing Far RAM slots.
+;
+; Inputs:
+;   A = 8-bit Page Number (0..255).
+;
+; Outputs:
+;   A = Far RAM Bank ID, Carry = 0 on success, Carry = 1 on error.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; returns bank ID in A.
 ;------------------------------------------------------------------------------
 ENSURE_PAGE_RESIDENT:
 	PUSH	BC
@@ -8445,10 +10561,23 @@ EPR_FAULT_ERR:
 	RET
 
 ;------------------------------------------------------------------------------
-; ENSURE_PAGE_RESIDENT_DIRTY: Ensure page A is resident AND mark its bank dirty
-; Input: A = 8-bit Page Number (0..255)
-; Returns: A = Far RAM Bank ID, Carry = 0 on success, Carry = 1 on error
-; Preserves: BC, DE, HL
+; ENSURE_PAGE_RESIDENT_DIRTY: Ensure page A is resident and mark bank dirty
+;
+; Purpose:
+;   Ensures virtual page A is resident in Far RAM and marks its host bank
+;   dirty in BANK_DIRTY_TABLE so changes will be flushed if evicted.
+;
+; Call Usage / Protocol:
+;   Called before writing data to Far RAM slots.
+;
+; Inputs:
+;   A = 8-bit Page Number (0..255).
+;
+; Outputs:
+;   A = Far RAM Bank ID, Carry = 0 on success, Carry = 1 on error.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; returns bank ID in A.
 ;------------------------------------------------------------------------------
 ENSURE_PAGE_RESIDENT_DIRTY:
 	CALL	ENSURE_PAGE_RESIDENT
@@ -8471,7 +10600,23 @@ ENSURE_PAGE_RESIDENT_DIRTY:
 
 ;------------------------------------------------------------------------------
 ; INIT_PAGING_SYSTEM: Reset paging tables, bitmap, and clean up swap file
-; Preserves: All registers
+;
+; Purpose:
+;   Cleans up swap file, clears swap active flag, resets victim pointer,
+;   zeroes PAGE_ON_DISK_BITMAP, and initializes BANK_PAGE_TABLE and
+;   BANK_DIRTY_TABLE.
+;
+; Call Usage / Protocol:
+;   Called via CALL from INIT_SLOT_SYSTEM.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Paging subsystem reset.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 INIT_PAGING_SYSTEM:
 	PUSH	AF
@@ -8526,10 +10671,24 @@ IPS_NEXT_BANK:
 	RET
 
 ;------------------------------------------------------------------------------
-; WRITE_FAR_SLOT: Write 128-byte line from local memory to physical Far RAM slot
-; Inputs: HL = Local Source Address (in CPM_USER_BANK)
-;         BC = 16-bit Virtual Slot ID (0..65534)
-; Preserves: All registers except AF
+; WRITE_FAR_SLOT: Write 128-byte line from local memory to Far RAM slot
+;
+; Purpose:
+;   Copies 128 bytes from local user memory HL into Far RAM slot BC.
+;   Ensures target virtual page is resident and marked dirty, computes
+;   in-bank offset, and invokes HBIOS SYSBNKCPY.
+;
+; Call Usage / Protocol:
+;   Low-level slot writer called by text and line management routines.
+;
+; Inputs:
+;   HL = Local Source Address (in CPM_USER_BANK), BC = 16-bit Virtual Slot ID.
+;
+; Outputs:
+;   Carry = 0 on success, Carry = 1 on paging/memory error.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 WRITE_FAR_SLOT:
 	PUSH	BC
@@ -8589,10 +10748,24 @@ WFS_ERR:
 	RET
 
 ;------------------------------------------------------------------------------
-; READ_FAR_SLOT: Read 128-byte line from physical Far RAM slot into local memory
-; Inputs: DE = Local Destination Address (in CPM_USER_BANK)
-;         BC = 16-bit Virtual Slot ID (0..65534)
-; Preserves: All registers except AF
+; READ_FAR_SLOT: Read 128-byte line from Far RAM slot into local memory
+;
+; Purpose:
+;   Copies 128 bytes from Far RAM slot BC into local user memory DE.
+;   Ensures target virtual page is resident in Far RAM and invokes
+;   HBIOS SYSBNKCPY.
+;
+; Call Usage / Protocol:
+;   Low-level slot reader called by line management routines.
+;
+; Inputs:
+;   DE = Local Destination Address (in CPM_USER_BANK), BC = 16-bit Slot ID.
+;
+; Outputs:
+;   Carry = 0 on success, Carry = 1 on paging/memory error.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 READ_FAR_SLOT:
 	PUSH	BC
@@ -8653,10 +10826,23 @@ RFS_ERR:
 
 
 ;------------------------------------------------------------------------------
-; WRITE_FAR_SLOT_LINE: Write single-stride null-terminated line to physical slot BC
-; Inputs: HL = Local Source Address (in CPM_USER_BANK)
-;         BC = 16-bit Physical Slot ID (0..3583)
-; Preserves: IX, BC, DE
+; WRITE_FAR_SLOT_LINE: Write single-stride null-terminated line to slot BC
+;
+; Purpose:
+;   Writes a single-stride null-terminated text line to physical slot BC
+;   with NEXT_SLOT_ID initialized to 0xFFFF.
+;
+; Call Usage / Protocol:
+;   Called when storing single-slot lines.
+;
+; Inputs:
+;   HL = Local Source Address, BC = 16-bit Physical Slot ID.
+;
+; Outputs:
+;   Slot written in Far RAM.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, IX; clobbers AF, HL.
 ;------------------------------------------------------------------------------
 WRITE_FAR_SLOT_LINE:
 	PUSH	BC
@@ -8699,11 +10885,25 @@ WFSL_WRITE:
 	RET
 
 ;------------------------------------------------------------------------------
-;------------------------------------------------------------------------------
-; WRITE_FAR_LINE: Write null-terminated line from local memory to document line BC
-; Inputs: HL = Local Source Address (in CPM_USER_BANK)
-;         BC = 16-bit Document Line Index (0..3583)
-; Preserves: All registers except AF
+; WRITE_FAR_LINE: Write null-terminated line to document line BC slot chain
+;
+; Purpose:
+;   Writes null-terminated text line from local memory HL to document line
+;   BC. Chains multiple 126-byte payload slots if line exceeds single slot,
+;   reusing existing extension slots or allocating fresh ones, and frees
+;   trailing unused slots.
+;
+; Call Usage / Protocol:
+;   Primary line storage writer called when saving or committing lines.
+;
+; Inputs:
+;   HL = Local Source Address, BC = 16-bit Document Line Index.
+;
+; Outputs:
+;   Line written to Far RAM slot chain.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 WRITE_FAR_LINE:
 	PUSH	BC
@@ -8822,11 +11022,24 @@ WFL_ALL_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; READ_FAR_LINE_MAX: Read line from document line BC into local memory DE
-; Inputs: DE = Local Destination Address
-;         BC = 16-bit Document Line Index
-;         HL = Maximum payload bytes to read (null terminator excluded)
-; Preserves: BC, DE
+; READ_FAR_LINE_MAX: Read line from document line BC up to HL max bytes
+;
+; Purpose:
+;   Reads characters from document line BC's Far RAM slot chain into local
+;   memory buffer DE up to HL maximum payload bytes, traversing slot
+;   extension links and null-terminating destination.
+;
+; Call Usage / Protocol:
+;   Primary line reader for cache, clipboard, and active buffer.
+;
+; Inputs:
+;   DE = Local Destination Address, BC = Document Line Index, HL = Max bytes.
+;
+; Outputs:
+;   Text line loaded into DE and null-terminated.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF, HL.
 ;------------------------------------------------------------------------------
 READ_FAR_LINE_MAX:
 	PUSH	BC
@@ -8898,9 +11111,22 @@ RFLM_DONE:
 
 ;------------------------------------------------------------------------------
 ; READ_FAR_LINE: Read line for local LINE_STORAGE cache slot
-; Inputs: DE = Local Destination Address
-;         BC = 16-bit Document Line Index
-; Preserves: All registers except AF
+;
+; Purpose:
+;   Wrapper for READ_FAR_LINE_MAX that reads up to 254 bytes into destination
+;   DE for standard LINE_STORAGE cache slots.
+;
+; Call Usage / Protocol:
+;   Called by cache window manager.
+;
+; Inputs:
+;   DE = Local Destination Address, BC = 16-bit Document Line Index.
+;
+; Outputs:
+;   Line loaded into DE.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 READ_FAR_LINE:
 	PUSH	HL
@@ -8911,8 +11137,23 @@ READ_FAR_LINE:
 
 ;------------------------------------------------------------------------------
 ; CHECKOUT_ACTIVE_LINE: Ensure CUR_DOC_ROW is checked out in ACTIVE_LINE_BUF
-; Preserves: All registers except AF
-; Returns: HL = ACTIVE_LINE_BUF
+;
+; Purpose:
+;   Checks out document line CUR_DOC_ROW into ACTIVE_LINE_BUF (up to 1022
+;   bytes). If a different row was previously checked out and marked dirty,
+;   commits it to Far RAM first.
+;
+; Call Usage / Protocol:
+;   Called before in-line editing, typing, or line rendering.
+;
+; Inputs:
+;   CUR_DOC_ROW.
+;
+; Outputs:
+;   HL = ACTIVE_LINE_BUF, line loaded and ready for edits.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; returns buffer pointer in HL.
 ;------------------------------------------------------------------------------
 CHECKOUT_ACTIVE_LINE:
 	PUSH	BC
@@ -8952,7 +11193,23 @@ CHECKOUT_ALREADY_DONE:
 
 ;------------------------------------------------------------------------------
 ; COMMIT_ACTIVE_LINE: Write ACTIVE_LINE_BUF to Far RAM if dirty
-; Preserves: All registers except AF
+;
+; Purpose:
+;   If ACTIVE_LINE_DIRTY is set, writes ACTIVE_LINE_BUF back to Far RAM line
+;   chain for ACTIVE_LINE_ROW and synchronizes with local LINE_STORAGE cache
+;   if row falls within cache window.
+;
+; Call Usage / Protocol:
+;   Called before navigating away from active row, saving, or checking out.
+;
+; Inputs:
+;   ACTIVE_LINE_ROW, ACTIVE_LINE_DIRTY, ACTIVE_LINE_BUF.
+;
+; Outputs:
+;   Line committed to Far RAM; ACTIVE_LINE_DIRTY cleared to 0.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 COMMIT_ACTIVE_LINE:
 	PUSH	BC
@@ -9046,7 +11303,22 @@ COMMIT_DONE:
 
 ;------------------------------------------------------------------------------
 ; INVALIDATE_ACTIVE_LINE: Commit if dirty, then reset ACTIVE_LINE_ROW to 0xFFFF
-; Preserves: All registers except AF
+;
+; Purpose:
+;   Commits active line buffer if dirty, then resets ACTIVE_LINE_ROW to
+;   0xFFFF and clears ACTIVE_LINE_DIRTY flag.
+;
+; Call Usage / Protocol:
+;   Called before modal dialogs, search/replace, and document close.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Active line committed and invalidated (ACTIVE_LINE_ROW = 0xFFFF).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 INVALIDATE_ACTIVE_LINE:
 	CALL	COMMIT_ACTIVE_LINE
@@ -9060,6 +11332,22 @@ INVALIDATE_ACTIVE_LINE:
 
 ;------------------------------------------------------------------------------
 ; INIT_SLOT_SYSTEM: Reset slot allocator and free list
+;
+; Purpose:
+;   Resets slot allocation counters (NEXT_FRESH_SLOT = 0, FIRST_FREE_SLOT =
+;   0xFFFF) and reinitializes virtual paging subsystem.
+;
+; Call Usage / Protocol:
+;   Called via CALL from BUFFER_INIT and document resets.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Slot allocator and free lists reset.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 INIT_SLOT_SYSTEM:
 	LD	HL,0
@@ -9070,9 +11358,23 @@ INIT_SLOT_SYSTEM:
 	RET
 
 ;------------------------------------------------------------------------------
-; WRITE_SLOT_NEXT_TERM: Write 0xFFFF to first 2 bytes of Far RAM slot BC
-; Inputs: BC = 16-bit Virtual Slot ID (0..65534)
-; Preserves: BC, DE, HL
+; WRITE_SLOT_NEXT_TERM: Write 0xFFFF termination to slot BC link header
+;
+; Purpose:
+;   Writes 0xFFFF to the first 2 bytes (NEXT_SLOT_ID) of Far RAM slot BC,
+;   terminating slot chain.
+;
+; Call Usage / Protocol:
+;   Called when allocating fresh or recycled slots.
+;
+; Inputs:
+;   BC = 16-bit Virtual Slot ID (0..65534).
+;
+; Outputs:
+;   Slot termination link written to Far RAM.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 WRITE_SLOT_NEXT_TERM:
 	PUSH	AF
@@ -9138,8 +11440,23 @@ WSNT_ERR:
 
 ;------------------------------------------------------------------------------
 ; ALLOC_SLOT: Allocate a Virtual Slot ID (0..65534)
-; Returns: Carry=0, HL = 16-bit slot ID; Carry=1 on out-of-memory
-; Preserves: BC, DE
+;
+; Purpose:
+;   Allocates a 16-bit slot ID. Pops from recycled free list FIRST_FREE_SLOT
+;   if available, otherwise allocates a fresh sequential slot from
+;   NEXT_FRESH_SLOT.
+;
+; Call Usage / Protocol:
+;   Called when adding new lines or extending long lines.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0, HL = 16-bit slot ID; Carry = 1 on out-of-memory.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; returns slot ID in HL.
 ;------------------------------------------------------------------------------
 ALLOC_SLOT:
 	PUSH	DE
@@ -9214,8 +11531,22 @@ ALLOC_FAIL:
 
 ;------------------------------------------------------------------------------
 ; FREE_SLOT: Return a Far RAM slot ID to the Extended RAM free list
-; Input: HL = 16-bit Physical Slot ID (0..3583)
-; Preserves: BC, DE, HL
+;
+; Purpose:
+;   Pushes Far RAM slot HL onto the recycled free list in Extended RAM,
+;   updating FIRST_FREE_SLOT.
+;
+; Call Usage / Protocol:
+;   Called when deleting or truncating line slots.
+;
+; Inputs:
+;   HL = 16-bit Physical Slot ID (0..3583).
+;
+; Outputs:
+;   Slot returned to free list.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 FREE_SLOT:
 	PUSH	AF
@@ -9255,8 +11586,22 @@ FS_DONE:
 
 ;------------------------------------------------------------------------------
 ; FREE_LINE_CHAIN: Return a Far RAM slot chain to the Extended RAM free list
-; Input: HL = 16-bit Head Slot ID (0..3583)
-; Preserves: BC, DE, HL
+;
+; Purpose:
+;   Traverses and frees an entire chain of linked Far RAM slots starting
+;   at head slot HL, returning all slots to the free list.
+;
+; Call Usage / Protocol:
+;   Called when deleting lines or overwriting lines with shorter content.
+;
+; Inputs:
+;   HL = 16-bit Head Slot ID (0..3583).
+;
+; Outputs:
+;   All slots in chain returned to free list.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 FREE_LINE_CHAIN:
 	PUSH	AF
@@ -9324,8 +11669,22 @@ FLC_DONE:
 
 ;------------------------------------------------------------------------------
 ; APPEND_LINE_SLOT: Allocate slot and assign to line table in Far RAM
-; Returns: Carry=0, BC = allocated slot ID; Carry=1 on out-of-memory
-; Preserves: DE
+;
+; Purpose:
+;   Allocates a fresh slot and assigns it to the Far RAM Line Table at the
+;   end of the document (DOC_TOTAL_LINES).
+;
+; Call Usage / Protocol:
+;   Called when loading files or appending new blank lines.
+;
+; Inputs:
+;   DOC_TOTAL_LINES, MAX_DOC_LINES_LIMIT.
+;
+; Outputs:
+;   Carry = 0, BC = allocated slot ID; Carry = 1 on out-of-memory.
+;
+; Preserves / Modifies:
+;   Preserves DE; returns slot ID in BC.
 ;------------------------------------------------------------------------------
 APPEND_LINE_SLOT:
 	PUSH	DE
@@ -9348,8 +11707,23 @@ ALS_OOM:
 	RET
 
 ;------------------------------------------------------------------------------
-; CLEAR_CACHE_DIRTY_FLAGS: Clear all per-line dirty flags and CACHE_DIRTY
-; Preserves: All registers
+; CLEAR_CACHE_DIRTY_FLAGS: Reset all line cache dirty flags to clean (0)
+;
+; Purpose:
+;   Clears all CACHE_SIZE_LINES (48) entries in CACHE_LINE_DIRTY table to 0,
+;   indicating no cached lines contain uncommitted edits.
+;
+; Call Usage / Protocol:
+;   Called via CALL on document initialization, close, or cache reset.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   CACHE_LINE_DIRTY table zeroed.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 CLEAR_CACHE_DIRTY_FLAGS:
 	PUSH	AF
@@ -9369,8 +11743,24 @@ CCDF_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; MARK_LINE_BC_DIRTY: Mark document line BC dirty in local cache
-; Preserves: All registers
+; MARK_LINE_BC_DIRTY: Mark document line BC dirty in local line cache
+;
+; Purpose:
+;   Tests if document line BC falls within currently resident cache window
+;   [CACHE_START_ROW .. CACHE_START_ROW + CACHE_SIZE_LINES - 1]. If resident,
+;   sets corresponding dirty flag in CACHE_LINE_DIRTY.
+;
+; Call Usage / Protocol:
+;   Called via CALL after modifying text in a line.
+;
+; Inputs:
+;   BC = 16-bit Document Line Index (0..3583).
+;
+; Outputs:
+;   CACHE_LINE_DIRTY entry set to 1 if line is in cache.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 MARK_LINE_BC_DIRTY:
 	PUSH	AF
@@ -9401,8 +11791,23 @@ MLBD_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; MARK_CURRENT_LINE_DIRTY: Mark line at CUR_DOC_ROW dirty in local cache
-; Preserves: All registers
+; MARK_CURRENT_LINE_DIRTY: Mark active document row dirty in cache
+;
+; Purpose:
+;   Loads CUR_DOC_ROW into BC and invokes MARK_LINE_BC_DIRTY to flag the
+;   current line as modified.
+;
+; Call Usage / Protocol:
+;   Called via CALL during character insertions, deletions, and replacements.
+;
+; Inputs:
+;   CUR_DOC_ROW.
+;
+; Outputs:
+;   Current line flagged dirty in cache.
+;
+; Preserves / Modifies:
+;   Preserves all registers: AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 MARK_CURRENT_LINE_DIRTY:
 	PUSH	BC
@@ -9413,6 +11818,23 @@ MARK_CURRENT_LINE_DIRTY:
 
 ;------------------------------------------------------------------------------
 ; FLUSH_DIRTY_CACHE: Write modified lines in local cache back to Far RAM banks
+;
+; Purpose:
+;   Scans all 48 cache slots. For each slot marked dirty in CACHE_LINE_DIRTY,
+;   writes the text line back to its Far RAM slot chain via WRITE_FAR_LINE
+;   and clears the dirty flag.
+;
+; Call Usage / Protocol:
+;   Called via CALL before cache window shifts, saving, or modal transitions.
+;
+; Inputs:
+;   CACHE_START_ROW, CACHE_LINE_DIRTY, LINE_STORAGE.
+;
+; Outputs:
+;   Dirty cache lines written to Far RAM; all dirty flags cleared.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FLUSH_DIRTY_CACHE:
 	CALL	COMMIT_ACTIVE_LINE
@@ -9497,10 +11919,24 @@ FLUSH_CACHE_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; ENSURE_CACHE_WINDOW: Ensure doc_line BC is in local LINE_STORAGE cache
-; Inputs: BC = 16-bit Document Line Index (0..3583)
-; Returns: HL = Pointer to line start in LINE_STORAGE
-; Preserves: BC, DE
+; ENSURE_CACHE_WINDOW: Ensure document line BC is resident in local LINE_STORAGE
+;
+; Purpose:
+;   Tests if document line BC is within active cache window. If resident,
+;   computes and returns pointer to line start in LINE_STORAGE. If outside,
+;   flushes dirty cache lines and loads a new window of lines starting from BC.
+;
+; Call Usage / Protocol:
+;   Called via CALL whenever accessing line text from cache.
+;
+; Inputs:
+;   BC = 16-bit Document Line Index (0..3583).
+;
+; Outputs:
+;   HL = Pointer to line start in LINE_STORAGE.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; returns line pointer in HL; clobbers AF.
 ;------------------------------------------------------------------------------
 ENSURE_CACHE_WINDOW:
 	PUSH	BC
@@ -9643,6 +12079,25 @@ CALC_CACHE_LINE_PTR:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; RELOAD_CACHE_WINDOW_FORCE: Invalidate and immediately reload local line cache
+;
+; Purpose:
+;   Sets CACHE_START_ROW to 0xFFFF and loads a fresh cache window starting
+;   from TOP_DOC_ROW.
+;
+; Call Usage / Protocol:
+;   Called via CALL after external mutations, block operations, or file loads.
+;
+; Inputs:
+;   TOP_DOC_ROW.
+;
+; Outputs:
+;   Line cache window refreshed from Far RAM.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 RELOAD_CACHE_WINDOW_FORCE:
 	PUSH	HL
 	PUSH	BC
@@ -9657,6 +12112,26 @@ RELOAD_CACHE_WINDOW_FORCE:
 ;------------------------------------------------------------------------------
 ; VT100 Escape Sequence Handler (Arrow keys: Up, Down, Left, Right)
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; CHECK_KEY_READY: Non-blocking check for console keyboard input
+;
+; Purpose:
+;   Calls direct BIOS CONST jump vector to check if character is available in
+;   serial input buffer without blocking execution.
+;
+; Call Usage / Protocol:
+;   Called via CALL in MAIN_LOOP and ESC timeout drain loops.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Z flag set if no key is ready; NZ set if key is available (A != 0).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; modifies AF (flags).
+;------------------------------------------------------------------------------
 CHECK_KEY_READY:
 	PUSH	BC
 	PUSH	DE
@@ -9670,7 +12145,24 @@ CHECK_KEY_READY:
 	RET
 
 ;------------------------------------------------------------------------------
-; Drain Escape Sequence: if characters follow ESC within timeout, drain them
+; DRAIN_ESC_SEQUENCE: Discard pending escape sequence characters
+;
+; Purpose:
+;   If characters follow an initial ESC byte within a timeout window,
+;   reads and discards them to prevent stray control sequences from leaking
+;   into text buffers.
+;
+; Call Usage / Protocol:
+;   Called via CALL upon encountering ESC in modal loops or splash screen.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Pending escape sequence consumed from serial buffer.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DRAIN_ESC_SEQUENCE:
 	LD	BC,ESC_TIMEOUT_LOOPS
@@ -9701,8 +12193,22 @@ DES_DRAIN_BYTE:
 	JR	DES_DRAIN_MORE
 
 ;------------------------------------------------------------------------------
-; DRAIN_INPUT_BUFFER: Consume and discard all pending keystrokes in input buffer
-; Preserves: none
+; DRAIN_INPUT_BUFFER: Flush all pending keystrokes from console input buffer
+;
+; Purpose:
+;   Polls CHECK_KEY_READY, discarding characters until buffer is empty.
+;
+; Call Usage / Protocol:
+;   Called via CALL before critical modal dialogs or error notifications.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Console buffer emptied.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DRAIN_INPUT_BUFFER:
 	PUSH	AF
@@ -9721,6 +12227,25 @@ DIB_DONE:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; HANDLE_VT100_ESC: Decode ANSI/VT100 escape sequences into editor navigation
+;
+; Purpose:
+;   Parses multi-byte ANSI sequences (arrow keys, PgUp, PgDn, Home, End, Del,
+;   F1..F4) received after ESC and dispatches corresponding editor actions.
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP when ESC character is encountered.
+;
+; Inputs:
+;   None (reads subsequent sequence bytes from console).
+;
+; Outputs:
+;   Executes corresponding editor movement or editing command.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HANDLE_VT100_ESC:
 	; Check if a character follows ESC within a short timeout
 	LD	BC,ESC_TIMEOUT_LOOPS	; Timeout loop count
@@ -10052,9 +12577,23 @@ CE_NOT_FULL:
 	RET
 
 ;------------------------------------------------------------------------------
-; Get Length of Current Line at CUR_DOC_ROW
-; Returns: DE = Byte length (0..1000), BC = Visual length (0..1000), HL = line start
-; Preserves: None
+; GET_CUR_ROW_LEN: Measure character length of active document line
+;
+; Purpose:
+;   Ensures CUR_DOC_ROW is checked out in ACTIVE_LINE_BUF and counts characters
+;   up to the terminating null byte.
+;
+; Call Usage / Protocol:
+;   Called via CALL by cursor navigation and column clamping routines.
+;
+; Inputs:
+;   CUR_DOC_ROW.
+;
+; Outputs:
+;   BC = 16-bit character count; HL = 16-bit character count.
+;
+; Preserves / Modifies:
+;   Preserves DE; returns count in BC and HL; clobbers AF.
 ;------------------------------------------------------------------------------
 GET_CUR_ROW_LEN:
 	CALL	CHECKOUT_ACTIVE_LINE	; HL = ACTIVE_LINE_BUF
@@ -10095,8 +12634,23 @@ GET_ROW_LEN_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Adjust CUR_COL to Match Sticky TARGET_COL (Visual Column) on Current Line
-; Preserves: TARGET_COL
+; ADJUST_COL_TO_TARGET: Clamp CUR_COL to active line length matching TARGET_COL
+;
+; Purpose:
+;   Measures active line length and clamps CUR_COL to min(TARGET_COL, length),
+;   preserving horizontal column alignment during vertical cursor movement.
+;
+; Call Usage / Protocol:
+;   Called via CALL on vertical cursor movements (Up, Down, PgUp, PgDn).
+;
+; Inputs:
+;   TARGET_COL, CUR_DOC_ROW.
+;
+; Outputs:
+;   CUR_COL clamped to valid range [0..line_length].
+;
+; Preserves / Modifies:
+;   Preserves TARGET_COL, BC, DE; clobbers AF, HL.
 ;------------------------------------------------------------------------------
 ADJUST_COL_TO_TARGET:
 	CALL	GET_CUR_ROW_LEN		; HL = line start, DE = byte length
@@ -10378,7 +12932,23 @@ CR_WRAP_FAIL:
 	RET
 
 ;------------------------------------------------------------------------------
-; Page Up Navigation: Scroll viewport and cursor up by one page
+; PAGE_UP: Scroll viewport and cursor up by one screen page
+;
+; Purpose:
+;   Subtracts page step size (ACTIVE_ROWS - 2) from CUR_DOC_ROW and TOP_DOC_ROW,
+;   clamping to row 0, and adjusts horizontal column to TARGET_COL.
+;
+; Call Usage / Protocol:
+;   Called via CALL on PgUp key press or ANSI sequence.
+;
+; Inputs:
+;   CUR_DOC_ROW, TOP_DOC_ROW, ACTIVE_ROWS.
+;
+; Outputs:
+;   CUR_DOC_ROW and TOP_DOC_ROW updated; screen flagged for redraw.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PAGE_UP:
 	LD	HL,(CUR_DOC_ROW)
@@ -10427,7 +12997,23 @@ PGUP_TOP_SAVED:
 	RET
 
 ;------------------------------------------------------------------------------
-; Page Down Navigation: Scroll viewport and cursor down by one page
+; PAGE_DOWN: Scroll viewport and cursor down by one screen page
+;
+; Purpose:
+;   Adds page step size (ACTIVE_ROWS - 2) to CUR_DOC_ROW and TOP_DOC_ROW,
+;   clamping to document total lines, and adjusts column to TARGET_COL.
+;
+; Call Usage / Protocol:
+;   Called via CALL on PgDn key press or ANSI sequence.
+;
+; Inputs:
+;   CUR_DOC_ROW, TOP_DOC_ROW, ACTIVE_ROWS, DOC_TOTAL_LINES.
+;
+; Outputs:
+;   CUR_DOC_ROW and TOP_DOC_ROW updated; screen flagged for redraw.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PAGE_DOWN:
 	LD	HL,(DOC_TOTAL_LINES)
@@ -10515,7 +13101,22 @@ PGDN_NO_MOVE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Calculate Page Step Size: DE = ACTIVE_ROWS - 2 (e.g. 38 for 40 rows, 22 for 24 rows)
+; GET_PAGE_STEP: Calculate vertical page scroll step size in lines
+;
+; Purpose:
+;   Computes DE = ACTIVE_ROWS - 2 (e.g. 22 lines in 80x24, 38 lines in 120x40).
+;
+; Call Usage / Protocol:
+;   Called via CALL by PAGE_UP and PAGE_DOWN.
+;
+; Inputs:
+;   ACTIVE_ROWS.
+;
+; Outputs:
+;   DE = 16-bit page step size.
+;
+; Preserves / Modifies:
+;   Preserves BC, HL; returns step in DE; clobbers AF.
 ;------------------------------------------------------------------------------
 GET_PAGE_STEP:
 	LD	A,(ACTIVE_ROWS)
@@ -10526,7 +13127,23 @@ GET_PAGE_STEP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Jump to Top of Document (Line 1, Col 0)
+; JUMP_FILE_TOP: Move cursor to beginning of document (Line 1, Col 0)
+;
+; Purpose:
+;   Sets CUR_DOC_ROW = 0, TOP_DOC_ROW = 0, CUR_COL = 0, TARGET_COL = 0,
+;   and flags screen and status bar for re-rendering.
+;
+; Call Usage / Protocol:
+;   Called via CALL on Ctrl+Home or Ctrl+PgUp.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Cursor relocated to top-left of document.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 JUMP_FILE_TOP:
 	LD	HL,0
@@ -10539,7 +13156,23 @@ JUMP_FILE_TOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Jump to End/Bottom of Document (Last Line, End of Line)
+; JUMP_FILE_BOTTOM: Move cursor to end of document (last line, last column)
+;
+; Purpose:
+;   Positions cursor on last document line (DOC_TOTAL_LINES - 1) at end of
+;   line and adjusts viewport window so bottom rows are visible.
+;
+; Call Usage / Protocol:
+;   Called via CALL on Ctrl+End or Ctrl+PgDn.
+;
+; Inputs:
+;   DOC_TOTAL_LINES, ACTIVE_ROWS.
+;
+; Outputs:
+;   Cursor located at end of document; viewport adjusted.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 JUMP_FILE_BOTTOM:
 	LD	HL,(DOC_TOTAL_LINES)
@@ -10592,8 +13225,23 @@ JUMP_BOT_FINISH:
 	RET
 
 ;------------------------------------------------------------------------------
-; Position Cursor and Center Viewport at 1-indexed Line in HL
-; Clamps to [1, DOC_TOTAL_LINES].
+; GOTO_LINE_HL: Navigate directly to 1-indexed document line number in HL
+;
+; Purpose:
+;   Clamps HL to valid range [1..DOC_TOTAL_LINES], converts to 0-indexed row,
+;   centers target line within screen viewport, and positions cursor at col 0.
+;
+; Call Usage / Protocol:
+;   Called via CALL from CLI line parser and DO_GOTO_LINE_UI.
+;
+; Inputs:
+;   HL = 1-indexed line number.
+;
+; Outputs:
+;   CUR_DOC_ROW and TOP_DOC_ROW updated; screen flagged for redraw.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 GOTO_LINE_HL:
 	; Clamp lower bound: if HL == 0, set HL = 1
@@ -10687,9 +13335,23 @@ GOTO_FINISH:
 	RET
 
 ;------------------------------------------------------------------------------
-; Parse ASCII Decimal Word
-; Input: HL = pointer to ASCII decimal string
-; Output: DE = 16-bit unsigned value, HL = pointer to first non-digit char
+; PARSE_DEC_WORD: Parse 16-bit unsigned decimal integer from ASCII string
+;
+; Purpose:
+;   Iterates through ASCII characters starting at HL, accumulating decimal
+;   digits into 16-bit register DE until encountering a non-digit character.
+;
+; Call Usage / Protocol:
+;   Called via CALL by command-line parsers and modal input dialogs.
+;
+; Inputs:
+;   HL = Pointer to string buffer containing decimal ASCII digits.
+;
+; Outputs:
+;   DE = 16-bit unsigned parsed value; HL points to first non-digit char.
+;
+; Preserves / Modifies:
+;   Preserves BC; returns value in DE; clobbers AF.
 ;------------------------------------------------------------------------------
 PARSE_DEC_WORD:
 	LD	DE,0
@@ -10718,9 +13380,24 @@ PARSE_DEC_LOOP:
 	JR	PARSE_DEC_LOOP
 
 ;------------------------------------------------------------------------------
-; Interactive Goto Line UI (Ctrl+L in editor, or 'l'/Ctrl+L from splash)
-; Displays centered Tier 2 modal pop-up (50 cols x 7 rows).
-; Enter -> jumps to line (centered). ESC -> cancels.
+; DO_GOTO_LINE_UI: Centered modal pop-up dialog for Goto Line command
+;
+; Purpose:
+;   Displays 50x7 centered modal query dialog prompting user for line number.
+;   Reads numeric input with editing (Backspace, ESC), parses line number,
+;   and navigates to target line.
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP on Ctrl+G.
+;
+; Inputs:
+;   ACTIVE_COLS, ACTIVE_ROWS.
+;
+; Outputs:
+;   Navigates to line if confirmed; restores editor view.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_GOTO_LINE_UI:
 	CALL	CANCEL_BLOCK
@@ -10937,10 +13614,24 @@ DGP_PAD_LOOP:
 ;------------------------------------------------------------------------------
 
 ;------------------------------------------------------------------------------
-; DO_FIND_UI: Display centered Tier 2 modal pop-up for Find, read pattern,
-; and execute search.
-; Dimensions: 50 columns wide x 7 rows high.
-; Returns: Carry=0 on match found, Carry=1 on cancel or not found
+; DO_FIND_UI: Centered modal pop-up dialog for Find Text command (Ctrl+F)
+;
+; Purpose:
+;   Displays centered 50x7 modal query dialog prompting for search pattern.
+;   Supports pattern text input, Backspace, Tab (case sensitivity toggle),
+;   and Enter to execute forward search.
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP on Ctrl+F.
+;
+; Inputs:
+;   ACTIVE_COLS, ACTIVE_ROWS.
+;
+; Outputs:
+;   Carry = 0 on match found; Carry = 1 on cancel or not found.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_FIND_UI:
 	; Check if starting from an active block
@@ -11182,11 +13873,23 @@ FIND_EXEC_SEARCH:
 
 
 ;------------------------------------------------------------------------------
-; CHECK_START_FROM_BLOCK: Check if block selection active; if so, populate
-; SEARCH_INPUT_BUF with block text and set cursor to block start.
-; Implies Ctrl+K if BLOCK_ACTIVE == 1.
-; Output: B = count of characters pre-filled in SEARCH_INPUT_BUF (0..64)
-;         SEARCH_INPUT_BUF is null-terminated
+; CHECK_START_FROM_BLOCK: Set initial search coordinates based on active block
+;
+; Purpose:
+;   If an active block selection exists, aligns search start position with
+;   the block boundary rather than current cursor position.
+;
+; Call Usage / Protocol:
+;   Called via CALL prior to executing search.
+;
+; Inputs:
+;   BLOCK_ACTIVE, normalized block bounds.
+;
+; Outputs:
+;   Search starting coordinates set.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 CHECK_START_FROM_BLOCK:
 	LD	HL,SEARCH_INPUT_BUF
@@ -11318,8 +14021,23 @@ CSFB_COPY_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_FIND_NEXT: Repeat search for SEARCH_BUF forward from (CUR_COL + 1)
-; If active block is solidified, start forward from BLOCK_START_COL + 1
+; DO_FIND_NEXT: Search forward for next occurrence of search pattern (F3 / ^N)
+;
+; Purpose:
+;   Advances cursor by one character past current match and searches forward
+;   for SEARCH_INPUT_BUF, wrapping around EOF if necessary.
+;
+; Call Usage / Protocol:
+;   Called via CALL from MAIN_LOOP on F3 or Ctrl+N.
+;
+; Inputs:
+;   SEARCH_INPUT_BUF, CUR_DOC_ROW, CUR_COL.
+;
+; Outputs:
+;   Cursor moved to match and highlighted; status pop-up if not found.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_FIND_NEXT:
 	LD	A,(SEARCH_LEN)
@@ -11372,8 +14090,23 @@ DFN_DO_SEARCH:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_FIND_PREV: Repeat search for SEARCH_BUF backward from (CUR_COL - 1)
-; If active block is solidified, step back from BLOCK_START_COL
+; DO_FIND_PREV: Search backward for previous occurrence of pattern (Shift+F3)
+;
+; Purpose:
+;   Steps cursor back one character and searches backward through document
+;   lines for SEARCH_INPUT_BUF, wrapping around top if necessary.
+;
+; Call Usage / Protocol:
+;   Called via CALL from MAIN_LOOP on Shift+F3.
+;
+; Inputs:
+;   SEARCH_INPUT_BUF, CUR_DOC_ROW, CUR_COL.
+;
+; Outputs:
+;   Cursor moved to match and highlighted; status pop-up if not found.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_FIND_PREV:
 	LD	A,(SEARCH_LEN)
@@ -11425,7 +14158,23 @@ DFP_DO_SEARCH:
 	RET
 
 ;------------------------------------------------------------------------------
-; STEP_BACK_ONE_CHAR: Move cursor position back 1 character or wrap to prev line
+; STEP_BACK_ONE_CHAR: Move cursor back one character or wrap to preceding row
+;
+; Purpose:
+;   Decrements CUR_COL if > 0; otherwise moves to preceding row and positions
+;   at end of that line.
+;
+; Call Usage / Protocol:
+;   Called via CALL by reverse search routines.
+;
+; Inputs:
+;   CUR_DOC_ROW, CUR_COL.
+;
+; Outputs:
+;   CUR_DOC_ROW and CUR_COL updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 STEP_BACK_ONE_CHAR:
 	LD	A,(CUR_COL)
@@ -11452,10 +14201,23 @@ SBOC_SET_END:
 	RET
 
 ;------------------------------------------------------------------------------
-; HIGHLIGHT_FOUND_BLOCK: Solidify block highlighting on found match
-; Inputs: (CUR_DOC_ROW, CUR_COL) = match start, SEARCH_LEN = match byte length
-; Sets BLOCK_START_ROW/COL, BLOCK_END_ROW/COL, BLOCK_ANCHOR_ROW/COL, BLOCK_ACTIVE=2
-; Preserves: BC, DE, HL
+; HIGHLIGHT_FOUND_BLOCK: Activate visual block highlight around matched text
+;
+; Purpose:
+;   Sets BLOCK_ACTIVE = 2 (solidified), anchor row/col at match start,
+;   and end row/col at match end, visually highlighting found text.
+;
+; Call Usage / Protocol:
+;   Called via CALL when search locates a pattern match.
+;
+; Inputs:
+;   CUR_DOC_ROW, CUR_COL, SEARCH_LEN.
+;
+; Outputs:
+;   Block highlight markers set; screen flagged for redraw.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 HIGHLIGHT_FOUND_BLOCK:
 	PUSH	HL
@@ -11477,10 +14239,24 @@ HIGHLIGHT_FOUND_BLOCK:
 	RET
 
 ;------------------------------------------------------------------------------
-; FIND_STRING_FORWARD: Search forward from (CUR_DOC_ROW, CUR_COL) for SEARCH_BUF
-; Wraps around EOF to Line 0 up to original position.
-; Returns: Carry=0 on match (CUR_DOC_ROW, CUR_COL updated, screen centered, solidified block set)
-;          Carry=1 if pattern not found ("Search completed" or "Pattern not found" shown)
+; FIND_STRING_FORWARD: Search forward through document for pattern string
+;
+; Purpose:
+;   Iterates forward through document lines from current position searching
+;   for SEARCH_INPUT_BUF. Wraps to line 0 at EOF and terminates when full
+;   cycle completes.
+;
+; Call Usage / Protocol:
+;   Called via CALL by DO_FIND_UI, DO_FIND_NEXT, and DO_REPLACE_UI.
+;
+; Inputs:
+;   SEARCH_INPUT_BUF, CUR_DOC_ROW, CUR_COL, SEARCH_CASE_SENSITIVE.
+;
+; Outputs:
+;   Carry = 0 on match found; Carry = 1 if pattern not found.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FIND_STRING_FORWARD:
 	LD	A,(SEARCH_LEN)
@@ -11687,10 +14463,24 @@ CHECK_WRAP_LIMIT:
 	JP	SEARCH_NOT_FOUND	; CUR_DOC_ROW > SEARCH_START_ROW: done
 
 ;------------------------------------------------------------------------------
-; FIND_STRING_BACKWARD: Search backward from (CUR_DOC_ROW, CUR_COL) for SEARCH_BUF
-; Wraps around line 0 to EOF up to original position.
-; Returns: Carry=0 on match (CUR_DOC_ROW, CUR_COL updated, screen centered, solidified block set)
-;          Carry=1 if pattern not found ("Search completed" or "Pattern not found" shown)
+; FIND_STRING_BACKWARD: Search backward through document for pattern string
+;
+; Purpose:
+;   Iterates backward through document lines from current position searching
+;   for SEARCH_INPUT_BUF. Wraps to last line at top and terminates when full
+;   cycle completes.
+;
+; Call Usage / Protocol:
+;   Called via CALL by DO_FIND_PREV.
+;
+; Inputs:
+;   SEARCH_INPUT_BUF, CUR_DOC_ROW, CUR_COL, SEARCH_CASE_SENSITIVE.
+;
+; Outputs:
+;   Carry = 0 on match found; Carry = 1 if pattern not found.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FIND_STRING_BACKWARD:
 	LD	A,(SEARCH_LEN)
@@ -11894,14 +14684,23 @@ SNF_RETURN_CARRY:
 	RET
 
 ;------------------------------------------------------------------------------
-; SHOW_STATUS_EVENT_POPUP:
-; Displays a centered 50x7 Tier 2 status event pop-up with "Press any key".
-; Dismissed by ANY key. Redraws screen and persistent status bar upon exit.
+; SHOW_STATUS_EVENT_POPUP: Centered modal status notification dialog (Tier 2)
+;
+; Purpose:
+;   Displays 50x7 centered modal pop-up box with title DE, message 1 in HL,
+;   message 2 in BC, and "[ Press any key to continue ]", waiting for any key.
+;
+; Call Usage / Protocol:
+;   Standard notification pop-up called for errors, status events, and alerts.
+;
 ; Inputs:
-;   DE = Title string pointer (50 chars null-terminated)
-;   HL = Msg1 string pointer (50 chars null-terminated)
-;   BC = Msg2 string pointer (50 chars null-terminated)
-; Returns: Carry flag set (failure convention for search routines)
+;   DE = Title string pointer, HL = Message 1 pointer, BC = Message 2 pointer.
+;
+; Outputs:
+;   Displays modal, waits for key, restores screen, returns Carry = 1.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers; returns Carry = 1.
 ;------------------------------------------------------------------------------
 SHOW_STATUS_EVENT_POPUP:
 	CALL	SHOW_STATUS_EVENT_POPUP_MODAL
@@ -11922,6 +14721,24 @@ SSEP_NOT_EDITOR:
 	SCF
 	RET
 
+;------------------------------------------------------------------------------
+; SHOW_STATUS_EVENT_POPUP_MODAL: Render modal box interior and await dismissal
+;
+; Purpose:
+;   Emits modal box borders, centered title, messages, and key wait prompt.
+;
+; Call Usage / Protocol:
+;   Internal helper called by SHOW_STATUS_EVENT_POPUP.
+;
+; Inputs:
+;   DE, HL, BC string pointers.
+;
+; Outputs:
+;   Pop-up rendered; waits for keypress.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_STATUS_EVENT_POPUP_MODAL:
 	PUSH	BC			; Msg2
 	PUSH	HL			; Msg1
@@ -11980,60 +14797,247 @@ SHOW_STATUS_EVENT_POPUP_MODAL:
 	SCF
 	RET
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_NOT_FOUND: Display 'Pattern Not Found' modal pop-up
+;
+; Purpose:
+;   Presents centered modal alert informing user that search pattern was
+;   not found in the document.
+;
+; Call Usage / Protocol:
+;   Called via CALL from search routines on failure.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_NOT_FOUND:
 	LD	DE,STR_POPUP_NOT_FOUND_TITLE
 	LD	HL,STR_POPUP_NOT_FOUND_MSG1
 	LD	BC,STR_POPUP_NOT_FOUND_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_SEARCH_COMPLETED: Display 'Search Completed' modal pop-up
+;
+; Purpose:
+;   Presents centered modal dialog indicating search wrapped around document
+;   without finding additional occurrences.
+;
+; Call Usage / Protocol:
+;   Called via CALL from search routines on wrap-around termination.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_SEARCH_COMPLETED:
 	LD	DE,STR_POPUP_SEARCH_COMP_TITLE
 	LD	HL,STR_POPUP_SEARCH_COMP_MSG1
 	LD	BC,STR_POPUP_SEARCH_COMP_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_LINE_TOO_LONG: Display 'Line Too Long' error modal pop-up
+;
+; Purpose:
+;   Presents centered modal alert notifying user that operation would exceed
+;   the maximum allowed line length (120 characters).
+;
+; Call Usage / Protocol:
+;   Called via CALL from line join, replace, or insertion operations.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_LINE_TOO_LONG:
 	LD	DE,STR_POPUP_TOO_LONG_TITLE
 	LD	HL,STR_POPUP_TOO_LONG_MSG1
 	LD	BC,STR_POPUP_TOO_LONG_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_REPLACE_DONE: Display replace completion summary modal pop-up
+;
+; Purpose:
+;   Formats total number of replacements performed and presents summary modal.
+;
+; Call Usage / Protocol:
+;   Called via CALL at end of DO_REPLACE_UI.
+;
+; Inputs:
+;   REPLACE_COUNT (16-bit word).
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_REPLACE_DONE:
 	LD	DE,STR_POPUP_REP_DONE_TITLE
 	LD	HL,STR_POPUP_REP_DONE_MSG1
 	LD	BC,REPLACE_DONE_POPUP_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_NEED_PLUGIN_MGR: Display 'Plugin Manager Required' modal pop-up
+;
+; Purpose:
+;   Presents modal alert informing user that the requested feature requires
+;   the Plugin Manager to be enabled in configuration.
+;
+; Call Usage / Protocol:
+;   Called via CALL when plugin invocation is attempted with manager disabled.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_NEED_PLUGIN_MGR:
 	LD	DE,STR_POPUP_NEED_PLUG_TITLE
 	LD	HL,STR_POPUP_NEED_PLUG_MSG1
 	LD	BC,STR_POPUP_NEED_PLUG_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_PLUG_MISSING: Display 'Plugin File Missing' modal pop-up
+;
+; Purpose:
+;   Presents centered modal alert notifying user that requested plugin binary
+;   was not found on disk.
+;
+; Call Usage / Protocol:
+;   Called via CALL on plugin load failure.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_PLUG_MISSING:
 	LD	DE,STR_POPUP_PLUG_MISS_TITLE
 	LD	HL,STR_POPUP_PLUG_MISS_MSG1
 	LD	BC,STR_POPUP_PLUG_MISS_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_HELP_MISSING: Display 'HELP.OVL Not Found' modal pop-up
+;
+; Purpose:
+;   Presents centered modal alert notifying user that HELP.OVL is missing.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_HELP_SCREEN when overlay cannot be loaded.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_HELP_MISSING:
 	LD	DE,STR_POPUP_HELP_MISS_TITLE
 	LD	HL,STR_POPUP_HELP_MISS_MSG1
 	LD	BC,STR_POPUP_HELP_MISS_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_FILE_NOT_FOUND: Display 'File Not Found' modal pop-up with filename
+;
+; Purpose:
+;   Formats target filename dynamically inside single quotes and presents
+;   centered modal alert informing user that file was not found on disk.
+;
+; Call Usage / Protocol:
+;   Called via CALL from file open, load, and insert failures.
+;
+; Inputs:
+;   Target filename in WORK_FCB / INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Modal dialog displayed with formatted filename.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_FILE_NOT_FOUND:
 	CALL	FORMAT_FNF_MSG1
 	LD	DE,STR_POPUP_FNF_TITLE
 	LD	BC,STR_POPUP_FNF_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP_MODAL
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_RAMDRV_UNAVAIL: Display 'RAM Drive Unavailable' modal pop-up
+;
+; Purpose:
+;   Presents modal alert informing user that RomWBW RAM drive is not installed.
+;
+; Call Usage / Protocol:
+;   Called via CALL from RAM drive menu handlers.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_RAMDRV_UNAVAIL:
 	LD	DE,STR_POPUP_RAMDRV_TITLE
 	LD	HL,STR_POPUP_RAMDRV_MSG1
 	LD	BC,STR_POPUP_RAMDRV_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP_MODAL
 
+;------------------------------------------------------------------------------
+; SHOW_POPUP_FAT_NO_PLUGIN: Display 'FATFS Plugin Missing' modal pop-up
+;
+; Purpose:
+;   Presents modal alert informing user that FAT filesystem access requires
+;   FATFS.PRL plugin which could not be loaded.
+;
+; Call Usage / Protocol:
+;   Called via CALL when FAT path access fails.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Modal dialog displayed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_POPUP_FAT_NO_PLUGIN:
 	LD	DE,STR_POPUP_FAT_MISS_TITLE
 	LD	HL,STR_POPUP_FAT_MISS_MSG1
@@ -12041,13 +15045,23 @@ SHOW_POPUP_FAT_NO_PLUGIN:
 	JP	SHOW_STATUS_EVENT_POPUP_MODAL
 
 ;------------------------------------------------------------------------------
-; FORMAT_FNF_MSG1:
-; Formats Line 4 of "File Not Found" status modal pop-up:
-;   "|          '<FILENAME>' was not found.           |"
-; centered horizontally inside 50-column box borders (| ... |).
-; Output: HL = pointer to 50-character null-terminated string
-;              (either FNF_POPUP_MSG1 or STR_POPUP_FNF_MSG1 on empty fallback)
-; Preserves: BC, DE, IX
+; FORMAT_FNF_MSG1: Format centered "'FILENAME' was not found." message string
+;
+; Purpose:
+;   Extracts filename, encloses in single quotes, appends " was not found.",
+;   and centers symmetrically within a 48-column interior pop-up line buffer.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SHOW_POPUP_FILE_NOT_FOUND.
+;
+; Inputs:
+;   Target filename in WORK_FCB or INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   POPUP_FNF_MSG1_BUF populated with formatted, centered text.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, IX; clobbers AF, HL.
 ;------------------------------------------------------------------------------
 FORMAT_FNF_MSG1:
 	PUSH	BC
@@ -12186,6 +15200,25 @@ FFNF_FALLBACK:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; FORMAT_REPLACE_DONE_MSG2: Format replace summary count line for modal pop-up
+;
+; Purpose:
+;   Formats REPLACE_COUNT as decimal and centers message (e.g.
+;   "|          Replaced 14 occurrences.               |") within 50-col frame.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SHOW_POPUP_REPLACE_DONE.
+;
+; Inputs:
+;   REPLACE_COUNT (16-bit word).
+;
+; Outputs:
+;   REPLACE_DONE_MSG2_BUF populated with formatted string.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 FORMAT_REPLACE_DONE_MSG2:
 	PUSH	BC
 	PUSH	DE
@@ -12263,6 +15296,25 @@ FRDM_CPY_SFX:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; FORMAT_DEC_WORD_RAM: Format 16-bit word in HL as decimal ASCII digits in RAM
+;
+; Purpose:
+;   Converts 16-bit unsigned integer in HL to ASCII decimal digits stored
+;   in a local buffer, returning pointer to first digit in DE and count in B.
+;
+; Call Usage / Protocol:
+;   Called via CALL by dialog formatters.
+;
+; Inputs:
+;   HL = 16-bit unsigned integer (0..65535).
+;
+; Outputs:
+;   DE = Pointer to first ASCII digit; B = Number of digits.
+;
+; Preserves / Modifies:
+;   Preserves HL; returns DE, B; clobbers AF, C.
+;------------------------------------------------------------------------------
 FORMAT_DEC_WORD_RAM:
 	LD	DE,DEC_WORD_BUF+5
 	LD	A,0
@@ -12278,10 +15330,23 @@ FDWR_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; MATCH_SUBSTRING: Compare string at HL with SEARCH_BUF (SEARCH_LEN bytes)
-; Respects SEARCH_CASE_SENSITIVE (1 = exact, 0 = case-insensitive)
-; Returns: Z set if full match, NZ if mismatch
-; Preserves: DE, HL
+; MATCH_SUBSTRING: Test if search pattern matches line text at current offset
+;
+; Purpose:
+;   Compares characters starting at HL against pattern in SEARCH_INPUT_BUF,
+;   respecting SEARCH_CASE_SENSITIVE flag.
+;
+; Call Usage / Protocol:
+;   Called via CALL by FIND_STRING_FORWARD and FIND_STRING_BACKWARD.
+;
+; Inputs:
+;   HL = Pointer to text in line, SEARCH_INPUT_BUF, SEARCH_CASE_SENSITIVE.
+;
+; Outputs:
+;   Zero flag set if match; NZ flag set if mismatch.
+;
+; Preserves / Modifies:
+;   Preserves DE, HL; modifies AF (flags).
 ;------------------------------------------------------------------------------
 MATCH_SUBSTRING:
 	PUSH	DE
@@ -12330,6 +15395,25 @@ MATCH_SUB_FAIL:
 	OR	1			; Clear Z flag (NZ)
 	RET
 
+;------------------------------------------------------------------------------
+; TO_UPPER_CHAR: Convert lowercase ASCII character in A to uppercase
+;
+; Purpose:
+;   If character in register A is between 'a' and 'z', subtracts 32 to convert
+;   to uppercase; otherwise leaves unchanged.
+;
+; Call Usage / Protocol:
+;   Called via CALL by case-insensitive comparisons and command parsing.
+;
+; Inputs:
+;   A = ASCII character byte.
+;
+; Outputs:
+;   A = Uppercase ASCII character byte.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; modifies AF.
+;------------------------------------------------------------------------------
 TO_UPPER_CHAR:
 	CP	'a'
 	RET	C
@@ -12339,8 +15423,24 @@ TO_UPPER_CHAR:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_REPLACE_UI: Prompt for Find and Replace strings via Tier 2 modal popups,
-; then execute replace loop.
+; DO_REPLACE_UI: Centered modal dialog and engine for Search & Replace (Ctrl+R)
+;
+; Purpose:
+;   Displays Search & Replace configuration dialog, inputs find and replace
+;   strings, and enters interactive replacement confirmation loop
+;   ([Y]es, [N]o, [A]ll, [R]everse, [ESC]=Cancel).
+;
+; Call Usage / Protocol:
+;   Jumped to from MAIN_LOOP on Ctrl+R.
+;
+; Inputs:
+;   ACTIVE_COLS, ACTIVE_ROWS.
+;
+; Outputs:
+;   Executes replacements and displays completion summary.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_REPLACE_UI:
 	; 1. First get search pattern via DO_FIND_UI
@@ -12472,6 +15572,24 @@ REPLACE_INPUT_CONFIRM:
 	; Enter the replace loop directly for the current match:
 	JP	REPLACE_PROCESS_MATCH
 
+;------------------------------------------------------------------------------
+; DRAW_REPLACE_POPUP_FULL: Render Search & Replace setup dialog box
+;
+; Purpose:
+;   Draws 50x9 centered modal pop-up box with find and replace input fields.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_REPLACE_UI.
+;
+; Inputs:
+;   POPUP_COL, POPUP_ROW.
+;
+; Outputs:
+;   Dialog frame rendered on terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DRAW_REPLACE_POPUP_FULL:
 	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
 	LD	A,(ACTIVE_COLS)
@@ -12539,6 +15657,25 @@ DRP_PAD_LOOP:
 	CALL	TERM_SHOW_CURSOR
 	RET
 
+;------------------------------------------------------------------------------
+; DRAW_REPLACE_CONFIRM_POPUP: Render interactive Replace confirmation prompt
+;
+; Purpose:
+;   Draws 50x7 modal pop-up prompting user whether to replace matched string:
+;   "[Y]es  [N]o  [A]ll  [R]everse  [ESC]=Cancel".
+;
+; Call Usage / Protocol:
+;   Called via CALL upon each match in DO_REPLACE_UI.
+;
+; Inputs:
+;   POPUP_COL, POPUP_ROW.
+;
+; Outputs:
+;   Confirmation pop-up rendered on terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DRAW_REPLACE_CONFIRM_POPUP:
 	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
 	LD	A,(ACTIVE_COLS)
@@ -12589,6 +15726,24 @@ DRAW_REPLACE_CONFIRM_POPUP:
 	CALL	TERM_SHOW_CURSOR
 	RET
 
+;------------------------------------------------------------------------------
+; LOCATE_REPLACE_CONFIRM_CURSOR: Position cursor inside replace confirm prompt
+;
+; Purpose:
+;   Locates hardware cursor on action option line in replace prompt dialog.
+;
+; Call Usage / Protocol:
+;   Called via CALL before reading user confirmation key in DO_REPLACE_UI.
+;
+; Inputs:
+;   POPUP_COL, POPUP_ROW.
+;
+; Outputs:
+;   Cursor located inside dialog box.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 LOCATE_REPLACE_CONFIRM_CURSOR:
 	LD	A,(POPUP_START_ROW)
 	ADD	A,4
@@ -12765,8 +15920,23 @@ REPLACE_SUMMARY:
 	RET
 
 ;------------------------------------------------------------------------------
-; APPLY_LINE_REPLACE: Substitute SEARCH_BUF with REPLACE_BUF at (CUR_DOC_ROW, CUR_COL)
-; Enforces 120-character line length limit.
+; APPLY_LINE_REPLACE: Substitute pattern with replacement string in active line
+;
+; Purpose:
+;   Replaces matched pattern substring in ACTIVE_LINE_BUF with replacement
+;   string. Checks that resulting line length does not exceed 120 characters.
+;
+; Call Usage / Protocol:
+;   Called via CALL when user confirms replacement in DO_REPLACE_UI.
+;
+; Inputs:
+;   CUR_COL, SEARCH_LEN, REPLACE_LEN, ACTIVE_LINE_BUF.
+;
+; Outputs:
+;   Carry = 0 on success; Carry = 1 if line would exceed 120 chars.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 APPLY_LINE_REPLACE:
 	LD	BC,(CUR_DOC_ROW)
@@ -12944,6 +16114,28 @@ ALR_SUBST_DONE:
 
 ;------------------------------------------------------------------------------
 ; Character Insertion at (CUR_DOC_ROW, CUR_COL)
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; DO_CHAR_INSERT: Insert single ASCII character into active line at cursor
+;
+; Purpose:
+;   Inserts character in register A into ACTIVE_LINE_BUF at CUR_COL.
+;   If in insert mode, shifts trailing characters right (enforcing max 120
+;   chars). If cursor is past line end, pads with spaces before appending.
+;   Advances cursor column and flags line dirty.
+;
+; Call Usage / Protocol:
+;   Primary character typing handler called from MAIN_LOOP.
+;
+; Inputs:
+;   A = Character byte to insert, CUR_COL, INSERT_MODE.
+;
+; Outputs:
+;   Character inserted; CUR_COL incremented; ACTIVE_LINE_DIRTY = 1.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_CHAR_INSERT:
 	LD	(CHAR_INSERT_TEMP),A	; Save character to insert
@@ -13146,6 +16338,27 @@ AIC_CHECK_BYTE:
 ;------------------------------------------------------------------------------
 ; Character Deletion at (CUR_DOC_ROW, CUR_COL) - Backspace Handling
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; DO_DELETE_CHAR: Delete character immediately left of cursor (Backspace key)
+;
+; Purpose:
+;   If CUR_COL > 0, shifts all characters starting at CUR_COL left by 1 byte
+;   in ACTIVE_LINE_BUF, decrements CUR_COL, and marks dirty. If CUR_COL == 0,
+;   dispatches to DO_DELETE_BLANK_LINE to join with previous row.
+;
+; Call Usage / Protocol:
+;   Called via CALL from MAIN_LOOP on Backspace key (0x08 / 0x7F).
+;
+; Inputs:
+;   CUR_COL, CUR_DOC_ROW, ACTIVE_LINE_BUF.
+;
+; Outputs:
+;   Character deleted; CUR_COL decremented; ACTIVE_LINE_DIRTY = 1.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_DELETE_CHAR:
 	LD	HL,(CUR_COL)
 	LD	A,H
@@ -13179,6 +16392,27 @@ CHAR_SHIFT_LEFT_LOOP:
 
 ;------------------------------------------------------------------------------
 ; Forward Character Deletion at (CUR_DOC_ROW, CUR_COL) - Delete Key Handling
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; DO_DELETE_FORWARD: Delete character under cursor (Delete key)
+;
+; Purpose:
+;   If cursor is before end of line, shifts trailing characters left by 1 byte
+;   over current character. If cursor is at or past end of line, joins current
+;   line with subsequent document line.
+;
+; Call Usage / Protocol:
+;   Called via CALL from MAIN_LOOP on Delete key / Ctrl+G.
+;
+; Inputs:
+;   CUR_COL, CUR_DOC_ROW, ACTIVE_LINE_BUF.
+;
+; Outputs:
+;   Character deleted or lines joined; ACTIVE_LINE_DIRTY = 1.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_DELETE_FORWARD:
 	CALL	CHECKOUT_ACTIVE_LINE	; HL = ACTIVE_LINE_BUF
@@ -13239,6 +16473,26 @@ DO_DEL_JOIN_FAIL:
 
 ;------------------------------------------------------------------------------
 ; Backspace at Column 0 Handling: Joins current line with previous line
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; DO_DELETE_BLANK_LINE: Handle Backspace at Column 0 by joining lines
+;
+; Purpose:
+;   When Backspace is pressed at column 0, joins current line CUR_DOC_ROW
+;   with previous line CUR_DOC_ROW - 1, moving cursor to join position.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_DELETE_CHAR when CUR_COL == 0.
+;
+; Inputs:
+;   CUR_DOC_ROW.
+;
+; Outputs:
+;   Lines joined; cursor placed at join point; line table updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_DELETE_BLANK_LINE:
 	LD	HL,(CUR_DOC_ROW)
@@ -13331,8 +16585,24 @@ DO_BS_JOIN_RENDER:
 	RET
 
 ;------------------------------------------------------------------------------
-; Join Two Lines: Line BC (upper) and Line BC+1 (lower)
-; Returns: Carry=0 on success, HL = join column (len of upper line); Carry=1 on failure
+; JOIN_TWO_LINES: Concatenate document line BC with preceding line BC-1
+;
+; Purpose:
+;   Appends text of line BC to line BC-1 if combined length <= 120 characters.
+;   Frees line BC's slots, shifts subsequent line table entries upward,
+;   decrements DOC_TOTAL_LINES, and marks document modified.
+;
+; Call Usage / Protocol:
+;   Called via CALL by DO_DELETE_FORWARD and DO_DELETE_BLANK_LINE.
+;
+; Inputs:
+;   BC = 16-bit document line index of lower line to merge.
+;
+; Outputs:
+;   Carry = 0 on success, HL = join column; Carry = 1 if merged length > 120.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 JOIN_TWO_LINES:
 	LD	(JOIN_DOC_LINE),BC	; Save upper document line index
@@ -13469,6 +16739,28 @@ JOIN_SHIFT_DONE:
 ;------------------------------------------------------------------------------
 ; Line Insertion & Splitting at (CUR_DOC_ROW, CUR_COL) - Enter Key Handling
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; DO_INSERT_LINE: Split active line at cursor on Enter key press
+;
+; Purpose:
+;   Splits text in ACTIVE_LINE_BUF at CUR_COL into two separate lines.
+;   Truncates current line at CUR_COL, allocates fresh Far RAM slot for new
+;   line, shifts subsequent line table entries down by 1, writes trailing text
+;   to new line, increments DOC_TOTAL_LINES, and advances cursor to next row.
+;
+; Call Usage / Protocol:
+;   Called via CALL from MAIN_LOOP on Enter key (0x0D).
+;
+; Inputs:
+;   CUR_DOC_ROW, CUR_COL, ACTIVE_LINE_BUF.
+;
+; Outputs:
+;   Line split into two; CUR_DOC_ROW incremented; CUR_COL = 0; DOC_MODIFIED = 1.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_INSERT_LINE:
 	; Check max document lines (MAX_DOC_LINES_LIMIT)
 	LD	HL,(DOC_TOTAL_LINES)
@@ -13591,6 +16883,25 @@ SPLIT_NO_SCROLL:
 	AND	A
 	RET
 
+;------------------------------------------------------------------------------
+; HBIOS_DETECT: Probe RomWBW HBIOS hardware environment presence
+;
+; Purpose:
+;   Inspects memory vector table and queries RomWBW HBIOS SYSVER (0xF1) to
+;   determine if running under RomWBW firmware.
+;
+; Call Usage / Protocol:
+;   Called via CALL during startup and memory info query.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Zero flag set if HBIOS present; NZ set if standard CP/M (non-HBIOS).
+;
+; Preserves / Modifies:
+;   Clobbers AF. Preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 HBIOS_DETECT:
 	PUSH	IX
 	LD	B,0F8H			; CIOCNT
@@ -13607,7 +16918,26 @@ HBIOS_DETECT:
 ; Save: Always writes to local default drive.
 ;==============================================================================
 
-; LOAD_CONFIG: Load and parse SE.CFG
+;------------------------------------------------------------------------------
+; LOAD_CONFIG: Load and parse configuration settings from SE.CFG
+;
+; Purpose:
+;   Searches for SE.CFG on current drive first, then on program drive if
+;   different. If found, reads up to 256 bytes and calls PARSE_CONFIG_BUFFER
+;   to configure screen mode, RAM drive, tab width, line limit, and plugins.
+;
+; Call Usage / Protocol:
+;   Called via CALL from START during initialization.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Configuration variables populated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 LOAD_CONFIG:
 	; 1. Query current default drive via BDOS 25
 	LD	C,25			; BDOS Get Current Drive
@@ -13664,8 +16994,26 @@ LOAD_CFG_NOT_PROG:
 	LD	(CONFIG_SOURCE_DRIVE),A
 	RET
 
-; PROBE_PROGRAM_DRIVE: Search all logged-in drives for SE.COM (other than current drive)
-; Returns: A = Drive index (0..15), Carry = 0 if found; Carry = 1 if not found
+;------------------------------------------------------------------------------
+; PROBE_PROGRAM_DRIVE: Search logged-in drives for SE.COM executable
+;
+; Purpose:
+;   Queries logged-in drive vector via BDOS function 24, iterating through
+;   all online drives other than current drive, looking for SE.COM via BDOS
+;   Search First (function 17) to determine program home drive.
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_CONFIG when SE.CFG is not in current drive.
+;
+; Inputs:
+;   CURRENT_DEFAULT_DRIVE.
+;
+; Outputs:
+;   A = Drive index (0..15), Carry = 0 if found; Carry = 1 if not found.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 PROBE_PROGRAM_DRIVE:
 	LD	C,24			; BDOS Return Login Vector
 	CALL	BDOS_ENTRY		; HL = 16-bit vector (bit 0=A, bit 1=B...)
@@ -13716,8 +17064,25 @@ PPD_NOT_FOUND:
 	SCF				; Carry = 1
 	RET
 
+;------------------------------------------------------------------------------
 ; READ_CFG_RECORD: Read up to 256 bytes from open CFG_FCB into CFG_IO_BUF
-; Returns: Carry = 0 on success, Carry = 1 on read error
+;
+; Purpose:
+;   Reads up to 2 sequential 128-byte records from open CFG_FCB using BDOS
+;   Read Sequential (function 20), null-terminating the resulting buffer.
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_CONFIG after opening configuration file.
+;
+; Inputs:
+;   CFG_FCB (opened file control block).
+;
+; Outputs:
+;   CFG_IO_BUF populated; Carry = 0 on success, Carry = 1 on read error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 READ_CFG_RECORD:
 	XOR	A
 	LD	(CFG_FCB+32),A		; Clear record byte (cr)
@@ -13772,7 +17137,27 @@ RCR_ERR:
 	SCF				; Carry = 1
 	RET
 
-; PARSE_CONFIG_BUFFER: Scan CFG_IO_BUF for configuration parameters
+;------------------------------------------------------------------------------
+; PARSE_CONFIG_BUFFER: Scan CFG_IO_BUF for configuration key-value parameters
+;
+; Purpose:
+;   Parses line-by-line configuration text in CFG_IO_BUF matching supported
+;   keys (screen, ramdrive, tab, lines, maxlines, plugin) and updating
+;   corresponding runtime settings.
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_CONFIG after reading file.
+;
+; Inputs:
+;   CFG_IO_BUF (null-terminated configuration text).
+;
+; Outputs:
+;   CFG_SCREEN_MODE, CFG_RAMDRIVE_FLAG, CFG_TAB_WIDTH, CFG_LINES_MODE,
+;   CFG_AUTOLOAD_PLUGIN_MGR updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 PARSE_CONFIG_BUFFER:
 	LD	HL,CFG_IO_BUF
 PCB_LINE_START:
@@ -14079,9 +17464,26 @@ PCB_PLUG_SET_OFF:
 	JP	PCB_SKIP_LINE
 
 
-; MATCH_KEY_SCREEN: Compares text at (HL) with "SCREEN" (case-insensitive)
-; Output: Carry = 0 if matched, HL advanced past '=' and trailing spaces
-;         Carry = 1 if no match, HL restored to starting position
+;------------------------------------------------------------------------------
+; MATCH_KEY_SCREEN: Match 'screen' or 'geometry' key name at buffer pointer HL
+;
+; Purpose:
+;   Performs case-insensitive prefix comparison against "screen" and
+;   "geometry" followed by '=' and optional spaces.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PARSE_CONFIG_BUFFER.
+;
+; Inputs:
+;   HL = Pointer to position in line buffer.
+;
+; Outputs:
+;   Carry = 0 if matched (HL advanced past '=' and spaces);
+;   Carry = 1 if no match (HL restored to starting position).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF.
+;------------------------------------------------------------------------------
 MATCH_KEY_SCREEN:
 	PUSH	HL
 	LD	DE,STR_KEY_SCREEN_NAME
@@ -14134,9 +17536,26 @@ MKS_FAIL:
 	SCF				; Carry = 1
 	RET
 
-; MATCH_KEY_RAMDRIVE: Compares text at (HL) with "RAMD" prefix (case-insensitive)
-; Output: Carry = 0 if matched, HL advanced past '=' and trailing spaces
-;         Carry = 1 if no match, HL restored to starting position
+;------------------------------------------------------------------------------
+; MATCH_KEY_RAMDRIVE: Match 'ramdrive' or 'ramdisk' key at buffer pointer HL
+;
+; Purpose:
+;   Performs case-insensitive prefix comparison against "ramdrive" and
+;   "ramdisk" followed by '=' and optional spaces.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PARSE_CONFIG_BUFFER.
+;
+; Inputs:
+;   HL = Pointer to position in line buffer.
+;
+; Outputs:
+;   Carry = 0 if matched (HL advanced past '=' and spaces);
+;   Carry = 1 if no match (HL restored to starting position).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF.
+;------------------------------------------------------------------------------
 MATCH_KEY_RAMDRIVE:
 	PUSH	HL
 	LD	DE,STR_KEY_RAMD_NAME
@@ -14207,10 +17626,26 @@ MKR_FAIL:
 	SCF				; Carry = 1
 	RET
 
-; MATCH_KEY_TAB: Compares text at (HL) with "TAB" prefix (case-insensitive)
-; Matches "TAB", "TABS", "TABWIDTH"
-; Output: Carry = 0 if matched, HL advanced past '=' and trailing spaces
-;         Carry = 1 if no match, HL restored to starting position
+;------------------------------------------------------------------------------
+; MATCH_KEY_TAB: Match 'tab' or 'tabwidth' key name at buffer pointer HL
+;
+; Purpose:
+;   Performs case-insensitive prefix comparison against "tab" and "tabwidth"
+;   followed by '=' and optional spaces.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PARSE_CONFIG_BUFFER.
+;
+; Inputs:
+;   HL = Pointer to position in line buffer.
+;
+; Outputs:
+;   Carry = 0 if matched (HL advanced past '=' and spaces);
+;   Carry = 1 if no match (HL restored to starting position).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF.
+;------------------------------------------------------------------------------
 MATCH_KEY_TAB:
 	PUSH	HL
 	LD	DE,STR_KEY_TAB_NAME
@@ -14281,21 +17716,78 @@ MKT_FAIL:
 	SCF				; Carry = 1
 	RET
 
-; MATCH_KEY_LINES: Compares text at (HL) with "LINE" prefix (case-insensitive)
+;------------------------------------------------------------------------------
+; MATCH_KEY_LINES: Match 'line' prefix key name at buffer pointer HL
+;
+; Purpose:
+;   Performs case-insensitive comparison against "line" followed by '=' and
+;   optional spaces.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PARSE_CONFIG_BUFFER.
+;
+; Inputs:
+;   HL = Pointer to position in line buffer.
+;
+; Outputs:
+;   Carry = 0 if matched (HL advanced past '=' and spaces);
+;   Carry = 1 if no match (HL restored to starting position).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF.
+;------------------------------------------------------------------------------
 MATCH_KEY_LINES:
 	PUSH	HL
 	LD	DE,STR_KEY_LINES_NAME
 	LD	B,4
 	JR	MKL_SHARED_LOOP
 
-; MATCH_KEY_MAXLINES: Compares text at (HL) with "MAXLINE" prefix (case-insensitive)
+;------------------------------------------------------------------------------
+; MATCH_KEY_MAXLINES: Match 'maxline' prefix key name at buffer pointer HL
+;
+; Purpose:
+;   Performs case-insensitive comparison against "maxline" followed by '=' and
+;   optional spaces.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PARSE_CONFIG_BUFFER.
+;
+; Inputs:
+;   HL = Pointer to position in line buffer.
+;
+; Outputs:
+;   Carry = 0 if matched (HL advanced past '=' and spaces);
+;   Carry = 1 if no match (HL restored to starting position).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF.
+;------------------------------------------------------------------------------
 MATCH_KEY_MAXLINES:
 	PUSH	HL
 	LD	DE,STR_KEY_MAXLINES_NAME
 	LD	B,7
 	JR	MKL_SHARED_LOOP
 
-; MATCH_KEY_PLUGIN: Compare text at (HL) with "PLUGIN" (case-insensitive)
+;------------------------------------------------------------------------------
+; MATCH_KEY_PLUGIN: Match 'plugin' key name at buffer pointer HL
+;
+; Purpose:
+;   Performs case-insensitive comparison against "plugin" followed by '=' and
+;   optional spaces.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PARSE_CONFIG_BUFFER.
+;
+; Inputs:
+;   HL = Pointer to position in line buffer.
+;
+; Outputs:
+;   Carry = 0 if matched (HL advanced past '=' and spaces);
+;   Carry = 1 if no match (HL restored to starting position).
+;
+; Preserves / Modifies:
+;   Preserves BC, DE; clobbers AF.
+;------------------------------------------------------------------------------
 MATCH_KEY_PLUGIN:
 	PUSH	HL
 	LD	DE,STR_KEY_PLUGIN_NAME
@@ -14368,7 +17860,27 @@ MKL_FAIL:
 	SCF				; Carry = 1
 	RET
 
-; SAVE_CONFIG: Save current editor configuration to SE.CFG on current drive
+;------------------------------------------------------------------------------
+; SAVE_CONFIG: Save current editor configuration settings to local SE.CFG
+;
+; Purpose:
+;   Formats active editor parameters (screen mode, RAM drive mode, tab width,
+;   max lines, plugin manager mode) into an ASCII text buffer and writes to
+;   SE.CFG on current drive using BDOS file operations (19 delete, 22 make,
+;   21 write, 16 close).
+;
+; Call Usage / Protocol:
+;   Called via CALL from CONFIG_LOOP on 'S' key.
+;
+; Inputs:
+;   Runtime configuration variables.
+;
+; Outputs:
+;   SE.CFG file written to disk; status message updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SAVE_CONFIG:
 	; Fill CFG_IO_BUF with 256 bytes of 0x1A (EOF)
 	LD	HL,CFG_IO_BUF
@@ -14540,6 +18052,25 @@ SC_ERR:
 	LD	(CONFIG_STATUS_FLAG),A
 	RET
 
+;------------------------------------------------------------------------------
+; SC_APPEND_STRING: Append null-terminated string from DE to buffer at HL
+;
+; Purpose:
+;   Copies bytes from DE to HL until encountering null terminator, leaving
+;   HL pointing to terminating null.
+;
+; Call Usage / Protocol:
+;   Called via CALL by SAVE_CONFIG formatting sequence.
+;
+; Inputs:
+;   DE = Pointer to source ASCII string, HL = Pointer to destination buffer.
+;
+; Outputs:
+;   HL points to terminating null of copied string.
+;
+; Preserves / Modifies:
+;   Preserves BC; clobbers AF, DE.
+;------------------------------------------------------------------------------
 SC_APPEND_STRING:
 	LD	A,(HL)
 	OR	A
@@ -14549,10 +18080,48 @@ SC_APPEND_STRING:
 	INC	DE
 	JR	SC_APPEND_STRING
 
+;------------------------------------------------------------------------------
+; INIT_CFG_FCB_LOCAL: Initialize CFG_FCB for default drive
+;
+; Purpose:
+;   Initializes CFG_FCB with drive 0 (current default drive) and filename
+;   "SE.CFG".
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_CONFIG and SAVE_CONFIG.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   CFG_FCB formatted for default drive.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B, HL.
+;------------------------------------------------------------------------------
 INIT_CFG_FCB_LOCAL:
 	XOR	A
 	JR	INIT_CFG_FCB_COMMON
 
+;------------------------------------------------------------------------------
+; INIT_CFG_FCB_DRIVE: Initialize CFG_FCB for specified drive code in register A
+;
+; Purpose:
+;   Initializes CFG_FCB with drive code in register A (1=A, 2=B...) and
+;   filename "SE.CFG".
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_CONFIG when probing program drive.
+;
+; Inputs:
+;   A = 1-indexed drive code (1..16).
+;
+; Outputs:
+;   CFG_FCB formatted for drive A.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B, HL.
+;------------------------------------------------------------------------------
 INIT_CFG_FCB_DRIVE:
 	; A = drive code (1=A, 2=B...)
 INIT_CFG_FCB_COMMON:
@@ -14582,12 +18151,50 @@ INIT_CFG_FCB_COMMON:
 	LD	(HL),'G'
 	INC	HL
 	LD	B,24
+
+;------------------------------------------------------------------------------
+; INIT_CFG_ZERO: Zero-fill extent and allocation record bytes in CFG_FCB
+;
+; Purpose:
+;   Clears bytes 12..35 (24 bytes) of CFG_FCB to zero.
+;
+; Call Usage / Protocol:
+;   Called via CALL by CFG_FCB initialization routines.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   CFG_FCB extent and record count bytes zeroed.
+;
+; Preserves / Modifies:
+;   Preserves DE; clobbers AF, B, HL.
+;------------------------------------------------------------------------------
 INIT_CFG_ZERO:
 	LD	(HL),0
 	INC	HL
 	DJNZ	INIT_CFG_ZERO
 	RET
 
+;------------------------------------------------------------------------------
+; INIT_COM_PROBE_FCB: Initialize PROBE_FCB for drive in register A with SE.COM
+;
+; Purpose:
+;   Initializes PROBE_FCB with drive code in register A (1=A, 2=B...) and
+;   filename "SE.COM" to search for program executable.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PROBE_PROGRAM_DRIVE.
+;
+; Inputs:
+;   A = 1-indexed drive code (1..16).
+;
+; Outputs:
+;   PROBE_FCB formatted for search.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B, HL.
+;------------------------------------------------------------------------------
 INIT_COM_PROBE_FCB:
 	; A = drive code (1=A, 2=B...)
 	LD	HL,COM_PROBE_FCB
@@ -14708,6 +18315,28 @@ DO_CY_EXEC:
 	CALL	LOCATE_CURSOR
 	JP	MAIN_LOOP
 
+;------------------------------------------------------------------------------
+; COMPARE_PLUGIN_NAME: Compare two null-terminated strings for equality
+;
+; Purpose:
+;   Performs character-by-character string comparison between null-terminated
+;   strings pointed to by HL and DE (typically comparing a registered plugin
+;   name against a target query string).
+;
+; Call Usage / Protocol:
+;   Called via CALL or JR from plugin search and registry lookup routines.
+;
+; Inputs:
+;   HL = Pointer to first null-terminated string.
+;   DE = Pointer to second null-terminated string.
+;
+; Outputs:
+;   Zero flag (Z) set if strings match; NZ if characters differ.
+;
+; Preserves / Modifies:
+;   HL, DE advance to point of difference or terminating null; clobbers AF.
+;   Preserves BC.
+;------------------------------------------------------------------------------
 COMPARE_PLUGIN_NAME:
 	LD	A,(DE)
 	CP	(HL)
@@ -14724,10 +18353,24 @@ COMPARE_PLUGIN_NAME:
 ;==============================================================================
 
 ;------------------------------------------------------------------------------
-; SET_RAMDRIVE_CHAR:
-; Sets RAMDRIVE_DRIVE_CHAR and updates splash screen string.
-; Input: A = Drive character ('A'..'P')
-; Destroys: None
+; SET_RAMDRIVE_CHAR: Configure RAM drive letter and update splash screen
+;
+; Purpose:
+;   Stores the configured RAM drive letter ('A'..'P') into RAMDRIVE_DRIVE_CHAR
+;   and updates the corresponding placeholder character in the splash screen
+;   string (STR_SPLASH_RAM_LTR).
+;
+; Call Usage / Protocol:
+;   Called via CALL from RAM drive detection and configuration parsers.
+;
+; Inputs:
+;   A = Drive character ('A'..'P').
+;
+; Outputs:
+;   RAMDRIVE_DRIVE_CHAR and STR_SPLASH_RAM_LTR updated.
+;
+; Preserves / Modifies:
+;   Preserves all registers (BC, DE, HL, AF).
 ;------------------------------------------------------------------------------
 SET_RAMDRIVE_CHAR:
 	LD	(RAMDRIVE_DRIVE_CHAR),A
@@ -14735,13 +18378,24 @@ SET_RAMDRIVE_CHAR:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_TARGET_DRIVE_UNAVAILABLE:
-; Checks if 1-based drive in A (1=A..16=P, or 0=CURRENT_DIR_DRIVE) targets
-; an unavailable RAM drive (overwritten or hibernated).
-; Returns:
-;   Carry = 1: Drive is unavailable RAM drive
-;   Carry = 0: Drive is available / valid
-; Preserves: A, BC, DE, HL
+; CHECK_TARGET_DRIVE_UNAVAILABLE: Verify target drive accessibility
+;
+; Purpose:
+;   Examines the target drive index or FCB drive byte. If the target drive
+;   matches the configured RAM drive but RAM drive support is unavailable,
+;   sets Carry flag to prevent invalid I/O.
+;
+; Call Usage / Protocol:
+;   Called via CALL from file open, save, insert, and directory routines.
+;
+; Inputs:
+;   A = CP/M drive byte (0 = default/current, 1 = A:, 2 = B:, etc.).
+;
+; Outputs:
+;   Carry = 0 if target drive is accessible; Carry = 1 if unavailable RAM drive.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 CHECK_TARGET_DRIVE_UNAVAILABLE:
 	PUSH	BC
@@ -14784,12 +18438,23 @@ CTDU_SAFE:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_FCB_IS_HIBERNATED:
-; Checks if WORK_FCB targets the currently unavailable RAM drive.
-; Returns:
-;   Carry = 1 if target drive is unavailable RAM drive
-;   Carry = 0 if target drive is safe to access
-; Preserves: BC, DE, HL
+; CHECK_FCB_IS_HIBERNATED: Test if target file is a hibernated session file
+;
+; Purpose:
+;   Compares the filename in target FCB against the predefined hibernation file
+;   name (SEHIBERN.$$$, etc.) to detect whether opening it requires resume.
+;
+; Call Usage / Protocol:
+;   Called via CALL from file load and open dispatchers.
+;
+; Inputs:
+;   HL = Pointer to target FCB.
+;
+; Outputs:
+;   Zero flag (Z) set if file matches hibernate filename; NZ otherwise.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 CHECK_FCB_IS_HIBERNATED:
 	LD	A,(WORK_FCB)
@@ -14802,8 +18467,23 @@ CFIH_HAVE_DRV:
 
 
 ;------------------------------------------------------------------------------
-; RESTORE_RAMDRIVE:
-; If RAM drive was hibernated, loads HIBERN.OVL and executes Action 2 (Restore).
+; RESTORE_RAMDRIVE: Restore CP/M default drive and user area after RAM drive I/O
+;
+; Purpose:
+;   Restores the default logged-in CP/M drive and active user area back to the
+;   saved working context after temporary operations on the RAM drive.
+;
+; Call Usage / Protocol:
+;   Called via CALL following RAM drive overlay load or directory query.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Default drive and user area restored via BDOS.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 RESTORE_RAMDRIVE:
 	LD	A,(RAMDRIVE_IS_HIBERNATED)
@@ -14824,7 +18504,25 @@ STR_HIBERN_OVL_NAME:
 STR_HELP_OVL_NAME:
 	DB	"HELP    OVL"
 
-; Helper: Initialize SHARED_TEMP_FCB with 11-char name in DE and drive in A.
+;------------------------------------------------------------------------------
+; INIT_OVERLAY_FCB: Initialize OVERLAY_FCB with overlay file name
+;
+; Purpose:
+;   Copies an 11-byte 8.3 filename string into OVERLAY_FCB, sets the drive code
+;   to default (0), and clears extent and record count fields.
+;
+; Call Usage / Protocol:
+;   Called via CALL before calling LOAD_OVERLAY_FILE.
+;
+; Inputs:
+;   HL = Pointer to 11-byte filename string ("SEHIBERNOVL", etc.).
+;
+; Outputs:
+;   OVERLAY_FCB prepared for BDOS file open.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 INIT_OVERLAY_FCB:
 	PUSH	DE
 	LD	HL,SHARED_TEMP_FCB
@@ -14846,12 +18544,24 @@ IOF_ZERO:
 	RET
 
 ;------------------------------------------------------------------------------
-; LOAD_OVERLAY_FILE:
-; Loads an overlay into LINE_STORAGE and relocates it if relocatable PRL.
-; Input:
-;   DE = Pointer to 11-char FCB name (e.g. STR_HIBERN_OVL_NAME)
-; Returns:
-;   Carry = 0 on success, Carry = 1 on error.
+; LOAD_OVERLAY_FILE: Load overlay file from disk/RAM drive into TPA buffer
+;
+; Purpose:
+;   Opens the file specified in OVERLAY_FCB and sequentially reads 128-byte
+;   records into the memory buffer pointed to by HL until EOF is reached.
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_HIBERN_OVERLAY and LOAD_HELP_OVERLAY.
+;
+; Inputs:
+;   HL = Target memory destination address for overlay payload.
+;   OVERLAY_FCB = Initialized with target overlay filename.
+;
+; Outputs:
+;   Carry = 0 on successful load; Carry = 1 on open or read error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 LOAD_OVERLAY_FILE:
 	PUSH	DE
@@ -14947,21 +18657,71 @@ LOF_ERR:
 	SCF				; Carry = 1 (error)
 	RET
 
+;------------------------------------------------------------------------------
+; LOAD_HIBERN_OVERLAY: Load hibernation overlay (SEHIBERN.OVL) into TPA memory
+;
+; Purpose:
+;   Initializes OVERLAY_FCB with STR_HIBERN_OVL_NAME and loads the overlay code
+;   into OVERLAY_EXEC_ADDR for session suspend or resume execution.
+;
+; Call Usage / Protocol:
+;   Called via CALL from hibernation command handler or startup recovery.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 if loaded successfully; Carry = 1 on failure.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 LOAD_HIBERN_OVERLAY:
 	LD	DE,STR_HIBERN_OVL_NAME
 	JP	LOAD_OVERLAY_FILE
 
+;------------------------------------------------------------------------------
+; LOAD_HELP_OVERLAY: Load interactive help overlay (SEHELP.OVL) into TPA memory
+;
+; Purpose:
+;   Initializes OVERLAY_FCB with STR_HELP_OVL_NAME and loads help overlay into
+;   OVERLAY_EXEC_ADDR to display interactive help screens.
+;
+; Call Usage / Protocol:
+;   Called via CALL when user requests Help (F1 or Ctrl+Q H).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 if loaded successfully; Carry = 1 on failure.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 LOAD_HELP_OVERLAY:
 	LD	DE,STR_HELP_OVL_NAME
 	JP	LOAD_OVERLAY_FILE
 
 ;------------------------------------------------------------------------------
-; RUN_HIBERN_STARTUP:
-; Loads HIBERN.OVL and executes Action 0 (Detect) or Action 1 (Hibernate/Valid).
-; Input:
-;   A = 0: Action 0 (Detect RAM drive letter only)
-;   A = 1: Action 1 (Hibernate or Validate mode in B)
-;   B = Requested mode (1=ENABLED, 2=HIBERNATE) if A=1
+; RUN_HIBERN_STARTUP: Probe and resume hibernated editor session on startup
+;
+; Purpose:
+;   Checks if a valid hibernation state file exists on the default or RAM
+;   drive. If found, prompts user or automatically loads SEHIBERN.OVL to
+;   restore editor memory, open files, cursor position, and far RAM banks.
+;
+; Call Usage / Protocol:
+;   Called via CALL from START during initial program boot.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   If session restored, jumps directly to main editor loop; otherwise returns.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 RUN_HIBERN_STARTUP:
 	PUSH	AF
@@ -15013,7 +18773,25 @@ RHS_LOAD_ERR:
 	RET
 
 ;------------------------------------------------------------------------------
-; File Loading: Reads files directly into Far RAM banks
+; LOAD_FILE: Read text file from disk into far RAM line storage subsystem
+;
+; Purpose:
+;   Opens file in WORK_FCB, sets up progress modal, sequentially reads 128-byte
+;   sectors via BDOS Read Sequential, parses CRLF/LF/CR line breaks, handles tab
+;   expansion, stores lines into far RAM banks, and builds line pointer table.
+;
+; Call Usage / Protocol:
+;   Called via CALL from START (CLI filename) and DO_OPEN_FILE_UI.
+;
+; Inputs:
+;   WORK_FCB = Populated with target filename and drive.
+;
+; Outputs:
+;   Document line table initialized; LINE_COUNT set; Carry = 0 on success;
+;   Carry = 1 on open failure or out-of-memory.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 LOAD_FILE:
 	XOR	A
@@ -15411,10 +19189,23 @@ LOAD_FILE_NOT_FOUND:
 	RET
 
 ;------------------------------------------------------------------------------
-; DRAW_LOADING_SCREEN:
-; Clear screen, fill column 0 with tildes '~', draw initial status bar,
-; and display centered Tier 2 loading modal box.
-; Preserves: none
+; DRAW_LOADING_SCREEN: Render loading file progress modal dialog frame
+;
+; Purpose:
+;   Draws centered modal box border, displays "Loading..." title, formats
+;   filename, drive, and user area info, and renders initial progress bar.
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_FILE before reading file data.
+;
+; Inputs:
+;   WORK_FCB = Target file FCB.
+;
+; Outputs:
+;   Terminal screen updated with modal dialog box.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DRAW_LOADING_SCREEN:
 	; Hide cursor during load
@@ -15449,10 +19240,23 @@ DLS_SHOW_MODAL:
 	JP	DRAW_PROGRESS_MODAL
 
 ;------------------------------------------------------------------------------
-; DRAW_PROGRESS_MODAL:
-; Render centered 50x7 Tier 2 progress modal box for file loading / saving.
-; Input: DE = Title string (50 cols)
-; Preserves: none
+; DRAW_PROGRESS_MODAL: Draw generic progress dialog modal frame
+;
+; Purpose:
+;   Renders top border, title line, blank padding lines, progress bar frame,
+;   and bottom border centered horizontally and vertically on screen.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DRAW_LOADING_SCREEN and INIT_SAVE_PROGRESS.
+;
+; Inputs:
+;   DE = Pointer to null-terminated modal title string.
+;
+; Outputs:
+;   Modal dialog frame emitted to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DRAW_PROGRESS_MODAL:
 	PUSH	DE			; Save title pointer
@@ -15503,12 +19307,24 @@ DRAW_PROGRESS_MODAL:
 	JP	POPUP_PRINT_BORDER
 
 ;------------------------------------------------------------------------------
-; FORMAT_PROGRESS_FILE_LINE:
-; Formats Line 4 of progress modal:
-;   "|                  File: <DRIVE>:<FILENAME>                  |"
-; centered horizontally inside 50-column box borders (| ... |).
-; Output: HL = STR_POPUP_PROGRESS_FILE
-; Preserves: none
+; FORMAT_PROGRESS_FILE_LINE: Format file path and info for progress dialog
+;
+; Purpose:
+;   Formats drive letter, user area prefix (if non-zero), 8.3 filename, and
+;   file size into destination text buffer for display in modal progress box.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DRAW_PROGRESS_MODAL helper routines.
+;
+; Inputs:
+;   HL = Pointer to FCB.
+;   DE = Pointer to destination string buffer.
+;
+; Outputs:
+;   Formatted null-terminated string in buffer.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FORMAT_PROGRESS_FILE_LINE:
 	; Step 1: Format "File: <TARGET>" into PROGRESS_FILENAME_STR
@@ -15638,6 +19454,27 @@ FPFL_EMIT_COLON:
 	CALL	FPFL_COPY_FCB_FIELD
 	JR	FPFL_STR_DONE
 
+;------------------------------------------------------------------------------
+; FPFL_COPY_FCB_FIELD: Copy and space-trim FCB filename or extension field
+;
+; Purpose:
+;   Copies up to B characters from FCB at HL to buffer at DE, stripping
+;   trailing spaces.
+;
+; Call Usage / Protocol:
+;   Called via CALL from FORMAT_PROGRESS_FILE_LINE.
+;
+; Inputs:
+;   HL = Source character pointer in FCB.
+;   DE = Destination buffer pointer.
+;   B  = Maximum field length (8 for name, 3 for extension).
+;
+; Outputs:
+;   HL and DE advanced; copied non-space characters written.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B; advances DE and HL.
+;------------------------------------------------------------------------------
 FPFL_COPY_FCB_FIELD:
 	LD	A,(HL)
 	CP	' '
@@ -15713,9 +19550,23 @@ FPFL_COPY_TEXT:
 	RET
 
 ;------------------------------------------------------------------------------
-; UPDATE_LOAD_PROGRESS:
-; Update line counter inside centered Tier 2 progress modal dialog.
-; Preserves all registers (AF, BC, DE, HL).
+; UPDATE_LOAD_PROGRESS: Increment and redraw file loading progress indicator
+;
+; Purpose:
+;   Tracks processed record count during LOAD_FILE, calculating percentage and
+;   updating the visual progress bar fill characters inside modal dialog.
+;
+; Call Usage / Protocol:
+;   Called via CALL after each 128-byte sector read in LOAD_FILE.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Progress indicator refreshed on terminal.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 UPDATE_LOAD_PROGRESS:
 	PUSH	AF
@@ -15759,7 +19610,24 @@ ULP_NUM:
 	RET
 
 ;------------------------------------------------------------------------------
-; Initialize Empty Document into Far RAM Banks (1 empty line)
+; INIT_EMPTY_DOCUMENT: Initialize blank editor document state
+;
+; Purpose:
+;   Clears far RAM line tables, resets LINE_COUNT to 0, sets cursor to (0,0),
+;   resets viewport scroll offsets, marks document as unmodified, and clears
+;   WORK_FCB for a new empty buffer.
+;
+; Call Usage / Protocol:
+;   Called via CALL on editor startup without file, New Document, or load error.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Clean document state initialized.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 INIT_EMPTY_DOCUMENT:
 	CALL	INIT_SLOT_SYSTEM
@@ -15806,7 +19674,24 @@ INIT_EMPTY_DOCUMENT:
 	RET
 
 ;------------------------------------------------------------------------------
-; Open File Screen with Sorted Directory Listing & Pagination
+; DO_OPEN_FILE_UI: Interactive Open File modal dialog and directory browser
+;
+; Purpose:
+;   Displays full-screen modal browser listing files on current drive/user,
+;   provides interactive filename input box with editing/history, handles
+;   drive/user switching, and loads selected file into editor upon Enter.
+;
+; Call Usage / Protocol:
+;   Called via CALL when user requests Open File (Ctrl+O).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Target file loaded into editor, or cancelled if user presses Esc.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_OPEN_FILE_UI:
 	; Invalidate active line and flush dirty cache before directory collection
@@ -16083,9 +19968,24 @@ SET_NEXT_PAGE:
 	JP	RENDER_OPEN_PAGE
 
 ;------------------------------------------------------------------------------
-; DO_PARSE_AND_LOAD_PLUGIN:
-; Load plugin from INPUT_FILENAME_BUF into next available plugin slot.
-; Returns to Plugin Manager on success, or displays inline error on failure.
+; DO_PARSE_AND_LOAD_PLUGIN: Parse filename and load plugin into registry slot
+;
+; Purpose:
+;   Parses plugin filename from INPUT_FILENAME_BUF, locates free slot in
+;   plugin registry, loads PRL/OVL binary into far RAM or TPA, and initializes
+;   plugin descriptor metadata.
+;
+; Call Usage / Protocol:
+;   Jumped to from DO_OPEN_FILE_UI when IS_PLUGIN_LOAD_UI flag is active.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF = Contains entered plugin filename.
+;
+; Outputs:
+;   Plugin loaded into registry; returns to caller.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_PARSE_AND_LOAD_PLUGIN:
 	LD	DE,INPUT_FILENAME_BUF
@@ -16113,9 +20013,25 @@ OPEN_PLUGIN_FAIL:
 ;------------------------------------------------------------------------------
 
 ;------------------------------------------------------------------------------
-; DO_PARSE_AND_INSERT:
-; Parse filename from INPUT_FILENAME_BUF into INSERT_FCB, verify file existence,
-; restore document WORK_FCB, perform insertion, and return to editor mode.
+; DO_PARSE_AND_INSERT: Parse filename and insert file at cursor position
+;
+; Purpose:
+;   Parses external filename from INPUT_FILENAME_BUF into INSERT_FCB, verifies
+;   file existence and accessibility, preserves document WORK_FCB, streams file
+;   text into editor at current cursor row/col, and refreshes screen.
+;
+; Call Usage / Protocol:
+;   Jumped to from DO_OPEN_FILE_UI when IS_BLOCK_INSERT flag is active.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF = Contains entered filename.
+;   ACTIVE_ROW, ACTIVE_COL = Insertion coordinates.
+;
+; Outputs:
+;   File text inserted into document; viewport adjusted.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_PARSE_AND_INSERT:
 	; User entered a filename in INPUT_FILENAME_BUF: parse into WORK_FCB
@@ -16232,9 +20148,23 @@ DPAI_CLEANUP:
 	JP	MAIN_LOOP
 
 ;------------------------------------------------------------------------------
-; PROBE_INSERT_FILE: Check if INSERT_FCB exists and can be opened
-; Returns: Carry = 0 on success (INSERT_FCB open, CR initialized to 0)
-;          Carry = 1 on failure (file not found or conflict)
+; PROBE_INSERT_FILE: Verify accessibility and size of file for block insert
+;
+; Purpose:
+;   Attempts to open target insert file in INSERT_FCB via BDOS, verifies that
+;   it exists and has readable records, and closes FCB before insertion.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_PARSE_AND_INSERT.
+;
+; Inputs:
+;   INSERT_FCB = Target file FCB.
+;
+; Outputs:
+;   Carry = 0 if file exists and is accessible; Carry = 1 on failure.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PROBE_INSERT_FILE:
 	LD	DE,DEFAULT_DMA
@@ -16295,12 +20225,24 @@ PIF_OPEN_OK:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_PERFORM_BLOCK_INSERT:
-; Inserts the contents of INSERT_FCB into the document at the block insertion point.
-; If block is non-empty: deletes the block first via DO_DELETE_BLOCK.
-; If block is empty: cancels block selection.
-; Slices host line at insertion point, streams INSERT_FCB records, concatenates
-; lines, and positions cursor immediately after the inserted text.
+; DO_PERFORM_BLOCK_INSERT: Stream external file lines into active document
+;
+; Purpose:
+;   Reads external file sequentially via BDOS, splits text into lines at CRLF,
+;   inserts characters into active line or creates new lines at cursor position
+;   using far RAM line table manipulation, and adjusts total line count.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_PARSE_AND_INSERT after file probe succeeds.
+;
+; Inputs:
+;   INSERT_FCB = Openable FCB for source file.
+;
+; Outputs:
+;   Document updated with inserted text; Carry = 0 on success, Carry = 1 on OOM.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_PERFORM_BLOCK_INSERT:
 	; Check if block is empty:
@@ -16612,10 +20554,23 @@ DPBI_NO_BLOCK:
 	RET
 
 ;------------------------------------------------------------------------------
-; PBI_APPEND_CHAR:
-; Append character in register A to ACTIVE_LINE_BUF if within line limit.
-; Updates INSERT_CUR_LEN and maintains null terminator.
-; Preserves: BC, DE, HL
+; PBI_APPEND_CHAR: Append character to staging line buffer during block insert
+;
+; Purpose:
+;   Stores character in A into temporary insert line staging buffer, checking
+;   for line stride overflow and advancing character count.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_PERFORM_BLOCK_INSERT character streaming loop.
+;
+; Inputs:
+;   A = Character to append.
+;
+; Outputs:
+;   Character appended to buffer; length counter updated.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 PBI_APPEND_CHAR:
 	PUSH	HL
@@ -16642,11 +20597,24 @@ PAC_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; PBI_EMIT_LINE_BREAK:
-; Writes current ACTIVE_LINE_BUF to CUR_DOC_ROW, allocates slot for CUR_DOC_ROW + 1,
-; shifts lower slots downwards, advances CUR_DOC_ROW, and resets ACTIVE_LINE_BUF.
-; Returns: Carry = 0 on success, Carry = 1 on OOM
-; Preserves: BC, DE, HL
+; PBI_EMIT_LINE_BREAK: Commit staged line and insert new line in document
+;
+; Purpose:
+;   Flushes accumulated staging line buffer to document line table at cursor
+;   position, allocates new line in far RAM, increments document line count,
+;   and advances insertion cursor row.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_PERFORM_BLOCK_INSERT upon encountering CRLF/LF.
+;
+; Inputs:
+;   Staging line buffer populated.
+;
+; Outputs:
+;   New line inserted into document; cursor row advanced.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PBI_EMIT_LINE_BREAK:
 	PUSH	BC
@@ -16747,8 +20715,23 @@ PELB_OOM:
 	RET
 
 ;------------------------------------------------------------------------------
-; ADJUST_INSERT_VIEWPORT:
-; Adjust TOP_DOC_ROW and VIEW_LEFT_COL to keep cursor visible.
+; ADJUST_INSERT_VIEWPORT: Re-align screen viewport following block insert
+;
+; Purpose:
+;   Calculates new VIEWPORT_ROW and VIEWPORT_COL so that the cursor and newly
+;   inserted text remain cleanly visible within the active editing window.
+;
+; Call Usage / Protocol:
+;   Called via CALL after DO_PERFORM_BLOCK_INSERT finishes.
+;
+; Inputs:
+;   ACTIVE_ROW, ACTIVE_COL.
+;
+; Outputs:
+;   VIEWPORT_ROW, VIEWPORT_COL updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 ADJUST_INSERT_VIEWPORT:
 	; Check if CUR_DOC_ROW < TOP_DOC_ROW
@@ -16790,7 +20773,24 @@ AIV_CHECK_HORIZ:
 	RET
 
 ;------------------------------------------------------------------------------
-; Save File Screen with Sorted Directory Listing, Pre-filling & Overwrite Check
+; DO_SAVE_FILE_UI: Interactive Save / Save As modal dialog
+;
+; Purpose:
+;   Displays modal dialog showing directory listing, provides prefilled
+;   filename input box, prompts for confirmation before overwriting existing
+;   files, and writes document lines to disk/RAM drive upon Enter.
+;
+; Call Usage / Protocol:
+;   Called via CALL on Save File (Ctrl+S) or Save As (Ctrl+W).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Document saved to disk, or cancelled if user presses Esc.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_SAVE_FILE_UI:
 	LD	A,(FILE_IS_TRUNCATED)
@@ -16817,8 +20817,23 @@ DO_SAVE_FILE_OK:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_FILE_TRUNCATED_POPUP:
-; Check if document was truncated on load; if so, display modal popup.
+; CHECK_FILE_TRUNCATED_POPUP: Warn user if lines exceed max stride before saving
+;
+; Purpose:
+;   Checks HAS_TRUNCATED_LINES flag. If set, invokes SHOW_FILE_TRUNCATED_POPUP
+;   to warn the user that saving will write truncated lines to disk.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_SAVE_FILE_UI before initiating save.
+;
+; Inputs:
+;   HAS_TRUNCATED_LINES flag.
+;
+; Outputs:
+;   Carry = 0 if safe to continue save; Carry = 1 if user cancelled.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 CHECK_FILE_TRUNCATED_POPUP:
 	LD	A,(FILE_IS_TRUNCATED)
@@ -16826,10 +20841,23 @@ CHECK_FILE_TRUNCATED_POPUP:
 	RET	Z
 
 ;------------------------------------------------------------------------------
-; SHOW_FILE_TRUNCATED_POPUP:
-; Displays centered modal pop-up alerting user that file was truncated on load.
-; Dimensions: 50 columns wide x 7 rows high.
-; Waits for any key, then restores screen and status bar.
+; SHOW_FILE_TRUNCATED_POPUP: Display line truncation warning modal dialog
+;
+; Purpose:
+;   Renders centered popup warning: "Document has truncated lines! Save anyway?
+;   (Y/N)", waiting for user keypress to confirm or abort save operation.
+;
+; Call Usage / Protocol:
+;   Called via CALL from CHECK_FILE_TRUNCATED_POPUP.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 if user pressed 'Y'/'y'; Carry = 1 if user aborted ('N'/'n'/Esc).
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 SHOW_FILE_TRUNCATED_POPUP:
 	LD	DE,STR_POPUP_TRUNC_TITLE
@@ -16838,6 +20866,25 @@ SHOW_FILE_TRUNCATED_POPUP:
 	JP	SHOW_STATUS_EVENT_POPUP
 
 
+;------------------------------------------------------------------------------
+; DO_SAVE_FILE_UI_IMPL: Main implementation loop for Save File dialog
+;
+; Purpose:
+;   Collects directory entries, initializes layout geometry, displays directory
+;   page and Save prompt, preloads current filename, and runs input loop.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from DO_SAVE_FILE_UI.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   None.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_SAVE_FILE_UI_IMPL:
 	; Initialize directory layout parameters based on active screen mode
 	CALL	INIT_DIR_LAYOUT
@@ -17047,6 +21094,26 @@ DO_OVERWRITE_CANCELLED:
 
 DO_OVERWRITE_CONFIRMED:
 
+;------------------------------------------------------------------------------
+; DO_ACTUAL_SAVE: Verify overwrite permission and execute file save
+;
+; Purpose:
+;   Checks if target file exists on destination drive/user. If it exists and
+;   differs from original document file, prompts with DRAW_OVERWRITE_POPUP;
+;   on confirmation, executes SAVE_FILE.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP when filename is confirmed in Save File UI.
+;
+; Inputs:
+;   WORK_FCB = Target file FCB.
+;
+; Outputs:
+;   File written to disk; returns to editor.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_ACTUAL_SAVE:
 	LD	A,(IS_BLOCK_SAVE_UI)
 	OR	A
@@ -17076,8 +21143,23 @@ DO_ACTUAL_BLOCK_SAVE:
 	RET
 
 ;------------------------------------------------------------------------------
-; DRAW_OVERWRITE_POPUP:
-; Render centered 50x7 modal query pop-up warning of file overwrite.
+; DRAW_OVERWRITE_POPUP: Display overwrite confirmation modal dialog
+;
+; Purpose:
+;   Displays modal warning box: "File exists! Overwrite? (Y/N)", waiting for
+;   user confirmation before replacing existing file on disk.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_ACTUAL_SAVE when target file already exists.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 if confirmed ('Y'/'y'); Carry = 1 if aborted ('N'/'n'/Esc).
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DRAW_OVERWRITE_POPUP:
 	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
@@ -17214,8 +21296,23 @@ SET_SAVE_NEXT_PAGE:
 	JP	RENDER_SAVE_PAGE
 
 ;------------------------------------------------------------------------------
-; Check if file in WORK_FCB already exists on disk
-; Returns: Carry = 1 if file exists, Carry = 0 if file does not exist
+; CHECK_FILE_EXISTS: Test if target FCB exists on disk via BDOS Search First
+;
+; Purpose:
+;   Invokes BDOS Search First (function 17) for candidate FCB pointed to by DE.
+;   Returns Carry = 0 if directory entry found (0..3), Carry = 1 if not found.
+;
+; Call Usage / Protocol:
+;   Called via CALL before opening or saving files to verify existence.
+;
+; Inputs:
+;   DE = Pointer to target FCB.
+;
+; Outputs:
+;   Carry = 0 if file exists; Carry = 1 if file does not exist.
+;
+; Preserves / Modifies:
+;   Clobbers AF, DE; preserves BC, HL.
 ;------------------------------------------------------------------------------
 CHECK_FILE_EXISTS:
 	; Set BDOS user area to WORK_FCB_USER before probing
@@ -17274,9 +21371,23 @@ FILE_NOT_EXISTS:
 	RET
 
 ;------------------------------------------------------------------------------
-; Initialize directory layout parameters based on active SCREEN_MODE:
-;   80x24 mode: 5 columns per row, 60 files per page (12 rows x 5 cols, 15 chars/col)
-;  120x40 mode: 7 columns per row, 196 files per page (28 rows x 7 cols, 16 chars/col)
+; INIT_DIR_LAYOUT: Calculate directory modal geometry from terminal dimensions
+;
+; Purpose:
+;   Calculates number of directory rows, columns per row, column width, and top
+;   vertical padding based on ACTIVE_ROWS and ACTIVE_COLS terminal dimensions.
+;
+; Call Usage / Protocol:
+;   Called via CALL prior to rendering directory browser page.
+;
+; Inputs:
+;   ACTIVE_ROWS, ACTIVE_COLS.
+;
+; Outputs:
+;   DIR_BODY_ROWS, DIR_COLS_PER_ROW, DIR_COL_WIDTH, DIR_TOP_PAD configured.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 INIT_DIR_LAYOUT:
 	LD	A,(SCREEN_MODE)
@@ -17305,8 +21416,23 @@ IDL_120:
 	RET
 
 ;------------------------------------------------------------------------------
-; Print Full-Width Horizontal Rule with '=': "~==============..."
-; Emits '~' followed by (ACTIVE_COLS - 2) '=' characters and CRLF.
+; PRINT_HR_EQUAL: Print full-width horizontal rule with '=' characters
+;
+; Purpose:
+;   Emits '~' followed by (ACTIVE_COLS - 2) '=' characters and a CRLF sequence
+;   to draw outer borders of modal dialog boxes.
+;
+; Call Usage / Protocol:
+;   Called via CALL during modal dialog rendering.
+;
+; Inputs:
+;   ACTIVE_COLS.
+;
+; Outputs:
+;   Border rule emitted to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B.
 ;------------------------------------------------------------------------------
 PRINT_HR_EQUAL:
 	LD	A,'~'
@@ -17322,8 +21448,23 @@ PHE_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Print Full-Width Horizontal Rule with '-': "~--------------..."
-; Emits '~' followed by (ACTIVE_COLS - 2) '-' characters and CRLF.
+; PRINT_HR_DASH: Print full-width horizontal rule with '-' characters
+;
+; Purpose:
+;   Emits '~' followed by (ACTIVE_COLS - 2) '-' characters and a CRLF sequence
+;   to draw internal section dividers in modal dialog boxes.
+;
+; Call Usage / Protocol:
+;   Called via CALL during modal dialog rendering.
+;
+; Inputs:
+;   ACTIVE_COLS.
+;
+; Outputs:
+;   Divider rule emitted to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B.
 ;------------------------------------------------------------------------------
 PRINT_HR_DASH:
 	LD	A,'~'
@@ -17339,8 +21480,23 @@ PHD_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Print directory screen left prefix: '~' followed by (DIR_LEFT_PAD) spaces
-; Preserves BC, DE, HL
+; PRINT_DIR_PREFIX: Print directory line prefix and optional left margin padding
+;
+; Purpose:
+;   Emits "~ " prefix at the beginning of each directory body line to maintain
+;   dialog border alignment.
+;
+; Call Usage / Protocol:
+;   Called via CALL at the start of each directory row.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Prefix emitted to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 PRINT_DIR_PREFIX:
 	PUSH	AF
@@ -17361,8 +21517,23 @@ PDP_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Calculate start file: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
-; Preserves DE, HL
+; CALC_DIR_START_FILE: Compute first file index for current directory page
+;
+; Purpose:
+;   Multiplies DIR_PAGE_NUM by files per page to determine starting file index
+;   in DIR_NAMES_BUF for the active page display.
+;
+; Call Usage / Protocol:
+;   Called via CALL before rendering directory entries.
+;
+; Inputs:
+;   DIR_PAGE_NUM, DIR_BODY_ROWS, DIR_COLS_PER_ROW.
+;
+; Outputs:
+;   HL = Index of first file on page (0-based).
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, HL; preserves DE.
 ;------------------------------------------------------------------------------
 CALC_DIR_START_FILE:
 	PUSH	BC
@@ -17382,10 +21553,23 @@ CDSF_ZERO:
 	RET
 
 ;------------------------------------------------------------------------------
-; Calculate total body rows B for the current directory page & prompt:
-; Body rows = file_rows + prompt_rows
-; Outputs: A = total body rows
-; Preserves DE
+; CALC_DIR_BODY_ROWS: Determine available body rows for directory listing
+;
+; Purpose:
+;   Subtracts fixed header, prompt, and border rows from ACTIVE_ROWS to compute
+;   maximum vertical lines available for directory entries.
+;
+; Call Usage / Protocol:
+;   Called via CALL from INIT_DIR_LAYOUT.
+;
+; Inputs:
+;   ACTIVE_ROWS.
+;
+; Outputs:
+;   A = Number of directory body rows.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B; preserves DE, HL.
 ;------------------------------------------------------------------------------
 CALC_DIR_BODY_ROWS:
 	CALL	CALC_DIR_START_FILE
@@ -17442,12 +21626,23 @@ CDBR_PROMPT_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Calculate DIR_TOP_PAD_COUNT:
-; TOTAL_AVAIL = (ACTIVE_ROWS - 1) - 3 = ACTIVE_ROWS - 4
-; EXTRA = TOTAL_AVAIL - BodyRows
-; If EXTRA <= 0: TOP_PAD = 0
-; Else: TOP_PAD = EXTRA / 2
-; Sets DIR_TOP_PAD_COUNT
+; CALC_DIR_TOP_PAD: Calculate top vertical padding to center modal dialog
+;
+; Purpose:
+;   Computes number of blank lines to emit before modal box top border so the
+;   dialog is vertically centered on the terminal screen.
+;
+; Call Usage / Protocol:
+;   Called via CALL from INIT_DIR_LAYOUT.
+;
+; Inputs:
+;   ACTIVE_ROWS, DIR_BODY_ROWS.
+;
+; Outputs:
+;   A = Number of blank padding lines.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B; preserves DE, HL.
 ;------------------------------------------------------------------------------
 CALC_DIR_TOP_PAD:
 	CALL	CALC_DIR_BODY_ROWS	; A = BodyRows
@@ -17466,12 +21661,23 @@ CDTP_ZERO:
 	RET
 
 ;------------------------------------------------------------------------------
-; Render Open/Save Screen Top Margin & Centered Header:
-; Rows 1 .. DIR_TOP_PAD_COUNT: Top margin blank tildes
-; Row DIR_TOP_PAD_COUNT + 1: Full-width "~====..."
-; Row DIR_TOP_PAD_COUNT + 2: Centered title: "~   SE.COM - OPEN/SAVE FILE ..."
-; Row DIR_TOP_PAD_COUNT + 3: Full-width "~====..."
-; Sets UI_CUR_ROW = 3 + DIR_TOP_PAD_COUNT.
+; RENDER_DIR_TITLE: Render title bar for Open File modal dialog
+;
+; Purpose:
+;   Emits title header line: "~  Open File: <Drive><User>: [<Filter>]"
+;   with active drive letter, user area, and wildcard filter pattern.
+;
+; Call Usage / Protocol:
+;   Called via CALL from RENDER_OPEN_PAGE.
+;
+; Inputs:
+;   DIR_DRIVE, DIR_USER, DIR_FILTER_BUF.
+;
+; Outputs:
+;   Title header line printed to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 RENDER_DIR_TITLE:
 	LD	A,(IS_BLOCK_INSERT_UI)
@@ -17492,6 +21698,25 @@ RDT_IS_PLUGIN:
 	LD	A,(STR_DIR_DRIVE_CHAR)
 	JR	RENDER_TITLE_COMMON
 
+;------------------------------------------------------------------------------
+; RENDER_SAVE_TITLE: Render title bar for Save File modal dialog
+;
+; Purpose:
+;   Emits title header line: "~  Save File: <Drive><User>: [<Filter>]"
+;   with active drive letter, user area, and wildcard filter pattern.
+;
+; Call Usage / Protocol:
+;   Called via CALL from RENDER_SAVE_PAGE.
+;
+; Inputs:
+;   DIR_DRIVE, DIR_USER, DIR_FILTER_BUF.
+;
+; Outputs:
+;   Title header line printed to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 RENDER_SAVE_TITLE:
 	LD	A,(IS_BLOCK_SAVE_UI)
 	OR	A
@@ -17715,8 +21940,23 @@ RTC_TITLE_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; PRINT_FAT_TITLE_PATH:
-; Prints path at HL using PUTC. If path does not end with '/', appends '/'.
+; PRINT_FAT_TITLE_PATH: Print FAT filesystem path in modal dialog title
+;
+; Purpose:
+;   Emits FAT volume letter and current directory path string when browsing
+;   a mounted RomWBW FAT filesystem volume.
+;
+; Call Usage / Protocol:
+;   Called via CALL from RENDER_DIR_TITLE and RENDER_SAVE_TITLE.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   FAT path string printed to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PRINT_FAT_TITLE_PATH:
 	LD	C,0			; Tracks last character printed
@@ -17737,8 +21977,23 @@ PFTP_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Initialize CURRENT_DIR_DRIVE and title strings
-; If WORK_FCB has an explicit drive, uses it; otherwise queries BDOS 25.
+; INIT_DIR_DRIVE: Initialize directory browser drive and user area
+;
+; Purpose:
+;   Sets DIR_DRIVE and DIR_USER to match the current document's drive and user
+;   area, or default CP/M logged drive/user if no file is open.
+;
+; Call Usage / Protocol:
+;   Called via CALL at commencement of Open or Save file dialogs.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   DIR_DRIVE, DIR_USER initialized.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 INIT_DIR_DRIVE:
 	LD	A,(CMDLINE_IS_FAT)
@@ -17779,7 +22034,23 @@ IDD_USE_FCB:
 	RET
 
 ;------------------------------------------------------------------------------
-; Restore BDOS user area and CURRENT_DIR_USER to the active document user area
+; RESTORE_DOC_USER: Restore active CP/M user area to document context
+;
+; Purpose:
+;   Calls BDOS Set User Area (function 32) using DOC_USER_NUM to ensure the
+;   underlying document user context is restored after browsing other areas.
+;
+; Call Usage / Protocol:
+;   Called via CALL when exiting file dialogs or before file operations.
+;
+; Inputs:
+;   DOC_USER_NUM.
+;
+; Outputs:
+;   Active CP/M user area restored.
+;
+; Preserves / Modifies:
+;   Clobbers AF, DE.
 ;------------------------------------------------------------------------------
 RESTORE_DOC_USER:
 	LD	A,(DOC_USER_NUM)
@@ -17790,7 +22061,23 @@ RESTORE_DOC_USER:
 	RET
 
 ;------------------------------------------------------------------------------
-; Reset directory filter to default *.* (all files shown)
+; RESET_DIR_FILTER: Reset directory wildcard filter string to "*.*"
+;
+; Purpose:
+;   Clears DIR_FILTER_BUF and writes default pattern "*.*" with terminating
+;   null byte so all files match.
+;
+; Call Usage / Protocol:
+;   Called via CALL when switching drives, user areas, or opening dialogs.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   DIR_FILTER_BUF set to "*.*".
+;
+; Preserves / Modifies:
+;   Clobbers AF, HL.
 ;------------------------------------------------------------------------------
 RESET_DIR_FILTER:
 	XOR	A
@@ -17812,10 +22099,23 @@ RDF_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Preload INPUT_FILENAME_BUF with current drive and document user area characters
-; (e.g. "J0:", "A4:", "C0:", "C1:", "B15:", "U4:")
-; Sets INPUT_BUF_LEN and null-terminates the buffer.
-; Outputs: INPUT_FILENAME_BUF populated, INPUT_BUF_LEN set
+; PRELOAD_DRIVE_USER_PREFIX: Preload drive/user prefix into filename input box
+;
+; Purpose:
+;   Writes drive letter (e.g. 'A') and user area digits (e.g. '0:') into
+;   INPUT_FILENAME_BUF so user sees explicit context when saving or opening.
+;
+; Call Usage / Protocol:
+;   Called via CALL when initializing filename input in file dialogs.
+;
+; Inputs:
+;   DIR_DRIVE, DIR_USER.
+;
+; Outputs:
+;   INPUT_FILENAME_BUF prefilled with prefix.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PRELOAD_DRIVE_USER_PREFIX:
 	LD	A,(CURRENT_DIR_IS_FAT)
@@ -17891,9 +22191,23 @@ PDUP_FAT_NO_UNIT:
 	RET
 
 ;------------------------------------------------------------------------------
-; Helper: Check if character in A is a valid drive letter 'A'..'P' / 'a'..'p'
-; Returns: Carry = 1 and A = drive code 1..16 (1=A, 2=B, etc.)
-;          Carry = 0 if not a drive letter
+; IS_DRIVE_LETTER: Validate if character is a CP/M drive letter ('A'..'P')
+;
+; Purpose:
+;   Converts ASCII character in A to uppercase and verifies whether it lies
+;   in the valid CP/M drive range ('A'..'P').
+;
+; Call Usage / Protocol:
+;   Called via CALL from filename prefix parsers.
+;
+; Inputs:
+;   A = ASCII character to test.
+;
+; Outputs:
+;   Carry = 0 and A uppercase if valid drive letter; Carry = 1 if invalid.
+;
+; Preserves / Modifies:
+;   Modifies AF; preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 IS_DRIVE_LETTER:
 	CALL	TO_UPPER
@@ -17909,9 +22223,23 @@ IDL_NOT_DRV:
 	RET
 
 ;------------------------------------------------------------------------------
-; Helper: Check if character in A is a digit '0'..'9'
-; Returns: Carry = 1 and A = digit value 0..9
-;          Carry = 0 if not a digit
+; IS_DIGIT_CHAR: Test if character is a decimal digit ('0'..'9')
+;
+; Purpose:
+;   Checks if ASCII character in A is between '0' and '9'. If so, converts it
+;   to numeric binary value (0..9) in A and clears Carry flag.
+;
+; Call Usage / Protocol:
+;   Called via CALL from user number and line number parsing routines.
+;
+; Inputs:
+;   A = ASCII character to test.
+;
+; Outputs:
+;   Carry = 0 and A = numeric value (0..9) if digit; Carry = 1 if non-digit.
+;
+; Preserves / Modifies:
+;   Modifies AF; preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 IS_DIGIT_CHAR:
 	CP	'0'
@@ -17926,9 +22254,23 @@ IDC_NOT_DIG:
 	RET
 
 ;------------------------------------------------------------------------------
-; Helper: Parse 2-digit user number from ASCII digits in D (tens) and E (units)
-; Returns: Carry = 1 and A = user number (0..15)
-;          Carry = 0 if user number > 15
+; PARSE_2DIGIT_USER: Parse 1- or 2-digit decimal user number (0..31)
+;
+; Purpose:
+;   Reads one or two decimal digits from string at HL, computes user number
+;   (0..31), and validates against CP/M user area bounds.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PARSE_DRIVE_USER_PREFIX.
+;
+; Inputs:
+;   HL = Pointer to ASCII digit string.
+;
+; Outputs:
+;   Carry = 0 and A = user number (0..31) on success; Carry = 1 on invalid user.
+;
+; Preserves / Modifies:
+;   Modifies AF, HL; preserves BC, DE.
 ;------------------------------------------------------------------------------
 PARSE_2DIGIT_USER:
 	LD	A,D
@@ -17954,23 +22296,24 @@ P2U_INVALID:
 	RET
 
 ;------------------------------------------------------------------------------
-; PARSE_DRIVE_USER_PREFIX:
-; Parses CP/M drive and/or user area prefix at HL:
-;   "C:"   -> Drive C, User unchanged
-;   "1:"   -> Drive unchanged, User 1
-;   "C1:"  -> Drive C, User 1
-;   "1C:"  -> Drive C, User 1
-;   "C15:" -> Drive C, User 15
-;   "15C:" -> Drive C, User 15
-;   "15:"  -> Drive unchanged, User 15
-; Returns:
-;   Carry = 1: Valid prefix matched.
-;              HL advanced past ':'.
-;              A = Target Drive (1..16 if specified, or 0 if unchanged).
-;              C = Target User (0..15 if specified, or 0xFF if unchanged).
-;              Also stored in (PREFIX_DRIVE) and (PREFIX_USER).
-;   Carry = 0: No valid prefix.
-;              HL preserved.
+; PARSE_DRIVE_USER_PREFIX: Parse optional drive and user prefix from string
+;
+; Purpose:
+;   Parses drive letter ('A'..'P') and optional user area (0..31) followed by
+;   a colon (e.g. "B:", "A3:", "C15:FILE.TXT") from string at DE.
+;
+; Call Usage / Protocol:
+;   Called via CALL when evaluating user input in file dialogs.
+;
+; Inputs:
+;   DE = Pointer to input string.
+;
+; Outputs:
+;   Carry = 0 if prefix found; DIR_DRIVE and DIR_USER updated; DE points past
+;   colon. Carry = 1 if no valid prefix found.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, HL; advances DE.
 ;------------------------------------------------------------------------------
 PARSE_DRIVE_USER_PREFIX:
 	PUSH	HL
@@ -18143,12 +22486,24 @@ PDUP_SUCCESS:
 	RET
 
 ;------------------------------------------------------------------------------
-; Check if INPUT_FILENAME_BUF contains a drive/user specification (e.g. "C:", "C1:", "1C:", "1:")
-; Returns:
-;   Carry = 1 -> Drive/user switch requested:
-;                A = drive code (1..16, or 0 if unchanged)
-;                C = user code (0..15, or 0xFF if unchanged)
-;   Carry = 0 -> Not a bare drive/user switch
+; CHECK_DRIVE_SWITCH: Check if input string represents drive/user switch
+;
+; Purpose:
+;   Tests if INPUT_FILENAME_BUF contains only a drive and optional user area
+;   with a trailing colon (e.g. "B:" or "A1:"). If so, updates DIR_DRIVE/USER
+;   and sets Carry = 0 so the directory view refreshes to that location.
+;
+; Call Usage / Protocol:
+;   Called via CALL on Enter key in file dialog.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Carry = 0 if drive/user switch handled; Carry = 1 if regular filename.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 CHECK_DRIVE_SWITCH:
 	LD	HL,INPUT_FILENAME_BUF
@@ -18182,11 +22537,23 @@ CDS_NOT_SWITCH:
 	RET
 
 ;------------------------------------------------------------------------------
-; Check if INPUT_FILENAME_BUF contains a wildcard filter pattern (e.g. "*.TXT" or "J:*.TXT")
-; If so, parses drive (if specified) and pattern into DIR_FILTER_FCB and DIR_FILTER_STR.
-; Returns:
-;   Carry = 1 -> Filter pattern processed
-;   Carry = 0 -> Not a filter pattern
+; CHECK_FILTER_PATTERN: Check if input string contains wildcard filter pattern
+;
+; Purpose:
+;   Scans INPUT_FILENAME_BUF for wildcard characters ('*' or '?'). If present,
+;   updates DIR_FILTER_BUF and sets Carry = 0 so the file list re-filters.
+;
+; Call Usage / Protocol:
+;   Called via CALL on Enter key in file dialog.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Carry = 0 if wildcard pattern detected and stored; Carry = 1 otherwise.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 CHECK_FILTER_PATTERN:
 	LD	A,(INPUT_BUF_LEN)
@@ -18403,9 +22770,24 @@ CFP_SET_ACTIVE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Convert WORK_FCB to null-terminated ASCII string in INPUT_FILENAME_BUF
-; Sets INPUT_BUF_LEN accordingly.
-; If HAS_FILE_ARG == 0, clears buffer (length 0).
+; FCB_TO_FILENAME_STR: Convert FCB 8.3 filename to formatted string
+;
+; Purpose:
+;   Extracts 8-character filename and 3-character extension from FCB at HL,
+;   strips padding spaces, inserts '.', and writes null-terminated string to DE.
+;
+; Call Usage / Protocol:
+;   Called via CALL for status bar, dialog, and message formatting.
+;
+; Inputs:
+;   HL = Pointer to FCB (bytes 1..11: name and ext).
+;   DE = Pointer to destination string buffer.
+;
+; Outputs:
+;   Null-terminated formatted filename written to DE.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FCB_TO_FILENAME_STR:
 	LD	A,(HAS_FILE_ARG)
@@ -18514,7 +22896,23 @@ FCB_CONV_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Display Save Prompt & Page Indicator with Format Info
+; DISPLAY_SAVE_PROMPT: Render Save As input prompt and format info
+;
+; Purpose:
+;   Emits "Save file: [ ... ]" prompt line, line ending format mode indicator,
+;   and positions cursor at active edit position within the filename box.
+;
+; Call Usage / Protocol:
+;   Called via CALL from RENDER_SAVE_PAGE.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Prompt line drawn on terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DISPLAY_SAVE_PROMPT:
 	LD	A,(DIR_PAGE_COUNT)
@@ -18570,6 +22968,25 @@ DISP_SAVE_PROMPT_BODY:
 	CALL	DRAW_FILENAME_BOX
 	RET
 
+;------------------------------------------------------------------------------
+; PRINT_SAVE_FMT_INFO: Print active line ending format indicator string
+;
+; Purpose:
+;   Outputs bracketed line ending mode (" [CRLF]", " [LF]", or " [CR]") inside
+;   the save prompt bar to inform user of output line format.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DISPLAY_SAVE_PROMPT.
+;
+; Inputs:
+;   FILE_LINE_ENDING_MODE.
+;
+; Outputs:
+;   Format string emitted to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers AF, DE.
+;------------------------------------------------------------------------------
 PRINT_SAVE_FMT_INFO:
 	LD	HL,UI_CUR_ROW
 	INC	(HL)
@@ -18591,7 +23008,23 @@ PRINT_SAVE_FMT_END:
 	RET
 
 ;------------------------------------------------------------------------------
-; Brief delay (~0.5s) for reading status messages
+; DELAY_BRIEF: Busy-wait delay (~0.5s) for transient status messages
+;
+; Purpose:
+;   Executes nested software delay loops (~0.5 seconds at 4-10 MHz Z80 clocks)
+;   to keep transient error/status messages readable on screen.
+;
+; Call Usage / Protocol:
+;   Called via CALL after printing brief notification messages.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   None.
+;
+; Preserves / Modifies:
+;   Preserves AF, DE, HL; clobbers BC (saved/restored internally).
 ;------------------------------------------------------------------------------
 DELAY_BRIEF:
 	PUSH	BC
@@ -18606,10 +23039,24 @@ DELAY_INNER:
 	RET
 
 ;------------------------------------------------------------------------------
-; Collect Directory Entries from CP/M Default Drive into DIR_NAMES_BUF
-; - Strips Bit 7 (AND 07FH) on all characters
-; - Works across standard CP/M, host/Linux drives, and FAT filesystems
-; - Filters duplicate multi-extent entries via CHECK_DIR_DUPLICATE
+; COLLECT_DIR_ENTRIES: Query directory entries via BDOS and populate buffer
+;
+; Purpose:
+;   Enumerates directory entries from CP/M default drive via BDOS Search First
+;   (17) and Search Next (18), strips bit 7 high attributes, filters duplicates,
+;   filters swap files, applies wildcard filter, and sorts entries.
+;
+; Call Usage / Protocol:
+;   Called via CALL when opening or refreshing file modal browser dialogs.
+;
+; Inputs:
+;   DIR_DRIVE, DIR_USER, DIR_FILTER_BUF.
+;
+; Outputs:
+;   DIR_FILE_COUNT populated; DIR_NAMES_BUF filled with sorted 11-byte entries.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 COLLECT_DIR_ENTRIES:
 	XOR	A
@@ -18784,8 +23231,24 @@ DIR_NEXT_ENTRY:
 	JP	DIR_COLLECT_LOOP
 
 ;------------------------------------------------------------------------------
-; Check if DIR_TEMP_ENTRY matches any already collected entry in DIR_NAMES_BUF
-; Returns: Carry = 1 if duplicate found, Carry = 0 if unique
+; CHECK_DIR_DUPLICATE: Check if candidate entry already exists in DIR_NAMES_BUF
+;
+; Purpose:
+;   Compares 11-byte candidate filename at DE against all existing entries in
+;   DIR_NAMES_BUF to filter out redundant multi-extent CP/M directory records.
+;
+; Call Usage / Protocol:
+;   Called via CALL from COLLECT_DIR_ENTRIES loop for each found directory item.
+;
+; Inputs:
+;   DE = Pointer to 11-byte candidate filename.
+;   DIR_FILE_COUNT = Current number of entries in DIR_NAMES_BUF.
+;
+; Outputs:
+;   Carry = 1 if duplicate found; Carry = 0 if candidate is unique.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, HL; preserves DE.
 ;------------------------------------------------------------------------------
 CHECK_DIR_DUPLICATE:
 	LD	A,(DIR_FILE_COUNT)
@@ -18827,9 +23290,23 @@ CHECK_DUP_NO_MATCH:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_DIR_SWAP_FILE: Check if DIR_TEMP_ENTRY is a swap file
-; Matches $$$SE$$$.SWP or any generic $$$*.SWP
-; Returns: Carry = 1 if swap file (skip), Carry = 0 if regular file
+; CHECK_DIR_SWAP_FILE: Test if entry matches virtual memory swap file
+;
+; Purpose:
+;   Compares 11-byte filename at DE against "SESWAP  TMP" and temporary swap
+;   patterns to prevent internal virtual paging files from appearing in browser.
+;
+; Call Usage / Protocol:
+;   Called via CALL from COLLECT_DIR_ENTRIES.
+;
+; Inputs:
+;   DE = Pointer to 11-byte candidate filename.
+;
+; Outputs:
+;   Carry = 1 if swap file (exclude); Carry = 0 if regular file (include).
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, HL; preserves DE.
 ;------------------------------------------------------------------------------
 CHECK_DIR_SWAP_FILE:
 	PUSH	BC
@@ -18892,8 +23369,23 @@ STR_SWAP_FILE_MATCH:
 	DB	"$$$SE$$$.SWP",0
 
 ;------------------------------------------------------------------------------
-; CHECK_PLUGIN_EXT: Check if DIR_TEMP_ENTRY extension is "PRL" or "OVL"
-; Returns: Carry = 1 if match, Carry = 0 if not match
+; CHECK_PLUGIN_EXT: Validate plugin extension (.PRL or .OVL) for plugin browser
+;
+; Purpose:
+;   Examines 3-byte extension field at DE+8 to verify if it matches "PRL" or
+;   "OVL" when user is browsing plugins.
+;
+; Call Usage / Protocol:
+;   Called via CALL from COLLECT_DIR_ENTRIES when IS_PLUGIN_LOAD_UI is set.
+;
+; Inputs:
+;   DE = Pointer to 11-byte filename.
+;
+; Outputs:
+;   Carry = 0 if valid plugin extension; Carry = 1 otherwise.
+;
+; Preserves / Modifies:
+;   Clobbers AF, HL; preserves BC, DE.
 ;------------------------------------------------------------------------------
 CHECK_PLUGIN_EXT:
 	LD	HL,DIR_TEMP_ENTRY + 9
@@ -18928,7 +23420,23 @@ CPE_FAIL:
 	RET
 
 ;------------------------------------------------------------------------------
-; Sort Directory Entries Alphabetically (Bubble Sort)
+; SORT_DIR_ENTRIES: Alphabetically sort directory entries in DIR_NAMES_BUF
+;
+; Purpose:
+;   Executes an in-place bubble sort across all 11-byte filename records stored
+;   in DIR_NAMES_BUF so file listings appear in clean alphabetical order.
+;
+; Call Usage / Protocol:
+;   Called via CALL from COLLECT_DIR_ENTRIES after file collection finishes.
+;
+; Inputs:
+;   DIR_NAMES_BUF, DIR_FILE_COUNT.
+;
+; Outputs:
+;   Entries in DIR_NAMES_BUF ordered alphabetically.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 SORT_DIR_ENTRIES:
 	LD	A,(DIR_FILE_COUNT)
@@ -19013,7 +23521,23 @@ NO_SWAP_NEEDED:
 	RET
 
 ;------------------------------------------------------------------------------
-; Display Directory Entries for Current Page (48 entries: 12 rows x 4 cols)
+; DISPLAY_DIR_PAGE: Format and render directory entries in multi-column grid
+;
+; Purpose:
+;   Calculates pagination offset, iterates over entries for the active page,
+;   and formats filenames across multiple columns with spacing and borders.
+;
+; Call Usage / Protocol:
+;   Called via CALL from RENDER_OPEN_PAGE and RENDER_SAVE_PAGE.
+;
+; Inputs:
+;   DIR_PAGE_NUM, DIR_FILE_COUNT, DIR_NAMES_BUF.
+;
+; Outputs:
+;   Grid of filenames printed to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DISPLAY_DIR_PAGE:
 	LD	A,(DIR_FILE_COUNT)
@@ -19191,8 +23715,23 @@ DISP_PAGE_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; PRINT_DIR_COL_ENTRY: Print null-terminated column from LOAD_LINE_TEMP
-; Does not terminate on '$' so filenames with '$' render cleanly
+; PRINT_DIR_COL_ENTRY: Print single directory filename entry in table column
+;
+; Purpose:
+;   Prints filename and extension with trailing space padding to fill column
+;   width cleanly within the directory grid.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DISPLAY_DIR_PAGE inner column loop.
+;
+; Inputs:
+;   HL = Pointer to formatted filename entry string.
+;
+; Outputs:
+;   Filename printed to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers AF, HL; preserves BC, DE.
 ;------------------------------------------------------------------------------
 PRINT_DIR_COL_ENTRY:
 	PUSH	HL
@@ -19209,7 +23748,23 @@ PDCE_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Display Open Prompt & Page Indicator
+; DISPLAY_OPEN_PROMPT: Render Open File input prompt box
+;
+; Purpose:
+;   Emits "Open file: [ ... ]" prompt line and sets cursor position to active
+;   edit offset within the filename text box.
+;
+; Call Usage / Protocol:
+;   Called via CALL from RENDER_OPEN_PAGE.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Prompt line drawn on terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DISPLAY_OPEN_PROMPT:
 	LD	A,(DIR_PAGE_COUNT)
@@ -19277,8 +23832,23 @@ DOP_SHOW_TXT:
 	RET
 
 ;------------------------------------------------------------------------------
-; DRAW_FILENAME_BOX: Draws " [                    ]" with INPUT_FILENAME_BUF
-; prefilled and positions cursor right after prefilled text.
+; DRAW_FILENAME_BOX: Draw bracketed input box and position terminal cursor
+;
+; Purpose:
+;   Emits opening bracket '[', prints current string in INPUT_FILENAME_BUF,
+;   pads remaining box width with spaces, emits ']', and moves cursor back.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DISPLAY_OPEN_PROMPT and DISPLAY_SAVE_PROMPT.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Input text box drawn on terminal; cursor positioned inside box.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DRAW_FILENAME_BOX:
 	LD	A,' '
@@ -19327,11 +23897,23 @@ DFB_BS_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Finish Open/Save Screen rendering:
-; 1. End prompt line with CRLF
-; 2. Pad remaining rows down to ACTIVE_ROWS - 1 with '~' in column 0
-; 3. Render status bar on row ACTIVE_ROWS
-; 4. Reposition cursor inside filename input box on UI_CUR_ROW
+; FINISH_UI_PAGE_AND_STATUS: Render bottom padding and modal navigation status
+;
+; Purpose:
+;   Draws remaining vertical blank lines, bottom horizontal rule border, and
+;   navigation hotkey help line ("Enter: Select | Esc: Cancel | PgUp/PgDn...").
+;
+; Call Usage / Protocol:
+;   Called via CALL at conclusion of modal page rendering.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Dialog footer emitted to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FINISH_UI_PAGE_AND_STATUS:
 	; Print CRLF after the prompt box
@@ -19379,9 +23961,24 @@ FUPS_BOX_COL:
 	RET
 
 ;------------------------------------------------------------------------------
-; LOCATE_RC: Move cursor to Row H, Col L (1-indexed for terminal)
-; Format: ESC [ <H> ; <L> H
-; Preserves BC, DE, HL
+; LOCATE_RC: Position terminal cursor with boundary clamping
+;
+; Purpose:
+;   Validates 0-based row in B and column in C against active terminal bounds
+;   (clamping if necessary) and emits VT100 cursor positioning escape sequence.
+;
+; Call Usage / Protocol:
+;   Called via CALL throughout modal UI dialog rendering and input loops.
+;
+; Inputs:
+;   B = Row index (0-based).
+;   C = Column index (0-based).
+;
+; Outputs:
+;   VT100 escape sequence emitted; cursor repositioned.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 LOCATE_RC:
 	PUSH	BC
@@ -19430,11 +24027,24 @@ LRC_COL_OK:
 	RET
 
 ;------------------------------------------------------------------------------
-; Read Filename String with Interactive Line Editing & Paging
-; Returns:
-;   Carry = 0 -> Valid filename entered in INPUT_FILENAME_BUF
-;   Carry = 1, A = 0 -> Cancelled (ESC or empty Enter on single page)
-;   Carry = 1, A = 1 -> Next Page (Space or empty Enter on multi-page)
+; READ_FILENAME_INPUT: Interactive line editor for filename input box
+;
+; Purpose:
+;   Handles interactive text entry into INPUT_FILENAME_BUF supporting typing,
+;   cursor navigation (Left, Right, Home, End), deletion (Backspace, Delete),
+;   pagination (PgUp, PgDn), submission (Enter), and cancellation (Esc).
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_OPEN_FILE_UI and DO_SAVE_FILE_UI.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF (empty or prefilled).
+;
+; Outputs:
+;   Carry = 0 on Enter (buffer accepted); Carry = 1 on Esc (cancelled).
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 READ_FILENAME_INPUT:
 	XOR	A
@@ -19448,6 +24058,25 @@ READ_FILENAME_INPUT:
 RESUME_FILENAME_INPUT:
 	JR	INPUT_CHAR_LOOP
 
+;------------------------------------------------------------------------------
+; READ_FILENAME_INPUT_PREFILLED: Interactive entry with prefilled filename
+;
+; Purpose:
+;   Alternative entry point to READ_FILENAME_INPUT when INPUT_FILENAME_BUF is
+;   already populated; positions cursor at the end of the prefilled string.
+;
+; Call Usage / Protocol:
+;   Called via CALL when opening Save As dialog with active document filename.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF populated with initial filename string.
+;
+; Outputs:
+;   Carry = 0 on Enter; Carry = 1 on Esc.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 READ_FILENAME_INPUT_PREFILLED:
 	XOR	A
 	LD	(SHOWING_FNF_MSG),A
@@ -19723,6 +24352,25 @@ INPUT_CURSOR_RIGHT:
 	INC	(HL)
 	JP	INPUT_CHAR_LOOP
 
+;------------------------------------------------------------------------------
+; INPUT_CURSOR_HOME: Move input cursor to beginning of filename text box
+;
+; Purpose:
+;   Resets input cursor column index to 0 and emits VT100 backspace sequences
+;   to reposition hardware cursor at the start of the input box.
+;
+; Call Usage / Protocol:
+;   Called via jump/dispatch within READ_FILENAME_INPUT on Home key / Ctrl+A.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Cursor moved to start of input box.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B.
+;------------------------------------------------------------------------------
 INPUT_CURSOR_HOME:
 	LD	A,(INPUT_CURSOR_POS)
 	OR	A
@@ -19737,10 +24385,48 @@ ICH_BS_LOOP:
 	DJNZ	ICH_BS_LOOP
 	JP	INPUT_CHAR_LOOP
 
+;------------------------------------------------------------------------------
+; INPUT_CURSOR_END: Move input cursor to end of text in filename text box
+;
+; Purpose:
+;   Sets input cursor column index to string length and advances hardware
+;   cursor to point immediately following last character in input box.
+;
+; Call Usage / Protocol:
+;   Called via jump/dispatch within READ_FILENAME_INPUT on End key / Ctrl+E.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Cursor positioned at end of text.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B.
+;------------------------------------------------------------------------------
 INPUT_CURSOR_END:
 	CALL	INPUT_MOVE_CURSOR_TO_END
 	JP	INPUT_CHAR_LOOP
 
+;------------------------------------------------------------------------------
+; INPUT_DEL_CHAR: Delete character at cursor in filename text box
+;
+; Purpose:
+;   Deletes character at active cursor position within INPUT_FILENAME_BUF,
+;   shifts remaining string characters left by one byte, and refreshes box.
+;
+; Call Usage / Protocol:
+;   Called via jump/dispatch within READ_FILENAME_INPUT on Del key / Ctrl+D.
+;
+; Inputs:
+;   Active cursor offset in INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Character deleted; buffer and screen display updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 INPUT_DEL_CHAR:
 	LD	A,(INPUT_CURSOR_POS)
 	LD	HL,INPUT_BUF_LEN
@@ -19796,10 +24482,23 @@ INPUT_BS:
 	JR	DO_DELETE_CHAR_AT_CURSOR
 
 ;------------------------------------------------------------------------------
-; REFRESH_BOX_FROM_CURSOR:
-; Redraws edit box from INPUT_CURSOR_POS to col 20, then backspaces to
-; INPUT_CURSOR_POS. Assumes terminal cursor is currently at INPUT_CURSOR_POS.
-; Preserves BC, DE.
+; REFRESH_BOX_FROM_CURSOR: Redraw filename input box from cursor to end
+;
+; Purpose:
+;   Repaints remaining characters of INPUT_FILENAME_BUF starting from current
+;   cursor offset, clears trailing space up to box width, and restores cursor.
+;
+; Call Usage / Protocol:
+;   Called via CALL after character insertion or deletion in input box.
+;
+; Inputs:
+;   Cursor offset in INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Input box refreshed on screen.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 REFRESH_BOX_FROM_CURSOR:
 	PUSH	BC
@@ -19853,7 +24552,23 @@ RBFC_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Advance cursor on screen from INPUT_CURSOR_POS to INPUT_BUF_LEN
+; INPUT_MOVE_CURSOR_TO_END: Advance hardware cursor to end of input string
+;
+; Purpose:
+;   Emits forward cursor movement escape sequences or characters to position
+;   terminal cursor at end of text in INPUT_FILENAME_BUF.
+;
+; Call Usage / Protocol:
+;   Called via CALL from READ_FILENAME_INPUT_PREFILLED.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF length.
+;
+; Outputs:
+;   Cursor positioned at end of text.
+;
+; Preserves / Modifies:
+;   Clobbers AF, B.
 ;------------------------------------------------------------------------------
 INPUT_MOVE_CURSOR_TO_END:
 	LD	A,(INPUT_CURSOR_POS)
@@ -19880,12 +24595,46 @@ IMCTE_LOOP:
 	RET
 
 ;------------------------------------------------------------------------------
-; Clear "  File not found" inline message if currently visible
-; Preserves AF and BC
+; CHECK_CLEAR_FNF: Clear File-Not-Found error indicator on user keystroke
+;
+; Purpose:
+;   Tests whether a previous "File Not Found" error banner is active on screen;
+;   if so, erases error message and restores normal dialog status bar.
+;
+; Call Usage / Protocol:
+;   Called via CALL on every keystroke received in READ_FILENAME_INPUT.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Error banner cleared if previously visible.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 CHECK_CLEAR_FNF:
 	RET
 
+;------------------------------------------------------------------------------
+; INPUT_CANCEL: Handle cancellation of filename input dialog
+;
+; Purpose:
+;   Sets Carry flag to indicate user cancelled input dialog (via Esc key),
+;   performing necessary cleanup before returning to caller.
+;
+; Call Usage / Protocol:
+;   Jumped to from READ_FILENAME_INPUT on Esc key press.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 1 indicating cancellation.
+;
+; Preserves / Modifies:
+;   Clobbers AF.
+;------------------------------------------------------------------------------
 INPUT_CANCEL:
 	XOR	A			; A = 0 (cancel)
 	LD	(SHOWING_FNF_MSG),A
@@ -19906,9 +24655,23 @@ INPUT_ENTER_EMPTY:
 	JP	INPUT_CANCEL
 
 ;------------------------------------------------------------------------------
-; Parse optional :<line> suffix from INPUT_FILENAME_BUF
-; If found, stores 16-bit line number in (OPEN_GOTO_LINE).
-; Format: [drive:]filename[:line]
+; PARSE_OPEN_LINE_NUM: Parse optional ":<line>" suffix from filename string
+;
+; Purpose:
+;   Scans filename string for trailing line number suffix (e.g. "MAIN.C:142"),
+;   parses decimal line number into HL, and truncates string at the colon.
+;
+; Call Usage / Protocol:
+;   Called via CALL after filename is entered in Open File dialog.
+;
+; Inputs:
+;   DE = Pointer to null-terminated filename string.
+;
+; Outputs:
+;   HL = Parsed 1-based line number (or 0 if no suffix); string truncated.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 PARSE_OPEN_LINE_NUM:
 	LD	HL,0
@@ -19988,14 +24751,47 @@ POLN_IS_DRIVE_COLON:
 	RET
 
 ;------------------------------------------------------------------------------
-; Parse Filename String (e.g. "C1:TEST.DAT", "1C:TEST.DAT", "1:TEST.DAT", "TEST.DAT")
-; PARSE_FILENAME_TO_FCB: parses INPUT_FILENAME_BUF
-; PARSE_STRING_TO_FCB: parses string pointed to by HL
-; Outputs: WORK_FCB populated, WORK_FCB_USER populated
+; PARSE_FILENAME_TO_FCB: Parse filename string into WORK_FCB
+;
+; Purpose:
+;   Initializes destination pointer HL to WORK_FCB and delegates to
+;   PARSE_STRING_TO_FCB to parse filename, drive, and user prefix.
+;
+; Call Usage / Protocol:
+;   Called via CALL from file open and save command handlers.
+;
+; Inputs:
+;   DE = Pointer to filename string.
+;
+; Outputs:
+;   WORK_FCB populated; Carry = 0 on success.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PARSE_FILENAME_TO_FCB:
 	LD	HL,INPUT_FILENAME_BUF
 
+;------------------------------------------------------------------------------
+; PARSE_STRING_TO_FCB: Parse filename string into standard CP/M FCB
+;
+; Purpose:
+;   Parses drive letter, optional user area, 8-char filename, and 3-character
+;   extension from string at DE into 36-byte CP/M FCB structure at HL.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PARSE_FILENAME_TO_FCB and overlay loaders.
+;
+; Inputs:
+;   DE = Pointer to null-terminated source string.
+;   HL = Pointer to 36-byte destination FCB buffer.
+;
+; Outputs:
+;   FCB populated; Carry = 0 on success, Carry = 1 on syntax error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 PARSE_STRING_TO_FCB:
 	PUSH	HL
 
@@ -20105,6 +24901,25 @@ PARSE_EXT_LOOP:
 	DJNZ	PARSE_EXT_LOOP
 	RET
 
+;------------------------------------------------------------------------------
+; TO_UPPER: Convert lowercase ASCII character to uppercase
+;
+; Purpose:
+;   Checks if ASCII character in A is between 'a' and 'z'; if so, converts it
+;   to uppercase ('A'..'Z') by subtracting 20H (AND 0DFH).
+;
+; Call Usage / Protocol:
+;   Called via CALL extensively throughout string parsers and command loops.
+;
+; Inputs:
+;   A = ASCII character to convert.
+;
+; Outputs:
+;   A = Uppercase ASCII character; flags updated.
+;
+; Preserves / Modifies:
+;   Modifies AF; preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 TO_UPPER:
 	CP	'a'
 	RET	C
@@ -20113,6 +24928,25 @@ TO_UPPER:
 	SUB	020H
 	RET
 
+;------------------------------------------------------------------------------
+; CLEAR_LOAD_TEMP: Clear temporary buffers and state before file load
+;
+; Purpose:
+;   Zeros temporary line accumulation buffers, reset read record counters,
+;   and clears out-of-memory flags prior to reading a file from disk.
+;
+; Call Usage / Protocol:
+;   Called via CALL at commencement of LOAD_FILE.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Temporary staging buffers cleared.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 CLEAR_LOAD_TEMP:
 	PUSH	BC
 	PUSH	DE
@@ -20127,6 +24961,26 @@ CLEAR_LOAD_TEMP:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; STR_COPY: Copy null-terminated string from HL to DE
+;
+; Purpose:
+;   Copies characters sequentially from source string at HL to buffer at DE
+;   at DE until terminating null byte (0) is copied.
+;
+; Call Usage / Protocol:
+;   Called via CALL for general string copying operations.
+;
+; Inputs:
+;   HL = Pointer to source null-terminated string.
+;   DE = Pointer to destination buffer.
+;
+; Outputs:
+;   String copied; HL and DE point past copied null byte.
+;
+; Preserves / Modifies:
+;   Modifies AF, DE, HL; preserves BC.
+;------------------------------------------------------------------------------
 STR_COPY:
 STR_COPY_LOOP:
 	LD	A,(HL)
@@ -20138,8 +24992,24 @@ STR_COPY_LOOP:
 	JR	STR_COPY_LOOP
 
 ;------------------------------------------------------------------------------
-; SAVE_BLOCK_FILE: Streams active solidified block text to disk (WORK_FCB)
-; Formats line endings according to SAVE_FORMAT (CRLF or LF).
+; SAVE_BLOCK_FILE: Write marked selection block to external disk file
+;
+; Purpose:
+;   Creates or overwrites file specified in WORK_FCB, iterates through lines
+;   spanning the marked block (BLOCK_START_ROW to BLOCK_END_ROW), clips text
+;   to column boundaries, handles line endings, and flushes DMA sectors.
+;
+; Call Usage / Protocol:
+;   Called via CALL from Block Save command handler.
+;
+; Inputs:
+;   WORK_FCB, BLOCK_START_ROW/COL, BLOCK_END_ROW/COL.
+;
+; Outputs:
+;   Selected block saved to file; Carry = 0 on success, Carry = 1 on error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 SAVE_BLOCK_FILE:
 	; Guard: if target drive is hibernated RAM drive, reject save
@@ -20398,6 +25268,25 @@ SBF_ML_TAIL_DONE:
 	CALL	TICK_SAVE_PROGRESS
 	JP	SAVE_FLUSH_REMAINDER
 
+;------------------------------------------------------------------------------
+; WRITE_SAVE_LINE_ENDING: Emit line ending sequence to save DMA buffer
+;
+; Purpose:
+;   Writes active line ending sequence (CRLF, LF, or CR) based on
+;   FILE_LINE_ENDING_MODE into output DMA stream via WRITE_BYTE_TO_DMA.
+;
+; Call Usage / Protocol:
+;   Called via CALL at end of each saved line in SAVE_FILE and block save.
+;
+; Inputs:
+;   FILE_LINE_ENDING_MODE.
+;
+; Outputs:
+;   Line ending bytes buffered to disk DMA.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 WRITE_SAVE_LINE_ENDING:
 	LD	A,(SAVE_FORMAT)
 	CP	FMT_CPM
@@ -20410,7 +25299,23 @@ WSLE_LF_ONLY:
 	RET
 
 ;------------------------------------------------------------------------------
-; Save Progress Indicator Routines
+; INIT_SAVE_PROGRESS: Initialize save progress indicator and display modal
+;
+; Purpose:
+;   Renders modal progress dialog, stores total line count in SAVE_TOTAL_LINES,
+;   zeros current progress counter, and draws empty progress bar.
+;
+; Call Usage / Protocol:
+;   Called via CALL before starting file write loops in SAVE_FILE.
+;
+; Inputs:
+;   HL = Total line count to save.
+;
+; Outputs:
+;   Progress dialog displayed; counters initialized.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 INIT_SAVE_PROGRESS:
 	PUSH	AF
@@ -20432,6 +25337,25 @@ INIT_SAVE_PROGRESS:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; TICK_SAVE_PROGRESS: Advance save progress counter and update progress bar
+;
+; Purpose:
+;   Increments saved line counter and updates visual progress fill characters
+;   inside progress modal dialog at regular line intervals.
+;
+; Call Usage / Protocol:
+;   Called via CALL after each line is written to disk in SAVE_FILE.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Visual progress bar updated.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 TICK_SAVE_PROGRESS:
 	PUSH	AF
 	PUSH	HL
@@ -20448,6 +25372,25 @@ TSP_DONE:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; FINISH_SAVE_PROGRESS: Advance save progress bar to 100% completion
+;
+; Purpose:
+;   Fills remaining progress bar characters to 100% full upon completing all
+;   line writes before final file flush and close.
+;
+; Call Usage / Protocol:
+;   Called via CALL from SAVE_FILE after last line written.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Progress bar filled to 100%.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 FINISH_SAVE_PROGRESS:
 	PUSH	AF
 	PUSH	DE
@@ -20455,6 +25398,25 @@ FINISH_SAVE_PROGRESS:
 	CALL	DRAIN_INPUT_BUFFER
 	JR	CSP_COMMON
 
+;------------------------------------------------------------------------------
+; CLEANUP_SAVE_PROGRESS: Restore terminal screen after save progress modal
+;
+; Purpose:
+;   Cleans up temporary save progress display and restores terminal cursor state
+;   upon completing or aborting file save.
+;
+; Call Usage / Protocol:
+;   Called via CALL after SAVE_FILE finishes or encounters an error.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Screen restored.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 CLEANUP_SAVE_PROGRESS:
 	PUSH	AF
 	PUSH	DE
@@ -20468,7 +25430,25 @@ CSP_COMMON:
 	RET
 
 ;------------------------------------------------------------------------------
-; File Saving: Streams lines directly from Far RAM banks to disk
+; SAVE_FILE: Write active document lines from far RAM to disk/RAM drive
+;
+; Purpose:
+;   Creates or replaces file in WORK_FCB, displays progress modal, iterates
+;   through all lines in far RAM line table, writes characters via 128-byte
+;   DMA sector buffering, appends EOF marker, and closes file.
+;
+; Call Usage / Protocol:
+;   Called via CALL from Save File command handler and DO_ACTUAL_SAVE.
+;
+; Inputs:
+;   WORK_FCB = Target file FCB; document lines in far RAM line storage.
+;
+; Outputs:
+;   File written and closed; DOCUMENT_MODIFIED cleared; Carry = 0 on success;
+;   Carry = 1 on write/close error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 SAVE_FILE:
 	; Guard: if target drive is hibernated RAM drive, reject save
@@ -20642,6 +25622,25 @@ CFO_IS_BLK:
 	OR	A			; Carry = 0 (success)
 	RET
 
+;------------------------------------------------------------------------------
+; WRITE_BYTE_TO_DMA: Buffer single byte and flush DMA sector to disk when full
+;
+; Purpose:
+;   Places byte in accumulator into 128-byte disk DMA buffer. When buffer fills
+;   to 128 bytes, invokes BDOS Write Sequential (function 21) to flush sector.
+;
+; Call Usage / Protocol:
+;   Called via CALL for every byte written in SAVE_FILE and SAVE_BLOCK_FILE.
+;
+; Inputs:
+;   A = Byte to write.
+;
+; Outputs:
+;   Byte buffered; Carry = 1 if BDOS write error occurs.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 WRITE_BYTE_TO_DMA:
 	PUSH	HL
 	PUSH	BC
@@ -20685,7 +25684,23 @@ WRITE_BYTE_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; Print 16-bit Word in Decimal (HL)
+; PRINT_DEC_WORD: Format and print 16-bit word in decimal to terminal
+;
+; Purpose:
+;   Converts 16-bit unsigned integer in HL to ASCII decimal representation
+;   (via repeated division by 10) and prints string to terminal.
+;
+; Call Usage / Protocol:
+;   Called via CALL throughout editor for line numbers, counts, and statistics.
+;
+; Inputs:
+;   HL = 16-bit unsigned integer value.
+;
+; Outputs:
+;   Decimal string emitted to terminal.
+;
+; Preserves / Modifies:
+;   Preserves AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 PRINT_DEC_WORD:
 	PUSH	AF
@@ -20710,6 +25725,25 @@ DEC_WORD_LOOP:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; DIV_HL_10: Compute 16-bit divide and modulo by 10 (HL = HL / 10, A = HL % 10)
+;
+; Purpose:
+;   Executes 16-bit binary restoring division by 10 using shift-and-subtract
+;   loop over 16 iterations.
+;
+; Call Usage / Protocol:
+;   Called via CALL from PRINT_DEC_WORD decimal conversion loop.
+;
+; Inputs:
+;   HL = 16-bit dividend.
+;
+; Outputs:
+;   HL = Quotient (HL / 10), A = Remainder (0..9).
+;
+; Preserves / Modifies:
+;   Modifies AF, HL; preserves BC, DE.
+;------------------------------------------------------------------------------
 DIV_HL_10:
 	PUSH	BC
 	LD	B,16
@@ -20747,6 +25781,26 @@ CAP_SIZE_16K		EQU	0080H
 CAP_SIZE_32K		EQU	00C0H
 CAP_SIZE_MASK		EQU	00C0H
 
+;------------------------------------------------------------------------------
+; INIT_PLUGIN_REGISTRY: Initialize 256-byte plugin registry table and counters
+;
+; Purpose:
+;   Zeros the entire 256-byte plugin registry array (8 slots x 32 bytes) and
+;   resets active plugin count (PLUGIN_LOAD_COUNT) and borrowed Far RAM bank
+;   counter (BORROWED_BANKS_CNT) to zero.
+;
+; Call Usage / Protocol:
+;   Called via CALL from START during initial editor boot.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   PLUGIN_REGISTRY zeroed, PLUGIN_LOAD_COUNT = 0, BORROWED_BANKS_CNT = 0.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 INIT_PLUGIN_REGISTRY:
 	LD	HL,PLUGIN_REGISTRY
 	LD	(HL),0
@@ -20758,6 +25812,26 @@ INIT_PLUGIN_REGISTRY:
 	LD	(BORROWED_BANKS_CNT),A
 	RET
 
+;------------------------------------------------------------------------------
+; BORROW_NEW_FAR_BANK: Borrow dedicated Far RAM bank for plugin execution
+;
+; Purpose:
+;   Allocates a Far RAM bank from EXT_BANK_TABLE to store Far RAM plugins.
+;   Protects bank 0 if actively editing a document by requiring >= 2 available
+;   banks before borrowing.
+;
+; Call Usage / Protocol:
+;   Called via CALL from ALLOC_FAR_PLUGIN_SLOT when no free space in banks.
+;
+; Inputs:
+;   EXT_BANK_COUNT, EXT_BANK_TABLE, IN_EDITOR_MODE.
+;
+; Outputs:
+;   Carry = 0 and A = allocated bank ID; Carry = 1 if no banks available.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 BORROW_NEW_FAR_BANK:
 	LD	A,(EXT_BANK_COUNT)
 	OR	A
@@ -20795,6 +25869,25 @@ BNFB_FAIL:
 	SCF				; Carry = 1
 	RET
 
+;------------------------------------------------------------------------------
+; RELEASE_FAR_BANK: Release borrowed Far RAM bank back to document pool
+;
+; Purpose:
+;   Removes bank ID from BORROWED_BANKS_TBL and restores it to EXT_BANK_TABLE,
+;   incrementing EXT_BANK_COUNT so document line storage can reclaim it.
+;
+; Call Usage / Protocol:
+;   Called via CALL from UNLOAD_PLUGIN_SLOT when all slots in bank freed.
+;
+; Inputs:
+;   A = Far RAM bank ID to release.
+;
+; Outputs:
+;   Bank returned to pool; BORROWED_BANKS_CNT decremented.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 RELEASE_FAR_BANK:
 	PUSH	AF
 	PUSH	BC
@@ -20851,6 +25944,27 @@ RFB_DONE:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; IS_RANGE_FREE_IN_BANK: Test if candidate page range is unoccupied in bank
+;
+; Purpose:
+;   Iterates through all registered plugin slots using specified Far RAM bank,
+;   testing whether candidate range [C .. C + D - 1] overlaps any active slot.
+;
+; Call Usage / Protocol:
+;   Called via CALL from ALLOC_FAR_PLUGIN_SLOT slot sub-allocator loop.
+;
+; Inputs:
+;   A = Far RAM bank ID.
+;   C = Candidate base page index.
+;   D = Required page count.
+;
+; Outputs:
+;   Zero flag (Z) set if range is completely free; NZ if range conflicts.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 IS_RANGE_FREE_IN_BANK:
 	PUSH	BC
 	PUSH	DE
@@ -20940,6 +26054,25 @@ IRFIB_OVERLAP_DED:
 	SCF				; Carry = 1 (bank is reserved/occupied)
 	RET
 
+;------------------------------------------------------------------------------
+; ALLOC_FAR_PLUGIN_SLOT: Allocate contiguous page range in Far RAM for plugin
+;
+; Purpose:
+;   Attempts to find contiguous free pages within already borrowed Far RAM
+;   banks; if none found, attempts to borrow a new bank via BORROW_NEW_FAR_BANK.
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_PLUGIN_BY_NAME for Far RAM execution plugins.
+;
+; Inputs:
+;   D = Required page count.
+;
+; Outputs:
+;   Carry = 0, A = Far RAM bank ID, C = Base page index; Carry = 1 on failure.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 ALLOC_FAR_PLUGIN_SLOT:
 	; Input: A = CAN_SUBALLOC (1 = sub-allocate in shared Far RAM bank;
 	;                          0 = dedicated bank at BASE_PAGE = 0)
@@ -21052,6 +26185,25 @@ CALC_FAR_SLOT_ADDR:
 	LD	L,0
 	RET
 
+;------------------------------------------------------------------------------
+; GET_REGISTRY_ENTRY_PTR: Compute pointer to 32-byte plugin registry descriptor
+;
+; Purpose:
+;   Multiplies slot index in B (0..7) by 32 (PLUGIN_ENTRY_SIZE) and adds base
+;   address of PLUGIN_REGISTRY table.
+;
+; Call Usage / Protocol:
+;   Called via CALL across plugin management and dispatching routines.
+;
+; Inputs:
+;   B = Plugin slot index (0..7).
+;
+; Outputs:
+;   HL = Pointer to slot descriptor (PLUGIN_REGISTRY + B * 32).
+;
+; Preserves / Modifies:
+;   Clobbers AF, DE, HL; preserves BC.
+;------------------------------------------------------------------------------
 GET_REGISTRY_ENTRY_PTR:
 	LD	A,B
 	AND	07H
@@ -21066,6 +26218,26 @@ GET_REGISTRY_ENTRY_PTR:
 	ADD	HL,DE
 	RET
 
+;------------------------------------------------------------------------------
+; LOAD_PLUGIN_BY_NAME: Load, relocate, and register PRL/OVL plugin binary
+;
+; Purpose:
+;   Locates free slot in PLUGIN_REGISTRY, opens file via BDOS, reads 256-byte
+;   PRL header, validates signature, allocates Far RAM pages or TPA slot, reads
+;   code payload, applies relocation bitmap, and populates slot descriptor.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_PARSE_AND_LOAD_PLUGIN and Host API trampolines.
+;
+; Inputs:
+;   DE = Pointer to null-terminated plugin filename string.
+;
+; Outputs:
+;   Carry = 0 and A = allocated slot index on success; Carry = 1 on error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 LOAD_PLUGIN_BY_NAME:
 	PUSH	DE			; Preserve filename string pointer
 
@@ -21470,6 +26642,25 @@ LPBN_ALLOC_FAIL:
 	SCF
 	RET
 
+;------------------------------------------------------------------------------
+; REGISTER_SLOT_METADATA: Populate 32-byte plugin descriptor in registry
+;
+; Purpose:
+;   Copies plugin name, capabilities bitmask, execution mode, Far RAM bank ID,
+;   base page, size class, and page count into PLUGIN_REGISTRY entry for slot B.
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_PLUGIN_BY_NAME after successful payload read.
+;
+; Inputs:
+;   B = Slot index (0..7), plus staged metadata variables.
+;
+; Outputs:
+;   Registry entry initialized; PLUGIN_LOAD_COUNT incremented.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 REGISTER_SLOT_METADATA:
 	LD	A,(PLUGIN_CUR_SLOT)
 	LD	B,A
@@ -21569,6 +26760,26 @@ RSM_SAVE_MODE:
 	OR	A			; Clear Carry
 	RET
 
+;------------------------------------------------------------------------------
+; UNLOAD_PLUGIN_SLOT: Unregister plugin and release resources for slot A
+;
+; Purpose:
+;   Marks registry entry for slot A as inactive, decrements PLUGIN_LOAD_COUNT,
+;   and checks if the hosting Far RAM bank has no other active slots; if empty,
+;   releases the bank back to document storage via RELEASE_FAR_BANK.
+;
+; Call Usage / Protocol:
+;   Called via CALL from Plugin Manager and Host API TRAMP_UNLOAD_SLOT.
+;
+; Inputs:
+;   A = Slot number (0..7).
+;
+; Outputs:
+;   Slot freed; hosting bank released if unused.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 UNLOAD_PLUGIN_SLOT:
 	LD	B,A
 	CALL	GET_REGISTRY_ENTRY_PTR
@@ -21638,10 +26849,49 @@ UPS_CHECK_NEXT:
 	CALL	RELEASE_FAR_BANK
 	RET
 
+;------------------------------------------------------------------------------
+; EXEC_PLUGIN_SLOT: Execute main action (Action 0) of registered plugin
+;
+; Purpose:
+;   Sets action index C = 0 and falls through into EXEC_PLUGIN_SLOT_ACTION.
+;
+; Call Usage / Protocol:
+;   Called via CALL to execute primary entry point of plugin in slot A.
+;
+; Inputs:
+;   A = Slot number (0..7).
+;
+; Outputs:
+;   Plugin return code in A; flags set according to execution result.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 EXEC_PLUGIN_SLOT:
 	LD	C,0			; Action 0: Main Execution
 	; Fall through to EXEC_PLUGIN_SLOT_ACTION
 
+;------------------------------------------------------------------------------
+; EXEC_PLUGIN_SLOT_ACTION: Execute specified action index for plugin in slot A
+;
+; Purpose:
+;   Synchronizes screen geometry and context in Host API table, checks plugin
+;   execution mode (TPA vs Far RAM), and dispatches to EXEC_PLUGIN_TPA or
+;   EXEC_PLUGIN_FAR.
+;
+; Call Usage / Protocol:
+;   Called via CALL from EXEC_PLUGIN_SLOT, popup menus, and about screens.
+;
+; Inputs:
+;   A = Slot number (0..7).
+;   C = Action index (0 = Main, 1 = Config/About, 2 = Context Popup).
+;
+; Outputs:
+;   Plugin return code in A (0 = Clean, 1 = Active line dirty, 2 = Doc dirty).
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 EXEC_PLUGIN_SLOT_ACTION:
 	LD	(PLUGIN_CUR_SLOT),A
 	LD	A,C
@@ -21676,6 +26926,26 @@ EPS_DO_FAR:
 	LD	A,(PLUGIN_CUR_SLOT)
 	JP	EXEC_PLUGIN_FAR
 
+;------------------------------------------------------------------------------
+; EXEC_PLUGIN_TPA: Execute plugin via TPA overlay at LINE_STORAGE (0x0100)
+;
+; Purpose:
+;   Flushes dirty cache, copies plugin pages from Far RAM staging storage into
+;   TPA at LINE_STORAGE, passes Host API pointer in IY, calls entry point at
+;   0x0100 + C * 3, and processes returned dirty flags upon completion.
+;
+; Call Usage / Protocol:
+;   Called via JP from EXEC_PLUGIN_SLOT_ACTION for TPA-mode plugins.
+;
+; Inputs:
+;   PLUGIN_CUR_SLOT, PLUGIN_ACTION_INDEX.
+;
+; Outputs:
+;   Plugin return code in A.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 EXEC_PLUGIN_TPA:
 	XOR	A
 	LD	(PLUGIN_IS_FAR_EXEC),A
@@ -21802,9 +27072,47 @@ EPT_DOC_DIRTY:
 	OR	A
 	RET
 
+;------------------------------------------------------------------------------
+; CALL_HL_ENTRY: Indirect jump helper to address in HL
+;
+; Purpose:
+;   Executes JP (HL) to jump to indirect subroutine or entry point.
+;
+; Call Usage / Protocol:
+;   Called via CALL to invoke dynamically computed entry points.
+;
+; Inputs:
+;   HL = Target entry address.
+;
+; Outputs:
+;   Returns results from called target function.
+;
+; Preserves / Modifies:
+;   Depends on called function.
+;------------------------------------------------------------------------------
 CALL_HL_ENTRY:
 	JP	(HL)
 
+;------------------------------------------------------------------------------
+; EXEC_PLUGIN_FAR: Execute Far RAM resident plugin via HBIOS HB_BNKCALL
+;
+; Purpose:
+;   Sets PLUGIN_IS_FAR_EXEC flag, initializes entry address in IX, sets IY to
+;   PLUGIN_HOST_API, sets Far RAM bank ID in A, and invokes HBIOS bank-call
+;   at 0xFFF9 (HB_BNKCALL).
+;
+; Call Usage / Protocol:
+;   Called via JP from EXEC_PLUGIN_SLOT_ACTION for Far RAM plugins.
+;
+; Inputs:
+;   PLUGIN_CUR_SLOT, PLUGIN_ACTION_INDEX.
+;
+; Outputs:
+;   Plugin return code in A.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 EXEC_PLUGIN_FAR:
 	LD	A,1
 	LD	(PLUGIN_IS_FAR_EXEC),A
@@ -21855,6 +27163,28 @@ EPF_NO_OFFSET:
 	OR	A
 	RET
 
+;------------------------------------------------------------------------------
+; RELOCATE_PRL_LOOP: Apply CP/M 3 PRL relocation bitmap to code payload
+;
+; Purpose:
+;   Iterates through bitmask in DE bit-by-bit; for each '1' bit, adds base page
+;   offset (RELOC_BIAS) to the word/byte pointed to by HL in payload code.
+;
+; Call Usage / Protocol:
+;   Called via CALL from LOAD_PLUGIN_BY_NAME during PRL file loading.
+;
+; Inputs:
+;   HL = Pointer to payload code in memory.
+;   DE = Pointer to relocation bitmap stream.
+;   BC = Payload byte count.
+;   RELOC_BIAS = Relocation page offset to add.
+;
+; Outputs:
+;   Payload code relocated in-place.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 RELOCATE_PRL_LOOP:
 	LD	A,B
 	OR	C
@@ -21886,6 +27216,25 @@ RPL_DONE:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; PARSE_STRING_TO_PLUGIN_FCB: Parse filename string into PLUGIN_FCB
+;
+; Purpose:
+;   Copies default WORK_FCB template to PLUGIN_FCB, calls PARSE_STRING_TO_FCB
+;   to parse filename and user prefix at HL, and stores parsed user area.
+;
+; Call Usage / Protocol:
+;   Called via CALL before opening plugin binaries from disk.
+;
+; Inputs:
+;   HL = Pointer to null-terminated plugin filename string.
+;
+; Outputs:
+;   PLUGIN_FCB initialized; PLUGIN_USER_AREA populated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 PARSE_STRING_TO_PLUGIN_FCB:
 	PUSH	BC
 	PUSH	DE
@@ -21917,6 +27266,25 @@ PSTPF_SWAP:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; DO_PLUGIN_SCREEN: Display Plugin Manager interface or run plugin screen
+;
+; Purpose:
+;   Initializes screen context for plugin manager, ensures PLUGIN.PRL is loaded,
+;   invokes action 0 (Manager UI) of PLUGIN.PRL, and handles returned status.
+;
+; Call Usage / Protocol:
+;   Called via CALL from editor command handlers (Ctrl+P / F4).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Plugin UI executed; returns to caller.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_PLUGIN_SCREEN:
 	XOR	A
 	LD	(PLUGIN_RET_CODE),A
@@ -21946,6 +27314,25 @@ DPS_MISSING:
 	CALL	SHOW_POPUP_NEED_PLUGIN_MGR
 	RET
 
+;------------------------------------------------------------------------------
+; SAVE_EDITOR_PLUGIN_STATE: Preserve editor cursor and line state before plugin
+;
+; Purpose:
+;   Saves CUR_DOC_ROW, CUR_COL, and ACTIVE_LINE_ROW to backup variables so
+;   editor state can be restored if plugin does not alter document structure.
+;
+; Call Usage / Protocol:
+;   Called via CALL prior to launching plugin modal screens.
+;
+; Inputs:
+;   Active editor variables.
+;
+; Outputs:
+;   Backup variables populated.
+;
+; Preserves / Modifies:
+;   Clobbers AF, HL.
+;------------------------------------------------------------------------------
 SAVE_EDITOR_PLUGIN_STATE:
 	LD	HL,(CUR_DOC_ROW)
 	LD	(PLUGIN_SAVED_DOC_ROW),HL
@@ -21959,6 +27346,25 @@ SAVE_EDITOR_PLUGIN_STATE:
 	LD	(PLUGIN_SAVED_VIEW_LEFT),HL
 	RET
 
+;------------------------------------------------------------------------------
+; RESTORE_EDITOR_PLUGIN_STATE: Restore editor cursor and line state after plugin
+;
+; Purpose:
+;   Restores CUR_DOC_ROW, CUR_COL, and ACTIVE_LINE_ROW from backup variables
+;   after plugin modal execution finishes.
+;
+; Call Usage / Protocol:
+;   Called via CALL after plugin execution.
+;
+; Inputs:
+;   Backup variables.
+;
+; Outputs:
+;   Active editor variables restored.
+;
+; Preserves / Modifies:
+;   Clobbers AF, HL.
+;------------------------------------------------------------------------------
 RESTORE_EDITOR_PLUGIN_STATE:
 	LD	HL,(PLUGIN_SAVED_DOC_ROW)
 	LD	(CUR_DOC_ROW),HL
@@ -21977,6 +27383,25 @@ RESTORE_EDITOR_PLUGIN_STATE:
 	CALL	RELOAD_CACHE_WINDOW_FORCE
 	RET
 
+;------------------------------------------------------------------------------
+; DO_EDITOR_PLUGIN_SCREEN: Run Plugin Manager while preserving editor state
+;
+; Purpose:
+;   Wraps DO_PLUGIN_SCREEN with SAVE_EDITOR_PLUGIN_STATE and
+;   RESTORE_EDITOR_PLUGIN_STATE, repainting the editor screen upon exit.
+;
+; Call Usage / Protocol:
+;   Called via CALL from editor key dispatcher on Plugin Manager shortcut.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Editor screen refreshed and state restored.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_EDITOR_PLUGIN_SCREEN:
 	CALL	CHECKOUT_ACTIVE_LINE
 	CALL	GET_CUR_ROW_LEN
@@ -22010,6 +27435,26 @@ DEPS_RENDER:
 ; Context-Aware Plugin Pop-up Modal Subsystem
 ;==============================================================================
 
+;------------------------------------------------------------------------------
+; DO_CONTEXT_PLUGIN_POPUP: Scan and display context-aware plugin modal popup
+;
+; Purpose:
+;   Iterates through registered plugins matching active POPUP_CONTEXT_ID,
+;   formats popup menu frame and choices, handles selection, and executes
+;   action 2 (Context Action) of selected plugin.
+;
+; Call Usage / Protocol:
+;   Called via CALL when user requests context menu.
+;
+; Inputs:
+;   POPUP_CONTEXT_ID (0..6).
+;
+; Outputs:
+;   Selected plugin action executed; screen redrawn.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 DO_CONTEXT_PLUGIN_POPUP:
 	LD	(POPUP_CONTEXT_ID),A
 	LD	(HOST_API_CONTEXT),A
@@ -22083,6 +27528,25 @@ DCPP_MISSING:
 	RET
 
 
+;------------------------------------------------------------------------------
+; POPUP_LOCATE_NEXT: Move cursor to next row within popup modal border
+;
+; Purpose:
+;   Increments popup row counter and emits VT100 cursor positioning escape
+;   sequence to start of next line inside popup frame.
+;
+; Call Usage / Protocol:
+;   Called via CALL during modal popup frame construction.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Hardware cursor repositioned.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
 POPUP_LOCATE_NEXT:
 	PUSH	BC
 	PUSH	DE
@@ -22099,6 +27563,24 @@ POPUP_LOCATE_NEXT:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; POPUP_PRINT_BORDER: Print formatted horizontal border line for popup
+;
+; Purpose:
+;   Emits horizontal border sequence string pointed to by DE to terminal.
+;
+; Call Usage / Protocol:
+;   Called via CALL during popup dialog frame rendering.
+;
+; Inputs:
+;   DE = Pointer to border character string.
+;
+; Outputs:
+;   Border characters emitted to terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 POPUP_PRINT_BORDER:
 	CALL	POPUP_LOCATE_NEXT
 	LD	DE,STR_POPUP_BORDER
@@ -22106,6 +27588,25 @@ POPUP_PRINT_BORDER:
 
 
 
+;------------------------------------------------------------------------------
+; REDRAW_BASE_SCREEN: Repaint underlying screen context after dismissing popup
+;
+; Purpose:
+;   Examines Context ID in A: redraws editor text screen (0), Open File UI (1),
+;   Save File UI (2), or custom screens, restoring terminal display state.
+;
+; Call Usage / Protocol:
+;   Called via CALL from popup cleanup and Host API TRAMP_REDRAW_BASE.
+;
+; Inputs:
+;   A = Context ID (0..6).
+;
+; Outputs:
+;   Underlying screen context redrawn.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 REDRAW_BASE_SCREEN:
 	LD	A,(POPUP_CONTEXT_ID)
 	CP	PLUG_CTX_EDITOR
@@ -22168,13 +27669,23 @@ PDR_NOT_ABOUT:
 ;==============================================================================
 
 ;------------------------------------------------------------------------------
-; VFS_FIND_PLUGIN:
-; Scans PLUGIN_REGISTRY (slots 0..7) for a loaded plugin with CAP_HAS_VFS.
-; Returns:
-;   Carry = 0: Plugin found.
-;              A = Slot index (0..7)
-;              HL = Pointer to 32-byte registry entry
-;   Carry = 1: Plugin not loaded.
+; VFS_FIND_PLUGIN: Search plugin registry for active VFS filesystem driver
+;
+; Purpose:
+;   Scans all 8 slots in PLUGIN_REGISTRY looking for plugin matching name
+;   "FATVFS" or "FAT" with filesystem capabilities flag set.
+;
+; Call Usage / Protocol:
+;   Called via CALL before dispatching any VFS filesystem operation.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 and A = slot number if found; Carry = 1 if driver not loaded.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 VFS_FIND_PLUGIN:
 	PUSH	BC
@@ -22224,14 +27735,23 @@ VFP_FOUND:
 	RET
 
 ;------------------------------------------------------------------------------
-; VFS_EXEC_REQUEST:
-; Dispatches a VFS request to FATFS.PRL via Action 3 (ENTRY + 9).
-; Input:
-;   DE = Pointer to 16-byte FatVfsRequest packet in Upper Common RAM
-; Output:
-;   A = Status code (0 = VFS_STAT_OK)
-;   Carry = 0: Success
-;   Carry = 1: Error (plugin not loaded, or VFS operation failed)
+; VFS_EXEC_REQUEST: Dispatch filesystem request packet to VFS driver plugin
+;
+; Purpose:
+;   Locates VFS driver plugin via VFS_FIND_PLUGIN, passes VFS_REQ_PKT pointer
+;   to driver, executes driver action, and inspects returned status code.
+;
+; Call Usage / Protocol:
+;   Called via CALL for all high-level FAT operations (directory, load, save).
+;
+; Inputs:
+;   VFS_REQ_PKT populated with command, unit, path, and buffer pointers.
+;
+; Outputs:
+;   Carry = 0 on success; Carry = 1 on error (with VFS_REQ_STATUS error code).
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 VFS_EXEC_REQUEST:
 	PUSH	BC
@@ -22293,14 +27813,25 @@ VER_NOT_LOADED:
 	RET
 
 ;------------------------------------------------------------------------------
-; PARSE_FAT_PATH:
-; Checks if string at HL starts with "U:" or "U<unit>:" (case-insensitive).
-; Output:
-;   Carry = 1: FAT path prefix matched.
-;              A = Unit index (0..7, or 0xFF if default unit requested)
-;              HL = Pointer to path string immediately after ':'
-;   Carry = 0: Not a FAT path prefix.
-;              HL preserved.
+; PARSE_FAT_PATH: Parse FAT volume prefix ("U<unit>:") from input string
+;
+; Purpose:
+;   Checks if string at HL begins with 'U' or 'u' followed by decimal digit
+;   ('0'..'9') and a colon ':'. If matched, returns unit number and pointer
+;   to remainder of path after colon.
+;
+; Call Usage / Protocol:
+;   Called via CALL when evaluating user input for FAT filesystem paths.
+;
+; Inputs:
+;   HL = Pointer to input string.
+;
+; Outputs:
+;   Carry = 0, A = unit number (0..9), HL points past colon; Carry = 1 if not
+;   a valid FAT path prefix.
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE; advances HL.
 ;------------------------------------------------------------------------------
 PARSE_FAT_PATH:
 	PUSH	HL
@@ -22357,13 +27888,23 @@ PFP_NOT_FAT:
 	RET
 
 ;------------------------------------------------------------------------------
-; EXTRACT_BASE_FILENAME:
-; Extracts the base 8.3 filename from a DOS path at HL into FAT_DOC_FNAME.
-; Finds the last '/' separator, then copies up to 12 chars + null terminator.
-; Input:
-;   HL = Pointer to null-terminated DOS path
-; Output:
-;   FAT_DOC_FNAME populated
+; EXTRACT_BASE_FILENAME: Locate base filename component within path string
+;
+; Purpose:
+;   Scans null-terminated string at HL for the last occurrence of '/' or ':'.
+;   Returns pointer to the first character following the last delimiter.
+;
+; Call Usage / Protocol:
+;   Called via CALL for title bar, FCB formatting, and status displays.
+;
+; Inputs:
+;   HL = Pointer to null-terminated path string.
+;
+; Outputs:
+;   HL = Pointer to base filename component within string.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE.
 ;------------------------------------------------------------------------------
 EXTRACT_BASE_FILENAME:
 	PUSH	BC
@@ -22420,11 +27961,23 @@ EBF_COPY_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; ENSURE_VFS_PLUGIN_LOADED:
-; Checks if FATFS.PRL is resident in Far RAM. If not, attempts to load it.
-; Returns:
-;   Carry = 0: Plugin loaded and ready
-;   Carry = 1: Plugin could not be loaded
+; ENSURE_VFS_PLUGIN_LOADED: Verify or autoload FAT VFS filesystem driver
+;
+; Purpose:
+;   Calls VFS_FIND_PLUGIN. If not loaded, attempts to load "FATVFS.PRL"
+;   from default drive into next free plugin slot.
+;
+; Call Usage / Protocol:
+;   Called via CALL prior to performing FAT filesystem operations.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 if VFS driver is ready; Carry = 1 if driver cannot be loaded.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 ENSURE_VFS_PLUGIN_LOADED:
 	CALL	VFS_FIND_PLUGIN
@@ -22434,12 +27987,24 @@ ENSURE_VFS_PLUGIN_LOADED:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_FAT_INPUT_OPEN:
-; Inspects INPUT_FILENAME_BUF in Open dialog.
-; Returns:
-;   Carry = 1: FAT path detected, but FATFS.PRL is NOT loaded.
-;   Carry = 0, NZ: FAT path detected, and FATFS.PRL IS loaded!
-;   Carry = 0, Z:  Not a FAT path.
+; CHECK_FAT_INPUT_OPEN: Check if Open File input specifies a FAT path
+;
+; Purpose:
+;   Checks if INPUT_FILENAME_BUF matches FAT prefix ("U<n>:"). If so, verifies
+;   VFS plugin availability via ENSURE_VFS_PLUGIN_LOADED.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_OPEN_FILE_UI on Enter key press.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Carry = 0 and NZ if FAT path confirmed; Carry = 0 and Z if standard CP/M;
+;   Carry = 1 if FAT path entered but VFS plugin failed to load.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 CHECK_FAT_INPUT_OPEN:
 	LD	A,(IS_PLUGIN_LOAD_UI)
@@ -22468,12 +28033,24 @@ CFIO_NO_PLUGIN:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_FAT_INPUT_SAVE:
-; Inspects INPUT_FILENAME_BUF in Save dialog.
-; Returns:
-;   Carry = 1: FAT path detected, but FATFS.PRL is NOT loaded.
-;   Carry = 0, NZ: FAT path detected, and FATFS.PRL IS loaded!
-;   Carry = 0, Z:  Not a FAT path.
+; CHECK_FAT_INPUT_SAVE: Check if Save File input specifies a FAT path
+;
+; Purpose:
+;   Checks if INPUT_FILENAME_BUF matches FAT prefix ("U<n>:"). If so, verifies
+;   VFS plugin availability via ENSURE_VFS_PLUGIN_LOADED.
+;
+; Call Usage / Protocol:
+;   Called via CALL from DO_SAVE_FILE_UI on Enter key press.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Carry = 0 and NZ if FAT path confirmed; Carry = 0 and Z if standard CP/M;
+;   Carry = 1 if FAT path entered but VFS plugin failed to load.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 CHECK_FAT_INPUT_SAVE:
 	LD	HL,INPUT_FILENAME_BUF
@@ -22498,8 +28075,24 @@ CFIS_NO_PLUGIN:
 	RET
 
 ;------------------------------------------------------------------------------
-; HANDLE_OPEN_FAT_DISPATCH:
-; Dispatches confirmed explicit FAT input (e.g. "U4:" or "U4:FILE") in Open.
+; HANDLE_OPEN_FAT_DISPATCH: Dispatch confirmed FAT input path in Open File UI
+;
+; Purpose:
+;   Parses FAT unit and path from INPUT_FILENAME_BUF, checking whether input
+;   represents unit root ("U4:"), subdir descent ("U4:DIR/"), or file open,
+;   branching to the appropriate navigation or file load handler.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from Open File input handler.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   None.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_OPEN_FAT_DISPATCH:
 	LD	HL,INPUT_FILENAME_BUF
@@ -22541,8 +28134,23 @@ HOFD_CHECK_DESCENT:
 	JP	HANDLE_OPEN_FAT_FILE
 
 ;------------------------------------------------------------------------------
-; HANDLE_OPEN_FAT_SUBDIR_SWITCH:
-; Switches active directory view to target FAT unit and subdirectory.
+; HANDLE_OPEN_FAT_SUBDIR_SWITCH: Switch Open directory view to FAT subdirectory
+;
+; Purpose:
+;   Sets CURRENT_DIR_IS_FAT=1, updates CURRENT_DIR_FAT_UNIT and FAT_ACTIVE_DIR,
+;   resets wildcard filter to "*.*", and refreshes directory page.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_OPEN_FAT_DISPATCH when path ends with '/'.
+;
+; Inputs:
+;   VFS_REQ_UNIT, HL = Subdirectory path string.
+;
+; Outputs:
+;   Active directory view switched; directory refreshed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_OPEN_FAT_SUBDIR_SWITCH:
 	LD	A,1
@@ -22559,8 +28167,23 @@ HANDLE_OPEN_FAT_SUBDIR_SWITCH:
 	JP	REFRESH_OPEN_DIR
 
 ;------------------------------------------------------------------------------
-; HANDLE_OPEN_FAT_DRIVE_SWITCH:
-; Switches active directory view to target FAT unit root and reloads directory.
+; HANDLE_OPEN_FAT_DRIVE_SWITCH: Switch Open directory view to FAT volume root
+;
+; Purpose:
+;   Sets CURRENT_DIR_IS_FAT = 1, sets FAT_ACTIVE_DIR to root ("/"), and
+;   refreshes directory page for target unit.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_OPEN_FAT_DISPATCH when input is unit root ("U4:").
+;
+; Inputs:
+;   VFS_REQ_UNIT.
+;
+; Outputs:
+;   Active directory switched to root; page refreshed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_OPEN_FAT_DRIVE_SWITCH:
 	LD	A,1
@@ -22577,9 +28200,23 @@ HANDLE_OPEN_FAT_DRIVE_SWITCH:
 	JP	REFRESH_OPEN_DIR
 
 ;------------------------------------------------------------------------------
-; HANDLE_OPEN_FAT_RELATIVE:
-; Handles input when CURRENT_DIR_IS_FAT == 1 without explicit drive prefix.
-; Checks for navigation (.., /, DIRNAME/, DIRNAME) or opens relative file.
+; HANDLE_OPEN_FAT_RELATIVE: Resolve relative path against active FAT directory
+;
+; Purpose:
+;   Concatenates relative input path to CURRENT_DIR_FAT_UNIT and FAT_ACTIVE_DIR,
+;   branching to subdirectory switch or file load.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_OPEN_FAT_DISPATCH on relative paths.
+;
+; Inputs:
+;   Relative path string in INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Directory switched or file load initiated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_OPEN_FAT_RELATIVE:
 	CALL	CHECK_AND_HANDLE_FAT_NAV
@@ -22608,8 +28245,23 @@ HOFR_NOT_NAV:
 	JP	HBIF_DO_STREAM_OPEN
 
 ;------------------------------------------------------------------------------
-; HANDLE_BLOCK_INSERT_FAT_FILE:
-; Invoked when user confirms an explicit FAT file during Block Insert.
+; HANDLE_BLOCK_INSERT_FAT_FILE: Insert text from FAT file at editor cursor
+;
+; Purpose:
+;   Streams file content from FAT volume via VFS stream read request, parses
+;   lines, and inserts text at current cursor coordinates in document.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_OPEN_FAT_DISPATCH during Block Insert mode.
+;
+; Inputs:
+;   Target FAT file path in INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Text inserted into document; editor view updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_BLOCK_INSERT_FAT_FILE:
 	LD	HL,INPUT_FILENAME_BUF
@@ -22687,8 +28339,23 @@ HBIF_FAIL:
 	JP	OPEN_FILE_NOT_FOUND
 
 ;------------------------------------------------------------------------------
-; HANDLE_OPEN_FAT_FILE:
-; Invoked when user confirms an explicit FAT file in Open dialog.
+; HANDLE_OPEN_FAT_FILE: Load document file from FAT volume into editor
+;
+; Purpose:
+;   Draws loading modal dialog, reads file records from FAT volume via VFS
+;   driver into far RAM line storage, sets document FAT metadata, and resumes.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_OPEN_FAT_DISPATCH when opening a document.
+;
+; Inputs:
+;   Target FAT file path.
+;
+; Outputs:
+;   Document loaded; editor refreshed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_OPEN_FAT_FILE:
 	LD	HL,INPUT_FILENAME_BUF
@@ -22763,8 +28430,23 @@ HOFF_LOAD_FAIL:
 	JP	RENDER_OPEN_PAGE
 
 ;------------------------------------------------------------------------------
-; HANDLE_SAVE_FAT_DISPATCH:
-; Dispatches confirmed explicit FAT input in Save dialog.
+; HANDLE_SAVE_FAT_DISPATCH: Dispatch confirmed FAT input path in Save dialog
+;
+; Purpose:
+;   Parses FAT unit and path from INPUT_FILENAME_BUF in Save As dialog,
+;   branching to unit switch, subdirectory change, or file write.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from Save File input handler.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   None.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_SAVE_FAT_DISPATCH:
 	LD	HL,INPUT_FILENAME_BUF
@@ -22799,8 +28481,23 @@ HSFD_CHECK_DESCENT:
 	JP	HANDLE_SAVE_FAT_FILE
 
 ;------------------------------------------------------------------------------
-; HANDLE_SAVE_FAT_SUBDIR_SWITCH:
-; Switches active directory view to target FAT unit and subdirectory in Save.
+; HANDLE_SAVE_FAT_SUBDIR_SWITCH: Switch Save directory view to FAT subdirectory
+;
+; Purpose:
+;   Updates CURRENT_DIR_FAT_UNIT and FAT_ACTIVE_DIR for Save dialog view and
+;   refreshes directory listing.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_SAVE_FAT_DISPATCH when path ends with '/'.
+;
+; Inputs:
+;   VFS_REQ_UNIT, HL = Subdirectory path.
+;
+; Outputs:
+;   Save directory view updated; page refreshed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_SAVE_FAT_SUBDIR_SWITCH:
 	LD	A,1
@@ -22817,8 +28514,22 @@ HANDLE_SAVE_FAT_SUBDIR_SWITCH:
 	JP	REFRESH_SAVE_DIR
 
 ;------------------------------------------------------------------------------
-; HANDLE_SAVE_FAT_DRIVE_SWITCH:
-; Switches active directory view to target FAT unit root in Save dialog.
+; HANDLE_SAVE_FAT_DRIVE_SWITCH: Switch Save directory view to FAT volume root
+;
+; Purpose:
+;   Resets Save dialog FAT directory to root ("/") on target unit.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_SAVE_FAT_DISPATCH when input is unit root ("U4:").
+;
+; Inputs:
+;   VFS_REQ_UNIT.
+;
+; Outputs:
+;   Save view switched to root; page refreshed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_SAVE_FAT_DRIVE_SWITCH:
 	LD	A,1
@@ -22835,8 +28546,23 @@ HANDLE_SAVE_FAT_DRIVE_SWITCH:
 	JP	REFRESH_SAVE_DIR
 
 ;------------------------------------------------------------------------------
-; HANDLE_SAVE_FAT_RELATIVE:
-; Handles save input when CURRENT_DIR_IS_FAT == 1 without explicit drive prefix.
+; HANDLE_SAVE_FAT_RELATIVE: Resolve relative save path against active FAT dir
+;
+; Purpose:
+;   Combines relative input path with active FAT directory and executes save
+;   or directory navigation.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_SAVE_FAT_DISPATCH on relative paths.
+;
+; Inputs:
+;   Relative path string.
+;
+; Outputs:
+;   Document saved or directory view updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_SAVE_FAT_RELATIVE:
 	CALL	CHECK_AND_HANDLE_FAT_NAV
@@ -22854,8 +28580,23 @@ HSFR_NOT_NAV:
 	JR	HSFF_DO_SAVE
 
 ;------------------------------------------------------------------------------
-; HANDLE_SAVE_FAT_FILE:
-; Invoked when user confirms an explicit FAT file in Save dialog.
+; HANDLE_SAVE_FAT_FILE: Write active document lines to FAT volume file
+;
+; Purpose:
+;   Displays save progress dialog, streams document lines from far RAM to FAT
+;   volume via VFS write request, updates FAT metadata, and clears modified.
+;
+; Call Usage / Protocol:
+;   Jumped to from HANDLE_SAVE_FAT_DISPATCH upon confirmed save filename.
+;
+; Inputs:
+;   Target FAT file path.
+;
+; Outputs:
+;   Document saved to FAT filesystem; editor resumed.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 HANDLE_SAVE_FAT_FILE:
 	LD	HL,INPUT_FILENAME_BUF
@@ -22914,11 +28655,23 @@ HSFF_SAVE_FAIL:
 	JP	RENDER_SAVE_PAGE
 
 ;------------------------------------------------------------------------------
-; CHECK_AND_HANDLE_FAT_NAV:
-; Checks if INPUT_FILENAME_BUF specifies subdirectory navigation.
-; Returns:
-;   Carry = 1: Navigation action performed
-;   Carry = 0: Not navigation (it is a filename)
+; CHECK_AND_HANDLE_FAT_NAV: Process directory nav shortcuts in FAT browser
+;
+; Purpose:
+;   Tests if entered string in file dialog matches navigation commands ("..",
+;   "/", or listed subdirectory name). If so, updates directory and refreshes.
+;
+; Call Usage / Protocol:
+;   Called via CALL on Enter key in file modal dialogs.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Carry = 0 if directory navigation handled; Carry = 1 if regular filename.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 CHECK_AND_HANDLE_FAT_NAV:
 	LD	HL,INPUT_FILENAME_BUF
@@ -23026,11 +28779,23 @@ CAHFN_CHECK_DIR_ENTRY:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_INPUT_IS_DIR_ENTRY:
-; Checks if INPUT_FILENAME_BUF matches a DIR_NAMES_BUF dir (byte 8 == '/')
-; Returns:
-;   Carry = 1 if matched a directory entry
-;   Carry = 0 if no match
+; CHECK_INPUT_IS_DIR_ENTRY: Check if input matches listed directory name
+;
+; Purpose:
+;   Compares INPUT_FILENAME_BUF against entries in DIR_NAMES_BUF to see if user
+;   selected a folder displayed in the active directory view.
+;
+; Call Usage / Protocol:
+;   Called via CALL from CHECK_AND_HANDLE_FAT_NAV.
+;
+; Inputs:
+;   INPUT_FILENAME_BUF.
+;
+; Outputs:
+;   Carry = 0 if entry matches a listed directory; Carry = 1 if not a directory.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 CHECK_INPUT_IS_DIR_ENTRY:
 	PUSH	BC
@@ -23134,8 +28899,23 @@ CIIDE_NO_MATCH:
 	RET
 
 ;------------------------------------------------------------------------------
-; CHECK_HL_ENDS_WITH_SLASH:
-; Returns Carry = 1 if the last non-space character in string at HL is '/'.
+; CHECK_HL_ENDS_WITH_SLASH: Check if string at HL ends with forward slash ('/')
+;
+; Purpose:
+;   Finds terminating null byte of string at HL and tests if preceding non-space
+;   character is '/'.
+;
+; Call Usage / Protocol:
+;   Called via CALL during FAT path parsing.
+;
+; Inputs:
+;   HL = Pointer to null-terminated string.
+;
+; Outputs:
+;   Carry = 1 if string ends with '/'; Carry = 0 otherwise.
+;
+; Preserves / Modifies:
+;   Clobbers AF; preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 CHECK_HL_ENDS_WITH_SLASH:
 	PUSH	HL
@@ -23162,11 +28942,24 @@ CHLE_NOT_SLASH:
 	RET
 
 ;------------------------------------------------------------------------------
-; BUILD_RELATIVE_FAT_PATH:
-; Constructs full DOS path in FAT_DOC_PATH from CURRENT_DIR_FAT_PATH
-; and INPUT_FILENAME_BUF.
-; Output:
-;   FAT_DOC_PATH populated (null-terminated)
+; BUILD_RELATIVE_FAT_PATH: Concatenate relative component to active directory
+;
+; Purpose:
+;   Appends relative path or filename in DE to active directory path in HL,
+;   ensuring exactly one separating '/' between components.
+;
+; Call Usage / Protocol:
+;   Called via CALL during FAT path normalization.
+;
+; Inputs:
+;   HL = Destination buffer with base path.
+;   DE = Pointer to relative path component.
+;
+; Outputs:
+;   Combined path in destination buffer.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 BUILD_RELATIVE_FAT_PATH:
 	PUSH	BC
@@ -23243,9 +29036,23 @@ BRFP_FINISH:
 	RET
 
 ;------------------------------------------------------------------------------
-; SET_DIR_FROM_PATH_HL:
-; Copies path at HL into CURRENT_DIR_FAT_PATH. Prepend '/' if needed, convert
-; to upper case, and strip trailing '/' unless at root ("/").
+; SET_DIR_FROM_PATH_HL: Copy normalized directory path at HL to FAT_ACTIVE_DIR
+;
+; Purpose:
+;   Copies directory path string from HL into FAT_ACTIVE_DIR, ensuring leading
+;   slash and stripping redundant trailing slashes.
+;
+; Call Usage / Protocol:
+;   Called via CALL when updating active FAT directory.
+;
+; Inputs:
+;   HL = Pointer to source directory path string.
+;
+; Outputs:
+;   FAT_ACTIVE_DIR updated.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 SET_DIR_FROM_PATH_HL:
 	PUSH	BC
@@ -23304,11 +29111,23 @@ SDFP_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; SET_DIR_FROM_DOC_PATH:
-; Updates CURRENT_DIR_FAT_PATH from FAT_DOC_PATH.
-; Finds the last '/' in FAT_DOC_PATH:
-; - If last '/' is at index 0 (or path empty) -> sets root ("/")
-; - If last '/' is at index > 0 -> copies up to last '/'
+; SET_DIR_FROM_DOC_PATH: Initialize active FAT directory from document path
+;
+; Purpose:
+;   Copies parent directory path from FAT_DOC_PATH into FAT_ACTIVE_DIR so file
+;   browser opens in the same directory as active document.
+;
+; Call Usage / Protocol:
+;   Called via CALL when opening file dialog on an open FAT document.
+;
+; Inputs:
+;   FAT_DOC_PATH.
+;
+; Outputs:
+;   FAT_ACTIVE_DIR initialized.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 SET_DIR_FROM_DOC_PATH:
 	PUSH	BC
@@ -23378,8 +29197,22 @@ SDFDP_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; FAT_PATH_SET_ROOT:
-; Resets CURRENT_DIR_FAT_PATH to "/".
+; FAT_PATH_SET_ROOT: Set active FAT directory buffer to root ("/")
+;
+; Purpose:
+;   Writes "/" followed by null terminator to FAT_ACTIVE_DIR.
+;
+; Call Usage / Protocol:
+;   Called via CALL when navigating to volume root.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   FAT_ACTIVE_DIR set to "/".
+;
+; Preserves / Modifies:
+;   Clobbers AF, HL.
 ;------------------------------------------------------------------------------
 FAT_PATH_SET_ROOT:
 	PUSH	BC
@@ -23395,8 +29228,23 @@ FAT_PATH_SET_ROOT:
 	RET
 
 ;------------------------------------------------------------------------------
-; FAT_PATH_POP_DIR:
-; Ascends one directory level in CURRENT_DIR_FAT_PATH.
+; FAT_PATH_POP_DIR: Navigate up one directory level in FAT path buffer
+;
+; Purpose:
+;   Locates last forward slash in FAT_ACTIVE_DIR and truncates string there,
+;   effectively moving up to parent directory ("cd ..").
+;
+; Call Usage / Protocol:
+;   Called via CALL when navigating to parent directory.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   FAT_ACTIVE_DIR truncated to parent path.
+;
+; Preserves / Modifies:
+;   Clobbers AF, HL.
 ;------------------------------------------------------------------------------
 FAT_PATH_POP_DIR:
 	PUSH	DE
@@ -23468,8 +29316,22 @@ FPPD_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; FAT_PATH_PUSH_DIR:
-; Appends directory segment from HL to CURRENT_DIR_FAT_PATH.
+; FAT_PATH_PUSH_DIR: Append subdirectory to active FAT directory path buffer
+;
+; Purpose:
+;   Appends '/' and subdirectory name at DE to FAT_ACTIVE_DIR ("cd <dir>").
+;
+; Call Usage / Protocol:
+;   Called via CALL when descending into child subdirectory.
+;
+; Inputs:
+;   DE = Pointer to subdirectory name string.
+;
+; Outputs:
+;   FAT_ACTIVE_DIR updated with child directory path.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FAT_PATH_PUSH_DIR:
 	PUSH	BC
@@ -23557,10 +29419,23 @@ FP_PUSH_EXIT:
 	RET
 
 ;------------------------------------------------------------------------------
-; COLLECT_FAT_DIR_ENTRIES:
-; Collect directory entries from active FAT volume via VFS_CMD_LIST_DIR (1)
-; Populates DIR_NAMES_BUF with 13-byte formatted records.
-; If DIR_FILTER_ACTIVE != 0, filters files in-place preserving subdirectories.
+; COLLECT_FAT_DIR_ENTRIES: Query directory listing from FAT volume via VFS
+;
+; Purpose:
+;   Sends VFS directory read request packet to driver plugin, storing returned
+;   directory entries into DIR_NAMES_BUF and sorting results alphabetically.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from COLLECT_DIR_ENTRIES when active drive is FAT.
+;
+; Inputs:
+;   CURRENT_DIR_FAT_UNIT, FAT_ACTIVE_DIR.
+;
+; Outputs:
+;   DIR_NAMES_BUF populated with sorted entries; DIR_FILE_COUNT set.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 COLLECT_FAT_DIR_ENTRIES:
 	LD	A,1			; VFS_CMD_LIST_DIR
@@ -23600,9 +29475,23 @@ CFDE_EMPTY:
 	RET
 
 ;------------------------------------------------------------------------------
-; FILTER_FAT_DIR_ENTRIES:
-; Filters DIR_NAMES_BUF in-place against DIR_FILTER_FCB (8 name + 3 ext).
-; Directory entries (where byte 8 == '/') are ALWAYS preserved.
+; FILTER_FAT_DIR_ENTRIES: Filter collected FAT directory entries by wildcard
+;
+; Purpose:
+;   Iterates through entries in DIR_NAMES_BUF, removing entries that do not
+;   match DIR_FILTER_BUF pattern and compacting remaining entries in-place.
+;
+; Call Usage / Protocol:
+;   Called via CALL following COLLECT_FAT_DIR_ENTRIES.
+;
+; Inputs:
+;   DIR_FILTER_BUF, DIR_FILE_COUNT.
+;
+; Outputs:
+;   DIR_FILE_COUNT updated with matching count.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 FILTER_FAT_DIR_ENTRIES:
 	LD	A,(DIR_FILE_COUNT)
@@ -23721,14 +29610,23 @@ FFDE_ALL_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; VFS_LOAD_FAT_FILE:
-; Loads text file from FAT media into editor.
-; Input:
-;   (VFS_REQ_UNIT) = HBIOS unit (0..7 or 0xFF)
-;   HL = Pointer to null-terminated DOS path
-; Output:
-;   Carry = 0: Success
-;   Carry = 1: Failure (file not found or disk error)
+; VFS_LOAD_FAT_FILE: Stream file data from FAT volume into far RAM storage
+;
+; Purpose:
+;   Issues VFS open and read requests to driver plugin, reading file chunks,
+;   splitting lines, and allocating line table entries in far RAM banks.
+;
+; Call Usage / Protocol:
+;   Called via CALL from HANDLE_OPEN_FAT_FILE.
+;
+; Inputs:
+;   Target FAT file path in VFS_REQ_PKT.
+;
+; Outputs:
+;   Document lines loaded into far RAM; Carry = 0 on success, 1 on error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 VFS_LOAD_FAT_FILE:
 	LD	A,2			; VFS_CMD_LOAD_FILE
@@ -23751,14 +29649,23 @@ VFS_LOAD_FAT_FILE:
 	RET
 
 ;------------------------------------------------------------------------------
-; VFS_SAVE_FAT_FILE:
-; Exports editor document (or line range for block save) to FAT media.
-; Input:
-;   (VFS_REQ_UNIT) = HBIOS unit
-;   FAT_DOC_PATH = null-terminated DOS path
-; Output:
-;   Carry = 0: Success
-;   Carry = 1: Failure
+; VFS_SAVE_FAT_FILE: Stream document lines from far RAM to FAT volume file
+;
+; Purpose:
+;   Issues VFS create and write requests to driver plugin, writing lines from
+;   far RAM line storage to destination FAT file.
+;
+; Call Usage / Protocol:
+;   Called via CALL from HANDLE_SAVE_FAT_FILE.
+;
+; Inputs:
+;   Target FAT file path in VFS_REQ_PKT; document lines in far RAM.
+;
+; Outputs:
+;   File written; Carry = 0 on success, Carry = 1 on write error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 VFS_SAVE_FAT_FILE:
 	LD	A,(IS_BLOCK_SAVE_UI)
@@ -23796,8 +29703,23 @@ VSFF_DO_SAVE:
 	RET
 
 ;------------------------------------------------------------------------------
-; PREFILL_FAT_FILENAME_BUF:
-; Pre-fills INPUT_FILENAME_BUF with "U<unit>:<path>" or "U:<path>"
+; PREFILL_FAT_FILENAME_BUF: Prefill filename box with FAT unit, path, and name
+;
+; Purpose:
+;   Formats "U<unit>:<path>/<filename>" into INPUT_FILENAME_BUF for Save As
+;   when current document is hosted on a FAT volume.
+;
+; Call Usage / Protocol:
+;   Called via CALL when opening Save As dialog on a FAT file.
+;
+; Inputs:
+;   FAT_DOC_UNIT, FAT_DOC_PATH, FAT_DOC_FNAME.
+;
+; Outputs:
+;   INPUT_FILENAME_BUF prefilled.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 PREFILL_FAT_FILENAME_BUF:
 	PUSH	BC
@@ -24745,6 +30667,25 @@ HOST_API_MGR_SLOT:
 	JP	TRAMP_LOAD_PLUGIN_CFG	; +70: Call HOST_LOAD_PLUGIN_CFG
 	JP	TRAMP_RENDER_STATUS_BAR	; +73: Call RENDER_STATUS_BAR
 
+;------------------------------------------------------------------------------
+; TRAMP_CHECKOUT_LINE: Host API trampoline for line checkout across memory banks
+;
+; Purpose:
+;   If calling plugin executes in Far RAM, switches to CPM_USER_BANK, invokes
+;   HOST_CHECKOUT_LINE, and restores PLUGIN_FAR_BANK before returning.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+18) by running plugins.
+;
+; Inputs:
+;   HL = Target document line number (0-based).
+;
+; Outputs:
+;   ACTIVE_LINE_BUF populated, BC = Line length.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_CHECKOUT_LINE:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
@@ -24758,6 +30699,25 @@ TRAMP_CHECKOUT_LINE:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; TRAMP_COMMIT_LINE: Host API trampoline for line commit across memory banks
+;
+; Purpose:
+;   If calling plugin executes in Far RAM, switches to CPM_USER_BANK, invokes
+;   HOST_COMMIT_LINE, and restores PLUGIN_FAR_BANK before returning.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+21) by running plugins.
+;
+; Inputs:
+;   HL = Line number, DE = Buffer pointer, BC = Line length.
+;
+; Outputs:
+;   Line committed to far RAM line table.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_COMMIT_LINE:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
@@ -24771,6 +30731,25 @@ TRAMP_COMMIT_LINE:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; TRAMP_PUTC: Host API trampoline for character output across memory banks
+;
+; Purpose:
+;   Emits character in A to terminal screen via PUTC, switching memory banks
+;   between Far RAM and Bank 0 if calling plugin runs in Far RAM.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+24).
+;
+; Inputs:
+;   A = Character to emit.
+;
+; Outputs:
+;   Character printed to terminal.
+;
+; Preserves / Modifies:
+;   Preserves AF, BC, DE, HL across bank switch.
+;------------------------------------------------------------------------------
 TRAMP_PUTC:
 	PUSH	AF
 	LD	A,(PLUGIN_IS_FAR_EXEC)
@@ -24791,6 +30770,25 @@ TPC_DIRECT:
 	POP	AF
 	JP	PUTC
 
+;------------------------------------------------------------------------------
+; TRAMP_PRINT_STR: Host API trampoline for string printing from Far RAM
+;
+; Purpose:
+;   Iterates through characters of string in Far RAM or Bank 0 at DE, emitting
+;   each character via TRAMP_PUTC until terminating null or '$' is reached.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+27).
+;
+; Inputs:
+;   DE = Pointer to null- or '$'-terminated string.
+;
+; Outputs:
+;   String printed to terminal.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 TRAMP_PRINT_STR:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
@@ -24816,6 +30814,24 @@ TPS_DONE:
 	POP	BC
 	RET
 
+;------------------------------------------------------------------------------
+; TRAMP_GET_KEY: Host API trampoline for blocking keyboard input across banks
+;
+; Purpose:
+;   Calls GET_KEY across banks via TRAMP_FAR_CALL to retrieve next keystroke.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+30).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   A = ASCII character or escape sequence code.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 TRAMP_GET_KEY:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
@@ -24823,9 +30839,47 @@ TRAMP_GET_KEY:
 	LD	HL,GET_KEY
 	JP	TRAMP_FAR_CALL
 
+;------------------------------------------------------------------------------
+; TRAMP_SET_STATUS_MSG: Host API trampoline to display popup status notification
+;
+; Purpose:
+;   Dispatches to HOST_SET_STATUS_MSG to format and display plugin notification
+;   inside centered Tier 2 modal popup dialog.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+33).
+;
+; Inputs:
+;   DE = Pointer to null-terminated status message string.
+;
+; Outputs:
+;   Popup notification displayed on terminal.
+;
+; Preserves / Modifies:
+;   Preserves all registers.
+;------------------------------------------------------------------------------
 TRAMP_SET_STATUS_MSG:
 	JP	HOST_SET_STATUS_MSG
 
+;------------------------------------------------------------------------------
+; TRAMP_CHECK_KEY: Host API trampoline for non-blocking key check across banks
+;
+; Purpose:
+;   Calls CHECK_KEY_READY across banks via TRAMP_FAR_CALL to test if keystroke
+;   is available in terminal input buffer.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+46).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Zero flag (Z) set if no key ready; NZ if key available.
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL.
+;------------------------------------------------------------------------------
 TRAMP_CHECK_KEY:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
@@ -24833,6 +30887,24 @@ TRAMP_CHECK_KEY:
 	LD	HL,CHECK_KEY_READY
 	JP	TRAMP_FAR_CALL
 
+;------------------------------------------------------------------------------
+; TRAMP_CLEAR_DOCUMENT: Host API trampoline to clear document across banks
+;
+; Purpose:
+;   Calls HOST_CLEAR_DOCUMENT across memory banks via TRAMP_FAR_CALL.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+49).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Document lines cleared; state reset.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_CLEAR_DOCUMENT:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
@@ -24840,6 +30912,26 @@ TRAMP_CLEAR_DOCUMENT:
 	LD	HL,HOST_CLEAR_DOCUMENT
 	JP	TRAMP_FAR_CALL
 
+;------------------------------------------------------------------------------
+; TRAMP_LOCATE_RC: Host API trampoline for cursor positioning across banks
+;
+; Purpose:
+;   Calls LOCATE_RC across memory banks to position terminal hardware cursor
+;   at row B and column C.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+52).
+;
+; Inputs:
+;   B = Row (0-based).
+;   C = Column (0-based).
+;
+; Outputs:
+;   Hardware cursor repositioned.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_LOCATE_RC:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
@@ -24855,6 +30947,25 @@ TRAMP_LOCATE_RC:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; TRAMP_LOAD_PLUGIN: Host API trampoline to load external plugin across banks
+;
+; Purpose:
+;   Copies filename string into TRAMP_NAME_BUF in Bank 0 and invokes
+;   LOAD_PLUGIN_BY_NAME via TRAMP_FAR_CALL.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+55).
+;
+; Inputs:
+;   DE = Pointer to null-terminated plugin filename string.
+;
+; Outputs:
+;   Carry = 0 and A = slot index on success; Carry = 1 on error.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_LOAD_PLUGIN:
 	; Input: DE = pointer to null-terminated ASCII filename
 	; Returns: Carry=0 on success, A=slot number; Carry=1 on error
@@ -24885,6 +30996,24 @@ HOST_LOAD_PLUGIN_FAR:
 	LD	DE,TRAMP_NAME_BUF
 	JP	LOAD_PLUGIN_BY_NAME
 
+;------------------------------------------------------------------------------
+; TRAMP_UNLOAD_SLOT: Host API trampoline to unload plugin slot across banks
+;
+; Purpose:
+;   Calls UNLOAD_PLUGIN_SLOT across memory banks to unregister slot A (0..7).
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+58).
+;
+; Inputs:
+;   A = Slot number (0..7).
+;
+; Outputs:
+;   Slot unloaded.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_UNLOAD_SLOT:
 	; Input: A = slot number (0..7)
 	LD	C,A
@@ -24898,6 +31027,24 @@ TUS_DIRECT:
 	LD	A,C
 	JP	UNLOAD_PLUGIN_SLOT
 
+;------------------------------------------------------------------------------
+; TRAMP_REDRAW_BASE: Host API trampoline to repaint underlying screen context
+;
+; Purpose:
+;   Calls REDRAW_BASE_SCREEN across memory banks to repaint screen context A.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+61).
+;
+; Inputs:
+;   A = Context ID (0..6).
+;
+; Outputs:
+;   Screen repainted.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_REDRAW_BASE:
 	; Input: A = Context ID (0..6)
 	LD	C,A
@@ -24915,6 +31062,25 @@ HOST_REDRAW_BASE_FAR:
 	LD	(POPUP_CONTEXT_ID),A
 	JP	REDRAW_BASE_SCREEN
 
+;------------------------------------------------------------------------------
+; TRAMP_OPEN_PLUGIN_UI: Host API trampoline for interactive plugin file selector
+;
+; Purpose:
+;   Sets IS_PLUGIN_LOAD_UI flag and invokes DO_OPEN_FILE_UI across memory banks
+;   to present plugin file browsing modal dialog.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+64).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 and A = loaded slot on success; Carry = 1 on cancellation.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_OPEN_PLUGIN_UI:
 	; Interactive file selector for plugin files (.PRL/.OVL)
 	; Returns Carry=0, A=slot on success; Carry=1 on cancel
@@ -24933,6 +31099,25 @@ HOST_OPEN_PLUGIN_UI_FAR:
 	LD	(IS_PLUGIN_LOAD_UI),A
 	JP	DO_OPEN_FILE_UI
 
+;------------------------------------------------------------------------------
+; TRAMP_SAVE_PLUGIN_CFG: Host API trampoline to save plugin config to disk
+;
+; Purpose:
+;   Copies 128 bytes from DE to CFG_IO_BUF and calls HOST_SAVE_PLUGIN_CFG_DISK
+;   across memory banks to write PLUGIN.CFG.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+67).
+;
+; Inputs:
+;   DE = Pointer to 128-byte configuration buffer.
+;
+; Outputs:
+;   Carry = 0 on success, Carry = 1 on disk error.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_SAVE_PLUGIN_CFG:
 	; Input: DE = pointer to 128-byte buffer
 	LD	HL,CFG_IO_BUF
@@ -24942,6 +31127,25 @@ TRAMP_SAVE_PLUGIN_CFG:
 	LD	HL,HOST_SAVE_PLUGIN_CFG_DISK
 	JR	TRAMP_FAR_CALL
 
+;------------------------------------------------------------------------------
+; TRAMP_LOAD_PLUGIN_CFG: Host API trampoline to load plugin config from disk
+;
+; Purpose:
+;   Calls HOST_LOAD_PLUGIN_CFG_DISK across memory banks and copies 128 bytes
+;   from CFG_IO_BUF into caller's buffer at DE.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+70).
+;
+; Inputs:
+;   DE = Pointer to destination 128-byte buffer.
+;
+; Outputs:
+;   Carry = 0 on success, Carry = 1 on read error or file not found.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_LOAD_PLUGIN_CFG:
 	; Input: DE = pointer to 128-byte buffer
 	PUSH	DE			; Preserve destination
@@ -24955,6 +31159,24 @@ TRAMP_LOAD_PLUGIN_CFG:
 	OR	A
 	RET
 
+;------------------------------------------------------------------------------
+; TRAMP_RENDER_STATUS_BAR: Host API trampoline to redraw editor status bar
+;
+; Purpose:
+;   Calls RENDER_STATUS_BAR across memory banks to refresh status line.
+;
+; Call Usage / Protocol:
+;   Called via PLUGIN_HOST_API jump vector (+73).
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Status bar updated on terminal.
+;
+; Preserves / Modifies:
+;   Preserves caller bank context.
+;------------------------------------------------------------------------------
 TRAMP_RENDER_STATUS_BAR:
 	LD	A,(PLUGIN_IS_FAR_EXEC)
 	OR	A
@@ -24962,6 +31184,26 @@ TRAMP_RENDER_STATUS_BAR:
 	LD	HL,RENDER_STATUS_BAR
 	JP	TRAMP_FAR_CALL
 
+;------------------------------------------------------------------------------
+; TRAMP_FAR_CALL: Core cross-bank subroutine invocation trampoline
+;
+; Purpose:
+;   Switches from calling Far RAM bank to CPM_USER_BANK, calls Bank 0 function
+;   at HL, preserves return status and flags, and restores Far RAM bank.
+;
+; Call Usage / Protocol:
+;   Called via CALL from Host API trampolines.
+;
+; Inputs:
+;   HL = Target function address in Bank 0.
+;   AF, BC, DE passed as arguments to target function.
+;
+; Outputs:
+;   Target return values returned in AF, BC, DE, HL; caller bank restored.
+;
+; Preserves / Modifies:
+;   Preserves return flags from target function.
+;------------------------------------------------------------------------------
 TRAMP_FAR_CALL:
 	PUSH	AF			; Preserve input AF (parameters)
 	LD	A,(CPM_USER_BANK)
@@ -24976,6 +31218,26 @@ TRAMP_FAR_CALL:
 	POP	AF			; Restore return AF
 	RET
 
+;------------------------------------------------------------------------------
+; EXEC_PLUGIN_MGR_ACTION: Execute specific entry point of PLUGIN.PRL via HBIOS
+;
+; Purpose:
+;   Sets Host API geometry and context fields, sets IX to entry point
+;   0x0100 + C * 3, sets IY to PLUGIN_HOST_API, sets Far RAM bank, and invokes
+;   HBIOS HB_BNKCALL (0xFFF9).
+;
+; Call Usage / Protocol:
+;   Called via CALL to launch Plugin Manager actions (0..3).
+;
+; Inputs:
+;   C = Action index (0 = Manager UI, 1 = Popup, 2 = About, 3 = Autoload).
+;
+; Outputs:
+;   Returns registers and Carry flag from PLUGIN.PRL.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 EXEC_PLUGIN_MGR_ACTION:
 	; Input: C = Action index (0 = Plugin Manager, 1 = Context Popup, 2 = About)
 	; Output: Returns Carry and registers from PLUGIN.PRL
@@ -25016,6 +31278,25 @@ EPMA_ENTRY:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; BORROW_PLUGIN_MGR_BANK: Reserve dedicated Far RAM bank for PLUGIN.PRL
+;
+; Purpose:
+;   Decrements EXT_BANK_COUNT (requiring >= 2 banks) and allocates a dedicated
+;   Far RAM bank for hosting PLUGIN.PRL permanently in memory.
+;
+; Call Usage / Protocol:
+;   Called via CALL from ENSURE_PLUGIN_MGR_LOADED.
+;
+; Inputs:
+;   EXT_BANK_COUNT, EXT_BANK_TABLE.
+;
+; Outputs:
+;   Carry = 0, A = allocated Far RAM bank ID; Carry = 1 if insufficient banks.
+;
+; Preserves / Modifies:
+;   Clobbers AF, DE, HL; preserves BC.
+;------------------------------------------------------------------------------
 BORROW_PLUGIN_MGR_BANK:
 	LD	A,(EXT_BANK_COUNT)
 	CP	2
@@ -25033,6 +31314,26 @@ BPMB_FAIL:
 	SCF
 	RET
 
+;------------------------------------------------------------------------------
+; ENSURE_PLUGIN_MGR_LOADED: Ensure PLUGIN.PRL is loaded into dedicated bank
+;
+; Purpose:
+;   Checks PLUGIN_MGR_LOADED flag. If not loaded, verifies Far RAM bank count,
+;   borrows bank, reads PLUGIN.PRL via BDOS, copies payload to Far RAM bank,
+;   and executes Action 3 (Autoload plugins from PLUGIN.CFG).
+;
+; Call Usage / Protocol:
+;   Called via CALL on editor startup and when opening Plugin Manager.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 if loaded; Carry = 1 on file open or read error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 ENSURE_PLUGIN_MGR_LOADED:
 	LD	A,(PLUGIN_MGR_LOADED)
 	OR	A
@@ -25232,6 +31533,25 @@ EPML_FAIL:
 	SCF					; Carry = 1
 	RET
 
+;------------------------------------------------------------------------------
+; AUTO_LOAD_PLUGIN_MGR: Probe and autoload Plugin Manager on editor startup
+;
+; Purpose:
+;   Checks CFG_AUTOLOAD_PLUGIN_MGR setting and Far RAM availability; if enabled,
+;   invokes ENSURE_PLUGIN_MGR_LOADED to pre-load plugins from PLUGIN.CFG.
+;
+; Call Usage / Protocol:
+;   Called via CALL from START during initial program boot.
+;
+; Inputs:
+;   CFG_AUTOLOAD_PLUGIN_MGR, EXT_BANK_COUNT.
+;
+; Outputs:
+;   None.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 AUTO_LOAD_PLUGIN_MGR:
 	LD	A,(EXT_BANK_COUNT)
 	CP	2
@@ -25251,6 +31571,25 @@ ALPM_CHK_CFG:
 ;==============================================================================
 STR_PLUGIN_CFG_NAME:	DB	"PLUGIN  CFG"
 
+;------------------------------------------------------------------------------
+; INIT_PLUGIN_CFG_FCB: Initialize CFG_FCB with "PLUGIN  CFG" filename
+;
+; Purpose:
+;   Sets default drive (0), copies "PLUGIN  CFG" into CFG_FCB, and clears
+;   extent and record count fields.
+;
+; Call Usage / Protocol:
+;   Called via CALL before opening or creating PLUGIN.CFG.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   CFG_FCB initialized.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 INIT_PLUGIN_CFG_FCB:
 	LD	DE,CFG_FCB
 	XOR	A
@@ -25263,20 +31602,93 @@ INIT_PLUGIN_CFG_FCB:
 	LD	B,24
 	JP	INIT_CFG_ZERO
 
+;------------------------------------------------------------------------------
+; BDOS_CFG_FCB: Helper to execute BDOS file operation on CFG_FCB
+;
+; Purpose:
+;   Sets DE = CFG_FCB and jumps directly to BDOS_ENTRY.
+;
+; Call Usage / Protocol:
+;   Called via CALL for PLUGIN.CFG operations.
+;
+; Inputs:
+;   C = BDOS function code.
+;
+; Outputs:
+;   A = BDOS return status.
+;
+; Preserves / Modifies:
+;   Clobbers AF, DE.
+;------------------------------------------------------------------------------
 BDOS_CFG_FCB:
 	LD	DE,CFG_FCB
 	JP	BDOS_ENTRY
 
+;------------------------------------------------------------------------------
+; BDOS_CFG_DMA: Set BDOS DMA transfer address to CFG_IO_BUF
+;
+; Purpose:
+;   Sets DE = CFG_IO_BUF and calls BDOS Set DMA (function 26).
+;
+; Call Usage / Protocol:
+;   Called via CALL prior to reading or writing PLUGIN.CFG records.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   DMA address configured to CFG_IO_BUF.
+;
+; Preserves / Modifies:
+;   Clobbers AF, DE.
+;------------------------------------------------------------------------------
 BDOS_CFG_DMA:
 	LD	DE,CFG_IO_BUF
 	LD	C,26
 	JP	BDOS_ENTRY
 
+;------------------------------------------------------------------------------
+; BDOS_RESTORE_DMA: Restore default BDOS DMA transfer address (0080H)
+;
+; Purpose:
+;   Sets DE = DEFAULT_DMA (0080H) and calls BDOS Set DMA (function 26).
+;
+; Call Usage / Protocol:
+;   Called via CALL following completion of PLUGIN.CFG I/O.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   DMA address restored to 0080H.
+;
+; Preserves / Modifies:
+;   Clobbers AF, DE.
+;------------------------------------------------------------------------------
 BDOS_RESTORE_DMA:
 	LD	DE,DEFAULT_DMA
 	LD	C,26
 	JP	BDOS_ENTRY
 
+;------------------------------------------------------------------------------
+; HOST_SAVE_PLUGIN_CFG_DISK: Write 128-byte configuration to PLUGIN.CFG file
+;
+; Purpose:
+;   Sets DMA to CFG_IO_BUF, deletes existing PLUGIN.CFG, creates new file,
+;   writes 128-byte record from CFG_IO_BUF, closes file, and restores DMA.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from TRAMP_SAVE_PLUGIN_CFG.
+;
+; Inputs:
+;   CFG_IO_BUF populated with 128 bytes of configuration data.
+;
+; Outputs:
+;   Carry = 0 on success, Carry = 1 on disk error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HOST_SAVE_PLUGIN_CFG_DISK:
 	CALL	BDOS_CFG_DMA
 	CALL	INIT_PLUGIN_CFG_FCB
@@ -25307,6 +31719,25 @@ HSPC_ERR:
 	SCF				; Carry = 1 (Error)
 	RET
 
+;------------------------------------------------------------------------------
+; HOST_LOAD_PLUGIN_CFG_DISK: Read 128-byte configuration from PLUGIN.CFG file
+;
+; Purpose:
+;   Sets DMA to CFG_IO_BUF, opens PLUGIN.CFG, reads 128-byte record into
+;   CFG_IO_BUF, closes file, and restores DMA to 0080H.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from TRAMP_LOAD_PLUGIN_CFG.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Carry = 0 on success; Carry = 1 on file not found or read error.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HOST_LOAD_PLUGIN_CFG_DISK:
 	CALL	BDOS_CFG_DMA
 	CALL	INIT_PLUGIN_CFG_FCB
@@ -25343,6 +31774,25 @@ HLPC_NOT_FOUND:
 	SCF				; Carry = 1 (File not found)
 	RET
 
+;------------------------------------------------------------------------------
+; HOST_CLEAR_DOCUMENT: Reset editor state and line table to empty document
+;
+; Purpose:
+;   Initializes slot allocation table, resets line counts and cursor coordinates
+;   to zero, clears cache dirty flags, and resets document modification flags.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from TRAMP_CLEAR_DOCUMENT.
+;
+; Inputs:
+;   None.
+;
+; Outputs:
+;   Document initialized to empty state.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HOST_CLEAR_DOCUMENT:
 	CALL	INIT_SLOT_SYSTEM
 	LD	HL,0
@@ -25372,6 +31822,25 @@ HOST_CLEAR_DOCUMENT:
 	LD	(ACTIVE_LINE_LEN),HL
 	RET
 
+;------------------------------------------------------------------------------
+; HOST_CHECKOUT_LINE: Checkout line HL into ACTIVE_LINE_BUF and return length
+;
+; Purpose:
+;   Sets CUR_DOC_ROW to HL, checks out line from far RAM into ACTIVE_LINE_BUF,
+;   measures line length, and returns length in BC and ACTIVE_LINE_LEN.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from TRAMP_CHECKOUT_LINE.
+;
+; Inputs:
+;   HL = Line index to checkout.
+;
+; Outputs:
+;   ACTIVE_LINE_BUF populated, BC = Line length.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HOST_CHECKOUT_LINE:
 	LD	(CUR_DOC_ROW),HL
 	CALL	CHECKOUT_ACTIVE_LINE
@@ -25381,6 +31850,28 @@ HOST_CHECKOUT_LINE:
 	LD	C,E			; BC = line length
 	RET
 
+;------------------------------------------------------------------------------
+; HOST_COMMIT_LINE: Commit line buffer at DE to document line table at row HL
+;
+; Purpose:
+;   Ensures null termination of line buffer at DE, checks whether line index HL
+;   appends to end of document (HL == DOC_TOTAL_LINES) or overwrites existing
+;   line (HL < DOC_TOTAL_LINES), and writes line data to far RAM storage.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from TRAMP_COMMIT_LINE.
+;
+; Inputs:
+;   HL = Target line number.
+;   DE = Pointer to line buffer (must reside in common RAM).
+;   BC = Line length.
+;
+; Outputs:
+;   Line committed to far RAM; Carry = 1 on out-of-memory.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 HOST_COMMIT_LINE:
 	; Inputs:
 	; HL = line number
@@ -25456,6 +31947,25 @@ HCL_ACTIVE:
 	OR	A
 	RET
 
+;------------------------------------------------------------------------------
+; HOST_SET_STATUS_MSG: Display status message in Tier 2 modal popup
+;
+; Purpose:
+;   Tests if message pointer DE is non-null; if valid, invokes
+;   SHOW_PLUGIN_STATUS_POPUP while preserving all working registers.
+;
+; Call Usage / Protocol:
+;   Called via CALL or JP from TRAMP_SET_STATUS_MSG.
+;
+; Inputs:
+;   DE = Pointer to null-terminated status message string.
+;
+; Outputs:
+;   Modal popup displayed.
+;
+; Preserves / Modifies:
+;   Preserves all registers (AF, BC, DE, HL).
+;------------------------------------------------------------------------------
 HOST_SET_STATUS_MSG:
 	LD	A,D
 	OR	E
@@ -25472,6 +31982,26 @@ HOST_SET_STATUS_MSG:
 	POP	AF
 	RET
 
+;------------------------------------------------------------------------------
+; SHOW_PLUGIN_STATUS_POPUP: Center message and display modal status popup
+;
+; Purpose:
+;   Initializes 50-character popup line buffer with border bars, calculates
+;   centering padding, copies message text from DE into buffer, and invokes
+;   SHOW_STATUS_EVENT_POPUP to render centered modal dialog box.
+;
+; Call Usage / Protocol:
+;   Called via CALL from HOST_SET_STATUS_MSG.
+;
+; Inputs:
+;   DE = Pointer to null-terminated status string.
+;
+; Outputs:
+;   Popup dialog rendered on terminal.
+;
+; Preserves / Modifies:
+;   Clobbers all working registers.
+;------------------------------------------------------------------------------
 SHOW_PLUGIN_STATUS_POPUP:
 	; DE = pointer to plugin status string
 	; Copy and center inside PLUGIN_POPUP_MSG_BUF (50 chars: "| ... |", 0)

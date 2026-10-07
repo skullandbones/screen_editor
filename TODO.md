@@ -805,5 +805,10 @@ upcoming milestones for SE.COM.
   - Updated `docs/KEYBINDINGS.md` to document new block mode controls.
 
 ### 6.2 Review and Enhance Subroutine Comments in `SE.ASM`
-- [ ] Review and enhance the comments in `SE.ASM` to provide information on
+- [x] Review and enhance the comments in `SE.ASM` to provide information on
   subroutine call usage and purpose of the subroutine.
+  - Standardized all subroutine comment banners across the codebase with
+    structured doc comment blocks providing Purpose, Call Usage / Protocol,
+    Inputs, Outputs, and Preserved/Modified registers.
+  - Verified 100% binary invariance (`SE.COM` MD5 matches byte-for-byte).
+  - Enforced strict <= 80 characters per line across all assembly comments.
