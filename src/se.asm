@@ -77,7 +77,8 @@ ESC_TIMEOUT_LOOPS EQU	5000		; VT100 escape debounce timeout loops (~15-20ms)
 KEY_DEL		EQU	127
 
 SEARCH_BUF_MAX	EQU	64
-FIND_POPUP_FIELD_LEN	EQU	29
+FIND_POPUP_FIELD_LEN	EQU	28
+REPLACE_POPUP_FIELD_LEN	EQU	29
 
 ; Line ending modes
 FMT_CPM		EQU	0		; CR/LF (0x0D, 0x0A)
@@ -1285,6 +1286,8 @@ SHOW_EXIT_PROMPT:
 ;   Carry = 1: User cancelled (ESC / Ctrl-C)
 ;------------------------------------------------------------------------------
 DO_SAVE_CHANGES_POPUP:
+	CALL	TERM_HIDE_CURSOR
+
 	; 1. Calculate POPUP_COL = ((ACTIVE_COLS - 50) / 2) + 1
 	LD	A,(ACTIVE_COLS)
 	SUB	50
@@ -1322,17 +1325,6 @@ DO_SAVE_CHANGES_POPUP:
 	CALL	PRINT_STR
 
 	CALL	POPUP_PRINT_BORDER
-
-	; Position cursor inside popup on prompt line after "Save changes? "
-	; Row = POPUP_SAVE_START_ROW + 4, Col = POPUP_COL + 32
-	LD	A,(POPUP_SAVE_START_ROW)
-	ADD	A,4
-	LD	H,A
-	LD	A,(POPUP_COL)
-	ADD	A,32
-	LD	L,A
-	CALL	LOCATE_RC
-	CALL	TERM_SHOW_CURSOR
 
 DSCP_KEY_LOOP:
 	CALL	GET_KEY
@@ -1375,14 +1367,7 @@ DSCP_DRAIN_WAIT:
 	LD	A,B
 	OR	C
 	JR	NZ,DSCP_DRAIN_WAIT
-	; Sequence drained: reposition cursor and resume key loop
-	LD	A,(POPUP_SAVE_START_ROW)
-	ADD	A,4
-	LD	H,A
-	LD	A,(POPUP_COL)
-	ADD	A,32
-	LD	L,A
-	CALL	LOCATE_RC
+	; Sequence drained: resume key loop
 	JR	DSCP_KEY_LOOP
 
 DSCP_DRAIN_BYTE:
@@ -1902,7 +1887,7 @@ NOT_ALPHA:
 ; Dynamically centered both horizontally and vertically for active screen geometry.
 ; Total menu lines: 20
 ;------------------------------------------------------------------------------
-SPLASH_MENU_LINES	EQU	20
+SPLASH_MENU_LINES	EQU	21
 
 ;------------------------------------------------------------------------------
 ; PRINT_TILDE_CRLF: Print '~' followed by CRLF
@@ -1949,7 +1934,7 @@ RENDER_SPLASH:
 	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
 	LD	A,(ACTIVE_ROWS)
 	DEC	A			; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB	SPLASH_MENU_LINES	; 23 - 20 = 3 (80x24), 39 - 20 = 19 (120x40)
+	SUB	SPLASH_MENU_LINES	; 23 - 21 = 2 (80x24), 39 - 21 = 18 (120x40)
 	JR	Z,SPLASH_NO_TOP_PAD
 	JR	C,SPLASH_NO_TOP_PAD
 	SRL	A			; 1 (80x24), 9 (120x40)
@@ -1976,7 +1961,7 @@ SPLASH_CONTENT_START:
 	; Row 2: Blank line
 	CALL	PRINT_TILDE_CRLF
 
-	; Rows 3..15: 13 Commands
+	; Rows 3..16: 14 Commands
 	LD	HL,STR_SPLASH_CMDS
 SPLASH_CMDS_LINE:
 	LD	A,(HL)
@@ -1992,7 +1977,7 @@ SPLASH_CMDS_CHAR:
 	JR	SPLASH_CMDS_LINE
 SPLASH_CMDS_DONE:
 
-	; Row 16: Blank line
+	; Row 17: Blank line
 	CALL	PRINT_TILDE_CRLF
 
 	; Row 17: Active Screen Mode
@@ -10756,12 +10741,12 @@ DFP_BOX_CLOSE:
 	CALL	POPUP_PRINT_BORDER
 
 	; Position cursor inside popup box at
-	; (POPUP_START_ROW + 4, POPUP_COL + 13 + B)
+	; (POPUP_START_ROW + 4, POPUP_COL + 14 + B)
 	LD	A,(POPUP_START_ROW)
 	ADD	A,4
 	LD	H,A
 	LD	A,(POPUP_COL)
-	ADD	A,13
+	ADD	A,14
 	ADD	A,B
 	LD	L,A
 	CALL	LOCATE_RC
@@ -11671,8 +11656,8 @@ SHOW_POPUP_HELP_MISSING:
 	JP	SHOW_STATUS_EVENT_POPUP
 
 SHOW_POPUP_FILE_NOT_FOUND:
+	CALL	FORMAT_FNF_MSG1
 	LD	DE,STR_POPUP_FNF_TITLE
-	LD	HL,STR_POPUP_FNF_MSG1
 	LD	BC,STR_POPUP_FNF_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP_MODAL
 
@@ -11687,6 +11672,152 @@ SHOW_POPUP_FAT_NO_PLUGIN:
 	LD	HL,STR_POPUP_FAT_MISS_MSG1
 	LD	BC,STR_POPUP_FAT_MISS_MSG2
 	JP	SHOW_STATUS_EVENT_POPUP_MODAL
+
+;------------------------------------------------------------------------------
+; FORMAT_FNF_MSG1:
+; Formats Line 4 of "File Not Found" status modal pop-up:
+;   "|          '<FILENAME>' was not found.           |"
+; centered horizontally inside 50-column box borders (| ... |).
+; Output: HL = pointer to 50-character null-terminated string
+;              (either FNF_POPUP_MSG1 or STR_POPUP_FNF_MSG1 on empty fallback)
+; Preserves: BC, DE, IX
+;------------------------------------------------------------------------------
+FORMAT_FNF_MSG1:
+	PUSH	BC
+	PUSH	DE
+	PUSH	IX
+
+	; Step 1: Scan INPUT_FILENAME_BUF skipping leading spaces
+	LD	HL,INPUT_FILENAME_BUF
+FFNF_SKIP_SP:
+	LD	A,(HL)
+	CP	' '
+	JR	NZ,FFNF_CHECK_EMPTY
+	INC	HL
+	JR	FFNF_SKIP_SP
+
+FFNF_CHECK_EMPTY:
+	OR	A
+	JR	Z,FFNF_FALLBACK		; Empty buffer -> use static template
+
+	; Save pointer to start of filename in IX
+	PUSH	HL
+	POP	IX
+
+	; Check for drive/user prefix in INPUT_FILENAME_BUF
+	LD	HL,INPUT_FILENAME_BUF
+	CALL	PARSE_DRIVE_USER_PREFIX
+	JR	C,FFNF_PREFIX_OK
+	; No prefix matched: any colon is a line colon
+	LD	DE,0
+	JR	FFNF_PREFIX_DONE
+FFNF_PREFIX_OK:
+	; Prefix matched: HL points past drive colon (DE = pointer past colon)
+	EX	DE,HL
+FFNF_PREFIX_DONE:
+
+	; Now scan from IX to determine length L (max 28 chars)
+	PUSH	IX
+	POP	HL			; HL = start of filename
+	LD	B,0			; B = length counter
+
+FFNF_SCAN_LOOP:
+	LD	A,(HL)
+	OR	A
+	JR	Z,FFNF_SCAN_DONE	; Null terminator -> end of filename
+	CP	' '
+	JR	Z,FFNF_SCAN_DONE	; Space -> end of filename
+	CP	':'
+	JR	NZ,FFNF_CHAR_OK
+
+	; Colon found: check if HL < DE (part of prefix) or HL >= DE (line colon)
+	CALL	CMP_HL_DE
+	JR	C,FFNF_CHAR_OK		; Colon is part of prefix!
+	JR	FFNF_SCAN_DONE		; Colon is at or after DE -> line colon! Stop.
+
+FFNF_CHAR_OK:
+	INC	B
+	INC	HL
+	LD	A,B
+	CP	28			; Limit filename to 28 chars
+	JR	C,FFNF_SCAN_LOOP
+
+FFNF_SCAN_DONE:
+	LD	A,B
+	OR	A
+	JR	Z,FFNF_FALLBACK		; 0 chars scanned -> fallback
+
+	; Length L is in B (1..28)
+	LD	C,B			; C = L
+
+	; Step 2: Initialize FNF_POPUP_MSG1 buffer with '|', 48 spaces, '|', 0
+	LD	HL,FNF_POPUP_MSG1
+	LD	(HL),'|'
+	INC	HL
+	LD	B,48
+	LD	A,' '
+FFNF_FILL_SP:
+	LD	(HL),A
+	INC	HL
+	DJNZ	FFNF_FILL_SP
+	LD	(HL),'|'
+	INC	HL
+	LD	(HL),0
+
+	; Step 3: Compute centering offset
+	; Total text length T = 1 ("'") + C (filename) + 16 ("' was not found.")
+	; T = C + 17
+	; Remaining spaces = 48 - (C + 17) = 31 - C
+	; Left spaces = (31 - C) / 2
+	LD	A,31
+	SUB	C
+	SRL	A			; A = left spaces
+
+	; Target pointer in buffer = FNF_POPUP_MSG1 + 1 + left spaces
+	LD	HL,FNF_POPUP_MSG1 + 1
+	LD	E,A
+	LD	D,0
+	ADD	HL,DE			; HL = destination in FNF_POPUP_MSG1
+
+	; Step 4: Write opening quote "'" (ASCII 39)
+	LD	(HL),39
+	INC	HL
+
+	; Step 5: Copy C characters from IX to HL, converting to upper
+	PUSH	IX
+	POP	DE			; DE = source filename
+	LD	B,C			; B = character count
+FFNF_COPY_NAME:
+	LD	A,(DE)
+	CALL	TO_UPPER
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FFNF_COPY_NAME
+
+	; Step 6: Copy 16 characters of suffix ("' was not found.")
+	LD	DE,STR_FNF_MSG1_SFX
+	LD	B,16
+FFNF_COPY_SFX:
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	DJNZ	FFNF_COPY_SFX
+
+	; Return HL = FNF_POPUP_MSG1
+	LD	HL,FNF_POPUP_MSG1
+	POP	IX
+	POP	DE
+	POP	BC
+	RET
+
+FFNF_FALLBACK:
+	LD	HL,STR_POPUP_FNF_MSG1
+	POP	IX
+	POP	DE
+	POP	BC
+	RET
 
 FORMAT_REPLACE_DONE_MSG2:
 	PUSH	BC
@@ -11885,7 +12016,7 @@ REPLACE_INPUT_LOOP:
 	; Check max length
 	LD	C,A
 	LD	A,B
-	CP	FIND_POPUP_FIELD_LEN
+	CP	REPLACE_POPUP_FIELD_LEN
 	JR	NC,REPLACE_INPUT_LOOP
 
 	LD	HL,REPLACE_BUF
@@ -12013,7 +12144,7 @@ DRAW_REPLACE_POPUP_FULL:
 	LD	DE,STR_REPLACE_POPUP_PROMPT
 	CALL	PRINT_STR
 	; Pad 29 spaces for empty box
-	LD	C,FIND_POPUP_FIELD_LEN
+	LD	C,REPLACE_POPUP_FIELD_LEN
 DRP_PAD_LOOP:
 	LD	A,' '
 	CALL	PUTC
@@ -17029,21 +17160,21 @@ RTC_TOP_PAD_DONE:
 	CALL	PRINT_HR_EQUAL
 
 	; 3. Row 2: Centered Title
-	; Title length: 43 if IS_BLOCK_INSERT_UI or IS_PLUGIN_LOAD_UI,
-	; 42 if IS_BLOCK_SAVE_UI, 41 otherwise
+	; Title length: 34 if IS_BLOCK_INSERT_UI or IS_PLUGIN_LOAD_UI,
+	; 33 if IS_BLOCK_SAVE_UI, 32 otherwise
 	LD	A,(IS_BLOCK_INSERT_UI)
 	OR	A
-	LD	A,43
+	LD	A,34
 	JR	NZ,RTC_BASE_LEN_OK
 	LD	A,(IS_PLUGIN_LOAD_UI)
 	OR	A
-	LD	A,43
+	LD	A,34
 	JR	NZ,RTC_BASE_LEN_OK
 	LD	A,(IS_BLOCK_SAVE_UI)
 	OR	A
-	LD	A,42
+	LD	A,33
 	JR	NZ,RTC_BASE_LEN_OK
-	LD	A,41
+	LD	A,32
 RTC_BASE_LEN_OK:
 	LD	B,A
 
@@ -23361,7 +23492,7 @@ STR_POPUP_SAVE_MSG1:
 STR_POPUP_SAVE_MSG2:
 	DB	"|                 Save changes?                  |", 0
 STR_POPUP_SAVE_KEYS:
-	DB	"|        [Y]es      [N]o      [ESC]=Cancel        |", 0
+	DB	"|        [Y]es      [N]o      [ESC]=Cancel       |", 0
 
 ; File Truncated Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_TRUNC_TITLE:
@@ -23369,7 +23500,7 @@ STR_POPUP_TRUNC_TITLE:
 STR_POPUP_TRUNC_MSG1:
 	DB	"| File exceeded capacity and has been truncated. |", 0
 STR_POPUP_TRUNC_MSG2:
-	DB	"| Save is disabled to protect data on disk.      |", 0
+	DB	"|   Save is disabled to protect data on disk.    |", 0
 STR_POPUP_TRUNC_KEY:
 	DB	"|           Press any key to continue            |", 0
 
@@ -23400,7 +23531,7 @@ STR_POPUP_PROGRESS_PFX:
 STR_PROGRESS_LINE_LBL:
 	DB	"Line ", 0
 STR_POPUP_PROGRESS_LINE:
-	DB	"|                   Line      0                  |", 0
+	DB	"|                   Line     0                   |", 0
 STR_POPUP_PROGRESS_SUB:
 	DB	"|           Please wait for completion           |", 0
 
@@ -23414,15 +23545,15 @@ STR_POPUP_BLANK_ROW:
 STR_FIND_POPUP_TITLE:
 	DB	"|                   Find Text                    |", 0
 STR_FIND_POPUP_MODE_EXACT:
-	DB	"|           Match: [Case Sensitive  ]            |", 0
+	DB	"|       Search Pattern: [Case Sensitive  ]       |", 0
 STR_FIND_POPUP_MODE_INSENS:
-	DB	"|           Match: [Case Insensitive]            |", 0
+	DB	"|       Search Pattern: [Case Insensitive]       |", 0
 STR_FIND_POPUP_PROMPT:
-	DB	"|     Find: [", 0
+	DB	"|      Find: [", 0
 STR_FIND_POPUP_BOX_CLOSE:
 	DB	"]      |", 0
 STR_FIND_POPUP_KEYS:
-	DB	"| [Enter]=Find  [Tab]=Toggle Case  [ESC]=Cancel  |", 0
+	DB	"| [Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel |", 0
 
 ; Replace Modal Pop-up Strings (50 cols x 7 rows)
 STR_REPLACE_POPUP_TITLE:
@@ -23450,7 +23581,7 @@ STR_REP_CONFIRM_KEYS:
 STR_POPUP_NOT_FOUND_TITLE:
 	DB	"|               Pattern Not Found                |", 0
 STR_POPUP_NOT_FOUND_MSG1:
-	DB	"|              Pattern not found.                |", 0
+	DB	"|               Pattern not found.               |", 0
 STR_POPUP_NOT_FOUND_MSG2:
 	DB	"|       Search pattern not found in file.        |", 0
 
@@ -23468,7 +23599,7 @@ STR_POPUP_TOO_LONG_TITLE:
 STR_POPUP_TOO_LONG_MSG1:
 	DB	"|          Line > 120 chars - skipped.           |", 0
 STR_POPUP_TOO_LONG_MSG2:
-	DB	"|      Line length limit exceeded on replace.    |", 0
+	DB	"|     Line length limit exceeded on replace.     |", 0
 
 ; Replace Done Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_REP_DONE_TITLE:
@@ -23533,6 +23664,8 @@ STR_POPUP_FNF_MSG1:
 	DB	"|               File was not found.              |", 0
 STR_POPUP_FNF_MSG2:
 	DB	"|        Specified file not found on disk.       |", 0
+STR_FNF_MSG1_SFX:
+	DB	"' was not found.", 0
 
 ; RAM Drive Unavailable Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_RAMDRV_TITLE:
@@ -23583,13 +23716,14 @@ STR_SPLASH_CMDS:
 	DB	"  type   [A]              for about",13,10
 	DB	"  type   [M]              for memory info",13,10
 	DB	"  type   [P]              for plugins",13,10
+	DB	"  type   [^P]             for context plugin menu",13,10
 	DB	"  type   [C]              to configure",13,10
 	DB	"  type   [1]              set 120x40",13,10
 	DB	"  type   [2]              set 80x24",13,10
 	DB	"  type   [Q]  or  [^Q]    to exit",13,10
 	DB	0
 
-STR_SPLASH_CUR_MODE:	DB	"Active Screen: [$"
+STR_SPLASH_CUR_MODE:	DB	"Active Screen : [$"
 STR_SPLASH_120X40_LBL:	DB	"120x40 (Modern Default)]",13,10,"$"
 STR_SPLASH_80X24_LBL:	DB	"80x24 (Classic Terminal)] ",13,10,"$"
 
@@ -23646,8 +23780,7 @@ STR_CFG_STAT_END:	DB	":SE.CFG)]          ",13,10,"$"
 STR_CFG_STAT_ERR:	DB	"ERROR writing SE.CFG]              ",13,10,"$"
 
 STR_CONFIG_FOOTER:
-	DB	"[1-5]=Toggle Option   [S]=Save Config   "
-	DB	"[Q]/[ESC]=return to splash screen", "$"
+	DB	"[1-5]=Toggle Option   [S]=Save Config   [ESC]=Exit", "$"
 
 STR_CFG_HDR:		DB	"# SE.CFG - Screen Editor Configuration",13,10,0
 STR_KEY_SCREEN_NAME:	DB	"SCREEN",0
@@ -23793,19 +23926,19 @@ STR_STATUS_COL:	DB	" Col ","$"
 
 MSG_EXIT:	DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
-STR_TITLE_OPEN_PRE:	DB	"SE.COM - OPEN FILE (DIRECTORY - DRIVE ","$"
+STR_TITLE_OPEN_PRE:	DB	"OPEN FILE (DIRECTORY - DRIVE ","$"
 STR_DIR_DRIVE_CHAR:	DB	"A"
-STR_TITLE_SAVE_PRE:	DB	"SE.COM - SAVE FILE (DIRECTORY - DRIVE ","$"
+STR_TITLE_SAVE_PRE:	DB	"SAVE FILE (DIRECTORY - DRIVE ","$"
 STR_SAVE_DRIVE_CHAR:	DB	"A"
-STR_TITLE_BLOCK_SAVE_PRE: DB	"SE.COM - SAVE BLOCK (DIRECTORY - DRIVE ","$"
+STR_TITLE_BLOCK_SAVE_PRE: DB	"SAVE BLOCK (DIRECTORY - DRIVE ","$"
 STR_TITLE_DRIVE_SUF:	DB	":)",13,10,"$"
 STR_TITLE_FILTER_PRE:	DB	": [","$"
 STR_TITLE_FILTER_SUF:	DB	"])",13,10,"$"
 
 STR_OPEN_PROMPT_TXT:	DB	"Enter filename to open:","$"
-STR_TITLE_INSERT_PRE:	DB	"SE.COM - INSERT FILE (DIRECTORY - DRIVE ","$"
+STR_TITLE_INSERT_PRE:	DB	"INSERT FILE (DIRECTORY - DRIVE ","$"
 STR_INSERT_PROMPT_TXT:	DB	"Enter filename to insert:","$"
-STR_TITLE_PLUG_LOAD_PRE: DB	"SE.COM - LOAD PLUGIN (DIRECTORY - DRIVE ","$"
+STR_TITLE_PLUG_LOAD_PRE: DB	"LOAD PLUGIN (DIRECTORY - DRIVE ","$"
 STR_PLUG_LOAD_PROMPT_TXT: DB	"Load Plugin (.PRL/.OVL):","$"
 
 STR_PAGE_PREFIX_TXT:	DB	"[Page ","$"
@@ -23829,7 +23962,7 @@ STR_SAVE_FMT_CPM:	DB	"CP/M","$"
 
 STR_SAVE_FMT_LINUX:	DB	"Linux","$"
 
-STR_SAVE_FMT_SUFFIX:	DB	"]  (^F: toggle format)",13,10,"$"
+STR_SAVE_FMT_SUFFIX:	DB	"]   [^F]=Toggle Format",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
@@ -25063,5 +25196,6 @@ SWAP_IO_BUF	EQU	SPLIT_LINE_TEMP + 768
 ; Overlaid on top 128 bytes of SPLIT_LINE_TEMP to keep binary within page
 PROGRESS_FILENAME_STR	EQU	SPLIT_LINE_TEMP + 896
 STR_POPUP_PROGRESS_FILE	EQU	SPLIT_LINE_TEMP + 928
+FNF_POPUP_MSG1		EQU	SPLIT_LINE_TEMP + 928
 
 BSS_END		EQU	LINE_STORAGE + LINE_STORAGE_SIZE

@@ -337,7 +337,7 @@ upcoming milestones for SE.COM.
   > dialogs must be cancellable only by ESC.
 
 ### 2.24 Right-Border Misalignment & Overflow in Save & Overwrite Modals
-- [ ] Correct string length and trailing margin in `STR_POPUP_SAVE_KEYS`.
+- [x] Correct string length and trailing margin in `STR_POPUP_SAVE_KEYS`.
   - In `src/se.asm:23364`, `STR_POPUP_SAVE_KEYS` is defined as:
     `"|        [Y]es      [N]o      [ESC]=Cancel        |"`
     which contains 51 characters (8 leading spaces, 33 characters of option
@@ -365,7 +365,7 @@ upcoming milestones for SE.COM.
   > distort modal border boundaries.
 
 ### 2.25 Missing Description Line and Asymmetric Spacing in Find Modal Pop-up
-- [ ] Bring Find modal pop-up layout and alignment into compliance with query
+- [x] Bring Find modal pop-up layout and alignment into compliance with query
   pop-up design standards.
   - In `src/se.asm:10714-10754` (`DRAW_FIND_POPUP_BODY`) and
     `src/se.asm:23414-23425` (`STR_FIND_POPUP_*`):
@@ -392,7 +392,7 @@ upcoming milestones for SE.COM.
   > options. All text is centre justified."*
 
 ### 2.26 Asymmetric Left-Aligned Messages in Truncated & Error Modal Pop-ups
-- [ ] Horizontally center informational messages in Tier 2 status and error
+- [x] Horizontally center informational messages in Tier 2 status and error
   pop-ups.
   - In `src/se.asm:23372` (`STR_POPUP_TRUNC_MSG2`):
     `"| Save is disabled to protect data on disk.      |"` has 1 leading space
@@ -417,7 +417,7 @@ upcoming milestones for SE.COM.
   > within the box borders."*
 
 ### 2.27 Configuration Screen Footer Uses Prohibited Slash Delimiter
-- [ ] Replace slash delimiter and non-standard casing in Configuration screen
+- [x] Replace slash delimiter and non-standard casing in Configuration screen
   footer.
   - In `src/se.asm:23648-23650` (`STR_CONFIG_FOOTER`):
     `"[1-5]=Toggle Option   [S]=Save Config   [Q]/[ESC]=return to splash..."`
@@ -437,7 +437,7 @@ upcoming milestones for SE.COM.
   > (e.g. `[Y]es   [N]o   [ESC]=Cancel`)."*
 
 ### 2.28 Save File UI Format Option Uses Parenthesized Colon Hotkey
-- [ ] Standardize Save File UI line ending format hotkey into bracket notation.
+- [x] Standardize Save File UI line ending format hotkey into bracket notation.
   - In `src/se.asm:23832` (`STR_SAVE_FMT_SUFFIX`), rendered by
     `PRINT_SAVE_FMT_INFO` (`src/se.asm:18075-18094`):
     `"]  (^F: toggle format)"` prints `Format: [CP/M]  (^F: toggle format)`.
@@ -455,7 +455,7 @@ upcoming milestones for SE.COM.
   > triggers must not use `( )` or colon syntax.
 
 ### 2.29 Plugin Configuration Pop-ups Omit Toggle Hotkeys and Delimiters
-- [ ] Bring plugin configuration dialog footers and option labels into UI/UX
+- [x] Bring plugin configuration dialog footers and option labels into UI/UX
   compliance.
   - In `plugins/beautify.asm:1711-1724` (`STR_BTC_L4`..`STR_BTC_L9`) and
     `plugins/wordcnt.asm:480-484` (`STR_WCC_L4`..`STR_WCC_L7`):
@@ -478,7 +478,7 @@ upcoming milestones for SE.COM.
   > vertical column alignment.
 
 ### 2.30 Misalignment of Splash Screen "Active Screen" Status Bracket
-- [ ] Align opening bracket of "Active Screen" status row with subsequent
+- [x] Align opening bracket of "Active Screen" status row with subsequent
   status lines on splash screen.
   - In `src/se.asm:23592`, `STR_SPLASH_CUR_MODE` is defined as:
     `STR_SPLASH_CUR_MODE: DB "Active Screen: [$"`
@@ -508,7 +508,7 @@ upcoming milestones for SE.COM.
   > strict vertical column alignment across rows.
 
 ### 2.31 Remove Visible Cursor from Save Changes and Unload Plugin Modals
-- [ ] Suppress visible blinking cursor in single-keystroke choice pop-ups.
+- [x] Suppress visible blinking cursor in single-keystroke choice pop-ups.
   - In `src/se.asm:1326-1335` and `1379-1385` (`DO_SAVE_CHANGES_POPUP`), the
     "Unsaved Modifications" modal explicitly positions and enables the
     terminal cursor on the query line after `"Save changes? "`
@@ -536,7 +536,7 @@ upcoming milestones for SE.COM.
   > not trailing static query prompts.
 
 ### 2.32 Redundant "SE.COM" Prefix in Open, Save, Help, Insert & Block Screens
-- [ ] Remove "SE.COM" from screen titles in file open, save, help, insert, and
+- [x] Remove "SE.COM" from screen titles in file open, save, help, insert, and
   block selection workspaces.
   - In `src/se.asm:23796-23808`, directory screen title prefixes include the
     executable binary filename `"SE.COM - "`:
@@ -576,7 +576,7 @@ upcoming milestones for SE.COM.
   > of the content block without redundant executable binary artifacts.
 
 ### 2.33 Splash Screen Omits Ctrl+P Context-Aware Plugin Menu Command
-- [ ] Document `[^P]` context-aware plugin menu shortcut in splash screen
+- [x] Document `[^P]` context-aware plugin menu shortcut in splash screen
   command list.
   - In `src/se.asm:398-406`, the splash screen event loop already supports
     `Ctrl+P` (`KEY_CTRL_P`) to open the context-aware plugin modal menu
@@ -601,7 +601,7 @@ upcoming milestones for SE.COM.
   > must be discoverable and documented in the screen command list.
 
 ### 2.34 "Opening File" Progress Dialog Line Counter Leaks Debris Trailing Zero
-- [ ] Fix unoverwritten trailing zero debris causing 1,000-line counter jumps in
+- [x] Fix unoverwritten trailing zero debris causing 1,000-line counter jumps in
   file progress modal dialogs.
   - In `src/se.asm:23402-23403`, the initial modal line template is defined
     in `STR_POPUP_PROGRESS_LINE`:
@@ -638,7 +638,7 @@ upcoming milestones for SE.COM.
   > positions from static background templates.
 
 ### 2.35 "File Not Found" Modal Pop-up Omits Target Filename
-- [ ] Dynamically display the target filename enclosed in single quotes `' '` in
+- [x] Dynamically display the target filename enclosed in single quotes `' '` in
   the "File Not Found" status modal pop-up.
   - In `src/se.asm:11673-11677` (`SHOW_POPUP_FILE_NOT_FOUND`), when a file
     fails to open in `DO_OPEN_FILE_UI` (`src/se.asm:15547`), plugin loading

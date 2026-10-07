@@ -418,7 +418,7 @@ class VT100QualityMonitor:
         if "SE - Screen Editor Configuration" in full_text:
             return "configuration_screen"
         if ("SE - Screen Editor" in full_text and
-                ("Active Screen:" in full_text or "type   e" in full_text or
+                ("Active Screen :" in full_text or "type   e" in full_text or
                  "type   [E]" in full_text)):
             return "splash_screen"
         if ("SE - Plugin Manager" in full_text or

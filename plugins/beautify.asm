@@ -341,7 +341,7 @@ COPY_ANIM_STR:
 
 	; Print Config Screen
 	LD	HL,BEAUTIFY_CFG_TABLE
-	LD	B,10
+	LD	B,11
 	LD	C,38
 	CALL	RENDER_CENTERED_BOX
 
@@ -1705,22 +1705,24 @@ BEAUTIFY_CFG_TABLE:
 	DW	STR_BTC_L6
 	DW	STR_BTC_L7
 	DW	STR_BT_BORDER
+	DW	STR_BTC_L8
 	DW	STR_BTC_L9
 	DW	STR_BT_BORDER
 
 STR_BTC_L2:		DB	"|    Z80 Beautifier Configuration    |", 0
-STR_BTC_L4:		DB	"|  1. Columns   : ["
+STR_BTC_L4:		DB	"| [1] Columns   : ["
 STR_CFG_COLS_VAL:	DB	"Standard (9/17)"
 			DB	"]  |", 0
-STR_BTC_L5:		DB	"|  2. Mnemonics : ["
+STR_BTC_L5:		DB	"| [2] Mnemonics : ["
 STR_CFG_MNEM_VAL:	DB	"UPPERCASE      "
 			DB	"]  |", 0
-STR_BTC_L6:		DB	"|  3. Registers : ["
+STR_BTC_L6:		DB	"| [3] Registers : ["
 STR_CFG_OPER_VAL:	DB	"UPPERCASE      "
 			DB	"]  |", 0
-STR_BTC_L7:		DB	"|  4. Animation : ["
+STR_BTC_L7:		DB	"| [4] Animation : ["
 STR_CFG_ANIM_VAL:	DB	"ON (Real-Time) "
 			DB	"]  |", 0
+STR_BTC_L8:		DB	"|        [1-4]=Toggle Option         |", 0
 STR_BTC_L9:		DB	"| [Enter]=Save & Exit   [ESC]=Cancel |", 0
 
 ;==============================================================================

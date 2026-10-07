@@ -204,7 +204,7 @@ def test_help_screen_centering():
             f"80x24 Help missing full-width rule: {out}"
         )
         expected_title_80 = (
-            b"~" + (b" " * 26) + b"SE.COM - EDITOR MODE KEYS\r\n"
+            b"~" + (b" " * 31) + b"EDITOR MODE KEYS\r\n"
         )
         assert expected_title_80 in out, (
             f"80x24 Help missing centered title: {out}"
@@ -286,7 +286,7 @@ def test_help_screen_centering():
 
         # Row 10 is centered title
         expected_title_120 = (
-            b"~" + (b" " * 46) + b"SE.COM - EDITOR MODE KEYS\r\n"
+            b"~" + (b" " * 51) + b"EDITOR MODE KEYS\r\n"
         )
         assert expected_title_120 in out, (
             f"120x40 Help missing centered title: {out}"

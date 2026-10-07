@@ -156,7 +156,7 @@ def test_ramdrive_detection_and_mem_screen(
         # Open Config Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        ok, out = read_until(master, b"return to splash screen", timeout=10.0)
+        ok, out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         if not ok:
             print("[-] Failed to open Config Menu.", flush=True)
             return False

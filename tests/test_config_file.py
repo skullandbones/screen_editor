@@ -182,7 +182,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=15.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=15.0)
         assert b"SE - Screen Editor Configuration" in out, "Failed to enter Config Screen"
         assert b"RAM Drive (A:)" in out and (
             b"[Preserve (RAM Drive Active, 128KB)]" in out or
@@ -193,15 +193,15 @@ def run_tests():
         assert b"Config Status      : [Default (No SE.CFG found)]" in out, "Config Screen wrong status"
         assert b"[1-5]=Toggle Option" in out, "Missing toggle command in footer"
         assert b"[S]=Save Config" in out, "Missing save command in footer"
-        assert b"return to splash screen" in out, (
-            "Missing return to splash in footer"
-        )
+        assert b"[ESC]=Exit" in out, "Missing exit command in footer"
         print("    [+] Config screen displays 120x40, Protected RAM drive, and Default status")
 
         # Exit to splash screen ('q')
         time.sleep(0.2)
         os.write(master, b"q")
-        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=15.0)
+        out = read_until(
+            master, b"Active Screen : [120x40 (Modern Default)]", timeout=15.0
+        )
         assert b"120x40 (Modern Default)" in out, "Failed returning to splash"
 
         # Exit SE ('q')
@@ -239,7 +239,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=10.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out, "Config Screen wrong geometry"
         assert b"RAM Drive (A:)" in out and (
             b"[Overwrite (Sacrifice Drive, 384KB)]" in out or
@@ -287,7 +287,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=10.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         assert b"80x24 (Classic Terminal)" in out
         assert b"RAM Drive (A:)" in out and (
             b"[Preserve (RAM Drive Active, 128KB)]" in out or
@@ -332,7 +332,9 @@ def run_tests():
         # Return to splash screen ('q')
         time.sleep(0.3)
         os.write(master, b"q")
-        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=10.0)
+        out = read_until(
+            master, b"Active Screen : [120x40 (Modern Default)]", timeout=10.0
+        )
         assert b"120x40 (Modern Default)" in out, "Splash screen did not reflect newly saved geometry"
         print("    [+] Returned to splash screen with active 120x40 geometry")
         drain_all(master)
@@ -363,7 +365,7 @@ def run_tests():
         time.sleep(0.4)
         os.write(master, b"se\r")
         out = read_until(
-            master, b"Active Screen: [120x40 (Modern Default)]", timeout=60.0
+            master, b"Active Screen : [120x40 (Modern Default)]", timeout=60.0
         )
         assert b"120x40 (Modern Default)" in out, (
             f"Re-launch did not retain saved 120x40. Buffer: {repr(out)}"
@@ -371,7 +373,7 @@ def run_tests():
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=10.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         assert b"120x40 (Modern Default)" in out
         assert b"RAM Drive (A:)" in out and (
             b"[Overwrite (Sacrifice Drive, 384KB)]" in out or
@@ -381,7 +383,7 @@ def run_tests():
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"Active Screen:", timeout=10.0)
+        read_until(master, b"Active Screen :", timeout=10.0)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
@@ -429,7 +431,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=15.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=15.0)
         assert b"80x24 (Classic Terminal)" in out
         assert b"Loaded from program drive (C:SE.CFG)" in out, f"Expected program drive status: {out}"
         print("    [+] Config screen displays Loaded from program drive (C:SE.CFG)")
@@ -562,7 +564,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=10.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         assert (b"Hibernate (Backup/Restore, 384KB)" in out or
                 b"Hibernate (Save/Restore RAMDRV.IMG)" in out)
         assert b"Loaded from local drive (C:SE.CFG)" in out
@@ -703,7 +705,7 @@ def run_tests():
         )
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=10.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         assert b"RAM Drive (B:)" in out, (
             f"Config screen did not display detected RAM drive B:: {out}"
         )
@@ -769,7 +771,7 @@ def run_tests():
         # Enter Configuration Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=10.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         assert b"Tab Width       : [8 Spaces (Default)]" in out, "Default tab width was not 8 Spaces"
         print("    [+] Config screen shows default 8 Spaces tab width")
 
@@ -804,7 +806,7 @@ def run_tests():
         # Exit to CP/M
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"Active Screen:", timeout=10.0)
+        read_until(master, b"Active Screen :", timeout=10.0)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
@@ -822,11 +824,13 @@ def run_tests():
         drain_all(master)
         time.sleep(0.4)
         os.write(master, b"se\r")
-        out = read_until(master, b"Active Screen: [120x40 (Modern Default)]", timeout=25.0)
+        out = read_until(
+            master, b"Active Screen : [120x40 (Modern Default)]", timeout=25.0
+        )
         drain_all(master)
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=10.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         assert b"Tab Width       : [4 Spaces]" in out, f"SE did not load 4 Spaces from SE.CFG: {out}"
         print("    [+] Re-launched SE successfully loaded TAB=4 from SE.CFG")
         drain_all(master)
@@ -834,7 +838,7 @@ def run_tests():
         # Exit SE
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"Active Screen:", timeout=10.0)
+        read_until(master, b"Active Screen :", timeout=10.0)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
@@ -982,7 +986,7 @@ def run_tests():
         # Enter Config Screen ('c')
         time.sleep(0.3)
         os.write(master, b"c")
-        out = read_until(master, b"return to splash screen", timeout=10.0)
+        out = read_until(master, b"[ESC]=Exit", timeout=10.0)
         assert b"3. Max Doc Lines   : [32K (32,768 Lines)]" in out, f"Config screen did not show 32K lines: {out}"
         print("    [+] Config screen shows 32K (32,768 Lines) loaded from SE.CFG")
 
@@ -1003,7 +1007,7 @@ def run_tests():
         # Return to splash screen ('q') and exit ('q')
         time.sleep(0.2)
         os.write(master, b"q")
-        read_until(master, b"Active Screen:", timeout=10.0)
+        read_until(master, b"Active Screen :", timeout=10.0)
         drain_all(master)
         time.sleep(0.2)
         os.write(master, b"q")
