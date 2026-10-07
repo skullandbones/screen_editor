@@ -17,24 +17,29 @@ DEFAULT_DMA	EQU	$0080
 CMD_LEN		EQU	$0080
 CMD_TAIL	EQU	$0081
 
-MAX_LINE_STRIDE	EQU	128		; 128 bytes stride per line buffer in local cache
-MAX_LINE_CHARS	EQU	1000		; Maximum visual characters per line in all modes
-MAX_INPUT_LINE_CHARS EQU 1000		; Interactive typing limit (up to 1,000 chars)
-MAX_CACHE_LINE_CHARS EQU 250		; Limit for local 256-byte scratch line buffers
-MAX_ACTIVE_LINE_STRIDE EQU 1024		; 1024 bytes dynamic workspace for active line
+; 128 bytes stride per line buffer in local cache
+MAX_LINE_STRIDE	EQU	128
+; Maximum visual characters per line in all modes
+MAX_LINE_CHARS	EQU	1000
+MAX_INPUT_LINE_CHARS EQU 1000	; Interactive typing limit (up to 1,000 chars)
+MAX_CACHE_LINE_CHARS EQU 250	; Limit for local 256-byte scratch line buffers
+MAX_ACTIVE_LINE_STRIDE EQU 1024	; 1024 bytes dynamic workspace for active line
 MAX_ACTIVE_PAYLOAD EQU	1022		; Max characters in active line payload
 MAX_ACTIVE_PAYLOAD_LO EQU 254		; Low byte of 1022
 MAX_ACTIVE_PAYLOAD_HI EQU 3		; High byte of 1022
-FAR_SLOT_SIZE	EQU	128		; 128 bytes stride per Far-RAM physical slot
-FAR_SLOT_PAYLOAD EQU	126		; 126 bytes text payload per Far-RAM slot
+FAR_SLOT_SIZE	EQU	128	; 128 bytes stride per Far-RAM physical slot
+FAR_SLOT_PAYLOAD EQU	126	; 126 bytes text payload per Far-RAM slot
 SLOT_TERM	EQU	0FFFFH		; 16-bit terminal slot marker in Far-RAM
 MAX_COPY_LINE_CHARS EQU	120		; Single-line block copy capacity limit
-MAX_FAR_BANKS	EQU	12		; Up to 12 extended 32KB RAM banks for text slots (384 KB)
-CACHE_SIZE_LINES EQU	40		; 40 lines in local working cache (5,120 bytes)
-MAX_DOC_LINES_16K EQU	16384		; 32KB Far RAM Line Table (16,384 lines * 2 bytes)
-MAX_DOC_LINES_32K EQU	32768		; 64KB Far RAM Line Table (32,768 lines * 2 bytes)
-MAX_DOC_LINES	EQU	32768		; Absolute ceiling limit for line indices
-MAX_VIRTUAL_SLOTS EQU	65534		; Up to 65,534 128-byte virtual slots (~8.3 MB)
+; Up to 12 extended 32KB RAM banks for text slots (384 KB)
+MAX_FAR_BANKS	EQU	12
+CACHE_SIZE_LINES EQU	40	; 40 lines in local working cache (5,120 bytes)
+; 32KB Far RAM Line Table (16,384 lines * 2 bytes)
+MAX_DOC_LINES_16K EQU	16384
+; 64KB Far RAM Line Table (32,768 lines * 2 bytes)
+MAX_DOC_LINES_32K EQU	32768
+MAX_DOC_LINES	EQU	32768	; Absolute ceiling limit for line indices
+MAX_VIRTUAL_SLOTS EQU	65534	; Up to 65,534 128-byte virtual slots (~8.3 MB)
 
 KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
 KEY_CTRL_C	EQU	3
@@ -49,19 +54,19 @@ KEY_CTRL_E	EQU	5		; End of line (End)
 KEY_CTRL_G	EQU	7		; Delete character at cursor
 
 ACTION_EXIT	EQU	0		; Confirmation action: Exit to CP/M
-ACTION_CLOSE	EQU	1		; Confirmation action: Close document to splash
-ACTION_NEW	EQU	2		; Confirmation action: Start new blank document
+ACTION_CLOSE	EQU	1	; Confirmation action: Close document to splash
+ACTION_NEW	EQU	2	; Confirmation action: Start new blank document
 ACTION_OPEN	EQU	3		; Confirmation action: Open File Screen
 KEY_CTRL_K	EQU	11		; Show Editor Mode Keys Screen
-KEY_CTRL_F	EQU	6		; Find in editor / Toggle endings in save
+KEY_CTRL_F	EQU	6	; Find in editor / Toggle endings in save
 KEY_CTRL_R	EQU	18		; Search & Replace
 KEY_CTRL_N	EQU	14		; Find Next
 KEY_CTRL_P	EQU	16		; Context-Aware Plugin Pop-up
-KEY_CTRL_I	EQU	9		; Tab / Toggle case sensitivity in prompt
+KEY_CTRL_I	EQU	9	; Tab / Toggle case sensitivity in prompt
 KEY_CTRL_U	EQU	21		; Page Up
 KEY_CTRL_V	EQU	22		; Page Down
 KEY_CTRL_L	EQU	12		; Goto Line Number
-KEY_CTRL_Y	EQU	25		; Beautify Block (if active) or Whole File
+KEY_CTRL_Y	EQU	25	; Beautify Block (if active) or Whole File
 KEY_CTRL_Z	EQU	26		; Open Plugin Manager Screen
 
 ; Context-Aware Plugin Screen IDs
@@ -76,7 +81,7 @@ KEY_BACKSPACE	EQU	8
 KEY_TAB		EQU	9
 KEY_ENTER	EQU	13
 KEY_ESC		EQU	27
-ESC_TIMEOUT_LOOPS EQU	5000		; VT100 escape debounce timeout loops (~15-20ms)
+ESC_TIMEOUT_LOOPS EQU	5000	; VT100 escape debounce timeout loops (~15-20ms)
 KEY_DEL		EQU	127
 
 SEARCH_BUF_MAX	EQU	64
@@ -92,17 +97,22 @@ MODE_120X40	EQU	0		; Modern 120 cols x 40 rows (Default)
 MODE_80X24	EQU	1		; Classic 80 cols x 24 rows
 
 ; RAM Drive Modes
-RAMDRV_MODE_PROTECTED	EQU	0	; Preserve RAM disk (banks 0x81..0x88 safe)
+; Preserve RAM disk (banks 0x81..0x88 safe)
+RAMDRV_MODE_PROTECTED	EQU	0
 RAMDRV_MODE_ENABLED	EQU	1	; Raw overwrite for maximum RAM buffer
-RAMDRV_MODE_HIBERNATE	EQU	2	; Automatic dump to RAMDRV.IMG & restore on exit
+; Automatic dump to RAMDRV.IMG & restore on exit
+RAMDRV_MODE_HIBERNATE	EQU	2
 
 ; Plugin Subsystem Modes
-PLUGIN_MODE_DISABLED	EQU	0	; Never load (disabled by user / low RAM)
-PLUGIN_MODE_AUTOLOAD	EQU	1	; Autoload PLUGIN.PRL into Far RAM at boot
+; Never load (disabled by user / low RAM)
+PLUGIN_MODE_DISABLED	EQU	0
+; Autoload PLUGIN.PRL into Far RAM at boot
+PLUGIN_MODE_AUTOLOAD	EQU	1
 PLUGIN_MODE_ONDEMAND	EQU	2	; Load PLUGIN.PRL on demand when used
 
 RAMDRV_START_BANK	EQU	081H	; RomWBW MD0:0 starts at bank 0x81
-RAMDRV_END_BANK		EQU	088H	; RomWBW MD0:0 ends at bank 0x88 (8 banks, 256KB)
+; RomWBW MD0:0 ends at bank 0x88 (8 banks, 256KB)
+RAMDRV_END_BANK		EQU	088H
 
 ;------------------------------------------------------------------------------
 ; Main Entry Point
@@ -166,10 +176,12 @@ START:
 	; Initialize Screen Geometry to Default (120x40)
 	CALL SET_MODE_120X40
 
-	; Check if filename was provided in FCB1 (populates WORK_FCB and HAS_FILE_ARG)
+	; Check if filename was provided in FCB1 (populates WORK_FCB and
+	; HAS_FILE_ARG)
 	CALL CHECK_COMMAND_LINE
 
-	; Load config from SE.CFG if present (local dir first, then program drive)
+	; Load config from SE.CFG if present (local dir first, then program
+	; drive)
 	CALL LOAD_CONFIG
 
 	; Process RAM drive via HIBERN.OVL
@@ -177,7 +189,7 @@ START:
 	OR A
 	JR Z,START_RAMDRV_DETECT
 	; Mode 1 or 2: Detect, Validate safety & Hibernate if requested
-	LD B,A				; B = requested mode (1=ENABLE, 2=HIBERNATE)
+	LD B,A			; B = requested mode (1=ENABLE, 2=HIBERNATE)
 	LD A,1				; Action 1
 	CALL RUN_HIBERN_STARTUP
 	JR START_RAMDRV_DONE
@@ -362,7 +374,8 @@ AUTO_LOAD_NOT_FOUND:
 	JP AUTO_LOAD_LINE_DEFAULT
 
 ALNF_EXPLICIT_DRIVE:
-	; Command line specified drive ("SE <n:filename>"): report "<n:filename> file not found" and exit
+	; Command line specified drive ("SE <n:filename>"): report "<n:filename>
+	; file not found" and exit
 	CALL FCB_TO_FILENAME_STR
 	LD A,13
 	CALL PUTC
@@ -563,7 +576,8 @@ SPLASH_START:
 SPLASH_LOOP:
 	CALL GET_KEY
 
-	; Standalone ESC or escape sequence (e.g. arrow keys) -> drain and ignore
+	; Standalone ESC or escape sequence (e.g. arrow keys) -> drain and
+	; ignore
 	CP KEY_ESC
 	JR NZ,SPLASH_NOT_ESC
 	CALL DRAIN_ESC_SEQUENCE
@@ -827,14 +841,16 @@ CTR_SET_HIB:
 	LD (CFG_RAMDRIVE_FLAG),A
 	JR CTR_APPLY
 CTR_SET_ENA:
-	; Before enabling raw overwrite, ensure active drive is not the RAM drive
+	; Before enabling raw overwrite, ensure active drive is not the RAM
+	; drive
 	LD A,(RAMDRIVE_DRIVE_NUM)
 	CP 0FFH
 	JR Z,CTR_DO_ENA
 	LD B,A
 	LD A,(CURRENT_DEFAULT_DRIVE)
 	CP B
-	JR Z,CTR_SET_PROT	; Active drive is RAM drive: skip Enabled, wrap to Protected!
+	; Active drive is RAM drive: skip Enabled, wrap to Protected!
+	JR Z,CTR_SET_PROT
 CTR_DO_ENA:
 	LD A,RAMDRV_MODE_ENABLED
 	LD (CFG_RAMDRIVE_FLAG),A
@@ -1054,7 +1070,8 @@ DO_SPLASH_GOTO_LINE:
 ;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 MAIN_LOOP:
-	; If no key is immediately ready in serial buffer, flush deferred render!
+	; If no key is immediately ready in serial buffer, flush deferred
+	; render!
 	CALL CHECK_KEY_READY
 	JR NZ,MAIN_LOOP_GET_KEY
 
@@ -1142,7 +1159,8 @@ CHECK_CTRL_O:
 	JP HANDLE_CTRL_O
 
 CHECK_CTRL_C:
-	; Command: Ctrl+C -> Copy block (solidifies dynamic block first if active)
+	; Command: Ctrl+C -> Copy block (solidifies dynamic block first if
+	; active)
 	CP KEY_CTRL_C
 	JR NZ,CHECK_CTRL_K
 	LD A,(BLOCK_ACTIVE)
@@ -1277,7 +1295,8 @@ DO_CTRL_X_MOVE:
 	JP MAIN_LOOP
 
 CHECK_CTRL_Y:
-	; Command: Ctrl+Y -> Beautify Block (if active) or Whole File (if no block)
+	; Command: Ctrl+Y -> Beautify Block (if active) or Whole File (if no
+	; block)
 	CP KEY_CTRL_Y
 	JR NZ,CHECK_CTRL_Z
 	CALL FLUSH_DEFERRED_RENDER
@@ -1708,7 +1727,8 @@ DO_BLOCK_SAVE_FILE:
 	LD (IS_SAVE_UI),A
 	LD (IS_SPLASH_SCREEN),A
 	; Note: BLOCK_ACTIVE is intentionally retained at 2 (solidified)
-	; so the user can subsequently press Del (or Ctrl+D) to delete the block.
+	; so the user can subsequently press Del (or Ctrl+D) to delete the
+	; block.
 	CALL TERM_INIT
 	CALL RENDER_SCREEN
 	CALL RENDER_STATUS_BAR
@@ -2846,7 +2866,8 @@ NOT_LINE_NUM:
 	RET
 
 FOUND_COLON:
-	; HL points to ':' in DEFAULT_DMA. Check if this colon is inside a drive/user prefix.
+	; HL points to ':' in DEFAULT_DMA. Check if this colon is inside a
+	; drive/user prefix.
 	PUSH HL				; Save colon pointer
 	LD HL,DEFAULT_DMA+1
 	CALL PARSE_DRIVE_USER_PREFIX
@@ -2911,7 +2932,8 @@ NOT_ALPHA:
 
 ;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
-; Dynamically centered both horizontally and vertically for active screen geometry.
+; Dynamically centered both horizontally and vertically for active screen
+; geometry.
 ; Total menu lines: 20
 ;------------------------------------------------------------------------------
 SPLASH_MENU_LINES	EQU	21
@@ -3005,10 +3027,11 @@ RENDER_SPLASH:
 	CALL TERM_HIDE_CURSOR
 	CALL TERM_CLEAR_SCREEN
 
-	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - SPLASH_MENU_LINES) / 2
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) -
+	; SPLASH_MENU_LINES) / 2
 	LD A,(ACTIVE_ROWS)
-	DEC A				; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB SPLASH_MENU_LINES		; 23 - 21 = 2 (80x24), 39 - 21 = 18 (120x40)
+	DEC A		; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB SPLASH_MENU_LINES	; 23 - 21 = 2 (80x24), 39 - 21 = 18 (120x40)
 	JR Z,SPLASH_NO_TOP_PAD
 	JR C,SPLASH_NO_TOP_PAD
 	SRL A				; 1 (80x24), 9 (120x40)
@@ -3170,7 +3193,8 @@ SPLASH_LINES_RAM:
 	CALL PRINT_STR
 
 RENDER_SPLASH_BOTTOM_PAD:
-	; Bottom padding: (ACTIVE_ROWS - 1) - SPLASH_TOP_PAD_COUNT - SPLASH_MENU_LINES
+	; Bottom padding: (ACTIVE_ROWS - 1) - SPLASH_TOP_PAD_COUNT -
+	; SPLASH_MENU_LINES
 	LD A,(ACTIVE_ROWS)
 	DEC A				; Text rows available
 	LD HL,SPLASH_TOP_PAD_COUNT
@@ -3191,7 +3215,8 @@ SPLASH_BOTTOM_DONE:
 
 ;------------------------------------------------------------------------------
 ; About Screen Renderer
-; Dynamically centered both horizontally and vertically for active screen geometry.
+; Dynamically centered both horizontally and vertically for active screen
+; geometry.
 ; Displays essential project, version, author, tools, and MIT license details.
 ;------------------------------------------------------------------------------
 ABOUT_MENU_LINES	EQU	9
@@ -3241,8 +3266,8 @@ PAL_LEN_DONE:
 	LD A,(ACTIVE_COLS)
 	DEC A				; Columns remaining after '~'
 	SUB B				; Subtract length in B
-	JR C,PAL_NO_PAD			; If string longer than remaining cols, no pad
-	SRL A				; Divide by 2 for symmetrical left margin
+	JR C,PAL_NO_PAD		; If string longer than remaining cols, no pad
+	SRL A			; Divide by 2 for symmetrical left margin
 	JR Z,PAL_NO_PAD
 	LD B,A
 PAL_PAD_LOOP:
@@ -3289,10 +3314,11 @@ SHOW_ABOUT_SCREEN:
 	CALL TERM_HIDE_CURSOR
 	CALL TERM_CLEAR_SCREEN
 
-	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - ABOUT_MENU_LINES) / 2
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - ABOUT_MENU_LINES)
+	; / 2
 	LD A,(ACTIVE_ROWS)
-	DEC A				; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB ABOUT_MENU_LINES		; 23 - 9 = 14 (80x24), 39 - 9 = 30 (120x40)
+	DEC A		; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB ABOUT_MENU_LINES	; 23 - 9 = 14 (80x24), 39 - 9 = 30 (120x40)
 	JR Z,ABOUT_NO_TOP_PAD
 	JR C,ABOUT_NO_TOP_PAD
 	SRL A				; 7 in 80x24, 15 in 120x40
@@ -3342,7 +3368,8 @@ ABOUT_CONTENT_START:
 	LD DE,STR_ABOUT_RETURN
 	CALL PRINT_ABOUT_LINE
 
-	; Bottom padding: (ACTIVE_ROWS - 1) - ABOUT_TOP_PAD_COUNT - ABOUT_MENU_LINES
+	; Bottom padding: (ACTIVE_ROWS - 1) - ABOUT_TOP_PAD_COUNT -
+	; ABOUT_MENU_LINES
 	LD A,(ACTIVE_ROWS)
 	DEC A				; Text rows available
 	LD HL,ABOUT_TOP_PAD_COUNT
@@ -3367,7 +3394,8 @@ ABOUT_BOTTOM_DONE:
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ; Configuration Screen Renderer (SHOW_CONFIG_SCREEN)
-; Dynamically centered both horizontally and vertically for active screen geometry.
+; Dynamically centered both horizontally and vertically for active screen
+; geometry.
 ; Option order:
 ;   Config Status (at top, unnumbered status)
 ;   1. Screen Geometry
@@ -3469,10 +3497,11 @@ SHOW_CONFIG_SCREEN:
 	CALL TERM_HIDE_CURSOR
 	CALL TERM_CLEAR_SCREEN
 
-	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - CONFIG_MENU_LINES) / 2
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) -
+	; CONFIG_MENU_LINES) / 2
 	LD A,(ACTIVE_ROWS)
-	DEC A				; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB CONFIG_MENU_LINES		; 23 - 11 = 12 (80x24), 39 - 11 = 28 (120x40)
+	DEC A		; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB CONFIG_MENU_LINES	; 23 - 11 = 12 (80x24), 39 - 11 = 28 (120x40)
 	JR Z,CONFIG_NO_TOP_PAD
 	JR C,CONFIG_NO_TOP_PAD
 	SRL A				; 6 in 80x24, 14 in 120x40
@@ -3682,7 +3711,8 @@ SCS_AFTER_SETTINGS:
 	LD DE,STR_CONFIG_FOOTER
 	CALL PRINT_ABOUT_LINE
 
-	; Bottom padding: (ACTIVE_ROWS - 1) - CONFIG_TOP_PAD_COUNT - CONFIG_MENU_LINES
+	; Bottom padding: (ACTIVE_ROWS - 1) - CONFIG_TOP_PAD_COUNT -
+	; CONFIG_MENU_LINES
 	LD A,(ACTIVE_ROWS)
 	DEC A				; Text rows available
 	LD HL,CONFIG_TOP_PAD_COUNT
@@ -3885,10 +3915,11 @@ SHOW_MEM_INFO_SCREEN:
 	CALL TERM_HIDE_CURSOR
 	CALL TERM_CLEAR_SCREEN
 
-	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - MEM_INFO_LINES) / 2
+	; Calculate vertical top padding: ((ACTIVE_ROWS - 1) - MEM_INFO_LINES) /
+	; 2
 	LD A,(ACTIVE_ROWS)
-	DEC A				; Text rows available (23 in 80x24, 39 in 120x40)
-	SUB MEM_INFO_LINES		; 23 - 23 = 0 (80x24), 39 - 23 = 16 (120x40)
+	DEC A		; Text rows available (23 in 80x24, 39 in 120x40)
+	SUB MEM_INFO_LINES	; 23 - 23 = 0 (80x24), 39 - 23 = 16 (120x40)
 	JR Z,MEM_INFO_NO_TOP_PAD
 	JR C,MEM_INFO_NO_TOP_PAD
 	SRL A				; 0 (80x24), 8 (120x40)
@@ -3949,9 +3980,10 @@ MEM_BANK_ROW_LOOP:
 	LD DE,STR_MEM_RETURN_PROMPT
 	CALL PRINT_STR
 
-	; Calculate bottom padding: (ACTIVE_ROWS - 1) - MEM_TOP_PAD_COUNT - MEM_INFO_LINES
+	; Calculate bottom padding: (ACTIVE_ROWS - 1) - MEM_TOP_PAD_COUNT -
+	; MEM_INFO_LINES
 	LD A,(ACTIVE_ROWS)
-	DEC A				; Text rows available (23 in 80x24, 39 in 120x40)
+	DEC A		; Text rows available (23 in 80x24, 39 in 120x40)
 	LD HL,MEM_TOP_PAD_COUNT
 	SUB (HL)
 	SUB MEM_INFO_LINES		; Remaining bottom padding
@@ -4075,7 +4107,8 @@ PMIS_SHOW_SE:
 	RET
 
 PMIS_SE_HBIOS:
-	; Calculate SE RAM: (1 [TPA] + (1 if LINE_TABLE_BANK!=0) + (1 if LINE_TABLE_BANK_1!=0) + EXT_BANK_COUNT) * 32
+	; Calculate SE RAM: (1 [TPA] + (1 if LINE_TABLE_BANK!=0) + (1 if
+	; LINE_TABLE_BANK_1!=0) + EXT_BANK_COUNT) * 32
 	LD A,1
 	LD HL,LINE_TABLE_BANK
 	LD B,(HL)
@@ -4214,7 +4247,8 @@ PMBR_EXT_LOOP:
 
 PMBR_FOUND_IN_EXT:
 	; Bank E is in EXT_BANK_TABLE as Document Buffer Bank C!
-	; Check Role: if E < HBIOS_APP_BANK -> RAM Disk (MD0:), else Application Memory
+	; Check Role: if E < HBIOS_APP_BANK -> RAM Disk (MD0:), else Application
+	; Memory
 	LD A,(HBIOS_APP_BANK)
 	CP E
 	JR C,PMBR_EXT_ROLE_APP		; If HBIOS_APP_BANK < E -> App
@@ -4302,7 +4336,8 @@ PMBR_CHK_LINE_0:
 	CALL PRINT_STR
 	LD DE,STR_MEM_SPACES_3
 	CALL PRINT_STR
-	; If LINE_TABLE_BANK_1 != 0, print STR_USAGE_LINE_TABLE_0, else STR_USAGE_LINE_TABLE
+	; If LINE_TABLE_BANK_1 != 0, print STR_USAGE_LINE_TABLE_0, else
+	; STR_USAGE_LINE_TABLE
 	LD A,(LINE_TABLE_BANK_1)
 	OR A
 	JR NZ,PMBR_LT0_SPLIT
@@ -4449,7 +4484,8 @@ PMBR_FREE_ACTUAL:
 	RET
 
 PMBR_NOT_INSTALLED:
-	; Bank not installed: Size = " -- ", Role = Not Installed, Usage = Not Present
+	; Bank not installed: Size = " -- ", Role = Not Installed, Usage = Not
+	; Present
 	LD DE,STR_MEM_SIZE_NONE
 	CALL PRINT_STR
 	LD DE,STR_MEM_SPACES_3
@@ -4780,7 +4816,7 @@ CANCEL_BLOCK:
 SOLIDIFY_BLOCK:
 	LD A,(BLOCK_ACTIVE)
 	CP 1
-	RET NZ				; Only dynamic selection can be solidified
+	RET NZ			; Only dynamic selection can be solidified
 	CALL NORMALIZE_BLOCK_BOUNDS
 	LD A,2
 	LD (BLOCK_ACTIVE),A		; State 2 = Solidified / Locked
@@ -5229,7 +5265,8 @@ NBB_ANCHOR_FIRST:
 
 NBB_CUR_FIRST:
 	; DE (Cursor Row) < HL (Anchor Row): Backwards multi-row selection
-	; Cursor at (DE, CUR_COL) is excluded -> START_ROW = DE, START_COL = CUR_COL + 1
+	; Cursor at (DE, CUR_COL) is excluded -> START_ROW = DE, START_COL =
+	; CUR_COL + 1
 	; Anchor at (HL, BC) is included -> END_ROW = HL, END_COL = BC + 1
 	LD (BLOCK_START_ROW),DE
 	LD DE,(CUR_COL)
@@ -5377,7 +5414,8 @@ GLBR_IN_RANGE:
 	CP L
 	JR NZ,GLBR_START_ONLY
 
-	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL - 1
+	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL
+	; - 1
 	LD HL,(BLOCK_START_COL)
 	LD DE,(BLOCK_END_COL)
 	; Compare HL with DE:
@@ -5398,7 +5436,8 @@ GLBR_SINGLE_OK:
 	JR GLBR_OK
 
 GLBR_START_ONLY:
-	; First line of multi-line block: StartCol = BLOCK_START_COL, EndCol = to EOL
+	; First line of multi-line block: StartCol = BLOCK_START_COL, EndCol =
+	; to EOL
 	LD HL,(BLOCK_START_COL)
 	LD (LINE_BLK_START),HL
 	LD HL,0FFFFH
@@ -5417,11 +5456,12 @@ GLBR_NOT_START_ROW:
 	CP L
 	JR NZ,GLBR_MIDDLE_ROW
 
-	; Last line of multi-line block: StartCol = 0, EndCol = BLOCK_END_COL - 1
+	; Last line of multi-line block: StartCol = 0, EndCol = BLOCK_END_COL -
+	; 1
 	LD DE,(BLOCK_END_COL)
 	LD A,D
 	OR E
-	JR Z,GLBR_NONE			; BLOCK_END_COL == 0 -> no chars on this line!
+	JR Z,GLBR_NONE		; BLOCK_END_COL == 0 -> no chars on this line!
 
 	DEC DE
 	LD (LINE_BLK_END),DE
@@ -5457,16 +5497,18 @@ GLBR_NONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; GLBR_CHECK_TAB_END: If character at EndCol (E) is a TAB, exclude it from highlight
+; GLBR_CHECK_TAB_END: If character at EndCol (E) is a TAB, exclude it from
+; highlight
 ; Inputs: BC = doc row, D = StartCol, E = EndCol
 ; Returns: Carry = 0: E adjusted (or unchanged)
-;          Carry = 1: line has no highlight left (EndCol decremented below StartCol)
+; Carry = 1: line has no highlight left (EndCol decremented below StartCol)
 ; Preserves: BC, D
 ;------------------------------------------------------------------------------
 GLBR_CHECK_TAB_END:
 	PUSH BC
 	PUSH DE
-	CALL ENSURE_CACHE_WINDOW	; HL = pointer to line start in LINE_STORAGE
+	; HL = pointer to line start in LINE_STORAGE
+	CALL ENSURE_CACHE_WINDOW
 	POP DE
 	POP BC
 
@@ -5535,13 +5577,13 @@ DO_DELETE_BLOCK:
 	CP E
 	JR NZ,DO_DEL_BLK_MULTILINE
 
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 	; CASE 1: Single-Line Block Deletion
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 DO_DEL_BLK_SINGLE:
 	LD BC,(BLOCK_START_ROW)
 	CALL GET_LINE_BLOCK_RANGE	; Carry=0: D = StartCol, E = EndCol
-	JP C,DO_DEL_BLK_FINISH		; If Carry=1, no characters in block range
+	JP C,DO_DEL_BLK_FINISH	; If Carry=1, no characters in block range
 
 	PUSH DE				; D = StartCol, E = EndCol
 
@@ -5558,7 +5600,7 @@ DO_DEL_BLK_SINGLE:
 	INC A
 	LD E,A
 	LD D,0
-	ADD HL,DE			; HL = LOAD_LINE_TEMP + EndCol + 1 (source)
+	ADD HL,DE		; HL = LOAD_LINE_TEMP + EndCol + 1 (source)
 
 	; Destination pointer: DE = LOAD_LINE_TEMP + StartCol
 	LD DE,LOAD_LINE_TEMP
@@ -5593,9 +5635,9 @@ DEL_BLK_SINGLE_SHIFT:
 
 	JP DO_DEL_BLK_FINISH
 
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 	; CASE 2: Multi-Line Block Deletion
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 DO_DEL_BLK_MULTILINE:
 	; Step 1: Process head of first line (BLOCK_START_ROW)
 	; Read first line into LOAD_LINE_TEMP
@@ -5613,7 +5655,8 @@ DO_DEL_BLK_MULTILINE:
 
 	; Step 2: Process tail of last line (BLOCK_END_ROW)
 	LD BC,(BLOCK_END_ROW)
-	CALL GET_LINE_BLOCK_RANGE	; Carry=0: D=0, E=EndCol. Carry=1: no highlight
+	; Carry=0: D=0, E=EndCol. Carry=1: no highlight
+	CALL GET_LINE_BLOCK_RANGE
 	JR C,DEL_BLK_TAIL_WHOLE
 
 	; Save E (EndCol)
@@ -5630,7 +5673,7 @@ DO_DEL_BLK_MULTILINE:
 	LD E,A
 	LD D,0
 	LD HL,SPLIT_LINE_TEMP
-	ADD HL,DE			; HL = pointer to tail in SPLIT_LINE_TEMP
+	ADD HL,DE		; HL = pointer to tail in SPLIT_LINE_TEMP
 	JR DEL_BLK_CONCAT_TAIL
 
 DEL_BLK_TAIL_WHOLE:
@@ -5675,7 +5718,8 @@ DEL_BLK_APPEND_DONE:
 	LD HL,LOAD_LINE_TEMP
 	CALL WRITE_FAR_LINE
 
-	; Step 3: Free slots for lines (BLOCK_START_ROW + 1) through (BLOCK_END_ROW)
+	; Step 3: Free slots for lines (BLOCK_START_ROW + 1) through
+	; (BLOCK_END_ROW)
 	LD HL,(BLOCK_START_ROW)
 	INC HL
 	LD (DEL_BLK_CUR_LINE),HL
@@ -5705,14 +5749,15 @@ DO_FREE_CUR_SLOT:
 	JR DEL_BLK_FREE_LOOP
 
 DEL_BLK_FREE_DONE:
-	; Step 4: Shift line table entries above BLOCK_END_ROW downwards to BLOCK_START_ROW + 1
+	; Step 4: Shift line table entries above BLOCK_END_ROW downwards to
+	; BLOCK_START_ROW + 1
 	; Lines removed: K = BLOCK_END_ROW - BLOCK_START_ROW
 	; Number of entries to shift: W = DOC_TOTAL_LINES - (BLOCK_END_ROW + 1)
 	LD HL,(DOC_TOTAL_LINES)
 	LD DE,(BLOCK_END_ROW)
 	INC DE				; DE = BLOCK_END_ROW + 1
 	AND A
-	SBC HL,DE			; HL = W = DOC_TOTAL_LINES - (BLOCK_END_ROW + 1)
+	SBC HL,DE		; HL = W = DOC_TOTAL_LINES - (BLOCK_END_ROW + 1)
 	JR Z,DEL_BLK_NO_SHIFT
 	JR C,DEL_BLK_NO_SHIFT
 
@@ -5720,13 +5765,14 @@ DEL_BLK_FREE_DONE:
 	LD B,H
 	LD C,L				; BC = W (word count)
 	LD DE,(BLOCK_START_ROW)
-	INC DE				; DE = destination line = BLOCK_START_ROW + 1
+	INC DE			; DE = destination line = BLOCK_START_ROW + 1
 	LD HL,(BLOCK_END_ROW)
 	INC HL				; HL = source line = BLOCK_END_ROW + 1
 	CALL SHIFT_LINE_SLOTS_UP
 
 DEL_BLK_NO_SHIFT:
-	; Update DOC_TOTAL_LINES = DOC_TOTAL_LINES - (BLOCK_END_ROW - BLOCK_START_ROW)
+	; Update DOC_TOTAL_LINES = DOC_TOTAL_LINES - (BLOCK_END_ROW -
+	; BLOCK_START_ROW)
 	LD HL,(BLOCK_END_ROW)
 	LD DE,(BLOCK_START_ROW)
 	AND A
@@ -5833,7 +5879,8 @@ CCIB_CHECK_COLS:
 	CP E
 	JR NZ,CCIB_CHECK_MULTI
 
-	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL (exclusive)
+	; Single-line block: StartCol = BLOCK_START_COL, EndCol = BLOCK_END_COL
+	; (exclusive)
 	; Inside only if BLOCK_START_COL <= CUR_COL < BLOCK_END_COL
 	LD HL,(CUR_COL)
 	LD DE,(BLOCK_START_COL)
@@ -5874,7 +5921,8 @@ CCIB_CHECK_MULTI_END:
 	LD DE,(BLOCK_END_ROW)
 	LD A,H
 	CP D
-	JR NZ,CCIB_INSIDE		; Middle row of multi-line block is always inside!
+	; Middle row of multi-line block is always inside!
+	JR NZ,CCIB_INSIDE
 	LD A,L
 	CP E
 	JR NZ,CCIB_INSIDE
@@ -5945,9 +5993,9 @@ DO_COPY_BLOCK:
 	CP E
 	JP NZ,DO_COPY_BLK_MULTILINE
 
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 	; CASE 1: Single-Line Block Copy
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 DO_COPY_BLK_SINGLE:
 	; Read source line BLOCK_START_ROW into SPLIT_LINE_TEMP
 	LD BC,(BLOCK_START_ROW)
@@ -5971,7 +6019,7 @@ COPY_SGL_SRC_LEN_DONE:
 	LD HL,(BLOCK_START_COL)
 	AND A
 	SBC HL,BC
-	RET NC				; BLOCK_START_COL >= src_len -> nothing to copy!
+	RET NC			; BLOCK_START_COL >= src_len -> nothing to copy!
 
 	; Check if BLOCK_END_COL > src_len (BC)
 	LD HL,(BLOCK_END_COL)
@@ -6035,7 +6083,7 @@ COPY_SGL_COL_OK:
 	LD DE,(DEST_LINE_LEN)
 	AND A
 	SBC HL,DE			; HL = available space
-	RET C				; If DEST_LINE_LEN >= MAX_INPUT_LINE_CHARS, can't add anything
+	RET C	; If DEST_LINE_LEN >= MAX_INPUT_LINE_CHARS, can't add anything
 	RET Z
 
 	; If COPY_BLK_LEN > Space, clamp COPY_BLK_LEN = Space
@@ -6075,7 +6123,8 @@ COPY_SGL_SPACE_OK:
 	POP HL				; HL = source last byte
 	LDDR				; Shift suffix right
 
-	; Copy COPY_BLK_LEN bytes from COPY_BLK_BUF into SPLIT_LINE_TEMP + CUR_COL
+	; Copy COPY_BLK_LEN bytes from COPY_BLK_BUF into SPLIT_LINE_TEMP +
+	; CUR_COL
 	LD HL,COPY_BLK_BUF
 	LD DE,SPLIT_LINE_TEMP
 	LD BC,(CUR_COL)
@@ -6133,9 +6182,9 @@ COPY_SGL_ADVANCE:
 	LD (DOC_MODIFIED),A
 	RET
 
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 	; CASE 2: Multi-Line Block Copy
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 DO_COPY_BLK_MULTILINE:
 	LD HL,(BLOCK_END_ROW)
 	LD DE,(BLOCK_START_ROW)
@@ -6160,7 +6209,8 @@ COPY_ML_CAP_FAIL:
 
 COPY_ML_CAP_OK:
 
-	; Pre-extract BLOCK_END_ROW prefix [0 .. BLOCK_END_COL] into COPY_TAIL_BUF
+	; Pre-extract BLOCK_END_ROW prefix [0 .. BLOCK_END_COL] into
+	; COPY_TAIL_BUF
 	; (Doing this early prevents corruption if CUR_DOC_ROW == BLOCK_END_ROW)
 	; If BLOCK_END_COL == 0, tail prefix is empty
 	LD A,(BLOCK_END_COL)
@@ -6281,7 +6331,8 @@ COPY_ML_SUFFIX_SAVED:
 	LD DE,COPY_BLK_BUF
 	CALL READ_FAR_LINE
 
-	; Append COPY_BLK_BUF[BLOCK_START_COL .. EOL] to LOAD_LINE_TEMP at CUR_COL
+	; Append COPY_BLK_BUF[BLOCK_START_COL .. EOL] to LOAD_LINE_TEMP at
+	; CUR_COL
 	LD HL,COPY_BLK_BUF
 	LD A,(BLOCK_START_COL)
 	LD E,A
@@ -6332,7 +6383,8 @@ COPY_ML_HEAD_DONE:
 	LD (COPY_SRC_ROW),HL		; Loop counter = K - 1
 	LD HL,(BLOCK_START_ROW)
 	INC HL
-	LD (DEL_BLK_CUR_LINE),HL	; Current source row = BLOCK_START_ROW + 1
+	; Current source row = BLOCK_START_ROW + 1
+	LD (DEL_BLK_CUR_LINE),HL
 
 COPY_ML_MID_LOOP:
 	LD BC,(DEL_BLK_CUR_LINE)
@@ -6522,7 +6574,8 @@ DO_MOVE_BLOCK:
 
 	CALL NORMALIZE_BLOCK_BOUNDS
 
-	; Check if cursor is inside the block; if so, cannot move block into itself!
+	; Check if cursor is inside the block; if so, cannot move block into
+	; itself!
 	CALL CHECK_CURSOR_IN_BLOCK
 	RET C
 
@@ -6610,7 +6663,8 @@ MOVE_EXEC_COPY:
 	CP E
 	JR NZ,MOVE_AFTER_DIFF_ROW
 
-	; Same row after: DEST_COL shifted left by L = SRC_END_COL - SRC_START_COL
+	; Same row after: DEST_COL shifted left by L = SRC_END_COL -
+	; SRC_START_COL
 	LD A,(MOVE_SRC_END_COL)
 	LD HL,MOVE_SRC_START_COL
 	SUB (HL)			; A = L
@@ -6623,7 +6677,8 @@ MOVE_EXEC_COPY:
 	JR MOVE_SET_BLOCK
 
 MOVE_AFTER_DIFF_ROW:
-	; Single-line block, but DEST is on a different row (after SRC_START_ROW):
+	; Single-line block, but DEST is on a different row (after
+	; SRC_START_ROW):
 	; Row did not shift, col did not shift!
 	LD HL,(MOVE_DEST_ROW)
 	LD (CUR_DOC_ROW),HL
@@ -6633,7 +6688,8 @@ MOVE_AFTER_DIFF_ROW:
 
 MOVE_AFTER_MULTI:
 	; Multi-line block:
-	; K = MOVE_SRC_END_ROW - MOVE_SRC_START_ROW lines were deleted before DEST!
+	; K = MOVE_SRC_END_ROW - MOVE_SRC_START_ROW lines were deleted before
+	; DEST!
 	; New DEST_ROW = MOVE_DEST_ROW - K
 	LD HL,(MOVE_SRC_END_ROW)
 	LD DE,(MOVE_SRC_START_ROW)
@@ -6838,7 +6894,8 @@ CHECK_CHAR_CONT_16:
 	OR A
 	JR NZ,CC16_NO
 
-	; 1. Left edge continuation: if VIEW_LEFT_COL > 0 and DE == VIEW_LEFT_COL
+	; 1. Left edge continuation: if VIEW_LEFT_COL > 0 and DE ==
+	; VIEW_LEFT_COL
 	LD A,(VIEW_LEFT_COL+1)
 	OR A
 	JR NZ,CC16_LEFT_NONZERO
@@ -6854,7 +6911,8 @@ CC16_LEFT_NONZERO:
 	JR Z,CC16_YES
 
 CC16_CHECK_RIGHT:
-	; 2. Right edge continuation: if DE + 1 == VIEW_RIGHT_COL and line continues
+	; 2. Right edge continuation: if DE + 1 == VIEW_RIGHT_COL and line
+	; continues
 	INC DE
 	LD A,(VIEW_RIGHT_COL+1)
 	CP D
@@ -6865,7 +6923,8 @@ CC16_NO_DEC:
 	DEC DE
 	JR NZ,CC16_NO
 
-	; Visual col DE is VIEW_RIGHT_COL - 1. Check if line continues past (HL):
+	; Visual col DE is VIEW_RIGHT_COL - 1. Check if line continues past
+	; (HL):
 	INC HL
 	LD A,(HL)
 	DEC HL
@@ -6999,13 +7058,13 @@ RENDER_CURRENT_LINE:
 	LD DE,(TOP_DOC_ROW)
 	AND A
 	SBC HL,DE
-	RET C				; Outside viewport: do not emit out-of-bounds row
+	RET C		; Outside viewport: do not emit out-of-bounds row
 	LD A,(ACTIVE_ROWS)
 	SUB 2
 	LD E,A
 	LD D,0
 	CALL CMP_HL_DE
-	RET NC				; Outside viewport: do not emit out-of-bounds row
+	RET NC		; Outside viewport: do not emit out-of-bounds row
 
 	; Move to start of current screen line and clear to EOL
 	LD A,L
@@ -7278,7 +7337,8 @@ FLUSH_DEFERRED_RENDER:
 	OR A
 	JR Z,CHECK_DEFERRED_LINE
 
-	; Full screen redraw needed (RENDER_SCREEN also updates status & locates cursor)
+	; Full screen redraw needed (RENDER_SCREEN also updates status & locates
+	; cursor)
 	XOR A
 	LD (NEED_SCREEN_RENDER),A
 	LD (NEED_LINE_RENDER),A
@@ -7292,7 +7352,8 @@ CHECK_DEFERRED_LINE:
 	JR Z,CHECK_DEFERRED_STATUS
 
 	; Check if CUR_DOC_ROW is within visible screen bounds:
-	; Must have: TOP_DOC_ROW <= CUR_DOC_ROW <= TOP_DOC_ROW + (ACTIVE_ROWS - 2)
+	; Must have: TOP_DOC_ROW <= CUR_DOC_ROW <= TOP_DOC_ROW + (ACTIVE_ROWS -
+	; 2)
 	LD HL,(CUR_DOC_ROW)
 	LD DE,(TOP_DOC_ROW)
 	AND A
@@ -7305,7 +7366,8 @@ CHECK_DEFERRED_LINE:
 	CALL CMP_HL_DE			; Carry=1 if HL < DE
 	JR NC,CDL_FULL_REDRAW		; HL >= ACTIVE_ROWS - 1: outside screen!
 
-	; Current line redraw needed (RENDER_CURRENT_LINE updates status & locates cursor)
+	; Current line redraw needed (RENDER_CURRENT_LINE updates status &
+	; locates cursor)
 	XOR A
 	LD (NEED_LINE_RENDER),A
 	LD (NEED_STATUS_RENDER),A
@@ -7376,7 +7438,8 @@ RBL_LOAD_LINE:
 	JR RBL_GOT_LINE_PTR
 
 RBL_USE_CACHE:
-	CALL ENSURE_CACHE_WINDOW	; HL = pointer to line start in LINE_STORAGE
+	; HL = pointer to line start in LINE_STORAGE
+	CALL ENSURE_CACHE_WINDOW
 
 RBL_GOT_LINE_PTR:
 	; Check if line is empty (HL == 0)
@@ -7961,7 +8024,8 @@ SHOW_STATUS_SPLASH_MEM:
 	JR SHOW_STATUS_ROWCOL
 
 SHOW_STATUS_ROWCOL:
-	; Field 5: Print fixed-position cursor position (POS_FIELD_WIDTH = 22 chars)
+	; Field 5: Print fixed-position cursor position (POS_FIELD_WIDTH = 22
+	; chars)
 	; "Line <cur:4>/<total:4> Col <col:3>"
 	; 1. Prefix: "Line " (5 chars)
 	LD DE,STR_STATUS_POS		; "Line "
@@ -8201,10 +8265,10 @@ CALC_FREE_MEM_KB:
 
 	LD A,(EXT_BANK_COUNT)
 	LD H,A
-	LD L,0				; HL = Total slots (EXT_BANK_COUNT * 256)
+	LD L,0			; HL = Total slots (EXT_BANK_COUNT * 256)
 	LD A,(IN_EDITOR_MODE)
 	OR A
-	JR Z,CFM_DIV8			; If no active editor document, 0 slots used
+	JR Z,CFM_DIV8		; If no active editor document, 0 slots used
 
 	LD DE,(DOC_TOTAL_LINES)
 	AND A
@@ -8330,7 +8394,8 @@ PRINT_STATUS_FILENAME:
 	OR A
 	JR Z,PSF_LIMIT_SET
 
-	LD A,FILENAME_FIELD_WIDTH-1	; If modified, reserve 1 char for '*' (max 13)
+	; If modified, reserve 1 char for '*' (max 13)
+	LD A,FILENAME_FIELD_WIDTH-1
 	LD (PSF_MAX_LEN),A
 
 PSF_LIMIT_SET:
@@ -8509,7 +8574,8 @@ PSF_CHECK_MODIFIED:
 	OR A
 	JR Z,PSF_PAD_SPACES
 
-	; Document is modified: print '*' indicator (max 13 chars printed, so space exists)
+	; Document is modified: print '*' indicator (max 13 chars printed, so
+	; space exists)
 	LD A,'*'
 	CALL PUTC
 	INC C
@@ -8555,16 +8621,18 @@ ADJUST_HORIZ_VIEWPORT:
 	PUSH DE
 	PUSH HL
 
-	CALL CALC_VISUAL_COL		; HL = true visual column (0..MAX_LINE_CHARS-1)
+	CALL CALC_VISUAL_COL	; HL = true visual column (0..MAX_LINE_CHARS-1)
 	EX DE,HL			; DE = visual column
 
-	; 1. Check if cursor is off-screen to the left or on left continuation highlight
+	; 1. Check if cursor is off-screen to the left or on left continuation
+	; highlight
 	LD HL,(VIEW_LEFT_COL)
 	LD A,H
 	OR L
 	JR Z,AHV_CHECK_RIGHT		; VIEW_LEFT_COL == 0 -> cannot pan left
 
-	; If VIEW_LEFT_COL >= DE (i.e. DE <= VIEW_LEFT_COL), cursor is on/past highlight -> pan left!
+	; If VIEW_LEFT_COL >= DE (i.e. DE <= VIEW_LEFT_COL), cursor is on/past
+	; highlight -> pan left!
 	LD A,L
 	SUB E
 	LD A,H
@@ -8604,7 +8672,8 @@ AHV_CHECK_RIGHT:
 	JR AHV_PAN_RIGHT
 
 AHV_PAN_LEFT:
-	; Pan left: round (DE - 1) down to multiple of 40 so cursor is strictly > new VIEW_LEFT_COL
+	; Pan left: round (DE - 1) down to multiple of 40 so cursor is strictly
+	; > new VIEW_LEFT_COL
 	LD HL,0
 	LD A,D
 	OR E
@@ -8700,9 +8769,10 @@ CONSTRAIN_CURSOR_VIEWPORT:
 	OR E
 	JR Z,CCV_CALC_MAX_VIS
 	LD HL,(TOP_DOC_ROW)
-	CALL CMP_HL_DE			; Carry=1 if TOP_DOC_ROW < DOC_TOTAL_LINES
+	CALL CMP_HL_DE		; Carry=1 if TOP_DOC_ROW < DOC_TOTAL_LINES
 	JR C,CCV_CALC_MAX_VIS
-	; TOP_DOC_ROW >= DOC_TOTAL_LINES: clamp TOP_DOC_ROW = DOC_TOTAL_LINES - 1
+	; TOP_DOC_ROW >= DOC_TOTAL_LINES: clamp TOP_DOC_ROW = DOC_TOTAL_LINES -
+	; 1
 	EX DE,HL
 	DEC HL
 	LD (TOP_DOC_ROW),HL
@@ -8710,7 +8780,7 @@ CONSTRAIN_CURSOR_VIEWPORT:
 CCV_CALC_MAX_VIS:
 	; 1. Calculate max visible doc row = TOP_DOC_ROW + (ACTIVE_ROWS - 2)
 	LD A,(ACTIVE_ROWS)
-	SUB 2				; A = max screen row index (e.g. 22 for 80x24, 38 for 120x40)
+	SUB 2	; A = max screen row index (e.g. 22 for 80x24, 38 for 120x40)
 	LD E,A
 	LD D,0
 	LD HL,(TOP_DOC_ROW)
@@ -8733,7 +8803,7 @@ CCV_CHECK_CUR_ROW:
 	; Check if CUR_DOC_ROW > DE:
 	LD HL,(CUR_DOC_ROW)
 	EX DE,HL			; HL = max allowed row, DE = CUR_DOC_ROW
-	CALL CMP_HL_DE			; Carry=1 if HL < DE (i.e. max allowed < CUR_DOC_ROW)
+	CALL CMP_HL_DE	; Carry=1 if HL < DE (i.e. max allowed < CUR_DOC_ROW)
 	JR NC,CCV_CHECK_TOP_ROW
 	; CUR_DOC_ROW > max allowed row: move cursor UP!
 	LD (CUR_DOC_ROW),HL
@@ -8864,10 +8934,10 @@ LOCATE_CURSOR:
 	AND A
 	SBC HL,DE
 	JR NC,LC_ROW_POS
-	LD HL,0				; Clamp to 0 if CUR_DOC_ROW < TOP_DOC_ROW
+	LD HL,0			; Clamp to 0 if CUR_DOC_ROW < TOP_DOC_ROW
 LC_ROW_POS:
 	LD A,(ACTIVE_ROWS)
-	SUB 2				; Max allowed row index (e.g. 22 for 80x24)
+	SUB 2			; Max allowed row index (e.g. 22 for 80x24)
 	LD E,A
 	LD D,0
 	CALL CMP_HL_DE			; Carry=1 if HL < DE
@@ -8884,10 +8954,10 @@ LC_ROW_OK:
 	AND A
 	SBC HL,DE			; HL = Screen Column (0-indexed)
 	JR NC,LC_COL_POS
-	LD HL,0				; Clamp to 0 if Visual Col < VIEW_LEFT_COL
+	LD HL,0			; Clamp to 0 if Visual Col < VIEW_LEFT_COL
 LC_COL_POS:
 	LD A,(ACTIVE_COLS)
-	DEC A				; Max allowed col index (e.g. 79 for 80-col)
+	DEC A			; Max allowed col index (e.g. 79 for 80-col)
 	LD E,A
 	LD D,0
 	CALL CMP_HL_DE			; Carry=1 if HL < DE
@@ -9019,10 +9089,11 @@ IFRB_GOT_BIOS_BANK:
 	; Check if RAM drive memory blocks should be used or protected
 	; Mode 0 (Protected): Protect banks 0x81..0x88
 	; Mode 1 (Enabled): Unconditionally allow banks down to 0x80
-	; Mode 2 (Hibernate): Allow banks down to 0x80 ONLY IF RAMDRIVE_IS_HIBERNATED == 1
+	; Mode 2 (Hibernate): Allow banks down to 0x80 ONLY IF
+	; RAMDRIVE_IS_HIBERNATED == 1
 	LD A,(CFG_RAMDRIVE_FLAG)
 	CP RAMDRV_MODE_ENABLED
-	JR Z,IFRB_FLOOR_SET		; If 1, use D = 0x80 (allow RAM drive blocks)
+	JR Z,IFRB_FLOOR_SET	; If 1, use D = 0x80 (allow RAM drive blocks)
 	CP RAMDRV_MODE_HIBERNATE
 	JR NZ,IFRB_PROTECTED_MODE
 	LD A,(RAMDRIVE_IS_HIBERNATED)
@@ -9032,7 +9103,8 @@ IFRB_GOT_BIOS_BANK:
 IFRB_PROTECTED_MODE:
 	; Protected mode (CFG_RAMDRIVE_FLAG == 0 or not hibernated):
 	; Query App Banks (SYSGET 0xF5) to find lowest safe App bank (BID_APP0)
-	; Returns: H = First App Bank ID (e.g. 0x89), L = App Bank count (e.g. 3)
+	; Returns: H = First App Bank ID (e.g. 0x89), L = App Bank count (e.g.
+	; 3)
 	PUSH IX
 	LD B,0F8H
 	LD C,0F5H			; BF_SYSGET_APPBNKS
@@ -9048,13 +9120,15 @@ IFRB_PROTECTED_MODE:
 	JR Z,IFRB_NO_APP_BANKS
 
 	; Safe floor is BID_APP0 - 1 (e.g. 0x89 - 1 = 0x88)
-	; Downward allocation stops when bank reaches floor, protecting 0x81..0x88
+	; Downward allocation stops when bank reaches floor, protecting
+	; 0x81..0x88
 	DEC H
 	LD D,H
 	JR IFRB_FLOOR_SET
 
 IFRB_NO_APP_BANKS:
-	; No application banks reported; floor = CPM_USER_BANK - 1 (safe fallback: 0 ext banks)
+	; No application banks reported; floor = CPM_USER_BANK - 1 (safe
+	; fallback: 0 ext banks)
 	; In CP/M 3.x, reserve Bank 0x8C (Buffers), so floor = CPM_USER_BANK - 2
 	LD A,(CPM_USER_BANK)
 	DEC A
@@ -9098,11 +9172,13 @@ IFRB_NOT_CPM3:
 	JR Z,IFRB_ALLOC_TEXT_BANKS
 
 	; Check if at least 3 banks available from C down to floor D:
-	; (C - D >= 3 guarantees 1 bank for Line 0, 1 bank for Line 1, >= 1 bank for Text)
+	; (C - D >= 3 guarantees 1 bank for Line 0, 1 bank for Line 1, >= 1 bank
+	; for Text)
 	LD A,C
 	SUB D
 	CP 3
-	JR C,IFRB_ALLOC_TEXT_BANKS	; Less than 3 banks: fallback to 16K mode!
+	; Less than 3 banks: fallback to 16K mode!
+	JR C,IFRB_ALLOC_TEXT_BANKS
 
 	; Allocate 2nd line table bank:
 	DEC C				; C = second Far RAM bank (e.g. 0x8C)
@@ -9271,7 +9347,7 @@ SLS_GOT_BANK:
 	RST 08H
 	POP IX
 	POP DE
-	POP HL				; Restore far destination address into HL
+	POP HL			; Restore far destination address into HL
 
 	; SYSBNKCPY: HL = Local Src Addr, DE = Far Dest Addr
 	EX DE,HL			; DE = Far Dest Addr
@@ -9518,7 +9594,7 @@ SLOTS_DOWN_USE_REM:
 	; Check distance down to line 16384 boundary for Source end
 	LD DE,(SLOT_SHIFT_SRC)
 	LD HL,16384
-	CALL CMP_HL_DE			; Carry=1 if 16384 < DE (src_end > 16384)
+	CALL CMP_HL_DE		; Carry=1 if 16384 < DE (src_end > 16384)
 	JR NC,SLOTS_DOWN_SRC_OK
 	; src_end > 16384: distance = src_end - 16384
 	EX DE,HL			; HL = src_end, DE = 16384
@@ -9534,7 +9610,7 @@ SLOTS_DOWN_SRC_OK:
 	; Check distance down to line 16384 boundary for Dest end
 	LD DE,(SLOT_SHIFT_DEST)
 	LD HL,16384
-	CALL CMP_HL_DE			; Carry=1 if 16384 < DE (dest_end > 16384)
+	CALL CMP_HL_DE		; Carry=1 if 16384 < DE (dest_end > 16384)
 	JR NC,SLOTS_DOWN_DEST_OK
 	; dest_end > 16384: distance = dest_end - 16384
 	EX DE,HL			; HL = dest_end, DE = 16384
@@ -9677,7 +9753,7 @@ WRITE_SLOTS_TO_ONE_BANK:
 	LD L,C
 	LD H,B
 	ADD HL,HL
-	EX DE,HL			; DE = Far Dest Addr, HL = Line Count (K)
+	EX DE,HL		; DE = Far Dest Addr, HL = Line Count (K)
 
 	; Byte count = K * 2
 	ADD HL,HL			; HL = Byte Count
@@ -10130,10 +10206,10 @@ FLUSH_BANK_TO_SWAP:
 	LD (SWAP_FCB+35),A		; r2
 
 	LD C,0				; C = slot index (0..N-1)
-	LD HL,0				; HL = Far RAM source offset (0, 128, 256...)
+	LD HL,0			; HL = Far RAM source offset (0, 128, 256...)
 
 FBTS_SLOT_LOOP:
-	PUSH BC				; Save B (remaining count), C (slot index)
+	PUSH BC			; Save B (remaining count), C (slot index)
 	PUSH HL				; Save Far RAM offset
 
 	; Setup SWAP_FCB record r0 = C, r1 = SWAP_PAGE_OLD, r2 = 0
@@ -10254,7 +10330,7 @@ FETCH_PAGE_FROM_SWAP:
 	LD (SWAP_FCB+35),A		; r2
 
 	LD C,0				; C = slot index (0..N-1)
-	LD HL,0				; HL = Far RAM dest offset (0, 128, 256...)
+	LD HL,0			; HL = Far RAM dest offset (0, 128, 256...)
 
 FPFS_SLOT_LOOP:
 	PUSH BC
@@ -10345,7 +10421,7 @@ SELECT_VICTIM_BANK:
 	LD A,(EXT_BANK_COUNT)
 	CP 2
 	JR C,SVB_FAIL
-	LD C,1				; C = candidate bank index (1 .. EXT_BANK_COUNT-1)
+	LD C,1		; C = candidate bank index (1 .. EXT_BANK_COUNT-1)
 	LD B,1				; B = best victim bank index
 	LD D,0				; D = max distance found so far
 	LD HL,BANK_PAGE_TABLE+1
@@ -10537,7 +10613,8 @@ EPR_SCAN_LOOP:
 
 EPR_PAGE_FAULT:
 	; PAGE FAULT! Page (SWAP_PAGE_TEMP) is NOT resident in any bank.
-	CALL HANDLE_PAGE_FAULT		; Returns B = victim bank index (1..11), Carry on error
+	; Returns B = victim bank index (1..11), Carry on error
+	CALL HANDLE_PAGE_FAULT
 	JR C,EPR_FAULT_ERR
 
 EPR_HIT:
@@ -10921,11 +10998,13 @@ WRITE_FAR_LINE:
 	LD B,H
 	LD C,L				; BC = head physical slot ID
 
-	; Read existing head slot into FAR_IO_BUF to check for existing NEXT_SLOT_ID
+	; Read existing head slot into FAR_IO_BUF to check for existing
+	; NEXT_SLOT_ID
 	LD DE,FAR_IO_BUF
 	CALL READ_FAR_SLOT
 	LD HL,(FAR_IO_BUF)
-	LD (FAR_OLD_NEXT_SLOT),HL	; Save previous extension slot ID (or 0xFFFF)
+	; Save previous extension slot ID (or 0xFFFF)
+	LD (FAR_OLD_NEXT_SLOT),HL
 
 WFL_STRIDE_LOOP:
 	; Prepare current stride payload in FAR_IO_BUF+2
@@ -11263,7 +11342,8 @@ COMMIT_CHECK_UPPER:
 	CP CACHE_SIZE_LINES
 	JR NC,COMMIT_DONE		; Index >= 48 -> outside cache
 
-	; Row is in cache! Calculate destination pointer: LINE_STORAGE + (E * 128)
+	; Row is in cache! Calculate destination pointer: LINE_STORAGE + (E *
+	; 128)
 	PUSH DE
 	LD L,E
 	LD H,0
@@ -11406,7 +11486,7 @@ WRITE_SLOT_NEXT_TERM:
 	ADD HL,HL			; *32
 	ADD HL,HL			; *64
 	ADD HL,HL			; *128
-	EX DE,HL			; DE = far_offset, H = Dest Bank, L = Src Bank
+	EX DE,HL		; DE = far_offset, H = Dest Bank, L = Src Bank
 
 	; SYSSETCPY: D = Dest Bank, E = Src Bank, HL = 2 bytes
 	PUSH DE
@@ -11478,13 +11558,15 @@ ALLOC_SLOT:
 	LD B,H
 	LD C,L				; BC = slot ID
 	LD DE,FAR_IO_BUF
-	CALL READ_FAR_SLOT		; Read first 128 bytes of slot (contains next ptr)
+	; Read first 128 bytes of slot (contains next ptr)
+	CALL READ_FAR_SLOT
 	LD HL,(FAR_IO_BUF)		; HL = next free slot ID
 	LD (FIRST_FREE_SLOT),HL
 	POP HL				; Restore allocated slot ID
 	LD B,H
 	LD C,L
-	CALL WRITE_SLOT_NEXT_TERM	; Ensure allocated slot has 0xFFFF next ptr
+	; Ensure allocated slot has 0xFFFF next ptr
+	CALL WRITE_SLOT_NEXT_TERM
 	JR C,ALLOC_FAIL
 	POP BC
 	POP DE
@@ -11780,10 +11862,10 @@ MARK_LINE_BC_DIRTY:
 	SBC HL,DE
 	LD A,H
 	OR A
-	JR NZ,MLBD_DONE			; If high byte != 0, outside cache window
+	JR NZ,MLBD_DONE		; If high byte != 0, outside cache window
 	LD A,L
 	CP CACHE_SIZE_LINES
-	JR NC,MLBD_DONE			; If index >= CACHE_SIZE_LINES, outside cache
+	JR NC,MLBD_DONE		; If index >= CACHE_SIZE_LINES, outside cache
 	LD DE,CACHE_LINE_DIRTY
 	ADD HL,DE
 	LD (HL),1
@@ -11852,7 +11934,7 @@ FLUSH_DIRTY_CACHE:
 	XOR A
 	LD (CACHE_DIRTY),A		; Clear dirty flag before flush
 
-	LD C,0				; Local cache line counter (0..CACHE_SIZE_LINES-1)
+	LD C,0		; Local cache line counter (0..CACHE_SIZE_LINES-1)
 FLUSH_CACHE_LOOP:
 	LD A,C
 	CP CACHE_SIZE_LINES
@@ -11945,7 +12027,8 @@ ENSURE_CACHE_WINDOW:
 	PUSH BC
 	PUSH DE
 
-	; Check if BC >= (CACHE_START_ROW) AND BC < (CACHE_START_ROW) + CACHE_SIZE_LINES
+	; Check if BC >= (CACHE_START_ROW) AND BC < (CACHE_START_ROW) +
+	; CACHE_SIZE_LINES
 	LD HL,(CACHE_START_ROW)
 	; Check BC >= CACHE_START_ROW
 	LD A,B
@@ -12063,7 +12146,7 @@ LOAD_CACHE_DONE:
 	LD HL,(CACHE_START_ROW)
 	LD A,C
 	SUB L
-	LD E,A				; E = local line index (0..CACHE_SIZE_LINES-1)
+	LD E,A			; E = local line index (0..CACHE_SIZE_LINES-1)
 
 CALC_CACHE_LINE_PTR:
 	LD L,E
@@ -12076,7 +12159,7 @@ CALC_CACHE_LINE_PTR:
 	ADD HL,HL			; *64
 	ADD HL,HL			; *128
 	LD DE,LINE_STORAGE
-	ADD HL,DE			; HL = pointer to line start in LINE_STORAGE
+	ADD HL,DE		; HL = pointer to line start in LINE_STORAGE
 
 	POP DE
 	POP BC
@@ -12140,7 +12223,7 @@ CHECK_KEY_READY:
 	PUSH DE
 	PUSH HL
 	LD HL,(BIOS_CONST_VEC)
-	CALL CALL_HL			; Returns A = 0xFF if char ready, 0x00 if not
+	CALL CALL_HL		; Returns A = 0xFF if char ready, 0x00 if not
 	POP HL
 	POP DE
 	POP BC
@@ -12179,7 +12262,7 @@ DES_WAIT:
 	RET				; Standalone ESC, nothing to drain
 
 DES_DRAIN_FIRST:
-	CALL GET_KEY			; Consume byte following ESC ('[' or 'O' etc.)
+	CALL GET_KEY		; Consume byte following ESC ('[' or 'O' etc.)
 DES_DRAIN_MORE:
 	LD BC,500
 DES_DRAIN_WAIT:
@@ -12263,7 +12346,8 @@ WAIT_ESC_BYTE:
 	LD A,(BLOCK_ACTIVE)
 	OR A
 	JR Z,ESC_TO_SPLASH
-	; Block selection active: cancel block highlight instead of exiting to splash
+	; Block selection active: cancel block highlight instead of exiting to
+	; splash
 	CALL CANCEL_BLOCK
 	RET
 
@@ -12341,13 +12425,13 @@ HANDLE_CSI:
 	JP Z,CURSOR_HOME
 	CP 'F'				; End (ESC [ F)
 	JP Z,CURSOR_END
-	CP '1'				; Home (ESC [ 1 ~) or modifier prefix (ESC [ 1 ; ...)
+	CP '1'		; Home (ESC [ 1 ~) or modifier prefix (ESC [ 1 ; ...)
 	JP Z,HANDLE_CSI_1
-	CP '2'				; Shift+Arrow prefix (ESC [ 2 A..D) or Insert
+	CP '2'			; Shift+Arrow prefix (ESC [ 2 A..D) or Insert
 	JP Z,HANDLE_CSI_2
-	CP '4'				; End (ESC [ 4 ~) or modifier prefix (ESC [ 4 ; ...)
+	CP '4'		; End (ESC [ 4 ~) or modifier prefix (ESC [ 4 ; ...)
 	JP Z,HANDLE_CSI_4
-	CP '7'				; Home (ESC [ 7 ~) / Ctrl+Home (ESC [ 7 ^)
+	CP '7'			; Home (ESC [ 7 ~) / Ctrl+Home (ESC [ 7 ^)
 	JP Z,HANDLE_CSI_7
 	CP '8'				; End (ESC [ 8 ~) / Ctrl+End (ESC [ 8 ^)
 	JP Z,HANDLE_CSI_8
@@ -12468,9 +12552,9 @@ HANDLE_CSI_LOOP:
 	CP 'D'
 	JP Z,HANDLE_CSI_D
 	CP 'H'
-	JP Z,JUMP_FILE_TOP		; Modified CSI: ESC [ 1 ; 5 H -> Ctrl+Home!
+	JP Z,JUMP_FILE_TOP	; Modified CSI: ESC [ 1 ; 5 H -> Ctrl+Home!
 	CP 'F'
-	JP Z,JUMP_FILE_BOTTOM		; Modified CSI: ESC [ 1 ; 5 F -> Ctrl+End!
+	JP Z,JUMP_FILE_BOTTOM	; Modified CSI: ESC [ 1 ; 5 F -> Ctrl+End!
 	CP 'I'
 	JP Z,PAGE_UP
 	CP 'G'
@@ -12560,7 +12644,8 @@ CURSOR_HOME:
 	RET
 
 CURSOR_END:
-	CALL GET_CUR_ROW_LEN		; HL = line start, DE = byte length, BC = visual length
+	; HL = line start, DE = byte length, BC = visual length
+	CALL GET_CUR_ROW_LEN
 	LD HL,MAX_INPUT_LINE_CHARS-1	; 999
 	LD A,E
 	SUB L
@@ -12760,7 +12845,7 @@ CURSOR_DOWN:
 	OR L
 	RET Z				; 0 lines
 
-	DEC HL				; Max valid doc row = DOC_TOTAL_LINES - 1
+	DEC HL			; Max valid doc row = DOC_TOTAL_LINES - 1
 	LD DE,(CUR_DOC_ROW)
 	; If CUR_DOC_ROW >= max valid row, cannot move down
 	LD A,D
@@ -12782,7 +12867,7 @@ C_DOWN_MOVE:
 	SBC HL,DE			; HL = screen row index
 	LD A,(ACTIVE_ROWS)
 	DEC A
-	DEC A				; A = max screen row index (ACTIVE_ROWS - 2)
+	DEC A			; A = max screen row index (ACTIVE_ROWS - 2)
 	CP L
 	JR NC,CUR_DOWN_NO_SCROLL	; Screen row <= max, no scroll
 
@@ -12815,7 +12900,8 @@ CURSOR_LEFT:
 	DEC HL
 	LD (CUR_COL),HL
 	CALL CALC_VISUAL_COL
-	LD (TARGET_COL),HL		; Horizontal movement updates sticky target visual column
+	; Horizontal movement updates sticky target visual column
+	LD (TARGET_COL),HL
 	LD A,(BLOCK_ACTIVE)
 	CP 1
 	RET NZ
@@ -12856,7 +12942,8 @@ CL_NO_SCROLL:
 	RET
 
 CURSOR_RIGHT:
-	CALL GET_CUR_ROW_LEN		; DE = current line byte length, BC = visual length
+	; DE = current line byte length, BC = visual length
+	CALL GET_CUR_ROW_LEN
 	LD HL,(CUR_COL)
 	; Check if CUR_COL >= DE (at or past EOL)
 	LD A,L
@@ -12880,7 +12967,8 @@ CR_IN_LINE:
 	INC HL
 	LD (CUR_COL),HL
 	CALL CALC_VISUAL_COL
-	LD (TARGET_COL),HL		; Horizontal movement updates sticky target visual column
+	; Horizontal movement updates sticky target visual column
+	LD (TARGET_COL),HL
 	LD A,(BLOCK_ACTIVE)
 	CP 1
 	RET NZ
@@ -13024,7 +13112,7 @@ PAGE_DOWN:
 	OR L
 	RET Z				; 0 lines
 
-	DEC HL				; HL = max_valid_row (DOC_TOTAL_LINES - 1)
+	DEC HL			; HL = max_valid_row (DOC_TOTAL_LINES - 1)
 	LD DE,(CUR_DOC_ROW)
 	; Compare CUR_DOC_ROW (DE) with max_valid_row (HL)
 	LD A,D
@@ -13186,14 +13274,15 @@ JUMP_FILE_BOTTOM:
 	JR JUMP_BOT_SET_CUR
 
 JUMP_BOT_HAS_LINES:
-	DEC HL				; HL = max_valid_row (DOC_TOTAL_LINES - 1)
+	DEC HL			; HL = max_valid_row (DOC_TOTAL_LINES - 1)
 JUMP_BOT_SET_CUR:
 	LD (CUR_DOC_ROW),HL
 	CALL GET_CUR_ROW_LEN		; DE = byte length, BC = visual length
 	LD (CUR_COL),DE
 	LD (TARGET_COL),BC
 
-	; Calculate TOP_DOC_ROW so the bottom line is visible at bottom of screen
+	; Calculate TOP_DOC_ROW so the bottom line is visible at bottom of
+	; screen
 	; Viewport height: E = ACTIVE_ROWS - 1
 	LD HL,(DOC_TOTAL_LINES)
 	LD A,(ACTIVE_ROWS)
@@ -13601,7 +13690,8 @@ DGP_PAD_LOOP:
 	; Line 7: Border
 	CALL POPUP_PRINT_BORDER
 
-	; Position cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL + 28)
+	; Position cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL +
+	; 28)
 	LD A,(POPUP_START_ROW)
 	ADD A,4
 	LD H,A
@@ -13912,7 +14002,8 @@ CHECK_START_FROM_BLOCK:
 
 CSFB_CHECK_SOLID:
 	; BLOCK_ACTIVE == 2: Check if cursor is at or in the block!
-	; If cursor has navigated away from the block, cancel block and do normal find!
+	; If cursor has navigated away from the block, cancel block and do
+	; normal find!
 	CALL NORMALIZE_BLOCK_BOUNDS
 
 	; Check if CUR_DOC_ROW is within [BLOCK_START_ROW, BLOCK_END_ROW]
@@ -13920,15 +14011,18 @@ CSFB_CHECK_SOLID:
 	LD DE,(BLOCK_START_ROW)
 	OR A
 	SBC HL,DE
-	JR C,CSFB_CANCEL_OLD_BLOCK	; CUR_DOC_ROW < BLOCK_START_ROW -> moved away!
+	; CUR_DOC_ROW < BLOCK_START_ROW -> moved away!
+	JR C,CSFB_CANCEL_OLD_BLOCK
 
 	LD HL,(BLOCK_END_ROW)
 	LD DE,(CUR_DOC_ROW)
 	OR A
 	SBC HL,DE
-	JR C,CSFB_CANCEL_OLD_BLOCK	; CUR_DOC_ROW > BLOCK_END_ROW -> moved away!
+	; CUR_DOC_ROW > BLOCK_END_ROW -> moved away!
+	JR C,CSFB_CANCEL_OLD_BLOCK
 
-	; On row: for single-line block, check if CUR_COL is within [BLOCK_START_COL, BLOCK_END_COL]
+	; On row: for single-line block, check if CUR_COL is within
+	; [BLOCK_START_COL, BLOCK_END_COL]
 	LD HL,(BLOCK_START_ROW)
 	LD DE,(BLOCK_END_ROW)
 	OR A
@@ -13939,10 +14033,12 @@ CSFB_CHECK_SOLID:
 	LD A,(CUR_COL)
 	LD HL,BLOCK_START_COL
 	CP (HL)
-	JR C,CSFB_CANCEL_OLD_BLOCK	; CUR_COL < BLOCK_START_COL -> moved away!
+	; CUR_COL < BLOCK_START_COL -> moved away!
+	JR C,CSFB_CANCEL_OLD_BLOCK
 	LD HL,BLOCK_END_COL
 	CP (HL)
-	JR Z,CSFB_EXTRACT		; CUR_COL == BLOCK_END_COL (at end of block): ok!
+	; CUR_COL == BLOCK_END_COL (at end of block): ok!
+	JR Z,CSFB_EXTRACT
 	JR C,CSFB_EXTRACT		; CUR_COL < BLOCK_END_COL: ok!
 	; CUR_COL > BLOCK_END_COL: moved away!
 
@@ -14331,7 +14427,8 @@ GOT_START_COL:
 	JP C,ADVANCE_NEXT_LINE
 
 SCAN_COL_LOOP:
-	; If wrapped and on SEARCH_START_ROW, do not search beyond SEARCH_START_COL
+	; If wrapped and on SEARCH_START_ROW, do not search beyond
+	; SEARCH_START_COL
 	LD A,(SEARCH_WRAPPED)
 	OR A
 	JR Z,CHECK_COL_MATCH
@@ -14354,7 +14451,8 @@ SCAN_COL_LOOP:
 	JR CHECK_COL_MATCH
 
 SCL_WRAP_EXCLUSIVE:
-	; Exclusive (repeat find / replace): B >= SEARCH_START_COL -> search completed
+	; Exclusive (repeat find / replace): B >= SEARCH_START_COL -> search
+	; completed
 	LD A,(SEARCH_START_COL)
 	LD E,A
 	LD A,B
@@ -14419,7 +14517,8 @@ SEARCH_POS_OK:
 	; Solidify block highlight on match
 	CALL HIGHLIGHT_FOUND_BLOCK
 
-	; Position cursor at the next character position past the end of the block
+	; Position cursor at the next character position past the end of the
+	; block
 	LD A,(BLOCK_END_COL)
 	LD (CUR_COL),A
 	CALL CALC_VISUAL_COL
@@ -14461,8 +14560,9 @@ CHECK_WRAP_LIMIT:
 	LD DE,(SEARCH_START_ROW)
 	OR A
 	SBC HL,DE
-	JP C,SEARCH_LINE_LOOP		; CUR_DOC_ROW < SEARCH_START_ROW: continue
-	JP Z,SEARCH_LINE_LOOP		; CUR_DOC_ROW == SEARCH_START_ROW: do wrapped pass
+	JP C,SEARCH_LINE_LOOP	; CUR_DOC_ROW < SEARCH_START_ROW: continue
+	; CUR_DOC_ROW == SEARCH_START_ROW: do wrapped pass
+	JP Z,SEARCH_LINE_LOOP
 	JP SEARCH_NOT_FOUND		; CUR_DOC_ROW > SEARCH_START_ROW: done
 
 ;------------------------------------------------------------------------------
@@ -14559,7 +14659,8 @@ BW_GOT_START_COL:
 	LD B,A				; B = candidate column (cand_col)
 
 SCAN_BW_COL_LOOP:
-	; If wrapped and on SEARCH_START_ROW, do not search before SEARCH_START_COL
+	; If wrapped and on SEARCH_START_ROW, do not search before
+	; SEARCH_START_COL
 	LD A,(SEARCH_WRAPPED)
 	OR A
 	JR Z,BW_CHECK_COL_MATCH
@@ -14585,7 +14686,8 @@ SCAN_BW_COL_LOOP:
 	JR BW_CHECK_COL_MATCH
 
 BW_WRAP_EXCLUSIVE:
-	; Exclusive (repeat find / replace): B <= SEARCH_START_COL -> search completed
+	; Exclusive (repeat find / replace): B <= SEARCH_START_COL -> search
+	; completed
 	LD A,(SEARCH_START_COL)
 	LD E,A
 	LD A,B
@@ -14609,7 +14711,7 @@ BW_CHECK_COL_MATCH:
 	; Not matched: step B backward
 	LD A,B
 	OR A
-	JR Z,RETREAT_PREV_LINE		; Reached col 0: retreat to previous line
+	JR Z,RETREAT_PREV_LINE	; Reached col 0: retreat to previous line
 	DEC B
 	JR SCAN_BW_COL_LOOP
 
@@ -14650,7 +14752,7 @@ CHECK_BW_WRAP_LIMIT:
 	OR A
 	SBC HL,DE
 	JP NC,SEARCH_BW_LINE_LOOP	; CUR_DOC_ROW >= SEARCH_START_ROW: valid
-	JP SEARCH_NOT_FOUND			; CUR_DOC_ROW < SEARCH_START_ROW: passed origin!
+	JP SEARCH_NOT_FOUND	; CUR_DOC_ROW < SEARCH_START_ROW: passed origin!
 
 SEARCH_NOT_FOUND:
 	; Restore initial cursor position
@@ -14677,7 +14779,8 @@ SEARCH_NOT_FOUND:
 	RET
 
 S_SHOW_COMPLETED:
-	; Previously found: keep match highlighted, display Search Completed popup
+	; Previously found: keep match highlighted, display Search Completed
+	; popup
 	CALL SHOW_POPUP_SEARCH_COMPLETED
 	SCF
 	RET
@@ -15114,10 +15217,11 @@ FFNF_SCAN_LOOP:
 	CP ':'
 	JR NZ,FFNF_CHAR_OK
 
-	; Colon found: check if HL < DE (part of prefix) or HL >= DE (line colon)
+	; Colon found: check if HL < DE (part of prefix) or HL >= DE (line
+	; colon)
 	CALL CMP_HL_DE
 	JR C,FFNF_CHAR_OK		; Colon is part of prefix!
-	JR FFNF_SCAN_DONE		; Colon is at or after DE -> line colon! Stop.
+	JR FFNF_SCAN_DONE	; Colon is at or after DE -> line colon! Stop.
 
 FFNF_CHAR_OK:
 	INC B
@@ -15245,7 +15349,8 @@ FRDM_FILL_SPACES:
 	; 2. Determine number of digits for REPLACE_COUNT
 	LD HL,(REPLACE_COUNT)
 	CALL GET_DEC_WORD_DIGITS	; A = digits D (1..5)
-	; Total text length = 14 ("Replace done: ") + D + 16 (" replacement(s).")
+	; Total text length = 14 ("Replace done: ") + D + 16 ("
+	; replacement(s).")
 	; = 30 + D chars
 	; Remaining spaces inside 48 chars = 48 - (30 + D) = 18 - D
 	; Left spaces = (18 - D) / 2
@@ -15450,7 +15555,8 @@ DO_REPLACE_UI:
 	CALL DO_FIND_UI
 	RET C				; Cancelled or pattern not found
 
-	; Note: DO_FIND_UI already executed first search and positioned at first match!
+	; Note: DO_FIND_UI already executed first search and positioned at first
+	; match!
 
 	; 2. Prompt for replacement string via Tier 2 centered modal popup
 	CALL DRAW_REPLACE_POPUP_FULL
@@ -15458,7 +15564,7 @@ DO_REPLACE_UI:
 	; Clear replace buffer
 	LD HL,REPLACE_BUF
 	LD (HL),0
-	LD B,0				; B = character count (0..FIND_POPUP_FIELD_LEN)
+	LD B,0			; B = character count (0..FIND_POPUP_FIELD_LEN)
 
 REPLACE_INPUT_LOOP:
 	CALL GET_KEY
@@ -15649,7 +15755,8 @@ DRP_PAD_LOOP:
 	; Line 7: Border
 	CALL POPUP_PRINT_BORDER
 
-	; Position cursor inside replace box at (POPUP_START_ROW + 4, POPUP_COL + 18)
+	; Position cursor inside replace box at (POPUP_START_ROW + 4, POPUP_COL
+	; + 18)
 	LD A,(POPUP_START_ROW)
 	ADD A,4
 	LD H,A
@@ -15724,7 +15831,8 @@ DRAW_REPLACE_CONFIRM_POPUP:
 	; Line 7: Border
 	CALL POPUP_PRINT_BORDER
 
-	; Position cursor inside popup on prompt line after "Replace this occurrence? "
+	; Position cursor inside popup on prompt line after "Replace this
+	; occurrence? "
 	CALL LOCATE_REPLACE_CONFIRM_CURSOR
 	CALL TERM_SHOW_CURSOR
 	RET
@@ -15859,7 +15967,7 @@ REPLACE_REV_TO_BW:
 
 REPLACE_ACTIVATE_ALL:
 	XOR A
-	LD (SEARCH_DIRECTION),A		; Ensure forward direction for Replace All
+	LD (SEARCH_DIRECTION),A	; Ensure forward direction for Replace All
 	LD A,1
 	LD (REPLACE_ALL_MODE),A
 	JP REPLACE_EXECUTE_SUBST
@@ -16008,7 +16116,7 @@ ALR_LENGTH_OK:
 
 	; Number of bytes to move = TAIL_LEN + 1 (includes null terminator)
 	INC C				; C = BYTES_TO_MOVE (tail + null)
-	LD B,0				; BC = count of tail bytes including null
+	LD B,0			; BC = count of tail bytes including null
 
 	; Compare S and R:
 	LD A,(SEARCH_LEN)
@@ -16040,7 +16148,7 @@ ALR_LENGTH_OK:
 	LD E,A
 	LD D,0
 	PUSH HL
-	ADD HL,DE			; HL = HL + Delta (Destination last byte)
+	ADD HL,DE		; HL = HL + Delta (Destination last byte)
 	EX DE,HL			; DE = Destination last byte
 	POP HL				; HL = Source last byte
 	POP BC				; BC = tail count
@@ -16156,7 +16264,8 @@ DO_CHAR_INSERT:
 
 ROW_IN_BOUNDS:
 	CALL CHECKOUT_ACTIVE_LINE	; Ensures line is in ACTIVE_LINE_BUF
-	CALL GET_CUR_ROW_LEN	; HL = ACTIVE_LINE_BUF, DE = len, BC = visual len
+	; HL = ACTIVE_LINE_BUF, DE = len, BC = visual len
+	CALL GET_CUR_ROW_LEN
 
 	; 1. Check byte capacity against MAX_ACTIVE_LINE_STRIDE - 2 (1022)
 	LD HL,MAX_ACTIVE_LINE_STRIDE-2
@@ -16176,7 +16285,7 @@ CHECK_BYTE_CAP_REPLACE:
 	SUB E
 	LD A,H
 	SBC A,D
-	RET NC				; In overwrite mode at or past EOL: cannot append when full!
+	RET NC	; In overwrite mode at or past EOL: cannot append when full!
 
 CHECK_VISUAL_LIMIT:
 	; 2. Check visual line length limit (MAX_INPUT_LINE_CHARS = 1000)
@@ -16187,7 +16296,8 @@ CHECK_VISUAL_LIMIT:
 	SBC A,H
 	JR NC,CHECK_AT_EOL_REPLACE	; BC >= 1000
 
-	; If inserting a Tab, check if tab expansion would push visual length > MAX_INPUT_LINE_CHARS
+	; If inserting a Tab, check if tab expansion would push visual length >
+	; MAX_INPUT_LINE_CHARS
 	LD A,(CHAR_INSERT_TEMP)
 	CP KEY_TAB
 	JR NZ,LINE_LEN_OK
@@ -16218,8 +16328,8 @@ CHECK_AT_EOL_REPLACE:
 	SUB E
 	LD A,H
 	SBC A,D
-	RET NC				; At or past EOL: cannot append when full!
-	JR LINE_LEN_OK			; Overwrite existing char in full line: allowed!
+	RET NC			; At or past EOL: cannot append when full!
+	JR LINE_LEN_OK		; Overwrite existing char in full line: allowed!
 
 LINE_LEN_OK:
 	LD A,1
@@ -16240,7 +16350,8 @@ LINE_LEN_OK:
 	OR A
 	JR NZ,DO_SHIFT_AND_INSERT
 
-	; Overwrite mode: replace character at ACTIVE_LINE_BUF + CUR_COL in place!
+	; Overwrite mode: replace character at ACTIVE_LINE_BUF + CUR_COL in
+	; place!
 	LD HL,ACTIVE_LINE_BUF
 	LD DE,(CUR_COL)
 	ADD HL,DE
@@ -16249,7 +16360,8 @@ LINE_LEN_OK:
 	JR ADVANCE_INSERT_CURSOR
 
 DO_SHIFT_AND_INSERT:
-	; 5. If CUR_COL < length: shift characters from (ACTIVE_LINE_BUF + DE) down to (ACTIVE_LINE_BUF + CUR_COL)
+	; 5. If CUR_COL < length: shift characters from (ACTIVE_LINE_BUF + DE)
+	; down to (ACTIVE_LINE_BUF + CUR_COL)
 	PUSH DE				; Save line length DE
 	LD HL,ACTIVE_LINE_BUF
 	ADD HL,DE			; HL = ACTIVE_LINE_BUF + DE
@@ -16273,7 +16385,7 @@ DO_SHIFT_AND_INSERT:
 
 	LDDR
 	XOR A
-	LD (DE),A			; Guarantee null terminator at new end of line
+	LD (DE),A		; Guarantee null terminator at new end of line
 
 	; Now insert character at ACTIVE_LINE_BUF + CUR_COL
 	LD HL,ACTIVE_LINE_BUF
@@ -16284,7 +16396,8 @@ DO_SHIFT_AND_INSERT:
 	JR ADVANCE_INSERT_CURSOR
 
 DO_PAD_AND_APPEND:
-	; Pad from ACTIVE_LINE_BUF + DE up to ACTIVE_LINE_BUF + CUR_COL with spaces
+	; Pad from ACTIVE_LINE_BUF + DE up to ACTIVE_LINE_BUF + CUR_COL with
+	; spaces
 	LD HL,ACTIVE_LINE_BUF
 	ADD HL,DE			; HL = ACTIVE_LINE_BUF + DE (at old EOL)
 	PUSH HL				; Save old EOL pointer
@@ -16321,7 +16434,7 @@ ADVANCE_INSERT_CURSOR:
 	JR NZ,AIC_CHECK_BYTE
 	LD A,H
 	CP D
-	RET Z				; At column 999, do not advance cursor further!
+	RET Z			; At column 999, do not advance cursor further!
 
 AIC_CHECK_BYTE:
 	LD HL,(CUR_COL)
@@ -16335,7 +16448,7 @@ AIC_CHECK_BYTE:
 	INC HL
 	LD (CUR_COL),HL
 	CALL CALC_VISUAL_COL
-	LD (TARGET_COL),HL		; Sync sticky target visual column on typing
+	LD (TARGET_COL),HL	; Sync sticky target visual column on typing
 	RET
 
 ;------------------------------------------------------------------------------
@@ -16371,7 +16484,7 @@ DO_DELETE_CHAR:
 	DEC HL
 	LD (CUR_COL),HL
 	CALL CALC_VISUAL_COL
-	LD (TARGET_COL),HL		; Sync sticky target visual column on Backspace
+	LD (TARGET_COL),HL	; Sync sticky target visual column on Backspace
 
 	LD A,1
 	LD (ACTIVE_LINE_DIRTY),A
@@ -16424,7 +16537,8 @@ DO_DELETE_FORWARD:
 
 	LD A,(HL)
 	OR A
-	JR Z,DO_DEL_FWD_JOIN_NEXT	; At end of line: join NEXT line into current line!
+	; At end of line: join NEXT line into current line!
+	JR Z,DO_DEL_FWD_JOIN_NEXT
 
 	LD A,1
 	LD (ACTIVE_LINE_DIRTY),A
@@ -16540,7 +16654,7 @@ DO_BS_ROW0_CHECK:
 	OR L
 	JR Z,DO_BS_ROW0_NO_SHIFT
 	LD B,H
-	LD C,L				; BC = count of lines to shift (new DOC_TOTAL_LINES)
+	LD C,L		; BC = count of lines to shift (new DOC_TOTAL_LINES)
 	LD DE,0				; Destination line = 0
 	LD HL,1				; Source line = 1
 	CALL SHIFT_LINE_SLOTS_UP
@@ -16557,11 +16671,12 @@ DO_BS_JOIN_PREV:
 	LD HL,(CUR_DOC_ROW)
 	DEC HL
 	LD B,H
-	LD C,L				; BC = upper line index (CUR_DOC_ROW - 1)
+	LD C,L			; BC = upper line index (CUR_DOC_ROW - 1)
 	CALL JOIN_TWO_LINES
-	RET C				; If Carry set (combined length > 1000), do nothing
+	RET C		; If Carry set (combined length > 1000), do nothing
 
-	; Join succeeded: HL = join column offset (original len of previous line)
+	; Join succeeded: HL = join column offset (original len of previous
+	; line)
 	LD (CUR_COL),HL			; Move cursor to join point
 	LD HL,(CUR_DOC_ROW)
 	DEC HL
@@ -16680,10 +16795,11 @@ JOIN_MEASURE_L2_DONE:
 	RET
 
 JOIN_CAPACITY_OK:
-	; 3. Append lower line (SPLIT_LINE_TEMP) to upper line (ACTIVE_LINE_BUF + len_1)
+	; 3. Append lower line (SPLIT_LINE_TEMP) to upper line (ACTIVE_LINE_BUF
+	; + len_1)
 	LD HL,ACTIVE_LINE_BUF
 	LD DE,(JOIN_COL_SAVED)
-	ADD HL,DE			; HL = pointer to null in ACTIVE_LINE_BUF
+	ADD HL,DE		; HL = pointer to null in ACTIVE_LINE_BUF
 	LD DE,SPLIT_LINE_TEMP
 JOIN_APPEND_LOOP:
 	LD A,(DE)
@@ -16711,7 +16827,8 @@ JOIN_APPEND_LOOP:
 	DEC HL
 	LD (DOC_TOTAL_LINES),HL
 
-	; 7. Shift line slots from JOIN_DOC_LINE + 2 upwards to JOIN_DOC_LINE + 1
+	; 7. Shift line slots from JOIN_DOC_LINE + 2 upwards to JOIN_DOC_LINE +
+	; 1
 	; Number of entries to shift: W = DOC_TOTAL_LINES - (JOIN_DOC_LINE + 1)
 	LD HL,(DOC_TOTAL_LINES)		; New total lines
 	LD DE,(JOIN_DOC_LINE)
@@ -16971,7 +17088,8 @@ LOAD_CONFIG:
 
 LOAD_CFG_NOT_LOCAL:
 	; 3. Probe other logged-in drives for SE.COM
-	CALL PROBE_PROGRAM_DRIVE	; Returns A = drive index (0..15) if found, Carry = 0
+	; Returns A = drive index (0..15) if found, Carry = 0
+	CALL PROBE_PROGRAM_DRIVE
 	RET C				; Not found on any other drive
 
 	; SE.COM found on drive A! Try opening SE.CFG on that drive
@@ -17019,7 +17137,7 @@ LOAD_CFG_NOT_PROG:
 ;------------------------------------------------------------------------------
 PROBE_PROGRAM_DRIVE:
 	LD C,24				; BDOS Return Login Vector
-	CALL BDOS_ENTRY			; HL = 16-bit vector (bit 0=A, bit 1=B...)
+	CALL BDOS_ENTRY		; HL = 16-bit vector (bit 0=A, bit 1=B...)
 	LD D,0				; D = drive index (0..15)
 PPD_LOOP:
 	LD A,D
@@ -18919,7 +19037,8 @@ PARSE_BYTE_LOOP:
 	CP 10				; LF
 	JP Z,HANDLE_LF
 
-	; Normal character (including 0x09 Tab): stream into Far RAM stride chain
+	; Normal character (including 0x09 Tab): stream into Far RAM stride
+	; chain
 	XOR A
 	LD (SEEN_CR),A
 
@@ -18945,7 +19064,8 @@ PARSE_BYTE_LOOP:
 	POP HL
 
 LOAD_HAVE_HEAD:
-	; Check if current stride is full (126 chars stored -> LOAD_STRIDE_OFF == 128)
+	; Check if current stride is full (126 chars stored -> LOAD_STRIDE_OFF
+	; == 128)
 	LD A,(LOAD_STRIDE_OFF)
 	CP FAR_SLOT_SIZE		; 128
 	JR C,LOAD_STORE_CHAR
@@ -19233,7 +19353,8 @@ DLS_TILDE_LOOP:
 	; Render initial status bar on row ACTIVE_ROWS
 	CALL RENDER_STATUS_BAR
 
-	; Determine modal title: "Inserting File" if block insert, else "Opening File"
+	; Determine modal title: "Inserting File" if block insert, else "Opening
+	; File"
 	LD DE,STR_POPUP_OPEN_TITLE
 	LD A,(IS_BLOCK_INSERT_UI)
 	OR A
@@ -19577,7 +19698,8 @@ UPDATE_LOAD_PROGRESS:
 	PUSH DE
 	PUSH HL
 
-	; Locate cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL + 20)
+	; Locate cursor inside popup box at (POPUP_START_ROW + 4, POPUP_COL +
+	; 20)
 	LD A,(POPUP_START_ROW)
 	ADD A,4
 	LD H,A
@@ -19697,7 +19819,8 @@ INIT_EMPTY_DOCUMENT:
 ;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_OPEN_FILE_UI:
-	; Invalidate active line and flush dirty cache before directory collection
+	; Invalidate active line and flush dirty cache before directory
+	; collection
 	; overlays LINE_STORAGE
 	CALL INVALIDATE_ACTIVE_LINE
 	CALL FLUSH_DIRTY_CACHE
@@ -19710,7 +19833,8 @@ DO_OPEN_FILE_UI:
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL INIT_DIR_DRIVE
 
-	; Initialize directory user area from current document or plugin user area
+	; Initialize directory user area from current document or plugin user
+	; area
 	LD A,(IS_PLUGIN_LOAD_UI)
 	OR A
 	JR Z,IDU_DOC
@@ -19721,16 +19845,19 @@ IDU_DOC:
 IDU_SET:
 	LD (CURRENT_DIR_USER),A
 
-	; Filter defaults to all files shown unless explicitly provided in edit box
+	; Filter defaults to all files shown unless explicitly provided in edit
+	; box
 	CALL RESET_DIR_FILTER
 
-	; Preload edit box with known current drive and user area prefix (e.g. "J0:", "A4:")
+	; Preload edit box with known current drive and user area prefix (e.g.
+	; "J0:", "A4:")
 	CALL PRELOAD_DRIVE_USER_PREFIX
 	LD HL,0
 	LD (OPEN_GOTO_LINE),HL
 
 REFRESH_OPEN_DIR:
-	; 1. Collect Directory Entries from CURRENT_DIR_DRIVE (with Bit-7 strip & dup filter)
+	; 1. Collect Directory Entries from CURRENT_DIR_DRIVE (with Bit-7 strip
+	; & dup filter)
 	CALL COLLECT_DIR_ENTRIES
 
 	; 2. Sort Directory Entries Alphabetically
@@ -19934,7 +20061,8 @@ OPEN_FILE_NOT_FOUND:
 	JP RENDER_OPEN_PAGE
 
 CHECK_PAGING_OR_CANCEL:
-	; A = return code: 0 = Cancel (ESC), 1 = Next Page (PgDn), 3 = Prev Page (PgUp)
+	; A = return code: 0 = Cancel (ESC), 1 = Next Page (PgDn), 3 = Prev Page
+	; (PgUp)
 	CP 1
 	JR Z,DO_NEXT_PAGE
 	CP 3
@@ -19996,7 +20124,7 @@ DO_PARSE_AND_LOAD_PLUGIN:
 	JR C,OPEN_PLUGIN_FAIL
 
 	; Success: clear flags, restore user area, and return to caller
-	PUSH AF				; Preserve return A (slot number) & Carry
+	PUSH AF			; Preserve return A (slot number) & Carry
 	XOR A
 	LD (IS_PLUGIN_LOAD_UI),A
 	LD (IS_SPLASH_SCREEN),A
@@ -20267,7 +20395,8 @@ DO_PERFORM_BLOCK_INSERT:
 	CP E
 	JR NZ,DPBI_NON_EMPTY
 
-	; Block is empty: cancel block selection, ensure cursor is at insertion point
+	; Block is empty: cancel block selection, ensure cursor is at insertion
+	; point
 	CALL CANCEL_BLOCK
 	LD HL,(BLOCK_START_ROW)
 	LD (CUR_DOC_ROW),HL
@@ -20277,7 +20406,8 @@ DO_PERFORM_BLOCK_INSERT:
 
 DPBI_NON_EMPTY:
 	; Non-empty block: DO_DELETE_BLOCK deletes selected text,
-	; clears BLOCK_ACTIVE, and sets (CUR_DOC_ROW, CUR_COL) = (BLOCK_START_ROW, BLOCK_START_COL)
+	; clears BLOCK_ACTIVE, and sets (CUR_DOC_ROW, CUR_COL) =
+	; (BLOCK_START_ROW, BLOCK_START_COL)
 	CALL DO_DELETE_BLOCK
 	LD HL,(BLOCK_START_ROW)
 	LD (CUR_DOC_ROW),HL
@@ -20320,7 +20450,8 @@ DPBI_SPLIT_LOOP:
 	LD HL,(CUR_COL)
 	LD (INSERT_CUR_LEN),HL
 
-	; Detach ACTIVE_LINE_ROW so active line system won't auto-commit scratch buffer
+	; Detach ACTIVE_LINE_ROW so active line system won't auto-commit scratch
+	; buffer
 	LD HL,0FFFFH
 	LD (ACTIVE_LINE_ROW),HL
 	XOR A
@@ -20535,7 +20666,7 @@ DPBI_SKIP_FCB_CLOSE:
 	JR NZ,DPBI_SET_SOLID_BLOCK
 	LD A,L
 	CP E
-	JR Z,DPBI_NO_BLOCK		; Start == End: 0 bytes inserted, no block
+	JR Z,DPBI_NO_BLOCK	; Start == End: 0 bytes inserted, no block
 
 DPBI_SET_SOLID_BLOCK:
 	LD HL,(INSERT_ORIG_START_ROW)
@@ -20803,7 +20934,8 @@ DO_SAVE_FILE_UI:
 	RET
 
 DO_SAVE_FILE_OK:
-	; Invalidate active line and flush dirty cache before directory collection
+	; Invalidate active line and flush dirty cache before directory
+	; collection
 	; overlays LINE_STORAGE
 	CALL INVALIDATE_ACTIVE_LINE
 	CALL FLUSH_DIRTY_CACHE
@@ -20895,7 +21027,8 @@ DO_SAVE_FILE_UI_IMPL:
 	; Initialize active directory drive from default disk or WORK_FCB
 	CALL INIT_DIR_DRIVE
 
-	; Filter defaults to all files shown unless explicitly provided in edit box
+	; Filter defaults to all files shown unless explicitly provided in edit
+	; box
 	CALL RESET_DIR_FILTER
 
 	; Initialize directory user area from current document user area
@@ -21124,7 +21257,7 @@ DO_ACTUAL_SAVE:
 
 	; Save the file from Far RAM to disk
 	CALL SAVE_FILE
-	RET C				; Save failed / target hibernated -> return
+	RET C			; Save failed / target hibernated -> return
 
 	; Mark filename as known and saved
 	LD A,1
@@ -21266,9 +21399,11 @@ HANDLE_SAVE_FILTER:
 	JP REFRESH_SAVE_DIR
 
 CHECK_SAVE_PAGING_OR_CANCEL:
-	; A = return code: 0 = Cancel (ESC), 1 = Next Page (PgDn), 2 = Format Toggled (Ctrl-F), 3 = Prev Page (PgUp)
+	; A = return code: 0 = Cancel (ESC), 1 = Next Page (PgDn), 2 = Format
+	; Toggled (Ctrl-F), 3 = Prev Page (PgUp)
 	CP 2
-	JP Z,RENDER_SAVE_PAGE		; Redraw save page with new format and prefilled input
+	; Redraw save page with new format and prefilled input
+	JP Z,RENDER_SAVE_PAGE
 	CP 1
 	JR Z,DO_SAVE_NEXT_PAGE
 	CP 3
@@ -21586,7 +21721,8 @@ CALC_DIR_BODY_ROWS:
 	JR CDBR_CALC_PROMPT
 
 CDBR_HAS_FILES:
-	; Files on page = min(DIR_PAGE_CAPACITY, DIR_FILE_COUNT - DIR_START_FILE)
+	; Files on page = min(DIR_PAGE_CAPACITY, DIR_FILE_COUNT -
+	; DIR_START_FILE)
 	LD HL,DIR_START_FILE
 	SUB (HL)
 	LD HL,DIR_PAGE_CAPACITY
@@ -21871,7 +22007,8 @@ RTC_NO_PAD:
 	POP AF
 	CALL PUTC
 
-	; If FAT mode, print unit digit; if CP/M mode and user > 0, print user digits
+	; If FAT mode, print unit digit; if CP/M mode and user > 0, print user
+	; digits
 	LD A,(CURRENT_DIR_IS_FAT)
 	OR A
 	JR NZ,RTC_PRINT_FAT_UNIT
@@ -21899,7 +22036,8 @@ RTC_PRINT_FAT_UNIT:
 	CALL PUTC
 
 RTC_FAT_UNIT_DONE:
-	; FAT mode suffix: print ':', path, optional trailing '/', then filter or ')'
+	; FAT mode suffix: print ':', path, optional trailing '/', then filter
+	; or ')'
 	LD A,':'
 	CALL PUTC
 
@@ -22623,7 +22761,8 @@ CFP_NO_DRIVE_PREFIX:
 	LD HL,INPUT_FILENAME_BUF
 
 CFP_PARSE_START:
-	; Copy uppercase pattern to DIR_FILTER_STR (max 12 chars null-terminated)
+	; Copy uppercase pattern to DIR_FILTER_STR (max 12 chars
+	; null-terminated)
 	PUSH HL
 	LD DE,DIR_FILTER_STR
 	LD B,12
@@ -23070,7 +23209,8 @@ COLLECT_DIR_ENTRIES:
 	OR A
 	JP NZ,COLLECT_FAT_DIR_ENTRIES
 
-	; Guard: if RAM drive is hibernated and CURRENT_DIR_DRIVE matches, return empty directory
+	; Guard: if RAM drive is hibernated and CURRENT_DIR_DRIVE matches,
+	; return empty directory
 	LD A,(RAMDRIVE_IS_HIBERNATED)
 	OR A
 	JR Z,CDE_DRIVE_OK
@@ -23088,10 +23228,11 @@ CDE_DRIVE_OK:
 	LD C,26				; BDOS Set DMA
 	CALL BDOS_ENTRY
 
-	; Prepare DIR_SEARCH_FCB: Drive = CURRENT_DIR_DRIVE, 11 filter bytes, rest 0
+	; Prepare DIR_SEARCH_FCB: Drive = CURRENT_DIR_DRIVE, 11 filter bytes,
+	; rest 0
 	LD HL,DIR_SEARCH_FCB
 	LD A,(CURRENT_DIR_DRIVE)
-	LD (HL),A			; Active directory drive (1=A, 2=B, etc.)
+	LD (HL),A		; Active directory drive (1=A, 2=B, etc.)
 	INC HL
 	EX DE,HL
 	LD HL,DIR_FILTER_FCB
@@ -23128,7 +23269,7 @@ DIR_COLLECT_LOOP:
 	ADD HL,HL			; *16
 	ADD HL,HL			; *32
 	LD DE,RAW_SECTOR_BUF
-	ADD HL,DE			; HL = pointer to 32-byte directory entry
+	ADD HL,DE		; HL = pointer to 32-byte directory entry
 
 	; Check user number / deleted status (byte 0):
 	LD A,(HL)
@@ -23139,7 +23280,8 @@ DIR_COLLECT_LOOP:
 	CP B
 	JR NZ,DIR_NEXT_ENTRY		; Non-matching user entry
 
-	; Check that filename is not blank (first char != space and != 0, with bit 7 stripped)
+	; Check that filename is not blank (first char != space and != 0, with
+	; bit 7 stripped)
 	INC HL				; HL = pointer to filename (bytes 1..8)
 	LD A,(HL)
 	AND 07FH
@@ -23191,7 +23333,8 @@ COPY_EXT_TEMP:
 	JR NC,DIR_NEXT_ENTRY		; Not a plugin file -> skip
 CDE_NOT_PLUGIN_UI:
 
-	; Check if this filename is already in DIR_NAMES_BUF (duplicate extent filter)
+	; Check if this filename is already in DIR_NAMES_BUF (duplicate extent
+	; filter)
 	CALL CHECK_DIR_DUPLICATE
 	JR C,DIR_NEXT_ENTRY		; Already collected -> skip duplicate
 
@@ -23265,7 +23408,7 @@ CHECK_DUP_ENTRY_LOOP:
 	PUSH BC
 	PUSH HL				; Save entry pointer in DIR_NAMES_BUF
 	LD DE,DIR_TEMP_ENTRY
-	LD C,12				; Compare 12 bytes (8 name + '.' + 3 ext)
+	LD C,12			; Compare 12 bytes (8 name + '.' + 3 ext)
 
 CHECK_DUP_BYTE_LOOP:
 	LD A,(DE)
@@ -23475,7 +23618,7 @@ COMPARE_ENTRY_LOOP:
 	JR NO_SWAP_NEEDED		; Exactly identical
 
 COMPARE_FOUND_DIFF:
-	JR NC,NO_SWAP_NEEDED		; (DE) >= (HL): already in alphabetical order!
+	JR NC,NO_SWAP_NEEDED	; (DE) >= (HL): already in alphabetical order!
 
 	; Swap entry j and entry j+1 (13 bytes)
 	POP HL				; HL = entry j pointer
@@ -23555,7 +23698,8 @@ DISPLAY_DIR_PAGE:
 	RET
 
 DO_SHOW_PAGE:
-	; Calculate start file: DIR_START_FILE = DIR_PAGE_INDEX * DIR_PAGE_CAPACITY
+	; Calculate start file: DIR_START_FILE = DIR_PAGE_INDEX *
+	; DIR_PAGE_CAPACITY
 	CALL CALC_DIR_START_FILE
 
 	; Calculate number of files on this page:
@@ -23568,9 +23712,10 @@ DO_SHOW_PAGE:
 	JR C,HAVE_PAGE_COUNT
 	LD A,(HL)
 HAVE_PAGE_COUNT:
-	LD B,A				; B = number of files to display on this page
+	LD B,A			; B = number of files to display on this page
 
-	; Calculate pointer in DIR_NAMES_BUF: DIR_NAMES_BUF + (DIR_START_FILE * 13)
+	; Calculate pointer in DIR_NAMES_BUF: DIR_NAMES_BUF + (DIR_START_FILE *
+	; 13)
 	LD A,(DIR_START_FILE)
 	LD L,A
 	LD H,0
@@ -23584,7 +23729,7 @@ HAVE_PAGE_COUNT:
 	ADD HL,DE			; *12
 	ADD HL,DE			; *13
 	LD DE,DIR_NAMES_BUF
-	ADD HL,DE			; HL = pointer to start entry on this page
+	ADD HL,DE		; HL = pointer to start entry on this page
 
 	XOR A
 	LD (DIR_COL_COUNT),A
@@ -23686,7 +23831,7 @@ DISP_COL_TERMINATE:
 	INC A
 	LD (DIR_COL_COUNT),A
 	LD HL,DIR_COLS_PER_ROW
-	CP (HL)				; Wrap at DIR_COLS_PER_ROW (5 on 80x24, 7 on 120x40)
+	CP (HL)		; Wrap at DIR_COLS_PER_ROW (5 on 80x24, 7 on 120x40)
 	JR NZ,NO_ROW_WRAP
 	XOR A
 	LD (DIR_COL_COUNT),A
@@ -23888,7 +24033,8 @@ DFB_CLOSE_BOX:
 	LD A,']'
 	CALL PUTC
 
-	; Move cursor back (21 - INPUT_BUF_LEN) positions to sit on next space after prefilled text
+	; Move cursor back (21 - INPUT_BUF_LEN) positions to sit on next space
+	; after prefilled text
 	LD A,21
 	LD HL,INPUT_BUF_LEN
 	SUB (HL)
@@ -24098,7 +24244,7 @@ INPUT_CHAR_LOOP:
 	OR A
 	JR Z,INPUT_CHAR_LOOP		; Ignore Ctrl-F in Open Screen
 	LD A,(SAVE_FORMAT)
-	XOR 1				; Toggle between FMT_CPM (0) and FMT_LINUX (1)
+	XOR 1			; Toggle between FMT_CPM (0) and FMT_LINUX (1)
 	LD (SAVE_FORMAT),A
 	LD A,2				; A = 2 (Format toggled)
 	SCF				; Carry = 1 (special action)
@@ -24725,7 +24871,8 @@ POLN_NOT_NUM:
 	RET
 
 POLN_FOUND_COLON:
-	; HL points to ':' in INPUT_FILENAME_BUF. Check if this colon is inside a drive/user prefix.
+	; HL points to ':' in INPUT_FILENAME_BUF. Check if this colon is inside
+	; a drive/user prefix.
 	PUSH HL				; Save colon pointer
 	LD HL,INPUT_FILENAME_BUF
 	CALL PARSE_DRIVE_USER_PREFIX
@@ -25119,9 +25266,9 @@ SBF_NON_EMPTY:
 	CP E
 	JP NZ,SBF_MULTILINE
 
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 	; Single-Line Block
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 	LD BC,(BLOCK_START_ROW)
 	LD DE,SPLIT_LINE_TEMP
 	LD HL,MAX_ACTIVE_LINE_STRIDE-2
@@ -25172,11 +25319,12 @@ SBF_SGL_DONE:
 	CALL TICK_SAVE_PROGRESS
 	JP SAVE_FLUSH_REMAINDER
 
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 	; Multi-Line Block
-	;--------------------------------------------------------------------------
+	;---------------------------------------------------------------------
 SBF_MULTILINE:
-	; Step 1: Head row (BLOCK_START_ROW), from BLOCK_START_COL to end of line
+	; Step 1: Head row (BLOCK_START_ROW), from BLOCK_START_COL to end of
+	; line
 	LD BC,(BLOCK_START_ROW)
 	LD DE,SPLIT_LINE_TEMP
 	LD HL,MAX_ACTIVE_LINE_STRIDE-2
@@ -25567,12 +25715,14 @@ SAVE_STRIDE_LOOP:
 SAVE_PAYLOAD_LOOP:
 	LD A,(HL)
 	OR A
-	JR Z,SAVE_LINE_END		; Null terminator reached: this line is complete!
+	; Null terminator reached: this line is complete!
+	JR Z,SAVE_LINE_END
 	CALL WRITE_BYTE_TO_DMA
 	INC HL
 	DJNZ SAVE_PAYLOAD_LOOP
 
-	; Stride exhausted (all 126 bytes emitted): advance to next slot in chain
+	; Stride exhausted (all 126 bytes emitted): advance to next slot in
+	; chain
 	LD BC,(SAVE_NEXT_SLOT)
 	JR SAVE_STRIDE_LOOP
 
@@ -25671,7 +25821,7 @@ WRITE_BYTE_TO_DMA:
 	LD (SAVE_RECORD_NUM),HL
 
 	LD DE,WORK_FCB
-	LD C,34				; BDOS Write Random (prevents ghost extent)
+	LD C,34			; BDOS Write Random (prevents ghost extent)
 	CALL BDOS_ENTRY
 	POP DE
 
@@ -25840,11 +25990,12 @@ BORROW_NEW_FAR_BANK:
 	OR A
 	JR Z,BNFB_FAIL			; No banks left in EXT_BANK_TABLE
 	CP 2
-	JR NC,BNFB_OK			; >= 2 banks left: always safe to borrow!
-	; Exactly 1 bank left. Only allow borrowing if not actively editing a document
+	JR NC,BNFB_OK		; >= 2 banks left: always safe to borrow!
+	; Exactly 1 bank left. Only allow borrowing if not actively editing a
+	; document
 	LD A,(IN_EDITOR_MODE)
 	OR A
-	JR NZ,BNFB_FAIL			; Active document in editor: protect bank 0!
+	JR NZ,BNFB_FAIL		; Active document in editor: protect bank 0!
 BNFB_OK:
 	LD A,(EXT_BANK_COUNT)
 	DEC A
@@ -25973,7 +26124,8 @@ IS_RANGE_FREE_IN_BANK:
 	PUSH DE
 	PUSH HL
 
-	; Guard: If target bank is PLUGIN_MGR_BANK, it is dedicated to PLUGIN.PRL
+	; Guard: If target bank is PLUGIN_MGR_BANK, it is dedicated to
+	; PLUGIN.PRL
 	LD HL,PLUGIN_MGR_BANK
 	CP (HL)
 	JR Z,IRFIB_OVERLAP_DED
@@ -26091,7 +26243,8 @@ ALLOC_FAR_PLUGIN_SLOT:
 	JR Z,AFPS_DEDICATED_BANK
 
 	; --- Sub-allocated Plugin Allocation (Shared banks) ---
-	; Search existing borrowed banks for a free contiguous page range of length E
+	; Search existing borrowed banks for a free contiguous page range of
+	; length E
 	LD A,(BORROWED_BANKS_CNT)
 	OR A
 	JR Z,AFPS_NEED_NEW_BANK
@@ -26104,7 +26257,8 @@ AFPS_BANK_LOOP:
 	LD A,(HL)			; A = bank ID
 	LD (ALLOC_TEMP_BANK),A
 
-	; Candidate search in bank: test C = 0, 1, 2, ... while C + PAGE_COUNT <= 128
+	; Candidate search in bank: test C = 0, 1, 2, ... while C + PAGE_COUNT
+	; <= 128
 	LD C,0
 AFPS_CAND_LOOP:
 	PUSH BC
@@ -26128,7 +26282,8 @@ AFPS_CAND_LOOP:
 
 	; --- Dedicated Bank Allocation (Always BASE_PAGE = 0) ---
 AFPS_DEDICATED_BANK:
-	; Search for any existing borrowed bank that is completely free (C=0, E=128)
+	; Search for any existing borrowed bank that is completely free (C=0,
+	; E=128)
 	LD A,(BORROWED_BANKS_CNT)
 	OR A
 	JR Z,AFPS_NEED_NEW_BANK
@@ -26381,12 +26536,14 @@ LPBN_CHK_8K:
 	LD DE,8193
 	CALL CMP_HL_DE
 	JP NC,LPBN_TOO_LARGE
-	; Check TPA restriction: if bit 0 set, footprint must fit in LINE_STORAGE_SIZE
+	; Check TPA restriction: if bit 0 set, footprint must fit in
+	; LINE_STORAGE_SIZE
 	LD A,(LINE_STORAGE + 4096 + 28)
 	BIT 0,A
 	JR Z,LPBN_CALC_PAYLOAD		; Pure Far 8K plugin -> proceed
 
-	; 8K plugin with TPA: verify total TPA footprint <= LINE_STORAGE_SIZE (5120)
+	; 8K plugin with TPA: verify total TPA footprint <= LINE_STORAGE_SIZE
+	; (5120)
 	LD HL,(LINE_STORAGE + 4096 + 1)		; PROG_SIZE
 	LD DE,(LINE_STORAGE + 4096 + 7)		; LOAD_ADDR
 	LD A,D
@@ -26840,7 +26997,7 @@ UPS_CHECK_BANK_LOOP:
 	INC HL				; Points to offset +24 (FAR_BANK)
 	LD A,(HL)
 	CP C
-	RET Z				; Another active slot uses bank C! Do not release.
+	RET Z		; Another active slot uses bank C! Do not release.
 UPS_CHECK_NEXT:
 	INC B
 	LD A,B
@@ -26901,7 +27058,8 @@ EXEC_PLUGIN_SLOT_ACTION:
 	LD (PLUGIN_ACTION_INDEX),A
 	XOR A
 	LD (PLUGIN_RET_CODE),A
-	; Synchronize screen dimensions and context in Host API (+14, +15, +16, +17)
+	; Synchronize screen dimensions and context in Host API (+14, +15, +16,
+	; +17)
 	LD A,(ACTIVE_COLS)
 	LD (HOST_API_COLS),A
 	LD A,(POPUP_CONTEXT_ID)
@@ -27514,7 +27672,7 @@ DCPP_EXEC:
 	CALL EXEC_PLUGIN_SLOT_ACTION
 	LD A,(POPUP_ACTION_MODAL)
 	OR A
-	JR Z,DCPP_DISMISS		; Non-modal Action 0: dismiss back to caller
+	JR Z,DCPP_DISMISS	; Non-modal Action 0: dismiss back to caller
 	; Modal Action: Redraw base screen & return to Ctrl+P menu
 	CALL REDRAW_BASE_SCREEN
 	JR DCPP_LOOP
@@ -29774,7 +29932,8 @@ PFFB_DONE:
 	RET
 
 ; Context Plugin Pop-up String Constants
-STR_POPUP_BORDER:		DB	"+------------------------------------------------+", 0
+STR_POPUP_BORDER:
+	DB	"+------------------------------------------------+", 0
 
 ; Save Changes Modal Pop-up Strings (50 cols x 7 rows)
 STR_POPUP_SAVE_TITLE:
@@ -30118,17 +30277,19 @@ STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 ; About Screen Strings
 ;------------------------------------------------------------------------------
 STR_ABOUT_TITLE:	DB	"SE - Screen Editor", "$"
-STR_ABOUT_VERSION:	DB	"version 1.0.0 (2026-10-07)", "$"
+STR_ABOUT_VERSION:	DB	"version 1.0.1 (2026-10-07)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
-STR_ABOUT_AI:		DB	"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high", "$"
-STR_ABOUT_LICENSE:	DB	"Open source software under the MIT License", "$"
+STR_ABOUT_AI:
+	DB	"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high", "$"
+STR_ABOUT_LICENSE:
+	DB	"Open source software under the MIT License", "$"
 STR_ABOUT_RETURN:	DB	"Press any key to continue", "$"
 
 ;------------------------------------------------------------------------------
 ; Memory Information Screen Strings
 ;------------------------------------------------------------------------------
 STR_MEM_TITLE_PAD:
-	DB "                      ","$"		; 22 spaces to center within 72 columns
+	DB "                      ","$"	; 22 spaces to center within 72 columns
 STR_MEM_INFO_TITLE:
 	DB "SE.COM - Extended Memory Map",13,10,"$"
 STR_MEM_INFO_BLANK:
@@ -30193,7 +30354,7 @@ STR_MEM_SPACES_3:	DB	' '
 STR_MEM_SPACES_2:	DB	' ', ' ', '$'
 
 
-STR_STATUS_PREFIX:	DB	" SE v1.0.0 | ","$"
+STR_STATUS_PREFIX:	DB	" SE v1.0.1 | ","$"
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 
@@ -30287,8 +30448,9 @@ STR_FILE_NOT_FOUND_SUFFIX:	DB	" file not found",13,10,"$"
 ; Variables & Stack Area
 ;------------------------------------------------------------------------------
 SAVED_SP:	DW	0
-SHOWING_FNF_MSG:	DB	0		; 1 if "  File not found" inline message is visible
-UI_CUR_ROW:	DB	0		; Current screen row tracking for Open/Save UI
+; 1 if " File not found" inline message is visible
+SHOWING_FNF_MSG:	DB	0
+UI_CUR_ROW:	DB	0	; Current screen row tracking for Open/Save UI
 BIOS_CONST_VEC:	DW	0
 BIOS_CONIN_VEC:	DW	0
 BIOS_CONOUT_VEC:	DW	0
@@ -30309,31 +30471,38 @@ MEM_BANK_LOOP_IDX:	DB	0
 SCREEN_MODE:	DB	MODE_120X40	; Default to 120x40
 ACTIVE_ROWS:	DB	40		; Default 40 rows
 ACTIVE_COLS:	DB	120		; Default 120 cols
-VIEW_LEFT_COL:	DW	0		; Horizontal viewport left column offset (0..1000)
-VIEW_RIGHT_COL:	DW	120		; Cached right column bound (VIEW_LEFT_COL + ACTIVE_COLS)
+; Horizontal viewport left column offset (0..1000)
+VIEW_LEFT_COL:	DW	0
+; Cached right column bound (VIEW_LEFT_COL + ACTIVE_COLS)
+VIEW_RIGHT_COL:	DW	120
 
 ; Screen cursor coordinates use "row" (0..ACTIVE_ROWS-2) internally for terminal
 ; positioning (LOCATE_CURSOR: Screen Row = CUR_DOC_ROW - TOP_DOC_ROW + 1).
 ; Document line indices in buffer/file use "line" (0..DOC_TOTAL_LINES-1) and are
 ; rendered on the status line as "Line <cur>/<total>".
 CUR_DOC_ROW:	DW	0		; 16-bit document line index (0..3583)
-CUR_COL:	DW	0		; 16-bit character byte index in line (0..1000)
+CUR_COL:	DW	0	; 16-bit character byte index in line (0..1000)
 TARGET_COL:	DW	0		; Sticky visual column (0..1000)
-TOP_DOC_ROW:	DW	0		; 16-bit top visible document line on screen
-DOC_TOTAL_LINES:	DW	1		; 16-bit total document lines count (default 1 empty line)
+TOP_DOC_ROW:	DW	0	; 16-bit top visible document line on screen
+; 16-bit total document lines count (default 1 empty line)
+DOC_TOTAL_LINES:	DW	1
 HAS_FILE_ARG:	DB	0
 CMDLINE_HAS_DRIVE:	DB	0
-CMDLINE_GOTO_LINE:	DW	0		; 16-bit line number from command line (0 = start)
-OPEN_GOTO_LINE:		DW	0		; 16-bit line number from open file UI (0 = start)
+; 16-bit line number from command line (0 = start)
+CMDLINE_GOTO_LINE:	DW	0
+; 16-bit line number from open file UI (0 = start)
+OPEN_GOTO_LINE:		DW	0
 GOTO_LINE_BUF:	DS	8
 SEARCH_BUF:		DS	65
 SEARCH_LEN:		DB	0
-SEARCH_CASE_SENSITIVE:	DB	1		; Default 1 = Exact (case-sensitive)
-SEARCH_EVER_FOUND:	DB	0		; 1 if pattern was ever found during session
+SEARCH_CASE_SENSITIVE:	DB	1	; Default 1 = Exact (case-sensitive)
+; 1 if pattern was ever found during session
+SEARCH_EVER_FOUND:	DB	0
 SEARCH_DIRECTION:	DB	0		; 0 = Forward, 1 = Backward
-REPLACE_MATCH_COL:	DW	0		; Saved column during interactive replace
-PREV_START_ROW_TEMP:	DW	0		; Saved row before Find Next/Prev
-PREV_START_COL_TEMP:	DW	0		; Saved col before Find Next/Prev
+; Saved column during interactive replace
+REPLACE_MATCH_COL:	DW	0
+PREV_START_ROW_TEMP:	DW	0	; Saved row before Find Next/Prev
+PREV_START_COL_TEMP:	DW	0	; Saved col before Find Next/Prev
 REPLACE_BUF:		DS	65
 REPLACE_LEN:		DB	0
 REPLACE_ALL_MODE:	DB	0
@@ -30348,28 +30517,38 @@ REPLACE_DELTA_TEMP:	DB	0
 IN_EDITOR_MODE:	DB	0
 IS_SPLASH_SCREEN:	DB	0
 STATUS_OOM_FLAG:	DB	0
-FILE_IS_TRUNCATED:	DB	0		; 1 if file was truncated on load (Save protected)
-FILE_TOTAL_RECORDS:	DW	0		; Total 128-byte records computed by BDOS 35
-FILE_RECORDS_HI:	DB	0		; High byte of 24-bit record count
+; 1 if file was truncated on load (Save protected)
+FILE_IS_TRUNCATED:	DB	0
+; Total 128-byte records computed by BDOS 35
+FILE_TOTAL_RECORDS:	DW	0
+FILE_RECORDS_HI:	DB	0	; High byte of 24-bit record count
 SAVE_FORMAT:	DB	FMT_CPM		; Default format is CP/M (CR/LF)
-IS_SAVE_UI:		DB	0		; 1 if currently in Save File Screen
-IS_BLOCK_INSERT_UI:	DB	0		; 1 if currently in Block Insert File Screen
-IS_BLOCK_SAVE_UI:	DB	0		; 1 if currently in Block Save File Screen
+IS_SAVE_UI:		DB	0	; 1 if currently in Save File Screen
+; 1 if currently in Block Insert File Screen
+IS_BLOCK_INSERT_UI:	DB	0
+; 1 if currently in Block Save File Screen
+IS_BLOCK_SAVE_UI:	DB	0
 IS_PLUGIN_LOAD_UI:	DB	0	; 1 if in Plugin Load Screen
 IS_LOADING_FILE:	DB	0		; 1 if currently loading file
 IS_SAVING_FILE:		DB	0		; 1 if currently saving file
-LOAD_PROGRESS_COUNT:	DB	100		; Progress interval down-counter (100 lines)
-LOAD_PROGRESS_LINES:	DW	0		; Lines read counter for loading status bar
-SAVED_HAS_FILE_ARG:	DB	0		; Saved HAS_FILE_ARG during block insert
-INSERT_LINE_HAD_CHARS:	DB	0		; 1 if current line of inserted file had chars
-IS_EXIT_PROMPT:		DB	0		; 1 if currently in Save Changes Exit Prompt
-REPLACE_ACTIVE:		DB	0		; 1 during active Search & Replace loop
-REPLACE_DONE_POPUP_MSG2: DS	51		; 50-col Msg2 buffer for Replace Done popup
-BLOCK_POPUP_LINE4_BUF:	DS	51		; 50-col Line 4 buffer for Block modal
-INSERT_FCB:		DS	36		; Dedicated FCB for block insert file
-INSERT_CUR_LEN:		DW	0		; Streaming insert current line length
-INSERT_NEW_CUR_COL:	DW	0		; Cursor column position after insert
-INSERT_IS_FIRST_LINE:	DB	0		; 1 while processing line 1 of inserted file
+; Progress interval down-counter (100 lines)
+LOAD_PROGRESS_COUNT:	DB	100
+; Lines read counter for loading status bar
+LOAD_PROGRESS_LINES:	DW	0
+SAVED_HAS_FILE_ARG:	DB	0	; Saved HAS_FILE_ARG during block insert
+; 1 if current line of inserted file had chars
+INSERT_LINE_HAD_CHARS:	DB	0
+; 1 if currently in Save Changes Exit Prompt
+IS_EXIT_PROMPT:		DB	0
+REPLACE_ACTIVE:		DB	0	; 1 during active Search & Replace loop
+; 50-col Msg2 buffer for Replace Done popup
+REPLACE_DONE_POPUP_MSG2: DS	51
+BLOCK_POPUP_LINE4_BUF:	DS	51	; 50-col Line 4 buffer for Block modal
+INSERT_FCB:		DS	36	; Dedicated FCB for block insert file
+INSERT_CUR_LEN:		DW	0	; Streaming insert current line length
+INSERT_NEW_CUR_COL:	DW	0	; Cursor column position after insert
+; 1 while processing line 1 of inserted file
+INSERT_IS_FIRST_LINE:	DB	0
 INSERT_ORIG_START_ROW:	DW	0		; Block start row backup
 INSERT_ORIG_START_COL:	DW	0		; Block start col backup
 SEEN_CR:	DB	0		; Line format auto-detection state
@@ -30394,44 +30573,62 @@ MOVE_SRC_START_COL:	DW	0
 MOVE_SRC_END_ROW:	DW	0
 MOVE_SRC_END_COL:	DW	0
 MOVE_DEST_IS_BEFORE:	DB	0
-BLOCK_ACTIVE:	DB	0		; 0 = inactive, 1 = selecting, 2 = solidified
-BLOCK_ANCHOR_ROW:	DW	0		; 16-bit document row where block started
-BLOCK_ANCHOR_COL:	DW	0		; 16-bit character column where block started
+BLOCK_ACTIVE:	DB	0	; 0 = inactive, 1 = selecting, 2 = solidified
+; 16-bit document row where block started
+BLOCK_ANCHOR_ROW:	DW	0
+; 16-bit character column where block started
+BLOCK_ANCHOR_COL:	DW	0
 BLOCK_START_ROW:	DW	0		; Normalized start row
 BLOCK_START_COL:	DW	0		; Normalized start col
 BLOCK_END_ROW:	DW	0		; Normalized end row
 BLOCK_END_COL:	DW	0		; Normalized end col
 
 LINE_BLK_ACTIVE:	DB	0		; 1 if rendered line is in block
-LINE_BLK_START:	DW	0		; Start character column of highlight on line
-LINE_BLK_END:	DW	0		; End character column of highlight on line
-LINE_IN_INVERSE:	DB	0		; 1 if terminal currently has inverse video ON
+LINE_BLK_START:	DW	0	; Start character column of highlight on line
+LINE_BLK_END:	DW	0	; End character column of highlight on line
+; 1 if terminal currently has inverse video ON
+LINE_IN_INVERSE:	DB	0
 
 NEED_SCREEN_RENDER:	DB	0	; 1 if full screen redraw pending
 NEED_LINE_RENDER:	DB	0	; 1 if current line redraw pending
-NEED_STATUS_RENDER:	DB	0	; 1 if status bar redraw / cursor restore pending
-INSERT_MODE:		DB	1	; 1 = Insert mode (default), 0 = Overwrite mode
+; 1 if status bar redraw / cursor restore pending
+NEED_STATUS_RENDER:	DB	0
+; 1 = Insert mode (default), 0 = Overwrite mode
+INSERT_MODE:		DB	1
 
-CACHE_START_ROW:	DW	0		; 16-bit doc row index at LINE_STORAGE[0]
-CACHE_DIRTY:	DB	0		; 1 if local cache has unsaved modifications
-CACHE_LINE_DIRTY:	DS	CACHE_SIZE_LINES ; 1 byte per local cache line (0=clean, 1=dirty)
-DOC_MODIFIED:	DB	0		; 1 if document has unsaved modifications
+; 16-bit doc row index at LINE_STORAGE[0]
+CACHE_START_ROW:	DW	0
+CACHE_DIRTY:	DB	0	; 1 if local cache has unsaved modifications
+; 1 byte per local cache line (0=clean, 1=dirty)
+CACHE_LINE_DIRTY:	DS	CACHE_SIZE_LINES
+DOC_MODIFIED:	DB	0	; 1 if document has unsaved modifications
 CONFIRM_ACTION:	DB	0		; 0=Exit, 1=Close, 2=New
-EXT_BANK_COUNT:	DB	0		; Number of available far RAM banks (up to 14)
+EXT_BANK_COUNT:	DB	0	; Number of available far RAM banks (up to 14)
 EXT_BANK_TABLE:	DS	14		; Table of far RAM bank IDs
-LINE_TABLE_BANK:	DB	0		; Far RAM Bank dedicated to 16K line slots table (Bank 0)
-LINE_TABLE_BANK_1:	DB	0		; Far RAM Bank dedicated to 16K..32K line slots table (Bank 1)
-CFG_LINES_MODE:		DB	0		; 0 = 16K lines (default), 1 = 32K lines
-MAX_DOC_LINES_LIMIT:	DW	MAX_DOC_LINES_16K ; Dynamic max document lines (16384 or 32768)
-LINE_SLOT_TEMP:		DW	0		; 2-byte transfer buffer for GET/SET_LINE_SLOT
-SLOT_SHIFT_SRC:		DW	0		; Far RAM source line for block slot shifts
-SLOT_SHIFT_DEST:	DW	0		; Far RAM dest line for block slot shifts
+; Far RAM Bank dedicated to 16K line slots table (Bank 0)
+LINE_TABLE_BANK:	DB	0
+; Far RAM Bank dedicated to 16K..32K line slots table (Bank 1)
+LINE_TABLE_BANK_1:	DB	0
+CFG_LINES_MODE:		DB	0	; 0 = 16K lines (default), 1 = 32K lines
+; Dynamic max document lines (16384 or 32768)
+MAX_DOC_LINES_LIMIT:	DW	MAX_DOC_LINES_16K
+; 2-byte transfer buffer for GET/SET_LINE_SLOT
+LINE_SLOT_TEMP:		DW	0
+; Far RAM source line for block slot shifts
+SLOT_SHIFT_SRC:		DW	0
+; Far RAM dest line for block slot shifts
+SLOT_SHIFT_DEST:	DW	0
 SLOT_SHIFT_REM:		DW	0		; Remaining lines to shift
-SLOT_SHIFT_CHUNK:	DW	0		; Current chunk size in lines (up to 128)
-SLOT_SHIFT_BYTES:	DW	0		; Current chunk size in bytes (up to 256)
-WLSR_K:			DW	0		; Temporary K for WRITE_LINE_SLOTS_FROM_RAM
-WLSR_SRC:		DW	0		; Temporary Source for WRITE_LINE_SLOTS_FROM_RAM
-WLSR_DEST:		DW	0		; Temporary Dest for WRITE_LINE_SLOTS_FROM_RAM
+; Current chunk size in lines (up to 128)
+SLOT_SHIFT_CHUNK:	DW	0
+; Current chunk size in bytes (up to 256)
+SLOT_SHIFT_BYTES:	DW	0
+; Temporary K for WRITE_LINE_SLOTS_FROM_RAM
+WLSR_K:			DW	0
+; Temporary Source for WRITE_LINE_SLOTS_FROM_RAM
+WLSR_SRC:		DW	0
+; Temporary Dest for WRITE_LINE_SLOTS_FROM_RAM
+WLSR_DEST:		DW	0
 
 FAR_DEST_BANK:	DB	0
 FAR_SRC_BANK:	DB	0
@@ -30441,14 +30638,19 @@ FAR_LOCAL_ADDR:	DW	0
 SLOT_TEMP:	DB	0
 NEXT_FRESH_SLOT:	DW	0
 FIRST_FREE_SLOT:	DW	0FFFFH
-DEC_WORD_BUF:	DS	6		; Buffer for PRINT_DEC_WORD (5 digits + null)
+DEC_WORD_BUF:	DS	6	; Buffer for PRINT_DEC_WORD (5 digits + null)
 
-SWAP_ACTIVE:		DB	0		; 1 if $$$SE$$$.SWP is active, 0 if RAM-only
+; 1 if $$$SE$$$.SWP is active, 0 if RAM-only
+SWAP_ACTIVE:		DB	0
 SWAP_FCB:		DS	36		; FCB for temporary swap file
-BANK_PAGE_TABLE:	DS	12		; Virtual page number (0..255) resident in Bank 0..11
-BANK_DIRTY_TABLE:	DS	12		; 1 if bank has unsaved modifications, 0 if clean
-NEXT_VICTIM_BANK:	DB	1		; Round-robin victim pointer (1..11; Bank 0 is pinned)
-PAGE_ON_DISK_BITMAP:	DS	32		; 256 bits: 1 bit per page (1 if written to swap)
+; Virtual page number (0..255) resident in Bank 0..11
+BANK_PAGE_TABLE:	DS	12
+; 1 if bank has unsaved modifications, 0 if clean
+BANK_DIRTY_TABLE:	DS	12
+; Round-robin victim pointer (1..11; Bank 0 is pinned)
+NEXT_VICTIM_BANK:	DB	1
+; 256 bits: 1 bit per page (1 if written to swap)
+PAGE_ON_DISK_BITMAP:	DS	32
 SWAP_PAGE_TEMP:		DB	0		; Target virtual page number
 SWAP_BANK_TEMP:		DB	0		; Target bank index (0..11)
 SWAP_BNK_ID:		DB	0		; Target Far RAM bank ID
@@ -30469,19 +30671,25 @@ SAVE_NEXT_SLOT:		DW	0
 FLC_COUNT:		DB	0
 
 
-ACTIVE_LINE_ROW:	DW	0FFFFH		; Document row checked out in ACTIVE_LINE_BUF
-ACTIVE_LINE_DIRTY:	DB	0		; 1 if ACTIVE_LINE_BUF has unsaved modifications
+; Document row checked out in ACTIVE_LINE_BUF
+ACTIVE_LINE_ROW:	DW	0FFFFH
+; 1 if ACTIVE_LINE_BUF has unsaved modifications
+ACTIVE_LINE_DIRTY:	DB	0
 REND_LINE_PTR:		DW	0
 REND_VIS_COL:		DW	0
 REND_CHAR_IDX:		DW	0
 REND_TAB_SPACES:	DB	0
 ACT_VIS_ACC:		DW	0
 
-FAR_IO_BUF:		DS	128		; 128-byte scratch buffer for physical Far RAM transfers
-LOAD_LINE_TEMP:		DS	256		; 256-byte scratch line for local operations
-SPLIT_LINE_TEMP:	DS	1024		; 1024-byte scratch line for line splits
-ACTIVE_LINE_LEN:	DW	0		; 16-bit byte length of line in ACTIVE_LINE_BUF
-ACTIVE_LINE_BUF:	DS	1024		; 1024-byte dynamic workspace for active line
+; 128-byte scratch buffer for physical Far RAM transfers
+FAR_IO_BUF:		DS	128
+; 256-byte scratch line for local operations
+LOAD_LINE_TEMP:		DS	256
+SPLIT_LINE_TEMP:	DS	1024	; 1024-byte scratch line for line splits
+; 16-bit byte length of line in ACTIVE_LINE_BUF
+ACTIVE_LINE_LEN:	DW	0
+; 1024-byte dynamic workspace for active line
+ACTIVE_LINE_BUF:	DS	1024
 CUR_DMA_PTR:	DW	0
 DMA_BYTES_LEFT:	DB	0
 SAVE_RECORD_NUM: DW	0
@@ -30490,14 +30698,18 @@ SAVE_RECORD_NUM: DW	0
 WORK_FCB:	DS	36
 DIR_TEMP_FCB:	DS	36
 
-CURRENT_DIR_DRIVE:	DB	0		; Active directory drive (1=A:, 2=B:, 3=C:, etc.)
-CURRENT_DIR_USER:	DB	0		; Active directory user area (0..15)
-ORIG_CPM_USER:		DB	0		; CP/M user area on entry (0..15)
-DOC_USER_NUM:		DB	0		; User area for currently loaded document (0..15)
-WORK_FCB_USER:		DB	0		; User area for pending WORK_FCB operation (0..15)
-BLOCK_IO_USER:		DB	0		; User area for Block Insert / Block Save (0..15)
-PREFIX_DRIVE:		DB	0		; Parsed prefix drive (1..16 or 0)
-PREFIX_USER:		DB	0FFH		; Parsed prefix user (0..15 or 0xFF)
+; Active directory drive (1=A:, 2=B:, 3=C:, etc.)
+CURRENT_DIR_DRIVE:	DB	0
+CURRENT_DIR_USER:	DB	0	; Active directory user area (0..15)
+ORIG_CPM_USER:		DB	0	; CP/M user area on entry (0..15)
+; User area for currently loaded document (0..15)
+DOC_USER_NUM:		DB	0
+; User area for pending WORK_FCB operation (0..15)
+WORK_FCB_USER:		DB	0
+; User area for Block Insert / Block Save (0..15)
+BLOCK_IO_USER:		DB	0
+PREFIX_DRIVE:		DB	0	; Parsed prefix drive (1..16 or 0)
+PREFIX_USER:		DB	0FFH	; Parsed prefix user (0..15 or 0xFF)
 ; Consolidated transient CP/M File Control Block (36 bytes)
 ; Shared across sequential operations: dir search, raw disk, config, ramdrv
 SHARED_TEMP_FCB:	DS	36
@@ -30522,24 +30734,37 @@ INPUT_CURSOR_POS:	DB	0
 INPUT_CHAR_TEMP:	DB	0
 INLINE_MSG_LEN:		DB	16
 INPUT_FILENAME_BUF:	DS	32
-DIR_FILTER_FCB:		DB	"???????????"	; 11-byte FCB wildcard pattern (8 name + 3 ext)
-DIR_FILTER_STR:		DB	"*.*",0,0,0,0,0,0,0,0,0 ; Display string for active filter (null-terminated)
-DIR_FILTER_ACTIVE:	DB	0		; 0 = *.* (all files), 1 = custom filter active
+; 11-byte FCB wildcard pattern (8 name + 3 ext)
+DIR_FILTER_FCB:		DB	"???????????"
+; Display string for active filter (null-terminated)
+DIR_FILTER_STR:		DB	"*.*",0,0,0,0,0,0,0,0,0
+; 0 = *.* (all files), 1 = custom filter active
+DIR_FILTER_ACTIVE:	DB	0
 
 ; Transient FCBs and buffers moved to SHARED_TEMP_FCB and LINE_STORAGE
-CURRENT_DEFAULT_DRIVE:	DB	0		; Active CP/M default drive (0=A, 1=B, etc.)
-CONFIG_SOURCE_DRIVE:	DB	0FFH		; Drive where config was loaded from (0xFF = none)
-CONFIG_STATUS_FLAG:	DB	0		; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
-SPLASH_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on splash screen
-MEM_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on memory screen
-ABOUT_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on about screen
-CONFIG_TOP_PAD_COUNT:	DB	0		; Number of top padding rows on config screen
-CFG_RAMDRIVE_FLAG:	DB	0		; 0=protected, 1=enabled, 2=hibernate
+; Active CP/M default drive (0=A, 1=B, etc.)
+CURRENT_DEFAULT_DRIVE:	DB	0
+; Drive where config was loaded from (0xFF = none)
+CONFIG_SOURCE_DRIVE:	DB	0FFH
+; 0=none/default, 1=loaded local, 2=loaded program, 3=saved local, 4=save error
+CONFIG_STATUS_FLAG:	DB	0
+; Number of top padding rows on splash screen
+SPLASH_TOP_PAD_COUNT:	DB	0
+; Number of top padding rows on memory screen
+MEM_TOP_PAD_COUNT:	DB	0
+; Number of top padding rows on about screen
+ABOUT_TOP_PAD_COUNT:	DB	0
+; Number of top padding rows on config screen
+CONFIG_TOP_PAD_COUNT:	DB	0
+CFG_RAMDRIVE_FLAG:	DB	0	; 0=protected, 1=enabled, 2=hibernate
 CFG_TAB_WIDTH:		DB	8		; Tab width: 4 or 8 (default 8)
 CFG_TAB_MASK:		DB	7		; Tab mask: 3 or 7 (default 7)
-RAMDRIVE_IS_HIBERNATED:	DB	0		; 0=not hibernated, 1=hibernated to RAMDRV.IMG
-RAMDRIVE_DRIVE_NUM:	DB	0FFH		; Detected RomWBW RAM drive (0=A, 1=B, ..., 0xFF=none)
-RAMDRIVE_DRIVE_CHAR:	DB	'?'		; Character representation ('A', 'B', etc. or '?')
+; 0=not hibernated, 1=hibernated to RAMDRV.IMG
+RAMDRIVE_IS_HIBERNATED:	DB	0
+; Detected RomWBW RAM drive (0=A, 1=B, ..., 0xFF=none)
+RAMDRIVE_DRIVE_NUM:	DB	0FFH
+; Character representation ('A', 'B', etc. or '?')
+RAMDRIVE_DRIVE_CHAR:	DB	'?'
 
 ;==============================================================================
 ; Plugin Subsystem High-Memory Variables & Registry
@@ -30604,12 +30829,12 @@ FAT_ACTIVE_UNIT:	DB	0FFH		; Active browsing unit
 FAT_ACTIVE_DIR:		DS	128		; Active directory path
 FAT_INPUT_MATCHED:	DB	0		; Match flag during input check
 CURRENT_DIR_IS_FAT:	DB	0		; 0=CP/M drive, 1=FAT volume
-CURRENT_DIR_FAT_UNIT:	DB	0FFH		; FAT browsing unit (0..7, 0xFF=default)
-CURRENT_DIR_FAT_PATH:	DS	64		; Active directory path (e.g. "/")
+CURRENT_DIR_FAT_UNIT:	DB	0FFH	; FAT browsing unit (0..7, 0xFF=default)
+CURRENT_DIR_FAT_PATH:	DS	64	; Active directory path (e.g. "/")
 BLOCK_INSERT_IS_FAT:	DB	0		; 1 during FAT block insertion
-FAT_INSERT_PATH:	DS	64		; Buffer for block insertion path
-CMDLINE_IS_FAT:		DB	0		; 1 if startup argument was FAT file
-CMDLINE_FAT_UNIT:	DB	0FFH		; Unit from command line argument
+FAT_INSERT_PATH:	DS	64	; Buffer for block insertion path
+CMDLINE_IS_FAT:		DB	0	; 1 if startup argument was FAT file
+CMDLINE_FAT_UNIT:	DB	0FFH	; Unit from command line argument
 STR_SLASH:		DB	"/",0
 STR_FATFS_PRL:		DB	"FATFS.PRL",0	; Plugin filename for auto-load
 STR_TITLE_PAREN_CRLF:	DB	")",13,10,0	; Title closing parenthesis
@@ -30630,12 +30855,13 @@ FAT_CHUNK_BUF:		DS	128		; FAT stream buffer (Common RAM)
 
 ;==============================================================================
 ; Upper Memory Host API Trampoline & Vector Table
-; Physically situated in Upper 32KB (> 8000h) so it is resident across all banks.
+; Physically situated in Upper 32KB (> 8000h) so it is resident across all
+; banks.
 ;==============================================================================
 ALIGN 4
 PLUGIN_HOST_API:
 	DB "SE"				; +0:  Magic
-	DW 0100H			; +2:  Host version (v1.0.0)
+	DW 0101H			; +2:  Host version (v1.0.1)
 	DW ACTIVE_LINE_BUF		; +4:  Pointer to ACTIVE_LINE_BUF
 	DW ACTIVE_LINE_LEN		; +6:  Pointer to ACTIVE_LINE_LEN
 	DW CUR_DOC_ROW			; +8:  Pointer to CUR_DOC_ROW
@@ -30648,7 +30874,7 @@ HOST_API_CONTEXT:
 HOST_API_ROWS:
 	DB 24				; +16: Screen rows (24 or 40)
 HOST_API_MGR_SLOT:
-	DB 0FFH				; +17: Plugin Manager Slot (0..7 or 0xFF)
+	DB 0FFH			; +17: Plugin Manager Slot (0..7 or 0xFF)
 	JP TRAMP_CHECKOUT_LINE		; +18: Call HOST_CHECKOUT_LINE
 	JP TRAMP_COMMIT_LINE		; +21: Call HOST_COMMIT_LINE
 	JP TRAMP_PUTC			; +24: Call PUTC
@@ -30659,14 +30885,14 @@ HOST_API_MGR_SLOT:
 	DW BLOCK_START_ROW		; +38: Pointer to BLOCK_START_ROW
 	DW BLOCK_END_ROW		; +40: Pointer to BLOCK_END_ROW
 	DW CFG_TAB_WIDTH		; +42: Pointer to CFG_TAB_WIDTH
-	DW PLUGIN_REGISTRY		; +44: Pointer to PLUGIN_REGISTRY (256 bytes)
+	DW PLUGIN_REGISTRY	; +44: Pointer to PLUGIN_REGISTRY (256 bytes)
 	JP TRAMP_CHECK_KEY		; +46: Call CHECK_KEY_READY
 	JP TRAMP_CLEAR_DOCUMENT		; +49: Call HOST_CLEAR_DOCUMENT
 	JP TRAMP_LOCATE_RC		; +52: Call LOCATE_RC (H=Row, L=Col)
-	JP TRAMP_LOAD_PLUGIN		; +55: Call LOAD_PLUGIN_BY_NAME (DE=filename)
-	JP TRAMP_UNLOAD_SLOT		; +58: Call UNLOAD_PLUGIN_SLOT (A=slot 0..7)
-	JP TRAMP_REDRAW_BASE		; +61: Call REDRAW_BASE_SCREEN (A=context 0..6)
-	JP TRAMP_OPEN_PLUGIN_UI		; +64: Call DO_OPEN_FILE_UI (plugin mode)
+	JP TRAMP_LOAD_PLUGIN	; +55: Call LOAD_PLUGIN_BY_NAME (DE=filename)
+	JP TRAMP_UNLOAD_SLOT	; +58: Call UNLOAD_PLUGIN_SLOT (A=slot 0..7)
+	JP TRAMP_REDRAW_BASE	; +61: Call REDRAW_BASE_SCREEN (A=context 0..6)
+	JP TRAMP_OPEN_PLUGIN_UI	; +64: Call DO_OPEN_FILE_UI (plugin mode)
 	JP TRAMP_SAVE_PLUGIN_CFG	; +67: Call HOST_SAVE_PLUGIN_CFG
 	JP TRAMP_LOAD_PLUGIN_CFG	; +70: Call HOST_LOAD_PLUGIN_CFG
 	JP TRAMP_RENDER_STATUS_BAR	; +73: Call RENDER_STATUS_BAR
@@ -31214,7 +31440,7 @@ TRAMP_FAR_CALL:
 	CALL 0FFF3H
 	EI
 	POP AF				; Restore input AF
-	CALL CALL_HL			; Call target function with original AF, BC, DE
+	CALL CALL_HL		; Call target function with original AF, BC, DE
 	PUSH AF				; Preserve return AF (results & Carry)
 	DI
 	LD A,(PLUGIN_FAR_BANK)
@@ -31243,11 +31469,13 @@ TRAMP_FAR_CALL:
 ;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 EXEC_PLUGIN_MGR_ACTION:
-	; Input: C = Action index (0 = Plugin Manager, 1 = Context Popup, 2 = About)
+	; Input: C = Action index (0 = Plugin Manager, 1 = Context Popup, 2 =
+	; About)
 	; Output: Returns Carry and registers from PLUGIN.PRL
 	LD A,1
 	LD (PLUGIN_IS_FAR_EXEC),A
-	; Synchronize screen geometry and context in Host API (+14, +15, +16, +17)
+	; Synchronize screen geometry and context in Host API (+14, +15, +16,
+	; +17)
 	LD A,(ACTIVE_COLS)
 	LD (HOST_API_COLS),A
 	LD A,(POPUP_CONTEXT_ID)
@@ -31269,10 +31497,10 @@ EXEC_PLUGIN_MGR_ACTION:
 	ADD HL,BC
 EPMA_ENTRY:
 	PUSH HL
-	POP IX				; IX = entry point (0x0100, 0x0103, 0x0106)
+	POP IX			; IX = entry point (0x0100, 0x0103, 0x0106)
 	LD IY,PLUGIN_HOST_API
 	LD A,(PLUGIN_MGR_BANK)
-	LD (PLUGIN_FAR_BANK),A		; In case host trampolines need PLUGIN_FAR_BANK
+	LD (PLUGIN_FAR_BANK),A	; In case host trampolines need PLUGIN_FAR_BANK
 	DI
 	CALL 0FFF9H			; HB_BNKCALL
 	EI
@@ -31348,12 +31576,14 @@ ENSURE_PLUGIN_MGR_LOADED:
 	OR A
 	JP Z,EPML_FAIL
 
-	; Check if Far RAM is available (at least 2 banks: 1 for doc, 1 for plugin mgr)
+	; Check if Far RAM is available (at least 2 banks: 1 for doc, 1 for
+	; plugin mgr)
 	LD A,(EXT_BANK_COUNT)
 	CP 2
 	JP C,EPML_FAIL
 
-	; Borrow a dedicated Far RAM bank for PLUGIN.PRL (not in BORROWED_BANKS_TBL)
+	; Borrow a dedicated Far RAM bank for PLUGIN.PRL (not in
+	; BORROWED_BANKS_TBL)
 	CALL BORROW_PLUGIN_MGR_BANK
 	JP C,EPML_FAIL
 	LD (PLUGIN_MGR_BANK),A
@@ -31441,7 +31671,7 @@ ENSURE_PLUGIN_MGR_LOADED:
 	RR L
 	LD (PAYLOAD_SECTORS_REMAIN),HL
 
-	LD HL,0100H				; Code destination in PLUGIN_MGR_BANK
+	LD HL,0100H			; Code destination in PLUGIN_MGR_BANK
 	LD (FAR_SECT_DEST),HL
 
 EPML_SECTOR_LOOP:
@@ -31925,7 +32155,7 @@ HCL_NOT_EQUAL:
 	; Check if HL < DOC_TOTAL_LINES
 	EX DE,HL			; HL = DOC_TOTAL_LINES, DE = line_num
 	OR A
-	SBC HL,DE			; If line_num < DOC_TOTAL_LINES, Carry = 0, NZ
+	SBC HL,DE		; If line_num < DOC_TOTAL_LINES, Carry = 0, NZ
 	EX DE,HL			; HL = line_num
 	JR C,HCL_OUT_OF_BOUNDS		; line_num > DOC_TOTAL_LINES
 	; HL < DOC_TOTAL_LINES -> Overwrite mode
@@ -32085,7 +32315,8 @@ BSS_START:
 LINE_STORAGE_SIZE EQU	CACHE_SIZE_LINES * 128
 LINE_STORAGE	EQU	BSS_START
 
-; Overlay directory entries buffer onto LINE_STORAGE (mutually exclusive with editor)
+; Overlay directory entries buffer onto LINE_STORAGE (mutually exclusive with
+; editor)
 DIR_NAMES_BUF	EQU	LINE_STORAGE
 
 ; Overlay 4KB TPA plugin execution slot onto LINE_STORAGE (0 extra bytes)

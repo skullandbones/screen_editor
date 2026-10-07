@@ -14,8 +14,8 @@ communicating over **Minicom** or any standard VT100/ANSI terminal emulator.
   vectors for Far RAM bank discovery, fast memory copying, and RAM drive
   protection. See
   [docs/HARDWARE_COMPATIBILITY.md](docs/HARDWARE_COMPATIBILITY.md).
-* **Vim-Style Splash Screen & Diagnostics**: Clean startup landing screen
-  with keyboard navigation, memory diagnostics, and direct editor entry.
+* **Vim-Style Splash Screen**: Clean startup landing screen with keyboard
+  navigation, memory info, and direct editor entry.
 * **512KB Extended Memory Buffer**: Breaks the classic 64KB CP/M memory ceiling
   by utilizing RomWBW HBIOS bank switching (`RST 08H`) to allocate and edit
   large files (such as multi-thousand line Z80 assembly source files) in upper
@@ -226,6 +226,8 @@ Examples:
 * `C>SE 30.TXT:15` — Opens `30.TXT` with viewport centered on Line 15.
 * `C>SE B:MYFILE.ASM:42` — Opens file on Drive B: centered on Line 42
   (matching compiler error output).
+* `C>SE 1C:SOURCE.C` — Opens `SOURCE.C` on Drive C: in User Area 1.
+* `C>SE C1:SOURCE.C:42` — Opens `SOURCE.C` in User Area 1 on Line 42.
 
 ### 3. Editor Mode Keybindings & Hybrid Block Highlighting
 
@@ -274,23 +276,6 @@ Examples:
 * **Classic Mode (80x24)**: Uses 80 columns by 24 rows, ideal for classic VT100
   hardware terminals or 80x24 serial windows.
 
-### 5. 512KB Extended Memory Diagnostic
-
-Pressing `t` on the splash screen queries the RomWBW HBIOS API (`RST 08H`),
-reports hardware memory capacity, and runs an inter-bank DMA transfer
-(`SYSSETCPY` / `SYSBNKCPY`) between CP/M User RAM and upper 32KB RAM banks:
-
-```text
-=== SE.COM 512KB Extended Memory Diagnostic ===
-
-[+] RomWBW HBIOS API (RST 08H): DETECTED
-[*] Installed RAM Banks: 16 x 32KB (512KB Total RAM)
-[*] Active CP/M User Bank ID: 0x00
-[*] Testing Inter-Bank Far Memory Transfer (Bank 0 <-> Bank 1)...
-[+] 512KB Far Memory Banking Test: PASSED! (Pattern 0xAA55 Verified)
-
-Press any key to continue
-```
 
 ---
 
