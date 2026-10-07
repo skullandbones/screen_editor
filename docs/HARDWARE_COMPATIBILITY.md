@@ -104,7 +104,7 @@ causes:
 
 ## 4. Operating System Compatibility Matrix
 
-Memory footprint verified with `check_tpa.py` against `SE.COM` (v0.9.9):
+Memory footprint verified with `check_tpa.py` against `SE.COM` (v1.0.0):
 
 | Environment | BDOS | TPA | Used | Margin | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
