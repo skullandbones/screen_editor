@@ -30277,7 +30277,7 @@ STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 ; About Screen Strings
 ;------------------------------------------------------------------------------
 STR_ABOUT_TITLE:	DB	"SE - Screen Editor", "$"
-STR_ABOUT_VERSION:	DB	"version 1.0.0 (2026-10-07)", "$"
+STR_ABOUT_VERSION:	DB	"version 1.0.1 (2026-10-07)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
 STR_ABOUT_AI:
 	DB	"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high", "$"
@@ -30354,7 +30354,7 @@ STR_MEM_SPACES_3:	DB	' '
 STR_MEM_SPACES_2:	DB	' ', ' ', '$'
 
 
-STR_STATUS_PREFIX:	DB	" SE v1.0.0 | ","$"
+STR_STATUS_PREFIX:	DB	" SE v1.0.1 | ","$"
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 
@@ -30861,7 +30861,7 @@ FAT_CHUNK_BUF:		DS	128		; FAT stream buffer (Common RAM)
 ALIGN 4
 PLUGIN_HOST_API:
 	DB "SE"				; +0:  Magic
-	DW 0100H			; +2:  Host version (v1.0.0)
+	DW 0101H			; +2:  Host version (v1.0.1)
 	DW ACTIVE_LINE_BUF		; +4:  Pointer to ACTIVE_LINE_BUF
 	DW ACTIVE_LINE_LEN		; +6:  Pointer to ACTIVE_LINE_LEN
 	DW CUR_DOC_ROW			; +8:  Pointer to CUR_DOC_ROW
