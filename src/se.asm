@@ -1,6 +1,9 @@
 ;==============================================================================
 ; SE.COM: CP/M Full-Screen Text Editor for RomWBW / RC2014
 ; Target: Z80 CPU, CP/M 2.2+, RomWBW HBIOS 512K Extended RAM, Minicom/VT100
+;
+; Copyright Dean Jenkins. Source code created by Antigravity AI.
+; View file using 8 'spaces' per tab.
 ;==============================================================================
 
 	ORG	$0100
