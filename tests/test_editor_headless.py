@@ -4054,28 +4054,37 @@ def test_se_execution():
         if b"SE - Screen Editor" not in out_s65_about:
             print(f"[-] Step 65 failed: 'SE - Screen Editor' title not found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        if b"version 0.9.8" not in out_s65_about:
-            print(f"[-] Step 65 failed: Version details not found on About screen: {repr(out_s65_about)}", flush=True)
+        if b"version 0.9.9" not in out_s65_about:
+            print(f"[-] Step 65 failed: Version details not found on About "
+                  f"screen: {repr(out_s65_about)}", flush=True)
             return False
         if b"by Dean Jenkins" not in out_s65_about:
-            print(f"[-] Step 65 failed: Author attribution not found on About screen: {repr(out_s65_about)}", flush=True)
+            print(f"[-] Step 65 failed: Author attribution not found on About "
+                  f"screen: {repr(out_s65_about)}", flush=True)
             return False
-        if b"Google Antigravity 2.16.0" not in out_s65_about:
-            print(f"[-] Step 65 failed: Antigravity 2.16.0 attribution not found on About screen: {repr(out_s65_about)}", flush=True)
+        if b"Google Antigravity 2.19.1" not in out_s65_about:
+            print(f"[-] Step 65 failed: Antigravity 2.19.1 attribution not "
+                  f"found on About screen: {repr(out_s65_about)}", flush=True)
             return False
         if b"Gemini FLASH 3.8 high" not in out_s65_about:
-            print(f"[-] Step 65 failed: Gemini FLASH 3.8 high attribution not found on About screen: {repr(out_s65_about)}", flush=True)
+            print(f"[-] Step 65 failed: Gemini FLASH 3.8 high attribution not "
+                  f"found on About screen: {repr(out_s65_about)}", flush=True)
             return False
         if b"MIT License" not in out_s65_about:
-            print(f"[-] Step 65 failed: MIT License not found on About screen: {repr(out_s65_about)}", flush=True)
+            print(f"[-] Step 65 failed: MIT License not found on About screen: "
+                  f"{repr(out_s65_about)}", flush=True)
             return False
         if b"Architecture:" in out_s65_about or b"Features:" in out_s65_about:
-            print(f"[-] Step 65 failed: Bloated Architecture/Features unexpectedly found on About screen: {repr(out_s65_about)}", flush=True)
+            print(f"[-] Step 65 failed: Bloated Architecture/Features "
+                  f"unexpectedly found: {repr(out_s65_about)}", flush=True)
             return False
         if b"Press any key to continue" not in out_s65_about:
-            print(f"[-] Step 65 failed: Return prompt not found on About screen: {repr(out_s65_about)}", flush=True)
+            print(f"[-] Step 65 failed: Return prompt not found on About "
+                  f"screen: {repr(out_s65_about)}", flush=True)
             return False
-        print("[+] Verified About screen contents: essential details, Antigravity 2.16.0, Gemini FLASH 3.8, MIT License, and Return prompt.", flush=True)
+        print("[+] Verified About screen contents: essential details, "
+              "Antigravity 2.19.1, Gemini FLASH 3.8, MIT License, and "
+              "Return prompt.", flush=True)
 
         # 3. Press Enter to return to splash screen
         os.write(master, b"\r")
