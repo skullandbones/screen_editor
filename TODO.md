@@ -49,6 +49,28 @@ tasks have been archived.
   `SE.COM` core into the 32 KB Far RAM `FATFS.PRL` binary.
   - Retain a lightweight 128-byte trampoline in `SE.COM`.
 
+### 3.6 Right-Size / Overlay Clipboard Buffers (+0.75 KB to +1.5 KB TPA)
+- [ ] Reduce `COPY_BLK_BUF` from 1,024 B to 256 B to match maximum line
+  length (+768 B).
+- [ ] Alternatively, overlay clipboard onto `LINE_STORAGE` during block
+  operations without using Far RAM (+1,536 B).
+
+### 3.7 Consolidate Transient File Control Blocks (+144 B TPA)
+- [ ] Unify mutually exclusive FCBs (`DIR_TEMP_FCB`, `SHARED_TEMP_FCB`,
+  `INSERT_FCB`, `PLUGIN_FCB`) into a single 36-byte `SCRATCH_FCB`.
+
+### 3.8 Unify Modal Pop-up Message Buffers (+150 B TPA)
+- [ ] Share a single 64-byte `MODAL_MSG_BUF` across replace, block, and
+  plugin modal dialog formatters.
+
+### 3.9 Dynamic Working Cache Sizing for 80x24 Mode (+2.0 KB TPA)
+- [ ] Dynamically size `LINE_STORAGE` to 24 lines (3,072 B) when
+  operating in 80x24 mode to recover +2,048 B of TPA headroom.
+
+### 3.10 Banked / Streamed Static UI Strings (+1.5 KB to +2.5 KB TPA)
+- [ ] Relocate static Help, About, and Memory screen strings to Far RAM
+  Bank 0 or stream on demand when displayed.
+
 ---
 
 ## 4. Test Automation & Verification
