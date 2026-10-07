@@ -1476,47 +1476,53 @@ def test_se_execution():
         os.write(master, b"\x14\x01")
         read_until(master, b"Line    1/", timeout=4.0)
 
-        # Press Ctrl+B (\x02) to activate block mode at Row 1, Col 0: 0 chars selected
+        # Press Ctrl+B (\x02) to activate block mode: 0 chars selected
         os.write(master, b"\x02")
-        out_blk0c = read_until(master, b"[SEL: 0c]", timeout=4.0)
-        if b"[SEL: 0c]" not in out_blk0c:
-            print(f"[-] Hybrid block activation failed (expected [SEL: 0c]). Buffer: {repr(out_blk0c)}", flush=True)
+        out_blk0c = read_until(master, b"Sel: 0 chars", timeout=4.0)
+        if b"Sel: 0 chars" not in out_blk0c:
+            print(f"[-] Hybrid block activation failed: {repr(out_blk0c)}",
+                  flush=True)
             return False
-        # Verify screen did not corrupt (subsequent lines must remain distinct and not repeat line 1)
+        # Verify screen did not corrupt (subsequent lines distinct)
         if b"Line 02 of " not in out_blk0c or b"Line 03 of " not in out_blk0c:
-            print(f"[-] Screen corruption detected after Ctrl+B! Distinct lines missing. Buffer: {repr(out_blk0c)}", flush=True)
+            print(f"[-] Screen corruption detected after Ctrl+B! Buffer: "
+                  f"{repr(out_blk0c)}", flush=True)
             return False
 
-        # Move cursor right 5 columns to expand partial line selection to 5 characters
+        # Move cursor right 5 columns to expand partial selection to 5 chars
         os.write(master, b"\x1b[C" * 5)
-        out_blk5c = read_until(master, b"[SEL: 5c]", timeout=4.0)
-        if b"[SEL: 5c]" not in out_blk5c:
-            print(f"[-] Partial single-line expansion failed (expected [SEL: 5c]). Buffer: {repr(out_blk5c)}", flush=True)
+        out_blk5c = read_until(master, b"Sel: 5 chars", timeout=4.0)
+        if b"Sel: 5 chars" not in out_blk5c:
+            print(f"[-] Partial expansion failed: {repr(out_blk5c)}",
+                  flush=True)
             return False
         # Verify inverse video sequence \x1b[7m is emitted in buffer
         if b"\x1b[7m" not in out_blk5c:
-            print(f"[-] Inverse video escape sequence missing during block highlight. Buffer: {repr(out_blk5c)}", flush=True)
+            print(f"[-] Inverse video missing: {repr(out_blk5c)}", flush=True)
             return False
 
         # Move cursor down 2 rows to expand block to 3 lines
         os.write(master, b"\x1b[B\x1b[B")
-        out_blk3l = read_until(master, b"[SEL: 3L]", timeout=4.0)
-        if b"[SEL: 3L]" not in out_blk3l:
-            print(f"[-] Multi-line block expansion failed (expected [SEL: 3L]). Buffer: {repr(out_blk3l)}", flush=True)
+        out_blk3l = read_until(master, b"Sel: 3 lines", timeout=4.0)
+        if b"Sel: 3 lines" not in out_blk3l:
+            print(f"[-] Multi-line expansion failed: {repr(out_blk3l)}",
+                  flush=True)
             return False
 
         # Move cursor up 1 row to contract block to 2 lines
         os.write(master, b"\x1b[A")
-        out_blk2l = read_until(master, b"[SEL: 2L]", timeout=4.0)
-        if b"[SEL: 2L]" not in out_blk2l:
-            print(f"[-] Multi-line block contraction failed (expected [SEL: 2L]). Buffer: {repr(out_blk2l)}", flush=True)
+        out_blk2l = read_until(master, b"Sel: 2 lines", timeout=4.0)
+        if b"Sel: 2 lines" not in out_blk2l:
+            print(f"[-] Multi-line contraction failed: {repr(out_blk2l)}",
+                  flush=True)
             return False
 
-        # Solidify block with Ctrl+K (\x0b)
-        os.write(master, b"\x0b")
-        out_solid = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
-        if b"[BLK: 2L LOCK]" not in out_solid:
-            print(f"[-] Ctrl+K block solidification failed (expected [BLK: 2L LOCK]). Buffer: {repr(out_solid)}", flush=True)
+        # Solidify block with Enter (\r)
+        os.write(master, b"\r")
+        out_solid = read_until(master, b"Block: 2 lines", timeout=4.0)
+        if b"Block: 2 lines" not in out_solid:
+            print(f"[-] Block solidification failed: {repr(out_solid)}",
+                  flush=True)
             return False
 
         # Move cursor down after solidification; verify block remains locked
@@ -1525,27 +1531,30 @@ def test_se_execution():
         drain_all(master)
         # Redraw status / verify locked state
         os.write(master, b"\x1b[A")
-        out_still_locked = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
-        if b"[BLK: 2L LOCK]" not in out_still_locked:
-            print(f"[-] Block did not remain locked after cursor movement. Buffer: {repr(out_still_locked)}", flush=True)
+        out_still_locked = read_until(master, b"Block: 2 lines", timeout=4.0)
+        if b"Block: 2 lines" not in out_still_locked:
+            print(f"[-] Block did not remain locked: {repr(out_still_locked)}",
+                  flush=True)
             return False
 
-        # Press ESC to cancel solidified block mode (should clear [BLK: ... LOCK] and stay in editor)
+        # Press ESC to cancel solidified block mode
         os.write(master, b"\x1b")
         out_esc_blk = read_until(master, b"^K: Editor keys", timeout=4.0)
         if b"^K: Editor keys" not in out_esc_blk:
-            print(f"[-] ESC failed to cancel solidified block. Buffer: {repr(out_esc_blk)}", flush=True)
+            print(f"[-] ESC failed to cancel solidified block: "
+                  f"{repr(out_esc_blk)}", flush=True)
             return False
 
-        # Verify single-line partial block with Ctrl+K solidification
+        # Verify single-line partial block with Enter solidification
         os.write(master, b"\x02")
-        read_until(master, b"[SEL: 0c]", timeout=4.0)
+        read_until(master, b"Sel: 0 chars", timeout=4.0)
         os.write(master, b"\x1b[C" * 3)
-        read_until(master, b"[SEL: 3c]", timeout=4.0)
-        os.write(master, b"\x0b")
-        out_solid_c = read_until(master, b"[BLK: 3c LOCK]", timeout=4.0)
-        if b"[BLK: 3c LOCK]" not in out_solid_c:
-            print(f"[-] Single-line Ctrl+K solidification failed. Buffer: {repr(out_solid_c)}", flush=True)
+        read_until(master, b"Sel: 3 chars", timeout=4.0)
+        os.write(master, b"\r")
+        out_solid_c = read_until(master, b"Block: 3 chars", timeout=4.0)
+        if b"Block: 3 chars" not in out_solid_c:
+            print(f"[-] Single-line solidification failed: {repr(out_solid_c)}",
+                  flush=True)
             return False
 
         # Cancel with Ctrl+B
@@ -1557,7 +1566,7 @@ def test_se_execution():
             return False
         print(
             "[+] Step 34: Successfully verified hybrid block highlighting & "
-            "Ctrl+K solidification!",
+            "Enter solidification!",
             flush=True
         )
 
@@ -1640,10 +1649,10 @@ def test_se_execution():
         # Select 2 characters: Right Arrow twice (Col 0 -> Col 2)
         os.write(master, b"\x1b[C\x1b[C")
         time.sleep(0.1)
-        # Solidify block with Ctrl+K
-        os.write(master, b"\x0b")
-        out_solid_cpy = read_until(master, b"[BLK: 2c LOCK]", timeout=4.0)
-        if b"[BLK: 2c LOCK]" not in out_solid_cpy:
+        # Solidify block with Enter
+        os.write(master, b"\r")
+        out_solid_cpy = read_until(master, b"Block: 2 chars", timeout=4.0)
+        if b"Block: 2 chars" not in out_solid_cpy:
             print(
                 f"[-] Step 36: Block solidification failed for Ctrl+C test. "
                 f"Buffer: {repr(out_solid_cpy)}",
@@ -1677,7 +1686,7 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_cpy1 = drain_all(master)
-        if b"[BLK: 2c LOCK]" not in out_cpy1 or (
+        if b"Block: 2 chars" not in out_cpy1 or (
             b"L1L1" not in out_cpy1 and b"L1\x1b[0mL1" not in out_cpy1
         ):
             print(
@@ -1691,7 +1700,7 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_cpy2 = drain_all(master)
-        if b"[BLK: 2c LOCK]" not in out_cpy2 or (
+        if b"Block: 2 chars" not in out_cpy2 or (
             b"L1L1L1" not in out_cpy2 and b"L1\x1b[0mL1L1" not in out_cpy2
         ):
             print(
@@ -1715,10 +1724,10 @@ def test_se_execution():
         # Start block (Ctrl+B), expand down 1 row (Down Arrow to Row 2 Col 0)
         os.write(master, b"\x02\x1b[B")
         time.sleep(0.1)
-        # Solidify with Ctrl+K -> must be [BLK: 1L LOCK]
-        os.write(master, b"\x0b")
-        out_1l_solid = read_until(master, b"[BLK: 1L LOCK]", timeout=4.0)
-        if b"[BLK: 1L LOCK]" not in out_1l_solid:
+        # Solidify with Enter -> must be Block: 1 line
+        os.write(master, b"\r")
+        out_1l_solid = read_until(master, b"Block: 1 line", timeout=4.0)
+        if b"Block: 1 line" not in out_1l_solid:
             print(
                 f"[-] Step 36: 1L block solidification failed. "
                 f"Buffer: {repr(out_1l_solid)}",
@@ -1731,7 +1740,7 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_1l_cpy = drain_all(master)
-        if b"[BLK: 1L LOCK]" not in out_1l_cpy:
+        if b"Block: 1 line" not in out_1l_cpy:
             print(
                 f"[-] Step 36: Ctrl+C at Row 2 Col 0 failed. "
                 f"Buffer: {repr(out_1l_cpy)}",
@@ -1752,10 +1761,10 @@ def test_se_execution():
         # Start block (Ctrl+B), expand down 2 rows (Down Arrow twice) for 2 lines
         os.write(master, b"\x02\x1b[B\x1b[B")
         time.sleep(0.1)
-        # Solidify with Ctrl+K -> must be [BLK: 2L LOCK]
-        os.write(master, b"\x0b")
-        out_ml_solid = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
-        if b"[BLK: 2L LOCK]" not in out_ml_solid:
+        # Solidify with Enter -> must be Block: 2 lines
+        os.write(master, b"\r")
+        out_ml_solid = read_until(master, b"Block: 2 lines", timeout=4.0)
+        if b"Block: 2 lines" not in out_ml_solid:
             print(
                 f"[-] Step 36: Multi-line solidification failed. "
                 f"Buffer: {repr(out_ml_solid)}",
@@ -1772,7 +1781,7 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_ml_cpy = drain_all(master)
-        if b"[BLK: 2L LOCK]" not in out_ml_cpy:
+        if b"Block: 2 lines" not in out_ml_cpy:
             print(
                 f"[-] Step 36: Multi-line block copy failed. "
                 f"Buffer: {repr(out_ml_cpy)}",
@@ -1810,26 +1819,29 @@ def test_se_execution():
         drain_all(master)
 
         # 1. Start in Column 0, press Ctrl+B:
-        # Must show [SEL: 0c], zero chars in block, no inverse video on character 0
+        # Must show Sel: 0 chars, zero chars in block
         os.write(master, b"\x02")
-        out_s37_0c = read_until(master, b"[SEL: 0c]", timeout=4.0)
-        if b"[SEL: 0c]" not in out_s37_0c:
-            print(f"[-] Step 37 failed: Ctrl+B at Col 0 did not show [SEL: 0c]. Buffer: {repr(out_s37_0c)}", flush=True)
+        out_s37_0c = read_until(master, b"Sel: 0 chars", timeout=4.0)
+        if b"Sel: 0 chars" not in out_s37_0c:
+            print(f"[-] Step 37 failed: Ctrl+B at Col 0 did not show "
+                  f"Sel: 0 chars. Buffer: {repr(out_s37_0c)}", flush=True)
             return False
 
         # 2. Cursor right 1 char (Right Arrow to Col 1):
-        # Old cursor location (Col 0) becomes highlighted, cursor cell at Col 1 is normal video
+        # Old cursor location (Col 0) becomes highlighted
         os.write(master, b"\x1b[C")
-        out_s37_1c = read_until(master, b"[SEL: 1c]", timeout=4.0)
-        if b"[SEL: 1c]" not in out_s37_1c:
-            print(f"[-] Step 37 failed: Right arrow did not show [SEL: 1c]. Buffer: {repr(out_s37_1c)}", flush=True)
+        out_s37_1c = read_until(master, b"Sel: 1 char", timeout=4.0)
+        if b"Sel: 1 char" not in out_s37_1c:
+            print(f"[-] Step 37 failed: Right arrow did not show Sel: 1 char. "
+                  f"Buffer: {repr(out_s37_1c)}", flush=True)
             return False
 
-        # 3. Press Ctrl+K to solidify: shows [BLK: 1c LOCK]
-        os.write(master, b"\x0b")
-        out_s37_solid = read_until(master, b"[BLK: 1c LOCK]", timeout=4.0)
-        if b"[BLK: 1c LOCK]" not in out_s37_solid:
-            print(f"[-] Step 37 failed: Ctrl+K did not show [BLK: 1c LOCK]. Buffer: {repr(out_s37_solid)}", flush=True)
+        # 3. Press Enter to solidify: shows Block: 1 char
+        os.write(master, b"\r")
+        out_s37_solid = read_until(master, b"Block: 1 char", timeout=4.0)
+        if b"Block: 1 char" not in out_s37_solid:
+            print(f"[-] Step 37 failed: Enter did not show Block: 1 char. "
+                  f"Buffer: {repr(out_s37_solid)}", flush=True)
             return False
 
         # 4. Press Ctrl+C at Col 1: must NOT be ignored (Col 1 is outside [0, 1)!)
@@ -1837,8 +1849,9 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_s37_cpy1 = drain_all(master)
-        if b"[BLK: 1c LOCK]" not in out_s37_cpy1:
-            print(f"[-] Step 37 failed: Ctrl+C at Col 1 was ignored or corrupted! Buffer: {repr(out_s37_cpy1)}", flush=True)
+        if b"Block: 1 char" not in out_s37_cpy1:
+            print(f"[-] Step 37 failed: Ctrl+C at Col 1 was ignored or "
+                  f"corrupted! Buffer: {repr(out_s37_cpy1)}", flush=True)
             return False
 
         # 5. Cursor right 1 char (Right Arrow to Col 2):
@@ -1851,8 +1864,9 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_s37_cpy2 = drain_all(master)
-        if b"[BLK: 1c LOCK]" not in out_s37_cpy2:
-            print(f"[-] Step 37 failed: Second Ctrl+C failed or corrupted! Buffer: {repr(out_s37_cpy2)}", flush=True)
+        if b"Block: 1 char" not in out_s37_cpy2:
+            print(f"[-] Step 37 failed: Second Ctrl+C failed or corrupted! "
+                  f"Buffer: {repr(out_s37_cpy2)}", flush=True)
             return False
 
         # 7. Cancel block with ESC
@@ -1879,18 +1893,20 @@ def test_se_execution():
 
         # Press Ctrl+B to start block at Row 10 Col 5
         os.write(master, b"\x02")
-        out_s38_b10 = read_until(master, b"[SEL: 0c]", timeout=4.0)
-        if b"[SEL: 0c]" not in out_s38_b10:
-            print(f"[-] Step 38 failed: Ctrl+B at Row 10 Col 5 did not show [SEL: 0c]. Buffer: {repr(out_s38_b10)}", flush=True)
+        out_s38_b10 = read_until(master, b"Sel: 0 chars", timeout=4.0)
+        if b"Sel: 0 chars" not in out_s38_b10:
+            print(f"[-] Step 38 failed: Ctrl+B at Row 10 Col 5 did not show "
+                  f"Sel: 0 chars. Buffer: {repr(out_s38_b10)}", flush=True)
             return False
 
-        # Press Left Arrow 6 times: moves Col 5 -> 4 -> 3 -> 2 -> 1 -> 0 -> wraps to Row 9 end
+        # Press Left Arrow 6 times: Col 5 -> 4 -> 3 -> 2 -> 1 -> 0 -> wraps
         for _ in range(6):
             os.write(master, b"\x1b[D")
             time.sleep(0.05)
-        out_s38_wrap = read_until(master, b"[SEL: 2L]", timeout=4.0)
-        if b"[SEL: 2L]" not in out_s38_wrap:
-            print(f"[-] Step 38 failed: Left arrow wrap did not show [SEL: 2L]. Buffer: {repr(out_s38_wrap)}", flush=True)
+        out_s38_wrap = read_until(master, b"Sel: 2 lines", timeout=4.0)
+        if b"Sel: 2 lines" not in out_s38_wrap:
+            print(f"[-] Step 38 failed: Left arrow wrap did not show "
+                  f"Sel: 2 lines. Buffer: {repr(out_s38_wrap)}", flush=True)
             return False
 
         # Continue pressing Left Arrow until cursor reaches Row 9 Col 0
@@ -1901,17 +1917,18 @@ def test_se_execution():
             if b"Line    9/" in buf and b"Col 0 " in buf:
                 break
 
-        # Confirm Row 9 remains highlighted (cols 1..254) and status remains [SEL: 2L]
+        # Confirm Row 9 highlighted and status remains Sel: 2 lines
         out_s38_col0 = drain_all(master)
         # Redraw status bar / line check:
         os.write(master, b"")
         time.sleep(0.1)
 
-        # Press Ctrl+K to solidify: shows [BLK: 2L LOCK]
-        os.write(master, b"\x0b")
-        out_s38_solid_ml = read_until(master, b"[BLK: 2L LOCK]", timeout=4.0)
-        if b"[BLK: 2L LOCK]" not in out_s38_solid_ml:
-            print(f"[-] Step 38 failed: Ctrl+K did not show [BLK: 2L LOCK]. Buffer: {repr(out_s38_solid_ml)}", flush=True)
+        # Press Enter to solidify: shows Block: 2 lines
+        os.write(master, b"\r")
+        out_s38_solid_ml = read_until(master, b"Block: 2 lines", timeout=4.0)
+        if b"Block: 2 lines" not in out_s38_solid_ml:
+            print(f"[-] Step 38 failed: Enter did not show Block: 2 lines. "
+                  f"Buffer: {repr(out_s38_solid_ml)}", flush=True)
             return False
 
         # Press Ctrl+C at Row 9 Col 0: must NOT be ignored
@@ -1919,8 +1936,9 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_s38_cpy_ml = drain_all(master)
-        if b"[BLK: 2L LOCK]" not in out_s38_cpy_ml:
-            print(f"[-] Step 38 failed: Ctrl+C at Row 9 Col 0 was ignored or failed! Buffer: {repr(out_s38_cpy_ml)}", flush=True)
+        if b"Block: 2 lines" not in out_s38_cpy_ml:
+            print(f"[-] Step 38 failed: Ctrl+C at Row 9 Col 0 was ignored or "
+                  f"failed! Buffer: {repr(out_s38_cpy_ml)}", flush=True)
             return False
 
         # Cancel block with ESC
@@ -1929,34 +1947,38 @@ def test_se_execution():
         drain_all(master)
 
         # Part 2: Single-line backwards selection (Col 5 left to Col 4)
-        # Move to top of document (Ctrl+T) and Col 0 (Ctrl+A), then move right 5 columns
+        # Move to top of document (Ctrl+T) and Col 0 (Ctrl+A), then move right
         os.write(master, b"\x14\x01")
         read_until(master, b"Line    1/", timeout=4.0)
         os.write(master, b"\x1b[C" * 5)
         out_s38_c5 = read_until(master, b"Col 5", timeout=4.0)
         if b"Col 5" not in out_s38_c5:
-            print(f"[-] Step 38 failed: Could not navigate to Col 5. Buffer: {repr(out_s38_c5)}", flush=True)
+            print(f"[-] Step 38 failed: Could not navigate to Col 5. "
+                  f"Buffer: {repr(out_s38_c5)}", flush=True)
             return False
 
         # Press Ctrl+B to start block at Col 5
         os.write(master, b"\x02")
-        out_s38_b5 = read_until(master, b"[SEL: 0c]", timeout=4.0)
-        if b"[SEL: 0c]" not in out_s38_b5:
-            print(f"[-] Step 38 failed: Ctrl+B at Col 5 did not show [SEL: 0c]. Buffer: {repr(out_s38_b5)}", flush=True)
+        out_s38_b5 = read_until(master, b"Sel: 0 chars", timeout=4.0)
+        if b"Sel: 0 chars" not in out_s38_b5:
+            print(f"[-] Step 38 failed: Ctrl+B at Col 5 did not show "
+                  f"Sel: 0 chars. Buffer: {repr(out_s38_b5)}", flush=True)
             return False
 
         # Press Left Arrow to Col 4: expands 1 character backwards
         os.write(master, b"\x1b[D")
-        out_s38_left = read_until(master, b"[SEL: 1c]", timeout=4.0)
-        if b"[SEL: 1c]" not in out_s38_left:
-            print(f"[-] Step 38 failed: Left arrow did not show [SEL: 1c]. Buffer: {repr(out_s38_left)}", flush=True)
+        out_s38_left = read_until(master, b"Sel: 1 char", timeout=4.0)
+        if b"Sel: 1 char" not in out_s38_left:
+            print(f"[-] Step 38 failed: Left arrow did not show Sel: 1 char. "
+                  f"Buffer: {repr(out_s38_left)}", flush=True)
             return False
 
-        # Press Ctrl+K to solidify: shows [BLK: 1c LOCK]
-        os.write(master, b"\x0b")
-        out_s38_solid_sl = read_until(master, b"[BLK: 1c LOCK]", timeout=4.0)
-        if b"[BLK: 1c LOCK]" not in out_s38_solid_sl:
-            print(f"[-] Step 38 failed: Ctrl+K did not show [BLK: 1c LOCK]. Buffer: {repr(out_s38_solid_sl)}", flush=True)
+        # Press Enter to solidify: shows Block: 1 char
+        os.write(master, b"\r")
+        out_s38_solid_sl = read_until(master, b"Block: 1 char", timeout=4.0)
+        if b"Block: 1 char" not in out_s38_solid_sl:
+            print(f"[-] Step 38 failed: Enter did not show Block: 1 char. "
+                  f"Buffer: {repr(out_s38_solid_sl)}", flush=True)
             return False
 
         # Press Ctrl+C at Col 4: must NOT be ignored (Col 4 is outside [5, 6)!)
@@ -1964,7 +1986,7 @@ def test_se_execution():
         os.write(master, b"\x03")
         time.sleep(0.3)
         out_s38_cpy_sl = drain_all(master)
-        if b"[BLK: 1c LOCK]" not in out_s38_cpy_sl:
+        if b"Block: 1 char" not in out_s38_cpy_sl:
             print(f"[-] Step 38 failed: Ctrl+C at Col 4 was ignored or failed! Buffer: {repr(out_s38_cpy_sl)}", flush=True)
             return False
 
@@ -1978,41 +2000,52 @@ def test_se_execution():
         # Step 39: Verify Block Selection Workflow Simplifications
         print("[*] Step 39: Testing block selection workflow simplifications...", flush=True)
 
-        # 1. Test Ctrl-B re-anchoring
-        os.write(master, b"\x14\x01") # Ctrl+T, Ctrl+A to top and col 0
+        # 1. Test Ctrl-B pure toggle (Option A)
+        os.write(master, b"\x14\x01")  # Ctrl+T, Ctrl+A to top and col 0
         time.sleep(0.1)
         drain_all(master)
 
-        os.write(master, b"\x02") # Ctrl-B
-        out_b0 = read_until(master, b"[SEL: 0c]", timeout=4.0)
-        if b"[SEL: 0c]" not in out_b0:
-            print(f"[-] Step 39 Ctrl-B activation failed: {repr(out_b0)}", flush=True)
+        os.write(master, b"\x02")  # Ctrl-B: activate block mode
+        out_b0 = read_until(master, b"Sel: 0 chars", timeout=4.0)
+        if b"Sel: 0 chars" not in out_b0:
+            print(f"[-] Step 39 Ctrl-B activation failed: {repr(out_b0)}",
+                  flush=True)
             return False
 
-        os.write(master, b"\x1b[C" * 5) # Right 5 cols
-        out_b5 = read_until(master, b"[SEL: 5c]", timeout=4.0)
-        if b"[SEL: 5c]" not in out_b5:
-            print(f"[-] Step 39 Ctrl-B move right failed: {repr(out_b5)}", flush=True)
+        os.write(master, b"\x1b[C" * 5)  # Right 5 cols
+        out_b5 = read_until(master, b"Sel: 5 chars", timeout=4.0)
+        if b"Sel: 5 chars" not in out_b5:
+            print(f"[-] Step 39 Ctrl-B move right failed: {repr(out_b5)}",
+                  flush=True)
             return False
 
-        os.write(master, b"\x02") # Ctrl-B: cursor moved, so re-anchors to 0c at current col!
-        out_b_re = read_until(master, b"[SEL: 0c]", timeout=4.0)
-        if b"[SEL: 0c]" not in out_b_re:
-            print(f"[-] Step 39 Ctrl-B re-anchor failed: {repr(out_b_re)}", flush=True)
-            return False
-
-        os.write(master, b"\x1b[C" * 2) # Right 2 cols
-        out_b2 = read_until(master, b"[SEL: 2c]", timeout=4.0)
-        if b"[SEL: 2c]" not in out_b2:
-            print(f"[-] Step 39 expansion after re-anchor failed: {repr(out_b2)}", flush=True)
-            return False
-
-        os.write(master, b"\x02") # Ctrl-B at Col 7: re-anchors at Col 7
-        read_until(master, b"[SEL: 0c]", timeout=4.0)
-        os.write(master, b"\x02") # Ctrl-B without moving: cancels block!
+        os.write(master, b"\x02")  # Ctrl-B: pure toggle cancels active block!
         out_b_canc = read_until(master, b"^K: Editor keys", timeout=4.0)
         if b"^K: Editor keys" not in out_b_canc:
-            print(f"[-] Step 39 Ctrl-B cancel without moving failed: {repr(out_b_canc)}", flush=True)
+            print(f"[-] Step 39 Ctrl-B cancel failed: {repr(out_b_canc)}",
+                  flush=True)
+            return False
+
+        # Re-activate block mode with Ctrl-B
+        os.write(master, b"\x02")
+        out_b_react = read_until(master, b"Sel: 0 chars", timeout=4.0)
+        if b"Sel: 0 chars" not in out_b_react:
+            print(f"[-] Step 39 Ctrl-B re-activation failed: "
+                  f"{repr(out_b_react)}", flush=True)
+            return False
+
+        os.write(master, b"\x1b[C" * 2)  # Right 2 cols
+        out_b2 = read_until(master, b"Sel: 2 chars", timeout=4.0)
+        if b"Sel: 2 chars" not in out_b2:
+            print(f"[-] Step 39 expansion after re-activation failed: "
+                  f"{repr(out_b2)}", flush=True)
+            return False
+
+        os.write(master, b"\x02")  # Ctrl-B: cancels block!
+        out_b_canc2 = read_until(master, b"^K: Editor keys", timeout=4.0)
+        if b"^K: Editor keys" not in out_b_canc2:
+            print(f"[-] Step 39 Ctrl-B second cancel failed: "
+                  f"{repr(out_b_canc2)}", flush=True)
             return False
 
         # 2. Test Shift + Arrow keys
@@ -2021,20 +2054,20 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"\x1b[1;2C") # Shift+Right
-        out_s_r = read_until(master, b"[SEL: 1c]", timeout=4.0)
-        if b"[SEL: 1c]" not in out_s_r:
+        out_s_r = read_until(master, b"Sel: 1 char", timeout=4.0)
+        if b"Sel: 1 char" not in out_s_r:
             print(f"[-] Step 39 Shift+Right failed: {repr(out_s_r)}", flush=True)
             return False
 
         os.write(master, b"\x1b[C") # Unshifted Right Arrow -> extends block
-        out_s_ext = read_until(master, b"[SEL: 2c]", timeout=4.0)
-        if b"[SEL: 2c]" not in out_s_ext:
+        out_s_ext = read_until(master, b"Sel: 2 chars", timeout=4.0)
+        if b"Sel: 2 chars" not in out_s_ext:
             print(f"[-] Step 39 unshifted Right extension failed: {repr(out_s_ext)}", flush=True)
             return False
 
         os.write(master, b"\x1b[1;2B") # Shift+Down -> cancels active block, starts new, moves down
-        out_s_d = read_until(master, b"[SEL: 2L]", timeout=4.0)
-        if b"[SEL: 2L]" not in out_s_d:
+        out_s_d = read_until(master, b"Sel: 2 lines", timeout=4.0)
+        if b"Sel: 2 lines" not in out_s_d:
             print(f"[-] Step 39 Shift+Down failed: {repr(out_s_d)}", flush=True)
             return False
 
@@ -2053,8 +2086,8 @@ def test_se_execution():
         read_until(master, b"DELTEST12345", timeout=4.0)
 
         os.write(master, b"\x02" + b"\x1b[C" * 7) # Select "DELTEST"
-        out_d_sel = read_until(master, b"[SEL: 7c]", timeout=4.0)
-        if b"[SEL: 7c]" not in out_d_sel:
+        out_d_sel = read_until(master, b"Sel: 7 chars", timeout=4.0)
+        if b"Sel: 7 chars" not in out_d_sel:
             print(f"[-] Step 39 select DELTEST failed: {repr(out_d_sel)}", flush=True)
             return False
 
@@ -2076,14 +2109,14 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"\x02" + b"\x1b[C" * 3) # Select "123"
-        out_c_sel = read_until(master, b"[SEL: 3c]", timeout=4.0)
-        if b"[SEL: 3c]" not in out_c_sel:
+        out_c_sel = read_until(master, b"Sel: 3 chars", timeout=4.0)
+        if b"Sel: 3 chars" not in out_c_sel:
             print(f"[-] Step 39 select 123 failed: {repr(out_c_sel)}", flush=True)
             return False
 
         os.write(master, b"\x03") # Ctrl-C -> solidifies AND performs copy operation immediately!
-        out_c_lock = read_until(master, b"[BLK: 3c LOCK]", timeout=4.0)
-        if b"[BLK: 3c LOCK]" not in out_c_lock:
+        out_c_lock = read_until(master, b"Block: 3 chars", timeout=4.0)
+        if b"Block: 3 chars" not in out_c_lock:
             print(f"[-] Step 39 Ctrl-C solidify failed: {repr(out_c_lock)}", flush=True)
             return False
 
@@ -2117,17 +2150,18 @@ def test_se_execution():
         time.sleep(0.1)
         drain_all(master)
 
-        os.write(master, b"\x02" + b"\x1b[C" * 3) # Ctrl-B, Right * 3 -> [SEL: 3c]
-        out_s40_sel = read_until(master, b"[SEL: 3c]", timeout=4.0)
-        if b"[SEL: 3c]" not in out_s40_sel:
+        os.write(master, b"\x02" + b"\x1b[C" * 3)  # Ctrl-B, Right * 3
+        out_s40_sel = read_until(master, b"Sel: 3 chars", timeout=4.0)
+        if b"Sel: 3 chars" not in out_s40_sel:
             print(f"[-] Step 40 select 3c failed: {repr(out_s40_sel)}", flush=True)
             return False
 
-        # Solidify with Ctrl-K
-        os.write(master, b"\x0b")
-        out_s40_lock = read_until(master, b"[BLK: 3c LOCK]", timeout=4.0)
-        if b"[BLK: 3c LOCK]" not in out_s40_lock:
-            print(f"[-] Step 40 Ctrl-K solidify failed: {repr(out_s40_lock)}", flush=True)
+        # Solidify with Enter
+        os.write(master, b"\r")
+        out_s40_lock = read_until(master, b"Block: 3 chars", timeout=4.0)
+        if b"Block: 3 chars" not in out_s40_lock:
+            print(f"[-] Step 40 Enter solidify failed: {repr(out_s40_lock)}",
+                  flush=True)
             return False
 
         # Move to end of line: Ctrl-E (Col 8)
@@ -2138,8 +2172,10 @@ def test_se_execution():
         # Move block to end of line with Ctrl-X (\x18)!
         os.write(master, b"\x18")
         out_s40_move1 = read_until(master, b"Col 5", timeout=4.0)
-        if b"[BLK: 3c LOCK]" not in out_s40_move1 or b"Col 5" not in out_s40_move1:
-            print(f"[-] Step 40 forward move failed: {repr(out_s40_move1)}", flush=True)
+        if (b"Block: 3 chars" not in out_s40_move1 or
+                b"Col 5" not in out_s40_move1):
+            print(f"[-] Step 40 forward move failed: {repr(out_s40_move1)}",
+                  flush=True)
             return False
 
         # 2. Backward move on same line: move block from Col 5 back to Col 0
@@ -2149,24 +2185,27 @@ def test_se_execution():
 
         os.write(master, b"\x18") # Ctrl-X
         out_s40_move2 = read_until(master, b"Col 0", timeout=4.0)
-        if b"[BLK: 3c LOCK]" not in out_s40_move2 or b"Col 0" not in out_s40_move2:
-            print(f"[-] Step 40 backward move failed: {repr(out_s40_move2)}", flush=True)
+        if (b"Block: 3 chars" not in out_s40_move2 or
+                b"Col 0" not in out_s40_move2):
+            print(f"[-] Step 40 backward move failed: {repr(out_s40_move2)}",
+                  flush=True)
             return False
 
-        # 3. Test implied Ctrl-K on Ctrl-X during dynamic selection
+        # 3. Test implied solidification on Ctrl-X during dynamic selection
         os.write(master, b"\x1b") # ESC to cancel block
         read_until(master, b"^K: Editor keys", timeout=4.0)
 
-        os.write(master, b"\x02" + b"\x1b[C" * 2) # Select "12" -> [SEL: 2c]
-        out_s40_dyn = read_until(master, b"[SEL: 2c]", timeout=4.0)
-        if b"[SEL: 2c]" not in out_s40_dyn:
+        os.write(master, b"\x02" + b"\x1b[C" * 2) # Select "12" -> Sel: 2 chars
+        out_s40_dyn = read_until(master, b"Sel: 2 chars", timeout=4.0)
+        if b"Sel: 2 chars" not in out_s40_dyn:
             print(f"[-] Step 40 dynamic select failed: {repr(out_s40_dyn)}", flush=True)
             return False
 
-        os.write(master, b"\x18") # Ctrl-X during selection -> implied Ctrl-K
-        out_s40_impl = read_until(master, b"[BLK: 2c LOCK]", timeout=4.0)
-        if b"[BLK: 2c LOCK]" not in out_s40_impl:
-            print(f"[-] Step 40 implied Ctrl-K on Ctrl-X failed: {repr(out_s40_impl)}", flush=True)
+        os.write(master, b"\x18") # Ctrl-X during selection -> implied solidify
+        out_s40_impl = read_until(master, b"Block: 2 chars", timeout=4.0)
+        if b"Block: 2 chars" not in out_s40_impl:
+            print(f"[-] Step 40 implied solidify failed: {repr(out_s40_impl)}",
+                  flush=True)
             return False
 
         os.write(master, b"\x1b") # ESC to cancel block
@@ -2197,20 +2236,20 @@ def test_se_execution():
             print(f"[-] Step 41 full line check failed: {repr(out_s41_full)}", flush=True)
             return False
 
-        # 2. Select a 5-character block on this line: Ctrl-A, Right 10, Ctrl-B, Right 5, Ctrl-K
+        # 2. Select a 5-char block: Ctrl-A, Right 10, Ctrl-B, Right 5, Enter
         os.write(master, b"\x01" + b"\x1b[C" * 10)
         time.sleep(0.1)
         drain_all(master)
 
         os.write(master, b"\x02" + b"\x1b[C" * 5) # Select 5 chars
-        out_s41_sel = read_until(master, b"[SEL: 5c]", timeout=4.0)
-        if b"[SEL: 5c]" not in out_s41_sel:
+        out_s41_sel = read_until(master, b"Sel: 5 chars", timeout=4.0)
+        if b"Sel: 5 chars" not in out_s41_sel:
             print(f"[-] Step 41 select 5c failed: {repr(out_s41_sel)}", flush=True)
             return False
 
-        os.write(master, b"\x0b") # Solidify -> [BLK: 5c LOCK]
-        out_s41_lock = read_until(master, b"[BLK: 5c LOCK]", timeout=4.0)
-        if b"[BLK: 5c LOCK]" not in out_s41_lock:
+        os.write(master, b"\r") # Solidify -> Block: 5 chars
+        out_s41_lock = read_until(master, b"Block: 5 chars", timeout=4.0)
+        if b"Block: 5 chars" not in out_s41_lock:
             print(f"[-] Step 41 solidify failed: {repr(out_s41_lock)}", flush=True)
             return False
 
@@ -2233,7 +2272,7 @@ def test_se_execution():
             return False
 
         # Block should remain intact
-        if b"[BLK: 5c LOCK]" not in out_s41_check:
+        if b"Block: 5 chars" not in out_s41_check:
             print(f"[-] Step 41 block lock state lost: {repr(out_s41_check)}", flush=True)
             return False
 
@@ -2666,8 +2705,9 @@ def test_se_execution():
         time.sleep(0.1)
         os.write(master, b"BetaLine\r")
         out_s48 = read_until(master, b"Col 8", timeout=4.0)
-        if b"[BLK: 8c LOCK]" not in out_s48:
-            print(f"[-] Step 48 failed: [BLK: 8c LOCK] missing from status bar. Buffer: {repr(out_s48)}", flush=True)
+        if b"Block: 8 chars" not in out_s48:
+            print(f"[-] Step 48 failed: Block: 8 chars missing from "
+                  f"status bar. Buffer: {repr(out_s48)}", flush=True)
             return False
         if b"Col 8" not in out_s48:
             print(f"[-] Step 48 failed: Cursor not positioned past block at Col 8. Buffer: {repr(out_s48)}", flush=True)
@@ -2686,8 +2726,8 @@ def test_se_execution():
         read_until(master, b"[ESC]=Cancel", timeout=4.0)
         time.sleep(0.1)
         os.write(master, b"\r")
-        out_s48_re = read_until(master, b"[BLK: 8c LOCK]", timeout=6.0)
-        if b"[BLK: 8c LOCK]" not in out_s48_re or b"Col 8" not in out_s48_re:
+        out_s48_re = read_until(master, b"Block: 8 chars", timeout=6.0)
+        if b"Block: 8 chars" not in out_s48_re or b"Col 8" not in out_s48_re:
             print(
                 f"[-] Step 48 failed: Solidified block re-match missing or "
                 f"not at Col 8. Buffer: {repr(out_s48_re)}",
@@ -2725,9 +2765,9 @@ def test_se_execution():
         os.write(master, b"\x02")
         # Move right 4 times to select "Line"
         os.write(master, b"\x1b[C\x1b[C\x1b[C\x1b[C")
-        read_until(master, b"[SEL: 4c]", timeout=4.0)
+        read_until(master, b"Sel: 4 chars", timeout=4.0)
 
-        # Press Ctrl+F: should imply Ctrl+K and pre-fill "Line"
+        # Press Ctrl+F: should imply solidify and pre-fill "Line"
         os.write(master, b"\x06")
         out_s49_prompt = read_until(master, b"[ESC]=Cancel", timeout=4.0)
         if b"Find: [Line" not in out_s49_prompt:
@@ -2738,7 +2778,8 @@ def test_se_execution():
         # Confirm search with Enter
         os.write(master, b"\r")
         out_s49_match = read_until(master, b"Col 4", timeout=4.0)
-        if b"[BLK: 4c LOCK]" not in out_s49_match or b"Col 4" not in out_s49_match:
+        if (b"Block: 4 chars" not in out_s49_match or
+                b"Col 4" not in out_s49_match):
             print(f"[-] Step 49 failed: Pre-filled match not solidified or not at Col 4. Buffer: {repr(out_s49_match)}", flush=True)
             return False
         print("[+] Successfully verified Start Search from Highlighted Block (Step 49)!", flush=True)
@@ -2770,7 +2811,7 @@ def test_se_execution():
         read_until(master, b"[ESC]=Cancel", timeout=4.0)
         time.sleep(0.1)
         os.write(master, b"BetaLine\r")
-        read_until(master, b"[BLK: 8c LOCK]", timeout=4.0)
+        read_until(master, b"Block: 8 chars", timeout=4.0)
 
         # Now trigger Find Next (Ctrl+N): wraps whole file and finds no more matches!
         time.sleep(0.3)
@@ -3513,7 +3554,7 @@ def test_se_execution():
         # Test block mode suppression: press Ctrl+B
         drain_all(master)
         os.write(master, b"\x02")  # Ctrl+B
-        read_until(master, b"[SEL:", timeout=6.0)
+        read_until(master, b"Sel:", timeout=6.0)
         drain_all(master)
         # Force screen redraw with Ctrl+L
         os.write(master, b"\x0c")
@@ -4181,7 +4222,7 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"INS1.TXT\r")
-        out_s66_ins1 = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
+        out_s66_ins1 = read_until(master, b"Block: 8 chars", timeout=8.0)
         out_s66_ins1 += drain_all(master)
 
         if (b"Inserting File" not in out_s66_ins1 and
@@ -4197,18 +4238,23 @@ def test_se_execution():
             print(f"[-] Step 66 Subtest 3 failed: '~' not found during insert: {repr(out_s66_ins1)}", flush=True)
             return False
         if b"INS1.TXT" not in out_s66_ins1:
-            print(f"[-] Step 66 Subtest 3 failed: 'INS1.TXT' not found in status bar during insert: {repr(out_s66_ins1)}", flush=True)
+            print(f"[-] Step 66 Subtest 3 failed: 'INS1.TXT' not found in "
+                  f"status bar during insert: {repr(out_s66_ins1)}", flush=True)
             return False
-        if b"[BLK: 8c LOCK]" not in out_s66_ins1:
-            print(f"[-] Step 66 Subtest 3 failed: '[BLK: 8c LOCK]' not found on status bar: {repr(out_s66_ins1)}", flush=True)
+        if b"Block: 8 chars" not in out_s66_ins1:
+            print(f"[-] Step 66 Subtest 3 failed: 'Block: 8 chars' not found "
+                  f"on status bar: {repr(out_s66_ins1)}", flush=True)
             return False
         if b"INSERTED" not in out_s66_ins1:
-            print(f"[-] Step 66 Subtest 3 failed: 'INSERTED' not found: {repr(out_s66_ins1)}", flush=True)
+            print(f"[-] Step 66 Subtest 3 failed: 'INSERTED' not found: "
+                  f"{repr(out_s66_ins1)}", flush=True)
             return False
         if b"(Untitled)" not in out_s66_ins1:
-            print(f"[-] Step 66 Subtest 3 failed: WORK_FCB was overwritten, expected (Untitled): {repr(out_s66_ins1)}", flush=True)
+            print(f"[-] Step 66 Subtest 3 failed: WORK_FCB was overwritten, "
+                  f"expected (Untitled): {repr(out_s66_ins1)}", flush=True)
             return False
-        print("[+] Step 66 Subtest 3 PASSED: Single-line inserted at cursor, solidified [BLK: 8c LOCK], (Untitled) preserved.", flush=True)
+        print("[+] Step 66 Subtest 3 PASSED: Single-line inserted at cursor, "
+              "solidified Block: 8 chars, (Untitled) preserved.", flush=True)
 
         # Subtest 4: Replace non-empty single-line block with multi-line file
         os.write(master, b" END")
@@ -4237,7 +4283,7 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"INS2.TXT\r")
-        out_s66_ins2 = read_until(master, b"[BLK: 2L LOCK]", timeout=8.0)
+        out_s66_ins2 = read_until(master, b"Block: 2 lines", timeout=8.0)
         out_s66_ins2 += drain_all(master)
 
         if (b"Inserting File" not in out_s66_ins2 and
@@ -4255,8 +4301,9 @@ def test_se_execution():
         if b"INS2.TXT" not in out_s66_ins2:
             print(f"[-] Step 66 Subtest 4 failed: 'INS2.TXT' not found in status bar during insert: {repr(out_s66_ins2)}", flush=True)
             return False
-        if b"[BLK: 2L LOCK]" not in out_s66_ins2:
-            print(f"[-] Step 66 Subtest 4 failed: '[BLK: 2L LOCK]' not found on status bar: {repr(out_s66_ins2)}", flush=True)
+        if b"Block: 2 lines" not in out_s66_ins2:
+            print(f"[-] Step 66 Subtest 4 failed: 'Block: 2 lines' not found "
+                  f"on status bar: {repr(out_s66_ins2)}", flush=True)
             return False
         if b"FIRST LINE" not in out_s66_ins2:
             print(f"[-] Step 66 Subtest 4 failed: 'FIRST LINE' not found: {repr(out_s66_ins2)}", flush=True)
@@ -4264,7 +4311,8 @@ def test_se_execution():
         if b"SECOND LINE" not in out_s66_ins2:
             print(f"[-] Step 66 Subtest 4 failed: 'SECOND LINE' not found: {repr(out_s66_ins2)}", flush=True)
             return False
-        print("[+] Step 66 Subtest 4 PASSED: Single-line block replaced with multi-line file and solidified [BLK: 2L LOCK].", flush=True)
+        print("[+] Step 66 Subtest 4 PASSED: Single-line block replaced with "
+              "multi-line file and solidified Block: 2 lines.", flush=True)
 
         # Subtest 5: Replace multi-line block with single-line file
         # Dismiss previous solidified block with ESC
@@ -4300,11 +4348,11 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"INS1.TXT\r")
-        out_s66_ins3 = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
+        out_s66_ins3 = read_until(master, b"Block: 8 chars", timeout=8.0)
         out_s66_ins3 += drain_all(master)
 
-        if b"[BLK: 8c LOCK]" not in out_s66_ins3:
-            print(f"[-] Step 66 Subtest 5 failed: '[BLK: 8c LOCK]' not "
+        if b"Block: 8 chars" not in out_s66_ins3:
+            print(f"[-] Step 66 Subtest 5 failed: 'Block: 8 chars' not "
                   f"found: {repr(out_s66_ins3)}", flush=True)
             return False
         if b"INSERTED" not in out_s66_ins3:
@@ -4313,10 +4361,10 @@ def test_se_execution():
             return False
         print("[+] Step 66 Subtest 5 PASSED: Multi-line block deleted, "
               "replaced with single-line file, and solidified "
-              "[BLK: 8c LOCK].", flush=True)
+              "Block: 8 chars.", flush=True)
 
         # Subtest 6: Test block delete of inserted file, re-insert and ESC dismiss
-        # Line 1 currently has "Hello" + [BLK: 8c LOCK] "INSERTED" + " END"
+        # Line 1 currently has "Hello" + Block: 8 chars "INSERTED" + " END"
         # Press Del (\x7f) to delete the inserted block
         os.write(master, b"\x7f")
         out_s66_del = read_until(master, b"^K: Editor keys", timeout=6.0)
@@ -4333,9 +4381,9 @@ def test_se_execution():
         read_until(master, b"Enter filename to insert:", timeout=6.0)
         drain_all(master)
         os.write(master, b"INS1.TXT\r")
-        out_s66_reins = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
+        out_s66_reins = read_until(master, b"Block: 8 chars", timeout=8.0)
         out_s66_reins += drain_all(master)
-        if b"[BLK: 8c LOCK]" not in out_s66_reins:
+        if b"Block: 8 chars" not in out_s66_reins:
             print(f"[-] Step 66 Subtest 6 failed: Re-insert not solidified: {repr(out_s66_reins)}", flush=True)
             return False
 
@@ -4383,12 +4431,13 @@ def test_se_execution():
         # Cancel with ESC and verify block retained as solidified
         time.sleep(0.2)
         os.write(master, b"\x1b")
-        out_s67_esc = read_until(master, b"[BLK: 8c", timeout=5.0)
+        out_s67_esc = read_until(master, b"Block: 8 chars", timeout=5.0)
         out_s67_esc += drain_all(master)
-        if b"[BLK: 8c" not in out_s67_esc:
+        if b"Block: 8 chars" not in out_s67_esc:
             print(f"[-] Step 67 Subtest 2 failed: Block not retained after ESC cancel: {repr(out_s67_esc)}", flush=True)
             return False
-        print("[+] Step 67 Subtest 2 PASSED: ESC cancelled back to editor with block retained [BLK: 8c].", flush=True)
+        print("[+] Step 67 Subtest 2 PASSED: ESC cancelled back to editor "
+              "with block retained Block: 8 chars.", flush=True)
 
         # Press Ctrl+S again and save to BLKSGL.TXT
         os.write(master, b"\x13")
@@ -4398,9 +4447,9 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"BLKSGL.TXT\r")
-        out_s67_saved = read_until(master, b"[BLK: 8c", timeout=6.0)
+        out_s67_saved = read_until(master, b"Block: 8 chars", timeout=6.0)
         out_s67_saved += drain_all(master)
-        if b"[BLK: 8c" not in out_s67_saved:
+        if b"Block: 8 chars" not in out_s67_saved:
             print(f"[-] Step 67 Subtest 3 failed: Block not retained after successful save: {repr(out_s67_saved)}", flush=True)
             return False
         print("[+] Step 67 Subtest 3 PASSED: Block saved and block selection remained solidified.", flush=True)
@@ -4409,7 +4458,7 @@ def test_se_execution():
         os.write(master, b"\x1b[3~")
         out_s67_del = read_until(master, b"Hello END", timeout=5.0)
         out_s67_del += drain_all(master)
-        if b"Hello END" not in out_s67_del or b"[BLK:" in out_s67_del:
+        if b"Hello END" not in out_s67_del or b"Block:" in out_s67_del:
             print(f"[-] Step 67 Subtest 4 failed: Block deletion with Del failed: {repr(out_s67_del)}", flush=True)
             return False
         print("[+] Step 67 Subtest 4 PASSED: Saved block deleted with Del key, line is now 'Hello END'.", flush=True)
@@ -4530,7 +4579,7 @@ def test_se_execution():
         drain_all(master)
 
         os.write(master, b"BLK300.TXT\r")
-        out_s68_bsave = read_until(master, b"LOCK]", timeout=30.0)
+        out_s68_bsave = read_until(master, b"Block:", timeout=30.0)
         out_s68_bsave += drain_all(master)
 
         if (b"Saving File" not in out_s68_bsave and
@@ -4560,8 +4609,7 @@ def test_se_execution():
                 flush=True
             )
             return False
-        if (b"[BLK: 251L LOCK]" not in out_s68_bsave and
-                b"LOCK]" not in out_s68_bsave):
+        if b"Block: 250L" not in out_s68_bsave:
             print(
                 f"[-] Step 68 failed: Block status not restored: "
                 f"{repr(out_s68_bsave[-200:])}",
@@ -5045,8 +5093,8 @@ def test_se_execution():
         # Cancel with ESC back to editor with solidified block
         time.sleep(0.3)
         os.write(master, b"\x1b")
-        out_s70_esc_ins = read_until(master, b"LOCK]", timeout=6.0)
-        if b"LOCK]" not in out_s70_esc_ins:
+        out_s70_esc_ins = read_until(master, b"Block:", timeout=6.0)
+        if b"Block:" not in out_s70_esc_ins:
             print(
                 f"[-] Step 70 failed: ESC from Insert File did not return "
                 f"with lock. Buffer: {repr(out_s70_esc_ins)}",
@@ -5091,7 +5139,7 @@ def test_se_execution():
         # Cancel Block Save with ESC
         time.sleep(0.3)
         os.write(master, b"\x1b")
-        read_until(master, b"LOCK]", timeout=6.0)
+        read_until(master, b"Block:", timeout=6.0)
 
         # Cancel active block in editor with ESC
         time.sleep(0.2)
@@ -5248,11 +5296,11 @@ def test_se_execution():
 
         # Subtest 6: Block Save & Insert across User Areas
         os.write(master, b"\x02") # Ctrl+B start block
-        read_until(master, b"[BLK:", timeout=4.0)
+        read_until(master, b"Sel:", timeout=4.0)
         os.write(master, b"\x1b[B") # Cursor down 1 row
         drain_all(master)
-        os.write(master, b"\x02") # Ctrl+B solidify block
-        read_until(master, b"LOCK]", timeout=4.0)
+        os.write(master, b"\r") # Enter solidify block
+        read_until(master, b"Block:", timeout=4.0)
 
         # Block Save (Ctrl+S with active block)
         time.sleep(0.1)
@@ -5268,8 +5316,8 @@ def test_se_execution():
 
         time.sleep(0.1)
         os.write(master, b"\x08" * 20 + b"C1:BLKU1.TXT\r")
-        out_s71_bs_done = read_until(master, b"LOCK]", timeout=8.0)
-        if b"LOCK]" not in out_s71_bs_done:
+        out_s71_bs_done = read_until(master, b"Block:", timeout=8.0)
+        if b"Block:" not in out_s71_bs_done:
             print(f"[-] Step 71 Subtest 6 failed: Block save failed to complete. Buffer: {repr(out_s71_bs_done)}", flush=True)
             return False
 
@@ -5283,11 +5331,13 @@ def test_se_execution():
 
         time.sleep(0.1)
         os.write(master, b"\x08" * 20 + b"1C:BLKU1.TXT\r")
-        out_s71_bi_done = read_until(master, b"^K: Editor keys", timeout=8.0)
-        if b"^K: Editor keys" not in out_s71_bi_done:
-            print(f"[-] Step 71 Subtest 6 failed: Block insert did not return to editor. Buffer: {repr(out_s71_bi_done)}", flush=True)
+        out_s71_bi_done = read_until(master, b"Block:", timeout=8.0)
+        if b"Block:" not in out_s71_bi_done:
+            print(f"[-] Step 71 Subtest 6 failed: Block insert did not return "
+                  f"to editor. Buffer: {repr(out_s71_bi_done)}", flush=True)
             return False
-        print("[+] Step 71 Subtest 6 PASSED: Block Save and Insert verified in User 1.", flush=True)
+        print("[+] Step 71 Subtest 6 PASSED: Block Save and Insert "
+              "verified in User 1.", flush=True)
 
         # Subtest 7: Exit to CP/M preserves original User 0
         os.write(master, b"\x11") # Ctrl+Q

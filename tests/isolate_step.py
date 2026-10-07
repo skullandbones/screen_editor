@@ -349,9 +349,9 @@ def run_step_66(master):
     os.write(master, b"\x0f")  # Ctrl+O
     read_until(master, b"Enter filename to insert:", timeout=6.0)
     os.write(master, b"INS1.TXT\r")
-    ok, out_ins1 = read_until(master, b"[BLK: 8c LOCK]", timeout=8.0)
+    ok, out_ins1 = read_until(master, b"Block: 8 chars", timeout=8.0)
     if not ok:
-        return False, f"[BLK: 8c LOCK] missing after insert: {out_ins1}"
+        return False, f"Block: 8 chars missing after insert: {out_ins1}"
     if b"INSERTED" not in out_ins1:
         return False, f"'INSERTED' content not found: {out_ins1}"
     if b"(Untitled)" not in out_ins1:
@@ -376,9 +376,9 @@ def run_step_66(master):
     os.write(master, b"\x0f")
     read_until(master, b"Enter filename to insert:", timeout=6.0)
     os.write(master, b"INS2.TXT\r")
-    ok, out_ins2 = read_until(master, b"[BLK: 2L LOCK]", timeout=8.0)
+    ok, out_ins2 = read_until(master, b"Block: 2 lines", timeout=8.0)
     if not ok:
-        return False, f"[BLK: 2L LOCK] not found: {out_ins2}"
+        return False, f"Block: 2 lines not found: {out_ins2}"
     if b"FIRST LINE" not in out_ins2 or b"SECOND LINE" not in out_ins2:
         return False, f"Multi-line content missing: {out_ins2}"
 
