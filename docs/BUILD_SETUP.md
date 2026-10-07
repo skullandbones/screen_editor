@@ -4,6 +4,10 @@ This guide describes how to configure the host build environment, compile
 **`SE.COM`** and its modular plugins, execute automated verification suites,
 and adhere to repository development standards.
 
+> **Setting Up From Scratch?** If you are configuring a clean host machine from
+> zero, see the step-by-step [`REPLICATION_GUIDE.md`](REPLICATION_GUIDE.md) for
+> package installation commands, git repository cloning, and toolchain builds.
+
 ---
 
 ## 1. System Requirements & Toolchain Prerequisites

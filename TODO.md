@@ -797,6 +797,8 @@ upcoming milestones for SE.COM.
   - `docs/USER_GUIDE.md`: Full end-user manual covering invocation syntax,
     splash screen, editor navigation, visual block workflow (Option A,
     Point 4, Point 5), search/replace, configuration, and plugins.
+  - `docs/REPLICATION_GUIDE.md`: Step-by-step from-scratch setup recipe covering
+    host packages, z88dk/emulator builds, RomWBW binaries, and verification.
   - Updated `docs/KEYBINDINGS.md` to document new block mode controls.
 
 ### 6.2 Review and Enhance Subroutine Comments in `SE.ASM`
