@@ -7765,6 +7765,14 @@ SHOW_STATUS_80X24:
 
 SHOW_STATUS_FORMAT:
 	; Field 3: Print format (8 chars: "CP/M  | " or "Linux | ")
+	LD A,(IS_LOADING_FILE)
+	OR A
+	JR Z,SHOW_STATUS_FMT_KNOWN
+	LD DE,STR_FMT_BLANK
+	CALL PRINT_STR
+	JR SHOW_STATUS_REST
+
+SHOW_STATUS_FMT_KNOWN:
 	LD A,(SAVE_FORMAT)
 	CP FMT_CPM
 	JR NZ,SHOW_LINUX_FMT
@@ -8027,6 +8035,14 @@ SHOW_STATUS_ROWCOL:
 	; Field 5: Print fixed-position cursor position (POS_FIELD_WIDTH = 22
 	; chars)
 	; "Line <cur:4>/<total:4> Col <col:3>"
+	LD A,(IS_LOADING_FILE)
+	OR A
+	JR Z,SSRC_NOT_LOADING
+	LD DE,STR_STATUS_LOADING_POS
+	CALL PRINT_STR
+	JP SSRC_POS_DONE
+
+SSRC_NOT_LOADING:
 	; 1. Prefix: "Line " (5 chars)
 	LD DE,STR_STATUS_POS		; "Line "
 	CALL PRINT_STR
@@ -18918,17 +18934,25 @@ LOAD_FILE:
 	XOR A
 	LD (STATUS_OOM_FLAG),A
 	LD (FILE_IS_TRUNCATED),A
+	LD (DOC_IS_FAT),A
 	LD HL,0
 	LD (FILE_TOTAL_RECORDS),HL
 	LD (FILE_RECORDS_HI),A
-	LD DE,DEFAULT_DMA
-	LD C,26				; BDOS Set DMA
-	CALL BDOS_ENTRY
 
-	; Set BDOS user area to WORK_FCB_USER
+	; Reset save format to default CP/M (CR/LF)
+	LD A,FMT_CPM
+	LD (SAVE_FORMAT),A
+
+	; Synchronize document user area to target file before loading screen
 	LD A,(WORK_FCB_USER)
+	LD (DOC_USER_NUM),A
+	LD (CURRENT_DIR_USER),A
 	LD E,A
 	LD C,32				; BDOS Set User Area
+	CALL BDOS_ENTRY
+
+	LD DE,DEFAULT_DMA
+	LD C,26				; BDOS Set DMA
 	CALL BDOS_ENTRY
 
 	; Guard: if target drive is hibernated RAM drive, reject load
@@ -19819,6 +19843,10 @@ INIT_EMPTY_DOCUMENT:
 ;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 DO_OPEN_FILE_UI:
+	; Backup active document FAT flag on entry to open UI
+	LD A,(DOC_IS_FAT)
+	LD (PREV_DOC_IS_FAT),A
+
 	; Invalidate active line and flush dirty cache before directory
 	; collection
 	; overlays LINE_STORAGE
@@ -19959,6 +19987,10 @@ DO_PARSE_AND_LOAD:
 	CALL CHECK_TARGET_DRIVE_UNAVAILABLE
 	JR C,OPEN_RAMDRV_UNAVAILABLE
 
+	; Clear FAT document flag before loading CP/M file
+	XOR A
+	LD (DOC_IS_FAT),A
+
 	; Load the file into Far RAM
 	CALL LOAD_FILE
 	JP C,OPEN_FILE_NOT_FOUND
@@ -20046,6 +20078,8 @@ OPEN_RAMDRV_UNAVAILABLE:
 	LDIR
 	LD A,(DOC_USER_NUM)
 	LD (WORK_FCB_USER),A
+	LD A,(PREV_DOC_IS_FAT)
+	LD (DOC_IS_FAT),A
 	CALL SHOW_POPUP_RAMDRV_UNAVAIL
 	JP RENDER_OPEN_PAGE
 
@@ -20057,6 +20091,8 @@ OPEN_FILE_NOT_FOUND:
 	LDIR
 	LD A,(DOC_USER_NUM)
 	LD (WORK_FCB_USER),A
+	LD A,(PREV_DOC_IS_FAT)
+	LD (DOC_IS_FAT),A
 	CALL SHOW_POPUP_FILE_NOT_FOUND
 	JP RENDER_OPEN_PAGE
 
@@ -20071,6 +20107,8 @@ CHECK_PAGING_OR_CANCEL:
 	LD (IS_PLUGIN_LOAD_UI),A
 	LD (IS_SPLASH_SCREEN),A
 	CALL RESTORE_DOC_USER
+	LD A,(PREV_DOC_IS_FAT)
+	LD (DOC_IS_FAT),A
 	LD HL,0FFFFH
 	LD (CACHE_START_ROW),HL
 	SCF				; Carry = 1 (Cancelled)
@@ -30364,6 +30402,8 @@ STR_FMT_CPM:	DB	"CP/M  | ","$"
 
 STR_FMT_LINUX:	DB	"Linux | ","$"
 
+STR_FMT_BLANK:	DB	"      | ","$"
+
 STR_STATUS_KEYS:	DB	"^K: Editor keys | ","$"
 STR_STATUS_OVR:		DB	"Overwrite mode  | ","$"
 STR_PAN_PREFIX:		DB	"[Pan +","$"
@@ -30386,6 +30426,9 @@ STR_STATUS_SEP:	DB	" | ","$"
 STR_NO_NAME:	DB	"(Untitled)",0
 
 STR_STATUS_POS:	DB	"Line ","$"
+
+STR_STATUS_LOADING_POS:
+	DB	"Line    1/---- Col   0","$"
 
 STR_STATUS_COL:	DB	" Col ","$"
 
@@ -30528,6 +30571,7 @@ IS_SAVE_UI:		DB	0	; 1 if currently in Save File Screen
 IS_BLOCK_INSERT_UI:	DB	0
 ; 1 if currently in Block Save File Screen
 IS_BLOCK_SAVE_UI:	DB	0
+PREV_DOC_IS_FAT:	DB	0	; Saved DOC_IS_FAT during Open UI
 IS_PLUGIN_LOAD_UI:	DB	0	; 1 if in Plugin Load Screen
 IS_LOADING_FILE:	DB	0		; 1 if currently loading file
 IS_SAVING_FILE:		DB	0		; 1 if currently saving file

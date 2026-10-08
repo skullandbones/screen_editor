@@ -15,9 +15,20 @@ tasks have been archived.
 ## 2. BUGS
 
 ### 2.36 Intermittent Wrong Filename & Format Tracking in Open Dialog/Status Bar
-- [ ] Investigate and fix intermittent display of incorrect filename in the
+- [x] Investigate and fix intermittent display of incorrect filename in the
   "Opening File" progress modal dialog and status bar, and verify format
   indicator tracking across file switches.
+  - **Resolution**:
+    - Cleared `DOC_IS_FAT` prior to `LOAD_FILE` in `DO_PARSE_AND_LOAD`, with
+      backup/restore via `PREV_DOC_IS_FAT` on cancellation or error.
+    - Synchronized `DOC_USER_NUM` to `WORK_FCB_USER` at start of `LOAD_FILE`
+      before `DRAW_LOADING_SCREEN` so modal and status bar agree.
+    - Reset `SAVE_FORMAT` to `FMT_CPM` on entry to `LOAD_FILE`.
+    - Blanked format (`STR_FMT_BLANK: "      | "`) and line count
+      (`STR_STATUS_LOADING_POS: "Line    1/---- Col   0"`) on status bar
+      during loading (`IS_LOADING_FILE == 1`).
+    - Added automated regression test Step 75 in `test_editor_headless.py`
+      and `isolate_step.py`.
   - **Symptom**: Observed intermittently when opening large files, where the
     "Opening File" modal pop-up indicates the wrong target filename and/or
     the bottom status bar shows the wrong filename or stale file metadata.
