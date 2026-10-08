@@ -42,17 +42,26 @@ CPMRM ?= $(ROMWBW_TOOLS)/cpmrm
 TARGET = SE.COM
 ASM_SRC = src/se.asm
 
-.PHONY: all plugins image init-image clean-image check-tpa check-plugins \
-	check-lines test test-sanity test-conformity test-paging test-config \
-	test-32k test-cpm3 test-plugins test-beautifier test-popup test-slots \
-	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
-	test-fatfs-hook test-full clean
+TARGET_NEXT_CPM = SE_NEXT.COM
+ASM_SRC_NEXT_CPM = src/se_next_cpm.asm
+
+.PHONY: all se-next-cpm plugins image init-image clean-image check-tpa \
+	check-plugins check-lines test test-sanity test-conformity \
+	test-paging test-config test-32k test-cpm3 test-plugins \
+	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
+	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full clean
 
 all: $(TARGET) plugins
+
+se-next-cpm: $(TARGET_NEXT_CPM)
 
 $(TARGET): $(ASM_SRC)
 	@echo "==> Assembling $(TARGET) with z88dk-z80asm..."
 	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
+
+$(TARGET_NEXT_CPM): $(ASM_SRC_NEXT_CPM)
+	@echo "==> Assembling $(TARGET_NEXT_CPM) with z88dk-z80asm..."
+	$(Z80ASM) -b -m -s -o=$(TARGET_NEXT_CPM) $(ASM_SRC_NEXT_CPM)
 
 check-tpa: $(TARGET)
 	@echo "==> Checking $(TARGET) memory footprint against TPA..."
@@ -77,7 +86,7 @@ plugins:
 
 $(IMAGE):
 	@mkdir -p $(IMAGE_DIR)
-	@echo "==> Initializing workspace-isolated disk image from golden image..."
+	@echo "==> Initializing workspace-isolated disk image..."
 	cp --sparse=always $(GOLDEN_IMAGE) $(IMAGE)
 	chmod 644 $(IMAGE)
 
@@ -188,7 +197,7 @@ test-popup: image
 	python3 tests/test_ctrl_p_popup.py
 
 test-slots: image
-	@echo "==> Running SE.COM modular plugin slots (4K/16K/32K) test suite..."
+	@echo "==> Running SE.COM modular plugin slots test suite..."
 	python3 tests/test_plugin_slots.py
 
 test-plugin-cfg: image
@@ -225,6 +234,7 @@ test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-paging test-monkey
 
 clean:
-	rm -f $(TARGET) *.lst src/*.lst *.obj src/*.obj *.lis *.def \
-		*.map *.sym src/*.o src/*.map src/*.sym \
-		plugins/*.PRL plugins/*.OVL plugins/*.bin plugins/*.lst plugins/*.sym
+	rm -f $(TARGET) $(TARGET_NEXT_CPM) *.lst src/*.lst *.obj src/*.obj \
+		*.lis *.def *.map *.sym src/*.o src/*.map src/*.sym \
+		plugins/*.PRL plugins/*.OVL plugins/*.bin plugins/*.lst \
+		plugins/*.sym
