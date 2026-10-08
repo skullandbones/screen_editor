@@ -32,6 +32,7 @@ export TOOL_DIR := $(TOOLS_ROOT)
 
 ROMWBW_TOOLS ?= $(TOOLS_ROOT)/romwbw_src/Tools/Linux
 Z80ASM ?= $(TOOLS_ROOT)/z88dk/bin/z88dk-z80asm
+APPMAKE ?= $(TOOLS_ROOT)/z88dk/bin/z88dk-appmake
 GOLDEN_IMAGE ?= $(TOOLS_ROOT)/romwbw_src/Binary/hd1k_combo.img
 IMAGE_DIR ?= disks
 IMAGE ?= $(IMAGE_DIR)/hd1k_combo.img
@@ -45,8 +46,12 @@ ASM_SRC = src/se.asm
 TARGET_NEXT_CPM = SE_NEXT.COM
 ASM_SRC_NEXT_CPM = src/se_next_cpm.asm
 
-.PHONY: all se-next-cpm plugins image init-image clean-image check-tpa \
-	check-plugins check-lines test test-sanity test-conformity \
+TARGET_NEXT_NEX = SE.NEX
+TARGET_NEXT_DOT = .se
+ASM_SRC_NEXT = src/se_next.asm
+
+.PHONY: all se-next-cpm se-next-native plugins image init-image clean-image \
+	check-tpa check-plugins check-lines test test-sanity test-conformity \
 	test-paging test-config test-32k test-cpm3 test-plugins \
 	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
 	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full clean
@@ -55,6 +60,8 @@ all: $(TARGET) plugins
 
 se-next-cpm: $(TARGET_NEXT_CPM)
 
+se-next-native: $(TARGET_NEXT_NEX) $(TARGET_NEXT_DOT)
+
 $(TARGET): $(ASM_SRC)
 	@echo "==> Assembling $(TARGET) with z88dk-z80asm..."
 	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
@@ -62,6 +69,18 @@ $(TARGET): $(ASM_SRC)
 $(TARGET_NEXT_CPM): $(ASM_SRC_NEXT_CPM)
 	@echo "==> Assembling $(TARGET_NEXT_CPM) with z88dk-z80asm..."
 	$(Z80ASM) -b -m -s -o=$(TARGET_NEXT_CPM) $(ASM_SRC_NEXT_CPM)
+
+$(TARGET_NEXT_NEX): $(ASM_SRC_NEXT)
+	@echo "==> Assembling $(TARGET_NEXT_NEX) with z88dk-z80asm..."
+	$(Z80ASM) -b -m -s -o=SE_NEX.BIN $(ASM_SRC_NEXT)
+	$(APPMAKE) +zxn -b SE_NEX.BIN -c SE_NEX -o SE.nex --nex
+	cp -f SE.nex $(TARGET_NEXT_NEX)
+
+$(TARGET_NEXT_DOT): $(ASM_SRC_NEXT)
+	@echo "==> Assembling $(TARGET_NEXT_DOT) with z88dk-z80asm..."
+	$(Z80ASM) -DNEXT_DOT_COMMAND -b -m -s -o=dot_se.bin $(ASM_SRC_NEXT)
+	cp -f dot_se.bin $(TARGET_NEXT_DOT)
+	cp -f dot_se.bin SE
 
 check-tpa: $(TARGET)
 	@echo "==> Checking $(TARGET) memory footprint against TPA..."
@@ -234,7 +253,8 @@ test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-paging test-monkey
 
 clean:
-	rm -f $(TARGET) $(TARGET_NEXT_CPM) *.lst src/*.lst *.obj src/*.obj \
-		*.lis *.def *.map *.sym src/*.o src/*.map src/*.sym \
-		plugins/*.PRL plugins/*.OVL plugins/*.bin plugins/*.lst \
-		plugins/*.sym
+	rm -f $(TARGET) $(TARGET_NEXT_CPM) $(TARGET_NEXT_NEX) SE.nex \
+		$(TARGET_NEXT_DOT) SE SE_NEX.BIN dot_se.bin *.lst src/*.lst \
+		*.obj src/*.obj *.lis *.def *.map *.sym src/*.o src/*.map \
+		src/*.sym plugins/*.PRL plugins/*.OVL plugins/*.bin \
+		plugins/*.lst plugins/*.sym
