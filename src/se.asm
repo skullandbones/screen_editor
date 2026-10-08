@@ -9,110 +9,18 @@
 	ORG $0100
 
 ;------------------------------------------------------------------------------
-; Constants & BDOS Vectors
+; Subsystem Interface Headers & Constants
 ;------------------------------------------------------------------------------
-BDOS_ENTRY	EQU	$0005
-DEFAULT_FCB	EQU	$005C
-DEFAULT_DMA	EQU	$0080
-CMD_LEN		EQU	$0080
-CMD_TAIL	EQU	$0081
-
-; 128 bytes stride per line buffer in local cache
-MAX_LINE_STRIDE	EQU	128
-; Maximum visual characters per line in all modes
-MAX_LINE_CHARS	EQU	1000
-MAX_INPUT_LINE_CHARS EQU 1000	; Interactive typing limit (up to 1,000 chars)
-MAX_CACHE_LINE_CHARS EQU 250	; Limit for local 256-byte scratch line buffers
-MAX_ACTIVE_LINE_STRIDE EQU 1024	; 1024 bytes dynamic workspace for active line
-MAX_ACTIVE_PAYLOAD EQU	1022		; Max characters in active line payload
-MAX_ACTIVE_PAYLOAD_LO EQU 254		; Low byte of 1022
-MAX_ACTIVE_PAYLOAD_HI EQU 3		; High byte of 1022
-FAR_SLOT_SIZE	EQU	128	; 128 bytes stride per Far-RAM physical slot
-FAR_SLOT_PAYLOAD EQU	126	; 126 bytes text payload per Far-RAM slot
-SLOT_TERM	EQU	0FFFFH		; 16-bit terminal slot marker in Far-RAM
-MAX_COPY_LINE_CHARS EQU	120		; Single-line block copy capacity limit
-; Up to 12 extended 32KB RAM banks for text slots (384 KB)
-MAX_FAR_BANKS	EQU	12
-CACHE_SIZE_LINES EQU	40	; 40 lines in local working cache (5,120 bytes)
-; 32KB Far RAM Line Table (16,384 lines * 2 bytes)
-MAX_DOC_LINES_16K EQU	16384
-; 64KB Far RAM Line Table (32,768 lines * 2 bytes)
-MAX_DOC_LINES_32K EQU	32768
-MAX_DOC_LINES	EQU	32768	; Absolute ceiling limit for line indices
-MAX_VIRTUAL_SLOTS EQU	65534	; Up to 65,534 128-byte virtual slots (~8.3 MB)
-
-KEY_CTRL_B	EQU	2		; Toggle Block Highlighting
-KEY_CTRL_C	EQU	3
-KEY_CTRL_X	EQU	24		; Move solidified block to cursor
-KEY_CTRL_Q	EQU	17
-KEY_CTRL_W	EQU	23		; Close file to splash
-KEY_CTRL_S	EQU	19
-KEY_CTRL_O	EQU	15		; Open File Screen
-KEY_CTRL_A	EQU	1		; Start of line (Home)
-KEY_CTRL_D	EQU	4		; Cursor Right
-KEY_CTRL_E	EQU	5		; End of line (End)
-KEY_CTRL_G	EQU	7		; Delete character at cursor
-
-ACTION_EXIT	EQU	0		; Confirmation action: Exit to CP/M
-ACTION_CLOSE	EQU	1	; Confirmation action: Close document to splash
-ACTION_NEW	EQU	2	; Confirmation action: Start new blank document
-ACTION_OPEN	EQU	3		; Confirmation action: Open File Screen
-KEY_CTRL_K	EQU	11		; Show Editor Mode Keys Screen
-KEY_CTRL_F	EQU	6	; Find in editor / Toggle endings in save
-KEY_CTRL_R	EQU	18		; Search & Replace
-KEY_CTRL_N	EQU	14		; Find Next
-KEY_CTRL_P	EQU	16		; Context-Aware Plugin Pop-up
-KEY_CTRL_I	EQU	9	; Tab / Toggle case sensitivity in prompt
-KEY_CTRL_U	EQU	21		; Page Up
-KEY_CTRL_V	EQU	22		; Page Down
-KEY_CTRL_L	EQU	12		; Goto Line Number
-KEY_CTRL_Y	EQU	25	; Beautify Block (if active) or Whole File
-KEY_CTRL_Z	EQU	26		; Open Plugin Manager Screen
-
-; Context-Aware Plugin Screen IDs
-PLUG_CTX_EDITOR		EQU	0
-PLUG_CTX_SPLASH		EQU	1
-PLUG_CTX_CONFIG		EQU	2
-PLUG_CTX_MEM_INFO	EQU	3
-PLUG_CTX_PLUGIN_MGR	EQU	4
-PLUG_CTX_HELP		EQU	5
-PLUG_CTX_ABOUT		EQU	6
-KEY_BACKSPACE	EQU	8
-KEY_TAB		EQU	9
-KEY_ENTER	EQU	13
-KEY_ESC		EQU	27
-ESC_TIMEOUT_LOOPS EQU	5000	; VT100 escape debounce timeout loops (~15-20ms)
-KEY_DEL		EQU	127
-
-SEARCH_BUF_MAX	EQU	64
-FIND_POPUP_FIELD_LEN	EQU	28
-REPLACE_POPUP_FIELD_LEN	EQU	29
-
-; Line ending modes
-FMT_CPM		EQU	0		; CR/LF (0x0D, 0x0A)
-FMT_LINUX	EQU	1		; LF only (0x0A)
-
-; Screen Size Modes
-MODE_120X40	EQU	0		; Modern 120 cols x 40 rows (Default)
-MODE_80X24	EQU	1		; Classic 80 cols x 24 rows
-
-; RAM Drive Modes
-; Preserve RAM disk (banks 0x81..0x88 safe)
-RAMDRV_MODE_PROTECTED	EQU	0
-RAMDRV_MODE_ENABLED	EQU	1	; Raw overwrite for maximum RAM buffer
-; Automatic dump to RAMDRV.IMG & restore on exit
-RAMDRV_MODE_HIBERNATE	EQU	2
-
-; Plugin Subsystem Modes
-; Never load (disabled by user / low RAM)
-PLUGIN_MODE_DISABLED	EQU	0
-; Autoload PLUGIN.PRL into Far RAM at boot
-PLUGIN_MODE_AUTOLOAD	EQU	1
-PLUGIN_MODE_ONDEMAND	EQU	2	; Load PLUGIN.PRL on demand when used
-
-RAMDRV_START_BANK	EQU	081H	; RomWBW MD0:0 starts at bank 0x81
-; RomWBW MD0:0 ends at bank 0x88 (8 banks, 256KB)
-RAMDRV_END_BANK		EQU	088H
+	INCLUDE "include/config.inc"
+	INCLUDE "include/hal.inc"
+	INCLUDE "include/buffer.inc"
+	INCLUDE "include/editor.inc"
+	INCLUDE "include/block.inc"
+	INCLUDE "include/search.inc"
+	INCLUDE "include/ui.inc"
+	INCLUDE "include/file_io.inc"
+	INCLUDE "include/plugin.inc"
+	INCLUDE "include/beautify.inc"
 
 ;------------------------------------------------------------------------------
 ; Main Entry Point
@@ -2935,8 +2843,7 @@ NOT_ALPHA:
 ; Dynamically centered both horizontally and vertically for active screen
 ; geometry.
 ; Total menu lines: 20
-;------------------------------------------------------------------------------
-SPLASH_MENU_LINES	EQU	21
+; SPLASH_MENU_LINES is defined in include/ui.inc
 
 ;------------------------------------------------------------------------------
 ; PRINT_TILDE_CRLF: Output '~' character followed by carriage return and newline
@@ -3218,8 +3125,7 @@ SPLASH_BOTTOM_DONE:
 ; Dynamically centered both horizontally and vertically for active screen
 ; geometry.
 ; Displays essential project, version, author, tools, and MIT license details.
-;------------------------------------------------------------------------------
-ABOUT_MENU_LINES	EQU	9
+; ABOUT_MENU_LINES is defined in include/ui.inc
 
 ;------------------------------------------------------------------------------
 ; PRINT_ABOUT_LINE: Print string horizontally centered with column 0 tilde
@@ -3469,7 +3375,7 @@ PRINT_CONFIG_BLANK_LINE:
 	CALL PUTC
 	RET
 
-CONFIG_MENU_LINES	EQU	11
+; CONFIG_MENU_LINES is defined in include/ui.inc
 
 ;------------------------------------------------------------------------------
 ; SHOW_CONFIG_SCREEN: Render Configuration Manager screen
@@ -3884,8 +3790,7 @@ PMP_LOOP:
 PMP_DONE:
 	POP BC
 	RET
-
-MEM_INFO_LINES	EQU	23
+; MEM_INFO_LINES is defined in include/ui.inc
 
 ;------------------------------------------------------------------------------
 ; SHOW_MEM_INFO_SCREEN: Render 16-row 32KB memory bank map and system summary
@@ -7699,9 +7604,7 @@ LOCATE_STATUS_ROW:
 	LD H,A
 	LD L,1
 	JP LOCATE_RC
-
-STATUS_ENCLOSED_WIDTH	EQU	78
-POS_FIELD_WIDTH		EQU	22
+; STATUS_ENCLOSED_WIDTH and POS_FIELD_WIDTH are defined in include/ui.inc
 
 ;------------------------------------------------------------------------------
 ; RENDER_STATUS_BAR: Render complete reverse-video status bar on bottom row
@@ -8132,8 +8035,7 @@ SSRC_RIGHT_PAD_DONE:
 	CALL TERM_INVERSE_OFF
 	CALL LOCATE_CURSOR
 	RET
-
-MEM_FIELD_WIDTH		EQU	15
+; MEM_FIELD_WIDTH is defined in include/ui.inc
 
 ;------------------------------------------------------------------------------
 ; PRINT_STATUS_FREE_MEM: Format free memory field for status bar on splash
@@ -8373,8 +8275,7 @@ CMP_HL_DE:
 	SBC HL,DE
 	POP HL
 	RET
-
-FILENAME_FIELD_WIDTH	EQU	14
+; FILENAME_FIELD_WIDTH is defined in include/ui.inc
 PSF_MAX_LEN:		DB	14
 
 ;------------------------------------------------------------------------------
@@ -25955,22 +25856,7 @@ DIV_HL_10_NEXT:
 ; Plugin Subsystem (CP/M 3 PRL & OVL Modular Architecture)
 ; Modular 4K/16K/32K Slots, Dynamic Multi-Bank Far RAM Allocation, TPA Overlay
 ;==============================================================================
-PLUGIN_ENTRY_SIZE	EQU	32		; 32-byte registry entries
-PLUGIN_MAX_SLOTS	EQU	8		; 8 slots
-PLUGIN_UI_LINES		EQU	17
-
-; Capabilities bitflags
-CAP_TPA_EXEC		EQU	0001H
-CAP_FAR_EXEC		EQU	0002H
-CAP_DOC_MUTATE		EQU	0004H
-CAP_MODAL_UI		EQU	0008H
-CAP_HAS_ABOUT		EQU	0010H
-CAP_HAS_CONFIG		EQU	0020H
-CAP_SIZE_4K		EQU	0000H
-CAP_SIZE_8K		EQU	0040H
-CAP_SIZE_16K		EQU	0080H
-CAP_SIZE_32K		EQU	00C0H
-CAP_SIZE_MASK		EQU	00C0H
+; Plugin limits and capabilities are defined in include/plugin.inc
 
 ;------------------------------------------------------------------------------
 ; INIT_PLUGIN_REGISTRY: Initialize 256-byte plugin registry table and counters
