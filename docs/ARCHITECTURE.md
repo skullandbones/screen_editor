@@ -271,3 +271,117 @@ Resident in Upper Memory above `0x8000`:
   `DOC_TOTAL_LINES`, `CUR_COL`, `ACTIVE_COLS`, `ACTIVE_ROWS`.
 * Function Dispatch Table: Terminal I/O, cursor locate, modal rendering, line
   insert/delete/replace, and file I/O callbacks.
+
+---
+
+## 8. Modular Multi-Platform Architecture & Hardware Abstraction Layer (HAL)
+
+Starting with v1.1.0, `SE` features a decoupled, modular architecture that
+separates platform-specific hardware control (console I/O, keyboard decoding,
+memory paging, and mass storage) from editor core logic (document line buffers,
+gap buffers, viewport rendering, search, config, and plugins).
+
+### 8.1 Modular Directory & Source Organization
+
+The codebase is organized into three distinct tiers:
+
+1. **Subsystem Headers (`src/include/*.inc`)**:
+   - `config.inc`: Screen dimensions, buffer sizes, and configuration offsets.
+   - `hal.inc`: Hardware abstraction interface constants and vector jumps.
+   - `buffer.inc`: Line pointer tables, document buffers, and edit records.
+   - `editor.inc`: Mode flags, cursor state, navigation, and key commands.
+   - `block.inc`: Block anchor coordinates, selection state, and clipboard.
+   - `search.inc`: Search patterns, case flags, and match coordinators.
+   - `ui.inc`: Modal dialog geometries, palette attributes, and status rows.
+   - `file_io.inc`: FCB layouts, sector transfer buffers, and error codes.
+   - `plugin.inc`: Far RAM plugin slots, jump tables, and host ABI hooks.
+   - `beautify.inc`: Assembly formatter state and indentation parameters.
+
+2. **Hardware Abstraction Platform Drivers (`src/hal/`)**:
+   - `src/hal/cpm/`:
+     - `hal_cpm_console.asm`: CP/M BDOS/BIOS character I/O and VT100 control.
+     - `hal_cpm_memory.asm`: RomWBW HBIOS `RST 08H` Far RAM bank switching.
+     - `hal_cpm_storage.asm`: BDOS 2.2/3.0 FCB record access and disk I/O.
+   - `src/hal/next_cpm/`:
+     - `hal_nextcpm_console.asm`: NextCPM 80-column console output driver.
+     - `hal_nextcpm_keyboard.asm`: Next keyboard translation to WordStar codes.
+     - `hal_nextcpm_memory.asm`: NextCPM banked memory mapping driver.
+     - `hal_nextcpm_storage.asm`: NextCPM CP/M 2.2-compatible storage services.
+   - `src/hal/next_native/`:
+     - `hal_next_console.asm`: NextReg `0x07` 28 MHz turbo & RST 10h stream.
+     - `hal_next_keyboard.asm`: Port `0xFE` scanning & cursor key translation.
+     - `hal_next_memory.asm`: NextReg `0x50`–`0x57` MMU 8KB SRAM page banking.
+     - `hal_next_storage.asm`: NextZXOS / ESXDOS `RST 08H` FAT file operations.
+
+3. **Core Subsystems (`src/core/*.asm`)**:
+   - `buffer.asm`: Gap buffer insertion, line deletion, and text indexing.
+   - `block.asm`: Block selection, marking, cut, copy, paste, and formatting.
+   - `search.asm`: Fast substring search, replace, and wrap handling.
+   - `editor.asm`: Keystroke dispatch table, command routing, and edit loops.
+   - `ui_render.asm`: Viewport line drawing, tilde margins, and line numbers.
+   - `ui_browser.asm`: Centered modal dialogs, file pickers, and pop-ups.
+   - `config.asm`: Options persistence, geometry switching, and `SE.CFG`.
+   - `memory.asm`: Far RAM paging manager, bank pool, and swap handling.
+   - `plugin_mgr.asm`: Dynamic plugin loader, slot binder, and menu pop-ups.
+   - `plugin_tramp.asm`: Upper memory vector table (`PLUGIN_HOST_API`).
+   - `beautify.asm`: Built-in Z80 code beautification coordinator.
+
+### 8.2 Hardware Abstraction Layer (HAL) Contract
+
+All core subsystems interact with platform peripherals exclusively through
+jump vectors defined in `hal.inc` and implemented by the active HAL driver:
+
+* **Console Vector Table**:
+  - `HAL_CONSOLE_INIT`: Initialize screen mode, cursor, and terminal stream.
+  - `HAL_RAW_CONIN`: Blocking read of an unbuffered input character.
+  - `HAL_RAW_CONOUT`: Direct output of an ASCII byte or escape code.
+  - `HAL_RAW_CONST`: Poll for console input readiness (non-blocking).
+  - `HAL_CONSOLE_RESTORE`: Clean up screen and restore host OS terminal state.
+
+* **Keyboard Vector Table**:
+  - `HAL_KBD_INIT`: Set up keyboard scanning hardware and repeat counters.
+  - `HAL_KBD_POLL`: Check for keypress activity.
+  - `HAL_KBD_READ`: Read key event and translate to unified ASCII/WordStar.
+  - `HAL_KBD_RESTORE`: Restore standard keyboard scanning configuration.
+
+* **Memory Management Vector Table**:
+  - `HAL_MEM_INIT`: Detect available physical memory banks and capacity.
+  - `HAL_MEM_QUERY`: Return available Far RAM bank count and bank IDs.
+  - `HAL_BANK_MAP`: Page an 8KB/16KB logical Far RAM bank into view window.
+  - `HAL_BANK_RESTORE`: Restore host OS default memory bank configuration.
+
+* **Storage Vector Table**:
+  - `HAL_STORAGE_INIT`: Initialize filesystem subsystem and working drive.
+  - `HAL_FILE_OPEN`: Open document file by name with read/write access.
+  - `HAL_FILE_CLOSE`: Flush buffers, update directory record, and close file.
+  - `HAL_FILE_READ`: Sequential record read into active line buffer.
+  - `HAL_FILE_WRITE`: Sequential record write from buffer to media.
+
+### 8.3 Supported Target Profiles
+
+The build system (`Makefile`) compiles the unified codebase into four distinct
+distribution artifacts:
+
+| Binary | Target Platform | Base | Size | Primary Use Case |
+| :--- | :--- | :--- | :--- | :--- |
+| `SE.COM` | RomWBW CP/M 2.2/3.0 | 0x0100 | 47,872 B | Standard CP/M SBCs |
+| `SE_NEXT.COM` | NextCPM (ZX Next) | 0x0100 | 47,872 B | CP/M on Next |
+| `SE.NEX` | ZX Next Standalone | 0x4000 | 49,664 B | NextZXOS Browser App |
+| `.se` / `SE` | NextZXOS Dot Cmd | 0x2000 | 48,128 B | NextZXOS CLI Tool |
+
+
+
+- **`SE.COM`**: Standard CP/M binary targeting RomWBW systems. Retains 100%
+  byte-for-byte binary invariance against golden baselines and guarantees
+  +2,048 B TPA headroom margin below `0xD800`.
+- **`SE_NEXT.COM`**: Drop-in executable for NextCPM environments. Uses NextCPM
+  80-column console output and Sinclair keyboard translation while maintaining
+  CP/M BDOS filesystem compatibility.
+- **`SE.NEX`**: Packaged executable for the ZX Spectrum Next. Features a
+  512-byte `.NEX` header, pre-maps 3 $\times$ 16KB SRAM banks (Banks 0, 2, 5),
+  switches the Z80N CPU to 28 MHz turbo mode via NextReg `0x07`, and routes ANSI
+  text through `RST 10H`.
+- **`.se` / `SE`**: Compact NextZXOS dot command installed to `/dot/` on the
+  Next SD card. Executes directly at `0x2000` from the NextZXOS CLI with file
+  path arguments (e.g. `.se autoexec.bas`).
+

@@ -50,11 +50,14 @@ TARGET_NEXT_NEX = SE.NEX
 TARGET_NEXT_DOT = .se
 ASM_SRC_NEXT = src/se_next.asm
 
-.PHONY: all se-next-cpm se-next-native plugins image init-image clean-image \
-	check-tpa check-plugins check-lines test test-sanity test-conformity \
-	test-paging test-config test-32k test-cpm3 test-plugins \
-	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
-	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full clean
+.PHONY: all se-next-cpm se-next-native test-next plugins image init-image \
+	clean-image check-tpa check-plugins check-lines test test-sanity \
+	test-conformity test-paging test-config test-32k test-cpm3 \
+	test-plugins test-beautifier test-popup test-slots test-plugin-cfg \
+	test-fatfs test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full \
+	clean
+
+
 
 all: $(TARGET) plugins
 
@@ -239,6 +242,10 @@ test-fatfs-hook: image
 	@echo "==> Running FATFS Phase 2 VFS hook & status bar test suite..."
 	python3 tests/test_fatfs_vfs_hook.py
 
+test-next: se-next-cpm se-next-native
+	@echo "==> Running ZX Spectrum Next multi-target test suite..."
+	python3 tests/test_next_targets.py
+
 test-monkey: image
 	@echo "==> Running SE.COM drunken monkey chaos test suite..."
 	python3 tests/test_drunken_monkey.py --steps $(or $(STEPS),50)
@@ -250,7 +257,9 @@ view-monkey:
 
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
-	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-paging test-monkey
+	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-next test-paging \
+	test-monkey
+
 
 clean:
 	rm -f $(TARGET) $(TARGET_NEXT_CPM) $(TARGET_NEXT_NEX) SE.nex \

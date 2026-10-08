@@ -350,7 +350,75 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 
 ---
 
-## 9. Modular Plugin System
+## 9. ZX Spectrum Next Operations & Targets
+
+The `SE` editor provides three distinct deployment packages for the ZX Spectrum
+Next, covering both CP/M emulation and native NextZXOS operating environments.
+
+### 9.1 NextCPM Deployment (`SE_NEXT.COM`)
+
+NextCPM provides a full CP/M 2.2 operating environment on the ZX Spectrum Next,
+running directly from the NextZXOS SD card.
+
+* **Installation**:
+  1. Copy `SE_NEXT.COM` to your NextCPM disk image or virtual drive folder
+     (e.g., drive `A:` or `C:`).
+  2. Boot NextCPM from the NextZXOS browser or command line (`.cpm`).
+* **Invocation**:
+  ```text
+  A>SE_NEXT                       # Open startup Splash Screen in 80x24 mode
+  A>SE_NEXT README.TXT            # Open README.TXT directly
+  A>SE_NEXT MAIN.C:42             # Open MAIN.C jumping to line 42
+  ```
+* **Display & Keyboard**:
+  - Automatically utilizes the NextCPM 80-column ANSI terminal driver.
+  - Supports standard Sinclair cursor keys mapped to WordStar navigation:
+    <kbd>Ctrl+E</kbd>, <kbd>Ctrl+X</kbd>, <kbd>Ctrl+S</kbd>, <kbd>Ctrl+D</kbd>.
+
+
+### 9.2 NextZXOS Standalone Application (`SE.NEX`)
+
+`SE.NEX` is a self-contained executable with a 512-byte `.NEX` header that can
+be launched directly from the NextZXOS file browser.
+
+* **Installation**:
+  1. Copy `SE.NEX` to any folder on your Next SD card (e.g. `/apps/editor/`).
+* **Launching**:
+  - Open the NextZXOS file browser (press `Enter` from the Next Basic prompt).
+  - Navigate to `/apps/editor/` and highlight `SE.NEX`.
+  - Press `Enter` to run.
+* **Hardware Configuration**:
+  - Automatically engages 28 MHz turbo execution (NextReg `0x07`).
+  - Pre-loads into 16KB SRAM Banks 0, 2, and 5 with entry point at `0x4000`.
+  - Direct ANSI terminal rendering over the NextZXOS `RST 10H` stream.
+
+### 9.3 NextZXOS Command-Line Dot Command (`.se` / `SE`)
+
+NextZXOS dot commands are executable utilities located in the `/dot/` directory
+that can be invoked directly from the Sinclair Basic command prompt.
+
+* **Installation**:
+  1. Copy the `.se` (or `SE`) binary into the `/dot/` directory of your SD card:
+     ```text
+     copy "c:/se_dist/.se" to "/dot/.se"
+     ```
+* **Invocation**:
+  - From the Sinclair Basic command prompt or an exec script:
+    ```text
+    .se                           # Open editor splash screen
+    .se autoexec.bas              # Edit autoexec.bas from current directory
+    .se c:/src/kernel.asm         # Edit file with absolute SD path
+    .se c:/src/kernel.asm:120     # Jump directly to line 120
+    ```
+* **Command-Line Argument Parsing**:
+  - NextZXOS passes command line tail arguments directly to dot commands.
+  - The editor automatically extracts file paths, resolves drive prefixes,
+    and parses optional `:line` jump targets.
+  - Exiting the editor returns cleanly to the Sinclair Basic prompt.
+
+---
+
+## 10. Modular Plugin System
 
 * **Context Plugin Pop-up (<kbd>Ctrl+P</kbd>)**: Displays a quick menu of
   active plugins relevant to the current screen context.
@@ -365,9 +433,9 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 
 ---
 
-## 10. Troubleshooting & Common Questions
+## 11. Troubleshooting & Common Questions
 
-### 10.1 Splash Screen Shows "Max Lines: [256 lines (RAM)]"
+### 11.1 Splash Screen Shows "Max Lines: [256 lines (RAM)]"
 
 * **Cause**: By default, `SE.COM` runs in `Preserve` mode to protect RomWBW RAM
   disk `A:`. When all upper RAM banks are reserved for `Drive A:`, `SE.COM`
@@ -379,7 +447,7 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
   3. Press **`s`** to save to `SE.CFG`.
   4. Return to the splash screen; line capacity will now show `[16,384 lines]`.
 
-### 10.2 How to Maximise the Number of Editor Lines (Up to 32,768 Lines)
+### 11.2 How to Maximise the Number of Editor Lines (Up to 32,768 Lines)
 
 * **Step 1**: Press **`c`** for Configuration, then press **`3`** to set
   **Max Document Lines** to `32,768 lines`.
@@ -389,14 +457,14 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 * **Step 4**: Press **`m`** on splash to inspect bank allocations in the
   **Memory Map**.
 
-### 10.3 Garbled Pop-ups or Screen Wrapping at 80 Columns
+### 11.3 Garbled Pop-ups or Screen Wrapping at 80 Columns
 
 * **Cause**: Terminal emulator is set to standard 80x24, while `SE.COM` defaults
   to 120x40 widescreen mode.
 * **Solution**: Press **`2`** on the splash screen to select `80x24 (Classic
   Mode)`, then press **`c`** and **`s`** to save.
 
-### 10.4 Serial Communications & Flow Control (115200 bps)
+### 11.4 Serial Communications & Flow Control (115200 bps)
 
 * **Speed & Framing**: Set terminal emulator to **115200 bps 8N1**.
 * **Hardware Flow Control**: Enable hardware flow control using full-duplex
@@ -406,5 +474,6 @@ roles (System, Line Table, Document Paging, Plugins), and available TPA memory.
 
 For deep-dive diagnostics, flow control setup, and swap file management,
 consult the complete [Troubleshooting Guide](TROUBLESHOOTING.md).
+
 
 

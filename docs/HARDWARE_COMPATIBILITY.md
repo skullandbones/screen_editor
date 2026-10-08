@@ -102,7 +102,59 @@ causes:
 
 ---
 
-## 4. Operating System Compatibility Matrix
+## 4. ZX Spectrum Next Hardware & System Requirements
+
+Starting with v1.1.0, the `SE` editor natively supports the **ZX Spectrum Next**
+platform across both CP/M emulation and native NextZXOS operating environments.
+
+### 4.1 Hardware & FPGA Core Requirements
+
+| Subsystem | Requirement | Notes |
+| :--- | :--- | :--- |
+| **FPGA Core** | Core 3.01.00 or later | Core 3.0+ required for NextRegs |
+| **CPU** | Z80N (28 MHz Turbo) | Configured via NextReg 0x07 |
+| **SRAM** | 1024KB or 2048KB | Internal static RAM expansion |
+| **MMU** | NextReg 0x50–0x57 | 8KB page banking across SRAM |
+| **Storage** | SD Card via DivMMC / NextZXOS | FAT16 / FAT32 filesystem |
+| **Display** | 80x24 Column Text Stream | Via RST 10H or NextCPM console |
+| **Keyboard** | Sinclair Matrix (Port 0xFE) | Full WordStar cursor navigation |
+
+### 4.2 Next Architectural Features Utilized
+
+1. **28 MHz CPU Turbo Mode**:
+   - At startup, native Next targets (`SE.NEX` and `.se`) program NextReg
+     `0x07` (`0x03` = 28 MHz turbo). This provides 8x to 10x the processing
+     throughput of standard 3.5 MHz / 4 MHz retro Z80 platforms.
+2. **NextReg MMU 8KB Banking**:
+   - NextRegs `0x50` through `0x57` control 8KB memory banking across physical
+     slots 0 through 7 (spanning the full 64KB Z80 address space).
+   - Document line buffers, Far RAM edit pools, and transient plugins are
+     dynamically paged into 8KB slots without consuming base execution memory.
+3. **NextZXOS / ESXDOS Storage Services**:
+   - The native `.se` dot command and `SE.NEX` standalone application invoke
+     the NextZXOS kernel via `RST 08H` ESXDOS API vectors (`M_GETSETDRV`,
+     `F_OPEN`, `F_CLOSE`, `F_READ`, `F_WRITE`, `F_SEEK`) for direct,
+     zero-copy FAT filesystem access.
+4. **NextCPM Console & Storage Integration**:
+   - Under NextCPM (`SE_NEXT.COM`), standard CP/M BDOS console calls (Functions
+     1, 2, 6, 9) and BIOS vectors are routed to the NextCPM 80-column console
+     driver with Sinclair keyboard translation.
+
+### 4.3 Verified Next Emulators
+
+In addition to physical ZX Spectrum Next Issue 1/2 hardware, all Next binaries
+are tested and supported under the following software emulators:
+
+- **CSpect** (by Mike Dailly):
+  - Recommended launch flags: `-w3 -zxnext -nextrom -mmc=<next_sd.img>`
+  - Requires `enNextFileSystem.dll` and standard NextZXOS system files.
+- **ZEsarUX** (by Cesar Hernandez):
+  - Machine selection: `--tbblue-features` / `ZX Spectrum Next`.
+  - Supports 28 MHz turbo execution, NextReg MMU banking, and DivMMC SD images.
+
+---
+
+## 5. Operating System Compatibility Matrix
 
 Memory footprint verified with `check_tpa.py` against `SE.COM` (v1.0.3):
 
@@ -127,7 +179,7 @@ support Far RAM document buffering.*
 
 ---
 
-## 5. Terminal Emulator Configuration
+## 6. Terminal Emulator Configuration
 
 For optimal full-screen editing over serial connections, configure your
 terminal emulator (Minicom, PuTTY, TeraTerm, screen, or Windows Terminal)
@@ -145,9 +197,10 @@ as follows:
 
 ---
 
-## 6. Operational Troubleshooting & Diagnostics
+## 7. Operational Troubleshooting & Diagnostics
 
 If your system displays `[256 lines (RAM)]` or encounters serial flow control
 issues, consult the dedicated [Troubleshooting Guide](TROUBLESHOOTING.md) for
 step-by-step resolution procedures.
+
 
