@@ -2,7 +2,7 @@
 """
 isolate_step.py - Isolated Test Harness for SE.COM Conformity Regression Steps.
 
-Allows running individual steps from the 74-step test suite in complete
+Allows running individual steps from the 75-step test suite in complete
 isolation to quickly reproduce, verify, and resolve failures.
 
 Usage:
@@ -12,6 +12,7 @@ Usage:
     python3 tests/isolate_step.py 70
     python3 tests/isolate_step.py 73
     python3 tests/isolate_step.py 74
+    python3 tests/isolate_step.py 75
     python3 tests/isolate_step.py all
 """
 
@@ -128,7 +129,8 @@ def setup_disk_files(img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root):
             "0:SE.COM", "0:se.com", "0:INS1.TXT", "0:INS2.TXT",
             "0:BLKSGL.TXT", "0:SAV300.TXT", "0:BLK300.TXT",
             "0:LONGNAME.TXT", "0:TESTF.TXT", "1:U1FILE.TXT",
-            "1:SAVEU1.TXT", "1:BLKU1.TXT"
+            "1:SAVEU1.TXT", "1:BLKU1.TXT", "0:CPM1.TXT",
+            "0:LIN1.TXT", "0:CPM2.TXT"
         ]:
             subprocess.run(
                 [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, fname],
@@ -187,6 +189,33 @@ def setup_disk_files(img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root):
             [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, u1_tmp, "1:U1FILE.TXT"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
+        cpm1_tmp = "/tmp/CPM1.TXT"
+        with open(cpm1_tmp, "wb") as f:
+            for i in range(1, 301):
+                f.write(
+                    f"CPM1 Line {i:04d} content CRLF\r\n".encode("ascii")
+                )
+        lin1_tmp = "/tmp/LIN1.TXT"
+        with open(lin1_tmp, "wb") as f:
+            for i in range(1, 301):
+                f.write(
+                    f"LIN1 Line {i:04d} content LF\n".encode("ascii")
+                )
+        cpm2_tmp = "/tmp/CPM2.TXT"
+        with open(cpm2_tmp, "wb") as f:
+            for i in range(1, 301):
+                f.write(
+                    f"CPM2 Line {i:04d} content CRLF\r\n".encode("ascii")
+                )
+        for fn, tmp_p in [
+            ("0:CPM1.TXT", cpm1_tmp),
+            ("0:LIN1.TXT", lin1_tmp),
+            ("0:CPM2.TXT", cpm2_tmp),
+        ]:
+            subprocess.run(
+                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, tmp_p, fn],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
 
 
 def boot_cpm(master):
@@ -699,7 +728,7 @@ def run_step_65(master):
         return False, f"Return prompt not found on About screen: {out_about}"
     if b"SE - Screen Editor" not in out_about:
         return False, f"'SE - Screen Editor' title not found: {out_about}"
-    if b"version 1.0.2" not in out_about:
+    if b"version 1.0.3" not in out_about:
         return False, f"Version details not found on About screen: {out_about}"
     if b"by Dean Jenkins" not in out_about:
         return False, f"Author attribution not found on About: {out_about}"
@@ -724,6 +753,88 @@ def run_step_65(master):
     return True, "Step 65 PASSED"
 
 
+def run_step_75(master):
+    """Step 75: Regression Test for Bug 2.36 (Open Modal & Status Format)."""
+    # 1. Launch SE with CPM1.TXT (CRLF format)
+    time.sleep(0.3)
+    os.write(master, b"se cpm1.txt\r")
+    ok, out1 = read_until(master, b"CPM1 Line 0038", timeout=30.0)
+    out1 += drain_all(master, 0.4)
+    if not ok:
+        return False, f"CPM1.TXT buffer render timed out: {out1[-300:]}"
+    if (b"CP/M  | " not in out1 or
+            b"Line    1/300 " not in out1 or
+            b"C:CPM1.TXT" not in out1):
+        return False, f"Initial CPM1.TXT load state invalid: {out1[-300:]}"
+
+    # 2. Open LIN1.TXT (Linux LF-only) via Ctrl+O
+    time.sleep(0.5)
+    os.write(master, b"\x0f")        # Ctrl+O
+    ok, out_open1 = read_until(
+        master, b"Enter filename to open:", timeout=10.0
+    )
+    if not ok:
+        return False, f"Failed to enter Open File screen: {out_open1}"
+
+    time.sleep(0.5)
+    os.write(master, b"LIN1.TXT\r")
+    ok, out2 = read_until(master, b"LIN1 Line 0038", timeout=30.0)
+    out2 += drain_all(master, 0.4)
+    if not ok:
+        return False, f"LIN1.TXT buffer render timed out: {out2[-300:]}"
+    if (b"File: C:LIN1.TXT" not in out2 or
+            b"Opening File" not in out2):
+        return False, f"Modal popup filename tracking error for LIN1: {out2}"
+    if (b"|       |" not in out2 or
+            b"Line    1/----" not in out2):
+        return False, f"Loading status bar not blanked for LIN1: {out2}"
+    if (b"Linux | " not in out2 or
+            b"Line    1/300 " not in out2 or
+            b"C:LIN1.TXT" not in out2):
+        return False, f"Post-load status bar incorrect for LIN1: {out2[-300:]}"
+
+    # 3. Open CPM2.TXT (CP/M CRLF) via Ctrl+O
+    time.sleep(0.5)
+    os.write(master, b"\x0f")        # Ctrl+O
+    ok, out_open2 = read_until(
+        master, b"Enter filename to open:", timeout=10.0
+    )
+    if not ok:
+        return False, f"Failed to enter Open File screen: {out_open2}"
+
+    time.sleep(0.5)
+    os.write(master, b"CPM2.TXT\r")
+    ok, out3 = read_until(master, b"CPM2 Line 0038", timeout=30.0)
+    out3 += drain_all(master, 0.4)
+    if not ok:
+        return False, f"CPM2.TXT buffer render timed out: {out3[-300:]}"
+    if (b"File: C:CPM2.TXT" not in out3 or
+            b"Opening File" not in out3):
+        return False, f"Modal popup filename tracking error for CPM2: {out3}"
+    if (b"|       |" not in out3 or
+            b"Line    1/----" not in out3):
+        return False, f"Loading status bar not blanked for CPM2: {out3}"
+    if (b"CP/M  | " not in out3 or
+            b"Line    1/300 " not in out3 or
+            b"C:CPM2.TXT" not in out3):
+        return False, f"Post-load status bar not CP/M for CPM2: {out3[-300:]}"
+
+    # 4. Clean exit to CP/M
+    time.sleep(0.5)
+    os.write(master, b"\x11")        # Ctrl+Q
+    time.sleep(0.3)
+    os.write(master, b"q\r")
+    ok, out_exit = read_until(master, b"C>", timeout=8.0)
+    if b"Save changes?" in out_exit:
+        os.write(master, b"N")
+        ok, out_exit2 = read_until(master, b"C>", timeout=8.0)
+        ok = ok and (b"C>" in out_exit2)
+    if not ok:
+        return False, f"Clean exit to CP/M failed: {out_exit}"
+
+    return True, "Step 75 PASSED"
+
+
 # =============================================================================
 # Dispatcher
 # =============================================================================
@@ -736,6 +847,7 @@ STEP_HANDLERS = {
     70: run_step_70,
     73: run_step_73,
     74: run_step_74,
+    75: run_step_75,
 }
 
 
@@ -794,7 +906,7 @@ def run_isolated(step_num):
 
 def main():
     if len(sys.argv) < 2:
-        steps_to_run = [27, 66, 68, 70, 73, 74]
+        steps_to_run = [27, 66, 68, 70, 73, 74, 75]
     elif sys.argv[1].lower() == "all":
         steps_to_run = sorted(STEP_HANDLERS.keys())
     else:

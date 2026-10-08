@@ -194,6 +194,37 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, u1_tmp, "1:U1FILE.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cpm1_tmp = "/tmp/CPM1.TXT"
+        with open(cpm1_tmp, "wb") as f:
+            for i in range(1, 301):
+                f.write(
+                    f"CPM1 Line {i:04d} content CRLF\r\n".encode("ascii")
+                )
+        lin1_tmp = "/tmp/LIN1.TXT"
+        with open(lin1_tmp, "wb") as f:
+            for i in range(1, 301):
+                f.write(
+                    f"LIN1 Line {i:04d} content LF\n".encode("ascii")
+                )
+        cpm2_tmp = "/tmp/CPM2.TXT"
+        with open(cpm2_tmp, "wb") as f:
+            for i in range(1, 301):
+                f.write(
+                    f"CPM2 Line {i:04d} content CRLF\r\n".encode("ascii")
+                )
+        for fn, tmp_p in [
+            ("0:CPM1.TXT", cpm1_tmp),
+            ("0:LIN1.TXT", lin1_tmp),
+            ("0:CPM2.TXT", cpm2_tmp),
+        ]:
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, fn],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            subprocess.run(
+                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, tmp_p, fn],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
 
     print("[*] Launching RomWBW on RC2014 emulator...", flush=True)
     master, slave = os.openpty()
@@ -4054,7 +4085,7 @@ def test_se_execution():
         if b"SE - Screen Editor" not in out_s65_about:
             print(f"[-] Step 65 failed: 'SE - Screen Editor' title not found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        if b"version 1.0.2" not in out_s65_about:
+        if b"version 1.0.3" not in out_s65_about:
             print(f"[-] Step 65 failed: Version details not found on About "
                   f"screen: {repr(out_s65_about)}", flush=True)
             return False
@@ -5941,6 +5972,108 @@ def test_se_execution():
         print("[+] Successfully verified Splash RAM Drive Status and "
               "Unavailable Guard (Step 74)!", flush=True)
 
+        # ---------------------------------------------------------------------
+        # Step 75: Regression Test for Bug 2.36 (Open Modal & Status Format)
+        # ---------------------------------------------------------------------
+        print("[*] Step 75: Verifying Open Modal & Status Format Tracking...",
+              flush=True)
+
+        # 1. Launch SE with CPM1.TXT (CRLF format)
+        time.sleep(0.3)
+        os.write(master, b"se cpm1.txt\r")
+        out_s75_1 = read_until(master, b"CPM1 Line 0038", timeout=30.0)
+        out_s75_1 += drain_all(master, 0.4)
+        if (b"CP/M  | " not in out_s75_1 or
+                b"Line    1/300 " not in out_s75_1 or
+                b"C:CPM1.TXT" not in out_s75_1):
+            print("[-] Step 75 failed: Initial CPM1.TXT load state invalid. "
+                  f"Buffer: {repr(out_s75_1[-300:])}", flush=True)
+            return False
+        print("    [+] CPM1.TXT rendered with CP/M format and correct metrics.")
+
+        # 2. Open LIN1.TXT (Linux LF-only) via Ctrl+O
+        time.sleep(0.5)
+        os.write(master, b"\x0f")        # Ctrl+O
+        out_s75_open1 = read_until(master, b"Enter filename to open:",
+                                   timeout=10.0)
+        if b"Enter filename to open:" not in out_s75_open1:
+            print("[-] Step 75 failed: Failed to enter Open File screen.",
+                  flush=True)
+            return False
+
+        time.sleep(0.5)
+        os.write(master, b"LIN1.TXT\r")
+        out_s75_2 = read_until(master, b"LIN1 Line 0038", timeout=30.0)
+        out_s75_2 += drain_all(master, 0.4)
+        if (b"File: C:LIN1.TXT" not in out_s75_2 or
+                b"Opening File" not in out_s75_2):
+            print("[-] Step 75 failed: Modal popup filename tracking error "
+                  f"for LIN1.TXT. Buffer: {repr(out_s75_2)}", flush=True)
+            return False
+        if (b"|       |" not in out_s75_2 or
+                b"Line    1/----" not in out_s75_2):
+            print("[-] Step 75 failed: Loading status bar not blanked/neutral "
+                  f"during LIN1.TXT load. Buffer: {repr(out_s75_2)}",
+                  flush=True)
+            return False
+        if (b"Linux | " not in out_s75_2 or
+                b"Line    1/300 " not in out_s75_2 or
+                b"C:LIN1.TXT" not in out_s75_2):
+            print("[-] Step 75 failed: Post-load status bar incorrect for "
+                  f"LIN1.TXT. Buffer: {repr(out_s75_2[-300:])}", flush=True)
+            return False
+        print("    [+] LIN1.TXT opened: modal dialog & Linux format verified.")
+
+        # 3. Open CPM2.TXT (CP/M CRLF) via Ctrl+O
+        time.sleep(0.5)
+        os.write(master, b"\x0f")        # Ctrl+O
+        out_s75_open2 = read_until(master, b"Enter filename to open:",
+                                   timeout=10.0)
+        if b"Enter filename to open:" not in out_s75_open2:
+            print("[-] Step 75 failed: Failed to enter Open File screen.",
+                  flush=True)
+            return False
+
+        time.sleep(0.5)
+        os.write(master, b"CPM2.TXT\r")
+        out_s75_3 = read_until(master, b"CPM2 Line 0038", timeout=30.0)
+        out_s75_3 += drain_all(master, 0.4)
+        if (b"File: C:CPM2.TXT" not in out_s75_3 or
+                b"Opening File" not in out_s75_3):
+            print("[-] Step 75 failed: Modal popup filename tracking error "
+                  f"for CPM2.TXT. Buffer: {repr(out_s75_3)}", flush=True)
+            return False
+        if (b"|       |" not in out_s75_3 or
+                b"Line    1/----" not in out_s75_3):
+            print("[-] Step 75 failed: Loading status bar not blanked/neutral "
+                  f"during CPM2.TXT load. Buffer: {repr(out_s75_3)}",
+                  flush=True)
+            return False
+        if (b"CP/M  | " not in out_s75_3 or
+                b"Line    1/300 " not in out_s75_3 or
+                b"C:CPM2.TXT" not in out_s75_3):
+            print("[-] Step 75 failed: Post-load status bar did not revert "
+                  f"to CP/M format. Buffer: {repr(out_s75_3[-300:])}",
+                  flush=True)
+            return False
+        print("    [+] CPM2.TXT opened: format cleanly restored to CP/M.")
+
+        # 4. Clean exit to CP/M
+        time.sleep(0.5)
+        os.write(master, b"\x11")        # Ctrl+Q
+        time.sleep(0.3)
+        os.write(master, b"q\r")
+        out_s75_exit = read_until(master, b"C>", timeout=8.0)
+        if b"Save changes?" in out_s75_exit:
+            os.write(master, b"N")
+            out_s75_exit += read_until(master, b"C>", timeout=8.0)
+        if b"C>" not in out_s75_exit:
+            print("[-] Step 75 failed: Clean exit to CP/M failed.", flush=True)
+            return False
+        print("    [+] Clean exit to CP/M prompt verified.")
+        print("[+] Successfully verified Open Modal & Status Format Tracking "
+              "(Step 75)!", flush=True)
+
         return True
 
     finally:
@@ -5989,6 +6122,18 @@ def test_se_execution():
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "1:BLKU1.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:CPM1.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:LIN1.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:CPM2.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         try:
             proc.kill()
             proc.wait(timeout=1.0)

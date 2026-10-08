@@ -14,9 +14,71 @@ tasks have been archived.
 
 ## 2. BUGS
 
-### 2.36 [Reserved for Next Bug Report]
+### 2.36 Intermittent Wrong Filename & Format Tracking in Open Dialog/Status Bar
+- [x] Investigate and fix intermittent display of incorrect filename in the
+  "Opening File" progress modal dialog and status bar, and verify format
+  indicator tracking across file switches.
+  - **Resolution**:
+    - Cleared `DOC_IS_FAT` prior to `LOAD_FILE` in `DO_PARSE_AND_LOAD`, with
+      backup/restore via `PREV_DOC_IS_FAT` on cancellation or error.
+    - Synchronized `DOC_USER_NUM` to `WORK_FCB_USER` at start of `LOAD_FILE`
+      before `DRAW_LOADING_SCREEN` so modal and status bar agree.
+    - Reset `SAVE_FORMAT` to `FMT_CPM` on entry to `LOAD_FILE`.
+    - Blanked format (`STR_FMT_BLANK: "      | "`) and line count
+      (`STR_STATUS_LOADING_POS: "Line    1/---- Col   0"`) on status bar
+      during loading (`IS_LOADING_FILE == 1`).
+    - Added automated regression test Step 75 in `test_editor_headless.py`
+      and `isolate_step.py`.
+  - **Symptom**: Observed intermittently when opening large files, where the
+    "Opening File" modal pop-up indicates the wrong target filename and/or
+    the bottom status bar shows the wrong filename or stale file metadata.
+    Seen once in interactive testing; exact reproduction conditions need
+    investigation.
+  - **Suspected Contributing Factors**:
+    - **Active Document Context**: The issue may depend on having a
+      different file already open in the editor prior to invoking the Open
+      File UI (`DO_EXEC_OPEN` / `DO_OPEN_FILE_UI`), causing state leakage
+      between the existing document and the incoming document.
+    - **Large File Timing**: In small files, the loading progress dialog
+      and initial status bar flash past near-instantaneously. In large files
+      (multi-sector / multi-record), the "Opening File" modal and loading
+      screen remain active on-screen for seconds, exposing any transient
+      or stale metadata rendered during `DRAW_LOADING_SCREEN`.
+    - **Stale Document Flags**:
+      - `DOC_IS_FAT`: When opening a standard CP/M file while a FAT/VFS file
+        is currently loaded, `DOC_IS_FAT` is not cleared until *after*
+        `LOAD_FILE` finishes (`src/se.asm:19972`). Consequently, during
+        `DRAW_LOADING_SCREEN`, `FORMAT_PROGRESS_FILE_LINE` and
+        `PRINT_STATUS_FILENAME` query `FAT_DOC_FNAME` rather than `WORK_FCB`.
+      - `DOC_USER_NUM`: `DOC_USER_NUM` is not updated to `WORK_FCB_USER` until
+        `LOAD_FINISH` (`src/se.asm:19270`), meaning `RENDER_STATUS_BAR` in
+        `DRAW_LOADING_SCREEN` emits the old file's user number.
+    - **Status Bar File Format Indicator (`CP/M  | ` vs `Linux | `)**:
+      - `SHOW_STATUS_FORMAT` inspects `SAVE_FORMAT`.
+      - `SAVE_FORMAT` is not reset at the start of `LOAD_FILE`; it retains
+        the format of the previously open document throughout
+        `DRAW_LOADING_SCREEN` and until the first CR/LF is parsed in the
+        sector stream (`HANDLE_CR` / `HANDLE_LF`).
+      - Furthermore, `RENDER_STATUS_BAR` is not called again during the
+        record read loop (`READ_SECTOR_LOOP`), so the status bar retains the
+        initial (potentially stale) format string while the file is loading.
+  - **Verification & Test Requirements**:
+    - Construct an automated test covering sequential file switches:
+      1. Load CP/M formatted file (CR/LF line endings).
+      2. Verify status bar displays `CP/M  | ` and correct filename.
+      3. From within editor, open a large Linux formatted file (LF endings).
+      4. Verify "Opening File" progress modal displays incoming filename.
+      5. Verify status bar during and after load transitions to `Linux | `.
+      6. From within editor, open a large CP/M formatted file.
+      7. Verify "Opening File" modal displays incoming filename.
+      8. Verify status bar transitions back to `CP/M  | `.
+    - Check whether the status bar during file loading reflects the existing
+      open file or the file currently being loaded, and ensure consistent,
+      deterministic state cleanup across all open/switch pathways.
+
+### 2.37 [Reserved for Next Bug Report]
 - [ ] Reserved to prevent duplicate bug numbering (Bugs 2.1–2.35 resolved
-  in v1.0.0).
+  in v1.0.0; Bug 2.36 active).
 
 ---
 
