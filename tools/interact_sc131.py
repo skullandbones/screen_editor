@@ -227,7 +227,7 @@ def main():
         session.type_keys("a", desc="Open About Screen")
         session.screen.reset(cols=80, rows=24)
         session.read_response(timeout=1.2, raw_echo=False)
-        session.show_screen(title="SE.COM About Screen (v1.0.1)")
+        session.show_screen(title="SE.COM About Screen (v1.0.2)")
 
         # Return to Splash (Space)
         time.sleep(1.2)

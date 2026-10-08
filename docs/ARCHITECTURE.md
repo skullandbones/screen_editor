@@ -266,7 +266,7 @@ serial lines or memory-mapped hardware consoles.
 
 Resident in Upper Memory above `0x8000`:
 * Offset `+0`: Magic `"SE"`
-* Offset `+2`: Host Version (e.g. `0101H` for `v1.0.1`)
+* Offset `+2`: Host Version (e.g. `0102H` for `v1.0.2`)
 * Offset `+4`: Pointers to `ACTIVE_LINE_BUF`, `ACTIVE_LINE_LEN`, `CUR_DOC_ROW`,
   `DOC_TOTAL_LINES`, `CUR_COL`, `ACTIVE_COLS`, `ACTIVE_ROWS`.
 * Function Dispatch Table: Terminal I/O, cursor locate, modal rendering, line
