@@ -474,6 +474,99 @@ def test_tier1_centering_and_tilde_discipline():
         print("    [+] Tier 1 centering & column 0 tildes verified [PASS]")
 
 
+def test_modal_archetypes_and_framing():
+    """Verify Tier 2 modal framing, centering, and Archetypes B/C (§8)."""
+    print("[*] Testing Tier 2 modal framing & Archetypes B/C (§8)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testmod_", suffix=".txt",
+                                     delete=False) as tf:
+        tf.write("Initial modal content\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Insert character to dirty the buffer
+            os.write(master, b"X")
+            time.sleep(0.1)
+            read_all_available(master, 0.2)
+
+            # Send Ctrl+Q (0x11) for Archetype B (Unsaved Modifications)
+            os.write(master, b"\x11")
+            modal_b_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Unsaved Modifications" in modal_b_out, (
+                "Modal Archetype B missing title"
+            )
+            assert "+--------------------------------------------------+" in (
+                modal_b_out
+            ), "Modal Archetype B missing border/title divider (+---+)"
+            assert "[Y]es" in modal_b_out and "[N]o" in modal_b_out, (
+                "Modal Archetype B missing [Y]es / [N]o options"
+            )
+            assert "[ESC]=Cancel" in modal_b_out, (
+                "Modal Archetype B missing [ESC]=Cancel footer option"
+            )
+
+            # Verify 'q' does NOT dismiss the confirmation query
+            os.write(master, b"q")
+            time.sleep(0.1)
+            read_all_available(master, 0.2)
+
+            # Send ESC (0x1B) to cancel confirmation query and return
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Send Ctrl+F (0x06) to trigger Archetype C (Find Text prompt)
+            os.write(master, b"\x06")
+            modal_c_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Find Text" in modal_c_out, (
+                "Modal Archetype C missing title"
+            )
+            assert "+--------------------------------------------------+" in (
+                modal_c_out
+            ), "Modal Archetype C missing border/title divider (+---+)"
+            assert "[ " in modal_c_out and " ]" in modal_c_out, (
+                "Modal Archetype C missing bracket pair [ text ] around input"
+            )
+            assert "[Enter]=Confirm      [ESC]=Cancel" in modal_c_out, (
+                "Modal Archetype C missing canonical footer"
+            )
+
+            # Cancel Archetype C via ESC
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Exit cleanly via Ctrl+Q then 'n' (discard edits)
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Tier 2 modal framing & Archetypes verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -487,6 +580,7 @@ def main():
     test_arrow_and_wordstar_navigation()
     test_horizontal_panning_and_line_barrier()
     test_tier1_centering_and_tilde_discipline()
+    test_modal_archetypes_and_framing()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

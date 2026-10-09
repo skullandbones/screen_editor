@@ -107,7 +107,7 @@ have been resolved and archived.
       ASCII banner borders and lack column 0 tilde (`~`) margin rows.
     - *Required Fix*: Apply mathematical 1-based centering formulas and fill
       margin rows down to row `HOST_ROWS - 1` with `~` in column 0.
-  - [ ] **Bug 2.4.7: Tier 2 Modal Framing, Centering & Archetype Invariance**:
+  - [x] **Bug 2.4.7: Tier 2 Modal Framing, Centering & Archetype Invariance**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.2, 8.3.
     - *Issue*: `src/core/ui_modal.c` places titles on top border without
       title divider line (`+---+`), uses off-by-one centering calculation,
