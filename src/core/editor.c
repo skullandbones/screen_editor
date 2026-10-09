@@ -18,6 +18,9 @@
 #include "../include/search.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/file_io.h"
+#include "../include/beautify.h"
+#include "../include/plugin.h"
 #include "../include/hal.h"
 
 /* Global Editor Navigation & State Variables */
@@ -422,6 +425,11 @@ int editor_handle_key(int key)
     case KEY_CTRL_F: do_ctrl_f_find(); break;
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
     case KEY_CTRL_N: do_ctrl_n_find_next(); break;
+    case KEY_CTRL_S: file_save(NULL, g_config.save_format); break;
+    case KEY_CTRL_Y: do_ctrl_y_beautify(); break;
+    case KEY_CTRL_Z: plugin_manager_ui(); break;
+    case KEY_CTRL_K: show_splash_screen(); break;
+    case KEY_CTRL_X: do_move_block(); break;
     case KEY_CTRL_Q:
         if (modal_confirm_save_changes() == MODAL_RES_OK) {
             g_editor_exit_flag = 1;

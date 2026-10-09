@@ -62,7 +62,7 @@ LINUX_MAIN_SRC = src/se_linux.c
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
 
-.PHONY: all se-next-cpm se-next-native test-next plugins image \
+.PHONY: all test-linux se-next-cpm se-next-native test-next plugins image \
 	init-image clean-image check-tpa check-plugins check-lines test \
 	test-sanity test-conformity test-paging test-config test-32k \
 	test-cpm3 test-plugins test-beautifier test-popup test-slots \
@@ -263,6 +263,10 @@ test-next: se-next-cpm se-next-native
 	@echo "==> Running ZX Spectrum Next multi-target test suite..."
 	python3 tests/test_next_targets.py
 
+test-linux: $(TARGET_LINUX)
+	@echo "==> Running Linux Native Profile automated test suite..."
+	python3 tests/test_linux_native.py
+
 test-monkey: image
 	@echo "==> Running SE.COM drunken monkey chaos test suite..."
 	python3 tests/test_drunken_monkey.py --steps $(or $(STEPS),50)
@@ -274,8 +278,8 @@ view-monkey:
 
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
-	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-next test-paging \
-	test-monkey
+	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-next test-linux \
+	test-paging test-monkey
 
 
 clean:
