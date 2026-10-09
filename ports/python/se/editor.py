@@ -114,7 +114,7 @@ class Editor:
             self.buffer.move_bottom()
         elif key == KEY_PGUP or key == KEY_CTRL_U:
             self.buffer.page_up(self.terminal.rows - 2)
-        elif key == KEY_PGDN or key == KEY_CTRL_V:
+        elif key == KEY_PGDN:
             self.buffer.page_down(self.terminal.rows - 2)
 
         # 2. Text Editing & Layout
@@ -143,6 +143,9 @@ class Editor:
             cut = self.buffer.cut_block()
             if cut:
                 self.status_msg = f"Cut {len(cut)}c"
+        elif key == KEY_CTRL_V:
+            if not self.buffer.paste_block():
+                self.buffer.page_down(self.terminal.rows - 2)
 
         # 4. Modals and Workspaces
         elif key == KEY_CTRL_F:

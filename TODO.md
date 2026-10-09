@@ -111,12 +111,16 @@ have been resolved and archived.
       cursor dynamically when `block_active == 1`, and updated `solidify_block`,
       `copy_block`, and `cut_block` to lock bounds upon block operations.
       Validated via `test_block_dynamic_cursor_tracking` in `test_buffer.py`.
-  - [ ] **Bug 2.7.3: Clipboard Paste Unbound (paste_block Never Called)**:
+  - [x] **Bug 2.7.3: Clipboard Paste Unbound (paste_block Never Called)**:
     - *Symptom*: User cannot paste copied clipboard text into the buffer.
     - *Root Cause*: In `editor.py`, `KEY_CTRL_V` is mapped exclusively to
       `buffer.page_down()`. `buffer.paste_block()` is implemented in buffer
       engine but never dispatched by any key.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.3 and 10.
+    - *Resolution*: Bound `KEY_CTRL_V` in `editor.py` to `paste_block()` with
+      fallback to `page_down()` when clipboard is empty, reserving `KEY_PGDN`
+      for dedicated paging. Validated via `test_ctrl_v_pastes_clipboard` in
+      `test_editor.py`.
   - [ ] **Bug 2.7.4: Status Bar Squatting & Status Event Rule Violation**:
     - *Symptom*: Transient messages (`Copied Xc`, `Cut Xc`, plugin status)
       overwrite Field 4 (`^K: Editor keys`) on the universal status bar.

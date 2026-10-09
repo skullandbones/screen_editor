@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from se.editor import Editor
-from se.terminal import KEY_CTRL_S, KEY_LEFT
+from se.terminal import KEY_CTRL_S, KEY_CTRL_V, KEY_LEFT, KEY_PGDN
 
 
 class TestEditor(unittest.TestCase):
@@ -44,6 +44,36 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 1: Ctrl+S save dispatch verified successfully.",
+            flush=True,
+        )
+
+    def test_ctrl_v_pastes_clipboard(self):
+        """Step 2: Verify Ctrl+V dispatches paste_block (Bug 2.7.3)."""
+        print(
+            "[*] Step 2: Testing Ctrl+V dispatches paste_block...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Hello World"]
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 5
+        self.editor.buffer.clipboard = " Beautiful"
+
+        # Dispatch Ctrl+V
+        self.editor.dispatch_key(KEY_CTRL_V)
+
+        self.assertEqual(
+            self.editor.buffer.current_line, "Hello Beautiful World"
+        )
+        self.assertEqual(self.editor.buffer.cursor_col, 15)
+
+        # Verify empty clipboard falls back to page_down
+        self.editor.buffer.clipboard = ""
+        self.editor.buffer.page_down = MagicMock()
+        self.editor.dispatch_key(KEY_CTRL_V)
+        self.editor.buffer.page_down.assert_called_once()
+
+        print(
+            "[+] Step 2: Ctrl+V paste dispatch verified successfully.",
             flush=True,
         )
 
