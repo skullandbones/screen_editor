@@ -77,6 +77,28 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_status_bar_field4_invariance(self):
+        """Step 3: Verify status bar Field 4 invariance (Bug 2.7.4)."""
+        print(
+            "[*] Step 3: Testing status bar Field 4 invariance...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+
+        # Render status bar with hypothetical status_msg
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, status_msg="Custom Msg"
+        )
+        full_bar = "".join(written)
+        self.assertIn("^K: Editor keys", full_bar)
+        self.assertNotIn("Custom Msg", full_bar)
+
+        print(
+            "[+] Step 3: Status bar Field 4 invariance verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

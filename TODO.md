@@ -121,12 +121,16 @@ have been resolved and archived.
       fallback to `page_down()` when clipboard is empty, reserving `KEY_PGDN`
       for dedicated paging. Validated via `test_ctrl_v_pastes_clipboard` in
       `test_editor.py`.
-  - [ ] **Bug 2.7.4: Status Bar Squatting & Status Event Rule Violation**:
+  - [x] **Bug 2.7.4: Status Bar Squatting & Status Event Rule Violation**:
     - *Symptom*: Transient messages (`Copied Xc`, `Cut Xc`, plugin status)
       overwrite Field 4 (`^K: Editor keys`) on the universal status bar.
     - *Root Cause*: `editor.py`, `ui.py`, and `plugin.py` route event strings
       to status bar via `status_msg` instead of Tier 2 notification modals.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.4 and 11.1.
+    - *Resolution*: Enforced persistent `^K: Editor keys` context on Field 4
+      in `render_status_bar()`, and removed status bar squatting assignments
+      on copy/cut in `editor.py`. Validated via
+      `test_status_bar_field4_invariance` in `test_editor.py`.
   - [ ] **Bug 2.7.5: Child Pop-up Isolation Defect in Plugin Palette**:
     - *Symptom*: When a plugin (e.g. `wordcnt.py`) displays a modal pop-up,
       it is drawn on top of the un-cleared parent menu without redrawing.

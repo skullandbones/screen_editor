@@ -136,13 +136,9 @@ class Editor:
         elif key == KEY_CTRL_B:
             self.buffer.toggle_block()
         elif key == KEY_CTRL_C:
-            copied = self.buffer.copy_block()
-            if copied:
-                self.status_msg = f"Copied {len(copied)}c"
+            self.buffer.copy_block()
         elif key == KEY_CTRL_X:
-            cut = self.buffer.cut_block()
-            if cut:
-                self.status_msg = f"Cut {len(cut)}c"
+            self.buffer.cut_block()
         elif key == KEY_CTRL_V:
             if not self.buffer.paste_block():
                 self.buffer.page_down(self.terminal.rows - 2)

@@ -52,11 +52,9 @@ class UIRenderer:
         fmt_str = "CPM  " if buf.format_cpm else "Linux"
         fmt_field = f" {fmt_str} |"
 
-        # Key help prompt or transient status message
-        if status_msg:
-            help_field = f" {status_msg:<15} |"
-        else:
-            help_field = " ^K: Editor keys |"
+        # Field 4 (Help Hint / Context, 18 chars): persistent help context
+        # Status events prohibited on status bar per Section 4.4
+        help_field = " ^K: Editor keys |"
 
         # Cursor and pan position field
         cur_line = buf.cursor_row + 1
