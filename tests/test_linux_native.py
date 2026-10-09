@@ -13,6 +13,7 @@ Part of SE.COM / Linux Native Profile (x86_64 and AArch64).
 
 import os
 import pty
+import select
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,27 @@ import time
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 SE_LINUX_BIN = os.path.join(PROJECT_DIR, "se-linux")
+
+
+def read_all_available(fd, timeout_sec=0.5):
+    """Read all available output from fd until quiet."""
+    chunks = []
+    end_time = time.time() + timeout_sec
+    while time.time() < end_time:
+        r, _, _ = select.select([fd], [], [], 0.05)
+        if r:
+            try:
+                data = os.read(fd, 16384)
+                if not data:
+                    break
+                chunks.append(data)
+                end_time = time.time() + 0.15
+            except Exception:
+                break
+        else:
+            if chunks:
+                break
+    return b"".join(chunks)
 
 
 def wait_pid_with_timeout(pid, timeout_sec=3.0):
@@ -320,6 +342,81 @@ def test_arrow_and_wordstar_navigation():
             os.remove(test_file_path)
 
 
+def test_horizontal_panning_and_line_barrier():
+    """Verify horizontal pan quantum (+40) and 120-char line limit (§6)."""
+    print("[*] Testing horizontal panning engine & line barrier (§6)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_pan_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+
+            # Flush initial startup output
+            read_all_available(master, 0.2)
+
+            # Insert 85 'A' characters to push cursor past column 79
+            os.write(master, b"A" * 85)
+            output = read_all_available(master, 0.4)
+            out_str = output.decode("utf-8", errors="replace")
+            assert "[Pan +40]" in out_str, (
+                f"Expected '[Pan +40]' indicator past column 79:\n{out_str}"
+            )
+
+            # Jump home (Ctrl+A / 0x01) to retreat below column 40
+            os.write(master, b"\x01")
+            output2 = read_all_available(master, 0.4)
+            out_str2 = output2.decode("utf-8", errors="replace")
+            assert "[Pan +40]" not in out_str2, (
+                f"Expected '[Pan +40]' to clear when at column 0:\n{out_str2}"
+            )
+
+            # Move to End and attempt typing 150 chars
+            os.write(master, b"\x1b[F")  # End key
+            time.sleep(0.1)
+            os.write(master, b"B" * 60)  # Total 85 + 60 = 145 attempted
+            time.sleep(0.2)
+
+            # Save file (Ctrl+S)
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            # Dismiss save modal with space
+            os.write(master, b" ")
+            time.sleep(0.1)
+            # Exit editor (Ctrl+Q)
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(test_file_path, "r") as f:
+                saved_lines = f.readlines()
+
+            first_line = saved_lines[0].rstrip("\r\n")
+            assert len(first_line) == 120, (
+                f"Expected line strictly capped at 120 chars, got "
+                f"{len(first_line)}"
+            )
+            print("    [+] Horizontal pan & 120-char line limit verified "
+                  "[PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -331,6 +428,7 @@ def main():
     test_status_bar_canonical_layout()
     test_status_event_notification_modal()
     test_arrow_and_wordstar_navigation()
+    test_horizontal_panning_and_line_barrier()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

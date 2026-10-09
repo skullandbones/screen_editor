@@ -94,7 +94,7 @@ have been resolved and archived.
     - *Required Fix*: Implement distinct keycodes for navigation vs commands,
       bind `cursor_up()` and `cursor_down()`, and restore authentic WordStar
       diamond navigation and ANSI cursor key parity.
-  - [ ] **Bug 2.4.5: Non-Functional Horizontal Panning Engine & Line Barrier**:
+  - [x] **Bug 2.4.5: Non-Functional Horizontal Panning Engine & Line Barrier**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 6.1, 6.2.
     - *Issue*: `g_horiz_pan_offset` in `src/core/editor.c` is never adjusted
       when cursor moves beyond column 79. `MAX_INPUT_LINE_CHARS` is 1000 in

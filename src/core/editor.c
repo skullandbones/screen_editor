@@ -62,10 +62,46 @@ uint16_t calc_visual_col(const char *buf, uint16_t char_col)
     return vis_col;
 }
 
+void update_horizontal_pan(void)
+{
+    uint16_t vis_col;
+    uint16_t old_pan = g_horiz_pan_offset;
+
+    if (g_config.screen_mode == MODE_120X40) {
+        g_horiz_pan_offset = 0;
+        if (old_pan != 0) {
+            g_need_screen_render = 1;
+            g_need_status_render = 1;
+        }
+        return;
+    }
+
+    vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+
+    if (vis_col >= 120) {
+        g_horiz_pan_offset = 80;
+    } else if (vis_col >= 80) {
+        g_horiz_pan_offset = 40;
+    } else if (vis_col < 40) {
+        g_horiz_pan_offset = 0;
+    } else {
+        /* In range 40..79: hysteresis retention */
+        if (old_pan == 80) {
+            g_horiz_pan_offset = 40;
+        }
+    }
+
+    if (g_horiz_pan_offset != old_pan) {
+        g_need_screen_render = 1;
+        g_need_status_render = 1;
+    }
+}
+
 void locate_cursor(void)
 {
     uint16_t screen_row;
     uint16_t vis_col;
+    uint8_t  screen_col;
 
     if (g_cur_doc_row < g_top_doc_row) {
         g_top_doc_row = g_cur_doc_row;
@@ -80,8 +116,12 @@ void locate_cursor(void)
         vis_col = 0;
     }
 
-    /* Column 0 has tilde margin on screen */
-    hal_console_locate((uint8_t)screen_row, (uint8_t)(vis_col + 2));
+    /* Column 0 has tilde margin on screen; text starts at col 2 */
+    screen_col = (uint8_t)(vis_col + 2);
+    if (screen_col > g_active_cols) {
+        screen_col = g_active_cols;
+    }
+    hal_console_locate((uint8_t)screen_row, screen_col);
 }
 
 int do_char_insert(char c)
@@ -90,7 +130,8 @@ int do_char_insert(char c)
 
     checkout_active_line(g_cur_doc_row);
 
-    if (g_active_line_len >= MAX_INPUT_LINE_CHARS) {
+    if (g_cur_col >= MAX_INPUT_LINE_CHARS ||
+        g_active_line_len >= MAX_INPUT_LINE_CHARS) {
         return -1;
     }
 
@@ -467,6 +508,7 @@ void editor_main_loop(void)
 {
     while (!g_editor_exit_flag) {
         int key;
+        update_horizontal_pan();
         if (g_need_screen_render) {
             render_screen();
             g_need_screen_render = 0;

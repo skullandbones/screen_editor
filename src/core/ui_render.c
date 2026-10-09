@@ -184,11 +184,18 @@ void render_status_bar(void)
         blk_str = " [BLK LOCK]";
     }
 
-    snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u%s%s |",
-             (unsigned)(g_cur_doc_row + 1),
-             (unsigned)g_doc_total_lines,
-             (unsigned)g_cur_col,
-             pan_str, blk_str);
+    if (pan_str[0] != '\0' || blk_str[0] != '\0') {
+        snprintf(field5, sizeof(field5), " Line %u/%u Col %u%s%s |",
+                 (unsigned)(g_cur_doc_row + 1),
+                 (unsigned)g_doc_total_lines,
+                 (unsigned)g_cur_col,
+                 pan_str, blk_str);
+    } else {
+        snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u |",
+                 (unsigned)(g_cur_doc_row + 1),
+                 (unsigned)g_doc_total_lines,
+                 (unsigned)g_cur_col);
+    }
 
     snprintf(core, sizeof(core), "%s%s%s%s%s",
              field1, field2, field3, field4, field5);
