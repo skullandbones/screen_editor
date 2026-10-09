@@ -210,7 +210,7 @@ have been resolved and archived.
       shifts when cursor reaches `view_cols` (column 80 in 80-col mode),
       allowing column 79 to render unpanned. Validated via
       `test_horizontal_panning` in `test_buffer.py`.
-  - [ ] **Bug 2.7.13: Terminal Buffer Starvation on PTYs (sys.stdin.read)**:
+  - [x] **Bug 2.7.13: Terminal Buffer Starvation on PTYs (sys.stdin.read)**:
     - *Symptom*: When Python SE runs on a live PTY, arrow keys and multi-byte
       escape sequences are broken; `\x1b` is decoded as standalone `KEY_ESC`
       (canceling blocks or returning to Splash) and trailing characters (`[A`,
@@ -221,6 +221,11 @@ have been resolved and archived.
       on fd 0, the OS reports no bytes waiting, causing `is_key_ready()` to
       falsely report `False`.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.4 and Section 10.
+    - *Resolution*: Updated `get_char()` and `is_key_ready()` in `terminal.py`
+      to use unbuffered `os.read(fd, 1)` and direct fd selection when stdin has
+      a file descriptor, falling back to stream reads for non-fd mock streams.
+      Validated via `test_unbuffered_pty_escape_sequence_decoding` in
+      `test_terminal.py`.
   - [ ] **Bug 2.7.14: Editor Starts in Document Mode Instead of Splash Screen**:
     - *Symptom*: Running `se` without CLI arguments directly enters the document
       editor workspace with an untitled buffer, skipping the Splash screen.

@@ -184,24 +184,27 @@ class Terminal:
 
     def is_key_ready(self, timeout=0.0):
         """Check if characters are waiting to be read on stdin."""
-        if not hasattr(sys.stdin, "fileno"):
-            return True
-        try:
-            if not sys.stdin.isatty():
+        if hasattr(sys.stdin, "fileno"):
+            try:
+                fd = sys.stdin.fileno()
+                r, _, _ = select.select([fd], [], [], timeout)
+                return bool(r)
+            except (io.UnsupportedOperation, OSError, AttributeError):
                 return True
-            r, _, _ = select.select([sys.stdin], [], [], timeout)
-            return bool(r)
-        except (io.UnsupportedOperation, OSError):
-            return True
+        return True
 
     def get_char(self, timeout=None):
         """Read a single raw character from stdin with optional timeout."""
-        if timeout is not None and hasattr(sys.stdin, "fileno"):
+        if hasattr(sys.stdin, "fileno"):
             try:
-                r, _, _ = select.select([sys.stdin], [], [], timeout)
-                if not r:
-                    return None
-            except (io.UnsupportedOperation, OSError):
+                fd = sys.stdin.fileno()
+                if timeout is not None:
+                    r, _, _ = select.select([fd], [], [], timeout)
+                    if not r:
+                        return None
+                b = os.read(fd, 1)
+                return b.decode("latin1", errors="replace") if b else None
+            except (io.UnsupportedOperation, OSError, AttributeError):
                 pass
         ch = sys.stdin.read(1)
         return ch if ch else None

@@ -4,6 +4,7 @@ Unit tests for terminal management and escape sequence decoding in SE.
 """
 
 import io
+import os
 import sys
 import unittest
 from unittest.mock import patch
@@ -160,6 +161,27 @@ class TestTerminal(unittest.TestCase):
         )
         self.assertEqual(out.getvalue(), expected)
         print("[+] Step 8: Cursor locate clamping verified.", flush=True)
+
+    def test_unbuffered_pty_escape_sequence_decoding(self):
+        """Step 9: Verify PTY unbuffered escape sequence decoding."""
+        print(
+            "[*] Step 9: Testing unbuffered escape sequence decoding...",
+            flush=True,
+        )
+        r_fd, w_fd = os.pipe()
+        try:
+            os.write(w_fd, b"\x1b[A")
+            with open(r_fd, "r", closefd=False) as pipe_in:
+                with patch("sys.stdin", pipe_in):
+                    key = self.term.get_key(timeout=0.2)
+                    self.assertEqual(key, KEY_UP)
+        finally:
+            os.close(r_fd)
+            os.close(w_fd)
+        print(
+            "[+] Step 9: Unbuffered escape sequence decoding verified.",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":
