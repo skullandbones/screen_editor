@@ -210,6 +210,84 @@ have been resolved and archived.
       shifts when cursor reaches `view_cols` (column 80 in 80-col mode),
       allowing column 79 to render unpanned. Validated via
       `test_horizontal_panning` in `test_buffer.py`.
+  - [ ] **Bug 2.7.13: Terminal Buffer Starvation on PTYs (sys.stdin.read)**:
+    - *Symptom*: When Python SE runs on a live PTY, arrow keys and multi-byte
+      escape sequences are broken; `\x1b` is decoded as standalone `KEY_ESC`
+      (canceling blocks or returning to Splash) and trailing characters (`[A`,
+      `[D`, etc.) are inserted into document text.
+    - *Root Cause*: `get_char()` in `terminal.py` calls `sys.stdin.read(1)`.
+      Python's `TextIOWrapper` buffers chunks from the OS file descriptor into
+      internal user-space memory. When `is_key_ready()` calls `select.select()`
+      on fd 0, the OS reports no bytes waiting, causing `is_key_ready()` to
+      falsely report `False`.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.4 and Section 10.
+  - [ ] **Bug 2.7.14: Editor Starts in Document Mode Instead of Splash Screen**:
+    - *Symptom*: Running `se` without CLI arguments directly enters the document
+      editor workspace with an untitled buffer, skipping the Splash screen.
+      In CP/M `SE.COM`, running `se` without arguments opens the Tier 1 Splash
+      screen (`SHOW_SPLASH_SCREEN`).
+    - *Root Cause*: `editor.py`'s `Editor.run()` enters `render_editor()`
+      unconditionally without checking whether an input file argument was
+      provided on the CLI or displaying `action_splash_screen()`.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and
+      `src/se.asm` lines 146-151 (`HAS_FILE_ARG == 0 -> JP SHOW_SPLASH_SCREEN`).
+  - [ ] **Bug 2.7.15: Status Bar Column Spill During Block Selection ([SEL])**:
+    - *Symptom*: When block selection is active (`Ctrl+B`), the status bar row
+      overflows 80 columns (82 characters: `| (Untitled)* ... [SEL]`), inducing
+      terminal line wrapping and display corruption.
+    - *Root Cause*: `render_status_bar()` in `ui.py` appends `[SEL]` at the end
+      of `stat_text` instead of formatting live selection metrics
+      (`Sel: X chars` / `Sel: X lines`) inside the 18-character Field 4 budget.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3 and
+      Section 11.3 (Anti-Pattern 3: Terminal Column Spill).
+  - [ ] **Bug 2.7.16: Status Bar Geometry and Environment Spacing Discrepancy**:
+    - *Symptom*: Field 2 geometry in Python SE is formatted as ` 80x24 |`
+      (7 chars, missing leading space), and Field 3 environment is ` CPM   |`
+      (missing slash) compared to CP/M `SE.COM`'s canonical ` 80x24 |` and
+      ` CP/M  |`.
+    - *Root Cause*: `ui.py` formats `geom_field = f" {geometry_str} |"` instead
+      of standard 8-character width `f"  {geometry_str} |"` and
+      `fmt_str = "CPM  "` instead of `"CP/M "`.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3.
+  - [ ] **Bug 2.7.17: Missing Case-Sensitivity Toggle ([Tab]) in Find Dialog**:
+    - *Symptom*: In CP/M `SE.COM`, the Find Text modal dialog displays
+      `Search Pattern: [Case Sensitive  ]` and supports pressing `[Tab]` to
+      dynamically toggle between Case Sensitive and Case Insensitive before
+      searching. In Python SE, `action_find()` uses generic `modal.show_input()`
+      with no case indicator or `Tab` toggle.
+    - *Root Cause*: `action_find()` does not provide a custom search modal
+      supporting `KEY_TAB` case-sensitivity toggling.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 (Archetype C)
+      and `src/core/search.asm`.
+  - [ ] **Bug 2.7.18: Splash Screen Missing Command Matrix and Status Blocks**:
+    - *Symptom*: CP/M `SE.COM` splash screen features 14 canonical commands
+      (`[E]`, `[N]`, `[O]`, `[S]`, `[W]`, `[L]`, `[A]`, `[M]`, `[P]`, `[^P]`,
+      `[C]`, `[1]`, `[2]`, `[Q]`) and 4 dynamic status blocks (Screen geometry,
+      RAM drive mode, Plugin system, Max lines). Python SE splash screen
+      displays only 7 abbreviated options (`:e`, `:o`, `:s`, `:c`, `:p`, `:?`,
+      `:q`) and lacks handlers for `[A]`, `[M]`, `[N]`, `[W]`, `[1]`, `[2]`,
+      `[L]`.
+    - *Root Cause*: `action_splash_screen()` in `editor.py` uses a hard-coded
+      abbreviated template and lacks dispatch branches for the full CP/M
+      command matrix.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and
+      `src/core/plugin_mgr.asm` line 4278.
+  - [ ] **Bug 2.7.19: Prohibited Dismissal Prompt Text on Help Screen**:
+    - *Symptom*: Help screen (`Ctrl+K`) footer displays prohibited text:
+      `Press any key to return to editor`. CP/M `SE.COM` displays canonical
+      `Press any key to continue`.
+    - *Root Cause*: `action_help()` in `editor.py` uses legacy prompt string
+      `Press any key to return to editor`.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 Archetype A
+      and `tests/test_bug_2_22.py`.
+  - [ ] **Bug 2.7.20: Missing Tier 1 About ([A]) and Memory Map ([M]) Screens**:
+    - *Symptom*: Pressing `a` (About) or `m` (Memory Info) from Splash or
+      keybindings in Python SE is ignored; both full-screen Tier 1 workspaces
+      exist in CP/M `SE.COM` but are completely absent from Python SE.
+    - *Root Cause*: `action_about()` and `action_mem_info()` are not implemented
+      in `editor.py`.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1 and
+      `src/se.asm` lines 2858 & 3465.
 
 ---
 
