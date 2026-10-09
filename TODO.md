@@ -268,7 +268,7 @@ have been resolved and archived.
       as `f" {geometry_str:>6} |"` (8 chars) and Field 3 as
       `f" {fmt_str} |"` with `fmt_str = "CP/M "` or `"Linux"`. Validated via
       `test_status_bar_geometry_and_environment_spacing` in `test_editor.py`.
-  - [ ] **Bug 2.7.17: Missing Case-Sensitivity Toggle ([Tab]) in Find Dialog**:
+  - [x] **Bug 2.7.17: Missing Case-Sensitivity Toggle ([Tab]) in Find Dialog**:
     - *Symptom*: In CP/M `SE.COM`, the Find Text modal dialog displays
       `Search Pattern: [Case Sensitive  ]` and supports pressing `[Tab]` to
       dynamically toggle between Case Sensitive and Case Insensitive before
@@ -278,6 +278,10 @@ have been resolved and archived.
       supporting `KEY_TAB` case-sensitivity toggling.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 (Archetype C)
       and `src/core/search.asm`.
+    - *Resolution*: Implemented `show_find_dialog()` in `modal.py` featuring
+      dynamic `[Tab]=Toggle Case` cycling of the `Search Pattern` indicator,
+      and updated `action_find()` in `editor.py`. Validated via
+      `test_find_dialog_tab_case_toggle` in `test_editor.py`.
   - [ ] **Bug 2.7.18: Splash Screen Missing Command Matrix and Status Blocks**:
     - *Symptom*: CP/M `SE.COM` splash screen features 14 canonical commands
       (`[E]`, `[N]`, `[O]`, `[S]`, `[W]`, `[L]`, `[A]`, `[M]`, `[P]`, `[^P]`,

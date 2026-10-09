@@ -22,6 +22,7 @@ from se.terminal import (
     KEY_BACKSPACE,
     KEY_ENTER,
     KEY_ESC,
+    KEY_TAB,
     KEY_PGDN,
 )
 
@@ -441,6 +442,40 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 12: Status bar geometry & format spacing verified.",
+            flush=True,
+        )
+
+    def test_find_dialog_tab_case_toggle(self):
+        """Step 13: Verify find modal Tab case toggle (Bug 2.7.17)."""
+        print(
+            "[*] Step 13: Testing find dialog Tab case toggle...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.buffer.lines = ["This is a test line"]
+
+        # Feed: "t", "e", "s", "t", KEY_TAB, KEY_ENTER
+        key_sequence = ["t", "e", "s", "t", KEY_TAB, KEY_ENTER]
+        key_iter = iter(key_sequence)
+        self.editor.terminal.get_key = lambda timeout=None: next(
+            key_iter, KEY_ENTER
+        )
+
+        self.editor.action_find()
+
+        self.assertEqual(self.editor.search_query, "test")
+        self.assertFalse(self.editor.case_sensitive)
+        self.assertEqual(self.editor.buffer.cursor_col, 10)
+
+        dialog_text = "".join(written)
+        self.assertIn("Find Text", dialog_text)
+        self.assertIn("Case Sensitive", dialog_text)
+        self.assertIn("Case Insensitive", dialog_text)
+        self.assertIn("[Tab]=Toggle Case", dialog_text)
+
+        print(
+            "[+] Step 13: Find dialog Tab case toggle verified.",
             flush=True,
         )
 

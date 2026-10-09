@@ -212,13 +212,12 @@ class Editor:
             self.buffer.target_col = 0
 
     def action_find(self):
-        """Prompt for search text and search forward from cursor."""
-        query = self.modal.show_input(
-            title="Find Text",
-            desc="Enter search string to locate",
-            label="Find:",
+        """Prompt for search text with Tab case toggle and search forward."""
+        query, case_sens = self.modal.show_find_dialog(
             initial_text=self.search_query,
+            initial_case_sensitive=self.case_sensitive,
         )
+        self.case_sensitive = case_sens
         if query:
             self.search_query = query
             self.action_find_next()
