@@ -62,11 +62,16 @@ class DocumentBuffer:
         """
         Calculate horizontal viewport pan offset [Pan +40] based on cursor.
         """
-        usable_cols = max(10, view_cols - 1)
-        if self.cursor_col >= usable_cols:
-            self.pan_col = 40 if self.cursor_col < usable_cols + 40 else 80
+        if view_cols >= MAX_LINE_LENGTH:
+            self.pan_col = 0
+            return
+
+        if self.cursor_col >= view_cols:
+            self.pan_col = 40 if self.cursor_col < view_cols + 40 else 80
         elif self.cursor_col < 40:
             self.pan_col = 0
+        elif self.cursor_col < 80 and self.pan_col == 80:
+            self.pan_col = 40
 
     def insert_char(self, ch: str) -> bool:
         """

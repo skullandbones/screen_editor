@@ -111,19 +111,43 @@ class TestBuffer(unittest.TestCase):
         print("[+] Step 4: Navigation verified.", flush=True)
 
     def test_horizontal_panning(self):
-        """Step 5: Verify horizontal pan offset [Pan +40]."""
+        """Step 5: Verify horizontal pan offset [Pan +40] (Bug 2.7.12)."""
         print("[*] Step 5: Testing horizontal pan [Pan +40]...", flush=True)
-        self.buf.cursor_col = 30
+        # Column 79 fits in 80 columns without panning (Bug 2.7.12)
+        self.buf.cursor_col = 79
         self.buf.update_pan(view_cols=80)
         self.assertEqual(self.buf.pan_col, 0)
 
-        self.buf.cursor_col = 85
+        # Column 80 triggers Pan +40
+        self.buf.cursor_col = 80
         self.buf.update_pan(view_cols=80)
         self.assertEqual(self.buf.pan_col, 40)
 
-        self.buf.cursor_col = 10
+        # Column 119 remains at Pan +40
+        self.buf.cursor_col = 119
+        self.buf.update_pan(view_cols=80)
+        self.assertEqual(self.buf.pan_col, 40)
+
+        # Column 120 triggers Pan +80
+        self.buf.cursor_col = 120
+        self.buf.update_pan(view_cols=80)
+        self.assertEqual(self.buf.pan_col, 80)
+
+        # Retreating below 80 returns to Pan +40
+        self.buf.cursor_col = 79
+        self.buf.update_pan(view_cols=80)
+        self.assertEqual(self.buf.pan_col, 40)
+
+        # Retreating below 40 returns to Pan 0
+        self.buf.cursor_col = 39
         self.buf.update_pan(view_cols=80)
         self.assertEqual(self.buf.pan_col, 0)
+
+        # 120-column geometry does not pan within 120 cols
+        self.buf.cursor_col = 100
+        self.buf.update_pan(view_cols=120)
+        self.assertEqual(self.buf.pan_col, 0)
+
         print("[+] Step 5: Horizontal panning verified.", flush=True)
 
     def test_block_copy_cut_paste(self):

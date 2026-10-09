@@ -201,11 +201,15 @@ have been resolved and archived.
       `KEY_DEL_CHAR` (`0x7F`) to `KEY_DELETE`, preserving `KEY_BACKSPACE`
       for `0x08`. Validated via `test_backspace_and_enter` in
       `test_terminal.py`.
-  - [ ] **Bug 2.7.12: Off-by-One in Horizontal Pan Trigger**:
+  - [x] **Bug 2.7.12: Off-by-One in Horizontal Pan Trigger**:
     - *Symptom*: Panning jumps to `[Pan +40]` at column 79 rather than 80.
     - *Root Cause*: `buffer.py` checks `self.cursor_col >= usable_cols` where
       `usable_cols = 79`, triggering pan while cursor is still within screen.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 6.2.
+    - *Resolution*: Updated `update_pan()` in `buffer.py` to trigger pan
+      shifts when cursor reaches `view_cols` (column 80 in 80-col mode),
+      allowing column 79 to render unpanned. Validated via
+      `test_horizontal_panning` in `test_buffer.py`.
 
 ---
 
