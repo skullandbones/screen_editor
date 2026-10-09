@@ -16,7 +16,26 @@
 #include "../include/buffer.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/file_io.h"
 #include "../include/hal.h"
+
+static void modal_puts_centered(uint8_t row, uint8_t left,
+                                uint8_t width, const char *str)
+{
+    size_t len = str ? strlen(str) : 0;
+    uint8_t interior_w = width - 2;
+    uint8_t pad;
+    size_t i;
+
+    if (len > interior_w) {
+        len = interior_w;
+    }
+    pad = (uint8_t)((interior_w - len) / 2);
+    hal_console_locate(row, left + 1 + pad);
+    for (i = 0; i < len; i++) {
+        hal_console_putc(str[i]);
+    }
+}
 
 void modal_draw_frame(uint8_t top, uint8_t left,
                       uint8_t width, uint8_t height,
@@ -24,23 +43,44 @@ void modal_draw_frame(uint8_t top, uint8_t left,
 {
     uint8_t r, c;
     uint8_t title_len = (title && *title) ? (uint8_t)strlen(title) : 0;
-    uint8_t title_start = 2;
+    uint8_t title_pad = 0;
 
-    /* Draw Top Border */
+    /* Row 0: Top Border */
     hal_console_locate(top, left);
     hal_console_putc('+');
     for (c = 1; c < width - 1; c++) {
-        if (title_len > 0 && c >= title_start &&
-            c < title_start + title_len) {
-            hal_console_putc(title[c - title_start]);
-        } else {
-            hal_console_putc('-');
-        }
+        hal_console_putc('-');
     }
     hal_console_putc('+');
 
-    /* Draw Side Borders and Clear Interior */
-    for (r = 1; r < height - 1; r++) {
+    /* Row 1: Title Row */
+    hal_console_locate(top + 1, left);
+    hal_console_putc('|');
+    if (title_len > width - 2) {
+        title_len = width - 2;
+    }
+    title_pad = (width - 2 - title_len) / 2;
+    for (c = 0; c < title_pad; c++) {
+        hal_console_putc(' ');
+    }
+    for (c = 0; c < title_len; c++) {
+        hal_console_putc(title[c]);
+    }
+    for (c = title_pad + title_len; c < width - 2; c++) {
+        hal_console_putc(' ');
+    }
+    hal_console_putc('|');
+
+    /* Row 2: Title Separator Divider (+---+) */
+    hal_console_locate(top + 2, left);
+    hal_console_putc('+');
+    for (c = 1; c < width - 1; c++) {
+        hal_console_putc('-');
+    }
+    hal_console_putc('+');
+
+    /* Rows 3..height-2: Interior Clear */
+    for (r = 3; r < height - 1; r++) {
         hal_console_locate(top + r, left);
         hal_console_putc('|');
         for (c = 1; c < width - 1; c++) {
@@ -49,7 +89,7 @@ void modal_draw_frame(uint8_t top, uint8_t left,
         hal_console_putc('|');
     }
 
-    /* Draw Bottom Border */
+    /* Row height-1: Bottom Border */
     hal_console_locate(top + height - 1, left);
     hal_console_putc('+');
     for (c = 1; c < width - 1; c++) {
@@ -60,28 +100,21 @@ void modal_draw_frame(uint8_t top, uint8_t left,
 
 int modal_alert(const char *title, const char *msg1, const char *msg2)
 {
-    uint8_t width = 46;
+    uint8_t width = 52;
     uint8_t height = 7;
-    uint8_t top = (g_active_rows > height) ? (g_active_rows - height) / 2 : 5;
-    uint8_t left = (g_active_cols > width) ? (g_active_cols - width) / 2 : 15;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
 
     hal_console_hide_cursor();
     modal_draw_frame(top, left, width, height, title);
 
-    if (msg1) {
-        hal_console_locate(top + 2, left + 4);
-        hal_console_puts(msg1);
+    if (msg1 && *msg1) {
+        modal_puts_centered(top + 3, left, width, msg1);
     }
-    if (msg2) {
-        hal_console_locate(top + 3, left + 4);
-        hal_console_puts(msg2);
+    if (msg2 && *msg2) {
+        modal_puts_centered(top + 4, left, width, msg2);
     }
-
-    /* Draw Centered [ OK ] Button */
-    hal_console_locate(top + 5, left + (width - 8) / 2);
-    hal_console_inverse_on();
-    hal_console_puts("[  OK  ]");
-    hal_console_inverse_off();
+    modal_puts_centered(top + 5, left, width, "Press any key to continue");
 
     hal_console_getkey();
     g_need_screen_render = 1;
@@ -89,47 +122,48 @@ int modal_alert(const char *title, const char *msg1, const char *msg2)
 }
 
 int modal_confirm(const char *title, const char *msg,
-                   const char *btn1, const char *btn2)
+                  const char *btn1, const char *btn2)
 {
-    uint8_t width = 50;
-    uint8_t height = 7;
-    uint8_t top = (g_active_rows > height) ? (g_active_rows - height) / 2 : 5;
-    uint8_t left = (g_active_cols > width) ? (g_active_cols - width) / 2 : 15;
+    uint8_t width = 52;
+    uint8_t height = 8;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
     uint8_t selected = 0;
+    (void)btn1;
+    (void)btn2;
 
     hal_console_hide_cursor();
     modal_draw_frame(top, left, width, height, title);
 
-    if (msg) {
-        hal_console_locate(top + 2, left + 4);
-        hal_console_puts(msg);
+    if (msg && *msg) {
+        modal_puts_centered(top + 3, left, width, msg);
     }
+    modal_puts_centered(top + 4, left, width, "Save changes?");
 
     while (1) {
-        /* Render Button 1 */
-        hal_console_locate(top + 4, left + 10);
+        /* Render Options: [Y]es      [N]o      [ESC]=Cancel */
+        hal_console_locate(top + 6, left + 6);
         if (selected == 0) hal_console_inverse_on();
-        hal_console_puts("[ ");
-        hal_console_puts(btn1 ? btn1 : "Yes");
-        hal_console_puts(" ]");
+        hal_console_puts("[Y]es");
         if (selected == 0) hal_console_inverse_off();
 
-        /* Render Button 2 */
-        hal_console_locate(top + 4, left + 28);
+        hal_console_puts("      ");
         if (selected == 1) hal_console_inverse_on();
-        hal_console_puts("[ ");
-        hal_console_puts(btn2 ? btn2 : "No");
-        hal_console_puts(" ]");
+        hal_console_puts("[N]o");
         if (selected == 1) hal_console_inverse_off();
+
+        hal_console_puts("      [ESC]=Cancel");
 
         int k = hal_console_getkey();
         if (k == KEY_ENTER || k == ' ') {
             g_need_screen_render = 1;
             return (selected == 0) ? MODAL_RES_YES : MODAL_RES_NO;
-        } else if (k == KEY_ESC || k == 'q' || k == 'Q') {
+        } else if (k == KEY_ESC) {
+            /* Cancelable solely by ESC (not Ctrl+C or q) */
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_TAB || k == KEY_CTRL_D || k == 0x1B) {
+        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT ||
+                   k == KEY_CTRL_D || k == KEY_CTRL_S) {
             selected = (selected == 0) ? 1 : 0;
         } else if (k == 'y' || k == 'Y') {
             g_need_screen_render = 1;
@@ -142,21 +176,22 @@ int modal_confirm(const char *title, const char *msg,
 }
 
 int modal_confirm_3btn(const char *title, const char *msg,
-                        const char *btn1, const char *btn2, const char *btn3)
+                       const char *btn1, const char *btn2, const char *btn3)
 {
     uint8_t width = 56;
-    uint8_t height = 7;
-    uint8_t top = (g_active_rows > height) ? (g_active_rows - height) / 2 : 5;
-    uint8_t left = (g_active_cols > width) ? (g_active_cols - width) / 2 : 12;
+    uint8_t height = 8;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
     uint8_t selected = 0;
 
     hal_console_hide_cursor();
     modal_draw_frame(top, left, width, height, title);
 
-    if (msg) {
-        hal_console_locate(top + 2, left + 4);
-        hal_console_puts(msg);
+    if (msg && *msg) {
+        modal_puts_centered(top + 3, left, width, msg);
     }
+    modal_puts_centered(top + 6, left, width,
+                        "[Tab]=Select   [Enter]=Run   [ESC]=Cancel");
 
     while (1) {
         hal_console_locate(top + 4, left + 5);
@@ -186,32 +221,42 @@ int modal_confirm_3btn(const char *title, const char *msg,
             if (selected == 0) return MODAL_RES_OK;
             if (selected == 1) return MODAL_RES_NO;
             return MODAL_RES_DISCARD;
-        } else if (k == KEY_ESC || k == 'q' || k == 'Q') {
+        } else if (k == KEY_ESC) {
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_TAB || k == KEY_CTRL_D) {
+        } else if (k == KEY_TAB || k == KEY_RIGHT || k == KEY_CTRL_D) {
             selected = (selected + 1) % 3;
+        } else if (k == KEY_LEFT || k == KEY_CTRL_S) {
+            selected = (selected + 2) % 3;
         }
     }
 }
 
 int modal_prompt_text(const char *title, const char *prompt,
-                       char *buffer, size_t max_len)
+                      char *buffer, size_t max_len)
 {
-    uint8_t width = 50;
-    uint8_t height = 7;
-    uint8_t top = (g_active_rows > height) ? (g_active_rows - height) / 2 : 5;
-    uint8_t left = (g_active_cols > width) ? (g_active_cols - width) / 2 : 15;
-    uint8_t field_len = width - 10;
+    uint8_t width = 52;
+    uint8_t height = 8;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    uint8_t field_len = 30;
     size_t cur_len = buffer ? strlen(buffer) : 0;
+    uint8_t input_left;
     size_t i;
 
     modal_draw_frame(top, left, width, height, title);
-    hal_console_locate(top + 2, left + 4);
-    hal_console_puts(prompt);
+    if (prompt && *prompt) {
+        modal_puts_centered(top + 3, left, width, prompt);
+    }
+    modal_puts_centered(top + 6, left, width,
+                        "[Enter]=Confirm      [ESC]=Cancel");
+
+    /* Centered Bracket Framing: [ text ] */
+    input_left = left + (uint8_t)((width - (field_len + 4)) / 2);
 
     while (1) {
-        hal_console_locate(top + 4, left + 4);
+        hal_console_locate(top + 4, input_left);
+        hal_console_puts("[ ");
         hal_console_inverse_on();
         for (i = 0; i < field_len; i++) {
             if (i < cur_len) {
@@ -221,14 +266,19 @@ int modal_prompt_text(const char *title, const char *prompt,
             }
         }
         hal_console_inverse_off();
-        hal_console_locate(top + 4, (uint8_t)(left + 4 + cur_len));
+        hal_console_puts(" ]");
+
+        /* Terminal cursor placed directly inside bracket field */
+        hal_console_locate(top + 4, (uint8_t)(input_left + 2 + cur_len));
         hal_console_show_cursor();
 
         int k = hal_console_getkey();
         if (k == KEY_ENTER) {
+            hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_OK;
         } else if (k == KEY_ESC) {
+            hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
         } else if (k == KEY_BACKSPACE || k == KEY_DEL) {
@@ -246,11 +296,41 @@ int modal_prompt_text(const char *title, const char *prompt,
 
 int modal_confirm_save_changes(void)
 {
+    int res;
+
     if (!g_doc_modified) {
         return MODAL_RES_OK;
     }
 
-    return modal_confirm("Unsaved Changes",
-                         "Save changes before closing?",
-                         "Save", "Don't Save");
+    res = modal_confirm("Unsaved Modifications",
+                        "Any unsaved edits will be lost if discarded.",
+                        "Yes", "No");
+    if (res == MODAL_RES_YES) {
+        file_save(NULL, g_config.save_format);
+        return MODAL_RES_OK;
+    } else if (res == MODAL_RES_NO) {
+        return MODAL_RES_OK;
+    }
+    return MODAL_RES_CANCEL;
+}
+
+void modal_show_notification(const char *title, const char *message)
+{
+    uint8_t width = 52;
+    uint8_t height = 7;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+
+    hal_console_hide_cursor();
+    modal_draw_frame(top, left, width, height, title);
+
+    if (message && *message) {
+        modal_puts_centered(top + 3, left, width, message);
+    }
+    modal_puts_centered(top + 5, left, width, "Press any key to continue");
+
+    while (hal_console_getkey() <= 0) {
+        /* Wait for user keystroke */
+    }
+    g_need_screen_render = 1;
 }

@@ -59,6 +59,7 @@ int ui_browser_open_dialog(char *selected_filename, size_t max_len)
 
     ui_browser_refresh_directory("*.*");
     hal_console_hide_cursor();
+    render_status_bar();
 
     while (1) {
         int i;
@@ -95,14 +96,14 @@ int ui_browser_open_dialog(char *selected_filename, size_t max_len)
         } else if (k == KEY_ESC || k == 'q' || k == 'Q') {
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_CTRL_E || k == 's' || k == 0x05) { /* Down */
+        } else if (k == KEY_DOWN || k == KEY_CTRL_X || k == 's') { /* Down */
             if (selected_idx + 1 < s_browser_count) {
                 selected_idx++;
                 if (selected_idx >= page_start + BROWSER_PAGE_SIZE) {
                     page_start += BROWSER_PAGE_SIZE;
                 }
             }
-        } else if (k == KEY_CTRL_A || k == 'w' || k == 0x04) { /* Up */
+        } else if (k == KEY_UP || k == KEY_CTRL_E || k == 'w') { /* Up */
             if (selected_idx > 0) {
                 selected_idx--;
                 if (selected_idx < page_start) {

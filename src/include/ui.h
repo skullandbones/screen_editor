@@ -53,6 +53,7 @@ void render_screen(void);
 void render_status_bar(void);
 void clear_screen(void);
 void show_splash_screen(void);
+void show_help_screen(void);
 void show_about_screen(void);
 void show_config_screen(void);
 void show_mem_info_screen(void);

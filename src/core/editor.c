@@ -62,10 +62,46 @@ uint16_t calc_visual_col(const char *buf, uint16_t char_col)
     return vis_col;
 }
 
+void update_horizontal_pan(void)
+{
+    uint16_t vis_col;
+    uint16_t old_pan = g_horiz_pan_offset;
+
+    if (g_config.screen_mode == MODE_120X40) {
+        g_horiz_pan_offset = 0;
+        if (old_pan != 0) {
+            g_need_screen_render = 1;
+            g_need_status_render = 1;
+        }
+        return;
+    }
+
+    vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+
+    if (vis_col >= 120) {
+        g_horiz_pan_offset = 80;
+    } else if (vis_col >= 80) {
+        g_horiz_pan_offset = 40;
+    } else if (vis_col < 40) {
+        g_horiz_pan_offset = 0;
+    } else {
+        /* In range 40..79: hysteresis retention */
+        if (old_pan == 80) {
+            g_horiz_pan_offset = 40;
+        }
+    }
+
+    if (g_horiz_pan_offset != old_pan) {
+        g_need_screen_render = 1;
+        g_need_status_render = 1;
+    }
+}
+
 void locate_cursor(void)
 {
     uint16_t screen_row;
     uint16_t vis_col;
+    uint8_t  screen_col;
 
     if (g_cur_doc_row < g_top_doc_row) {
         g_top_doc_row = g_cur_doc_row;
@@ -80,8 +116,12 @@ void locate_cursor(void)
         vis_col = 0;
     }
 
-    /* Column 0 has tilde margin on screen */
-    hal_console_locate((uint8_t)screen_row, (uint8_t)(vis_col + 2));
+    /* Column 0 has tilde margin on screen; text starts at col 2 */
+    screen_col = (uint8_t)(vis_col + 2);
+    if (screen_col > g_active_cols) {
+        screen_col = g_active_cols;
+    }
+    hal_console_locate((uint8_t)screen_row, screen_col);
 }
 
 int do_char_insert(char c)
@@ -90,7 +130,8 @@ int do_char_insert(char c)
 
     checkout_active_line(g_cur_doc_row);
 
-    if (g_active_line_len >= MAX_INPUT_LINE_CHARS) {
+    if (g_cur_col >= MAX_INPUT_LINE_CHARS ||
+        g_active_line_len >= MAX_INPUT_LINE_CHARS) {
         return -1;
     }
 
@@ -412,10 +453,21 @@ void goto_line(uint16_t target_line)
 int editor_handle_key(int key)
 {
     switch (key) {
+    case KEY_UP: cursor_up(); break;
+    case KEY_DOWN: cursor_down(); break;
+    case KEY_LEFT: cursor_left(); break;
+    case KEY_RIGHT: cursor_right(); break;
+    case KEY_HOME: cursor_home(); break;
+    case KEY_END: cursor_end(); break;
+    case KEY_PGUP: page_up(); break;
+    case KEY_PGDN: page_down(); break;
+    case KEY_INS: toggle_insert_mode(); break;
+    case KEY_DEL: do_delete(); break;
     case KEY_CTRL_A: cursor_home(); break;
-    case KEY_CTRL_E: cursor_end(); break;
+    case KEY_CTRL_E: cursor_up(); break;
     case KEY_CTRL_D: cursor_right(); break;
-    case KEY_CTRL_G: do_delete(); break;
+    case KEY_CTRL_G: jump_file_bottom(); break;
+    case KEY_CTRL_T: jump_file_top(); break;
     case KEY_BACKSPACE: do_backspace(); break;
     case KEY_ENTER: do_enter(); break;
     case KEY_CTRL_U: page_up(); break;
@@ -428,8 +480,15 @@ int editor_handle_key(int key)
     case KEY_CTRL_S: file_save(NULL, g_config.save_format); break;
     case KEY_CTRL_Y: do_ctrl_y_beautify(); break;
     case KEY_CTRL_Z: plugin_manager_ui(); break;
-    case KEY_CTRL_K: show_splash_screen(); break;
-    case KEY_CTRL_X: do_move_block(); break;
+    case KEY_CTRL_K: show_help_screen(); break;
+    case KEY_ESC: show_splash_screen(); break;
+    case KEY_CTRL_X:
+        if (g_block_mode != BLOCK_MODE_OFF) {
+            do_move_block();
+        } else {
+            cursor_down();
+        }
+        break;
     case KEY_CTRL_Q:
         if (modal_confirm_save_changes() == MODAL_RES_OK) {
             g_editor_exit_flag = 1;
@@ -450,6 +509,7 @@ void editor_main_loop(void)
 {
     while (!g_editor_exit_flag) {
         int key;
+        update_horizontal_pan();
         if (g_need_screen_render) {
             render_screen();
             g_need_screen_render = 0;

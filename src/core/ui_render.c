@@ -19,6 +19,7 @@
 #include "../include/memory.h"
 #include "../include/file_io.h"
 #include "../include/ui.h"
+#include "../include/ui_modal.h"
 #include "../include/hal.h"
 
 /* Global Display State Variables */
@@ -49,13 +50,10 @@ void clear_screen(void)
 
 void set_status_msg(const char *msg)
 {
-    if (msg) {
-        strncpy(g_status_msg, msg, sizeof(g_status_msg) - 1);
-        g_status_msg[sizeof(g_status_msg) - 1] = '\0';
-    } else {
-        g_status_msg[0] = '\0';
+    g_status_msg[0] = '\0';
+    if (msg && *msg) {
+        modal_show_notification("Notice", msg);
     }
-    g_need_status_render = 1;
 }
 
 static void render_row_content(uint8_t screen_row, uint16_t doc_row)
@@ -144,106 +142,246 @@ void render_buffer_line(uint16_t row)
 
 void render_status_bar(void)
 {
-    char bar[128];
-    uint32_t free_kb = mem_get_free_kb();
-    const char *fname = g_current_filename[0] ?
-                        g_current_filename : "[Untitled]";
-    size_t bar_len;
-    size_t i;
+    char raw_name[80];
+    char field1[32];
+    char field2[16];
+    char field3[16];
+    char field4[32];
+    char field5[64];
+    char pan_str[16];
+    const char *blk_str;
+    const char *fname;
+    const char *geom_str;
+    const char *fmt_str;
+    char core[256];
+    char full_bar[256];
+    size_t core_len;
+    size_t i, idx;
+
+    fname = g_current_filename[0] ? g_current_filename : "(Untitled)";
+    snprintf(raw_name, sizeof(raw_name), "%s%c", fname,
+             g_doc_modified ? '*' : ' ');
+    snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
+
+    geom_str = (g_config.screen_mode == MODE_120X40) ? "120x40" : "80x24";
+    snprintf(field2, sizeof(field2), " %s |", geom_str);
+
+    fmt_str = (g_file_format == FMT_CPM) ? "CPM  " : "Linux";
+    snprintf(field3, sizeof(field3), " %s |", fmt_str);
+
+    snprintf(field4, sizeof(field4), " ^K: Editor keys |");
+
+    pan_str[0] = '\0';
+    if (g_horiz_pan_offset > 0) {
+        snprintf(pan_str, sizeof(pan_str), " [Pan +%u]",
+                 (unsigned)g_horiz_pan_offset);
+    }
+
+    blk_str = "";
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        blk_str = " [SEL]";
+    } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
+        blk_str = " [BLK LOCK]";
+    }
+
+    if (pan_str[0] != '\0' || blk_str[0] != '\0') {
+        snprintf(field5, sizeof(field5), " Line %u/%u Col %u%s%s |",
+                 (unsigned)(g_cur_doc_row + 1),
+                 (unsigned)g_doc_total_lines,
+                 (unsigned)g_cur_col,
+                 pan_str, blk_str);
+    } else {
+        snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u |",
+                 (unsigned)(g_cur_doc_row + 1),
+                 (unsigned)g_doc_total_lines,
+                 (unsigned)g_cur_col);
+    }
+
+    snprintf(core, sizeof(core), "%s%s%s%s%s",
+             field1, field2, field3, field4, field5);
+    core_len = strlen(core);
+
+    if (core_len < g_active_cols) {
+        size_t pad = g_active_cols - core_len;
+        size_t left_pad = pad / 2;
+        size_t right_pad = pad - left_pad;
+        idx = 0;
+        for (i = 0; i < left_pad && idx + 1 < sizeof(full_bar); i++) {
+            full_bar[idx++] = ' ';
+        }
+        for (i = 0; i < core_len && idx + 1 < sizeof(full_bar); i++) {
+            full_bar[idx++] = core[i];
+        }
+        for (i = 0; i < right_pad && idx + 1 < sizeof(full_bar); i++) {
+            full_bar[idx++] = ' ';
+        }
+        full_bar[idx] = '\0';
+    } else {
+        strncpy(full_bar, core, g_active_cols);
+        full_bar[g_active_cols] = '\0';
+    }
 
     hal_console_locate(g_active_rows, 1);
     hal_console_inverse_on();
-
-    if (g_status_msg[0] != '\0') {
-        snprintf(bar, sizeof(bar), " %-76s", g_status_msg);
-    } else {
-        snprintf(bar, sizeof(bar),
-                 " SE v1.1.0 | Ln %-5u/%-5u Col %-3u | %s%s | Free: %4u KB",
-                 (unsigned)(g_cur_doc_row + 1),
-                 (unsigned)g_doc_total_lines,
-                 (unsigned)(g_cur_col + 1),
-                 fname,
-                 g_doc_modified ? "*" : " ",
-                 (unsigned)free_kb);
-    }
-
-    bar_len = strlen(bar);
-    hal_console_puts(bar);
-    for (i = bar_len; i < g_active_cols; i++) {
-        hal_console_putc(' ');
-    }
-
+    hal_console_puts(full_bar);
     hal_console_inverse_off();
+}
+
+static void render_tier1_workspace_screen(const char **lines,
+                                          size_t count,
+                                          size_t content_width)
+{
+    uint8_t avail_rows;
+    uint8_t top_row;
+    uint8_t left_col;
+    uint8_t r;
+    size_t line_idx;
+
+    clear_screen();
+    avail_rows = (g_active_rows > 1) ? (g_active_rows - 1) : 23;
+    top_row = (avail_rows > count)
+              ? (uint8_t)(((avail_rows - count) / 2) + 1)
+              : 1;
+    left_col = (g_active_cols > content_width)
+               ? (uint8_t)(((g_active_cols - content_width) / 2) + 1)
+               : 2;
+    if (left_col < 2) {
+        left_col = 2;
+    }
+
+    /* Column 0 Tilde Margin Discipline for all rows 1..avail_rows */
+    for (r = 1; r <= avail_rows; r++) {
+        hal_console_locate(r, 1);
+        hal_console_putc('~');
+        if (r >= top_row && r < top_row + count) {
+            line_idx = r - top_row;
+            hal_console_locate(r, left_col);
+            hal_console_puts(lines[line_idx]);
+        }
+        hal_console_clear_eol();
+    }
+
+    /* Universal Status Bar presence on Row HOST_ROWS */
+    render_status_bar();
 }
 
 void show_splash_screen(void)
 {
+    static const char *s_splash_lines[14] = {
+        "              SE.COM — Screen Editor              ",
+        "              Version v1.1.0 (Linux)              ",
+        "                                                  ",
+        "       Free Memory: [Dynamic Heap]   Lines: [32K] ",
+        "                                                  ",
+        "                     :e to edit                   ",
+        "                     :o to open file              ",
+        "                     :s to save file              ",
+        "                     :c for config                ",
+        "                     :p for plugins               ",
+        "                     :? for help                  ",
+        "                     :q to quit                   ",
+        "                                                  ",
+        "                   Enter choice: _                "
+    };
+    int k;
+
+    render_tier1_workspace_screen(s_splash_lines, 14, 50);
+    while ((k = hal_console_getkey()) <= 0) {
+        /* Wait for user keystroke */
+    }
+    if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
+        g_editor_exit_flag = 1;
+    }
     clear_screen();
-    hal_console_locate(2, 25);
-    hal_console_puts("========================================");
-    hal_console_locate(3, 25);
-    hal_console_puts("     SE.COM - Full Screen Editor        ");
-    hal_console_locate(4, 25);
-    hal_console_puts("            Version 1.1.0               ");
-    hal_console_locate(5, 25);
-    hal_console_puts("========================================");
-    hal_console_locate(7, 20);
-    hal_console_puts("Ctrl+O : Open File        Ctrl+S : Save Document");
-    hal_console_locate(8, 20);
-    hal_console_puts("Ctrl+Q : Quick Exit       Ctrl+F : Find Text    ");
-    hal_console_locate(9, 20);
-    hal_console_puts("Ctrl+R : Search & Replace Ctrl+B : Block Select ");
-    hal_console_locate(10, 20);
-    hal_console_puts("Ctrl+Y : Beautify Code    Ctrl+K : Mode Guide   ");
-    hal_console_locate(13, 25);
-    hal_console_puts("Press any key to start editing...");
-    hal_console_getkey();
+    g_need_screen_render = 1;
+}
+
+static const char *s_help_lines[17] = {
+    "                       SE.COM — EDITOR MODE KEYS                      ",
+    "                                                                      ",
+    "  Cursor Navigation:                 Block Operations:                ",
+    "    Arrows / WordStar (^S,^D,^E,^X)     Ctrl+B: Toggle Block          ",
+    "    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block            ",
+    "    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block             ",
+    "    Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block           ",
+    "                                                                      ",
+    "  Search & Replace:                  File & System:                   ",
+    "    Ctrl+F: Find Text                   Ctrl+S: Save File             ",
+    "    Ctrl+N: Find Next                   Ctrl+O: Open File             ",
+    "    Ctrl+R: Search and Replace          Ctrl+Q: Safe Quit             ",
+    "    Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette        ",
+    "    Ctrl+Y: Beautify Source Code        ESC   : Splash Screen         ",
+    "                                                                      ",
+    "                   Press any key to return to editor                  ",
+    "                                                                      "
+};
+
+void show_help_screen(void)
+{
+    render_tier1_workspace_screen(s_help_lines, 17, 70);
+    while (hal_console_getkey() <= 0) {
+        /* Wait for user keystroke */
+    }
     clear_screen();
     g_need_screen_render = 1;
 }
 
 void show_about_screen(void)
 {
-    clear_screen();
-    hal_console_locate(5, 25);
-    hal_console_puts("========================================");
-    hal_console_locate(6, 25);
-    hal_console_puts("    SE.COM - Multi-Platform Editor      ");
-    hal_console_locate(7, 25);
-    hal_console_puts("             Version 1.1.0              ");
-    hal_console_locate(8, 25);
-    hal_console_puts("       CP/M, ZX Spectrum Next, Linux    ");
-    hal_console_locate(9, 25);
-    hal_console_puts("========================================");
-    hal_console_locate(12, 28);
-    hal_console_puts("Press any key to return...");
-    hal_console_getkey();
+    static const char *s_about_lines[6] = {
+        "        SE.COM — Screen Editor (Linux)        ",
+        "                Version v1.1.0                ",
+        "                                              ",
+        "        CP/M, ZX Spectrum Next, Linux         ",
+        "                                              ",
+        "          Press any key to return...          "
+    };
+    render_tier1_workspace_screen(s_about_lines, 6, 46);
+    while (hal_console_getkey() <= 0) {
+        /* Wait for user keystroke */
+    }
     clear_screen();
     g_need_screen_render = 1;
 }
 
 void show_config_screen(void)
 {
-    /* Render configuration options dialog */
-    show_about_screen();
+    static const char *s_config_lines[11] = {
+        "            SE — Configuration Manager            ",
+        "                                                  ",
+        "         1. Screen Geometry  : 80x24              ",
+        "         2. Tab Width        : 8                  ",
+        "         3. Max Line Capacity: 32K                ",
+        "         4. RAM Drive Mode   : Disabled           ",
+        "                                                  ",
+        "   [S] Save to SE.CFG    [ESC]/[Enter] Return     ",
+        "                                                  ",
+        "                Enter option: _                   ",
+        "                                                  "
+    };
+    render_tier1_workspace_screen(s_config_lines, 11, 50);
+    hal_console_getkey();
+    clear_screen();
+    g_need_screen_render = 1;
 }
 
 void show_mem_info_screen(void)
 {
-    char buf[64];
-    clear_screen();
-    hal_console_locate(4, 25);
-    hal_console_puts("=== Virtual Memory & Banking Status ===");
-    snprintf(buf, sizeof(buf), "Free Virtual Slots: %u",
+    char line1[64];
+    char line2[64];
+    const char *mem_lines[5];
+
+    snprintf(line1, sizeof(line1), "      Free Virtual Slots: %-6u        ",
              (unsigned)mem_get_free_slots());
-    hal_console_locate(6, 25);
-    hal_console_puts(buf);
-    snprintf(buf, sizeof(buf), "Free Document Buffer: %u KB",
+    snprintf(line2, sizeof(line2), "      Free Document Buffer: %-4u KB    ",
              (unsigned)mem_get_free_kb());
-    hal_console_locate(7, 25);
-    hal_console_puts(buf);
-    hal_console_locate(10, 28);
-    hal_console_puts("Press any key to return...");
+    mem_lines[0] = "    === Virtual Memory & Banking Status ===   ";
+    mem_lines[1] = "                                              ";
+    mem_lines[2] = line1;
+    mem_lines[3] = line2;
+    mem_lines[4] = "          Press any key to return...          ";
+
+    render_tier1_workspace_screen(mem_lines, 5, 46);
     hal_console_getkey();
     clear_screen();
     g_need_screen_render = 1;

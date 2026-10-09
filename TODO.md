@@ -25,9 +25,74 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Stable / Production.
-- **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; report new Profile 1 defects here).*
+- **Status**: Verification Complete / 5 Defects Open (Bug 2.1.3 Rejected).
+- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+  - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 4.3, 4.4, 11.1.
+    - *Issue*: Status bar Field 4 is overwritten with free memory
+      (`Free: 64 KB |`) on splash screen, with selection metrics
+      (`Sel: 0 chars |`) when block mode is active, and with `[Pan +40] |`
+      when horizontally panned, violating the universal `^K: Editor keys |`
+      invariant. Field 3 displays `CP/M  |` with slash rather than `CPM   |`.
+      Field 2 in 80x24 mode prints with 2 leading spaces (`  80x24 |`).
+    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm`
+      to canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
+      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
+      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
+      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
+  - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.1.
+    - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
+      default. On standard CP/M terminals and serial consoles (VT100 / ANSI,
+      80x24 standard), this causes terminal character column spill
+      (Anti-Pattern #3) where the status bar padding exceeds 80 columns,
+      resulting in distorted visual wrapping on 80x24 displays.
+    - *Required Fix*: Default initial terminal geometry to `80x24`
+      (`CALL SET_MODE_80X24`), matching the canonical terminal standard
+      defined in Section 2.1, while preserving `120x40` toggle via command
+      line or config file.
+  - [x] **Bug 2.1.3: WordStar Navigation Disconnect [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Dropped support for WordStar diamond navigation (`^S`, `^D`,
+      `^E`, `^X`) in `SE.COM`. Overriding `Ctrl+S` (Save File), `Ctrl+D`
+      (Forward Delete), `Ctrl+E` (End of Line), and `Ctrl+X` (Cut/Move Block)
+      is excessively invasive to established SE.COM keymappings. Cursor
+      navigation remains fully supported via ANSI/VT100 arrow keys and
+      Home/End (`Ctrl+A`/`Ctrl+E`).
+  - [ ] **Bug 2.1.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.3.
+    - *Issue*: In `plugins/help.asm`, content height is 22 lines, leaving 0
+      top margin rows on an 80x24 screen, violating 1-based vertical centering.
+      Rows 1 and 3 render ASCII banner rules (`=============================`)
+      and Row 21 renders `-----------------------------`. Status bar Field 4
+      displays `Free: 63 KB |`. Help text lists obsolete/colliding non-WordStar
+      keybindings.
+    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
+      canonical 17-line, 70-column two-column tabular layout, centered
+      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
+      universal status bar presence on Row 24.
+  - [ ] **Bug 2.1.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1, 7.2.
+    - *Issue*: `RENDER_SPLASH` in `src/se.asm` renders a 21-line menu
+      structure with fixed menu items (`type [E] or [Enter] to edit...`),
+      lacking the canonical 14-line centered presentation (`:e to edit`,
+      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
+      `:? for help`, `:q to quit`).
+    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
+      `src/se.asm` to match the canonical 14-line, 50-column Tier 1 splash
+      layout specified in Section 7.2.
+  - [ ] **Bug 2.1.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.3 (Archetype C).
+    - *Issue*: In `DO_GOTO_LINE_UI` (`src/core/editor.asm`), dialog width is
+      50 columns instead of canonical 52 columns. Footer buttons display
+      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
+      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
+      `src/core/search.asm` exhibit similar non-standard widths.
+    - *Required Fix*: Standardize CP/M modal pop-up routines in
+      `src/core/editor.asm` and `src/core/search.asm` to strictly conform to
+      Archetype C (52x8 box, `+---+` title divider,
+      `[Enter]=Confirm      [ESC]=Cancel` footer, bracketed input `[  ]`).
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
@@ -35,9 +100,35 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / Verification in Progress.
-- **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; report new Profile 2 defects here).*
+- **Status**: Verification Complete / 5 Defects Open (Bug 2.2.3 Rejected).
+- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+  - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 4.3, 4.4, 11.1.
+    - *Issue*: Status bar Field 4 displays free memory on splash, selection
+      metrics on block mode, and pan offset when panned in `se_next_cpm.asm`.
+    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/se_next_cpm.asm` to
+      canonical 5-field layout; move indicators to Field 5.
+  - [ ] **Bug 2.2.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.1.
+    - *Issue*: Next CP/M profile defaults to 120x40 instead of standard 80x24.
+    - *Required Fix*: Initialize to `80x24` mode in `START` (`se_next_cpm.asm`).
+  - [x] **Bug 2.2.3: WordStar Navigation Disconnect [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Dropped support for WordStar diamond navigation in
+      `SE_NEXT.COM` to preserve established SE.COM keymappings.
+  - [ ] **Bug 2.2.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.3.
+    - *Issue*: Help overlay displays 22-line banner box with zero top margin.
+    - *Required Fix*: Standardize to 17-line 70-column centered layout.
+  - [ ] **Bug 2.2.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1, 7.2.
+    - *Issue*: Splash screen displays legacy 21-line menu in `se_next_cpm.asm`.
+    - *Required Fix*: Align with canonical 14-line centered splash layout.
+  - [ ] **Bug 2.2.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.3 (Archetype C).
+    - *Issue*: 50-column dialog framing and non-standard action button footers.
+    - *Required Fix*: Align dialog boxes with 52-column Archetype C format.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
@@ -57,9 +148,64 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / Fully Tested.
-- **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; report new Profile 4 defects here).*
+- **Status**: Conformance Complete / All 7 Look & Feel Defects Resolved.
+- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+  - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3.
+    - *Issue*: `render_status_bar` in `src/core/ui_render.c` outputs custom
+      format `" SE v1.1.0 | Ln %-5u/%-5u Col %-3u | %s%s | Free: %4u KB"`.
+    - *Required Fix*: Conform to canonical 5-field layout:
+      `| {name}{mod} | {geom} | {fmt} | ^K: Editor keys | Line ... Col ... |`.
+      Add Geometry (`80x24 |`), Format (`Linux |` / `CPM   |`), Pan indicator
+      (`[Pan +40]`), Block indicator (`[SEL]` / `[BLK LOCK]`), and center-pad
+      across full terminal width.
+  - [x] **Bug 2.4.2: Missing Universal Status Bar on Non-Document Workspaces**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 7.2, 7.3, 7.4.
+    - *Issue*: Non-document screens (`show_splash_screen`, `show_about_screen`,
+      `show_config_screen`, `show_mem_info_screen`) in `src/core/ui_render.c`
+      wipe the screen and fail to render the status bar on `HOST_ROWS`.
+    - *Required Fix*: Guarantee universal status bar presence on `HOST_ROWS`
+      across all Tier 1 screens and behind Tier 2 pop-up dialogs.
+  - [x] **Bug 2.4.3: Status Bar Squatting Anti-Pattern for Transient Alerts**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.4, 11.1.
+    - *Issue*: `ui_render.c:158` writes transient alerts (`g_status_msg`)
+      directly into the status bar, clobbering persistent document metadata.
+    - *Required Fix*: Remove status bar message overwriting (Anti-Pattern #1).
+      Route all status events (Save Complete, Search Failed, etc.) to Tier 2
+      centered modal pop-up boxes (`show_notification` / Archetype A).
+  - [x] **Bug 2.4.4: Arrow Key & WordStar Diamond Keybinding Misalignment**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, arrow keys decode to
+      `KEY_CTRL_E` (Up), `KEY_CTRL_X` (Down), `KEY_CTRL_S` (Left), and
+      `KEY_CTRL_D` (Right). In `src/core/editor.c:414`, `KEY_CTRL_E` dispatches
+      to `cursor_end()`, `KEY_CTRL_X` dispatches to `do_move_block()`, and
+      `KEY_CTRL_S` dispatches to `file_save()`. Up moves to End-of-Line,
+      Down cuts block, and Left saves file. `cursor_up()` and `cursor_down()`
+      are completely missing from `editor_handle_key`.
+    - *Required Fix*: Implement distinct keycodes for navigation vs commands,
+      bind `cursor_up()` and `cursor_down()`, and restore authentic WordStar
+      diamond navigation and ANSI cursor key parity.
+  - [x] **Bug 2.4.5: Non-Functional Horizontal Panning Engine & Line Barrier**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 6.1, 6.2.
+    - *Issue*: `g_horiz_pan_offset` in `src/core/editor.c` is never adjusted
+      when cursor moves beyond column 79. `MAX_INPUT_LINE_CHARS` is 1000 in
+      `config.h` instead of the strict 120-character line barrier.
+    - *Required Fix*: Implement horizontal pan quantum (+40 columns) shift
+      logic (`pan_col` = 40 or 80) and enforce `MAX_LINE = 120` limit.
+  - [x] **Bug 2.4.6: Tier 1 Centering & Column 0 Tilde Margin Discipline**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.2.
+    - *Issue*: Splash and help screens use top-aligned fixed coordinates with
+      ASCII banner borders and lack column 0 tilde (`~`) margin rows.
+    - *Required Fix*: Apply mathematical 1-based centering formulas and fill
+      margin rows down to row `HOST_ROWS - 1` with `~` in column 0.
+  - [x] **Bug 2.4.7: Tier 2 Modal Framing, Centering & Archetype Invariance**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.2, 8.3.
+    - *Issue*: `src/core/ui_modal.c` places titles on top border without
+      title divider line (`+---+`), uses off-by-one centering calculation,
+      permits quitting confirmation modals via `q`/`Q` instead of solely `ESC`,
+      and omits bracket framing `[ text ]` on text input prompts.
+    - *Required Fix*: Implement canonical Archetypes A, B, C, D with title
+      dividers, 1-based centering, and strict key dismissal rules.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
