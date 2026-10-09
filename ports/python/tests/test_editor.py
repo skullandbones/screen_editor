@@ -403,6 +403,47 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_status_bar_geometry_and_environment_spacing(self):
+        """Step 12: Verify status bar geometry & fmt spacing (Bug 2.7.16)."""
+        print(
+            "[*] Step 12: Testing status bar geometry and format spacing...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+
+        # CP/M format default
+        self.editor.buffer.format_cpm = True
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        texts_cpm = [w for w in written if not w.startswith("\x1b")]
+        self.assertEqual(len(texts_cpm[0]), 80)
+        self.assertIn("  80x24 | CP/M  |", texts_cpm[0])
+
+        # Linux format
+        written.clear()
+        self.editor.buffer.format_cpm = False
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        texts_linux = [w for w in written if not w.startswith("\x1b")]
+        self.assertEqual(len(texts_linux[0]), 80)
+        self.assertIn("  80x24 | Linux |", texts_linux[0])
+
+        # 120x40 geometry
+        written.clear()
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="120x40"
+        )
+        texts_120 = [w for w in written if not w.startswith("\x1b")]
+        self.assertIn(" 120x40 | Linux |", texts_120[0])
+
+        print(
+            "[+] Step 12: Status bar geometry & format spacing verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -47,9 +47,9 @@ class UIRenderer:
         raw_name = buf.filename + mod_char
         name_field = f"| {raw_name:<14} |"
 
-        # Geometry and format fields
-        geom_field = f" {geometry_str} |"
-        fmt_str = "CPM  " if buf.format_cpm else "Linux"
+        # Geometry and format fields (8 chars each)
+        geom_field = f" {geometry_str:>6} |"
+        fmt_str = "CP/M " if buf.format_cpm else "Linux"
         fmt_field = f" {fmt_str} |"
 
         # Field 4 (Help Hint / Context / Block Selection, 18 chars)

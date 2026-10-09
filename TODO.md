@@ -255,7 +255,7 @@ have been resolved and archived.
       Field 5. Validated via
       `test_status_bar_block_selection_metrics_and_no_spill` in
       `test_editor.py`.
-  - [ ] **Bug 2.7.16: Status Bar Geometry and Environment Spacing Discrepancy**:
+  - [x] **Bug 2.7.16: Status Bar Geometry and Environment Spacing Discrepancy**:
     - *Symptom*: Field 2 geometry in Python SE is formatted as ` 80x24 |`
       (7 chars, missing leading space), and Field 3 environment is ` CPM   |`
       (missing slash) compared to CP/M `SE.COM`'s canonical ` 80x24 |` and
@@ -264,6 +264,10 @@ have been resolved and archived.
       of standard 8-character width `f"  {geometry_str} |"` and
       `fmt_str = "CPM  "` instead of `"CP/M "`.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3.
+    - *Resolution*: Updated `render_status_bar()` in `ui.py` to format Field 2
+      as `f" {geometry_str:>6} |"` (8 chars) and Field 3 as
+      `f" {fmt_str} |"` with `fmt_str = "CP/M "` or `"Linux"`. Validated via
+      `test_status_bar_geometry_and_environment_spacing` in `test_editor.py`.
   - [ ] **Bug 2.7.17: Missing Case-Sensitivity Toggle ([Tab]) in Find Dialog**:
     - *Symptom*: In CP/M `SE.COM`, the Find Text modal dialog displays
       `Search Pattern: [Case Sensitive  ]` and supports pressing `[Tab]` to
