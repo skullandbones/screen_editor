@@ -182,13 +182,13 @@ class ModalDialog:
                 if cursor_idx > 0:
                     cursor_idx -= 1
                     buf.pop(cursor_idx)
-            elif k in (KEY_DELETE, KEY_CTRL_G):
+            elif k in (KEY_DELETE, KEY_CTRL_D, KEY_CTRL_G):
                 if cursor_idx < len(buf):
                     buf.pop(cursor_idx)
             elif k in (KEY_LEFT, KEY_CTRL_S):
                 if cursor_idx > 0:
                     cursor_idx -= 1
-            elif k in (KEY_RIGHT, KEY_CTRL_D):
+            elif k == KEY_RIGHT:
                 if cursor_idx < len(buf):
                     cursor_idx += 1
             elif k in (KEY_HOME, KEY_CTRL_A):
@@ -258,13 +258,13 @@ class ModalDialog:
                 if cursor_idx > 0:
                     cursor_idx -= 1
                     buf.pop(cursor_idx)
-            elif k in (KEY_DELETE, KEY_CTRL_G):
+            elif k in (KEY_DELETE, KEY_CTRL_D, KEY_CTRL_G):
                 if cursor_idx < len(buf):
                     buf.pop(cursor_idx)
             elif k in (KEY_LEFT, KEY_CTRL_S):
                 if cursor_idx > 0:
                     cursor_idx -= 1
-            elif k in (KEY_RIGHT, KEY_CTRL_D):
+            elif k == KEY_RIGHT:
                 if cursor_idx < len(buf):
                     cursor_idx += 1
             elif k in (KEY_HOME, KEY_CTRL_A):

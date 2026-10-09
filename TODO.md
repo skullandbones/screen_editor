@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 4 Defects Open (Bugs 2.7.23–2.7.26).
+- **Status**: Active / 3 Defects Open (Bugs 2.7.24–2.7.26).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -549,7 +549,7 @@ have been resolved and archived.
       visual coordinates across `move_up()`, `move_down()`, `page_up()`, and
       `page_down()`. Validated via `test_vertical_navigation_sticky_col` in
       `test_buffer.py`.
-  - [ ] **Bug 2.7.23: Ctrl+D Mapped to Cursor Right Instead of Forward Delete**:
+  - [x] **Bug 2.7.23: Ctrl+D Mapped to Cursor Right Instead of Forward Delete**:
     - *Symptom*: Pressing `Ctrl+D` moves cursor one position to the right
       instead of deleting the character forward under the cursor.
     - *Root Cause*: In `editor.py:105`, `KEY_CTRL_D` is bound alongside
@@ -557,10 +557,11 @@ have been resolved and archived.
       `modal.py` binds `KEY_CTRL_D` to move right.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 10 Keybinding Table and
       Architectural Decision Note.
-    - *Required Fix*: Rebind `KEY_CTRL_D` in `editor.py` to
-      `self.buffer.delete_char()`, remove `KEY_CTRL_D` from `KEY_RIGHT` cursor
-      navigation in `editor.py` and `modal.py`, and bind `KEY_CTRL_D` to delete
-      under cursor in input modals.
+    - *Resolution*: Rebound `KEY_CTRL_D` in `editor.py` to
+      `self.buffer.delete_char()` (forward delete), removed `KEY_CTRL_D` from
+      `KEY_RIGHT` navigation in `editor.py` and `modal.py`, and bound
+      `KEY_CTRL_D` to forward delete in modal input loops. Validated via
+      `test_ctrl_d_forward_delete` in `test_editor.py`.
   - [ ] **Bug 2.7.24: Tier 2 Modal Dialog Width Non-Conformance (50 cols)**:
     - *Symptom*: Tier 2 confirmation query modals (`show_confirm`), text input
       modals (`show_input`), and Find dialogs (`show_find_dialog`) are 50

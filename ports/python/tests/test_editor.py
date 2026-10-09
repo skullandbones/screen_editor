@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 from se.editor import Editor
 from se.terminal import (
+    KEY_CTRL_D,
     KEY_CTRL_S,
     KEY_CTRL_V,
     KEY_LEFT,
@@ -597,6 +598,37 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 16: About and Memory Map workspaces verified.",
+            flush=True,
+        )
+
+    def test_ctrl_d_forward_delete(self):
+        """Step 17: Verify Ctrl+D deletes char forward (Bug 2.7.23)."""
+        print(
+            "[*] Step 17: Testing Ctrl+D deletes char forward...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Hello World"]
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0  # At 'H'
+
+        # Dispatch Ctrl+D
+        self.editor.dispatch_key(KEY_CTRL_D)
+
+        # 'H' must be deleted, leaving 'ello World' at col 0
+        self.assertEqual(self.editor.buffer.current_line, "ello World")
+        self.assertEqual(self.editor.buffer.cursor_col, 0)
+
+        # Dispatch KEY_RIGHT: must advance to col 1 without deleting
+        self.editor.dispatch_key(KEY_RIGHT)
+        self.assertEqual(self.editor.buffer.cursor_col, 1)
+
+        # Dispatch Ctrl+D again: deletes 'l' under cursor (col 1)
+        self.editor.dispatch_key(KEY_CTRL_D)
+        self.assertEqual(self.editor.buffer.current_line, "elo World")
+        self.assertEqual(self.editor.buffer.cursor_col, 1)
+
+        print(
+            "[+] Step 17: Ctrl+D forward delete verified successfully.",
             flush=True,
         )
 

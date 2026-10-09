@@ -104,7 +104,7 @@ class Editor:
         # 1. Navigation Keys
         if key == KEY_LEFT:
             self.buffer.move_left()
-        elif key == KEY_RIGHT or key == KEY_CTRL_D:
+        elif key == KEY_RIGHT:
             self.buffer.move_right()
         elif key == KEY_UP:
             self.buffer.move_up()
@@ -128,7 +128,7 @@ class Editor:
             self.buffer.split_line()
         elif key == KEY_BACKSPACE:
             self.buffer.backspace()
-        elif key == KEY_DELETE:
+        elif key == KEY_DELETE or key == KEY_CTRL_D:
             self.buffer.delete_char()
         elif key == KEY_TAB:
             # Expand tab to spaces based on config tab width and visual col
