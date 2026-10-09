@@ -473,7 +473,7 @@ class Editor:
                 f"3. Max Line Capacity: {self.config.max_lines}",
                 f"4. RAM Drive Mode   : {ram}",
                 "",
-                "[S] Save to SE.CFG    [ESC]/[Enter] Return to Splash",
+                "[S] Save to SE.CFG    [ESC]/[Enter] Return",
                 "",
                 "Enter option: ",
             ]
@@ -490,15 +490,22 @@ class Editor:
                 return
             elif ch == "1":
                 if self.config.screen_cols == 80:
-                    self.config.screen_cols = 120
-                    self.config.screen_rows = 40
+                    self.config.set("SCREEN", "120x40")
                 else:
-                    self.config.screen_cols = 80
-                    self.config.screen_rows = 24
+                    self.config.set("SCREEN", "80x24")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
             elif ch == "2":
-                self.config.tab_width = 8 if self.config.tab_width == 4 else 4
+                new_tab = "4" if self.config.tab_width == 8 else "8"
+                self.config.set("TAB", new_tab)
+            elif ch == "3":
+                cur_cap = self.config.max_lines
+                new_cap = "32K" if cur_cap == "16K" else "16K"
+                self.config.set("MAXLINES", new_cap)
+            elif ch == "4":
+                cur_ram = self.config.get("RAMDRIVE", "PRESERVE").upper()
+                new_ram = "DISABLED" if cur_ram != "DISABLED" else "PRESERVE"
+                self.config.set("RAMDRIVE", new_ram)
             elif ch == "s":
                 self.config.save_config()
                 self.modal.show_notification(

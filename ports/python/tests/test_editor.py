@@ -220,6 +220,35 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_config_screen_option_toggles(self):
+        """Step 7: Verify config options 3 & 4 toggle handlers (Bug 2.7.8)."""
+        print(
+            "[*] Step 7: Testing config screen option 3 & 4 toggles...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+
+        # Press '3' (toggle max lines), '4' (toggle ramdrive), and Enter (exit)
+        keys = ["3", "4", "\r"]
+        key_iter = iter(keys)
+        self.editor.terminal.get_key = lambda: next(key_iter)
+
+        # Ensure baseline values
+        self.editor.config.set("MAXLINES", "16K")
+        self.editor.config.set("RAMDRIVE", "PRESERVE")
+
+        self.editor.action_config_screen()
+
+        # Option 3 toggles 16K -> 32K
+        self.assertEqual(self.editor.config.max_lines, "32K")
+        # Option 4 toggles PRESERVE -> DISABLED
+        self.assertFalse(self.editor.config.ramdrive_enabled)
+
+        print(
+            "[+] Step 7: Config screen option toggles verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

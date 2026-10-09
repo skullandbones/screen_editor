@@ -162,12 +162,16 @@ have been resolved and archived.
       delete under cursor (`Delete`, `Ctrl+G`), and WordStar navigation in
       `show_input()` in `modal.py`. Validated via
       `test_modal_input_navigation_and_editing` in `test_editor.py`.
-  - [ ] **Bug 2.7.8: Missing Configuration Manager Option Handlers (3 and 4)**:
+  - [x] **Bug 2.7.8: Missing Configuration Manager Option Handlers (3 and 4)**:
     - *Symptom*: Pressing `3` (Max Lines) or `4` (RAM Drive Mode) on the
       Configuration screen is silently ignored.
     - *Root Cause*: `action_config_screen()` in `editor.py` defines options
       3 and 4 in display lines but implements no branch handlers for them.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.4.
+    - *Resolution*: Added missing `Config` properties and `save_config()`
+      method in `config.py`, and implemented option 3 and 4 toggle handlers
+      in `action_config_screen()` in `editor.py`. Validated via
+      `test_config_screen_option_toggles` in `test_editor.py`.
   - [ ] **Bug 2.7.9: Cursor Placed on Status Bar on Centered Workspaces**:
     - *Symptom*: Blinking cursor sits at row 24 / col 1 instead of prompt.
     - *Root Cause*: `render_centered_workspace()` in `ui.py` invokes

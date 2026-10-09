@@ -39,6 +39,30 @@ class Config:
         return (80, 24)
 
     @property
+    def screen_cols(self) -> int:
+        """Return active screen column count (80 or 120)."""
+        return self.screen_geometry[0]
+
+    @property
+    def screen_rows(self) -> int:
+        """Return active screen row count (24 or 40)."""
+        return self.screen_geometry[1]
+
+    @property
+    def max_lines(self) -> str:
+        """Return maximum line capacity setting (e.g. 16K, 32K)."""
+        return self.get("MAXLINES", self.DEFAULT_MAX_LINES).upper()
+
+    @property
+    def ramdrive_enabled(self) -> bool:
+        """Return True if RAM drive mode is enabled (non-DISABLED)."""
+        return self.get("RAMDRIVE", self.DEFAULT_RAMDRIVE).upper() != "DISABLED"
+
+    def save_config(self, path: str = "SE.CFG") -> bool:
+        """Save active configuration to target path (default SE.CFG)."""
+        return self.save(path)
+
+    @property
     def tab_width(self) -> int:
         """Return tab stop width (4 or 8)."""
         val = self.get("TAB", str(self.DEFAULT_TAB_WIDTH))
