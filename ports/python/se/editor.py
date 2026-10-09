@@ -96,7 +96,7 @@ class Editor:
     def dispatch_key(self, key: str):
         """Dispatch a single keypress or symbolic action."""
         # 1. Navigation Keys
-        if key == KEY_LEFT or key == KEY_CTRL_S:
+        if key == KEY_LEFT:
             self.buffer.move_left()
         elif key == KEY_RIGHT or key == KEY_CTRL_D:
             self.buffer.move_right()

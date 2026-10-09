@@ -91,12 +91,15 @@ have been resolved and archived.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: Active / Look & Feel Conformance Audit.
 - **Active Defects & Issue Tracking**:
-  - [ ] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
+  - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
     - *Root Cause*: `KEY_CTRL_S` is caught in `ports/python/se/editor.py` under
       the navigation branch (`if key == KEY_LEFT or key == KEY_CTRL_S:`),
       making `elif key == KEY_CTRL_S: self.action_save_file()` dead code.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.3 and 10.
+    - *Resolution*: Removed `KEY_CTRL_S` collision from cursor navigation
+      branch in `editor.py` so `Ctrl+S` triggers `action_save_file()`.
+      Validated via `test_ctrl_s_dispatches_save_file` in `test_editor.py`.
   - [ ] **Bug 2.7.2: Block Selection Not Extended on Cursor Movement (Ctrl+B)**:
     - *Symptom*: Pressing `Ctrl+B` and moving cursor selects zero characters;
       no inverse video highlight is displayed, and block copy/cut returns "".

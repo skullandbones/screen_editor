@@ -72,6 +72,10 @@ def main():
             "ports/python/tests/test_plugin.py",
         ),
         (
+            "editor controller and dispatch tests",
+            "ports/python/tests/test_editor.py",
+        ),
+        (
             "headless PTY integration tests",
             "ports/python/tests/test_headless.py",
         ),
