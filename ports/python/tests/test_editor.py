@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from se.editor import Editor
+from se.modal import ModalDialog
 from se.terminal import (
     KEY_CTRL_D,
     KEY_CTRL_S,
@@ -629,6 +630,58 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 17: Ctrl+D forward delete verified successfully.",
+            flush=True,
+        )
+
+    def test_tier2_modal_52_col_width(self):
+        """Step 18: Verify Tier 2 modal 52-column width (Bug 2.7.24)."""
+        print(
+            "[*] Step 18: Testing Tier 2 modal 52-column width...",
+            flush=True,
+        )
+        captured = []
+        self.editor.modal.draw_box = (
+            lambda top, left, width, lines: captured.append(
+                (top, left, width)
+            )
+        )
+        self.editor.terminal.get_key = MagicMock(return_value="y")
+
+        # 1. Confirmation query (Archetype B)
+        self.editor.modal.show_confirm(
+            title="Save", desc="Unsaved edits", query="Save?"
+        )
+        self.assertEqual(len(captured), 1)
+        top, left, width = captured[-1]
+        self.assertEqual(width, 52)
+        # On 80-col screen, left should be (80 - 52) // 2 + 1 = 15
+        self.assertEqual(left, 15)
+
+        # 2. Text input modal (Archetype C)
+        self.editor.terminal.get_key = MagicMock(return_value="\r")
+        self.editor.modal.show_input(
+            title="Goto", desc="Jump line", label="Line:"
+        )
+        self.assertEqual(captured[-1][2], 52)
+
+        # 3. Find dialog (Archetype C with toggle)
+        self.editor.modal.show_find_dialog(initial_text="test")
+        self.assertEqual(captured[-1][2], 52)
+
+        # 4. Notification dialog (Archetype A)
+        self.editor.modal.show_notification("Info", "Operation complete")
+        self.assertEqual(captured[-1][2], 52)
+
+        # 5. Verify drawn borders produce exactly 52 chars (50 hyphens)
+        written = []
+        real_draw_box = ModalDialog(self.editor.terminal).draw_box
+        self.editor.terminal.write = lambda s: written.append(s)
+        real_draw_box(1, 15, 52, ["Title", "---", "Message"])
+        # Top border: + followed by 50 hyphens followed by +
+        self.assertIn("+" + ("-" * 50) + "+", written)
+
+        print(
+            "[+] Step 18: Tier 2 modal 52-column width verified.",
             flush=True,
         )
 

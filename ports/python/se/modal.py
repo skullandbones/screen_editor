@@ -72,7 +72,7 @@ class ModalDialog:
         Display a Tier 2 status/notification pop-up.
         Dismissible by any key.
         """
-        width = max(50, len(title) + 10, len(message) + 8)
+        width = max(52, len(title) + 10, len(message) + 8)
         height = 7
         top, left = self.compute_popup_pos(width, height)
 
@@ -98,7 +98,7 @@ class ModalDialog:
         Display a Tier 2 query modal (e.g. Save Changes, Overwrite).
         Returns 'y'/'Y', 'n'/'N', or None on ESC.
         """
-        width = 50
+        width = 52
         height = 8
         top, left = self.compute_popup_pos(width, height)
 
@@ -141,7 +141,7 @@ class ModalDialog:
         Display a Tier 2 single-line text input modal (e.g. Goto Line, Find).
         Returns entered text or None on ESC.
         """
-        width = 50
+        width = 52
         height = 8
         top, left = self.compute_popup_pos(width, height)
 
@@ -210,7 +210,7 @@ class ModalDialog:
         Display Archetype C Find Text modal with dynamic [Tab] case toggle.
         Returns (search_query, is_case_sensitive) or (None, is_case_sensitive).
         """
-        width = 50
+        width = 52
         height = 8
         top, left = self.compute_popup_pos(width, height)
 

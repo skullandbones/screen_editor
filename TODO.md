@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 3 Defects Open (Bugs 2.7.24–2.7.26).
+- **Status**: Active / 2 Defects Open (Bugs 2.7.25–2.7.26).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -562,7 +562,7 @@ have been resolved and archived.
       `KEY_RIGHT` navigation in `editor.py` and `modal.py`, and bound
       `KEY_CTRL_D` to forward delete in modal input loops. Validated via
       `test_ctrl_d_forward_delete` in `test_editor.py`.
-  - [ ] **Bug 2.7.24: Tier 2 Modal Dialog Width Non-Conformance (50 cols)**:
+  - [x] **Bug 2.7.24: Tier 2 Modal Dialog Width Non-Conformance (50 cols)**:
     - *Symptom*: Tier 2 confirmation query modals (`show_confirm`), text input
       modals (`show_input`), and Find dialogs (`show_find_dialog`) are 50
       columns wide with 48-hyphen borders instead of canonical 52 columns.
@@ -570,8 +570,10 @@ have been resolved and archived.
       219).
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 8.3
       (Archetypes B, C, D).
-    - *Required Fix*: Standardize modal box width to 52 columns (`width = 52`,
-      50-hyphen borders) across all Tier 2 Archetypes in `modal.py`.
+    - *Resolution*: Standardized Tier 2 modal box width to canonical 52
+      columns (`width = 52`, 50-hyphen borders) across `show_confirm`,
+      `show_input`, `show_find_dialog`, and `show_notification` in `modal.py`.
+      Validated via `test_tier2_modal_52_col_width` in `test_editor.py`.
   - [ ] **Bug 2.7.25: Help Workspace Height & Obsolete WordStar Text**:
     - *Symptom*: Help screen (`Ctrl+K`) renders 14 lines instead of canonical
       17 lines and displays obsolete text `Arrows / WordStar (^S,^D,^E,^X)`
