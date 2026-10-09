@@ -192,11 +192,15 @@ have been resolved and archived.
       in `action_splash_screen()`, and prioritized `block_active = 0` on
       `KEY_ESC` in `dispatch_key()` in `editor.py`. Validated via
       `test_esc_behavior_block_cancel_and_splash_exit` in `test_editor.py`.
-  - [ ] **Bug 2.7.11: ASCII DEL (0x7F) Mapped to Backspace in Terminal Driver**:
+  - [x] **Bug 2.7.11: ASCII DEL (0x7F) Mapped to Backspace in Terminal Driver**:
     - *Symptom*: Pressing Delete (0x7F) deletes char to left instead of under.
     - *Root Cause*: `terminal.py` maps `KEY_DEL_CHAR` (`0x7F`) to
       `KEY_BACKSPACE` instead of `KEY_DELETE`.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Resolution*: Updated `get_key()` in `terminal.py` to map
+      `KEY_DEL_CHAR` (`0x7F`) to `KEY_DELETE`, preserving `KEY_BACKSPACE`
+      for `0x08`. Validated via `test_backspace_and_enter` in
+      `test_terminal.py`.
   - [ ] **Bug 2.7.12: Off-by-One in Horizontal Pan Trigger**:
     - *Symptom*: Panning jumps to `[Pan +40]` at column 79 rather than 80.
     - *Root Cause*: `buffer.py` checks `self.cursor_col >= usable_cols` where

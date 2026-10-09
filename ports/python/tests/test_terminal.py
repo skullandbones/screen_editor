@@ -129,12 +129,14 @@ class TestTerminal(unittest.TestCase):
         print("[+] Step 6: Standalone ESC verified.", flush=True)
 
     def test_backspace_and_enter(self):
-        """Step 7: Verify Backspace (0x08 & 0x7F) and Enter mapping."""
+        """Step 7: Verify Backspace (0x08), DEL (0x7F), and Enter mapping."""
         print("[*] Step 7: Testing Backspace and Enter mapping...", flush=True)
-        for char in ("\x08", "\x7f"):
-            with patch("sys.stdin", io.StringIO(char)):
-                key = self.term.get_key(timeout=0.1)
-                self.assertEqual(key, KEY_BACKSPACE)
+        with patch("sys.stdin", io.StringIO("\x08")):
+            key = self.term.get_key(timeout=0.1)
+            self.assertEqual(key, KEY_BACKSPACE)
+        with patch("sys.stdin", io.StringIO("\x7f")):
+            key = self.term.get_key(timeout=0.1)
+            self.assertEqual(key, KEY_DELETE)
         for char in ("\r", "\n"):
             with patch("sys.stdin", io.StringIO(char)):
                 key = self.term.get_key(timeout=0.1)

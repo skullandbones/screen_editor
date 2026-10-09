@@ -284,8 +284,12 @@ class Terminal:
 
             return KEY_ESC
 
-        # Map DEL (0x7F) and Backspace (0x08)
-        if ch in (KEY_DEL_CHAR, KEY_BACKSPACE):
+        # Map DEL (0x7F) to KEY_DELETE per Section 10
+        if ch == KEY_DEL_CHAR:
+            return KEY_DELETE
+
+        # Map Backspace (0x08)
+        if ch == KEY_BACKSPACE:
             return KEY_BACKSPACE
 
         # Enter / Carriage Return
