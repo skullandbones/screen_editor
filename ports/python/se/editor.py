@@ -60,7 +60,9 @@ class Editor:
         self.terminal = Terminal(default_cols=cols, default_rows=rows)
         self.renderer = UIRenderer(self.terminal)
         self.modal = ModalDialog(self.terminal)
-        self.buffer = DocumentBuffer(filename=filename)
+        self.buffer = DocumentBuffer(
+            filename=filename, tab_width=self.config.tab_width
+        )
         self.search_query: str = ""
         self.replace_query: str = ""
         self.case_sensitive: bool = True
@@ -129,9 +131,10 @@ class Editor:
         elif key == KEY_DELETE:
             self.buffer.delete_char()
         elif key == KEY_TAB:
-            # Expand tab to spaces based on config tab width
+            # Expand tab to spaces based on config tab width and visual col
+            vis_c = self.buffer.get_visual_col()
             spaces = self.config.tab_width - (
-                self.buffer.cursor_col % self.config.tab_width
+                vis_c % self.config.tab_width
             )
             for _ in range(spaces):
                 self.buffer.insert_char(" ")

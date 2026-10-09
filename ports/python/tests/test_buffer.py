@@ -10,7 +10,12 @@ import tempfile
 import time
 import unittest
 
-from se.buffer import DocumentBuffer, MAX_LINE_LENGTH
+from se.buffer import (
+    DocumentBuffer,
+    MAX_LINE_LENGTH,
+    calc_visual_col,
+    expand_tabs_visual,
+)
 
 
 class TestBuffer(unittest.TestCase):
@@ -237,6 +242,52 @@ class TestBuffer(unittest.TestCase):
                 os.remove(tmp_path)
 
         print("[+] Step 7: File load and save verified.", flush=True)
+
+    def test_tab_traversal_and_coordinates(self):
+        """Step 9: Verify 3-coordinate space and tab traversal (Bug 2.7.21)."""
+        print(
+            "[*] Step 9: Testing 3-coordinate space & tab traversal...",
+            flush=True,
+        )
+        # 1. Visual column calculation with tab_width=4
+        line = "\tA\tB"
+        self.assertEqual(calc_visual_col(line, 0, tab_width=4), 0)
+        self.assertEqual(calc_visual_col(line, 1, tab_width=4), 4)
+        self.assertEqual(calc_visual_col(line, 2, tab_width=4), 5)
+        self.assertEqual(calc_visual_col(line, 3, tab_width=4), 8)
+        self.assertEqual(calc_visual_col(line, 4, tab_width=4), 9)
+
+        # 2. Visual column calculation with tab_width=8
+        self.assertEqual(calc_visual_col(line, 1, tab_width=8), 8)
+        self.assertEqual(calc_visual_col(line, 2, tab_width=8), 9)
+        self.assertEqual(calc_visual_col(line, 3, tab_width=8), 16)
+
+        # 3. Tab expansion
+        self.assertEqual(expand_tabs_visual("\tA", 4), "    A")
+        self.assertEqual(expand_tabs_visual("A\tB", 4), "A   B")
+
+        # 4. Discrete tab traversal in DocumentBuffer
+        buf = DocumentBuffer(tab_width=4)
+        buf.lines = ["\tXYZ"]
+        buf.cursor_col = 0
+        self.assertEqual(buf.get_visual_col(), 0)
+
+        # Move right leaps forward by tab_spaces (4 cols) in 1 keypress
+        buf.move_right()
+        self.assertEqual(buf.cursor_col, 1)
+        self.assertEqual(buf.get_visual_col(), 4)
+        self.assertEqual(buf.target_col, 4)
+
+        # Move left leaps backward to 0 in 1 keypress
+        buf.move_left()
+        self.assertEqual(buf.cursor_col, 0)
+        self.assertEqual(buf.get_visual_col(), 0)
+        self.assertEqual(buf.target_col, 0)
+
+        print(
+            "[+] Step 9: 3-coordinate space and tab traversal verified.",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

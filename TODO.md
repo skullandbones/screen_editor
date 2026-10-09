@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 6 Defects Open (Bugs 2.7.21–2.7.26).
+- **Status**: Active / 5 Defects Open (Bugs 2.7.22–2.7.26).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -518,7 +518,7 @@ have been resolved and archived.
       `editor.py` conforming to Tier 1 centered workspace layout, column 0
       tilde discipline, and canonical dismissal prompt. Validated via
       `test_about_and_mem_info_workspaces` in `test_editor.py`.
-  - [ ] **Bug 2.7.21: Missing 3-Coordinate Space & Tab Traversal Engine**:
+  - [x] **Bug 2.7.21: Missing 3-Coordinate Space & Tab Traversal Engine**:
     - *Symptom*: When files containing literal tab (`\t` / `0x09`) characters
       are loaded, text lines wrap unpredictably, the terminal expands tabs
       using hardware tab stops (8) instead of configured tab width (4/8),
@@ -530,10 +530,11 @@ have been resolved and archived.
       emits raw `\t` bytes to the terminal, and places cursor using raw
       `cursor_col`.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, 6.7.
-    - *Required Fix*: Implement `calc_visual_col()` in `buffer.py` and `ui.py`,
-      expand tabs into visual space during line rendering, pin cursor to
-      discrete character boundaries, and compute screen cursor column via
-      `(calc_visual_col(line, cursor_col, tab_width) - pan_col) + 1`.
+    - *Resolution*: Implemented `calc_visual_col()` and `expand_tabs_visual()`
+      in `buffer.py` and `ui.py`. Expanded tabs into spaces during line
+      rendering, pinned cursor navigation to discrete tab boundaries, and
+      synchronized terminal screen cursor column to visual space. Validated via
+      `test_tab_traversal_and_coordinates` in `test_buffer.py`.
   - [ ] **Bug 2.7.22: Vertical Navigation Target Column Tab Misalignment**:
     - *Symptom*: Navigating vertically (`Up`, `Down`, `PageUp`, `PageDown`)
       across lines containing tab characters causes the cursor to jump

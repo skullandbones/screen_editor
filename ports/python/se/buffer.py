@@ -9,12 +9,47 @@ from typing import List, Optional, Tuple
 MAX_LINE_LENGTH = 120
 
 
+def calc_visual_col(line: str, cur_col: int, tab_width: int = 4) -> int:
+    """
+    Map buffer byte offset cur_col to 0-indexed document visual column.
+    Expands tab characters (0x09) to tab stops according to tab_width.
+    """
+    vis_col = 0
+    limit = max(0, min(cur_col, len(line)))
+    for i in range(limit):
+        if line[i] == "\t":
+            vis_col += tab_width - (vis_col % tab_width)
+        else:
+            vis_col += 1
+    return min(vis_col, MAX_LINE_LENGTH - 1)
+
+
+def expand_tabs_visual(line: str, tab_width: int = 4) -> str:
+    """
+    Expand tab characters in line into visual space for terminal display.
+    """
+    result = []
+    vis_col = 0
+    for ch in line:
+        if ch == "\t":
+            spaces = tab_width - (vis_col % tab_width)
+            result.append(" " * spaces)
+            vis_col += spaces
+        else:
+            result.append(ch)
+            vis_col += 1
+    return "".join(result)
+
+
+
 class DocumentBuffer:
     """
     Manages document lines, cursor positioning, and block selections.
     """
 
-    def __init__(self, filename: Optional[str] = None):
+    def __init__(
+        self, filename: Optional[str] = None, tab_width: int = 4
+    ):
         self.filename: str = filename if filename else "(Untitled)"
         self.has_file: bool = bool(filename)
         self.lines: List[str] = [""]
@@ -23,6 +58,7 @@ class DocumentBuffer:
         self.target_col: int = 0
         self.top_row: int = 0
         self.pan_col: int = 0
+        self.tab_width: int = tab_width
         self.modified: bool = False
         self.format_cpm: bool = True  # True = CP/M CRLF, False = Linux LF
         self.clipboard: str = ""
@@ -58,6 +94,11 @@ class DocumentBuffer:
             self.lines[row] = text[:MAX_LINE_LENGTH]
             self.modified = True
 
+    def get_visual_col(self, col: Optional[int] = None) -> int:
+        """Return visual column for cursor_col or specified col."""
+        c = self.cursor_col if col is None else col
+        return calc_visual_col(self.current_line, c, self.tab_width)
+
     def update_pan(self, view_cols: int):
         """
         Calculate horizontal viewport pan offset [Pan +40] based on cursor.
@@ -86,7 +127,7 @@ class DocumentBuffer:
         new_line = line[:col] + ch + line[col:]
         self.lines[self.cursor_row] = new_line
         self.cursor_col = col + 1
-        self.target_col = self.cursor_col
+        self.target_col = self.get_visual_col()
         self.modified = True
         return True
 
@@ -140,7 +181,7 @@ class DocumentBuffer:
             col = min(len(line), self.cursor_col)
             self.lines[self.cursor_row] = line[: col - 1] + line[col:]
             self.cursor_col = col - 1
-            self.target_col = self.cursor_col
+            self.target_col = self.get_visual_col()
             self.modified = True
             return True
 
@@ -154,7 +195,7 @@ class DocumentBuffer:
                 self.lines.pop(self.cursor_row)
                 self.cursor_row -= 1
                 self.cursor_col = join_col
-                self.target_col = join_col
+                self.target_col = self.get_visual_col()
                 self.modified = True
                 return True
         return False
@@ -166,7 +207,7 @@ class DocumentBuffer:
         elif self.cursor_row > 0:
             self.cursor_row -= 1
             self.cursor_col = len(self.lines[self.cursor_row])
-        self.target_col = self.cursor_col
+        self.target_col = self.get_visual_col()
 
     def move_right(self):
         """Move cursor right one column or wrap to start of next line."""
@@ -176,7 +217,7 @@ class DocumentBuffer:
         elif self.cursor_row < len(self.lines) - 1:
             self.cursor_row += 1
             self.cursor_col = 0
-        self.target_col = self.cursor_col
+        self.target_col = self.get_visual_col()
 
     def move_up(self):
         """Move cursor up one line, preserving target column."""
@@ -198,7 +239,7 @@ class DocumentBuffer:
     def move_end(self):
         """Move cursor to end of current line."""
         self.cursor_col = len(self.current_line)
-        self.target_col = self.cursor_col
+        self.target_col = self.get_visual_col()
 
     def move_top(self):
         """Jump to top of document (Line 1, Col 0)."""

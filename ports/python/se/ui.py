@@ -4,7 +4,11 @@ Enforces column 0 tilde discipline, viewport clipping, and screen centering.
 """
 
 from typing import List, Optional, Tuple
-from se.buffer import DocumentBuffer
+from se.buffer import (
+    DocumentBuffer,
+    calc_visual_col,
+    expand_tabs_visual,
+)
 from se.terminal import Terminal
 
 
@@ -103,6 +107,7 @@ class UIRenderer:
         buf: DocumentBuffer,
         geometry_str: str = "80x24",
         status_msg: Optional[str] = None,
+        tab_width: Optional[int] = None,
     ):
         """
         Render active document editor workspace with column 0 tildes.
@@ -110,6 +115,7 @@ class UIRenderer:
         cols = self.term.cols
         rows = self.term.rows
         body_rows = rows - 1  # Exclude status bar row
+        tab_w = tab_width if tab_width is not None else buf.tab_width
 
         # Adjust vertical scroll window
         if buf.cursor_row < buf.top_row:
@@ -125,10 +131,11 @@ class UIRenderer:
             self.term.locate(screen_r, 1)
 
             if doc_r < buf.total_lines:
-                # Render document line sliced by horizontal pan
-                line_text = buf.get_line(doc_r)
-                if buf.pan_col < len(line_text):
-                    visible = line_text[buf.pan_col : buf.pan_col + cols]
+                # Render line sliced by horizontal pan in visual space
+                raw_line = buf.get_line(doc_r)
+                vis_line = expand_tabs_visual(raw_line, tab_w)
+                if buf.pan_col < len(vis_line):
+                    visible = vis_line[buf.pan_col : buf.pan_col + cols]
                 else:
                     visible = ""
 
@@ -137,7 +144,15 @@ class UIRenderer:
                     r1, c1, r2, c2 = buf.get_normalized_block()
                     if r1 <= doc_r <= r2:
                         self._render_highlighted_line(
-                            visible, doc_r, buf.pan_col, r1, c1, r2, c2
+                            visible,
+                            raw_line,
+                            doc_r,
+                            buf.pan_col,
+                            r1,
+                            c1,
+                            r2,
+                            c2,
+                            tab_w,
                         )
                     else:
                         self.term.write(visible)
@@ -157,27 +172,36 @@ class UIRenderer:
 
         # Reposition terminal cursor at active document character
         sc_r = (buf.cursor_row - buf.top_row) + 1
-        sc_c = (buf.cursor_col - buf.pan_col) + 1
+        vis_c = calc_visual_col(buf.current_line, buf.cursor_col, tab_w)
+        sc_c = (vis_c - buf.pan_col) + 1
+        sc_r = max(1, min(body_rows, sc_r))
+        sc_c = max(1, min(cols, sc_c))
         self.term.locate(sc_r, sc_c)
         self.term.flush()
 
     def _render_highlighted_line(
         self,
         visible_text: str,
+        raw_line: str,
         doc_r: int,
         pan_col: int,
         r1: int,
         c1: int,
         r2: int,
         c2: int,
+        tab_w: int,
     ):
         """Render line with inverse video applied to selected block range."""
         start_c = c1 if doc_r == r1 else 0
-        end_c = c2 if doc_r == r2 else 9999
+        end_c = c2 if doc_r == r2 else len(raw_line)
+
+        # Map buffer byte offsets to document visual columns
+        start_vis_col = calc_visual_col(raw_line, start_c, tab_w)
+        end_vis_col = calc_visual_col(raw_line, end_c, tab_w)
 
         # Adjust for horizontal pan
-        start_vis = max(0, start_c - pan_col)
-        end_vis = max(0, min(len(visible_text), end_c - pan_col))
+        start_vis = max(0, start_vis_col - pan_col)
+        end_vis = max(0, min(len(visible_text), end_vis_col - pan_col))
 
         if start_vis >= len(visible_text):
             self.term.write(visible_text)
