@@ -226,7 +226,7 @@ have been resolved and archived.
       a file descriptor, falling back to stream reads for non-fd mock streams.
       Validated via `test_unbuffered_pty_escape_sequence_decoding` in
       `test_terminal.py`.
-  - [ ] **Bug 2.7.14: Editor Starts in Document Mode Instead of Splash Screen**:
+  - [x] **Bug 2.7.14: Editor Starts in Document Mode Instead of Splash Screen**:
     - *Symptom*: Running `se` without CLI arguments directly enters the document
       editor workspace with an untitled buffer, skipping the Splash screen.
       In CP/M `SE.COM`, running `se` without arguments opens the Tier 1 Splash
@@ -236,6 +236,10 @@ have been resolved and archived.
       provided on the CLI or displaying `action_splash_screen()`.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and
       `src/se.asm` lines 146-151 (`HAS_FILE_ARG == 0 -> JP SHOW_SPLASH_SCREEN`).
+    - *Resolution*: Updated `Editor.run()` in `editor.py` to invoke
+      `self.action_splash_screen()` prior to entering the document edit loop
+      when `not self.buffer.has_file`. Updated `test_headless.py` and validated
+      via `test_startup_mode_splash_screen` in `test_editor.py`.
   - [ ] **Bug 2.7.15: Status Bar Column Spill During Block Selection ([SEL])**:
     - *Symptom*: When block selection is active (`Ctrl+B`), the status bar row
       overflows 80 columns (82 characters: `| (Untitled)* ... [SEL]`), inducing

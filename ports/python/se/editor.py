@@ -75,6 +75,9 @@ class Editor:
         self.terminal.enter_raw_mode()
         self.running = True
 
+        if not self.buffer.has_file:
+            self.action_splash_screen()
+
         try:
             while self.running:
                 geom_str = f"{self.terminal.cols}x{self.terminal.rows}"

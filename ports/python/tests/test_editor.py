@@ -317,6 +317,43 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_startup_mode_splash_screen(self):
+        """Step 10: Verify splash on start without file (Bug 2.7.14)."""
+        print(
+            "[*] Step 10: Testing startup splash screen without file...",
+            flush=True,
+        )
+        # Case A: Editor initialized with no file argument
+        editor_no_file = Editor(filename=None)
+        editor_no_file.terminal.enter_raw_mode = MagicMock()
+        editor_no_file.terminal.exit_raw_mode = MagicMock()
+        editor_no_file.renderer.render_editor = MagicMock()
+        editor_no_file.terminal.get_key = MagicMock(
+            side_effect=lambda: setattr(editor_no_file, "running", False)
+        )
+        editor_no_file.action_splash_screen = MagicMock(
+            side_effect=lambda: setattr(editor_no_file, "running", False)
+        )
+        editor_no_file.run()
+        editor_no_file.action_splash_screen.assert_called_once()
+
+        # Case B: Editor initialized with file argument
+        editor_with_file = Editor(filename="test.txt")
+        editor_with_file.terminal.enter_raw_mode = MagicMock()
+        editor_with_file.terminal.exit_raw_mode = MagicMock()
+        editor_with_file.renderer.render_editor = MagicMock()
+        editor_with_file.terminal.get_key = MagicMock(
+            side_effect=lambda: setattr(editor_with_file, "running", False)
+        )
+        editor_with_file.action_splash_screen = MagicMock()
+        editor_with_file.run()
+        editor_with_file.action_splash_screen.assert_not_called()
+
+        print(
+            "[+] Step 10: Startup splash screen behavior verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
