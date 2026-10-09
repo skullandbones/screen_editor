@@ -209,6 +209,9 @@ class UIRenderer:
             cols, rows, content_w, content_h
         )
 
+        prompt_row = None
+        prompt_col = None
+
         for screen_r in range(1, body_rows + 1):
             self.term.locate(screen_r, 1)
             # Column 0 tilde on all workspace rows
@@ -220,9 +223,19 @@ class UIRenderer:
                 line_str = lines[content_idx]
                 self.term.locate(screen_r, left_col)
                 self.term.write(line_str)
+                if any(
+                    p in line_str for p in ("Enter choice:", "Enter option:")
+                ):
+                    prompt_row = screen_r
+                    prompt_col = left_col + len(line_str)
 
             self.term.clear_eol()
 
         # Bottom row status bar
         self.render_status_bar(buf, geometry_str=geometry_str)
+
+        # Reposition cursor adjacent to prompt if present (Bug 2.7.9)
+        if prompt_row is not None and prompt_col is not None:
+            self.term.locate(prompt_row, prompt_col)
+
         self.term.flush()

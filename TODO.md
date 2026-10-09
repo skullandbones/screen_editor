@@ -172,12 +172,16 @@ have been resolved and archived.
       method in `config.py`, and implemented option 3 and 4 toggle handlers
       in `action_config_screen()` in `editor.py`. Validated via
       `test_config_screen_option_toggles` in `test_editor.py`.
-  - [ ] **Bug 2.7.9: Cursor Placed on Status Bar on Centered Workspaces**:
+  - [x] **Bug 2.7.9: Cursor Placed on Status Bar on Centered Workspaces**:
     - *Symptom*: Blinking cursor sits at row 24 / col 1 instead of prompt.
     - *Root Cause*: `render_centered_workspace()` in `ui.py` invokes
       `render_status_bar()` as its final operation without repositioning
       cursor adjacent to `Enter choice: ` or `Enter option: `.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and 7.4.
+    - *Resolution*: Updated `render_centered_workspace()` in `ui.py` to
+      record prompt row/column and reposition the terminal cursor adjacent
+      to the prompt following status bar rendering. Validated via
+      `test_centered_workspace_prompt_cursor_position` in `test_editor.py`.
   - [ ] **Bug 2.7.10: Standalone ESC Trapped on Splash & Misses Block Cancel**:
     - *Symptom*: Pressing `ESC` on Splash screen is ignored; in editor,
       pressing `ESC` with active block exits to Splash instead of canceling.

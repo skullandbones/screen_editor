@@ -249,6 +249,44 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_centered_workspace_prompt_cursor_position(self):
+        """Step 8: Verify cursor placed adjacent to prompt (Bug 2.7.9)."""
+        print(
+            "[*] Step 8: Testing centered workspace prompt cursor...",
+            flush=True,
+        )
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+        locate_calls = []
+        self.editor.terminal.locate = lambda r, c: locate_calls.append((r, c))
+        self.editor.terminal.write = MagicMock()
+        self.editor.terminal.clear_eol = MagicMock()
+        self.editor.terminal.flush = MagicMock()
+
+        lines = [
+            "SE — Screen Editor",
+            "",
+            "Enter choice: ",
+        ]
+        self.editor.renderer.render_centered_workspace(
+            lines, self.editor.buffer, geometry_str="80x24"
+        )
+
+        # Expected top_row and left_col:
+        # avail_rows = 23, content_h = 3 -> top_row = 11
+        # screen_cols = 80, content_w = 18 -> left_col = 32
+        # prompt is line index 2 -> row = 11 + 2 = 13
+        # prompt col = 32 + len("Enter choice: ") = 32 + 14 = 46
+        self.assertTrue(len(locate_calls) > 0)
+        final_cursor = locate_calls[-1]
+        self.assertEqual(final_cursor, (13, 46))
+        self.assertNotEqual(final_cursor[0], 24)
+
+        print(
+            "[+] Step 8: Centered workspace prompt cursor verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
