@@ -89,9 +89,80 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / Fully Tested.
+- **Status**: Active / Look & Feel Conformance Audit.
 - **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; report new Profile 7 defects here).*
+  - [ ] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
+    - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
+    - *Root Cause*: `KEY_CTRL_S` is caught in `ports/python/se/editor.py` under
+      the navigation branch (`if key == KEY_LEFT or key == KEY_CTRL_S:`),
+      making `elif key == KEY_CTRL_S: self.action_save_file()` dead code.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.3 and 10.
+  - [ ] **Bug 2.7.2: Block Selection Not Extended on Cursor Movement (Ctrl+B)**:
+    - *Symptom*: Pressing `Ctrl+B` and moving cursor selects zero characters;
+      no inverse video highlight is displayed, and block copy/cut returns "".
+    - *Root Cause*: `buffer.py` sets `block_start` and `block_end` on toggle,
+      but cursor navigation methods (`move_left`, `move_right`, `move_up`,
+      `move_down`, `page_up`, `page_down`) never update `block_end`.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.1 and 9.2.
+  - [ ] **Bug 2.7.3: Clipboard Paste Unbound (paste_block Never Called)**:
+    - *Symptom*: User cannot paste copied clipboard text into the buffer.
+    - *Root Cause*: In `editor.py`, `KEY_CTRL_V` is mapped exclusively to
+      `buffer.page_down()`. `buffer.paste_block()` is implemented in buffer
+      engine but never dispatched by any key.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.3 and 10.
+  - [ ] **Bug 2.7.4: Status Bar Squatting & Status Event Rule Violation**:
+    - *Symptom*: Transient messages (`Copied Xc`, `Cut Xc`, plugin status)
+      overwrite Field 4 (`^K: Editor keys`) on the universal status bar.
+    - *Root Cause*: `editor.py`, `ui.py`, and `plugin.py` route event strings
+      to status bar via `status_msg` instead of Tier 2 notification modals.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.4 and 11.1.
+  - [ ] **Bug 2.7.5: Child Pop-up Isolation Defect in Plugin Palette**:
+    - *Symptom*: When a plugin (e.g. `wordcnt.py`) displays a modal pop-up,
+      it is drawn on top of the un-cleared parent menu without redrawing.
+    - *Root Cause*: `action_plugin_palette()` does not erase parent surface
+      or restore underlying screen before child modal execution.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.4.
+  - [ ] **Bug 2.7.6: Tier 2 Modal Dialog Framing Layout Discrepancies**:
+    - *Symptom*: Query modals (`show_confirm`) and text input modals
+      (`show_input`) have cramped 7-row height without empty separator rows.
+    - *Root Cause*: `modal.py` omits the blank row separating the prompt line
+      from the action buttons (`[Y]es ...` / `[Enter]=Confirm ...`).
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3
+      (Archetypes B and C).
+  - [ ] **Bug 2.7.7: Modal Input Dialog Navigation Key Defect (show_input)**:
+    - *Symptom*: Arrow keys (`KEY_LEFT`, `KEY_RIGHT`), `Home`, `End`, and
+      `Delete` are ignored inside text input modal dialogs.
+    - *Root Cause*: `show_input()` in `modal.py` lacks key handlers for
+      cursor movement or character deletion inside the input brackets.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 (Archetype C).
+  - [ ] **Bug 2.7.8: Missing Configuration Manager Option Handlers (3 and 4)**:
+    - *Symptom*: Pressing `3` (Max Lines) or `4` (RAM Drive Mode) on the
+      Configuration screen is silently ignored.
+    - *Root Cause*: `action_config_screen()` in `editor.py` defines options
+      3 and 4 in display lines but implements no branch handlers for them.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.4.
+  - [ ] **Bug 2.7.9: Cursor Placed on Status Bar on Centered Workspaces**:
+    - *Symptom*: Blinking cursor sits at row 24 / col 1 instead of prompt.
+    - *Root Cause*: `render_centered_workspace()` in `ui.py` invokes
+      `render_status_bar()` as its final operation without repositioning
+      cursor adjacent to `Enter choice: ` or `Enter option: `.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and 7.4.
+  - [ ] **Bug 2.7.10: Standalone ESC Trapped on Splash & Misses Block Cancel**:
+    - *Symptom*: Pressing `ESC` on Splash screen is ignored; in editor,
+      pressing `ESC` with active block exits to Splash instead of canceling.
+    - *Root Cause*: `action_splash_screen()` ignores `KEY_ESC`; `dispatch_key`
+      lacks active block cancellation check on `KEY_ESC`.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10 and 11.5.
+  - [ ] **Bug 2.7.11: ASCII DEL (0x7F) Mapped to Backspace in Terminal Driver**:
+    - *Symptom*: Pressing Delete (0x7F) deletes char to left instead of under.
+    - *Root Cause*: `terminal.py` maps `KEY_DEL_CHAR` (`0x7F`) to
+      `KEY_BACKSPACE` instead of `KEY_DELETE`.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+  - [ ] **Bug 2.7.12: Off-by-One in Horizontal Pan Trigger**:
+    - *Symptom*: Panning jumps to `[Pan +40]` at column 79 rather than 80.
+    - *Root Cause*: `buffer.py` checks `self.cursor_col >= usable_cols` where
+      `usable_cols = 79`, triggering pan while cursor is still within screen.
+    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 6.2.
 
 ---
 
