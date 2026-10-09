@@ -26,9 +26,9 @@ have been resolved and archived.
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
 - **Status**: Verification Complete / 5 Defects Open (Bug 2.1.3 Rejected).
-- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+- **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 4.3, 4.4, 11.1.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
     - *Issue*: Status bar Field 4 is overwritten with free memory
       (`Free: 64 KB |`) on splash screen, with selection metrics
       (`Sel: 0 chars |`) when block mode is active, and with `[Pan +40] |`
@@ -41,7 +41,7 @@ have been resolved and archived.
       `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
       `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
   - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.1.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
       default. On standard CP/M terminals and serial consoles (VT100 / ANSI,
       80x24 standard), this causes terminal character column spill
@@ -52,7 +52,7 @@ have been resolved and archived.
       defined in Section 2.1, while preserving `120x40` toggle via command
       line or config file.
   - [x] **Bug 2.1.3: WordStar Navigation Disconnect [REJECTED / WONTFIX]**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
     - *Rationale*: Dropped support for WordStar diamond navigation (`^S`, `^D`,
       `^E`, `^X`) in `SE.COM`. Overriding `Ctrl+S` (Save File), `Ctrl+D`
@@ -61,7 +61,7 @@ have been resolved and archived.
       navigation remains fully supported via ANSI/VT100 arrow keys and
       Home/End (`Ctrl+A`/`Ctrl+E`).
   - [ ] **Bug 2.1.4: Tier 1 Centering & Tilde Violations on Help Screen**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.3.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
     - *Issue*: In `plugins/help.asm`, content height is 22 lines, leaving 0
       top margin rows on an 80x24 screen, violating 1-based vertical centering.
       Rows 1 and 3 render ASCII banner rules (`=============================`)
@@ -73,7 +73,7 @@ have been resolved and archived.
       vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
       universal status bar presence on Row 24.
   - [ ] **Bug 2.1.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1, 7.2.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Issue*: `RENDER_SPLASH` in `src/se.asm` renders a 21-line menu
       structure with fixed menu items (`type [E] or [Enter] to edit...`),
       lacking the canonical 14-line centered presentation (`:e to edit`,
@@ -83,7 +83,7 @@ have been resolved and archived.
       `src/se.asm` to match the canonical 14-line, 50-column Tier 1 splash
       layout specified in Section 7.2.
   - [ ] **Bug 2.1.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.3 (Archetype C).
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
     - *Issue*: In `DO_GOTO_LINE_UI` (`src/core/editor.asm`), dialog width is
       50 columns instead of canonical 52 columns. Footer buttons display
       `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
@@ -101,32 +101,32 @@ have been resolved and archived.
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
 - **Status**: Verification Complete / 5 Defects Open (Bug 2.2.3 Rejected).
-- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+- **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 4.3, 4.4, 11.1.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
     - *Issue*: Status bar Field 4 displays free memory on splash, selection
       metrics on block mode, and pan offset when panned in `se_next_cpm.asm`.
     - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/se_next_cpm.asm` to
       canonical 5-field layout; move indicators to Field 5.
   - [ ] **Bug 2.2.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.1.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: Next CP/M profile defaults to 120x40 instead of standard 80x24.
     - *Required Fix*: Initialize to `80x24` mode in `START` (`se_next_cpm.asm`).
   - [x] **Bug 2.2.3: WordStar Navigation Disconnect [REJECTED / WONTFIX]**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
     - *Rationale*: Dropped support for WordStar diamond navigation in
       `SE_NEXT.COM` to preserve established SE.COM keymappings.
   - [ ] **Bug 2.2.4: Tier 1 Centering & Tilde Violations on Help Screen**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.3.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
     - *Issue*: Help overlay displays 22-line banner box with zero top margin.
     - *Required Fix*: Standardize to 17-line 70-column centered layout.
   - [ ] **Bug 2.2.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1, 7.2.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Issue*: Splash screen displays legacy 21-line menu in `se_next_cpm.asm`.
     - *Required Fix*: Align with canonical 14-line centered splash layout.
   - [ ] **Bug 2.2.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.3 (Archetype C).
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
     - *Issue*: 50-column dialog framing and non-standard action button footers.
     - *Required Fix*: Align dialog boxes with 52-column Archetype C format.
 
@@ -149,9 +149,9 @@ have been resolved and archived.
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
 - **Status**: Active / 5 Defects Open (Bugs 2.4.8–2.4.12).
-- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+- **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
     - *Issue*: `render_status_bar` in `src/core/ui_render.c` outputs custom
       format `" SE v1.1.0 | Ln %-5u/%-5u Col %-3u | %s%s | Free: %4u KB"`.
     - *Required Fix*: Conform to canonical 5-field layout:
@@ -160,21 +160,21 @@ have been resolved and archived.
       (`[Pan +40]`), Block indicator (`[SEL]` / `[BLK LOCK]`), and center-pad
       across full terminal width.
   - [x] **Bug 2.4.2: Missing Universal Status Bar on Non-Document Workspaces**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 7.2, 7.3, 7.4.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 7.2, 7.3, 7.4.
     - *Issue*: Non-document screens (`show_splash_screen`, `show_about_screen`,
       `show_config_screen`, `show_mem_info_screen`) in `src/core/ui_render.c`
       wipe the screen and fail to render the status bar on `HOST_ROWS`.
     - *Required Fix*: Guarantee universal status bar presence on `HOST_ROWS`
       across all Tier 1 screens and behind Tier 2 pop-up dialogs.
   - [x] **Bug 2.4.3: Status Bar Squatting Anti-Pattern for Transient Alerts**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.4, 11.1.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.4, 11.1.
     - *Issue*: `ui_render.c:158` writes transient alerts (`g_status_msg`)
       directly into the status bar, clobbering persistent document metadata.
     - *Required Fix*: Remove status bar message overwriting (Anti-Pattern #1).
       Route all status events (Save Complete, Search Failed, etc.) to Tier 2
       centered modal pop-up boxes (`show_notification` / Archetype A).
   - [x] **Bug 2.4.4: Arrow Key & WordStar Diamond Keybinding Misalignment**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, arrow keys decode to
       `KEY_CTRL_E` (Up), `KEY_CTRL_X` (Down), `KEY_CTRL_S` (Left), and
       `KEY_CTRL_D` (Right). In `src/core/editor.c:414`, `KEY_CTRL_E` dispatches
@@ -186,20 +186,20 @@ have been resolved and archived.
       bind `cursor_up()` and `cursor_down()`, and restore authentic WordStar
       diamond navigation and ANSI cursor key parity.
   - [x] **Bug 2.4.5: Non-Functional Horizontal Panning Engine & Line Barrier**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 6.1, 6.2.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2.
     - *Issue*: `g_horiz_pan_offset` in `src/core/editor.c` is never adjusted
       when cursor moves beyond column 79. `MAX_INPUT_LINE_CHARS` is 1000 in
       `config.h` instead of the strict 120-character line barrier.
     - *Required Fix*: Implement horizontal pan quantum (+40 columns) shift
       logic (`pan_col` = 40 or 80) and enforce `MAX_LINE = 120` limit.
   - [x] **Bug 2.4.6: Tier 1 Centering & Column 0 Tilde Margin Discipline**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.2.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.2.
     - *Issue*: Splash and help screens use top-aligned fixed coordinates with
       ASCII banner borders and lack column 0 tilde (`~`) margin rows.
     - *Required Fix*: Apply mathematical 1-based centering formulas and fill
       margin rows down to row `HOST_ROWS - 1` with `~` in column 0.
   - [x] **Bug 2.4.7: Tier 2 Modal Framing, Centering & Archetype Invariance**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.2, 8.3.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 8.3.
     - *Issue*: `src/core/ui_modal.c` places titles on top border without
       title divider line (`+---+`), uses off-by-one centering calculation,
       permits quitting confirmation modals via `q`/`Q` instead of solely `ESC`,
@@ -207,7 +207,7 @@ have been resolved and archived.
     - *Required Fix*: Implement canonical Archetypes A, B, C, D with title
       dividers, 1-based centering, and strict key dismissal rules.
   - [ ] **Bug 2.4.8: Missing Modal & Command Dispatchers in Editor Mode**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3, 10.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.
     - *Issue*: In `src/core/editor.c`, `editor_handle_key()` lacks cases for
       `KEY_CTRL_L` (Goto Line), `KEY_CTRL_O` (Open File), `KEY_CTRL_P` (Plugin
       Palette), and `KEY_CTRL_W` (Close File to Splash). Even though
@@ -218,7 +218,7 @@ have been resolved and archived.
       dispatch `goto_line()`, and bind `KEY_CTRL_O`, `KEY_CTRL_P`, and
       `KEY_CTRL_W` to their respective modal and editor actions.
   - [ ] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1, 7.2.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Issue*: `show_splash_screen` in `src/core/ui_render.c` renders the
       canonical 14-line matrix displaying `:e`, `:o`, `:s`, `:c`, `:p`, `:?`,
       `:q`, but only checks for `q`/`Q` and treats any other key as an
@@ -228,7 +228,7 @@ have been resolved and archived.
       `ui_render.c` / `editor.c` dispatching `:e`, `:o`, `:s`, `:c`, `:p`,
       `:?`, `1`, `2`, and `:q`.
   - [ ] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, the 30ms polling read
       loop reads up to 6 bytes into a single buffer. Rapid consecutive escape
       sequences (e.g. arrow navigation `\x1b[D\x1b[D\x1b[D`) are clumped into
@@ -238,7 +238,7 @@ have been resolved and archived.
       token parser or token FIFO buffer so back-to-back escape sequences are
       decoded without drops or clumping.
   - [ ] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.1, 9.2.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2.
     - *Issue*: In `src/core/block.c`, `g_block_active_row` and
       `g_block_active_col` are only updated on `start_new_block_at_cursor()`
       and `solidify_block()`. As cursor moves in `editor.c`, block bounds are
@@ -247,7 +247,7 @@ have been resolved and archived.
     - *Required Fix*: Track cursor position dynamically during
       `BLOCK_MODE_SELECTING` and update normalized block bounds on movement.
   - [ ] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
-    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.3, 10.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.
     - *Issue*: In `src/core/editor.c`, `KEY_CTRL_V` is bound exclusively to
       `page_down()`. `src/core/block.c` implements `do_copy_block()` and
       `do_delete_block()`, but has no dedicated paste function. Text copied via
@@ -290,7 +290,7 @@ have been resolved and archived.
     - *Root Cause*: `KEY_CTRL_S` is caught in `ports/python/se/editor.py` under
       the navigation branch (`if key == KEY_LEFT or key == KEY_CTRL_S:`),
       making `elif key == KEY_CTRL_S: self.action_save_file()` dead code.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.3 and 10.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.3 and 10.
     - *Resolution*: Removed `KEY_CTRL_S` collision from cursor navigation
       branch in `editor.py` so `Ctrl+S` triggers `action_save_file()`.
       Validated via `test_ctrl_s_dispatches_save_file` in `test_editor.py`.
@@ -300,7 +300,7 @@ have been resolved and archived.
     - *Root Cause*: `buffer.py` sets `block_start` and `block_end` on toggle,
       but cursor navigation methods (`move_left`, `move_right`, `move_up`,
       `move_down`, `page_up`, `page_down`) never update `block_end`.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.1 and 9.2.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 9.1 and 9.2.
     - *Resolution*: Updated `get_normalized_block()` to follow the active
       cursor dynamically when `block_active == 1`, and updated `solidify_block`,
       `copy_block`, and `cut_block` to lock bounds upon block operations.
@@ -310,7 +310,7 @@ have been resolved and archived.
     - *Root Cause*: In `editor.py`, `KEY_CTRL_V` is mapped exclusively to
       `buffer.page_down()`. `buffer.paste_block()` is implemented in buffer
       engine but never dispatched by any key.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.3 and 10.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 9.3 and 10.
     - *Resolution*: Bound `KEY_CTRL_V` in `editor.py` to `paste_block()` with
       fallback to `page_down()` when clipboard is empty, reserving `KEY_PGDN`
       for dedicated paging. Validated via `test_ctrl_v_pastes_clipboard` in
@@ -320,7 +320,7 @@ have been resolved and archived.
       overwrite Field 4 (`^K: Editor keys`) on the universal status bar.
     - *Root Cause*: `editor.py`, `ui.py`, and `plugin.py` route event strings
       to status bar via `status_msg` instead of Tier 2 notification modals.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.4 and 11.1.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.4 and 11.1.
     - *Resolution*: Enforced persistent `^K: Editor keys` context on Field 4
       in `render_status_bar()`, and removed status bar squatting assignments
       on copy/cut in `editor.py`. Validated via
@@ -330,7 +330,7 @@ have been resolved and archived.
       it is drawn on top of the un-cleared parent menu without redrawing.
     - *Root Cause*: `action_plugin_palette()` does not erase parent surface
       or restore underlying screen before child modal execution.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.4.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.4.
     - *Resolution*: Redrawn underlying editor workspace before invoking plugin
       actions from `action_plugin_palette()`, isolating child modal pop-ups
       and cleanly clearing the parent menu. Validated via
@@ -340,7 +340,7 @@ have been resolved and archived.
       (`show_input`) have cramped 7-row height without empty separator rows.
     - *Root Cause*: `modal.py` omits the blank row separating the prompt line
       from the action buttons (`[Y]es ...` / `[Enter]=Confirm ...`).
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.3
       (Archetypes B and C).
     - *Resolution*: Updated `show_confirm()` and `show_input()` in `modal.py`
       to 8-row height with an empty separator row before action options, and
@@ -351,7 +351,7 @@ have been resolved and archived.
       `Delete` are ignored inside text input modal dialogs.
     - *Root Cause*: `show_input()` in `modal.py` lacks key handlers for
       cursor movement or character deletion inside the input brackets.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 (Archetype C).
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
     - *Resolution*: Implemented navigation (`Left`, `Right`, `Home`, `End`),
       delete under cursor (`Delete`, `Ctrl+G`), and WordStar navigation in
       `show_input()` in `modal.py`. Validated via
@@ -361,7 +361,7 @@ have been resolved and archived.
       Configuration screen is silently ignored.
     - *Root Cause*: `action_config_screen()` in `editor.py` defines options
       3 and 4 in display lines but implements no branch handlers for them.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.4.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
     - *Resolution*: Added missing `Config` properties and `save_config()`
       method in `config.py`, and implemented option 3 and 4 toggle handlers
       in `action_config_screen()` in `editor.py`. Validated via
@@ -371,7 +371,7 @@ have been resolved and archived.
     - *Root Cause*: `render_centered_workspace()` in `ui.py` invokes
       `render_status_bar()` as its final operation without repositioning
       cursor adjacent to `Enter choice: ` or `Enter option: `.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and 7.4.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.2 and 7.4.
     - *Resolution*: Updated `render_centered_workspace()` in `ui.py` to
       record prompt row/column and reposition the terminal cursor adjacent
       to the prompt following status bar rendering. Validated via
@@ -381,7 +381,7 @@ have been resolved and archived.
       pressing `ESC` with active block exits to Splash instead of canceling.
     - *Root Cause*: `action_splash_screen()` ignores `KEY_ESC`; `dispatch_key`
       lacks active block cancellation check on `KEY_ESC`.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10 and 11.5.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 10 and 11.5.
     - *Resolution*: Added `k == KEY_ESC` exit condition to splash screen loop
       in `action_splash_screen()`, and prioritized `block_active = 0` on
       `KEY_ESC` in `dispatch_key()` in `editor.py`. Validated via
@@ -390,7 +390,7 @@ have been resolved and archived.
     - *Symptom*: Pressing Delete (0x7F) deletes char to left instead of under.
     - *Root Cause*: `terminal.py` maps `KEY_DEL_CHAR` (`0x7F`) to
       `KEY_BACKSPACE` instead of `KEY_DELETE`.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Resolution*: Updated `get_key()` in `terminal.py` to map
       `KEY_DEL_CHAR` (`0x7F`) to `KEY_DELETE`, preserving `KEY_BACKSPACE`
       for `0x08`. Validated via `test_backspace_and_enter` in
@@ -399,7 +399,7 @@ have been resolved and archived.
     - *Symptom*: Panning jumps to `[Pan +40]` at column 79 rather than 80.
     - *Root Cause*: `buffer.py` checks `self.cursor_col >= usable_cols` where
       `usable_cols = 79`, triggering pan while cursor is still within screen.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 6.2.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.2.
     - *Resolution*: Updated `update_pan()` in `buffer.py` to trigger pan
       shifts when cursor reaches `view_cols` (column 80 in 80-col mode),
       allowing column 79 to render unpanned. Validated via
@@ -414,7 +414,7 @@ have been resolved and archived.
       internal user-space memory. When `is_key_ready()` calls `select.select()`
       on fd 0, the OS reports no bytes waiting, causing `is_key_ready()` to
       falsely report `False`.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.4 and Section 10.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 2.4 and Section 10.
     - *Resolution*: Updated `get_char()` and `is_key_ready()` in `terminal.py`
       to use unbuffered `os.read(fd, 1)` and direct fd selection when stdin has
       a file descriptor, falling back to stream reads for non-fd mock streams.
@@ -428,7 +428,7 @@ have been resolved and archived.
     - *Root Cause*: `editor.py`'s `Editor.run()` enters `render_editor()`
       unconditionally without checking whether an input file argument was
       provided on the CLI or displaying `action_splash_screen()`.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.2 and
       `src/se.asm` lines 146-151 (`HAS_FILE_ARG == 0 -> JP SHOW_SPLASH_SCREEN`).
     - *Resolution*: Updated `Editor.run()` in `editor.py` to invoke
       `self.action_splash_screen()` prior to entering the document edit loop
@@ -441,7 +441,7 @@ have been resolved and archived.
     - *Root Cause*: `render_status_bar()` in `ui.py` appends `[SEL]` at the end
       of `stat_text` instead of formatting live selection metrics
       (`Sel: X chars` / `Sel: X lines`) inside the 18-character Field 4 budget.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3 and
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3 and
       Section 11.3 (Anti-Pattern 3: Terminal Column Spill).
     - *Resolution*: Updated `render_status_bar()` in `ui.py` to format active
       block selection metrics (`Sel: X chars`/`Sel: X lines` or `Block: ...`)
@@ -457,7 +457,7 @@ have been resolved and archived.
     - *Root Cause*: `ui.py` formats `geom_field = f" {geometry_str} |"` instead
       of standard 8-character width `f"  {geometry_str} |"` and
       `fmt_str = "CPM  "` instead of `"CP/M "`.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
     - *Resolution*: Updated `render_status_bar()` in `ui.py` to format Field 2
       as `f" {geometry_str:>6} |"` (8 chars) and Field 3 as
       `f" {fmt_str} |"` with `fmt_str = "CP/M "` or `"Linux"`. Validated via
@@ -470,7 +470,7 @@ have been resolved and archived.
       with no case indicator or `Tab` toggle.
     - *Root Cause*: `action_find()` does not provide a custom search modal
       supporting `KEY_TAB` case-sensitivity toggling.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 (Archetype C)
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C)
       and `src/core/search.asm`.
     - *Resolution*: Implemented `show_find_dialog()` in `modal.py` featuring
       dynamic `[Tab]=Toggle Case` cycling of the `Search Pattern` indicator,
@@ -487,7 +487,7 @@ have been resolved and archived.
     - *Root Cause*: `action_splash_screen()` in `editor.py` uses a hard-coded
       abbreviated template and lacks dispatch branches for the full CP/M
       command matrix.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.2 and
       `src/core/plugin_mgr.asm` line 4278.
     - *Resolution*: Updated `action_splash_screen()` in `editor.py` to render
       the canonical 14 commands and 4 live status blocks with full dispatch
@@ -500,10 +500,10 @@ have been resolved and archived.
       `Press any key to continue`.
     - *Root Cause*: `action_help()` in `editor.py` uses legacy prompt string
       `Press any key to return to editor`.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 Archetype A
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 Archetype A
       and `tests/test_bug_2_22.py`.
     - *Resolution*: Replaced prohibited dismissal prompt in `action_help()` in
-      `editor.py` and `LOOK_AND_FEEL_SPEC.md` with canonical
+      `editor.py` and `UI_UX_DESIGN.md` with canonical
       `Press any key to continue`. Validated via
       `test_help_screen_dismissal_prompt` in `test_editor.py`.
   - [x] **Bug 2.7.20: Missing Tier 1 About ([A]) and Memory Map ([M]) Screens**:
@@ -512,7 +512,7 @@ have been resolved and archived.
       exist in CP/M `SE.COM` but are completely absent from Python SE.
     - *Root Cause*: `action_about()` and `action_mem_info()` are not implemented
       in `editor.py`.
-    - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1 and
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.1 and
       `src/se.asm` lines 2858 & 3465.
     - *Resolution*: Implemented `action_about()` and `action_mem_info()` in
       `editor.py` conforming to Tier 1 centered workspace layout, column 0

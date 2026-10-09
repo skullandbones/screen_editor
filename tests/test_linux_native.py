@@ -174,7 +174,7 @@ def test_document_load_and_save():
 
 
 def test_status_bar_canonical_layout():
-    """Verify canonical 5-field status bar layout per LOOK_AND_FEEL_SPEC.md."""
+    """Verify canonical 5-field status bar layout per UI_UX_DESIGN.md."""
     print("[*] Testing canonical 5-field status bar layout (§4.3)...")
     with tempfile.NamedTemporaryFile("w+", prefix="testdoc_", suffix=".txt",
                                      delete=False) as tf:
