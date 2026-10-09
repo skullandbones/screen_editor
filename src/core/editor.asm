@@ -2319,6 +2319,10 @@ SPLIT_NO_SCROLL:
 ;   Clobbers AF. Preserves BC, DE, HL.
 ;------------------------------------------------------------------------------
 HBIOS_DETECT:
+	IFDEF TARGET_NEXT
+	OR 0FFH				; NZ (not HBIOS)
+	RET
+	ELSE
 	PUSH IX
 	LD B,0F8H			; CIOCNT
 	LD C,000H
@@ -2326,4 +2330,5 @@ HBIOS_DETECT:
 	POP IX
 	OR A
 	RET
+	ENDIF
 

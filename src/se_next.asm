@@ -23,6 +23,10 @@
 ;------------------------------------------------------------------------------
 ; Subsystem Interface Headers & Constants
 ;------------------------------------------------------------------------------
+TARGET_NEXT		EQU	1
+TARGET_NEXT_NATIVE	EQU	1
+BDOS_ENTRY		EQU	NATIVE_BDOS_ENTRY
+
 	INCLUDE "include/config.inc"
 	INCLUDE "include/hal.inc"
 	INCLUDE "include/buffer.inc"
@@ -70,6 +74,30 @@ START:
 	LD (SAVED_SP),SP
 	LD SP,LOCAL_STACK
 
+	IFDEF NEXT_DOT_COMMAND
+	; .se dot command: Save command line tail from HL to DEFAULT_DMA
+	LD DE,DEFAULT_DMA+1
+	LD B,0
+DOT_CMD_COPY:
+	LD A,(HL)
+	OR A
+	JR Z,DOT_CMD_DONE
+	CP 13				; CR
+	JR Z,DOT_CMD_DONE
+	CP 10				; LF
+	JR Z,DOT_CMD_DONE
+	LD (DE),A
+	INC HL
+	INC DE
+	INC B
+	LD A,B
+	CP 126
+	JR C,DOT_CMD_COPY
+DOT_CMD_DONE:
+	LD A,B
+	LD (DEFAULT_DMA),A
+	ENDIF
+
 	; Query initial CP/M Version via BDOS 12 (Get Version Number)
 	LD C,12
 	CALL BDOS_ENTRY
@@ -98,36 +126,19 @@ START:
 	; Initialize Direct BIOS Console Vectors
 	CALL INIT_BIOS_JUMPS
 
-	; Initialize Screen Geometry to Default (120x40)
-	CALL SET_MODE_120X40
+	; Initialize Screen Geometry to Default 80x24 for Next hardware
+	CALL SET_MODE_80X24
 
-	; Check if filename was provided in FCB1 (populates WORK_FCB and
-	; HAS_FILE_ARG)
+	; Check if filename was provided in command line
 	CALL CHECK_COMMAND_LINE
 
-	; Load config from SE.CFG if present (local dir first, then program
-	; drive)
+	; Load config from SE.CFG if present
 	CALL LOAD_CONFIG
-
-	; Process RAM drive via HIBERN.OVL
-	LD A,(CFG_RAMDRIVE_FLAG)
-	OR A
-	JR Z,START_RAMDRV_DETECT
-	; Mode 1 or 2: Detect, Validate safety & Hibernate if requested
-	LD B,A			; B = requested mode (1=ENABLE, 2=HIBERNATE)
-	LD A,1				; Action 1
-	CALL RUN_HIBERN_STARTUP
-	JR START_RAMDRV_DONE
-START_RAMDRV_DETECT:
-	; Mode 0: Detect RAM drive letter only
-	XOR A				; Action 0
-	CALL RUN_HIBERN_STARTUP
-START_RAMDRV_DONE:
 
 	; Initialize Terminal (Clear Screen & Home)
 	CALL TERM_INIT
 
-	; Query RomWBW User Bank and Initialize Far RAM Banks
+	; Initialize Far RAM Banks
 	CALL BUFFER_INIT
 
 	; Initialize search state to defaults (Case-sensitive = 1)
