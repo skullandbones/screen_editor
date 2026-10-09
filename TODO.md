@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / Look & Feel Conformance Audit.
+- **Status**: Active / 6 Defects Open (Bugs 2.7.21–2.7.26).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -518,6 +518,80 @@ have been resolved and archived.
       `editor.py` conforming to Tier 1 centered workspace layout, column 0
       tilde discipline, and canonical dismissal prompt. Validated via
       `test_about_and_mem_info_workspaces` in `test_editor.py`.
+  - [ ] **Bug 2.7.21: Missing 3-Coordinate Space & Tab Traversal Engine**:
+    - *Symptom*: When files containing literal tab (`\t` / `0x09`) characters
+      are loaded, text lines wrap unpredictably, the terminal expands tabs
+      using hardware tab stops (8) instead of configured tab width (4/8),
+      and the hardware cursor is severely desynchronized from the text.
+    - *Root Cause*: `DocumentBuffer` and `UIRenderer` lack the canonical
+      3-coordinate system (Buffer Space `CUR_COL`, Visual Space `VisualCol`,
+      Screen Space `ScreenCol`) and `calc_visual_col()` mapping specified in
+      `docs/UI_UX_DESIGN.md` §6.1–§6.2. `ui.py` slices lines by raw byte index,
+      emits raw `\t` bytes to the terminal, and places cursor using raw
+      `cursor_col`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, 6.7.
+    - *Required Fix*: Implement `calc_visual_col()` in `buffer.py` and `ui.py`,
+      expand tabs into visual space during line rendering, pin cursor to
+      discrete character boundaries, and compute screen cursor column via
+      `(calc_visual_col(line, cursor_col, tab_width) - pan_col) + 1`.
+  - [ ] **Bug 2.7.22: Vertical Navigation Target Column Tab Misalignment**:
+    - *Symptom*: Navigating vertically (`Up`, `Down`, `PageUp`, `PageDown`)
+      across lines containing tab characters causes the cursor to jump
+      erratically to incorrect columns on adjacent lines.
+    - *Root Cause*: `move_up()`, `move_down()`, `page_up()`, and `page_down()`
+      in `buffer.py` set `cursor_col = min(target_col, len(current_line))`
+      where `target_col` stores a raw character index rather than sticky visual
+      column coordinates.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.4.
+    - *Required Fix*: Implement `adjust_col_to_target(target_vis_col)` in
+      `buffer.py` conforming to the Section 6.4 algorithm, maintaining
+      `target_col` as sticky visual column space across vertical movement.
+  - [ ] **Bug 2.7.23: Ctrl+D Mapped to Cursor Right Instead of Forward Delete**:
+    - *Symptom*: Pressing `Ctrl+D` moves cursor one position to the right
+      instead of deleting the character forward under the cursor.
+    - *Root Cause*: In `editor.py:105`, `KEY_CTRL_D` is bound alongside
+      `KEY_RIGHT` (`elif key == KEY_RIGHT or key == KEY_CTRL_D:`). Similarly,
+      `modal.py` binds `KEY_CTRL_D` to move right.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 10 Keybinding Table and
+      Architectural Decision Note.
+    - *Required Fix*: Rebind `KEY_CTRL_D` in `editor.py` to
+      `self.buffer.delete_char()`, remove `KEY_CTRL_D` from `KEY_RIGHT` cursor
+      navigation in `editor.py` and `modal.py`, and bind `KEY_CTRL_D` to delete
+      under cursor in input modals.
+  - [ ] **Bug 2.7.24: Tier 2 Modal Dialog Width Non-Conformance (50 cols)**:
+    - *Symptom*: Tier 2 confirmation query modals (`show_confirm`), text input
+      modals (`show_input`), and Find dialogs (`show_find_dialog`) are 50
+      columns wide with 48-hyphen borders instead of canonical 52 columns.
+    - *Root Cause*: `width = 50` is hard-coded in `modal.py` (lines 101, 144,
+      219).
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 8.3
+      (Archetypes B, C, D).
+    - *Required Fix*: Standardize modal box width to 52 columns (`width = 52`,
+      50-hyphen borders) across all Tier 2 Archetypes in `modal.py`.
+  - [ ] **Bug 2.7.25: Help Workspace Height & Obsolete WordStar Text**:
+    - *Symptom*: Help screen (`Ctrl+K`) renders 14 lines instead of canonical
+      17 lines and displays obsolete text `Arrows / WordStar (^S,^D,^E,^X)`
+      despite WordStar diamond navigation being dropped.
+    - *Root Cause*: `action_help()` in `editor.py` uses legacy 14-line text
+      containing obsolete WordStar navigation references.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.3 and Section 10.
+    - *Required Fix*: Update `action_help()` in `editor.py` to match the
+      canonical 17-line by 70-column layout specified in Section 7.3 displaying
+      `Arrows / ANSI VT100`.
+  - [ ] **Bug 2.7.26: Horizontal Pan Left Boundary Edge & Lookahead Defect**:
+    - *Symptom*: When horizontal pan is active (`[Pan +40]`), moving cursor
+      left to column 40 fails to reset the viewport back to column 0.
+      Additionally, editing at column 79 on lines extending past column 79 does
+      not trigger lookahead pan.
+    - *Root Cause*: `update_pan()` in `buffer.py` uses strict inequality
+      `elif self.cursor_col < 40: self.pan_col = 0` rather than inclusive
+      boundary `vis_col <= 40`, and lacks the lookahead edge trigger for active
+      lines extending past column 79.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
+    - *Required Fix*: Update `update_pan()` in `buffer.py` to implement
+      canonical `ADJUST_HORIZ_VIEWPORT` logic, ensuring retreat to `vis_col <=
+      40` resets `pan_col` to 0, and lookahead triggers at `vis_col ==
+      VIEW_RIGHT_COL - 1`.
 
 ---
 
