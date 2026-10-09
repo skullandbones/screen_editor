@@ -50,12 +50,12 @@ TARGET_NEXT_NEX = SE.NEX
 TARGET_NEXT_DOT = .se
 ASM_SRC_NEXT = src/se_next.asm
 
-.PHONY: all se-next-cpm se-next-native test-next plugins image init-image \
-	clean-image check-tpa check-plugins check-lines test test-sanity \
-	test-conformity test-paging test-config test-32k test-cpm3 \
-	test-plugins test-beautifier test-popup test-slots test-plugin-cfg \
-	test-fatfs test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full \
-	clean
+.PHONY: all se-py test-py se-next-cpm se-next-native test-next plugins \
+	image init-image clean-image check-tpa check-plugins check-lines test \
+	test-sanity test-conformity test-paging test-config test-32k \
+	test-cpm3 test-plugins test-beautifier test-popup test-slots \
+	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
+	test-fatfs-hook test-full clean
 
 
 
@@ -255,10 +255,18 @@ view-monkey:
 	python3 tools/monkey_viewer.py \
 		$(or $(SESSION),tests/monkey_session_sample.json)
 
+se-py:
+	@echo "==> Running native Python SE editor..."
+	python3 ports/python/bin/se $(ARGS)
+
+test-py:
+	@echo "==> Running native Python SE test suite..."
+	python3 tests/test_python_port.py
+
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
 	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-next test-paging \
-	test-monkey
+	test-monkey test-py
 
 
 clean:

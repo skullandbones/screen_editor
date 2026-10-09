@@ -355,12 +355,12 @@ platform hardware abstraction, targeting three primary operating profiles:
   `src/rust/`.
 
 ### 7.5 Python Native Implementation for Linux
-- [ ] Construct a native SE editor implementation in Python 3 for Linux.
-- [ ] Implement full feature parity and UI/UX fidelity:
-  - Terminal I/O using Python standard library `termios` / `tty` or `curses`.
-  - Centered boxed modal dialogs, status bar, and WordStar keybindings.
-  - Compatible `SE.CFG` reader, parser, and default settings engine.
-  - Python-based plugin loading architecture reflecting Host API vectors.
-- [ ] Target platforms:
+- [x] Construct a native SE editor implementation in Python 3 for Linux.
+- [x] Implement full feature parity and UI/UX fidelity:
+  - [x] Terminal I/O using standard library `termios` / `tty` or `curses`.
+  - [x] Centered boxed modal dialogs, status bar, and WordStar keybindings.
+  - [x] Compatible `SE.CFG` reader, parser, and default settings engine.
+  - [x] Python-based plugin loading architecture reflecting Host API vectors.
+- [x] Target platforms:
   - Python 3.10+ on PC (`x86_64`) and Raspberry Pi 4 / 5 (`aarch64`).
-- [ ] Add executable script and package setup under `ports/python/`.
+- [x] Add executable script and package setup under `ports/python/`.
