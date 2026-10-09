@@ -539,6 +539,31 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_help_screen_dismissal_prompt(self):
+        """Step 15: Verify help screen dismissal prompt text (Bug 2.7.19)."""
+        print(
+            "[*] Step 15: Testing help screen dismissal prompt text...",
+            flush=True,
+        )
+        rendered_lines = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines.extend(
+                lines
+            )
+        )
+        self.editor.terminal.get_key = lambda timeout=None: " "
+
+        self.editor.action_help()
+
+        help_text = "\n".join(rendered_lines)
+        self.assertIn("Press any key to continue", help_text)
+        self.assertNotIn("Press any key to return to editor", help_text)
+
+        print(
+            "[+] Step 15: Help screen canonical prompt verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

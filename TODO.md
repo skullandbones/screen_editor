@@ -300,7 +300,7 @@ have been resolved and archived.
       branches for `[N]`, `[W]`, `[L]`, `[A]`, `[M]`, `[1]`, and `[2]`.
       Validated via `test_splash_command_matrix_and_status_blocks` in
       `test_editor.py`.
-  - [ ] **Bug 2.7.19: Prohibited Dismissal Prompt Text on Help Screen**:
+  - [x] **Bug 2.7.19: Prohibited Dismissal Prompt Text on Help Screen**:
     - *Symptom*: Help screen (`Ctrl+K`) footer displays prohibited text:
       `Press any key to return to editor`. CP/M `SE.COM` displays canonical
       `Press any key to continue`.
@@ -308,6 +308,10 @@ have been resolved and archived.
       `Press any key to return to editor`.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 Archetype A
       and `tests/test_bug_2_22.py`.
+    - *Resolution*: Replaced prohibited dismissal prompt in `action_help()` in
+      `editor.py` and `LOOK_AND_FEEL_SPEC.md` with canonical
+      `Press any key to continue`. Validated via
+      `test_help_screen_dismissal_prompt` in `test_editor.py`.
   - [ ] **Bug 2.7.20: Missing Tier 1 About ([A]) and Memory Map ([M]) Screens**:
     - *Symptom*: Pressing `a` (About) or `m` (Memory Info) from Splash or
       keybindings in Python SE is ignored; both full-screen Tier 1 workspaces

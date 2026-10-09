@@ -215,7 +215,7 @@ content blocks rather than top-aligned text.
      ~    Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette
      ~    Ctrl+Y: Beautify Source Code        ESC   : Splash Screen
      ~
-     ~                   Press any key to return to editor
+     ~                   Press any key to continue
      ~
      [STATUS BAR AT ROW 24]
      ```

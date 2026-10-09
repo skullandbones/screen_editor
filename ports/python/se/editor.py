@@ -320,7 +320,7 @@ class Editor:
             "  Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette",
             "  Ctrl+Y: Beautify Source Code        ESC   : Splash Screen",
             "",
-            "Press any key to return to editor",
+            "Press any key to continue",
         ]
         geom = f"{self.terminal.cols}x{self.terminal.rows}"
         self.renderer.render_centered_workspace(
