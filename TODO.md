@@ -282,7 +282,7 @@ have been resolved and archived.
       dynamic `[Tab]=Toggle Case` cycling of the `Search Pattern` indicator,
       and updated `action_find()` in `editor.py`. Validated via
       `test_find_dialog_tab_case_toggle` in `test_editor.py`.
-  - [ ] **Bug 2.7.18: Splash Screen Missing Command Matrix and Status Blocks**:
+  - [x] **Bug 2.7.18: Splash Screen Missing Command Matrix and Status Blocks**:
     - *Symptom*: CP/M `SE.COM` splash screen features 14 canonical commands
       (`[E]`, `[N]`, `[O]`, `[S]`, `[W]`, `[L]`, `[A]`, `[M]`, `[P]`, `[^P]`,
       `[C]`, `[1]`, `[2]`, `[Q]`) and 4 dynamic status blocks (Screen geometry,
@@ -295,6 +295,11 @@ have been resolved and archived.
       command matrix.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.2 and
       `src/core/plugin_mgr.asm` line 4278.
+    - *Resolution*: Updated `action_splash_screen()` in `editor.py` to render
+      the canonical 14 commands and 4 live status blocks with full dispatch
+      branches for `[N]`, `[W]`, `[L]`, `[A]`, `[M]`, `[1]`, and `[2]`.
+      Validated via `test_splash_command_matrix_and_status_blocks` in
+      `test_editor.py`.
   - [ ] **Bug 2.7.19: Prohibited Dismissal Prompt Text on Help Screen**:
     - *Symptom*: Help screen (`Ctrl+K`) footer displays prohibited text:
       `Press any key to return to editor`. CP/M `SE.COM` displays canonical

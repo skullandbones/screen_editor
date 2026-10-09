@@ -42,6 +42,7 @@ from se.terminal import (
     KEY_CTRL_T,
     KEY_CTRL_U,
     KEY_CTRL_V,
+    KEY_CTRL_W,
     KEY_CTRL_X,
     KEY_CTRL_Y,
 )
@@ -377,58 +378,158 @@ class Editor:
             )
             return False
 
-    def action_splash_screen(self):
-        """Display full-screen Splash screen workspace."""
+    def action_new_file(self):
+        """Create new empty document (prompting if unsaved edits)."""
+        if self.buffer.modified:
+            ans = self.modal.show_confirm(
+                title="Unsaved Modifications",
+                desc="Discard current modifications for new document?",
+                query="Discard edits? [y/n]:",
+            )
+            if ans != "y":
+                return
+        self.buffer = DocumentBuffer(filename="(Untitled)")
+        self.buffer.has_file = False
+
+    def action_close_file(self):
+        """Close active document and return to blank untitled state."""
+        if self.buffer.modified:
+            ans = self.modal.show_confirm(
+                title="Unsaved Modifications",
+                desc="Discard current modifications before closing?",
+                query="Discard edits? [y/n]:",
+            )
+            if ans != "y":
+                return
+        self.buffer = DocumentBuffer(filename="(Untitled)")
+        self.buffer.has_file = False
+
+    def action_about(self):
+        """Display Tier 1 About screen workspace."""
         lines = [
             "SE — Screen Editor",
-            "Version v1.1.0 (Python Native Linux)",
+            "Version v1.1.0",
             "",
-            "Free Memory: [Dynamic Heap]   Lines: [32K Max]",
+            "A fast, full-screen text editor for CP/M-80 and Linux.",
             "",
-            ":e to edit",
-            ":o to open file",
-            ":s to save file",
-            ":c for config",
-            ":p for plugins",
-            ":? for help",
-            ":q to quit",
-            "",
-            "Enter choice: ",
+            "Press any key to continue",
         ]
         geom = f"{self.terminal.cols}x{self.terminal.rows}"
         self.renderer.render_centered_workspace(
             lines, self.buffer, geometry_str=geom
         )
+        self.terminal.get_key()
 
+    def action_mem_info(self):
+        """Display Tier 1 Memory Information workspace."""
+        lines = [
+            "SE — Memory Map & System Information",
+            "",
+            f"Screen Buffer: {self.terminal.cols}x{self.terminal.rows}",
+            f"Line Capacity: {self.config.max_lines}",
+            f"Active Lines : {self.buffer.total_lines}",
+            "",
+            "Press any key to continue",
+        ]
+        geom = f"{self.terminal.cols}x{self.terminal.rows}"
+        self.renderer.render_centered_workspace(
+            lines, self.buffer, geometry_str=geom
+        )
+        self.terminal.get_key()
+
+    def action_splash_screen(self):
+        """Display full-screen Splash screen workspace."""
         while True:
+            screen_lbl = (
+                "120x40 (Modern Default)"
+                if self.terminal.cols == 120
+                else "80x24 (Classic Terminal)"
+            )
+            ram_lbl = (
+                "Preserved (Active)"
+                if self.config.ramdrive_enabled
+                else "None Detected"
+            )
+            plugin_lbl = (
+                "Operational"
+                if self.plugin_mgr.list_plugins()
+                else "Disabled"
+            )
+            max_lines_str = (
+                "32,768 lines"
+                if self.config.max_lines == "32K"
+                else "16,384 lines"
+            )
+
+            lines = [
+                "SE - Screen Editor",
+                "",
+                "  type   [E]  or  [Enter] to edit",
+                "  type   [N]              to new file",
+                "  type   [O]              to open file",
+                "  type   [S]              to save file",
+                "  type   [W]  or  [^W]    to close file",
+                "  type   [L]  or  [^L]    to goto line",
+                "  type   [A]              for about",
+                "  type   [M]              for memory info",
+                "  type   [P]              for plugins",
+                "  type   [^P]             for context plugin menu",
+                "  type   [C]              to configure",
+                "  type   [1]              set 120x40",
+                "  type   [2]              set 80x24",
+                "  type   [Q]  or  [^Q]    to exit",
+                "",
+                f"Active Screen : [{screen_lbl}]",
+                f"RAM Drive     : [{ram_lbl}]",
+                f"Plugin System : [{plugin_lbl}]",
+                f"Max Lines     : [{max_lines_str}]",
+                "",
+                "Enter choice: ",
+            ]
+            geom = f"{self.terminal.cols}x{self.terminal.rows}"
+            self.renderer.render_centered_workspace(
+                lines, self.buffer, geometry_str=geom
+            )
+
             k = self.terminal.get_key()
             if not k:
                 continue
             ch = k.lower()
             if ch in ("e", "\r") or k == KEY_ESC:
                 return  # Return to editor
-            elif ch == "o":
+            elif ch == "n":
+                self.action_new_file()
+                return
+            elif ch == "o" or k == KEY_CTRL_O:
                 self.action_open_file()
                 return
             elif ch == "s":
                 self.action_save_file()
                 return
+            elif ch == "w" or k == KEY_CTRL_W:
+                self.action_close_file()
+            elif ch == "l" or k == KEY_CTRL_L:
+                self.action_goto_line()
+                return
+            elif ch == "a":
+                self.action_about()
+            elif ch == "m":
+                self.action_mem_info()
+            elif ch == "p" or k == KEY_CTRL_P:
+                self.action_plugin_palette()
             elif ch == "c":
                 self.action_config_screen()
-                self.renderer.render_centered_workspace(
-                    lines, self.buffer, geometry_str=geom
-                )
-            elif ch == "p":
-                self.action_plugin_palette()
-                self.renderer.render_centered_workspace(
-                    lines, self.buffer, geometry_str=geom
-                )
             elif ch == "?":
                 self.action_help()
-                self.renderer.render_centered_workspace(
-                    lines, self.buffer, geometry_str=geom
-                )
-            elif ch == "q":
+            elif ch == "1":
+                self.config.set("SCREEN", "120x40")
+                self.terminal.cols = self.config.screen_cols
+                self.terminal.rows = self.config.screen_rows
+            elif ch == "2":
+                self.config.set("SCREEN", "80x24")
+                self.terminal.cols = self.config.screen_cols
+                self.terminal.rows = self.config.screen_rows
+            elif ch == "q" or k == KEY_CTRL_Q:
                 self.action_quit()
                 return
 

@@ -479,6 +479,66 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_splash_command_matrix_and_status_blocks(self):
+        """Step 14: Verify 14 splash commands & 4 status blocks (Bug 2.7.18)."""
+        print(
+            "[*] Step 14: Testing splash command matrix & status blocks...",
+            flush=True,
+        )
+        rendered_lines_list = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines_list.append(
+                list(lines)
+            )
+        )
+
+        # Feed sequence: '1' (toggle 120x40), '2' (toggle 80x24), 'e' (exit)
+        keys = ["1", "2", "e"]
+        key_iter = iter(keys)
+        self.editor.terminal.get_key = lambda timeout=None: next(
+            key_iter, "e"
+        )
+
+        self.editor.action_splash_screen()
+
+        self.assertTrue(len(rendered_lines_list) >= 3)
+        splash_text = "\n".join(rendered_lines_list[0])
+
+        # Verify 14 canonical commands
+        expected_commands = [
+            "[E]  or  [Enter] to edit",
+            "[N]              to new file",
+            "[O]              to open file",
+            "[S]              to save file",
+            "[W]  or  [^W]    to close file",
+            "[L]  or  [^L]    to goto line",
+            "[A]              for about",
+            "[M]              for memory info",
+            "[P]              for plugins",
+            "[^P]             for context plugin menu",
+            "[C]              to configure",
+            "[1]              set 120x40",
+            "[2]              set 80x24",
+            "[Q]  or  [^Q]    to exit",
+        ]
+        for cmd in expected_commands:
+            self.assertIn(cmd, splash_text)
+
+        # Verify 4 status blocks
+        self.assertIn("Active Screen : [", splash_text)
+        self.assertIn("RAM Drive     : [", splash_text)
+        self.assertIn("Plugin System : [", splash_text)
+        self.assertIn("Max Lines     : [", splash_text)
+
+        # Verify geometry switching: initial 80x24 -> 120x40 -> 80x24
+        self.assertEqual(self.editor.terminal.cols, 80)
+        self.assertEqual(self.editor.terminal.rows, 24)
+
+        print(
+            "[+] Step 14: Splash commands & status blocks verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

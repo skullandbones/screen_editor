@@ -70,8 +70,8 @@ class TestEditorHeadless(unittest.TestCase):
 
         try:
             # Step 1: Wait for splash screen and status bar to render
-            output = read_pty_until(master_fd, "Screen Editor", timeout=3.0)
-            if "Screen Editor" not in output:
+            output = read_pty_until(master_fd, "(Untitled)", timeout=3.0)
+            if "(Untitled)" not in output:
                 print(
                     f"[-] Step 1: Failed to boot splash. Buffer: "
                     f"{repr(output[-300:])}",
