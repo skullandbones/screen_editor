@@ -227,28 +227,96 @@ void render_status_bar(void)
     hal_console_inverse_off();
 }
 
+static void render_tier1_workspace_screen(const char **lines,
+                                          size_t count,
+                                          size_t content_width)
+{
+    uint8_t avail_rows;
+    uint8_t top_row;
+    uint8_t left_col;
+    uint8_t r;
+    size_t line_idx;
+
+    clear_screen();
+    avail_rows = (g_active_rows > 1) ? (g_active_rows - 1) : 23;
+    top_row = (avail_rows > count)
+              ? (uint8_t)(((avail_rows - count) / 2) + 1)
+              : 1;
+    left_col = (g_active_cols > content_width)
+               ? (uint8_t)(((g_active_cols - content_width) / 2) + 1)
+               : 2;
+    if (left_col < 2) {
+        left_col = 2;
+    }
+
+    /* Column 0 Tilde Margin Discipline for all rows 1..avail_rows */
+    for (r = 1; r <= avail_rows; r++) {
+        hal_console_locate(r, 1);
+        hal_console_putc('~');
+        if (r >= top_row && r < top_row + count) {
+            line_idx = r - top_row;
+            hal_console_locate(r, left_col);
+            hal_console_puts(lines[line_idx]);
+        }
+        hal_console_clear_eol();
+    }
+
+    /* Universal Status Bar presence on Row HOST_ROWS */
+    render_status_bar();
+}
+
 void show_splash_screen(void)
 {
+    static const char *s_splash_lines[14] = {
+        "              SE.COM — Screen Editor              ",
+        "              Version v1.1.0 (Linux)              ",
+        "                                                  ",
+        "       Free Memory: [Dynamic Heap]   Lines: [32K] ",
+        "                                                  ",
+        "                     :e to edit                   ",
+        "                     :o to open file              ",
+        "                     :s to save file              ",
+        "                     :c for config                ",
+        "                     :p for plugins               ",
+        "                     :? for help                  ",
+        "                     :q to quit                   ",
+        "                                                  ",
+        "                   Enter choice: _                "
+    };
+    int k;
+
+    render_tier1_workspace_screen(s_splash_lines, 14, 50);
+    k = hal_console_getkey();
+    if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
+        g_editor_exit_flag = 1;
+    }
     clear_screen();
-    render_status_bar();
-    hal_console_locate(2, 25);
-    hal_console_puts("========================================");
-    hal_console_locate(3, 25);
-    hal_console_puts("     SE.COM - Full Screen Editor        ");
-    hal_console_locate(4, 25);
-    hal_console_puts("            Version 1.1.0               ");
-    hal_console_locate(5, 25);
-    hal_console_puts("========================================");
-    hal_console_locate(7, 20);
-    hal_console_puts("Ctrl+O : Open File        Ctrl+S : Save Document");
-    hal_console_locate(8, 20);
-    hal_console_puts("Ctrl+Q : Quick Exit       Ctrl+F : Find Text    ");
-    hal_console_locate(9, 20);
-    hal_console_puts("Ctrl+R : Search & Replace Ctrl+B : Block Select ");
-    hal_console_locate(10, 20);
-    hal_console_puts("Ctrl+Y : Beautify Code    Ctrl+K : Mode Guide   ");
-    hal_console_locate(13, 25);
-    hal_console_puts("Press any key to start editing...");
+    g_need_screen_render = 1;
+}
+
+static const char *s_help_lines[17] = {
+    "                       SE.COM — EDITOR MODE KEYS                      ",
+    "                                                                      ",
+    "  Cursor Navigation:                 Block Operations:                ",
+    "    Arrows / WordStar (^S,^D,^E,^X)     Ctrl+B: Toggle Block          ",
+    "    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block            ",
+    "    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block             ",
+    "    Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block           ",
+    "                                                                      ",
+    "  Search & Replace:                  File & System:                   ",
+    "    Ctrl+F: Find Text                   Ctrl+S: Save File             ",
+    "    Ctrl+N: Find Next                   Ctrl+O: Open File             ",
+    "    Ctrl+R: Search and Replace          Ctrl+Q: Safe Quit             ",
+    "    Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette        ",
+    "    Ctrl+Y: Beautify Source Code        ESC   : Splash Screen         ",
+    "                                                                      ",
+    "                   Press any key to return to editor                  ",
+    "                                                                      "
+};
+
+void show_help_screen(void)
+{
+    render_tier1_workspace_screen(s_help_lines, 17, 70);
     hal_console_getkey();
     clear_screen();
     g_need_screen_render = 1;
@@ -256,20 +324,15 @@ void show_splash_screen(void)
 
 void show_about_screen(void)
 {
-    clear_screen();
-    render_status_bar();
-    hal_console_locate(5, 25);
-    hal_console_puts("========================================");
-    hal_console_locate(6, 25);
-    hal_console_puts("    SE.COM - Multi-Platform Editor      ");
-    hal_console_locate(7, 25);
-    hal_console_puts("             Version 1.1.0              ");
-    hal_console_locate(8, 25);
-    hal_console_puts("       CP/M, ZX Spectrum Next, Linux    ");
-    hal_console_locate(9, 25);
-    hal_console_puts("========================================");
-    hal_console_locate(12, 28);
-    hal_console_puts("Press any key to return...");
+    static const char *s_about_lines[6] = {
+        "        SE.COM — Screen Editor (Linux)        ",
+        "                Version v1.1.0                ",
+        "                                              ",
+        "        CP/M, ZX Spectrum Next, Linux         ",
+        "                                              ",
+        "          Press any key to return...          "
+    };
+    render_tier1_workspace_screen(s_about_lines, 6, 46);
     hal_console_getkey();
     clear_screen();
     g_need_screen_render = 1;
@@ -277,27 +340,42 @@ void show_about_screen(void)
 
 void show_config_screen(void)
 {
-    /* Render configuration options dialog */
-    show_about_screen();
+    static const char *s_config_lines[11] = {
+        "            SE — Configuration Manager            ",
+        "                                                  ",
+        "         1. Screen Geometry  : 80x24              ",
+        "         2. Tab Width        : 8                  ",
+        "         3. Max Line Capacity: 32K                ",
+        "         4. RAM Drive Mode   : Disabled           ",
+        "                                                  ",
+        "   [S] Save to SE.CFG    [ESC]/[Enter] Return     ",
+        "                                                  ",
+        "                Enter option: _                   ",
+        "                                                  "
+    };
+    render_tier1_workspace_screen(s_config_lines, 11, 50);
+    hal_console_getkey();
+    clear_screen();
+    g_need_screen_render = 1;
 }
 
 void show_mem_info_screen(void)
 {
-    char buf[64];
-    clear_screen();
-    render_status_bar();
-    hal_console_locate(4, 25);
-    hal_console_puts("=== Virtual Memory & Banking Status ===");
-    snprintf(buf, sizeof(buf), "Free Virtual Slots: %u",
+    char line1[64];
+    char line2[64];
+    const char *mem_lines[5];
+
+    snprintf(line1, sizeof(line1), "      Free Virtual Slots: %-6u        ",
              (unsigned)mem_get_free_slots());
-    hal_console_locate(6, 25);
-    hal_console_puts(buf);
-    snprintf(buf, sizeof(buf), "Free Document Buffer: %u KB",
+    snprintf(line2, sizeof(line2), "      Free Document Buffer: %-4u KB    ",
              (unsigned)mem_get_free_kb());
-    hal_console_locate(7, 25);
-    hal_console_puts(buf);
-    hal_console_locate(10, 28);
-    hal_console_puts("Press any key to return...");
+    mem_lines[0] = "    === Virtual Memory & Banking Status ===   ";
+    mem_lines[1] = "                                              ";
+    mem_lines[2] = line1;
+    mem_lines[3] = line2;
+    mem_lines[4] = "          Press any key to return...          ";
+
+    render_tier1_workspace_screen(mem_lines, 5, 46);
     hal_console_getkey();
     clear_screen();
     g_need_screen_render = 1;

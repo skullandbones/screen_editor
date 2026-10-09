@@ -101,7 +101,7 @@ have been resolved and archived.
       `config.h` instead of the strict 120-character line barrier.
     - *Required Fix*: Implement horizontal pan quantum (+40 columns) shift
       logic (`pan_col` = 40 or 80) and enforce `MAX_LINE = 120` limit.
-  - [ ] **Bug 2.4.6: Tier 1 Centering & Column 0 Tilde Margin Discipline**:
+  - [x] **Bug 2.4.6: Tier 1 Centering & Column 0 Tilde Margin Discipline**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.2.
     - *Issue*: Splash and help screens use top-aligned fixed coordinates with
       ASCII banner borders and lack column 0 tilde (`~`) margin rows.

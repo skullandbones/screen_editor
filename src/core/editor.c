@@ -480,7 +480,8 @@ int editor_handle_key(int key)
     case KEY_CTRL_S: file_save(NULL, g_config.save_format); break;
     case KEY_CTRL_Y: do_ctrl_y_beautify(); break;
     case KEY_CTRL_Z: plugin_manager_ui(); break;
-    case KEY_CTRL_K: show_splash_screen(); break;
+    case KEY_CTRL_K: show_help_screen(); break;
+    case KEY_ESC: show_splash_screen(); break;
     case KEY_CTRL_X:
         if (g_block_mode != BLOCK_MODE_OFF) {
             do_move_block();

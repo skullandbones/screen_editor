@@ -417,6 +417,63 @@ def test_horizontal_panning_and_line_barrier():
             os.remove(test_file_path)
 
 
+def test_tier1_centering_and_tilde_discipline():
+    """Verify Tier 1 centering & column 0 tilde discipline (§5, §7)."""
+    print("[*] Testing Tier 1 centering & column 0 tildes (§5.2, §7)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        splash_out = read_all_available(master, 0.4).decode("utf-8",
+                                                            errors="replace")
+        assert "~" in splash_out, (
+            "Splash screen missing column 0 tilde margin discipline"
+        )
+        assert "SE.COM — Screen Editor" in splash_out, (
+            "Splash screen missing canonical centered title"
+        )
+
+        # Press space to enter editor mode
+        os.write(master, b" ")
+        time.sleep(0.2)
+        read_all_available(master, 0.2)
+
+        # Press Ctrl+K (0x0B) to open Help mode screen
+        os.write(master, b"\x0b")
+        help_out = read_all_available(master, 0.4).decode("utf-8",
+                                                          errors="replace")
+        assert "SE.COM — EDITOR MODE KEYS" in help_out, (
+            "Help screen missing canonical centered title"
+        )
+        assert "~" in help_out, (
+            "Help screen missing column 0 tilde margin discipline"
+        )
+        assert "80x24 |" in help_out, (
+            "Help screen missing universal status bar presence"
+        )
+
+        # Press space to return to editor
+        os.write(master, b" ")
+        time.sleep(0.2)
+        read_all_available(master, 0.2)
+
+        # Exit editor cleanly via Ctrl+Q
+        os.write(master, b"\x11\n")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Tier 1 centering & column 0 tildes verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -429,6 +486,7 @@ def main():
     test_status_event_notification_modal()
     test_arrow_and_wordstar_navigation()
     test_horizontal_panning_and_line_barrier()
+    test_tier1_centering_and_tilde_discipline()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
