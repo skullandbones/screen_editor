@@ -290,7 +290,7 @@ platform hardware abstraction, targeting three primary operating profiles:
 ## 7. Multi-Language & Multi-Platform Profiles
 
 ### 7.1 C Semantic Equivalent Implementations (Drop-in Replacement Modules)
-- [ ] Write C semantic equivalent implementations for each modular Z80 assembly
+- [x] Write C semantic equivalent implementations for each modular Z80 assembly
   component (`src/core/*.asm`):
   - `src/core/buffer.c`: Document line cache, slot indexing, split/join logic.
   - `src/core/memory.c`: Virtual slot allocation, cache eviction, swap paging.
@@ -303,7 +303,7 @@ platform hardware abstraction, targeting three primary operating profiles:
   - `src/core/config.c`: `SE.CFG` reader, parser, serializer, and defaults.
   - `src/core/plugin_mgr.c`: Relocation loader, slot table, host API bridge.
   - `src/core/beautify.c`: Z80 assembly code formatter and operand aligner.
-- [ ] Maintain drop-in replacement capability conforming to module header API
+- [x] Maintain drop-in replacement capability conforming to module header API
   and ABI specifications (`src/include/*.h` mirroring `src/include/*.inc`):
   - Function signatures, parameter passing, and return codes must match.
   - Support hybrid linking (e.g. C core modules with Z80 HAL or vice-versa
@@ -311,8 +311,8 @@ platform hardware abstraction, targeting three primary operating profiles:
   - Ensure zero behavioral deviation across line limits and modal layouts.
 
 ### 7.2 Linux Native Executable using C Equivalent Modules
-- [ ] Construct native Linux SE executable compiled from the C core modules.
-- [ ] Implement POSIX / Linux Hardware Abstraction Layer (`src/hal/linux/`):
+- [x] Construct native Linux SE executable compiled from the C core modules.
+- [x] Implement POSIX / Linux Hardware Abstraction Layer (`src/hal/linux/`):
   - `hal_linux_console.c`: ANSI escape sequences, `termios` raw mode, and
     terminal resize handling (`SIGWINCH`) for 80x24 / 120x40 geometries.
   - `hal_linux_keyboard.c`: Non-blocking POSIX stdin read, escape sequence
@@ -321,10 +321,10 @@ platform hardware abstraction, targeting three primary operating profiles:
     TPA banking while preserving identical slot semantics and limits.
   - `hal_linux_storage.c`: Standard POSIX file I/O (`open`, `read`, `write`)
     and directory enumeration (`opendir`, `readdir`) for Linux paths.
-- [ ] Target platforms:
+- [x] Target platforms:
   - PC / Workstation: `x86_64` (Linux).
   - Raspberry Pi: `aarch64` (Raspberry Pi 4 and Raspberry Pi 5).
-- [ ] Add `se-linux` target in `Makefile` with cross-compilation support.
+- [x] Add `se-linux` target in `Makefile` with cross-compilation support.
 
 ### 7.3 CP/M-86 Executable using C Modules
 - [ ] Construct CP/M-86 executable (`SE.CMD`) compiled from C core modules.

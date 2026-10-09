@@ -15,6 +15,7 @@
 *.nex
 .se
 SE
+se-linux
 *.PRL
 *.OVL
 *.prl

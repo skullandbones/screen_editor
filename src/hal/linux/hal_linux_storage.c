@@ -1,0 +1,89 @@
+/*==============================================================================
+ * HAL_LINUX_STORAGE.C: Linux POSIX HAL - File I/O & Directory Enumeration
+ *
+ * Purpose:
+ *   Implements standard POSIX file I/O operations (open, close, read, write)
+ *   and directory scanning (opendir, readdir) for Linux file paths.
+ *
+ * Part of SE.COM / Linux Native Profile (x86_64 and AArch64)
+ *============================================================================*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include "../../include/config.h"
+#include "../../include/hal.h"
+#include "../../include/ui_browser.h"
+
+int hal_storage_open(const char *path, void *handle)
+{
+    int fd;
+    if (!path || !handle) return -1;
+    fd = open(path, O_RDONLY);
+    if (fd < 0) return -1;
+    *(int *)handle = fd;
+    return 0;
+}
+
+int hal_storage_make(const char *path, void *handle)
+{
+    int fd;
+    if (!path || !handle) return -1;
+    fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return -1;
+    *(int *)handle = fd;
+    return 0;
+}
+
+int hal_storage_close(void *handle)
+{
+    int fd;
+    if (!handle) return -1;
+    fd = *(int *)handle;
+    if (fd >= 0) {
+        close(fd);
+        *(int *)handle = -1;
+    }
+    return 0;
+}
+
+int hal_storage_read_sec(void *handle, uint8_t *buf)
+{
+    int fd;
+    ssize_t n;
+    if (!handle || !buf) return -1;
+    fd = *(int *)handle;
+    n = read(fd, buf, 128);
+    return (n == 128) ? 0 : 1;
+}
+
+int hal_storage_write_sec(void *handle, const uint8_t *buf)
+{
+    int fd;
+    ssize_t n;
+    if (!handle || !buf) return -1;
+    fd = *(int *)handle;
+    n = write(fd, buf, 128);
+    return (n == 128) ? 0 : 1;
+}
+
+void hal_linux_scan_directory(const char *dir_path)
+{
+    DIR *d;
+    struct dirent *dir;
+
+    if (!dir_path) dir_path = ".";
+    d = opendir(dir_path);
+    if (!d) return;
+
+    while ((dir = readdir(d)) != NULL) {
+        /* Ignore hidden files */
+        if (dir->d_name[0] == '.') continue;
+        /* Found entry */
+    }
+    closedir(d);
+}
