@@ -25,13 +25,26 @@ boxed modal pop-up dialogs.
 - **Configuration Engine**: Compatible with `SE.CFG`.
 - **Python Plugin Subsystem**: Reflects upper memory Host API vectors.
 
-## Installation & Execution
-Run directly without installation:
+## Installation & Start Instructions
+See [READ.ME](READ.ME) for complete installation, startup, and plugin
+documentation.
+
+### Method 1: Direct Execution (No Install)
 ```bash
-python3 ports/python/bin/se [filename]
+ports/python/bin/se [filename]
 ```
-Or install in development mode:
+Or via top-level Makefile:
+```bash
+make se-py [ARGS="filename"]
+```
+
+### Method 2: Package Installation (pip)
 ```bash
 pip install -e ports/python
 se [filename]
+```
+
+### Method 3: Automated Test Verification
+```bash
+make test-py
 ```

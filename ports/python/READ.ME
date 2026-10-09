@@ -1,0 +1,152 @@
+# Screen Editor (SE) — Python Native Linux Port
+================================================================================
+Install and Start Instructions for Native Python 3 Screen Editor
+================================================================================
+
+1. System Requirements & Prerequisites
+--------------------------------------------------------------------------------
+- Operating System:
+  - Linux x86_64 (PC / Workstation)
+  - Linux aarch64 (Raspberry Pi 4, Raspberry Pi 5)
+- Python Runtime:
+  - Python 3.10 or newer (tested on 3.10, 3.11, 3.12+)
+- Zero Third-Party Dependencies:
+  - Pure Python standard library only (termios, tty, select, fcntl, os, sys)
+  - No pip packages or external C extensions required to run
+- Terminal Console:
+  - ANSI / VT100 compatible terminal emulator (xterm, GNOME Terminal, Kitty,
+    Alacritty, Linux VT console, tmux)
+  - Standard geometry: 80 columns x 24 rows (or wide 120x40)
+
+2. Installation Instructions
+--------------------------------------------------------------------------------
+There are three convenient ways to install or run the Python SE editor:
+
+Method A: Zero-Install Direct Execution (Recommended for quick use)
+  No installation or virtual environment is needed. Run directly from the
+  repository:
+
+    chmod +x ports/python/bin/se
+    ports/python/bin/se [filename]
+
+  Alternatively, invoke via top-level Makefile:
+
+    make se-py
+    make se-py ARGS="myfile.txt"
+
+Method B: User / Virtualenv Package Installation (pip)
+  Install the package in editable development mode so the 'se' command is
+  globally accessible within your Python environment:
+
+    pip install -e ports/python
+
+  Or install for your current user:
+
+    pip install --user ports/python
+
+  Once installed, the executable binary 'se' will be placed on your PATH.
+
+Method C: User Binary Symlink
+  Create a symbolic link in ~/.local/bin or /usr/local/bin:
+
+    ln -s "$(pwd)/ports/python/bin/se" ~/.local/bin/se
+
+3. Start & Launch Instructions
+--------------------------------------------------------------------------------
+Command Syntax:
+  se [filename[:line]] [-l LINE] [--config PATH] [-v] [-h]
+
+Usage Examples:
+  se                     Start editor with empty buffer (Untitled)
+  se notes.txt           Open existing file notes.txt (or create on save)
+  se src/main.c:45       Open src/main.c and jump directly to line 45
+  se -l 100 script.py    Open script.py with cursor positioned at line 100
+  se --config SE.CFG     Load custom SE.CFG configuration settings
+  se --version           Display version number and platform information
+  se --help              Display complete CLI help options
+
+Starting via Makefile:
+  make se-py                        Launch empty editor session
+  make se-py ARGS="test.txt"        Launch editor with target file
+
+Running Automated Verification Suite:
+  make test-py                      Run full unit and PTY test suite
+  python3 tests/test_python_port.py Run port tests directly
+
+4. User Interface & Keybinding Reference
+--------------------------------------------------------------------------------
+The Python port adheres 100% to docs/UI_UX_DESIGN.md specifications:
+- Tier 1 Workspaces: Mathematically centered editor, splash, and help screens
+  padded with column 0 tildes (~) on empty rows.
+- Tier 2 Boxed Modals: Centered ASCII frames (+---+) for queries and dialogs.
+- Universal Status Bar: Fixed bottom row (Row 24 or 40) displaying:
+  | FILENAME.EXT* | 80x24 | Linux | ^K: Editor keys | Line 1/1 Col 0 |
+
+Core Keyboard Controls (WordStar & Function Keys):
+  Cursor Navigation:
+    Arrows / WordStar    ^S (Left), ^D (Right), ^E (Up), ^X (Down)
+    Word / Line Jumps    ^A (Line Start / Home), ^E (Line End)
+    Document Jumps       ^T (Top of file), ^G (Bottom of file)
+    Page Jumps           ^U (Page Up), ^V (Page Down)
+
+  Text Editing Primitives:
+    Enter                Split line at cursor (max 120 columns)
+    Backspace            Delete character left / join with previous line
+    Delete               Delete character under cursor / join next line
+    Tab                  Insert spaces aligned to configured tab width (4 or 8)
+
+  Block Operations:
+    Ctrl+B               Toggle block selection mode ([SEL] / [BLK LOCK])
+    Ctrl+C               Copy selected block to clipboard
+    Ctrl+X               Cut selected block to clipboard
+    Ctrl+V               Paste clipboard buffer at cursor position
+
+  Search and Replace:
+    Ctrl+F               Open Find Text input modal
+    Ctrl+N               Find next occurrence of search pattern
+    Ctrl+R               Open Search and Replace modal dialog
+    Ctrl+L               Goto line number modal
+
+  File Operations & Session:
+    Ctrl+S               Save document (prompts if Untitled)
+    Ctrl+O               Open file prompt
+    Ctrl+Q               Safe quit (prompts to save if buffer modified)
+    Ctrl+K               Display full-screen Editor Mode Help workspace
+    ESC                  Return to Tier 1 Splash screen menu
+
+  Plugins & Subsystems:
+    Ctrl+P               Open context-aware Plugin Palette modal dialog
+    Ctrl+Y               Format Z80 source code via BEAUTIFY plugin
+
+5. Configuration Engine (SE.CFG)
+--------------------------------------------------------------------------------
+SE automatically checks the current working directory for SE.CFG upon startup.
+Supported configuration directives:
+  SCREEN=80x24         Terminal geometry (80x24 or 120x40)
+  TAB=4                Tab expansion width in spaces (4 or 8)
+  LINES=32K            Maximum document buffer capacity (16K or 32K)
+  RAMDRIVE=ENABLED     RAM drive status flag (ENABLED or DISABLED)
+
+Save active configuration anytime from the Splash screen menu (:c -> [S]).
+
+6. Plugin Subsystem
+--------------------------------------------------------------------------------
+Plugins reside under ports/python/plugins/ and are discovered dynamically.
+Built-in plugins include:
+  - ROT13    : Rotate alphabetical characters by 13 positions (line or block).
+  - WORDCNT  : Calculate line, word, and character counts in Tier 2 modal.
+  - BEAUTIFY : Align Z80 assembly labels, opcodes, operands, and comments.
+
+To create a custom plugin, inherit from PluginBase in se.plugin:
+
+  from se.plugin import PluginBase, HostAPI
+
+  class MyPlugin(PluginBase):
+      NAME = "MYPLUG"
+      DESCRIPTION = "Custom text utility"
+
+      def run(self, api: HostAPI) -> bool:
+          line = api.checkout_line(0)
+          api.commit_line(0, line.upper())
+          api.show_modal("My Plugin", "First line transformed to upper case.")
+          return True
