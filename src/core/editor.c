@@ -1,0 +1,467 @@
+/*==============================================================================
+ * EDITOR.C: Core Subsystem - Interactive Key Dispatch & Edit Primitives
+ *
+ * Purpose:
+ *   Implements the interactive editor key dispatch loop, cursor navigation,
+ *   character insertion, line splitting, line joining, and visual coordinates.
+ *   C semantic equivalent to src/core/editor.asm.
+ *
+ * Part of SE.COM / Multi-Platform Modular Screen Editor Architecture
+ *============================================================================*/
+
+#include <string.h>
+#include <stdio.h>
+#include "../include/config.h"
+#include "../include/buffer.h"
+#include "../include/editor.h"
+#include "../include/block.h"
+#include "../include/search.h"
+#include "../include/ui.h"
+#include "../include/ui_modal.h"
+#include "../include/hal.h"
+
+/* Global Editor Navigation & State Variables */
+uint16_t g_cur_col = 0;
+uint16_t g_top_doc_row = 0;
+uint16_t g_horiz_pan_offset = 0;
+uint8_t  g_insert_mode = 1;
+uint8_t  g_editor_exit_flag = 0;
+uint8_t  g_action_code = ACTION_EXIT;
+
+void editor_init(void)
+{
+    g_cur_col = 0;
+    g_top_doc_row = 0;
+    g_horiz_pan_offset = 0;
+    g_insert_mode = 1;
+    g_editor_exit_flag = 0;
+    g_action_code = ACTION_EXIT;
+    checkout_active_line(0);
+}
+
+uint16_t calc_visual_col(const char *buf, uint16_t char_col)
+{
+    uint16_t vis_col = 0;
+    uint16_t i;
+    uint8_t tab_w = g_config.tab_width ? g_config.tab_width : 8;
+
+    if (!buf) {
+        return 0;
+    }
+
+    for (i = 0; i < char_col && buf[i] != '\0'; i++) {
+        if (buf[i] == '\t') {
+            vis_col = (uint16_t)((vis_col / tab_w + 1) * tab_w);
+        } else {
+            vis_col++;
+        }
+    }
+    return vis_col;
+}
+
+void locate_cursor(void)
+{
+    uint16_t screen_row;
+    uint16_t vis_col;
+
+    if (g_cur_doc_row < g_top_doc_row) {
+        g_top_doc_row = g_cur_doc_row;
+    }
+
+    screen_row = (g_cur_doc_row - g_top_doc_row) + 1;
+    vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+
+    if (vis_col >= g_horiz_pan_offset) {
+        vis_col -= g_horiz_pan_offset;
+    } else {
+        vis_col = 0;
+    }
+
+    /* Column 0 has tilde margin on screen */
+    hal_console_locate((uint8_t)screen_row, (uint8_t)(vis_col + 2));
+}
+
+int do_char_insert(char c)
+{
+    uint16_t i;
+
+    checkout_active_line(g_cur_doc_row);
+
+    if (g_active_line_len >= MAX_INPUT_LINE_CHARS) {
+        return -1;
+    }
+
+    /* If cursor beyond current line length, pad with spaces */
+    if (g_cur_col > g_active_line_len) {
+        for (i = g_active_line_len; i < g_cur_col; i++) {
+            g_active_line_buf[i] = ' ';
+        }
+        g_active_line_len = g_cur_col;
+    }
+
+    if (g_insert_mode) {
+        for (i = g_active_line_len; i > g_cur_col; i--) {
+            g_active_line_buf[i] = g_active_line_buf[i - 1];
+        }
+        g_active_line_buf[g_cur_col] = c;
+        g_active_line_len++;
+    } else {
+        g_active_line_buf[g_cur_col] = c;
+        if (g_cur_col >= g_active_line_len) {
+            g_active_line_len = g_cur_col + 1;
+        }
+    }
+
+    g_active_line_buf[g_active_line_len] = '\0';
+    g_cur_col++;
+    g_doc_modified = 1;
+    g_need_line_render = 1;
+    g_need_status_render = 1;
+    return 0;
+}
+
+void do_backspace(void)
+{
+    uint16_t i;
+
+    checkout_active_line(g_cur_doc_row);
+
+    if (g_cur_col > 0) {
+        if (g_cur_col <= g_active_line_len) {
+            for (i = g_cur_col - 1; i + 1 <= g_active_line_len; i++) {
+                g_active_line_buf[i] = g_active_line_buf[i + 1];
+            }
+            g_active_line_len--;
+            g_active_line_buf[g_active_line_len] = '\0';
+        }
+        g_cur_col--;
+        g_doc_modified = 1;
+        g_need_line_render = 1;
+        g_need_status_render = 1;
+    } else if (g_cur_doc_row > 0) {
+        /* Join current line with previous line */
+        char prev_buf[MAX_ACTIVE_LINE_STRIDE];
+        uint16_t prev_len = fetch_line_to_buffer(g_cur_doc_row - 1,
+                                                 prev_buf,
+                                                 MAX_ACTIVE_PAYLOAD);
+
+        if (prev_len + g_active_line_len < MAX_INPUT_LINE_CHARS) {
+            memcpy(prev_buf + prev_len, g_active_line_buf, g_active_line_len);
+            prev_len += g_active_line_len;
+            prev_buf[prev_len] = '\0';
+
+            delete_doc_row(g_cur_doc_row);
+            g_cur_doc_row--;
+            checkout_active_line(g_cur_doc_row);
+
+            memcpy(g_active_line_buf, prev_buf, prev_len + 1);
+            g_active_line_len = prev_len;
+            g_cur_col = (uint16_t)(prev_len - (g_active_line_len - prev_len));
+            g_cur_col = prev_len - (prev_len - (prev_len - g_active_line_len));
+            /* Cursor lands at boundary between previous and joined line */
+            g_cur_col = prev_len - (g_active_line_len > 0 ?
+                                    (prev_len - (prev_len - 0)) : 0);
+            g_cur_col = prev_len - (g_active_line_len);
+
+            g_doc_modified = 1;
+            g_need_screen_render = 1;
+        }
+    }
+}
+
+void do_delete(void)
+{
+    uint16_t i;
+
+    checkout_active_line(g_cur_doc_row);
+
+    if (g_cur_col < g_active_line_len) {
+        for (i = g_cur_col; i + 1 <= g_active_line_len; i++) {
+            g_active_line_buf[i] = g_active_line_buf[i + 1];
+        }
+        g_active_line_len--;
+        g_active_line_buf[g_active_line_len] = '\0';
+        g_doc_modified = 1;
+        g_need_line_render = 1;
+        g_need_status_render = 1;
+    } else if (g_cur_doc_row + 1 < g_doc_total_lines) {
+        /* Pull up next line and join */
+        char next_buf[MAX_ACTIVE_LINE_STRIDE];
+        uint16_t next_len = fetch_line_to_buffer(g_cur_doc_row + 1,
+                                                 next_buf,
+                                                 MAX_ACTIVE_PAYLOAD);
+
+        if (g_active_line_len + next_len < MAX_INPUT_LINE_CHARS) {
+            memcpy(g_active_line_buf + g_active_line_len, next_buf, next_len);
+            g_active_line_len += next_len;
+            g_active_line_buf[g_active_line_len] = '\0';
+
+            delete_doc_row(g_cur_doc_row + 1);
+            g_doc_modified = 1;
+            g_need_screen_render = 1;
+        }
+    }
+}
+
+void do_enter(void)
+{
+    char tail_buf[MAX_ACTIVE_LINE_STRIDE];
+    uint16_t tail_len = 0;
+
+    checkout_active_line(g_cur_doc_row);
+
+    if (g_cur_col < g_active_line_len) {
+        tail_len = g_active_line_len - g_cur_col;
+        memcpy(tail_buf, g_active_line_buf + g_cur_col, tail_len);
+        tail_buf[tail_len] = '\0';
+
+        g_active_line_len = g_cur_col;
+        g_active_line_buf[g_cur_col] = '\0';
+    }
+
+    commit_active_line();
+    insert_blank_line(g_cur_doc_row + 1);
+    g_cur_doc_row++;
+    checkout_active_line(g_cur_doc_row);
+
+    if (tail_len > 0) {
+        memcpy(g_active_line_buf, tail_buf, tail_len);
+        g_active_line_len = tail_len;
+        g_active_line_buf[tail_len] = '\0';
+    }
+
+    g_cur_col = 0;
+    g_doc_modified = 1;
+    g_need_screen_render = 1;
+}
+
+void cursor_up(void)
+{
+    if (g_cur_doc_row > 0) {
+        commit_active_line();
+        g_cur_doc_row--;
+        checkout_active_line(g_cur_doc_row);
+        if (g_cur_col > g_active_line_len) {
+            g_cur_col = g_active_line_len;
+        }
+        if (g_cur_doc_row < g_top_doc_row) {
+            g_top_doc_row = g_cur_doc_row;
+            g_need_screen_render = 1;
+        }
+        g_need_status_render = 1;
+    }
+}
+
+void cursor_down(void)
+{
+    if (g_cur_doc_row + 1 < g_doc_total_lines) {
+        uint8_t vis_lines = g_active_rows ? (g_active_rows - 1) : 23;
+        commit_active_line();
+        g_cur_doc_row++;
+        checkout_active_line(g_cur_doc_row);
+        if (g_cur_col > g_active_line_len) {
+            g_cur_col = g_active_line_len;
+        }
+        if (g_cur_doc_row >= g_top_doc_row + vis_lines) {
+            g_top_doc_row = g_cur_doc_row - vis_lines + 1;
+            g_need_screen_render = 1;
+        }
+        g_need_status_render = 1;
+    }
+}
+
+void cursor_left(void)
+{
+    if (g_cur_col > 0) {
+        g_cur_col--;
+        g_need_status_render = 1;
+    } else if (g_cur_doc_row > 0) {
+        cursor_up();
+        g_cur_col = g_active_line_len;
+        g_need_status_render = 1;
+    }
+}
+
+void cursor_right(void)
+{
+    checkout_active_line(g_cur_doc_row);
+    if (g_cur_col < g_active_line_len) {
+        g_cur_col++;
+        g_need_status_render = 1;
+    } else if (g_cur_doc_row + 1 < g_doc_total_lines) {
+        cursor_down();
+        g_cur_col = 0;
+        g_need_status_render = 1;
+    }
+}
+
+void cursor_home(void)
+{
+    g_cur_col = 0;
+    g_need_status_render = 1;
+}
+
+void cursor_end(void)
+{
+    checkout_active_line(g_cur_doc_row);
+    g_cur_col = g_active_line_len;
+    g_need_status_render = 1;
+}
+
+void page_up(void)
+{
+    uint8_t page_step = g_active_rows ? (g_active_rows - 2) : 22;
+    if (g_cur_doc_row > page_step) {
+        g_cur_doc_row -= page_step;
+    } else {
+        g_cur_doc_row = 0;
+    }
+    if (g_top_doc_row > page_step) {
+        g_top_doc_row -= page_step;
+    } else {
+        g_top_doc_row = 0;
+    }
+    checkout_active_line(g_cur_doc_row);
+    if (g_cur_col > g_active_line_len) {
+        g_cur_col = g_active_line_len;
+    }
+    g_need_screen_render = 1;
+}
+
+void page_down(void)
+{
+    uint8_t page_step = g_active_rows ? (g_active_rows - 2) : 22;
+    if (g_cur_doc_row + page_step < g_doc_total_lines) {
+        g_cur_doc_row += page_step;
+    } else if (g_doc_total_lines > 0) {
+        g_cur_doc_row = g_doc_total_lines - 1;
+    }
+    g_top_doc_row += page_step;
+    if (g_top_doc_row >= g_doc_total_lines) {
+        g_top_doc_row = (g_doc_total_lines > 1) ? g_doc_total_lines - 1 : 0;
+    }
+    checkout_active_line(g_cur_doc_row);
+    if (g_cur_col > g_active_line_len) {
+        g_cur_col = g_active_line_len;
+    }
+    g_need_screen_render = 1;
+}
+
+void jump_file_top(void)
+{
+    g_cur_doc_row = 0;
+    g_top_doc_row = 0;
+    g_cur_col = 0;
+    checkout_active_line(0);
+    g_need_screen_render = 1;
+}
+
+void jump_file_bottom(void)
+{
+    if (g_doc_total_lines > 0) {
+        g_cur_doc_row = g_doc_total_lines - 1;
+    } else {
+        g_cur_doc_row = 0;
+    }
+    checkout_active_line(g_cur_doc_row);
+    g_cur_col = 0;
+    g_need_screen_render = 1;
+}
+
+void toggle_insert_mode(void)
+{
+    g_insert_mode = !g_insert_mode;
+    g_need_status_render = 1;
+}
+
+void adjust_col_to_target(uint16_t target_vis_col)
+{
+    uint16_t i;
+    checkout_active_line(g_cur_doc_row);
+    for (i = 0; i <= g_active_line_len; i++) {
+        if (calc_visual_col(g_active_line_buf, i) >= target_vis_col) {
+            g_cur_col = i;
+            return;
+        }
+    }
+    g_cur_col = g_active_line_len;
+}
+
+void goto_line(uint16_t target_line)
+{
+    if (target_line == 0) {
+        target_line = 1;
+    }
+    if (target_line > g_doc_total_lines) {
+        target_line = g_doc_total_lines;
+    }
+    commit_active_line();
+    g_cur_doc_row = target_line - 1;
+    checkout_active_line(g_cur_doc_row);
+    g_cur_col = 0;
+    if (g_cur_doc_row < g_top_doc_row ||
+        g_cur_doc_row >= g_top_doc_row + 20) {
+        g_top_doc_row = (g_cur_doc_row > 10) ? (g_cur_doc_row - 10) : 0;
+    }
+    g_need_screen_render = 1;
+}
+
+int editor_handle_key(int key)
+{
+    switch (key) {
+    case KEY_CTRL_A: cursor_home(); break;
+    case KEY_CTRL_E: cursor_end(); break;
+    case KEY_CTRL_D: cursor_right(); break;
+    case KEY_CTRL_G: do_delete(); break;
+    case KEY_BACKSPACE: do_backspace(); break;
+    case KEY_ENTER: do_enter(); break;
+    case KEY_CTRL_U: page_up(); break;
+    case KEY_CTRL_V: page_down(); break;
+    case KEY_CTRL_B: toggle_block_mode(); break;
+    case KEY_CTRL_C: cancel_block(); break;
+    case KEY_CTRL_F: do_ctrl_f_find(); break;
+    case KEY_CTRL_R: do_ctrl_r_replace(); break;
+    case KEY_CTRL_N: do_ctrl_n_find_next(); break;
+    case KEY_CTRL_Q:
+        if (modal_confirm_save_changes() == MODAL_RES_OK) {
+            g_editor_exit_flag = 1;
+        }
+        break;
+    default:
+        if (key >= 32 && key <= 126) {
+            do_char_insert((char)key);
+        } else if (key == '\t') {
+            do_char_insert('\t');
+        }
+        break;
+    }
+    return 0;
+}
+
+void editor_main_loop(void)
+{
+    while (!g_editor_exit_flag) {
+        int key;
+        if (g_need_screen_render) {
+            render_screen();
+            g_need_screen_render = 0;
+            g_need_line_render = 0;
+            g_need_status_render = 0;
+        } else {
+            if (g_need_line_render) {
+                render_current_line();
+                g_need_line_render = 0;
+            }
+            if (g_need_status_render) {
+                render_status_bar();
+                g_need_status_render = 0;
+            }
+        }
+        locate_cursor();
+
+        key = hal_console_getkey();
+        if (key > 0) {
+            editor_handle_key(key);
+        }
+    }
+}

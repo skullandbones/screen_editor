@@ -290,7 +290,7 @@ platform hardware abstraction, targeting three primary operating profiles:
 ## 7. Multi-Language & Multi-Platform Profiles
 
 ### 7.1 C Semantic Equivalent Implementations (Drop-in Replacement Modules)
-- [ ] Write C semantic equivalent implementations for each modular Z80 assembly
+- [x] Write C semantic equivalent implementations for each modular Z80 assembly
   component (`src/core/*.asm`):
   - `src/core/buffer.c`: Document line cache, slot indexing, split/join logic.
   - `src/core/memory.c`: Virtual slot allocation, cache eviction, swap paging.
@@ -303,7 +303,7 @@ platform hardware abstraction, targeting three primary operating profiles:
   - `src/core/config.c`: `SE.CFG` reader, parser, serializer, and defaults.
   - `src/core/plugin_mgr.c`: Relocation loader, slot table, host API bridge.
   - `src/core/beautify.c`: Z80 assembly code formatter and operand aligner.
-- [ ] Maintain drop-in replacement capability conforming to module header API
+- [x] Maintain drop-in replacement capability conforming to module header API
   and ABI specifications (`src/include/*.h` mirroring `src/include/*.inc`):
   - Function signatures, parameter passing, and return codes must match.
   - Support hybrid linking (e.g. C core modules with Z80 HAL or vice-versa
