@@ -131,12 +131,16 @@ have been resolved and archived.
       in `render_status_bar()`, and removed status bar squatting assignments
       on copy/cut in `editor.py`. Validated via
       `test_status_bar_field4_invariance` in `test_editor.py`.
-  - [ ] **Bug 2.7.5: Child Pop-up Isolation Defect in Plugin Palette**:
+  - [x] **Bug 2.7.5: Child Pop-up Isolation Defect in Plugin Palette**:
     - *Symptom*: When a plugin (e.g. `wordcnt.py`) displays a modal pop-up,
       it is drawn on top of the un-cleared parent menu without redrawing.
     - *Root Cause*: `action_plugin_palette()` does not erase parent surface
       or restore underlying screen before child modal execution.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.4.
+    - *Resolution*: Redrawn underlying editor workspace before invoking plugin
+      actions from `action_plugin_palette()`, isolating child modal pop-ups
+      and cleanly clearing the parent menu. Validated via
+      `test_plugin_palette_child_isolation` in `test_editor.py`.
   - [ ] **Bug 2.7.6: Tier 2 Modal Dialog Framing Layout Discrepancies**:
     - *Symptom*: Query modals (`show_confirm`) and text input modals
       (`show_input`) have cramped 7-row height without empty separator rows.

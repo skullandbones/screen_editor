@@ -99,6 +99,37 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_plugin_palette_child_isolation(self):
+        """Step 4: Verify child pop-up isolation protocol (Bug 2.7.5)."""
+        print(
+            "[*] Step 4: Testing child pop-up isolation protocol...",
+            flush=True,
+        )
+        self.editor.plugin_mgr.list_plugins = MagicMock(
+            return_value=[("ROT13", "Rotate letters")]
+        )
+        self.editor.modal.show_menu = MagicMock(return_value=0)
+        order_of_events = []
+        self.editor.renderer.render_editor = MagicMock(
+            side_effect=lambda *a, **k: order_of_events.append("render_editor")
+        )
+        self.editor.plugin_mgr.execute = MagicMock(
+            side_effect=lambda *a, **k: order_of_events.append("execute_plugin")
+        )
+
+        # Trigger plugin palette action
+        self.editor.action_plugin_palette()
+
+        self.assertIn("render_editor", order_of_events)
+        self.assertIn("execute_plugin", order_of_events)
+        # Must clear parent menu before executing child plugin
+        self.assertEqual(order_of_events, ["render_editor", "execute_plugin"])
+
+        print(
+            "[+] Step 4: Child pop-up isolation protocol verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

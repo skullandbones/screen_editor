@@ -445,6 +445,9 @@ class Editor:
             items=plugins,
         )
         if choice is not None and 0 <= choice < len(plugins):
+            # Child pop-up isolation protocol (Section 8.4): clear parent menu
+            geom = f"{self.terminal.cols}x{self.terminal.rows}"
+            self.renderer.render_editor(self.buffer, geometry_str=geom)
             plugin_name, _ = plugins[choice]
             self.plugin_mgr.execute(plugin_name)
 
