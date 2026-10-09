@@ -148,23 +148,185 @@ The status bar is the sole fixed screen anchor in SE.
    - Rows containing active document lines never have a column 0 tilde.
    - Rows inside Tier 2 modal pop-up dialog boxes never have a column 0 tilde.
 
-6. Horizontal Panning Engine ([Pan +40]) & Line Barrier
+6. Editor Viewport Cursor Mechanics & Horizontal Panning
 --------------------------------------------------------------------------------
-1. Physical Line Length Barrier:
-   - Maximum physical line length is strictly 120 characters (`MAX_LINE = 120`).
-   - When the cursor reaches column 120, character insertion is blocked.
-   - No line may ever exceed 120 characters under any circumstance.
+Porting SE.COM cursor handling requires conforming 100% to the exact state
+machine, coordinate spaces, tab expansion rules, sticky target columns, and
+viewport panning algorithms defined in `src/core/editor.asm` and
+`src/core/ui_render.asm`.
 
-2. Horizontal Pan Quantum (+40 Columns):
-   - Viewing columns beyond the 80-column screen boundary is accomplished via
-     horizontal viewport panning in increments of 40 columns.
-   - When cursor column exceeds 79, `pan_col` shifts to 40 (`[Pan +40]`).
-   - If cursor column exceeds 119, `pan_col` shifts to 80 (`[Pan +80]`).
-   - When cursor retreats below column 40, `pan_col` returns to 0.
+1. Architectural State Variables & Coordinate Spaces:
+   The editor controller maintains six fundamental position variables:
+   - `CUR_DOC_ROW` (16-bit): 0-indexed document line number
+     (`0 .. DOC_TOTAL_LINES - 1`).
+   - `TOP_DOC_ROW` (16-bit): 0-indexed document line number aligned with
+     the top row of the visible text viewport (Screen Row 1).
+   - `CUR_COL` (16-bit): 0-indexed byte/character offset within the active
+     line buffer (`0 .. line_len`). In lines containing tabs, this is the raw
+     character index, NOT the visual column.
+   - `TARGET_COL` (16-bit): 0-indexed sticky visual target column
+     (`0 .. MAX_LINE_CHARS - 1`). Updated only by horizontal movements
+     (Left, Right, Home, End) or text edits; preserved across vertical
+     movements (Up, Down, PgUp, PgDn).
+   - `VIEW_LEFT_COL` (16-bit): 0-indexed visual column currently aligned
+     with the leftmost text column of the viewport (0, 40, 80...).
+   - `VIEW_RIGHT_COL` (16-bit): `VIEW_LEFT_COL + ACTIVE_COLS` (80, 120...).
 
-3. Viewport Mapping Formula:
-   - `ScreenColumn = (BufferCursorCol - PanCol) + 1`
-   - Visible text slice for screen row: `line[PanCol : PanCol + ViewportWidth]`
+   These variables map across three distinct coordinate spaces:
+   - Buffer Space: `(CUR_DOC_ROW, CUR_COL)` — 0-indexed character offsets.
+   - Document Visual Space: `(CUR_DOC_ROW, VisualCol)` — 0-indexed column
+     coordinates with all tab characters fully expanded to tab stops.
+   - Terminal Screen Space: `(ScreenRow, ScreenCol)` — 1-indexed ANSI
+     coordinates dispatched to hardware via `\x1b[{row};{col}H`.
+
+2. Tab Character Representation, Expansion & Traversal:
+   - In-Memory Storage:
+     Tab characters are stored as literal ASCII byte `0x09` (`KEY_TAB`) in
+     document line buffers. A tab occupies exactly 1 byte in `CUR_COL`.
+   - Tab Stop Quantum Formula (`GET_TAB_SPACES`):
+     Tab stops occur at intervals of `CFG_TAB_WIDTH` (default 4 columns,
+     configurable to 8). From any visual column `col`, the number of space
+     columns required to advance to the next tab stop is:
+     `tab_spaces = tab_width - (col % tab_width)`
+   - Visual Column Mapping (`CALC_VISUAL_COL`):
+     To map buffer offset `CUR_COL` to document visual column `VisualCol`:
+     1. Initialize `vis_col = 0`.
+     2. For each byte offset `i` from `0` to `CUR_COL - 1`:
+        - If `line[i] == 0x09` (`KEY_TAB`):
+          `vis_col += tab_width - (vis_col % tab_width)`.
+        - Else:
+          `vis_col += 1`.
+     3. Clamp `vis_col` to `MAX_LINE_CHARS - 1`.
+   - Discrete Traversal Rule:
+     The cursor is pinned to discrete character boundaries in the buffer.
+     It NEVER rests inside an expanded tab on the screen.
+     - Moving right over a Tab leaps forward from `vis_col` to
+       `vis_col + tab_spaces` in a single keypress.
+     - Moving left over a Tab leaps backward to the visual column preceding
+       the Tab in a single keypress.
+
+3. Horizontal Navigation (Left, Right, Home, End) & Line Wrapping:
+   Horizontal cursor movements update both `CUR_COL` and sticky `TARGET_COL`.
+   - Cursor Left (`CURSOR_LEFT` / Arrow Left):
+     - If `CUR_COL > 0`: `CUR_COL -= 1`.
+     - If `CUR_COL == 0` and `CUR_DOC_ROW > 0`:
+       Wrap to end of previous line:
+       `CUR_DOC_ROW -= 1`.
+       `CUR_COL = len(line[CUR_DOC_ROW])`.
+       If `CUR_DOC_ROW < TOP_DOC_ROW`: Viewport scrolls up:
+       `TOP_DOC_ROW = CUR_DOC_ROW`.
+     - If `CUR_COL == 0` and `CUR_DOC_ROW == 0`: Blocked (no-op).
+     - Update sticky target: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+   - Cursor Right (`CURSOR_RIGHT` / Arrow Right):
+     - Let `line_len = len(line[CUR_DOC_ROW])`.
+     - If `CUR_COL < line_len`:
+       `CUR_COL += 1`.
+     - If `CUR_COL >= line_len` and `CUR_DOC_ROW + 1 < DOC_TOTAL_LINES`:
+       Wrap to beginning of next line:
+       `CUR_DOC_ROW += 1`.
+       `CUR_COL = 0`.
+       Screen row = `CUR_DOC_ROW - TOP_DOC_ROW`.
+       If `ScreenRow > ACTIVE_ROWS - 2`: Viewport scrolls down:
+       `TOP_DOC_ROW += 1`.
+     - If at end of last document line: Blocked (no-op).
+     - Update sticky target: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+   - Cursor Home (`CURSOR_HOME` / `Ctrl+A`):
+     - `CUR_COL = 0`.
+     - `TARGET_COL = 0`.
+   - Cursor End (`CURSOR_END` / `Ctrl+E`):
+     - `CUR_COL = len(line[CUR_DOC_ROW])` (clamped to `MAX_LINE_CHARS - 1`).
+     - `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+
+4. Vertical Navigation & Sticky Visual Column (`TARGET_COL`):
+   Vertical cursor movement preserves `TARGET_COL` across line boundaries.
+   Clamping cursor position when passing through shorter lines does NOT mutate
+   `TARGET_COL`, allowing the cursor to return to its original visual column
+   when encountering subsequent longer lines.
+   - Column Target Clamping Algorithm (`ADJUST_COL_TO_TARGET`):
+     Given the destination line and sticky `TARGET_COL`:
+     1. Initialize `char_idx = 0` and `vis_acc = 0`.
+     2. While `char_idx < len(line)` and `vis_acc < TARGET_COL`:
+        - If `line[char_idx] == 0x09` (`KEY_TAB`):
+          `spaces = tab_width - (vis_acc % tab_width)`.
+          If `vis_acc + spaces > TARGET_COL`: Break (stop at tab boundary).
+          `vis_acc += spaces`.
+          `char_idx += 1`.
+        - Else:
+          `vis_acc += 1`.
+          `char_idx += 1`.
+     3. Set `CUR_COL = char_idx`.
+   - Cursor Up (`CURSOR_UP` / Arrow Up):
+     - If `CUR_DOC_ROW == 0`: Blocked (no-op).
+     - `CUR_DOC_ROW -= 1`.
+     - Viewport scroll: If `CUR_DOC_ROW < TOP_DOC_ROW`:
+       `TOP_DOC_ROW = CUR_DOC_ROW`.
+     - Realign: `ADJUST_COL_TO_TARGET()`.
+   - Cursor Down (`CURSOR_DOWN` / Arrow Down):
+     - If `CUR_DOC_ROW >= DOC_TOTAL_LINES - 1`: Blocked (no-op).
+     - `CUR_DOC_ROW += 1`.
+     - Viewport scroll: If `CUR_DOC_ROW - TOP_DOC_ROW > ACTIVE_ROWS - 2`:
+       `TOP_DOC_ROW += 1`.
+     - Realign: `ADJUST_COL_TO_TARGET()`.
+   - Page Up (`PAGE_UP` / `Ctrl+U`):
+     - `step = ACTIVE_ROWS - 2` (22 on 80x24; 38 on 120x40).
+     - `CUR_DOC_ROW = max(0, CUR_DOC_ROW - step)`.
+     - `TOP_DOC_ROW = max(0, TOP_DOC_ROW - step)`.
+     - Clamp: Ensure `TOP_DOC_ROW <= CUR_DOC_ROW`.
+     - Realign: `ADJUST_COL_TO_TARGET()`.
+   - Page Down (`PAGE_DOWN` / `Ctrl+V` without block):
+     - `step = ACTIVE_ROWS - 2`.
+     - `max_row = max(0, DOC_TOTAL_LINES - 1)`.
+     - `CUR_DOC_ROW = min(max_row, CUR_DOC_ROW + step)`.
+     - If `CUR_DOC_ROW >= TOP_DOC_ROW + step`:
+       `TOP_DOC_ROW = min(max_row, TOP_DOC_ROW + step)`.
+     - Realign: `ADJUST_COL_TO_TARGET()`.
+
+5. Viewport Window Scrolling & Boundary Constraints:
+   - Document Viewport Boundaries:
+     - Visible document rows span `ScreenRow = 1 .. ACTIVE_ROWS - 1`
+       (Rows 1..23 on 80x24; Rows 1..39 on 120x40).
+     - Row 24 (or Row 40) is unconditionally reserved for Universal Status Bar.
+   - Screen Viewport Constraint (`CONSTRAIN_CURSOR_VIEWPORT`):
+     Whenever the terminal is resized, documents loaded, or windows switched:
+     - `max_vis_row = TOP_DOC_ROW + (ACTIVE_ROWS - 2)`.
+     - If `CUR_DOC_ROW > max_vis_row`: `CUR_DOC_ROW = max_vis_row`.
+     - If `CUR_DOC_ROW < TOP_DOC_ROW`: `CUR_DOC_ROW = TOP_DOC_ROW`.
+     - Realign `CUR_COL` via `ADJUST_COL_TO_TARGET()`.
+
+6. Horizontal Panning Engine (`[Pan +40]`) & 120-Column Line Barrier:
+   - Physical Line Length Barrier:
+     - Maximum physical line length is strictly 120 characters
+       (`MAX_LINE = 120`). Character insertion beyond 120 is blocked.
+   - Horizontal Pan Quantum (+40 Columns):
+     - On standard 80-column screens, columns beyond column 79 are accessed via
+       horizontal viewport panning in increments of 40 columns.
+     - `VIEW_LEFT_COL` operates in steps of 40 columns (`0, 40, 80`).
+   - Panning Shift Logic (`ADJUST_HORIZ_VIEWPORT`):
+     Let `vis_col = CALC_VISUAL_COL(CUR_COL)`:
+     - Pan Right:
+       - If `vis_col >= VIEW_RIGHT_COL`: Increment `VIEW_LEFT_COL` by 40
+         until `VIEW_RIGHT_COL > vis_col`.
+       - Edge Trigger: If `vis_col == VIEW_RIGHT_COL - 1` and the active line
+         continues beyond `CUR_COL` (character at `CUR_COL` and next character
+         are non-null), pan right by 40 columns.
+     - Pan Left:
+       - If `VIEW_LEFT_COL > 0` and `vis_col <= VIEW_LEFT_COL`:
+         `VIEW_LEFT_COL = ((vis_col - 1) / 40) * 40` (rounds down to multiple
+         of 40).
+   - Status Bar Pan Indicator:
+     - When `VIEW_LEFT_COL > 0`, Status Bar Field 5 displays
+       `[Pan +{VIEW_LEFT_COL}]` (e.g. `[Pan +40]`, `[Pan +80]`).
+     - When `VIEW_LEFT_COL == 0`, the indicator is cleared.
+
+7. Terminal Hardware Cursor Placement (`LOCATE_CURSOR`):
+   After all navigation, panning, or editing steps, the hardware cursor is
+   positioned on the terminal using 1-based ANSI escape codes:
+   - `ScreenRow = (CUR_DOC_ROW - TOP_DOC_ROW) + 1`
+     - Clamped to: `1 <= ScreenRow <= ACTIVE_ROWS - 1`.
+   - `ScreenCol = (CALC_VISUAL_COL(CUR_COL) - VIEW_LEFT_COL) + 1`
+     - Clamped to: `1 <= ScreenCol <= ACTIVE_COLS`.
+   - Hardware Escape Sequence:
+     `\x1b[{ScreenRow};{ScreenCol}H`.
 
 7. Tier 1 Centered Workspaces
 --------------------------------------------------------------------------------
