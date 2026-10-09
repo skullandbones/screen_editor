@@ -50,16 +50,33 @@ TARGET_NEXT_NEX = SE.NEX
 TARGET_NEXT_DOT = .se
 ASM_SRC_NEXT = src/se_next.asm
 
-.PHONY: all se-next-cpm se-next-native test-next plugins image init-image \
-	clean-image check-tpa check-plugins check-lines test test-sanity \
-	test-conformity test-paging test-config test-32k test-cpm3 \
-	test-plugins test-beautifier test-popup test-slots test-plugin-cfg \
-	test-fatfs test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-full \
-	clean
+TARGET_LINUX = se-linux
+C_CORE_SRCS = src/core/buffer.c src/core/memory.c src/core/editor.c \
+	src/core/block.c src/core/search.c src/core/ui_render.c \
+	src/core/ui_modal.c src/core/ui_browser.c src/core/config.c \
+	src/core/plugin_mgr.c src/core/beautify.c src/core/file_io.c
+C_HAL_LINUX_SRCS = src/hal/linux/hal_linux_console.c \
+	src/hal/linux/hal_linux_keyboard.c src/hal/linux/hal_linux_memory.c \
+	src/hal/linux/hal_linux_storage.c
+LINUX_MAIN_SRC = src/se_linux.c
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
+
+.PHONY: all se-next-cpm se-next-native test-next plugins image \
+	init-image clean-image check-tpa check-plugins check-lines test \
+	test-sanity test-conformity test-paging test-config test-32k \
+	test-cpm3 test-plugins test-beautifier test-popup test-slots \
+	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
+	test-fatfs-hook test-full clean
 
 
 
 all: $(TARGET) plugins
+
+$(TARGET_LINUX): $(LINUX_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_LINUX_SRCS)
+	@echo "==> Compiling $(TARGET_LINUX) with $(CC)..."
+	$(CC) $(CFLAGS) -o $(TARGET_LINUX) $(LINUX_MAIN_SRC) $(C_CORE_SRCS) \
+		$(C_HAL_LINUX_SRCS)
 
 se-next-cpm: $(TARGET_NEXT_CPM)
 
@@ -262,8 +279,8 @@ test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 
 
 clean:
-	rm -f $(TARGET) $(TARGET_NEXT_CPM) $(TARGET_NEXT_NEX) SE.nex \
-		$(TARGET_NEXT_DOT) SE SE_NEX.BIN dot_se.bin *.lst src/*.lst \
-		*.obj src/*.obj *.lis *.def *.map *.sym src/*.o src/*.map \
-		src/*.sym plugins/*.PRL plugins/*.OVL plugins/*.bin \
+	rm -f $(TARGET) $(TARGET_LINUX) $(TARGET_NEXT_CPM) $(TARGET_NEXT_NEX) \
+		SE.nex $(TARGET_NEXT_DOT) SE SE_NEX.BIN dot_se.bin *.lst \
+		src/*.lst *.obj src/*.obj *.lis *.def *.map *.sym src/*.o \
+		src/*.map src/*.sym plugins/*.PRL plugins/*.OVL plugins/*.bin \
 		plugins/*.lst plugins/*.sym

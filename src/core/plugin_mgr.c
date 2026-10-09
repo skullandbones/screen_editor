@@ -92,9 +92,10 @@ void plugin_manager_ui(void)
     hal_console_puts("Slot  Name      Status      Capabilities");
 
     for (i = 0; i < PLUGIN_MAX_SLOTS; i++) {
-        char buf[64];
+        char buf[80];
         if (s_plugin_registry[i].active) {
-            snprintf(buf, sizeof(buf), "[%u]   %-8s  Active      Far RAM Exec",
+            snprintf(buf, sizeof(buf),
+                     "[%u]   %-8.8s  Active      Far RAM Exec",
                      (unsigned)i, s_plugin_registry[i].name);
         } else {
             snprintf(buf, sizeof(buf), "[%u]   --------  (empty)     ---",

@@ -145,14 +145,13 @@ int do_ctrl_f_find(void)
 {
     char input[SEARCH_BUF_MAX] = {0};
     if (g_search_len > 0) {
-        strncpy(input, g_search_buf, SEARCH_BUF_MAX - 1);
+        snprintf(input, sizeof(input), "%s", g_search_buf);
     }
 
     if (modal_prompt_text("Find Text", "Search for:",
                           input, FIND_POPUP_FIELD_LEN) == MODAL_RES_OK) {
         if (input[0] != '\0') {
-            strncpy(g_search_buf, input, SEARCH_BUF_MAX - 1);
-            g_search_buf[SEARCH_BUF_MAX - 1] = '\0';
+            snprintf(g_search_buf, sizeof(g_search_buf), "%s", input);
             g_search_len = (uint16_t)strlen(g_search_buf);
             return execute_find_forward();
         }
@@ -191,9 +190,9 @@ int do_ctrl_r_replace(void)
         return 0;
     }
 
-    strncpy(g_search_buf, find_input, SEARCH_BUF_MAX - 1);
+    snprintf(g_search_buf, sizeof(g_search_buf), "%s", find_input);
     g_search_len = (uint16_t)strlen(g_search_buf);
-    strncpy(g_replace_buf, repl_input, SEARCH_BUF_MAX - 1);
+    snprintf(g_replace_buf, sizeof(g_replace_buf), "%s", repl_input);
     g_replace_len = (uint16_t)strlen(g_replace_buf);
 
     while (execute_find_forward() == 0) {
