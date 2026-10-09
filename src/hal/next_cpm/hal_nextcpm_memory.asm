@@ -57,38 +57,185 @@ NEXTCPM_MEM_DETECT:
 	XOR A				; Return Z = 0 for detected Next
 	RET
 
+; Far RAM Base 8KB Page allocation (above system reserved 128K pages)
+NEXT_FAR_RAM_BASE_PAGE	EQU	020H	; 8KB Page 32 (256 KB offset)
+
+NEXT_MEM_INIT		EQU	NEXTCPM_MEM_INIT
+
 ;------------------------------------------------------------------------------
 ; NEXTCPM_MEM_INIT: Initialize Far RAM memory for NextCPM environment
 ;
 ; Purpose:
-;   Probes for Next hardware banking. If present, initializes Far RAM bank
-;   descriptors. If absent or in standard 64KB TPA, defaults to disk swap.
+;   Initializes 12 Far RAM banks across Next on-board SRAM for document
+;   storage under NextCPM.
 ;
 ; Outputs:
-;   EXT_BANK_COUNT populated (0..12).
-;   LINE_TABLE_BANK and LINE_TABLE_BANK_1 initialized.
+;   EXT_BANK_COUNT = 10, LINE_TABLE_BANK = 0, LINE_TABLE_BANK_1 = 1.
+;   Carry = 0 on success.
 ;
 ; Preserves / Modifies:
 ;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 NEXTCPM_MEM_INIT:
-	CALL NEXTCPM_MEM_DETECT
-	JR NZ,NEXTCPM_MEM_NO_BANKS
+	; Set CPM_USER_BANK to 0xFF (so user bank never collides with 0..11)
+	LD A,0FFH
+	LD (CPM_USER_BANK),A
 
-	; Next hardware detected: initialize Next Far RAM banking
-	; For safe CP/M operation, configure 4 banks (128KB Far RAM)
-	LD A,4
-	LD (EXT_BANK_COUNT),A
+	; Configure Line Table banks (Banks 0 and 1 = 64KB line table)
 	XOR A
-	LD (LINE_TABLE_BANK),A
+	LD (LINE_TABLE_BANK),A		; Bank 0: lines 0..16383
 	INC A
-	LD (LINE_TABLE_BANK_1),A
+	LD (LINE_TABLE_BANK_1),A	; Bank 1: lines 16384..32767
+
+	; Configure document line limit: 32,768 lines
+	LD HL,MAX_DOC_LINES_32K
+	LD (MAX_DOC_LINES_LIMIT),HL
+
+	; Populate EXT_BANK_TABLE with text slot banks 2..11 (10 banks)
+	LD HL,EXT_BANK_TABLE
+	LD B,10
+	LD A,2
+NCMI_BANK_LOOP:
+	LD (HL),A
+	INC HL
+	INC A
+	DJNZ NCMI_BANK_LOOP
+
+	LD A,10
+	LD (EXT_BANK_COUNT),A
+	OR A				; Clear carry (success)
 	RET
 
-NEXTCPM_MEM_NO_BANKS:
-	; Standard CP/M mode without banking: use disk swap ($$$SE$$$.SWP)
-	XOR A
-	LD (EXT_BANK_COUNT),A
-	LD (LINE_TABLE_BANK),A
-	LD (LINE_TABLE_BANK_1),A
+;------------------------------------------------------------------------------
+; NEXT_SYSSETCPY: Setup source/destination banks and length for Next bank copy
+;
+; Inputs:
+;   D = Destination Bank ID
+;   E = Source Bank ID
+;   HL = Byte Count to copy
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
+;------------------------------------------------------------------------------
+NEXT_SYSSETCPY:
+	PUSH AF
+	LD A,D
+	LD (NEXT_CPY_DEST_BNK),A
+	LD A,E
+	LD (NEXT_CPY_SRC_BNK),A
+	LD (NEXT_CPY_LEN),HL
+	POP AF
 	RET
+
+;------------------------------------------------------------------------------
+; NEXT_SYSBNKCPY: Copy memory between Local RAM and Next MMU Far RAM Slot 0
+;
+; Purpose:
+;   Maps target Far RAM 8KB page into MMU Slot 0 ($0000-$1FFF) via NextReg 0x50,
+;   executes atomic LDIR with interrupts disabled, and restores original Slot 0.
+;
+; Inputs:
+;   HL = Source Address
+;   DE = Destination Address
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
+NEXT_SYSBNKCPY:
+	LD A,(NEXT_CPY_SRC_BNK)
+	LD B,A
+	LD A,(CPM_USER_BANK)
+	CP B
+	JR Z,NCSB_SRC_IS_USER
+
+	; Case 1: Source is Far RAM Bank (B), Destination is Local RAM (DE)
+	; Compute physical 8KB page: 32 + (Bank * 4) + (H >> 5)
+	LD A,B
+	ADD A,A
+	ADD A,A
+	LD C,A
+
+	LD A,H
+	RLCA
+	RLCA
+	RLCA
+	AND 07H
+	ADD A,C
+	ADD A,NEXT_FAR_RAM_BASE_PAGE
+	LD (NEXT_TARGET_FAR_PAGE),A
+
+	; Adjust Far Source Address to Slot 0 ($0000..$1FFF)
+	LD A,H
+	AND 01FH
+	LD H,A
+	JR NCSB_DO_TRANSFER
+
+NCSB_SRC_IS_USER:
+	; Case 2: Source is Local RAM (HL), Destination is Far RAM Bank
+	LD A,(NEXT_CPY_DEST_BNK)
+	LD B,A
+	LD A,(CPM_USER_BANK)
+	CP B
+	JR Z,NCSB_LOCAL_TO_LOCAL
+
+	; Compute physical 8KB page: 32 + (Bank * 4) + (D >> 5)
+	LD A,B
+	ADD A,A
+	ADD A,A
+	LD C,A
+
+	LD A,D
+	RLCA
+	RLCA
+	RLCA
+	AND 07H
+	ADD A,C
+	ADD A,NEXT_FAR_RAM_BASE_PAGE
+	LD (NEXT_TARGET_FAR_PAGE),A
+
+	; Adjust Far Destination Address to Slot 0 ($0000..$1FFF)
+	LD A,D
+	AND 01FH
+	LD D,A
+
+NCSB_DO_TRANSFER:
+	; Save current Slot 0 page and map Far Page into Slot 0
+	LD BC,NEXT_PORT_REG_SELECT
+	LD A,050H
+	OUT (C),A
+	LD BC,NEXT_PORT_REG_DATA
+	IN A,(C)
+	LD (NEXT_SAVED_SLOT0_PAGE),A
+	LD A,(NEXT_TARGET_FAR_PAGE)
+	OUT (C),A
+
+	; Perform atomic transfer
+	LD BC,(NEXT_CPY_LEN)
+	DI
+	LDIR
+
+	; Restore original Slot 0 page
+	LD BC,NEXT_PORT_REG_SELECT
+	LD A,050H
+	OUT (C),A
+	LD BC,NEXT_PORT_REG_DATA
+	LD A,(NEXT_SAVED_SLOT0_PAGE)
+	OUT (C),A
+	EI
+	RET
+
+NCSB_LOCAL_TO_LOCAL:
+	LD BC,(NEXT_CPY_LEN)
+	LDIR
+	RET
+
+;------------------------------------------------------------------------------
+; Far Memory Transfer State Variables
+;------------------------------------------------------------------------------
+NEXT_CPY_DEST_BNK:	DB	0
+NEXT_CPY_SRC_BNK:	DB	0
+NEXT_CPY_LEN:		DW	0
+NEXT_SAVED_SLOT0_PAGE:	DB	0
+NEXT_TARGET_FAR_PAGE:	DB	0
+
+; End of HAL_NEXTCPM_MEMORY.ASM

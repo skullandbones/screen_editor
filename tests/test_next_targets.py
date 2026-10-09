@@ -80,7 +80,7 @@ def test_next_dot():
         path = os.path.join(PROJECT_DIR, name)
         assert os.path.exists(path), f"Missing {path}"
         size = os.path.getsize(path)
-        assert size == 48128, f"Expected 48,128 B, got {size}"
+        assert size == 49152, f"Expected 49,152 B, got {size}"
 
         with open(path, "rb") as f:
             first_byte = f.read(1)[0]

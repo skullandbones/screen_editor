@@ -11,7 +11,9 @@
 ;------------------------------------------------------------------------------
 ; CP/M System Addresses & Vectors
 ;------------------------------------------------------------------------------
+	IFNDEF BDOS_ENTRY
 BDOS_ENTRY		EQU	$0005	; BDOS call entry vector
+	ENDIF
 DEFAULT_FCB		EQU	$005C	; Default FCB 1 in CP/M base page
 DEFAULT_DMA		EQU	$0080	; Default DMA buffer in base page
 CMD_LEN			EQU	$0080	; Command tail length byte

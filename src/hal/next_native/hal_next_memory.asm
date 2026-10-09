@@ -76,38 +76,160 @@ NEXT_MEM_DETECT:
 ;   Clobbers AF, BC, DE, HL.
 ;------------------------------------------------------------------------------
 NEXT_MEM_INIT:
-	CALL NEXT_MEM_DETECT
-	JR NZ,NMI_NO_HARDWARE
+	; Set CPM_USER_BANK to 0xFF (so user bank never collides with 0..11)
+	LD A,0FFH
+	LD (CPM_USER_BANK),A
 
-	; Allocate 12 Far RAM banks across Next on-board SRAM
-	LD A,12
-	LD (EXT_BANK_COUNT),A
+	; Configure Line Table banks (Banks 0 and 1 = 64KB line table)
 	XOR A
-	LD (LINE_TABLE_BANK),A
+	LD (LINE_TABLE_BANK),A		; Bank 0: lines 0..16383
 	INC A
-	LD (LINE_TABLE_BANK_1),A
+	LD (LINE_TABLE_BANK_1),A	; Bank 1: lines 16384..32767
+
+	; Configure document line limit: 32,768 lines
+	LD HL,MAX_DOC_LINES_32K
+	LD (MAX_DOC_LINES_LIMIT),HL
+
+	; Populate EXT_BANK_TABLE with text slot banks 2..11 (10 banks)
+	LD HL,EXT_BANK_TABLE
+	LD B,10
+	LD A,2
+NMI_BANK_LOOP:
+	LD (HL),A
+	INC HL
+	INC A
+	DJNZ NMI_BANK_LOOP
+
+	LD A,10
+	LD (EXT_BANK_COUNT),A
 	OR A				; Clear carry (success)
 	RET
 
-NMI_NO_HARDWARE:
-	XOR A
-	LD (EXT_BANK_COUNT),A
-	LD (LINE_TABLE_BANK),A
-	LD (LINE_TABLE_BANK_1),A
-	SCF				; Set carry (error)
+;------------------------------------------------------------------------------
+; NEXT_SYSSETCPY: Setup source/destination banks and length for Next bank copy
+;
+; Inputs:
+;   D = Destination Bank ID
+;   E = Source Bank ID
+;   HL = Byte Count to copy
+;
+; Preserves / Modifies:
+;   Preserves BC, DE, HL; clobbers AF.
+;------------------------------------------------------------------------------
+NEXT_SYSSETCPY:
+	PUSH AF
+	LD A,D
+	LD (NEXT_CPY_DEST_BNK),A
+	LD A,E
+	LD (NEXT_CPY_SRC_BNK),A
+	LD (NEXT_CPY_LEN),HL
+	POP AF
+	RET
+
+;------------------------------------------------------------------------------
+; NEXT_SYSBNKCPY: Copy memory between Local RAM and Next MMU Far RAM Slot 0
+;
+; Purpose:
+;   Maps target Far RAM 8KB page into MMU Slot 0 ($0000-$1FFF) via NextReg 0x50,
+;   executes atomic LDIR with interrupts disabled, and restores original Slot 0.
+;
+; Inputs:
+;   HL = Source Address
+;   DE = Destination Address
+;
+; Preserves / Modifies:
+;   Clobbers AF, BC, DE, HL.
+;------------------------------------------------------------------------------
+NEXT_SYSBNKCPY:
+	LD A,(NEXT_CPY_SRC_BNK)
+	LD B,A
+	LD A,(CPM_USER_BANK)
+	CP B
+	JR Z,NSB_SRC_IS_USER
+
+	; Case 1: Source is Far RAM Bank (B), Destination is Local RAM (DE)
+	; Compute physical 8KB page: 32 + (Bank * 4) + (H >> 5)
+	LD A,B				; Bank ID (0..11)
+	ADD A,A				; *2
+	ADD A,A				; *4
+	LD C,A
+
+	LD A,H
+	RLCA
+	RLCA
+	RLCA
+	AND 07H				; H >> 5 (0..3)
+	ADD A,C
+	ADD A,NEXT_FAR_RAM_BASE_PAGE	; A = Physical 8KB page
+	LD (NEXT_TARGET_FAR_PAGE),A
+
+	; Adjust Far Source Address to Slot 0 ($0000..$1FFF)
+	LD A,H
+	AND 01FH
+	LD H,A
+	JR NSB_DO_TRANSFER
+
+NSB_SRC_IS_USER:
+	; Case 2: Source is Local RAM (HL), Destination is Far RAM Bank
+	LD A,(NEXT_CPY_DEST_BNK)
+	LD B,A
+	LD A,(CPM_USER_BANK)
+	CP B
+	JR Z,NSB_LOCAL_TO_LOCAL		; Both are user bank
+
+	; Compute physical 8KB page: 32 + (Bank * 4) + (D >> 5)
+	LD A,B
+	ADD A,A
+	ADD A,A
+	LD C,A
+
+	LD A,D
+	RLCA
+	RLCA
+	RLCA
+	AND 07H				; D >> 5 (0..3)
+	ADD A,C
+	ADD A,NEXT_FAR_RAM_BASE_PAGE	; A = Physical 8KB page
+	LD (NEXT_TARGET_FAR_PAGE),A
+
+	; Adjust Far Destination Address to Slot 0 ($0000..$1FFF)
+	LD A,D
+	AND 01FH
+	LD D,A
+
+NSB_DO_TRANSFER:
+	; Save current Slot 0 page and map Far Page into Slot 0
+	LD BC,NEXT_PORT_REG_SELECT
+	LD A,050H			; NextReg 0x50 = MMU Slot 0
+	OUT (C),A
+	LD BC,NEXT_PORT_REG_DATA
+	IN A,(C)			; Read current Slot 0 page
+	LD (NEXT_SAVED_SLOT0_PAGE),A
+	LD A,(NEXT_TARGET_FAR_PAGE)
+	OUT (C),A			; Map target page into Slot 0
+
+	; Perform atomic transfer
+	LD BC,(NEXT_CPY_LEN)
+	DI
+	LDIR
+
+	; Restore original Slot 0 page
+	LD BC,NEXT_PORT_REG_SELECT
+	LD A,050H
+	OUT (C),A
+	LD BC,NEXT_PORT_REG_DATA
+	LD A,(NEXT_SAVED_SLOT0_PAGE)
+	OUT (C),A
+	EI
+	RET
+
+NSB_LOCAL_TO_LOCAL:
+	LD BC,(NEXT_CPY_LEN)
+	LDIR
 	RET
 
 ;------------------------------------------------------------------------------
 ; HAL_MEM_SET_BANK: Map target Far RAM bank into CPU address space
-;
-; Inputs:
-;   A = Far RAM Bank index (0..11).
-;
-; Outputs:
-;   MMU Slot 4 ($8000-$9FFF) updated to map the corresponding 8KB page.
-;
-; Preserves / Modifies:
-;   Preserves BC, DE, HL; modifies AF.
 ;------------------------------------------------------------------------------
 HAL_MEM_SET_BANK:
 	PUSH BC
@@ -121,5 +243,14 @@ HAL_MEM_SET_BANK:
 	OUT (C),A
 	POP BC
 	RET
+
+;------------------------------------------------------------------------------
+; Far Memory Transfer State Variables
+;------------------------------------------------------------------------------
+NEXT_CPY_DEST_BNK:	DB	0
+NEXT_CPY_SRC_BNK:	DB	0
+NEXT_CPY_LEN:		DW	0
+NEXT_SAVED_SLOT0_PAGE:	DB	0
+NEXT_TARGET_FAR_PAGE:	DB	0
 
 ; End of HAL_NEXT_MEMORY.ASM
