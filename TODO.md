@@ -12,73 +12,86 @@ tasks have been archived.
 
 ---
 
-## 2. BUGS
+## 2. Bug Tracking & Known Issues by Build Variant
 
-### 2.36 Intermittent Wrong Filename & Format Tracking in Open Dialog/Status Bar
-- [x] Investigate and fix intermittent display of incorrect filename in the
-  "Opening File" progress modal dialog and status bar, and verify format
-  indicator tracking across file switches.
-  - **Resolution**:
-    - Cleared `DOC_IS_FAT` prior to `LOAD_FILE` in `DO_PARSE_AND_LOAD`, with
-      backup/restore via `PREV_DOC_IS_FAT` on cancellation or error.
-    - Synchronized `DOC_USER_NUM` to `WORK_FCB_USER` at start of `LOAD_FILE`
-      before `DRAW_LOADING_SCREEN` so modal and status bar agree.
-    - Reset `SAVE_FORMAT` to `FMT_CPM` on entry to `LOAD_FILE`.
-    - Blanked format (`STR_FMT_BLANK: "      | "`) and line count
-      (`STR_STATUS_LOADING_POS: "Line    1/---- Col   0"`) on status bar
-      during loading (`IS_LOADING_FILE == 1`).
-    - Added automated regression test Step 75 in `test_editor_headless.py`
-      and `isolate_step.py`.
-  - **Symptom**: Observed intermittently when opening large files, where the
-    "Opening File" modal pop-up indicates the wrong target filename and/or
-    the bottom status bar shows the wrong filename or stale file metadata.
-    Seen once in interactive testing; exact reproduction conditions need
-    investigation.
-  - **Suspected Contributing Factors**:
-    - **Active Document Context**: The issue may depend on having a
-      different file already open in the editor prior to invoking the Open
-      File UI (`DO_EXEC_OPEN` / `DO_OPEN_FILE_UI`), causing state leakage
-      between the existing document and the incoming document.
-    - **Large File Timing**: In small files, the loading progress dialog
-      and initial status bar flash past near-instantaneously. In large files
-      (multi-sector / multi-record), the "Opening File" modal and loading
-      screen remain active on-screen for seconds, exposing any transient
-      or stale metadata rendered during `DRAW_LOADING_SCREEN`.
-    - **Stale Document Flags**:
-      - `DOC_IS_FAT`: When opening a standard CP/M file while a FAT/VFS file
-        is currently loaded, `DOC_IS_FAT` is not cleared until *after*
-        `LOAD_FILE` finishes (`src/se.asm:19972`). Consequently, during
-        `DRAW_LOADING_SCREEN`, `FORMAT_PROGRESS_FILE_LINE` and
-        `PRINT_STATUS_FILENAME` query `FAT_DOC_FNAME` rather than `WORK_FCB`.
-      - `DOC_USER_NUM`: `DOC_USER_NUM` is not updated to `WORK_FCB_USER` until
-        `LOAD_FINISH` (`src/se.asm:19270`), meaning `RENDER_STATUS_BAR` in
-        `DRAW_LOADING_SCREEN` emits the old file's user number.
-    - **Status Bar File Format Indicator (`CP/M  | ` vs `Linux | `)**:
-      - `SHOW_STATUS_FORMAT` inspects `SAVE_FORMAT`.
-      - `SAVE_FORMAT` is not reset at the start of `LOAD_FILE`; it retains
-        the format of the previously open document throughout
-        `DRAW_LOADING_SCREEN` and until the first CR/LF is parsed in the
-        sector stream (`HANDLE_CR` / `HANDLE_LF`).
-      - Furthermore, `RENDER_STATUS_BAR` is not called again during the
-        record read loop (`READ_SECTOR_LOOP`), so the status bar retains the
-        initial (potentially stale) format string while the file is loading.
-  - **Verification & Test Requirements**:
-    - Construct an automated test covering sequential file switches:
-      1. Load CP/M formatted file (CR/LF line endings).
-      2. Verify status bar displays `CP/M  | ` and correct filename.
-      3. From within editor, open a large Linux formatted file (LF endings).
-      4. Verify "Opening File" progress modal displays incoming filename.
-      5. Verify status bar during and after load transitions to `Linux | `.
-      6. From within editor, open a large CP/M formatted file.
-      7. Verify "Opening File" modal displays incoming filename.
-      8. Verify status bar transitions back to `CP/M  | `.
-    - Check whether the status bar during file loading reflects the existing
-      open file or the file currently being loaded, and ensure consistent,
-      deterministic state cleanup across all open/switch pathways.
+This section tracks open defects, platform-specific anomalies, edge cases,
+and verification tasks categorized by operating profile and build variant.
+Completed bug reports from v1.0.0 (Bugs 2.1–2.35) and post-v1.0.0 (Bug 2.36)
+have been resolved and archived.
 
-### 2.37 [Reserved for Next Bug Report]
-- [ ] Reserved to prevent duplicate bug numbering (Bugs 2.1–2.35 resolved
-  in v1.0.0; Bug 2.36 active).
+### 2.1 Profile 1: Standard CP/M 2.2 / 3.0 (`SE.COM`)
+- **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC126,
+  Zeta 2, standard 64KB TPA).
+- **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
+  Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
+- **Build Target**: `make SE.COM` (or `make`).
+- **Status**: Stable / Production.
+- **Active Defects & Issue Tracking**:
+  - [ ] *(No active bugs open; report new Profile 1 defects here).*
+
+### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
+- **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
+- **Core Technology**: Z80 assembly (`src/se_next_cpm.asm`), Next-adapted
+  console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
+  memory extensions.
+- **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
+- **Status**: Active / Verification in Progress.
+- **Active Defects & Issue Tracking**:
+  - [ ] *(No active bugs open; report new Profile 2 defects here).*
+
+### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
+- **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
+  `/dot` command on SD card.
+- **Core Technology**: Z80 assembly (`src/se_next.asm`), native Next hardware
+  tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
+  NextZXOS filesystem API (`RST 08h`).
+- **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
+- **Status**: Active / Verification in Progress.
+- **Active Defects & Issue Tracking**:
+  - [ ] *(No active bugs open; report new Profile 3 defects here).*
+
+### 2.4 Profile 4: Linux Native C Profile (`se-linux`)
+- **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
+  (`aarch64`).
+- **Core Technology**: Portable C core modules (`src/core/*.c`), POSIX
+  Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
+  terminal I/O, dynamic heap buffer management.
+- **Build Target**: `make se-linux` (verified via `make test-linux`).
+- **Status**: Active / Fully Tested.
+- **Active Defects & Issue Tracking**:
+  - [ ] *(No active bugs open; report new Profile 4 defects here).*
+
+### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
+- **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
+- **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M-86
+  Hardware Abstraction Layer (`src/hal/cpm86/`), segmented 8086 memory
+  allocation, CP/M-86 BDOS console and FCB file system calls.
+- **Build Target**: `make se-cpm86` (produces `SE.CMD`).
+- **Status**: Implementation Pending (Roadmap Item 7.3).
+- **Active Defects & Issue Tracking**:
+  - [ ] *(No active bugs open; implementation pending).*
+
+### 2.6 Profile 6: Linux Native Rust Profile (`ports/rust/`)
+- **Target Platform**: Linux PC / Workstation (`x86_64-unknown-linux-gnu`) and
+  Raspberry Pi 4/5 (`aarch64-unknown-linux-gnu`).
+- **Core Technology**: Idiomatic Rust implementation (`ports/rust/`),
+  terminal engine (`crossterm` / raw `termios`), piece table or line-slot
+  cache buffer, WordStar / SE keybindings, `SE.CFG` parser.
+- **Build Target**: `cargo build --release` (or `make se-rust`).
+- **Status**: Implementation Pending (Roadmap Item 7.4).
+- **Active Defects & Issue Tracking**:
+  - [ ] *(No active bugs open; implementation pending).*
+
+### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
+- **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
+  (`aarch64`) running Python 3.10+.
+- **Core Technology**: Python 3 standard library package (`ports/python/se`),
+  `termios` / `tty` raw terminal driver, object-based line buffer paging,
+  `SE.CFG` reader/writer, modular Python plugins.
+- **Build Target**: `make se-py` (verified via `make test-py`).
+- **Status**: Active / Fully Tested.
+- **Active Defects & Issue Tracking**:
+  - [ ] *(No active bugs open; report new Profile 7 defects here).*
 
 ---
 
