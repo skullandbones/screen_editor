@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Conformance Complete / All 7 Look & Feel Defects Resolved.
+- **Status**: Active / 5 Defects Open (Bugs 2.4.8–2.4.12).
 - **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3.
@@ -206,6 +206,54 @@ have been resolved and archived.
       and omits bracket framing `[ text ]` on text input prompts.
     - *Required Fix*: Implement canonical Archetypes A, B, C, D with title
       dividers, 1-based centering, and strict key dismissal rules.
+  - [ ] **Bug 2.4.8: Missing Modal & Command Dispatchers in Editor Mode**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3, 10.
+    - *Issue*: In `src/core/editor.c`, `editor_handle_key()` lacks cases for
+      `KEY_CTRL_L` (Goto Line), `KEY_CTRL_O` (Open File), `KEY_CTRL_P` (Plugin
+      Palette), and `KEY_CTRL_W` (Close File to Splash). Even though
+      `modal_input_goto_line()` is implemented in `ui_modal.c` and
+      `goto_line()` exists in `editor.c`, `Ctrl+L` is silently dropped as a
+      no-op.
+    - *Required Fix*: Bind `KEY_CTRL_L` to invoke `modal_input_goto_line()` and
+      dispatch `goto_line()`, and bind `KEY_CTRL_O`, `KEY_CTRL_P`, and
+      `KEY_CTRL_W` to their respective modal and editor actions.
+  - [ ] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1, 7.2.
+    - *Issue*: `show_splash_screen` in `src/core/ui_render.c` renders the
+      canonical 14-line matrix displaying `:e`, `:o`, `:s`, `:c`, `:p`, `:?`,
+      `:q`, but only checks for `q`/`Q` and treats any other key as an
+      unconditional exit into the editor. Pressing `:o`, `:s`, `:c`, `:p`,
+      `:?`, `1`, or `2` fails to trigger the corresponding modals/workspaces.
+    - *Required Fix*: Implement an interactive splash event loop in
+      `ui_render.c` / `editor.c` dispatching `:e`, `:o`, `:s`, `:c`, `:p`,
+      `:?`, `1`, `2`, and `:q`.
+  - [ ] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, the 30ms polling read
+      loop reads up to 6 bytes into a single buffer. Rapid consecutive escape
+      sequences (e.g. arrow navigation `\x1b[D\x1b[D\x1b[D`) are clumped into
+      `seq`, causing CSI pattern match (`seq_len == 2`) to fail, defaulting to
+      `KEY_ESC`, and corrupting cursor navigation.
+    - *Required Fix*: Process escape sequences discretely with a single CSI/SS3
+      token parser or token FIFO buffer so back-to-back escape sequences are
+      decoded without drops or clumping.
+  - [ ] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.1, 9.2.
+    - *Issue*: In `src/core/block.c`, `g_block_active_row` and
+      `g_block_active_col` are only updated on `start_new_block_at_cursor()`
+      and `solidify_block()`. As cursor moves in `editor.c`, block bounds are
+      never updated, resulting in 0 characters selected and no visual highlight
+      while navigating in selection mode.
+    - *Required Fix*: Track cursor position dynamically during
+      `BLOCK_MODE_SELECTING` and update normalized block bounds on movement.
+  - [ ] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.3, 10.
+    - *Issue*: In `src/core/editor.c`, `KEY_CTRL_V` is bound exclusively to
+      `page_down()`. `src/core/block.c` implements `do_copy_block()` and
+      `do_delete_block()`, but has no dedicated paste function. Text copied via
+      `Ctrl+C` cannot be pasted.
+    - *Required Fix*: Implement `do_paste_block()` in `block.c` and bind
+      `KEY_CTRL_V` in `editor.c` to paste clipboard contents at current cursor.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
