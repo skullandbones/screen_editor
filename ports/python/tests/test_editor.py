@@ -21,6 +21,7 @@ from se.terminal import (
     KEY_DELETE,
     KEY_BACKSPACE,
     KEY_ENTER,
+    KEY_ESC,
     KEY_PGDN,
 )
 
@@ -284,6 +285,35 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 8: Centered workspace prompt cursor verified.",
+            flush=True,
+        )
+
+    def test_esc_behavior_block_cancel_and_splash_exit(self):
+        """Step 9: Verify ESC cancels block and exits splash (Bug 2.7.10)."""
+        print(
+            "[*] Step 9: Testing ESC block cancel & splash dual-exit...",
+            flush=True,
+        )
+        self.editor.action_splash_screen = MagicMock()
+
+        # Case A: Active block -> ESC must cancel block, not open splash
+        self.editor.buffer.block_active = 1
+        self.editor.dispatch_key(KEY_ESC)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.editor.action_splash_screen.assert_not_called()
+
+        # Case B: Inactive block -> ESC opens splash screen
+        self.editor.dispatch_key(KEY_ESC)
+        self.editor.action_splash_screen.assert_called_once()
+
+        # Case C: On splash screen, KEY_ESC exits back to editor
+        del self.editor.action_splash_screen  # restore real method
+        self.editor.renderer.render_centered_workspace = MagicMock()
+        self.editor.terminal.get_key = MagicMock(return_value=KEY_ESC)
+        self.editor.action_splash_screen()  # Must return cleanly on KEY_ESC
+
+        print(
+            "[+] Step 9: ESC block cancel and splash dual-exit verified.",
             flush=True,
         )
 

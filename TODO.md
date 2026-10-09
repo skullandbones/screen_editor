@@ -182,12 +182,16 @@ have been resolved and archived.
       record prompt row/column and reposition the terminal cursor adjacent
       to the prompt following status bar rendering. Validated via
       `test_centered_workspace_prompt_cursor_position` in `test_editor.py`.
-  - [ ] **Bug 2.7.10: Standalone ESC Trapped on Splash & Misses Block Cancel**:
+  - [x] **Bug 2.7.10: Standalone ESC Trapped on Splash & Misses Block Cancel**:
     - *Symptom*: Pressing `ESC` on Splash screen is ignored; in editor,
       pressing `ESC` with active block exits to Splash instead of canceling.
     - *Root Cause*: `action_splash_screen()` ignores `KEY_ESC`; `dispatch_key`
       lacks active block cancellation check on `KEY_ESC`.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10 and 11.5.
+    - *Resolution*: Added `k == KEY_ESC` exit condition to splash screen loop
+      in `action_splash_screen()`, and prioritized `block_active = 0` on
+      `KEY_ESC` in `dispatch_key()` in `editor.py`. Validated via
+      `test_esc_behavior_block_cancel_and_splash_exit` in `test_editor.py`.
   - [ ] **Bug 2.7.11: ASCII DEL (0x7F) Mapped to Backspace in Terminal Driver**:
     - *Symptom*: Pressing Delete (0x7F) deletes char to left instead of under.
     - *Root Cause*: `terminal.py` maps `KEY_DEL_CHAR` (`0x7F`) to

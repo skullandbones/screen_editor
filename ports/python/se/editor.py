@@ -165,7 +165,10 @@ class Editor:
         elif key == KEY_CTRL_Q:
             self.action_quit()
         elif key == KEY_ESC:
-            self.action_splash_screen()
+            if self.buffer.block_active > 0:
+                self.buffer.block_active = 0
+            else:
+                self.action_splash_screen()
 
         # 5. Printable Character Insertion
         elif len(key) == 1 and 32 <= ord(key) <= 126:
@@ -400,7 +403,7 @@ class Editor:
             if not k:
                 continue
             ch = k.lower()
-            if ch in ("e", "\r"):
+            if ch in ("e", "\r") or k == KEY_ESC:
                 return  # Return to editor
             elif ch == "o":
                 self.action_open_file()
