@@ -240,7 +240,7 @@ have been resolved and archived.
       `self.action_splash_screen()` prior to entering the document edit loop
       when `not self.buffer.has_file`. Updated `test_headless.py` and validated
       via `test_startup_mode_splash_screen` in `test_editor.py`.
-  - [ ] **Bug 2.7.15: Status Bar Column Spill During Block Selection ([SEL])**:
+  - [x] **Bug 2.7.15: Status Bar Column Spill During Block Selection ([SEL])**:
     - *Symptom*: When block selection is active (`Ctrl+B`), the status bar row
       overflows 80 columns (82 characters: `| (Untitled)* ... [SEL]`), inducing
       terminal line wrapping and display corruption.
@@ -249,6 +249,12 @@ have been resolved and archived.
       (`Sel: X chars` / `Sel: X lines`) inside the 18-character Field 4 budget.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3 and
       Section 11.3 (Anti-Pattern 3: Terminal Column Spill).
+    - *Resolution*: Updated `render_status_bar()` in `ui.py` to format active
+      block selection metrics (`Sel: X chars`/`Sel: X lines` or `Block: ...`)
+      inside the 18-character Field 4 slot and removed trailing indicator from
+      Field 5. Validated via
+      `test_status_bar_block_selection_metrics_and_no_spill` in
+      `test_editor.py`.
   - [ ] **Bug 2.7.16: Status Bar Geometry and Environment Spacing Discrepancy**:
     - *Symptom*: Field 2 geometry in Python SE is formatted as ` 80x24 |`
       (7 chars, missing leading space), and Field 3 environment is ` CPM   |`

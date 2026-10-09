@@ -52,9 +52,20 @@ class UIRenderer:
         fmt_str = "CPM  " if buf.format_cpm else "Linux"
         fmt_field = f" {fmt_str} |"
 
-        # Field 4 (Help Hint / Context, 18 chars): persistent help context
-        # Status events prohibited on status bar per Section 4.4
-        help_field = " ^K: Editor keys |"
+        # Field 4 (Help Hint / Context / Block Selection, 18 chars)
+        if buf.block_active > 0:
+            r1, c1, r2, c2 = buf.get_normalized_block()
+            prefix = "Sel: " if buf.block_active == 1 else "Block: "
+            if r1 == r2:
+                count = max(0, c2 - c1)
+                unit = "char" if count == 1 else "chars"
+            else:
+                count = (r2 - r1) + 1
+                unit = "line" if count == 1 else "lines"
+            metric = f"{prefix}{count} {unit}"
+            help_field = f" {metric[:14]:<15} |"
+        else:
+            help_field = " ^K: Editor keys |"
 
         # Cursor and pan position field
         cur_line = buf.cursor_row + 1
@@ -62,16 +73,9 @@ class UIRenderer:
         cur_col = buf.cursor_col
         pan_str = f" [Pan +{buf.pan_col}]" if buf.pan_col > 0 else ""
 
-        # Block selection indicator
-        blk_str = ""
-        if buf.block_active == 1:
-            blk_str = " [SEL]"
-        elif buf.block_active == 2:
-            blk_str = " [BLK LOCK]"
-
         pos_field = (
             f" Line {cur_line:>4}/{tot_lines:<4} "
-            f"Col {cur_col:<3}{pan_str}{blk_str} |"
+            f"Col {cur_col:<3}{pan_str} |"
         )
 
         # Assemble full status bar content

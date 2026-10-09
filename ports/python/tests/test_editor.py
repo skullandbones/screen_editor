@@ -354,6 +354,55 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_status_bar_block_selection_metrics_and_no_spill(self):
+        """Step 11: Verify status bar block metrics & no spill (Bug 2.7.15)."""
+        print(
+            "[*] Step 11: Testing status bar block metrics and column spill...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+
+        # Single-line selection (dynamic follows cursor)
+        self.editor.buffer.block_active = 1
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 5
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+
+        status_texts = [w for w in written if not w.startswith("\x1b")]
+        self.assertEqual(len(status_texts[0]), 80)
+        self.assertIn("Sel: 5 chars", status_texts[0])
+        self.assertNotIn("[SEL]", status_texts[0])
+
+        # Multi-line selection (dynamic follows cursor)
+        written.clear()
+        self.editor.buffer.lines = ["Line 1", "Line 2", "Line 3"]
+        self.editor.buffer.cursor_row = 2
+        self.editor.buffer.cursor_col = 3
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+
+        status_texts_multi = [w for w in written if not w.startswith("\x1b")]
+        self.assertEqual(len(status_texts_multi[0]), 80)
+        self.assertIn("Sel: 3 lines", status_texts_multi[0])
+
+        # Solidified block (uses block_end_row / block_end_col)
+        written.clear()
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_end_row = 2
+        self.editor.buffer.block_end_col = 3
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+
+        status_texts_solid = [w for w in written if not w.startswith("\x1b")]
+        self.assertEqual(len(status_texts_solid[0]), 80)
+        self.assertIn("Block: 3 lines", status_texts_solid[0])
+
+        print(
+            "[+] Step 11: Status bar block metrics verified without spill.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
