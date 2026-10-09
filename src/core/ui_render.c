@@ -19,6 +19,7 @@
 #include "../include/memory.h"
 #include "../include/file_io.h"
 #include "../include/ui.h"
+#include "../include/ui_modal.h"
 #include "../include/hal.h"
 
 /* Global Display State Variables */
@@ -49,13 +50,10 @@ void clear_screen(void)
 
 void set_status_msg(const char *msg)
 {
-    if (msg) {
-        strncpy(g_status_msg, msg, sizeof(g_status_msg) - 1);
-        g_status_msg[sizeof(g_status_msg) - 1] = '\0';
-    } else {
-        g_status_msg[0] = '\0';
+    g_status_msg[0] = '\0';
+    if (msg && *msg) {
+        modal_show_notification("Notice", msg);
     }
-    g_need_status_render = 1;
 }
 
 static void render_row_content(uint8_t screen_row, uint16_t doc_row)

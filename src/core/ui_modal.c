@@ -254,3 +254,36 @@ int modal_confirm_save_changes(void)
                          "Save changes before closing?",
                          "Save", "Don't Save");
 }
+
+void modal_show_notification(const char *title, const char *message)
+{
+    uint8_t width = 50;
+    uint8_t height = 7;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    const char *prompt = "Press any key to continue";
+    size_t msg_len, prompt_len, i;
+
+    hal_console_hide_cursor();
+    modal_draw_frame(top, left, width, height, title);
+
+    if (message && *message) {
+        msg_len = strlen(message);
+        if (msg_len > (size_t)(width - 4)) {
+            msg_len = width - 4;
+        }
+        hal_console_locate(top + 2,
+                           (uint8_t)(left + ((width - msg_len) / 2)));
+        for (i = 0; i < msg_len; i++) {
+            hal_console_putc(message[i]);
+        }
+    }
+
+    prompt_len = strlen(prompt);
+    hal_console_locate(top + 4,
+                       (uint8_t)(left + ((width - prompt_len) / 2)));
+    hal_console_puts(prompt);
+
+    hal_console_getkey();
+    g_need_screen_render = 1;
+}

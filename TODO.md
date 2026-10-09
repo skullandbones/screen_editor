@@ -75,7 +75,7 @@ have been resolved and archived.
       wipe the screen and fail to render the status bar on `HOST_ROWS`.
     - *Required Fix*: Guarantee universal status bar presence on `HOST_ROWS`
       across all Tier 1 screens and behind Tier 2 pop-up dialogs.
-  - [ ] **Bug 2.4.3: Status Bar Squatting Anti-Pattern for Transient Alerts**:
+  - [x] **Bug 2.4.3: Status Bar Squatting Anti-Pattern for Transient Alerts**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.4, 11.1.
     - *Issue*: `ui_render.c:158` writes transient alerts (`g_status_msg`)
       directly into the status bar, clobbering persistent document metadata.
