@@ -100,13 +100,17 @@ have been resolved and archived.
     - *Resolution*: Removed `KEY_CTRL_S` collision from cursor navigation
       branch in `editor.py` so `Ctrl+S` triggers `action_save_file()`.
       Validated via `test_ctrl_s_dispatches_save_file` in `test_editor.py`.
-  - [ ] **Bug 2.7.2: Block Selection Not Extended on Cursor Movement (Ctrl+B)**:
+  - [x] **Bug 2.7.2: Block Selection Not Extended on Cursor Movement (Ctrl+B)**:
     - *Symptom*: Pressing `Ctrl+B` and moving cursor selects zero characters;
       no inverse video highlight is displayed, and block copy/cut returns "".
     - *Root Cause*: `buffer.py` sets `block_start` and `block_end` on toggle,
       but cursor navigation methods (`move_left`, `move_right`, `move_up`,
       `move_down`, `page_up`, `page_down`) never update `block_end`.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 9.1 and 9.2.
+    - *Resolution*: Updated `get_normalized_block()` to follow the active
+      cursor dynamically when `block_active == 1`, and updated `solidify_block`,
+      `copy_block`, and `cut_block` to lock bounds upon block operations.
+      Validated via `test_block_dynamic_cursor_tracking` in `test_buffer.py`.
   - [ ] **Bug 2.7.3: Clipboard Paste Unbound (paste_block Never Called)**:
     - *Symptom*: User cannot paste copied clipboard text into the buffer.
     - *Root Cause*: In `editor.py`, `KEY_CTRL_V` is mapped exclusively to

@@ -138,9 +138,8 @@ class TestBuffer(unittest.TestCase):
         self.buf.toggle_block()
         self.assertEqual(self.buf.block_active, 1)
 
-        # Select "Beta"
-        self.buf.block_end_row = 0
-        self.buf.block_end_col = 10
+        # Select "Beta" by moving cursor
+        self.buf.cursor_col = 10
         copied = self.buf.copy_block()
         self.assertEqual(copied, "Beta")
 
@@ -155,6 +154,36 @@ class TestBuffer(unittest.TestCase):
         self.assertTrue(pasted)
         self.assertEqual(self.buf.get_line(0), "Alpha Beta Gamma")
         print("[+] Step 6: Block operations verified.", flush=True)
+
+    def test_block_dynamic_cursor_tracking(self):
+        """Step 8: Verify block selection dynamic tracking (Bug 2.7.2)."""
+        print(
+            "[*] Step 8: Testing dynamic block cursor tracking...",
+            flush=True,
+        )
+        self.buf.lines = ["First Line", "Second Line"]
+        self.buf.cursor_row = 0
+        self.buf.cursor_col = 0
+        self.buf.toggle_block()
+        self.assertEqual(self.buf.block_active, 1)
+
+        # Move cursor to col 5: dynamic block must span [0, 0] to [0, 5]
+        self.buf.cursor_col = 5
+        self.assertEqual(self.buf.get_normalized_block(), (0, 0, 0, 5))
+
+        # Move cursor down to next line: must span across rows
+        self.buf.cursor_row = 1
+        self.buf.cursor_col = 6
+        self.assertEqual(self.buf.get_normalized_block(), (0, 0, 1, 6))
+
+        # Copying dynamic block must solidify and capture text across lines
+        copied = self.buf.copy_block()
+        self.assertEqual(copied, "First Line\nSecond")
+        self.assertEqual(self.buf.block_active, 2)
+        print(
+            "[+] Step 8: Dynamic block cursor tracking verified.",
+            flush=True,
+        )
 
     def test_file_load_and_save(self):
         """Step 7: Verify file loading, saving, and format preservation."""

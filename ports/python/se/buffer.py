@@ -232,15 +232,20 @@ class DocumentBuffer:
     def solidify_block(self):
         """Solidify dynamic block selection to locked bounds."""
         if self.block_active == 1:
+            self.block_end_row = self.cursor_row
+            self.block_end_col = self.cursor_col
             self.block_active = 2
 
     def get_normalized_block(self) -> Tuple[int, int, int, int]:
         """
         Return normalized (start_row, start_col, end_row, end_col)
-        where start <= end.
+        where start <= end. Dynamic blocks follow the active cursor.
         """
         r1, c1 = self.block_start_row, self.block_start_col
-        r2, c2 = self.block_end_row, self.block_end_col
+        if self.block_active == 1:
+            r2, c2 = self.cursor_row, self.cursor_col
+        else:
+            r2, c2 = self.block_end_row, self.block_end_col
         if (r1, c1) > (r2, c2):
             return r2, c2, r1, c1
         return r1, c1, r2, c2
@@ -249,6 +254,8 @@ class DocumentBuffer:
         """Copy selected block text into clipboard buffer."""
         if self.block_active == 0:
             return ""
+        if self.block_active == 1:
+            self.solidify_block()
         r1, c1, r2, c2 = self.get_normalized_block()
         if r1 == r2:
             text = self.lines[r1][c1:c2]
@@ -265,6 +272,8 @@ class DocumentBuffer:
         """Cut selected block text, deleting it from document."""
         if self.block_active == 0:
             return ""
+        if self.block_active == 1:
+            self.solidify_block()
         text = self.copy_block()
         r1, c1, r2, c2 = self.get_normalized_block()
         if r1 == r2:
