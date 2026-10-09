@@ -57,9 +57,64 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / Fully Tested.
-- **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; report new Profile 4 defects here).*
+- **Status**: Active / Look & Feel Conformance Audit Complete.
+- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+  - [ ] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3.
+    - *Issue*: `render_status_bar` in `src/core/ui_render.c` outputs custom
+      format `" SE v1.1.0 | Ln %-5u/%-5u Col %-3u | %s%s | Free: %4u KB"`.
+    - *Required Fix*: Conform to canonical 5-field layout:
+      `| {name}{mod} | {geom} | {fmt} | ^K: Editor keys | Line ... Col ... |`.
+      Add Geometry (`80x24 |`), Format (`Linux |` / `CPM   |`), Pan indicator
+      (`[Pan +40]`), Block indicator (`[SEL]` / `[BLK LOCK]`), and center-pad
+      across full terminal width.
+  - [ ] **Bug 2.4.2: Missing Universal Status Bar on Non-Document Workspaces**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 7.2, 7.3, 7.4.
+    - *Issue*: Non-document screens (`show_splash_screen`, `show_about_screen`,
+      `show_config_screen`, `show_mem_info_screen`) in `src/core/ui_render.c`
+      wipe the screen and fail to render the status bar on `HOST_ROWS`.
+    - *Required Fix*: Guarantee universal status bar presence on `HOST_ROWS`
+      across all Tier 1 screens and behind Tier 2 pop-up dialogs.
+  - [ ] **Bug 2.4.3: Status Bar Squatting Anti-Pattern for Transient Alerts**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.4, 11.1.
+    - *Issue*: `ui_render.c:158` writes transient alerts (`g_status_msg`)
+      directly into the status bar, clobbering persistent document metadata.
+    - *Required Fix*: Remove status bar message overwriting (Anti-Pattern #1).
+      Route all status events (Save Complete, Search Failed, etc.) to Tier 2
+      centered modal pop-up boxes (`show_notification` / Archetype A).
+  - [ ] **Bug 2.4.4: Arrow Key & WordStar Diamond Keybinding Misalignment**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, arrow keys decode to
+      `KEY_CTRL_E` (Up), `KEY_CTRL_X` (Down), `KEY_CTRL_S` (Left), and
+      `KEY_CTRL_D` (Right). In `src/core/editor.c:414`, `KEY_CTRL_E` dispatches
+      to `cursor_end()`, `KEY_CTRL_X` dispatches to `do_move_block()`, and
+      `KEY_CTRL_S` dispatches to `file_save()`. Up moves to End-of-Line,
+      Down cuts block, and Left saves file. `cursor_up()` and `cursor_down()`
+      are completely missing from `editor_handle_key`.
+    - *Required Fix*: Implement distinct keycodes for navigation vs commands,
+      bind `cursor_up()` and `cursor_down()`, and restore authentic WordStar
+      diamond navigation and ANSI cursor key parity.
+  - [ ] **Bug 2.4.5: Non-Functional Horizontal Panning Engine & Line Barrier**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 6.1, 6.2.
+    - *Issue*: `g_horiz_pan_offset` in `src/core/editor.c` is never adjusted
+      when cursor moves beyond column 79. `MAX_INPUT_LINE_CHARS` is 1000 in
+      `config.h` instead of the strict 120-character line barrier.
+    - *Required Fix*: Implement horizontal pan quantum (+40 columns) shift
+      logic (`pan_col` = 40 or 80) and enforce `MAX_LINE = 120` limit.
+  - [ ] **Bug 2.4.6: Tier 1 Centering & Column 0 Tilde Margin Discipline**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.2.
+    - *Issue*: Splash and help screens use top-aligned fixed coordinates with
+      ASCII banner borders and lack column 0 tilde (`~`) margin rows.
+    - *Required Fix*: Apply mathematical 1-based centering formulas and fill
+      margin rows down to row `HOST_ROWS - 1` with `~` in column 0.
+  - [ ] **Bug 2.4.7: Tier 2 Modal Framing, Centering & Archetype Invariance**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.2, 8.3.
+    - *Issue*: `src/core/ui_modal.c` places titles on top border without
+      title divider line (`+---+`), uses off-by-one centering calculation,
+      permits quitting confirmation modals via `q`/`Q` instead of solely `ESC`,
+      and omits bracket framing `[ text ]` on text input prompts.
+    - *Required Fix*: Implement canonical Archetypes A, B, C, D with title
+      dividers, 1-based centering, and strict key dismissal rules.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
