@@ -150,10 +150,11 @@ tasks have been archived.
 
 ## 5. Post-v1.0.0 Milestones & Roadmap
 
-- [ ] Define feature scope and architectural targets for SE.COM v1.1.0 release.
-- [ ] Milestone: Modularize `se.asm` into functional sub-systems and port to
+- [x] Define feature scope and architectural targets for SE.COM v1.1.0 release.
+- [x] Milestone: Modularize `se.asm` into functional sub-systems and port to
   ZX Spectrum Next (supporting both Native Next and CP/M on the Next,
   detailed in Section 6).
+
 
 ---
 

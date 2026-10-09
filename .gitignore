@@ -10,10 +10,16 @@
 *.COM
 !SE.COM
 *.bin
+*.BIN
+*.NEX
+*.nex
+.se
+SE
 *.PRL
 *.OVL
 *.prl
 *.ovl
+
 
 # Python virtual environment and bytecode cache
 .venv/
