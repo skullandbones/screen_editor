@@ -102,7 +102,26 @@ def test_emulator_harness():
         # Run CSpect in headless mode if available
     elif zesarux:
         print(f"    [+] Found ZEsarUX at: {zesarux}")
-        # Run ZEsarUX in headless mode if available
+        cmd = [
+            zesarux,
+            "--noconfigfile",
+            "--machine",
+            "TBBlue",
+            "--snap",
+            os.path.join(PROJECT_DIR, "SE.NEX"),
+            "--vo",
+            "null",
+            "--ao",
+            "null",
+            "--exit-after",
+            "1",
+            "--quickexit",
+        ]
+        res = subprocess.run(
+            cmd, capture_output=True, text=True, cwd=PROJECT_DIR
+        )
+        assert res.returncode == 0, f"ZEsarUX run failed: {res.stderr}"
+        print("    [+] ZEsarUX live execution of SE.NEX (TBBlue): [PASS]")
     else:
         print(
             "    [-] Neither CSpect nor ZEsarUX detected in PATH. "

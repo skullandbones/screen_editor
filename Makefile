@@ -63,8 +63,8 @@ CC ?= gcc
 CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
 
 .PHONY: all se-py test-py test-linux se-next-cpm se-next-native test-next \
-	plugins image init-image clean-image check-tpa check-plugins \
-	check-lines test
+	demo-next plugins image init-image clean-image check-tpa check-plugins \
+	check-lines test \
 	test-sanity test-conformity test-paging test-config test-32k \
 	test-cpm3 test-plugins test-beautifier test-popup test-slots \
 	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
@@ -263,6 +263,10 @@ test-fatfs-hook: image
 test-next: se-next-cpm se-next-native
 	@echo "==> Running ZX Spectrum Next multi-target test suite..."
 	python3 tests/test_next_targets.py
+
+demo-next: se-next-cpm se-next-native
+	@echo "==> Running live ZX Spectrum Next emulator demo..."
+	python3 tools/demo_next.py --target all
 
 test-linux: $(TARGET_LINUX)
 	@echo "==> Running Linux Native Profile automated test suite..."
