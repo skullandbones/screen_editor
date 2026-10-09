@@ -685,6 +685,41 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_help_workspace_canonical_dimensions_and_keys(self):
+        """Step 19: Verify Help workspace 17-line 70-col layout (Bug 2.7.25)."""
+        print(
+            "[*] Step 19: Testing Help workspace layout & keys...",
+            flush=True,
+        )
+        rendered_lines = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines.extend(
+                lines
+            )
+        )
+        self.editor.terminal.get_key = lambda timeout=None: " "
+
+        self.editor.action_help()
+
+        # 1. Height must be exactly 17 lines
+        self.assertEqual(len(rendered_lines), 17)
+
+        # 2. Width must be exactly 70 columns
+        max_w = max(len(ln) for ln in rendered_lines)
+        self.assertEqual(max_w, 70)
+
+        # 3. Must display Arrows / ANSI VT100 and no WordStar references
+        help_text = "\n".join(rendered_lines)
+        self.assertIn("Arrows / ANSI VT100", help_text)
+        self.assertNotIn("WordStar", help_text)
+        self.assertNotIn("^S,^D,^E,^X", help_text)
+        self.assertIn("Press any key to continue", help_text)
+
+        print(
+            "[+] Step 19: Help workspace layout & keys verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

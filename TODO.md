@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 2 Defects Open (Bugs 2.7.25–2.7.26).
+- **Status**: Active / 1 Defect Open (Bug 2.7.26).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -574,16 +574,17 @@ have been resolved and archived.
       columns (`width = 52`, 50-hyphen borders) across `show_confirm`,
       `show_input`, `show_find_dialog`, and `show_notification` in `modal.py`.
       Validated via `test_tier2_modal_52_col_width` in `test_editor.py`.
-  - [ ] **Bug 2.7.25: Help Workspace Height & Obsolete WordStar Text**:
+  - [x] **Bug 2.7.25: Help Workspace Height & Obsolete WordStar Text**:
     - *Symptom*: Help screen (`Ctrl+K`) renders 14 lines instead of canonical
       17 lines and displays obsolete text `Arrows / WordStar (^S,^D,^E,^X)`
       despite WordStar diamond navigation being dropped.
     - *Root Cause*: `action_help()` in `editor.py` uses legacy 14-line text
       containing obsolete WordStar navigation references.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.3 and Section 10.
-    - *Required Fix*: Update `action_help()` in `editor.py` to match the
-      canonical 17-line by 70-column layout specified in Section 7.3 displaying
-      `Arrows / ANSI VT100`.
+    - *Resolution*: Updated `action_help()` in `editor.py` to canonical
+      17-line by 70-column layout conforming to Section 7.3, displaying
+      `Arrows / ANSI VT100` with all WordStar references purged. Validated via
+      `test_help_workspace_canonical_dimensions_and_keys` in `test_editor.py`.
   - [ ] **Bug 2.7.26: Horizontal Pan Left Boundary Edge & Lookahead Defect**:
     - *Symptom*: When horizontal pan is active (`[Pan +40]`), moving cursor
       left to column 40 fails to reset the viewport back to column 0.

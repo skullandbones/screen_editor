@@ -306,24 +306,27 @@ class Editor:
         )
 
     def action_help(self):
-        """Display full-screen Help workspace."""
+        """Display full-screen Help workspace (17 lines, 70 cols)."""
         lines = [
-            "SE.COM — EDITOR MODE KEYS",
+            "SE.COM — EDITOR MODE KEYS".center(70),
             "",
-            "Cursor Navigation:                 Block Operations:",
-            "  Arrows / WordStar (^S,^D,^E,^X)     Ctrl+B: Toggle Block",
-            "  Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block",
-            "  Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block",
-            "  Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block",
+            "  Cursor Navigation:".ljust(38) + "Block Operations:",
+            "    Arrows / ANSI VT100".ljust(38) + "Ctrl+B: Toggle Block",
+            "    Ctrl+A / Ctrl+E: Home / End".ljust(38) + "Ctrl+C: Copy Block",
+            "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38) + "Ctrl+X: Cut Block",
+            "    Ctrl+U / Ctrl+V: Page Up / Down".ljust(38)
+            + "Ctrl+V: Paste Block",
             "",
-            "Search & Replace:                  File & System:",
-            "  Ctrl+F: Find Text                   Ctrl+S: Save File",
-            "  Ctrl+N: Find Next                   Ctrl+O: Open File",
-            "  Ctrl+R: Search and Replace          Ctrl+Q: Safe Quit",
-            "  Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette",
-            "  Ctrl+Y: Beautify Source Code        ESC   : Splash Screen",
+            "  Search & Replace:".ljust(38) + "File & System:",
+            "    Ctrl+F: Find Text".ljust(38) + "Ctrl+S: Save File",
+            "    Ctrl+N: Find Next".ljust(38) + "Ctrl+O: Open File",
+            "    Ctrl+R: Search and Replace".ljust(38) + "Ctrl+Q: Safe Quit",
+            "    Ctrl+L: Goto Line Number".ljust(38) + "Ctrl+P: Plugin Palette",
+            "    Ctrl+Y: Beautify Source Code".ljust(38)
+            + "ESC   : Splash Screen",
             "",
-            "Press any key to continue",
+            "Press any key to continue".center(70),
+            "",
         ]
         geom = f"{self.terminal.cols}x{self.terminal.rows}"
         self.renderer.render_centered_workspace(
