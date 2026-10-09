@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 1 Defect Open (Bug 2.7.26).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.26 Closed).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -585,7 +585,7 @@ have been resolved and archived.
       17-line by 70-column layout conforming to Section 7.3, displaying
       `Arrows / ANSI VT100` with all WordStar references purged. Validated via
       `test_help_workspace_canonical_dimensions_and_keys` in `test_editor.py`.
-  - [ ] **Bug 2.7.26: Horizontal Pan Left Boundary Edge & Lookahead Defect**:
+  - [x] **Bug 2.7.26: Horizontal Pan Left Boundary Edge & Lookahead Defect**:
     - *Symptom*: When horizontal pan is active (`[Pan +40]`), moving cursor
       left to column 40 fails to reset the viewport back to column 0.
       Additionally, editing at column 79 on lines extending past column 79 does
@@ -595,10 +595,12 @@ have been resolved and archived.
       boundary `vis_col <= 40`, and lacks the lookahead edge trigger for active
       lines extending past column 79.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
-    - *Required Fix*: Update `update_pan()` in `buffer.py` to implement
-      canonical `ADJUST_HORIZ_VIEWPORT` logic, ensuring retreat to `vis_col <=
-      40` resets `pan_col` to 0, and lookahead triggers at `vis_col ==
-      VIEW_RIGHT_COL - 1`.
+    - *Resolution*: Updated `update_pan()` in `buffer.py` to implement canonical
+      `ADJUST_HORIZ_VIEWPORT` logic, ensuring retreat to `vis_col <= 40` resets
+      `pan_col` to 0, clamping `calc_visual_col` to `MAX_LINE_LENGTH`, and
+      triggering lookahead pan when cursor rests at `VIEW_RIGHT_COL - 1`
+      on lines extending beyond column 79. Validated via
+      `test_horizontal_pan_left_boundary_and_lookahead` in `test_buffer.py`.
 
 ---
 

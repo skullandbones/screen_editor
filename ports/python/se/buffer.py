@@ -15,13 +15,16 @@ def calc_visual_col(line: str, cur_col: int, tab_width: int = 4) -> int:
     Expands tab characters (0x09) to tab stops according to tab_width.
     """
     vis_col = 0
-    limit = max(0, min(cur_col, len(line)))
+    line_len = len(line)
+    limit = max(0, min(cur_col, line_len))
     for i in range(limit):
         if line[i] == "\t":
             vis_col += tab_width - (vis_col % tab_width)
         else:
             vis_col += 1
-    return min(vis_col, MAX_LINE_LENGTH - 1)
+    if cur_col > line_len:
+        vis_col += cur_col - line_len
+    return min(vis_col, MAX_LINE_LENGTH)
 
 
 def expand_tabs_visual(line: str, tab_width: int = 4) -> str:
@@ -131,18 +134,34 @@ class DocumentBuffer:
 
     def update_pan(self, view_cols: int):
         """
-        Calculate horizontal viewport pan offset [Pan +40] based on cursor.
+        Calculate horizontal viewport pan offset [Pan +40] based on visual col
+        and lookahead edge trigger according to docs/UI_UX_DESIGN.md §6.6.
         """
         if view_cols >= MAX_LINE_LENGTH:
             self.pan_col = 0
             return
 
-        if self.cursor_col >= view_cols:
-            self.pan_col = 40 if self.cursor_col < view_cols + 40 else 80
-        elif self.cursor_col < 40:
-            self.pan_col = 0
-        elif self.cursor_col < 80 and self.pan_col == 80:
-            self.pan_col = 40
+        vis_col = self.get_visual_col()
+
+        # 1. Pan Right
+        while vis_col >= self.pan_col + view_cols:
+            self.pan_col += 40
+
+        # Lookahead Edge Trigger: if at VIEW_RIGHT_COL - 1 and active line
+        # continues beyond CUR_COL (character at CUR_COL and next are non-null)
+        view_right = self.pan_col + view_cols
+        if (
+            vis_col == view_right - 1
+            and self.cursor_col + 1 < len(self.current_line)
+        ):
+            self.pan_col += 40
+
+        # 2. Pan Left
+        if self.pan_col > 0 and vis_col <= self.pan_col:
+            if vis_col <= 0:
+                self.pan_col = 0
+            else:
+                self.pan_col = max(0, ((vis_col - 1) // 40) * 40)
 
     def insert_char(self, ch: str) -> bool:
         """

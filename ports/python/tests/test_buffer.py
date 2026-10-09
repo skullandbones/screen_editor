@@ -368,6 +368,62 @@ class TestBuffer(unittest.TestCase):
             flush=True,
         )
 
+    def test_horizontal_pan_left_boundary_and_lookahead(self):
+        """
+        Step 11: Verify pan left boundary <= 40 and lookahead (Bug 2.7.26).
+        """
+        print(
+            "[*] Step 11: Testing pan left boundary <= 40 & lookahead...",
+            flush=True,
+        )
+        buf = DocumentBuffer(tab_width=4)
+
+        # 1. Test pan left boundary: retreating to col 40 resets to pan 0
+        buf.cursor_col = 85
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 40)
+
+        # Move to exactly col 40: must reset pan_col to 0 (inclusive boundary)
+        buf.cursor_col = 40
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 0)
+
+        # Move to col 80 while in pan 80: resets to pan 40
+        buf.cursor_col = 120
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 80)
+
+        buf.cursor_col = 80
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 40)
+
+        # 2. Lookahead pan trigger on active line extending past col 79
+        buf.pan_col = 0
+        buf.lines = ["X" * 90]
+        buf.cursor_col = 79
+        buf.update_pan(view_cols=80)
+        # Active line has characters past col 79, so lookahead triggers +40
+        self.assertEqual(buf.pan_col, 40)
+
+        # 3. No lookahead when typing at end of line (col 79 on line of len 79)
+        buf.pan_col = 0
+        buf.lines = ["X" * 79]
+        buf.cursor_col = 79
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 0)
+
+        # 4. No lookahead on short lines
+        buf.pan_col = 0
+        buf.lines = ["SHORT"]
+        buf.cursor_col = 4
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 0)
+
+        print(
+            "[+] Step 11: Pan left boundary & lookahead verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     t0 = time.time()
