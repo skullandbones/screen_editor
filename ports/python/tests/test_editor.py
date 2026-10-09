@@ -130,6 +130,50 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_modal_dialog_framing_layout(self):
+        """Step 5: Verify modal dialog framing and 8-row height (Bug 2.7.6)."""
+        print(
+            "[*] Step 5: Testing modal dialog framing and 8-row layout...",
+            flush=True,
+        )
+        captured_boxes = []
+
+        def mock_draw_box(top, left, width, lines):
+            captured_boxes.append((top, left, width, list(lines)))
+
+        self.editor.modal.draw_box = mock_draw_box
+        self.editor.terminal.get_key = MagicMock(return_value="y")
+
+        # Test show_confirm (Archetype B)
+        ans = self.editor.modal.show_confirm(
+            title="Query", desc="Warning description", query="Continue?"
+        )
+        self.assertEqual(ans, "y")
+        self.assertEqual(len(captured_boxes), 1)
+        _, _, _, lines = captured_boxes[0]
+        # 6 lines + 2 borders = 8 rows total
+        self.assertEqual(len(lines), 6)
+        self.assertEqual(lines[4], "")  # Empty row before options
+        self.assertIn("[Y]es", lines[5])
+
+        # Test show_input (Archetype C)
+        captured_boxes.clear()
+        self.editor.terminal.get_key = MagicMock(return_value="\r")
+        res = self.editor.modal.show_input(
+            title="Input", desc="Description", label="Target:"
+        )
+        self.assertEqual(res, "")
+        self.assertEqual(len(captured_boxes), 1)
+        _, _, _, lines = captured_boxes[0]
+        self.assertEqual(len(lines), 6)
+        self.assertEqual(lines[4], "")  # Empty row before options
+        self.assertIn("[Enter]=Confirm", lines[5])
+
+        print(
+            "[+] Step 5: Modal dialog framing and 8-row layout verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

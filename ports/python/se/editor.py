@@ -194,7 +194,6 @@ class Editor:
             title="Goto Line",
             desc="Enter target line number to jump to",
             label="Goto line:",
-            options_text="[Enter]=Goto Line      [ESC]=Cancel",
         )
         if ans and ans.strip().isdigit():
             target_line = int(ans.strip())
@@ -213,7 +212,6 @@ class Editor:
             desc="Enter search string to locate",
             label="Find:",
             initial_text=self.search_query,
-            options_text="[Enter]=Find      [ESC]=Cancel",
         )
         if query:
             self.search_query = query

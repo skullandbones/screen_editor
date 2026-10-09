@@ -141,13 +141,17 @@ have been resolved and archived.
       actions from `action_plugin_palette()`, isolating child modal pop-ups
       and cleanly clearing the parent menu. Validated via
       `test_plugin_palette_child_isolation` in `test_editor.py`.
-  - [ ] **Bug 2.7.6: Tier 2 Modal Dialog Framing Layout Discrepancies**:
+  - [x] **Bug 2.7.6: Tier 2 Modal Dialog Framing Layout Discrepancies**:
     - *Symptom*: Query modals (`show_confirm`) and text input modals
       (`show_input`) have cramped 7-row height without empty separator rows.
     - *Root Cause*: `modal.py` omits the blank row separating the prompt line
       from the action buttons (`[Y]es ...` / `[Enter]=Confirm ...`).
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3
       (Archetypes B and C).
+    - *Resolution*: Updated `show_confirm()` and `show_input()` in `modal.py`
+      to 8-row height with an empty separator row before action options, and
+      standardized options text in `editor.py`. Validated via
+      `test_modal_dialog_framing_layout` in `test_editor.py`.
   - [ ] **Bug 2.7.7: Modal Input Dialog Navigation Key Defect (show_input)**:
     - *Symptom*: Arrow keys (`KEY_LEFT`, `KEY_RIGHT`), `Home`, `End`, and
       `Delete` are ignored inside text input modal dialogs.

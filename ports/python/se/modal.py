@@ -89,7 +89,7 @@ class ModalDialog:
         Returns 'y'/'Y', 'n'/'N', or None on ESC.
         """
         width = 50
-        height = 7
+        height = 8
         top, left = self.compute_popup_pos(width, height)
 
         lines = [
@@ -97,6 +97,7 @@ class ModalDialog:
             "---",
             desc,
             query,
+            "",
             options_text,
         ]
         self.draw_box(top, left, width, lines)
@@ -131,7 +132,7 @@ class ModalDialog:
         Returns entered text or None on ESC.
         """
         width = 50
-        height = 7
+        height = 8
         top, left = self.compute_popup_pos(width, height)
 
         buf = list(initial_text[:max_len])
@@ -148,6 +149,7 @@ class ModalDialog:
                 "---",
                 desc,
                 query_line,
+                "",
                 options_text,
             ]
             self.draw_box(top, left, width, lines)
