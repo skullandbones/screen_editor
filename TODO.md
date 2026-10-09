@@ -68,7 +68,7 @@ have been resolved and archived.
       Add Geometry (`80x24 |`), Format (`Linux |` / `CPM   |`), Pan indicator
       (`[Pan +40]`), Block indicator (`[SEL]` / `[BLK LOCK]`), and center-pad
       across full terminal width.
-  - [ ] **Bug 2.4.2: Missing Universal Status Bar on Non-Document Workspaces**:
+  - [x] **Bug 2.4.2: Missing Universal Status Bar on Non-Document Workspaces**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 7.2, 7.3, 7.4.
     - *Issue*: Non-document screens (`show_splash_screen`, `show_about_screen`,
       `show_config_screen`, `show_mem_info_screen`) in `src/core/ui_render.c`

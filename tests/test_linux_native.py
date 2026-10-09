@@ -90,6 +90,12 @@ def test_interactive_pty_startup():
         assert b"SE.COM" in captured or b"SE v1.1.0" in captured, (
             "Screen output missing expected editor banner"
         )
+        assert b"80x24 |" in captured, (
+            "Splash screen missing universal status bar geometry anchor"
+        )
+        assert b"^K: Editor keys |" in captured, (
+            "Splash screen missing universal status bar help anchor"
+        )
         print("    [+] Interactive PTY startup & clean exit verified [PASS]")
 
 

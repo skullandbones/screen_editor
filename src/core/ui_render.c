@@ -225,6 +225,7 @@ void render_status_bar(void)
 void show_splash_screen(void)
 {
     clear_screen();
+    render_status_bar();
     hal_console_locate(2, 25);
     hal_console_puts("========================================");
     hal_console_locate(3, 25);
@@ -251,6 +252,7 @@ void show_splash_screen(void)
 void show_about_screen(void)
 {
     clear_screen();
+    render_status_bar();
     hal_console_locate(5, 25);
     hal_console_puts("========================================");
     hal_console_locate(6, 25);
@@ -278,6 +280,7 @@ void show_mem_info_screen(void)
 {
     char buf[64];
     clear_screen();
+    render_status_bar();
     hal_console_locate(4, 25);
     hal_console_puts("=== Virtual Memory & Banking Status ===");
     snprintf(buf, sizeof(buf), "Free Virtual Slots: %u",

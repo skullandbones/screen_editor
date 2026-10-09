@@ -59,6 +59,7 @@ int ui_browser_open_dialog(char *selected_filename, size_t max_len)
 
     ui_browser_refresh_directory("*.*");
     hal_console_hide_cursor();
+    render_status_bar();
 
     while (1) {
         int i;
