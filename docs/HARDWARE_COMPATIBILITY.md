@@ -156,7 +156,8 @@ are tested and supported under the following software emulators:
 
 ## 5. Operating System Compatibility Matrix
 
-Memory footprint verified with `check_tpa.py` against `SE.COM` (v1.0.3):
+Memory footprint verified with `check_tpa.py` against `SE.COM` (v1.1.0):
+
 
 | Environment | BDOS | TPA | Used | Margin | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |

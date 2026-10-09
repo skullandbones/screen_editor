@@ -104,8 +104,9 @@ FAT_CHUNK_BUF:		DS	128		; FAT stream buffer (Common RAM)
 ALIGN 4
 PLUGIN_HOST_API:
 	DB "SE"				; +0:  Magic
-	DW 0103H			; +2:  Host version (v1.0.3)
+	DW 0110H			; +2:  Host version (v1.1.0)
 	DW ACTIVE_LINE_BUF		; +4:  Pointer to ACTIVE_LINE_BUF
+
 	DW ACTIVE_LINE_LEN		; +6:  Pointer to ACTIVE_LINE_LEN
 	DW CUR_DOC_ROW			; +8:  Pointer to CUR_DOC_ROW
 	DW DOC_TOTAL_LINES		; +10: Pointer to DOC_TOTAL_LINES

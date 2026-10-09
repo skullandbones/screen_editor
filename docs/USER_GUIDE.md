@@ -41,8 +41,9 @@ displays the centered startup landing screen:
 
 ```text
 ~                      SE - Screen Editor
-~                  version 1.0.3 (2026-10-08)
+~                  version 1.1.0 (2026-10-09)
 ~
+
 ~        type   [E]  or  [Enter] to edit
 ~        type   [N]              to create a new file
 ~        type   [O]              to open a file

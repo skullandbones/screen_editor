@@ -4357,8 +4357,9 @@ STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 ; About Screen Strings
 ;------------------------------------------------------------------------------
 STR_ABOUT_TITLE:	DB	"SE - Screen Editor", "$"
-STR_ABOUT_VERSION:	DB	"version 1.0.3 (2026-10-08)", "$"
+STR_ABOUT_VERSION:	DB	"version 1.1.0 (2026-10-09)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
+
 STR_ABOUT_AI:
 	DB	"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high", "$"
 STR_ABOUT_LICENSE:
@@ -4434,7 +4435,8 @@ STR_MEM_SPACES_3:	DB	' '
 STR_MEM_SPACES_2:	DB	' ', ' ', '$'
 
 
-STR_STATUS_PREFIX:	DB	" SE v1.0.3 | ","$"
+STR_STATUS_PREFIX:	DB	" SE v1.1.0 | ","$"
+
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 
