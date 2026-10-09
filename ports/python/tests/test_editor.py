@@ -564,6 +564,42 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_about_and_mem_info_workspaces(self):
+        """Step 16: Verify About and Memory Map Tier 1 screens (Bug 2.7.20)."""
+        print(
+            "[*] Step 16: Testing About and Memory Map Tier 1 screens...",
+            flush=True,
+        )
+        rendered_lines = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines.extend(
+                lines
+            )
+        )
+        self.editor.terminal.get_key = lambda timeout=None: " "
+
+        # Test About workspace
+        self.editor.action_about()
+        about_text = "\n".join(rendered_lines)
+        self.assertIn("SE - Screen Editor", about_text)
+        self.assertIn("by Dean Jenkins", about_text)
+        self.assertIn("MIT License", about_text)
+        self.assertIn("Press any key to continue", about_text)
+
+        # Test Memory Map workspace
+        rendered_lines.clear()
+        self.editor.action_mem_info()
+        mem_text = "\n".join(rendered_lines)
+        self.assertIn("Extended Memory Map", mem_text)
+        self.assertIn("Bank  Phys   Size", mem_text)
+        self.assertIn("Linux OS / Python VM", mem_text)
+        self.assertIn("Press any key to continue", mem_text)
+
+        print(
+            "[+] Step 16: About and Memory Map workspaces verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

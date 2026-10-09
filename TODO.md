@@ -312,7 +312,7 @@ have been resolved and archived.
       `editor.py` and `LOOK_AND_FEEL_SPEC.md` with canonical
       `Press any key to continue`. Validated via
       `test_help_screen_dismissal_prompt` in `test_editor.py`.
-  - [ ] **Bug 2.7.20: Missing Tier 1 About ([A]) and Memory Map ([M]) Screens**:
+  - [x] **Bug 2.7.20: Missing Tier 1 About ([A]) and Memory Map ([M]) Screens**:
     - *Symptom*: Pressing `a` (About) or `m` (Memory Info) from Splash or
       keybindings in Python SE is ignored; both full-screen Tier 1 workspaces
       exist in CP/M `SE.COM` but are completely absent from Python SE.
@@ -320,6 +320,10 @@ have been resolved and archived.
       in `editor.py`.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1 and
       `src/se.asm` lines 2858 & 3465.
+    - *Resolution*: Implemented `action_about()` and `action_mem_info()` in
+      `editor.py` conforming to Tier 1 centered workspace layout, column 0
+      tilde discipline, and canonical dismissal prompt. Validated via
+      `test_about_and_mem_info_workspaces` in `test_editor.py`.
 
 ---
 

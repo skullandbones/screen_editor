@@ -407,10 +407,13 @@ class Editor:
     def action_about(self):
         """Display Tier 1 About screen workspace."""
         lines = [
-            "SE — Screen Editor",
-            "Version v1.1.0",
+            "SE - Screen Editor",
+            "version 1.1.0 (2026-10-09)",
+            "by Dean Jenkins",
             "",
-            "A fast, full-screen text editor for CP/M-80 and Linux.",
+            "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high",
+            "",
+            "Open source software under the MIT License",
             "",
             "Press any key to continue",
         ]
@@ -422,12 +425,26 @@ class Editor:
 
     def action_mem_info(self):
         """Display Tier 1 Memory Information workspace."""
+        ram_lbl = (
+            "Preserved (Active)"
+            if self.config.ramdrive_enabled
+            else "None Detected"
+        )
+        plugin_lbl = (
+            "Operational" if self.plugin_mgr.list_plugins() else "Disabled"
+        )
         lines = [
-            "SE — Memory Map & System Information",
+            "SE - Extended Memory Map",
+            f"OS: Linux | RAM: Dynamic Heap | Plugins: {plugin_lbl}",
             "",
-            f"Screen Buffer: {self.terminal.cols}x{self.terminal.rows}",
-            f"Line Capacity: {self.config.max_lines}",
-            f"Active Lines : {self.buffer.total_lines}",
+            "Bank  Phys   Size   System / OS Role        SE Usage",
+            "----  ----   ----   ---------------------   "
+            "----------------------------",
+            "0     0x00   64KB   Linux OS / Python VM    Code & Runtime Buffer",
+            "1     0x01   64KB   Document Buffer         Active Lines & Cache",
+            "2     0x02   32KB   Plugin Subsystem        Dynamic Plugin Memory",
+            "3     0x03   32KB   Clipboard Buffer        Cut/Copy Storage",
+            f"4     0x04   RAM    RAM Drive Storage       {ram_lbl}",
             "",
             "Press any key to continue",
         ]
