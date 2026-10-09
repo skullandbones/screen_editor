@@ -286,3 +286,81 @@ platform hardware abstraction, targeting three primary operating profiles:
     allowing direct CLI invocation (e.g. `.se readme.txt`).
 - [ ] Establish automated testing for Next targets using CSpect or ZEsarUX
   emulator harnesses.
+
+## 7. Multi-Language & Multi-Platform Profiles
+
+### 7.1 C Semantic Equivalent Implementations (Drop-in Replacement Modules)
+- [ ] Write C semantic equivalent implementations for each modular Z80 assembly
+  component (`src/core/*.asm`):
+  - `src/core/buffer.c`: Document line cache, slot indexing, split/join logic.
+  - `src/core/memory.c`: Virtual slot allocation, cache eviction, swap paging.
+  - `src/core/editor.c`: Command dispatch, cursor navigation, text editing.
+  - `src/core/block.c`: Block markers, cut/copy/paste, indentation adjustment.
+  - `src/core/search.c`: String search, case-sensitivity, replace loop.
+  - `src/core/ui_render.c`: Screen refresh, status bar, column 0 tilde margin.
+  - `src/core/ui_modal.c`: Tier 1 alerts, Tier 2 query modals, frame borders.
+  - `src/core/ui_browser.c`: File selection and directory pagination modals.
+  - `src/core/config.c`: `SE.CFG` reader, parser, serializer, and defaults.
+  - `src/core/plugin_mgr.c`: Relocation loader, slot table, host API bridge.
+  - `src/core/beautify.c`: Z80 assembly code formatter and operand aligner.
+- [ ] Maintain drop-in replacement capability conforming to module header API
+  and ABI specifications (`src/include/*.h` mirroring `src/include/*.inc`):
+  - Function signatures, parameter passing, and return codes must match.
+  - Support hybrid linking (e.g. C core modules with Z80 HAL or vice-versa
+    under Z88DK / SDCC / GCC).
+  - Ensure zero behavioral deviation across line limits and modal layouts.
+
+### 7.2 Linux Native Executable using C Equivalent Modules
+- [ ] Construct native Linux SE executable compiled from the C core modules.
+- [ ] Implement POSIX / Linux Hardware Abstraction Layer (`src/hal/linux/`):
+  - `hal_linux_console.c`: ANSI escape sequences, `termios` raw mode, and
+    terminal resize handling (`SIGWINCH`) for 80x24 / 120x40 geometries.
+  - `hal_linux_keyboard.c`: Non-blocking POSIX stdin read, escape sequence
+    decoding (arrows, PageUp/Down, Home/End), WordStar control keys.
+  - `hal_linux_memory.c`: Dynamic heap buffer management replacing 64KB Z80
+    TPA banking while preserving identical slot semantics and limits.
+  - `hal_linux_storage.c`: Standard POSIX file I/O (`open`, `read`, `write`)
+    and directory enumeration (`opendir`, `readdir`) for Linux paths.
+- [ ] Target platforms:
+  - PC / Workstation: `x86_64` (Linux).
+  - Raspberry Pi: `aarch64` (Raspberry Pi 4 and Raspberry Pi 5).
+- [ ] Add `se-linux` target in `Makefile` with cross-compilation support.
+
+### 7.3 CP/M-86 Executable using C Modules
+- [ ] Construct CP/M-86 executable (`SE.CMD`) compiled from C core modules.
+- [ ] Implement CP/M-86 Hardware Abstraction Layer (`src/hal/cpm86/`):
+  - `hal_cpm86_console.c`: CP/M-86 BDOS console calls and terminal escape
+    sequence handling.
+  - `hal_cpm86_keyboard.c`: CP/M-86 console status polling and input read.
+  - `hal_cpm86_memory.c`: 8086 segmented memory allocation utilizing CP/M-86
+    memory models for buffer expansion beyond 64KB.
+  - `hal_cpm86_storage.c`: CP/M-86 BDOS FCB disk I/O, user areas, drives.
+- [ ] Configure toolchain integration (GCC-IA16 / Open Watcom / Digital Research
+  C for CP/M-86).
+- [ ] Add `se-cpm86` build target in `Makefile` producing `SE.CMD`.
+
+### 7.4 Rust Native Implementation for Linux
+- [ ] Construct a native SE editor implementation in Rust for Linux.
+- [ ] Implement idiomatic Rust architecture mirroring SE UI/UX specification:
+  - Terminal engine using `crossterm`, `termion`, or raw `termios`.
+  - Tier 1 full-screen workspaces, Tier 2 centered modal pop-up dialogs,
+    and Tier 3 persistent status bar strictly matching `docs/UI_UX_DESIGN.md`.
+  - High-performance text buffer engine (piece table or line-slot cache).
+  - WordStar / SE keybindings (`Ctrl+K`, `Ctrl+Q`, `Ctrl+F`, `Ctrl+R`).
+  - Compatible `SE.CFG` configuration parsing and serialization.
+- [ ] Target platforms:
+  - PC: `x86_64-unknown-linux-gnu`.
+  - Raspberry Pi: `aarch64-unknown-linux-gnu` (RPi 4 / RPi 5).
+- [ ] Add Cargo workspace / package configuration under `ports/rust/` or
+  `src/rust/`.
+
+### 7.5 Python Native Implementation for Linux
+- [ ] Construct a native SE editor implementation in Python 3 for Linux.
+- [ ] Implement full feature parity and UI/UX fidelity:
+  - Terminal I/O using Python standard library `termios` / `tty` or `curses`.
+  - Centered boxed modal dialogs, status bar, and WordStar keybindings.
+  - Compatible `SE.CFG` reader, parser, and default settings engine.
+  - Python-based plugin loading architecture reflecting Host API vectors.
+- [ ] Target platforms:
+  - Python 3.10+ on PC (`x86_64`) and Raspberry Pi 4 / 5 (`aarch64`).
+- [ ] Add executable script and package setup under `ports/python/`.
