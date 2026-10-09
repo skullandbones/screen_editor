@@ -329,6 +329,8 @@ void modal_show_notification(const char *title, const char *message)
     }
     modal_puts_centered(top + 5, left, width, "Press any key to continue");
 
-    hal_console_getkey();
+    while (hal_console_getkey() <= 0) {
+        /* Wait for user keystroke */
+    }
     g_need_screen_render = 1;
 }

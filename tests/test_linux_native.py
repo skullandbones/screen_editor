@@ -147,11 +147,14 @@ def test_document_load_and_save():
             # Send Ctrl+S (0x13) to save
             os.write(master, b"\x13")
             time.sleep(0.2)
+            # Dismiss save notification modal (press any key)
+            os.write(master, b" ")
+            time.sleep(0.1)
             # Send Ctrl+Q (0x11) to exit
             os.write(master, b"\x11")
             time.sleep(0.1)
             # Confirmation key fallback if needed
-            os.write(master, b"\n")
+            os.write(master, b"n\n")
 
             exit_code = wait_pid_with_timeout(pid, 2.0)
             os.close(master)

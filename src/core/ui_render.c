@@ -286,7 +286,9 @@ void show_splash_screen(void)
     int k;
 
     render_tier1_workspace_screen(s_splash_lines, 14, 50);
-    k = hal_console_getkey();
+    while ((k = hal_console_getkey()) <= 0) {
+        /* Wait for user keystroke */
+    }
     if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
         g_editor_exit_flag = 1;
     }
@@ -317,7 +319,9 @@ static const char *s_help_lines[17] = {
 void show_help_screen(void)
 {
     render_tier1_workspace_screen(s_help_lines, 17, 70);
-    hal_console_getkey();
+    while (hal_console_getkey() <= 0) {
+        /* Wait for user keystroke */
+    }
     clear_screen();
     g_need_screen_render = 1;
 }
@@ -333,7 +337,9 @@ void show_about_screen(void)
         "          Press any key to return...          "
     };
     render_tier1_workspace_screen(s_about_lines, 6, 46);
-    hal_console_getkey();
+    while (hal_console_getkey() <= 0) {
+        /* Wait for user keystroke */
+    }
     clear_screen();
     g_need_screen_render = 1;
 }

@@ -25,9 +25,77 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Stable / Production.
-- **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; report new Profile 1 defects here).*
+- **Status**: Verification Complete / 6 Look & Feel Defects Identified.
+- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+  - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 4.3, 4.4, 11.1.
+    - *Issue*: Status bar Field 4 is overwritten with free memory
+      (`Free: 64 KB |`) on splash screen, with selection metrics
+      (`Sel: 0 chars |`) when block mode is active, and with `[Pan +40] |`
+      when horizontally panned, violating the universal `^K: Editor keys |`
+      invariant. Field 3 displays `CP/M  |` with slash rather than `CPM   |`.
+      Field 2 in 80x24 mode prints with 2 leading spaces (`  80x24 |`).
+    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm`
+      to canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
+      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
+      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
+      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
+  - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.1.
+    - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
+      default. On standard CP/M terminals and serial consoles (VT100 / ANSI,
+      80x24 standard), this causes terminal character column spill
+      (Anti-Pattern #3) where the status bar padding exceeds 80 columns,
+      resulting in distorted visual wrapping on 80x24 displays.
+    - *Required Fix*: Default initial terminal geometry to `80x24`
+      (`CALL SET_MODE_80X24`), matching the canonical terminal standard
+      defined in Section 2.1, while preserving `120x40` toggle via command
+      line or config file.
+  - [ ] **Bug 2.1.3: WordStar Navigation Disconnect & Command Collisions**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Issue*: In `MAIN_LOOP` (`src/se.asm`), `Ctrl+S` (`0x13`) dispatches to
+      `DO_SAVE_FILE_UI` (Save File Screen), `Ctrl+D` (`0x04`) dispatches to
+      `DO_DELETE_FORWARD` (Delete Character), `Ctrl+E` (`0x05`) dispatches to
+      `DO_END_KEY` (End of Line), and `Ctrl+X` (`0x18`) dispatches to
+      `DO_MOVE_BLOCK` (Move Block). WordStar diamond navigation (`^S` Left,
+      `^D` Right, `^E` Up, `^X` Down) fails completely and triggers
+      unintended commands during navigation sequences.
+    - *Required Fix*: Decouple navigation from commands in `src/se.asm`:
+      map `Ctrl+S` to `CURSOR_LEFT`, `Ctrl+D` to `CURSOR_RIGHT`, `Ctrl+E` to
+      `CURSOR_UP`, and `Ctrl+X` (when no block is active) to `CURSOR_DOWN`.
+  - [ ] **Bug 2.1.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.3.
+    - *Issue*: In `plugins/help.asm`, content height is 22 lines, leaving 0
+      top margin rows on an 80x24 screen, violating 1-based vertical centering.
+      Rows 1 and 3 render ASCII banner rules (`=============================`)
+      and Row 21 renders `-----------------------------`. Status bar Field 4
+      displays `Free: 63 KB |`. Help text lists obsolete/colliding non-WordStar
+      keybindings.
+    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
+      canonical 17-line, 70-column two-column tabular layout, centered
+      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
+      universal status bar presence on Row 24.
+  - [ ] **Bug 2.1.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1, 7.2.
+    - *Issue*: `RENDER_SPLASH` in `src/se.asm` renders a 21-line menu
+      structure with fixed menu items (`type [E] or [Enter] to edit...`),
+      lacking the canonical 14-line centered presentation (`:e to edit`,
+      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
+      `:? for help`, `:q to quit`).
+    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
+      `src/se.asm` to match the canonical 14-line, 50-column Tier 1 splash
+      layout specified in Section 7.2.
+  - [ ] **Bug 2.1.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.3 (Archetype C).
+    - *Issue*: In `DO_GOTO_LINE_UI` (`src/core/editor.asm`), dialog width is
+      50 columns instead of canonical 52 columns. Footer buttons display
+      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
+      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
+      `src/core/search.asm` exhibit similar non-standard widths.
+    - *Required Fix*: Standardize CP/M modal pop-up routines in
+      `src/core/editor.asm` and `src/core/search.asm` to strictly conform to
+      Archetype C (52x8 box, `+---+` title divider,
+      `[Enter]=Confirm      [ESC]=Cancel` footer, bracketed input `[  ]`).
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
@@ -35,9 +103,35 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / Verification in Progress.
-- **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; report new Profile 2 defects here).*
+- **Status**: Verification Complete / 6 Look & Feel Defects Identified.
+- **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
+  - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 4.3, 4.4, 11.1.
+    - *Issue*: Status bar Field 4 displays free memory on splash, selection
+      metrics on block mode, and pan offset when panned in `se_next_cpm.asm`.
+    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/se_next_cpm.asm` to
+      canonical 5-field layout; move indicators to Field 5.
+  - [ ] **Bug 2.2.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.1.
+    - *Issue*: Next CP/M profile defaults to 120x40 instead of standard 80x24.
+    - *Required Fix*: Initialize to `80x24` mode in `START` (`se_next_cpm.asm`).
+  - [ ] **Bug 2.2.3: WordStar Navigation Disconnect & Command Collisions**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
+    - *Issue*: `Ctrl+S`, `Ctrl+D`, `Ctrl+E`, `Ctrl+X` bound to file save,
+      forward delete, line end, and move block in `src/se_next_cpm.asm`.
+    - *Required Fix*: Map to cursor left, right, up, down navigation.
+  - [ ] **Bug 2.2.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.3.
+    - *Issue*: Help overlay displays 22-line banner box with zero top margin.
+    - *Required Fix*: Standardize to 17-line 70-column centered layout.
+  - [ ] **Bug 2.2.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 7.1, 7.2.
+    - *Issue*: Splash screen displays legacy 21-line menu in `se_next_cpm.asm`.
+    - *Required Fix*: Align with canonical 14-line centered splash layout.
+  - [ ] **Bug 2.2.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
+    - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.1, 8.3 (Archetype C).
+    - *Issue*: 50-column dialog framing and non-standard action button footers.
+    - *Required Fix*: Align dialog boxes with 52-column Archetype C format.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
