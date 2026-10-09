@@ -511,3 +511,46 @@ Enforced by:
 
 All updates to these branches must be fast-forward or standard merge commits.
 Never attempt `git push --force` or `git push --delete` on these branches.
+
+---
+
+## 6. Porting SE.COM
+
+All AI agents and developers implementing, maintaining, or extending ported
+variants of the Screen Editor (such as the Linux C profile `se-linux`, Python
+port `se-py`, Rust native `se-rs`, CP/M-86 `SE.CMD`, or ZX Spectrum Next
+targets) must conform strictly to the canonical Look and Feel specification:
+
+- **Authoritative Specification Document**:
+  [`docs/LOOK_AND_FEEL_SPEC.md`](docs/LOOK_AND_FEEL_SPEC.md)
+  (and foundational UI/UX standards in
+  [`docs/UI_UX_DESIGN.md`](docs/UI_UX_DESIGN.md)).
+
+### Mandatory Porting Invariance Rules:
+1. **Universal Status Bar (Row 24 / Row 40)**:
+   - Must appear on the bottom row of 100% of screens (Editor, Splash, Open,
+     Save, Help, Config, and background of pop-up dialogs).
+   - Rendered in inverse video (`\x1b[7m ... \x1b[0m`).
+   - Column 0 on the status bar row never displays a tilde.
+   - Status events (e.g. Save Confirmations, File Errors, Search Results) must
+     NEVER be printed on the status bar; they must be Tier 2 pop-ups.
+2. **Strict Column 0 Tilde (`~`) Discipline**:
+   - Every unallocated body row below EOF in the editor workspace, and all
+     margin rows in centered workspaces and pop-up backgrounds, must display a
+     tilde (`~`) in column 0.
+3. **Dedicated Surface Hierarchy (The 3 Tiers)**:
+   - Tier 1: Mathematically centered full-screen workspaces (Splash, Help,
+     Config, File Pickers) using the centering equations in the spec.
+   - Tier 2: Mathematically centered boxed modal dialogs with ASCII frames
+     (`+---+`, `|   |`) for all confirmations, inputs, and status events.
+   - Tier 3: Universal status bar on the bottom row.
+4. **Horizontal Panning (`Pan +40`) & Line Boundary**:
+   - Strict 120-column physical line length ceiling (`MAX_LINE = 120`).
+   - 40-column horizontal panning quantum (`[Pan +40]`, `[Pan +80]`).
+5. **WordStar Keybinding Fidelity**:
+   - 100% compliance with the canonical WordStar cursor diamond (`^S`, `^D`,
+     `^E`, `^X`), navigation shortcuts, and action keys in the spec table.
+6. **Automated Headless Conformance Testing**:
+   - Every port must include automated headless PTY integration tests
+     (validating boot, status bar presence, tildes, modals, and clean exit).
+
