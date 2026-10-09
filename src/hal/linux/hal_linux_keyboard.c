@@ -58,34 +58,34 @@ int hal_console_getkey(void)
         if (seq[0] == '[') {
             if (seq_len == 2) {
                 switch (seq[1]) {
-                case 'A': return KEY_CTRL_E; /* Up */
-                case 'B': return KEY_CTRL_X; /* Down */
-                case 'C': return KEY_CTRL_D; /* Right */
-                case 'D': return KEY_CTRL_S; /* Left */
-                case 'H': return KEY_CTRL_A; /* Home */
-                case 'F': return KEY_CTRL_E; /* End */
+                case 'A': return KEY_UP;    /* Up */
+                case 'B': return KEY_DOWN;  /* Down */
+                case 'C': return KEY_RIGHT; /* Right */
+                case 'D': return KEY_LEFT;  /* Left */
+                case 'H': return KEY_HOME;  /* Home */
+                case 'F': return KEY_END;   /* End */
                 default: break;
                 }
             } else if (seq_len >= 3 && seq[2] == '~') {
                 switch (seq[1]) {
-                case '1': return KEY_CTRL_A; /* Home */
-                case '2': return KEY_CTRL_B; /* Insert */
-                case '3': return KEY_DEL;    /* Delete */
-                case '4': return KEY_CTRL_E; /* End */
-                case '5': return KEY_CTRL_U; /* Page Up */
-                case '6': return KEY_CTRL_V; /* Page Down */
+                case '1': return KEY_HOME;  /* Home */
+                case '2': return KEY_INS;   /* Insert */
+                case '3': return KEY_DEL;   /* Delete */
+                case '4': return KEY_END;   /* End */
+                case '5': return KEY_PGUP;  /* Page Up */
+                case '6': return KEY_PGDN;  /* Page Down */
                 default: break;
                 }
             }
         } else if (seq[0] == 'O') {
             /* SS3 sequences */
             switch (seq[1]) {
-            case 'A': return KEY_CTRL_E; /* Up */
-            case 'B': return KEY_CTRL_X; /* Down */
-            case 'C': return KEY_CTRL_D; /* Right */
-            case 'D': return KEY_CTRL_S; /* Left */
-            case 'H': return KEY_CTRL_A; /* Home */
-            case 'F': return KEY_CTRL_E; /* End */
+            case 'A': return KEY_UP;    /* Up */
+            case 'B': return KEY_DOWN;  /* Down */
+            case 'C': return KEY_RIGHT; /* Right */
+            case 'D': return KEY_LEFT;  /* Left */
+            case 'H': return KEY_HOME;  /* Home */
+            case 'F': return KEY_END;   /* End */
             default: break;
             }
         }

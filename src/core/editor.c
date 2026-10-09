@@ -412,10 +412,21 @@ void goto_line(uint16_t target_line)
 int editor_handle_key(int key)
 {
     switch (key) {
+    case KEY_UP: cursor_up(); break;
+    case KEY_DOWN: cursor_down(); break;
+    case KEY_LEFT: cursor_left(); break;
+    case KEY_RIGHT: cursor_right(); break;
+    case KEY_HOME: cursor_home(); break;
+    case KEY_END: cursor_end(); break;
+    case KEY_PGUP: page_up(); break;
+    case KEY_PGDN: page_down(); break;
+    case KEY_INS: toggle_insert_mode(); break;
+    case KEY_DEL: do_delete(); break;
     case KEY_CTRL_A: cursor_home(); break;
-    case KEY_CTRL_E: cursor_end(); break;
+    case KEY_CTRL_E: cursor_up(); break;
     case KEY_CTRL_D: cursor_right(); break;
-    case KEY_CTRL_G: do_delete(); break;
+    case KEY_CTRL_G: jump_file_bottom(); break;
+    case KEY_CTRL_T: jump_file_top(); break;
     case KEY_BACKSPACE: do_backspace(); break;
     case KEY_ENTER: do_enter(); break;
     case KEY_CTRL_U: page_up(); break;
@@ -429,7 +440,13 @@ int editor_handle_key(int key)
     case KEY_CTRL_Y: do_ctrl_y_beautify(); break;
     case KEY_CTRL_Z: plugin_manager_ui(); break;
     case KEY_CTRL_K: show_splash_screen(); break;
-    case KEY_CTRL_X: do_move_block(); break;
+    case KEY_CTRL_X:
+        if (g_block_mode != BLOCK_MODE_OFF) {
+            do_move_block();
+        } else {
+            cursor_down();
+        }
+        break;
     case KEY_CTRL_Q:
         if (modal_confirm_save_changes() == MODAL_RES_OK) {
             g_editor_exit_flag = 1;

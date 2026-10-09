@@ -82,7 +82,7 @@ have been resolved and archived.
     - *Required Fix*: Remove status bar message overwriting (Anti-Pattern #1).
       Route all status events (Save Complete, Search Failed, etc.) to Tier 2
       centered modal pop-up boxes (`show_notification` / Archetype A).
-  - [ ] **Bug 2.4.4: Arrow Key & WordStar Diamond Keybinding Misalignment**:
+  - [x] **Bug 2.4.4: Arrow Key & WordStar Diamond Keybinding Misalignment**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, arrow keys decode to
       `KEY_CTRL_E` (Up), `KEY_CTRL_X` (Down), `KEY_CTRL_S` (Left), and

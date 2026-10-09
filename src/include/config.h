@@ -67,6 +67,7 @@ extern "C" {
 #define KEY_CTRL_Q              17  /* Quick exit / Save changes prompt */
 #define KEY_CTRL_R              18  /* Search & Replace */
 #define KEY_CTRL_S              19  /* Save current document */
+#define KEY_CTRL_T              20  /* Jump to top of document */
 #define KEY_CTRL_U              21  /* Page Up */
 #define KEY_CTRL_V              22  /* Page Down */
 #define KEY_CTRL_W              23  /* Close active file to splash screen */
@@ -75,6 +76,17 @@ extern "C" {
 #define KEY_CTRL_Z              26  /* Open Plugin Manager Screen */
 #define KEY_ESC                 27  /* Escape prefix / Cancel dialog */
 #define KEY_DEL                 127 /* Rubout / Delete character */
+
+/* Extended Navigation Keycodes (> 255) */
+#define KEY_UP                  256
+#define KEY_DOWN                257
+#define KEY_LEFT                258
+#define KEY_RIGHT               259
+#define KEY_HOME                260
+#define KEY_END                 261
+#define KEY_PGUP                262
+#define KEY_PGDN                263
+#define KEY_INS                 264
 
 #define ESC_TIMEOUT_LOOPS       5000 /* Escape debounce timeout */
 

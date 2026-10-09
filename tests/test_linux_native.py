@@ -250,6 +250,76 @@ def test_status_event_notification_modal():
             os.remove(test_file_path)
 
 
+def test_arrow_and_wordstar_navigation():
+    """Verify ANSI arrow keys and WordStar diamond cursor movement (§10)."""
+    print("[*] Testing ANSI arrow & WordStar cursor navigation (§10)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_nav_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("Line 1: Alpha\nLine 2: Bravo\nLine 3: Charlie\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            # Read initial screen (at Line 1, Col 1)
+            output = b""
+            try:
+                output += os.read(master, 8192)
+            except Exception:
+                pass
+
+            # Send ANSI Down Arrow: ESC [ B
+            os.write(master, b"\x1b[B")
+            time.sleep(0.15)
+            # Send ANSI Right Arrow: ESC [ C
+            os.write(master, b"\x1b[C")
+            time.sleep(0.15)
+            try:
+                output += os.read(master, 8192)
+            except Exception:
+                pass
+
+            out_str = output.decode("utf-8", errors="replace")
+            # Should show Line 2 and Col 1 in canonical status bar
+            assert "Line    2/3" in out_str and "Col 1" in out_str, (
+                f"Arrow navigation failed to update status bar:\n{out_str}"
+            )
+
+            # Send WordStar diamond: Ctrl+E (Up)
+            os.write(master, b"\x05")
+            time.sleep(0.15)
+            output2 = b""
+            try:
+                output2 += os.read(master, 8192)
+            except Exception:
+                pass
+            out_str2 = output2.decode("utf-8", errors="replace")
+            assert "Line    1/3" in out_str2, (
+                f"WordStar Ctrl+E (Up) failed to move up:\n{out_str2}"
+            )
+
+            # Send Ctrl+Q to exit
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] ANSI arrow & WordStar navigation verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -260,6 +330,7 @@ def main():
     test_document_load_and_save()
     test_status_bar_canonical_layout()
     test_status_event_notification_modal()
+    test_arrow_and_wordstar_navigation()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
