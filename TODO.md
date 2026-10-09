@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Verification Complete / 6 Look & Feel Defects Identified.
+- **Status**: Verification Complete / 5 Defects Open (Bug 2.1.3 Rejected).
 - **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -51,18 +51,15 @@ have been resolved and archived.
       (`CALL SET_MODE_80X24`), matching the canonical terminal standard
       defined in Section 2.1, while preserving `120x40` toggle via command
       line or config file.
-  - [ ] **Bug 2.1.3: WordStar Navigation Disconnect & Command Collisions**:
+  - [x] **Bug 2.1.3: WordStar Navigation Disconnect [REJECTED / WONTFIX]**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
-    - *Issue*: In `MAIN_LOOP` (`src/se.asm`), `Ctrl+S` (`0x13`) dispatches to
-      `DO_SAVE_FILE_UI` (Save File Screen), `Ctrl+D` (`0x04`) dispatches to
-      `DO_DELETE_FORWARD` (Delete Character), `Ctrl+E` (`0x05`) dispatches to
-      `DO_END_KEY` (End of Line), and `Ctrl+X` (`0x18`) dispatches to
-      `DO_MOVE_BLOCK` (Move Block). WordStar diamond navigation (`^S` Left,
-      `^D` Right, `^E` Up, `^X` Down) fails completely and triggers
-      unintended commands during navigation sequences.
-    - *Required Fix*: Decouple navigation from commands in `src/se.asm`:
-      map `Ctrl+S` to `CURSOR_LEFT`, `Ctrl+D` to `CURSOR_RIGHT`, `Ctrl+E` to
-      `CURSOR_UP`, and `Ctrl+X` (when no block is active) to `CURSOR_DOWN`.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Dropped support for WordStar diamond navigation (`^S`, `^D`,
+      `^E`, `^X`) in `SE.COM`. Overriding `Ctrl+S` (Save File), `Ctrl+D`
+      (Forward Delete), `Ctrl+E` (End of Line), and `Ctrl+X` (Cut/Move Block)
+      is excessively invasive to established SE.COM keymappings. Cursor
+      navigation remains fully supported via ANSI/VT100 arrow keys and
+      Home/End (`Ctrl+A`/`Ctrl+E`).
   - [ ] **Bug 2.1.4: Tier 1 Centering & Tilde Violations on Help Screen**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.3.
     - *Issue*: In `plugins/help.asm`, content height is 22 lines, leaving 0
@@ -103,7 +100,7 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Verification Complete / 6 Look & Feel Defects Identified.
+- **Status**: Verification Complete / 5 Defects Open (Bug 2.2.3 Rejected).
 - **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
   - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -115,11 +112,11 @@ have been resolved and archived.
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 2.1.
     - *Issue*: Next CP/M profile defaults to 120x40 instead of standard 80x24.
     - *Required Fix*: Initialize to `80x24` mode in `START` (`se_next_cpm.asm`).
-  - [ ] **Bug 2.2.3: WordStar Navigation Disconnect & Command Collisions**:
+  - [x] **Bug 2.2.3: WordStar Navigation Disconnect [REJECTED / WONTFIX]**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 10.
-    - *Issue*: `Ctrl+S`, `Ctrl+D`, `Ctrl+E`, `Ctrl+X` bound to file save,
-      forward delete, line end, and move block in `src/se_next_cpm.asm`.
-    - *Required Fix*: Map to cursor left, right, up, down navigation.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Dropped support for WordStar diamond navigation in
+      `SE_NEXT.COM` to preserve established SE.COM keymappings.
   - [ ] **Bug 2.2.4: Tier 1 Centering & Tilde Violations on Help Screen**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 5.2, 7.1, 7.3.
     - *Issue*: Help overlay displays 22-line banner box with zero top margin.

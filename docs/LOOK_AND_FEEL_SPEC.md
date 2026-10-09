@@ -375,6 +375,14 @@ or display notifications.
 | `Delete`     | `0x7F`| `KEY_DELETE`  | Delete char under cursor / join line|
 | `Tab`        | `0x09`| `KEY_TAB`     | Insert spaces to next tab stop (4/8)|
 
+> [!NOTE]
+> Architectural Decision (CP/M Profiles): WordStar diamond navigation
+> (`^S`, `^D`, `^E`, `^X`) is explicitly dropped in CP/M implementations
+> (`SE.COM` and `SE_NEXT.COM`) to prevent invasive disruption to canonical
+> SE.COM keybindings (`Ctrl+S` Save File, `Ctrl+D` Delete Forward, `Ctrl+E` End
+> of Line, `Ctrl+X` Cut/Move Block). Navigation on CP/M is provided via ANSI
+> VT100 arrow keys and standard navigation shortcuts (`Ctrl+A`/`Ctrl+E`).
+
 11. The Six UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
 Port authors must audit all visual routines against these 6 anti-patterns:
