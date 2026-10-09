@@ -21,6 +21,10 @@ se-linux
 *.prl
 *.ovl
 
+# Emulator transient files and local configurations
+*.idx
+*.CFG
+
 
 # Python virtual environment and bytecode cache
 .venv/
