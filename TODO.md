@@ -152,12 +152,16 @@ have been resolved and archived.
       to 8-row height with an empty separator row before action options, and
       standardized options text in `editor.py`. Validated via
       `test_modal_dialog_framing_layout` in `test_editor.py`.
-  - [ ] **Bug 2.7.7: Modal Input Dialog Navigation Key Defect (show_input)**:
+  - [x] **Bug 2.7.7: Modal Input Dialog Navigation Key Defect (show_input)**:
     - *Symptom*: Arrow keys (`KEY_LEFT`, `KEY_RIGHT`), `Home`, `End`, and
       `Delete` are ignored inside text input modal dialogs.
     - *Root Cause*: `show_input()` in `modal.py` lacks key handlers for
       cursor movement or character deletion inside the input brackets.
     - *Spec Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 8.3 (Archetype C).
+    - *Resolution*: Implemented navigation (`Left`, `Right`, `Home`, `End`),
+      delete under cursor (`Delete`, `Ctrl+G`), and WordStar navigation in
+      `show_input()` in `modal.py`. Validated via
+      `test_modal_input_navigation_and_editing` in `test_editor.py`.
   - [ ] **Bug 2.7.8: Missing Configuration Manager Option Handlers (3 and 4)**:
     - *Symptom*: Pressing `3` (Max Lines) or `4` (RAM Drive Mode) on the
       Configuration screen is silently ignored.

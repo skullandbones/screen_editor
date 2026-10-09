@@ -8,10 +8,20 @@ from se.terminal import (
     Terminal,
     KEY_UP,
     KEY_DOWN,
+    KEY_LEFT,
+    KEY_RIGHT,
+    KEY_HOME,
+    KEY_END,
+    KEY_DELETE,
     KEY_ESC,
     KEY_ENTER,
     KEY_TAB,
     KEY_BACKSPACE,
+    KEY_CTRL_A,
+    KEY_CTRL_D,
+    KEY_CTRL_E,
+    KEY_CTRL_G,
+    KEY_CTRL_S,
 )
 
 
@@ -172,6 +182,19 @@ class ModalDialog:
                 if cursor_idx > 0:
                     cursor_idx -= 1
                     buf.pop(cursor_idx)
+            elif k in (KEY_DELETE, KEY_CTRL_G):
+                if cursor_idx < len(buf):
+                    buf.pop(cursor_idx)
+            elif k in (KEY_LEFT, KEY_CTRL_S):
+                if cursor_idx > 0:
+                    cursor_idx -= 1
+            elif k in (KEY_RIGHT, KEY_CTRL_D):
+                if cursor_idx < len(buf):
+                    cursor_idx += 1
+            elif k in (KEY_HOME, KEY_CTRL_A):
+                cursor_idx = 0
+            elif k in (KEY_END, KEY_CTRL_E):
+                cursor_idx = len(buf)
             elif k and len(k) == 1 and 32 <= ord(k) <= 126:
                 if len(buf) < max_len:
                     buf.insert(cursor_idx, k)

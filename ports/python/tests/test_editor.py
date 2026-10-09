@@ -11,7 +11,18 @@ import unittest
 from unittest.mock import MagicMock
 
 from se.editor import Editor
-from se.terminal import KEY_CTRL_S, KEY_CTRL_V, KEY_LEFT, KEY_PGDN
+from se.terminal import (
+    KEY_CTRL_S,
+    KEY_CTRL_V,
+    KEY_LEFT,
+    KEY_RIGHT,
+    KEY_HOME,
+    KEY_END,
+    KEY_DELETE,
+    KEY_BACKSPACE,
+    KEY_ENTER,
+    KEY_PGDN,
+)
 
 
 class TestEditor(unittest.TestCase):
@@ -171,6 +182,41 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 5: Modal dialog framing and 8-row layout verified.",
+            flush=True,
+        )
+
+    def test_modal_input_navigation_and_editing(self):
+        """Step 6: Verify navigation and delete in show_input (Bug 2.7.7)."""
+        print(
+            "[*] Step 6: Testing navigation keys in show_input...",
+            flush=True,
+        )
+        self.editor.modal.draw_box = MagicMock()
+
+        # Key sequence to test left, right, home, end, delete, backspace
+        keys = [
+            KEY_LEFT,
+            KEY_LEFT,  # Cursor between B and D
+            "C",  # Insert C -> "ABCDE"
+            KEY_HOME,  # Cursor at 0
+            KEY_DELETE,  # Delete A -> "BCDE"
+            KEY_END,  # Cursor at end (4)
+            KEY_BACKSPACE,  # Delete E -> "BCD"
+            KEY_ENTER,  # Submit
+        ]
+        key_iter = iter(keys)
+        self.editor.terminal.get_key = lambda: next(key_iter)
+
+        res = self.editor.modal.show_input(
+            title="Edit",
+            desc="Edit text",
+            label="Value:",
+            initial_text="ABDE",
+        )
+        self.assertEqual(res, "BCD")
+
+        print(
+            "[+] Step 6: Modal input navigation & editing verified.",
             flush=True,
         )
 
