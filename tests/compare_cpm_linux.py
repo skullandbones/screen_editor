@@ -5,7 +5,7 @@ compare_cpm_linux.py - Parallel Comparison of SE.COM (CP/M) and se-linux.
 Runs SE.COM in the RC2014 CP/M emulator and se-linux in a Linux PTY in parallel.
 Applies identical input sequences to both and compares screen layouts, status
 bars, Tier 1 centering/tildes, Tier 2 modal dialogs, and key behaviors against
-LOOK_AND_FEEL_SPEC.md.
+UI_UX_DESIGN.md.
 """
 
 import os
