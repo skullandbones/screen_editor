@@ -41,6 +41,27 @@ def expand_tabs_visual(line: str, tab_width: int = 4) -> str:
     return "".join(result)
 
 
+def adjust_col_to_target(
+    line: str, target_col: int, tab_width: int = 4
+) -> int:
+    """
+    Compute buffer column offset aligned with target visual column
+    according to docs/UI_UX_DESIGN.md Section 6.4 algorithm.
+    """
+    char_idx = 0
+    vis_acc = 0
+    while char_idx < len(line) and vis_acc < target_col:
+        if line[char_idx] == "\t":
+            spaces = tab_width - (vis_acc % tab_width)
+            if vis_acc + spaces > target_col:
+                break
+            vis_acc += spaces
+            char_idx += 1
+        else:
+            vis_acc += 1
+            char_idx += 1
+    return char_idx
+
 
 class DocumentBuffer:
     """
@@ -98,6 +119,15 @@ class DocumentBuffer:
         """Return visual column for cursor_col or specified col."""
         c = self.cursor_col if col is None else col
         return calc_visual_col(self.current_line, c, self.tab_width)
+
+    def adjust_col_to_target(self, target_vis_col: Optional[int] = None):
+        """
+        Adjust cursor_col to align with sticky target_col visual column.
+        """
+        target = self.target_col if target_vis_col is None else target_vis_col
+        self.cursor_col = adjust_col_to_target(
+            self.current_line, target, self.tab_width
+        )
 
     def update_pan(self, view_cols: int):
         """
@@ -223,13 +253,13 @@ class DocumentBuffer:
         """Move cursor up one line, preserving target column."""
         if self.cursor_row > 0:
             self.cursor_row -= 1
-            self.cursor_col = min(self.target_col, len(self.current_line))
+            self.adjust_col_to_target()
 
     def move_down(self):
         """Move cursor down one line, preserving target column."""
         if self.cursor_row < len(self.lines) - 1:
             self.cursor_row += 1
-            self.cursor_col = min(self.target_col, len(self.current_line))
+            self.adjust_col_to_target()
 
     def move_home(self):
         """Move cursor to beginning of current line."""
@@ -257,12 +287,12 @@ class DocumentBuffer:
     def page_up(self, page_size: int):
         """Navigate up by page_size lines."""
         self.cursor_row = max(0, self.cursor_row - page_size)
-        self.cursor_col = min(self.target_col, len(self.current_line))
+        self.adjust_col_to_target()
 
     def page_down(self, page_size: int):
         """Navigate down by page_size lines."""
         self.cursor_row = min(len(self.lines) - 1, self.cursor_row + page_size)
-        self.cursor_col = min(self.target_col, len(self.current_line))
+        self.adjust_col_to_target()
 
     def toggle_block(self):
         """Toggle block selection state (Ctrl+B)."""

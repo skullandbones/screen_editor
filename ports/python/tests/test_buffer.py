@@ -13,6 +13,7 @@ import unittest
 from se.buffer import (
     DocumentBuffer,
     MAX_LINE_LENGTH,
+    adjust_col_to_target,
     calc_visual_col,
     expand_tabs_visual,
 )
@@ -286,6 +287,84 @@ class TestBuffer(unittest.TestCase):
 
         print(
             "[+] Step 9: 3-coordinate space and tab traversal verified.",
+            flush=True,
+        )
+
+    def test_vertical_navigation_sticky_col(self):
+        """
+        Step 10: Verify vertical navigation sticky target column (Bug 2.7.22).
+        """
+        print(
+            "[*] Step 10: Testing vertical navigation & sticky target...",
+            flush=True,
+        )
+        buf = DocumentBuffer(tab_width=4)
+        buf.lines = [
+            "0123456789ABCDEF",  # Row 0: 16 chars
+            "SHORT",             # Row 1: 5 chars
+            "\t\tINDENTED",      # Row 2: 2 tabs (vis 0..7) + INDENTED (vis 8..)
+            "ANOTHER LONG LINE",  # Row 3: 17 chars
+        ]
+
+        # Place cursor at Row 0, col 10
+        buf.cursor_row = 0
+        buf.cursor_col = 10
+        buf.target_col = 10
+
+        # Move Down to Row 1 ("SHORT", len 5)
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 5)
+        # target_col must stay sticky at 10
+        self.assertEqual(buf.target_col, 10)
+
+        # Move Down to Row 2 ("\t\tINDENTED")
+        # Visual col 10 corresponds to char_idx 4 ('\t', '\t', 'I', 'N')
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 2)
+        self.assertEqual(buf.cursor_col, 4)
+        self.assertEqual(buf.get_visual_col(), 10)
+        self.assertEqual(buf.target_col, 10)
+
+        # Move Down to Row 3 ("ANOTHER LONG LINE")
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 3)
+        self.assertEqual(buf.cursor_col, 10)
+        self.assertEqual(buf.target_col, 10)
+
+        # Move Up back through rows, preserving sticky target_col 10
+        buf.move_up()
+        self.assertEqual(buf.cursor_row, 2)
+        self.assertEqual(buf.cursor_col, 4)
+        self.assertEqual(buf.get_visual_col(), 10)
+
+        buf.move_up()
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 5)
+
+        buf.move_up()
+        self.assertEqual(buf.cursor_row, 0)
+        self.assertEqual(buf.cursor_col, 10)
+
+        # Test tab boundary clamping when target falls inside a tab
+        buf.lines = ["0123", "\tXYZ", "012345"]
+        buf.cursor_row = 0
+        buf.cursor_col = 2
+        buf.target_col = 2
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 1)
+        # Target 2 falls inside the tab (0..3), so it must clamp to 0
+        self.assertEqual(buf.cursor_col, 0)
+        self.assertEqual(buf.target_col, 2)
+
+        # Moving down restores cursor to col 2 on line without leading tabs
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 2)
+        self.assertEqual(buf.cursor_col, 2)
+        self.assertEqual(buf.target_col, 2)
+
+        print(
+            "[+] Step 10: Vertical navigation sticky target verified.",
             flush=True,
         )
 

@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 5 Defects Open (Bugs 2.7.22–2.7.26).
+- **Status**: Active / 4 Defects Open (Bugs 2.7.23–2.7.26).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -535,7 +535,7 @@ have been resolved and archived.
       rendering, pinned cursor navigation to discrete tab boundaries, and
       synchronized terminal screen cursor column to visual space. Validated via
       `test_tab_traversal_and_coordinates` in `test_buffer.py`.
-  - [ ] **Bug 2.7.22: Vertical Navigation Target Column Tab Misalignment**:
+  - [x] **Bug 2.7.22: Vertical Navigation Target Column Tab Misalignment**:
     - *Symptom*: Navigating vertically (`Up`, `Down`, `PageUp`, `PageDown`)
       across lines containing tab characters causes the cursor to jump
       erratically to incorrect columns on adjacent lines.
@@ -544,9 +544,11 @@ have been resolved and archived.
       where `target_col` stores a raw character index rather than sticky visual
       column coordinates.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.4.
-    - *Required Fix*: Implement `adjust_col_to_target(target_vis_col)` in
-      `buffer.py` conforming to the Section 6.4 algorithm, maintaining
-      `target_col` as sticky visual column space across vertical movement.
+    - *Resolution*: Implemented `adjust_col_to_target()` in `buffer.py`
+      conforming to Section 6.4 algorithm, preserving `target_col` sticky
+      visual coordinates across `move_up()`, `move_down()`, `page_up()`, and
+      `page_down()`. Validated via `test_vertical_navigation_sticky_col` in
+      `test_buffer.py`.
   - [ ] **Bug 2.7.23: Ctrl+D Mapped to Cursor Right Instead of Forward Delete**:
     - *Symptom*: Pressing `Ctrl+D` moves cursor one position to the right
       instead of deleting the character forward under the cursor.
