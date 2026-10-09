@@ -144,35 +144,81 @@ void render_buffer_line(uint16_t row)
 
 void render_status_bar(void)
 {
-    char bar[128];
-    uint32_t free_kb = mem_get_free_kb();
-    const char *fname = g_current_filename[0] ?
-                        g_current_filename : "[Untitled]";
-    size_t bar_len;
-    size_t i;
+    char raw_name[80];
+    char field1[32];
+    char field2[16];
+    char field3[16];
+    char field4[32];
+    char field5[64];
+    char pan_str[16];
+    const char *blk_str;
+    const char *fname;
+    const char *geom_str;
+    const char *fmt_str;
+    char core[256];
+    char full_bar[256];
+    size_t core_len;
+    size_t i, idx;
+
+    fname = g_current_filename[0] ? g_current_filename : "(Untitled)";
+    snprintf(raw_name, sizeof(raw_name), "%s%c", fname,
+             g_doc_modified ? '*' : ' ');
+    snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
+
+    geom_str = (g_config.screen_mode == MODE_120X40) ? "120x40" : "80x24";
+    snprintf(field2, sizeof(field2), " %s |", geom_str);
+
+    fmt_str = (g_file_format == FMT_CPM) ? "CPM  " : "Linux";
+    snprintf(field3, sizeof(field3), " %s |", fmt_str);
+
+    snprintf(field4, sizeof(field4), " ^K: Editor keys |");
+
+    pan_str[0] = '\0';
+    if (g_horiz_pan_offset > 0) {
+        snprintf(pan_str, sizeof(pan_str), " [Pan +%u]",
+                 (unsigned)g_horiz_pan_offset);
+    }
+
+    blk_str = "";
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        blk_str = " [SEL]";
+    } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
+        blk_str = " [BLK LOCK]";
+    }
+
+    snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u%s%s |",
+             (unsigned)(g_cur_doc_row + 1),
+             (unsigned)g_doc_total_lines,
+             (unsigned)g_cur_col,
+             pan_str, blk_str);
+
+    snprintf(core, sizeof(core), "%s%s%s%s%s",
+             field1, field2, field3, field4, field5);
+    core_len = strlen(core);
+
+    if (core_len < g_active_cols) {
+        size_t pad = g_active_cols - core_len;
+        size_t left_pad = pad / 2;
+        size_t right_pad = pad - left_pad;
+        idx = 0;
+        for (i = 0; i < left_pad && idx + 1 < sizeof(full_bar); i++) {
+            full_bar[idx++] = ' ';
+        }
+        for (i = 0; i < core_len && idx + 1 < sizeof(full_bar); i++) {
+            full_bar[idx++] = core[i];
+        }
+        for (i = 0; i < right_pad && idx + 1 < sizeof(full_bar); i++) {
+            full_bar[idx++] = ' ';
+        }
+        full_bar[idx] = '\0';
+    } else {
+        strncpy(full_bar, core, g_active_cols);
+        full_bar[g_active_cols] = '\0';
+    }
 
     hal_console_locate(g_active_rows, 1);
     hal_console_inverse_on();
-
-    if (g_status_msg[0] != '\0') {
-        snprintf(bar, sizeof(bar), " %-76s", g_status_msg);
-    } else {
-        snprintf(bar, sizeof(bar),
-                 " SE v1.1.0 | Ln %-5u/%-5u Col %-3u | %s%s | Free: %4u KB",
-                 (unsigned)(g_cur_doc_row + 1),
-                 (unsigned)g_doc_total_lines,
-                 (unsigned)(g_cur_col + 1),
-                 fname,
-                 g_doc_modified ? "*" : " ",
-                 (unsigned)free_kb);
-    }
-
-    bar_len = strlen(bar);
-    hal_console_puts(bar);
-    for (i = bar_len; i < g_active_cols; i++) {
-        hal_console_putc(' ');
-    }
-
+    hal_console_puts(full_bar);
     hal_console_inverse_off();
 }
 

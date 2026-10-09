@@ -59,7 +59,7 @@ have been resolved and archived.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
 - **Status**: Active / Look & Feel Conformance Audit Complete.
 - **Active Defects & Issue Tracking (LOOK_AND_FEEL_SPEC.md Conformance)**:
-  - [ ] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
+  - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/LOOK_AND_FEEL_SPEC.md` Section 4.3.
     - *Issue*: `render_status_bar` in `src/core/ui_render.c` outputs custom
       format `" SE v1.1.0 | Ln %-5u/%-5u Col %-3u | %s%s | Free: %4u KB"`.

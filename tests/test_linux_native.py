@@ -142,6 +142,58 @@ def test_document_load_and_save():
             os.remove(test_file_path)
 
 
+def test_status_bar_canonical_layout():
+    """Verify canonical 5-field status bar layout per LOOK_AND_FEEL_SPEC.md."""
+    print("[*] Testing canonical 5-field status bar layout (§4.3)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_", suffix=".txt",
+                                     delete=False) as tf:
+        tf.write("Hello SE World\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            output = b""
+            try:
+                output += os.read(master, 8192)
+            except Exception:
+                pass
+
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            out_str = output.decode("utf-8", errors="replace")
+
+            assert "80x24 |" in out_str, (
+                "Status bar missing '80x24 |' geometry field"
+            )
+            assert "Linux |" in out_str or "CPM   |" in out_str, (
+                "Status bar missing format indicator ('Linux |' or 'CPM   |')"
+            )
+            assert "^K: Editor keys |" in out_str, (
+                "Status bar missing '^K: Editor keys |' help field"
+            )
+            assert "Line " in out_str and "Col " in out_str, (
+                "Status bar missing 'Line ... Col ...' position field"
+            )
+            print("    [+] Canonical 5-field status bar layout verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -150,6 +202,7 @@ def main():
     test_build_and_help()
     test_interactive_pty_startup()
     test_document_load_and_save()
+    test_status_bar_canonical_layout()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
