@@ -42,6 +42,7 @@ extern "C" {
 /* Global Display State Variables */
 extern uint8_t  g_active_cols;
 extern uint8_t  g_active_rows;
+extern uint8_t  g_is_splash_screen;
 extern uint8_t  g_need_screen_render;
 extern uint8_t  g_need_line_render;
 extern uint8_t  g_need_status_render;

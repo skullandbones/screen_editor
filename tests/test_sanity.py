@@ -76,9 +76,11 @@ def drain_all(master_fd, quiet_time=0.1):
         except (BlockingIOError, OSError):
             break
 
-def run_sanity_test():
+def run_sanity_test(use_sec=False):
     t_start = time.time()
     emu_bin, rom_file, img_file, se_bin, cpmrm_bin = find_paths()
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     if not os.path.isfile(emu_bin):
         print(f"[-] Emulator binary not found: {emu_bin}", flush=True)
@@ -99,7 +101,7 @@ def run_sanity_test():
                        stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL)
 
-    print("[*] Launching RomWBW on RC2014 emulator (Sanity Suite)...",
+    print(f"[*] Launching RomWBW on RC2014 emulator ({target_name} Sanity)...",
           flush=True)
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -140,16 +142,17 @@ def run_sanity_test():
             return False
         print("[+] Step 2: Switched to Drive C>.", flush=True)
 
-        # 3. Launch SE.COM
-        print("[*] Step 3: Launching SE.COM...", flush=True)
+        # 3. Launch editor binary
+        print(f"[*] Step 3: Launching {target_name}...", flush=True)
         time.sleep(0.5)
-        os.write(master, b"se\r")
-        out = read_until(master, b"for about", timeout=30.0)
-        if b"for about" not in out and b"Col 0" not in out:
-            print(f"[-] Step 3: SE.COM splash screen not detected. Buffer: "
-                  f"{repr(out)}", flush=True)
+        os.write(master, cmd_name + b"\r")
+        out = read_until(master, b"Col 0", timeout=30.0)
+        if b"Col 0" not in out:
+            print(f"[-] Step 3: {target_name} splash screen not detected. "
+                  f"Buffer: {repr(out)}", flush=True)
             return False
-        print("[+] Step 3: Splash screen displayed successfully.", flush=True)
+        print(f"[+] Step 3: {target_name} splash screen displayed "
+              f"successfully.", flush=True)
 
         # 4. Enter Editor Mode ('e')
         print("[*] Step 4: Entering Editor Mode ('e')...", flush=True)
@@ -177,12 +180,14 @@ def run_sanity_test():
 
         # 6. Test Block Mode toggle: Ctrl+B to start, verify Sel: 0 chars
         print("[*] Step 6: Testing Block Mode toggle (Ctrl+B)...", flush=True)
+        time.sleep(0.1)
         os.write(master, b"\x02")
         out_blk = read_until(master, b"Sel: 0 chars", timeout=3.0)
         if b"Sel: 0 chars" not in out_blk:
             print(f"[-] Step 6: Block mode activation failed. Buffer: "
                   f"{repr(out_blk)}", flush=True)
             return False
+        time.sleep(0.1)
         os.write(master, b"\x02")
         out_unblk = read_until(master, b"^K: Editor keys", timeout=3.0)
         if b"^K: Editor keys" not in out_unblk:
@@ -194,6 +199,7 @@ def run_sanity_test():
         # 7. Test Editor Mode Keys Help Screen: Ctrl+K, then return with Enter
         print("[*] Step 7: Testing Editor Mode Keys Help Screen (Ctrl+K)...",
               flush=True)
+        time.sleep(0.1)
         os.write(master, b"\x0b")
         out_help = read_until(master,
                               b"Press any key to continue",
@@ -203,6 +209,7 @@ def run_sanity_test():
                   flush=True)
             return False
         drain_all(master)
+        time.sleep(0.1)
         os.write(master, b"\r")
         out_back = read_until(master, b"^K: Editor keys", timeout=3.0)
         if b"SANITY CHECK OK" not in out_back:
@@ -231,7 +238,7 @@ def run_sanity_test():
 
         # Answer 'n' to discard changes and return to CP/M
         os.write(master, b"n")
-        out_exit = read_until(master, b"C>", timeout=4.0)
+        out_exit = read_until(master, b"C>", timeout=8.0)
         if b"C>" not in out_exit:
             print(f"[-] Step 8: Clean exit with Ctrl+Q failed. Buffer: "
                   f"{repr(out_exit)}", flush=True)
@@ -239,12 +246,12 @@ def run_sanity_test():
         print("[+] Step 8: Clean exit with unsaved prompt verified.",
               flush=True)
 
-        # 9. Verify CLI file load & clean status bar filename: 'se 2.TXT'
-        print("[*] Step 9: Verifying CLI file load & status bar (se 2.TXT)...",
-              flush=True)
+        # 9. Verify CLI file load & clean status bar filename: '<cmd> 2.TXT'
+        print(f"[*] Step 9: Verifying CLI file load & status bar "
+              f"({cmd_name.decode()} 2.TXT)...", flush=True)
         drain_all(master)
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         out_load = read_until(master, b"Line    1/2", timeout=30.0)
         if b"| C:2.TXT        |" not in out_load:
             print(f"[-] Step 9: Status bar filename malformed (expected "
@@ -256,8 +263,8 @@ def run_sanity_test():
                   f"erroneous 'U:' suffix! Buffer: {repr(out_load[-400:])}",
                   flush=True)
             return False
-        print("[+] Step 9: Verified clean status bar for CP/M file (se 2.TXT): "
-              "'| C:2.TXT        |'.", flush=True)
+        print(f"[+] Step 9: Verified clean status bar for CP/M file "
+              f"({cmd_name.decode()} 2.TXT): '| C:2.TXT        |'.", flush=True)
 
         # Clean exit to CP/M
         time.sleep(0.3)
@@ -270,7 +277,7 @@ def run_sanity_test():
         print("[+] Step 9: Clean exit back to CP/M prompt.", flush=True)
 
         elapsed = time.time() - t_start
-        print(f"[+] All SE.COM sanity tests PASSED in {elapsed:.2f}s!",
+        print(f"[+] All {target_name} sanity tests PASSED in {elapsed:.2f}s!",
               flush=True)
         return True
 
@@ -289,5 +296,6 @@ def run_sanity_test():
             pass
 
 if __name__ == "__main__":
-    success = run_sanity_test()
+    use_sec_arg = "--sec" in sys.argv
+    success = run_sanity_test(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

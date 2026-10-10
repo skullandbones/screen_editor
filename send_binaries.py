@@ -5,10 +5,10 @@ Specifically designed for SC131 / RC2014 systems communicating over serial UART.
 
 Strategy:
   1. Ping CP/M console with CR / drive switch command to confirm prompt is at J:
-  2. For each binary (*.COM in the repo and plugins/*.{OVL,PRL}):
+  2. For each binary (including SE.COM, SEC.COM, and plugins/*.{OVL,PRL}):
      - Send command: A:XM R <FILENAME>
      - Consume the command echo and XM.COM banner text for 3 seconds
-     - Start Python XMODEM-1K transfer over serial with hardware flow control (RTS/CTS)
+     - Start Python XMODEM-1K transfer over serial with hardware flow control
      - Wait for CP/M to return to the J: prompt before initiating next file
 """
 
@@ -382,7 +382,8 @@ def send_batch(port="/dev/ttyUSB0", baudrate=115200, target_drive="J:",
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Transfer all *.COM files and binary plugins (.OVL/.PRL) from repo to CP/M drive J: over serial."
+        description="Transfer all *.COM files (including SE.COM, SEC.COM) and "
+                    "plugins (.OVL/.PRL) from repo to CP/M drive J:."
     )
     parser.add_argument(
         "files",

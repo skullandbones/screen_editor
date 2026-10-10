@@ -729,13 +729,13 @@ platform hardware abstraction, targeting three primary operating profiles:
 ## 7. Multi-Language & Multi-Platform Profiles
 
 ### 7.1 C Semantic Equivalent Modules & CP/M Target (`SEC.COM`)
-- [ ] Compile C semantic equivalent core modules to produce `SEC.COM` for CP/M:
+- [x] Compile C semantic equivalent core modules to produce `SEC.COM` for CP/M:
   - The C drop-in replacement modules (`src/core/*.c`) shall be used to build
     `SEC.COM`, a native CP/M executable that runs directly on CP/M systems.
   - From a black box point of view, `SEC.COM` in principle should be completely
     identical to `SE.COM` (matching terminal behavior, visual layout, status
     bar, modal dialogs, cursor mechanics, keybindings, and file I/O).
-- [ ] Maintain drop-in replacement capability conforming to module header API
+- [x] Maintain drop-in replacement capability conforming to module header API
   and ABI specifications (`src/include/*.h` mirroring `src/include/*.inc`):
   - `src/core/buffer.c`: Document line cache, slot indexing, split/join logic.
   - `src/core/memory.c`: Virtual slot allocation, cache eviction, swap paging.
@@ -748,7 +748,7 @@ platform hardware abstraction, targeting three primary operating profiles:
   - `src/core/config.c`: `SE.CFG` reader, parser, serializer, and defaults.
   - `src/core/plugin_mgr.c`: Relocation loader, slot table, host API bridge.
   - `src/core/beautify.c`: Z80 assembly code formatter and operand aligner.
-- [ ] Integrate CP/M build target in `Makefile` for `SEC.COM`:
+- [x] Integrate CP/M build target in `Makefile` for `SEC.COM`:
   - Link C core modules with CP/M platform HAL (`src/hal/cpm/`) via Z88DK / SDCC
     cross-compiler toolchain.
   - Update `send_binaries.py` so that it transfers `SEC.COM` to the target CP/M

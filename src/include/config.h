@@ -42,11 +42,23 @@ extern "C" {
 #define SLOT_TERM               0xFFFF
 #define MAX_COPY_LINE_CHARS     120
 #define MAX_FAR_BANKS           12
+#ifdef __CPM__
+#define CACHE_SIZE_LINES        16
+#define MAX_DOC_LINES_16K       1024
+#define MAX_DOC_LINES_32K       1024
+#define MAX_DOC_LINES           1024
+#define MAX_VIRTUAL_SLOTS       512
+#define MAX_ACTIVE_SLOTS        512
+#define CLIPBOARD_MAX_CHARS     1024
+#else
 #define CACHE_SIZE_LINES        40
 #define MAX_DOC_LINES_16K       16384
 #define MAX_DOC_LINES_32K       32768
 #define MAX_DOC_LINES           32768
 #define MAX_VIRTUAL_SLOTS       65534
+#define MAX_ACTIVE_SLOTS        4096
+#define CLIPBOARD_MAX_CHARS     32768
+#endif
 
 /* Keyboard Control Codes (WordStar & ANSI Mappings) */
 #define KEY_CTRL_A              1   /* Start of line (Home) */

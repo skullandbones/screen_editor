@@ -30,7 +30,9 @@ uint16_t g_norm_end_row = 0;
 uint16_t g_norm_end_col = 0;
 
 /* Clipboard Storage */
+#ifndef CLIPBOARD_MAX_CHARS
 #define CLIPBOARD_MAX_CHARS 32768
+#endif
 static char     s_clipboard_buf[CLIPBOARD_MAX_CHARS];
 static uint16_t s_clipboard_len = 0;
 
@@ -64,19 +66,10 @@ void solidify_block(void)
 
 void toggle_block_mode(void)
 {
-    switch (g_block_mode) {
-    case BLOCK_MODE_OFF:
-        start_new_block_at_cursor();
-        break;
-    case BLOCK_MODE_SELECTING:
-        solidify_block();
-        break;
-    case BLOCK_MODE_SOLIDIFIED:
+    if (g_block_mode != BLOCK_MODE_OFF) {
         cancel_block();
-        break;
-    default:
-        g_block_mode = BLOCK_MODE_OFF;
-        break;
+    } else {
+        start_new_block_at_cursor();
     }
     g_need_status_render = 1;
 }

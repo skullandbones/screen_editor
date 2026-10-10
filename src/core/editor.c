@@ -509,23 +509,26 @@ void editor_main_loop(void)
 {
     while (!g_editor_exit_flag) {
         int key;
-        update_horizontal_pan();
-        if (g_need_screen_render) {
-            render_screen();
-            g_need_screen_render = 0;
-            g_need_line_render = 0;
-            g_need_status_render = 0;
-        } else {
-            if (g_need_line_render) {
-                render_current_line();
+
+        if (!hal_console_check_key()) {
+            update_horizontal_pan();
+            if (g_need_screen_render) {
+                render_screen();
+                g_need_screen_render = 0;
                 g_need_line_render = 0;
-            }
-            if (g_need_status_render) {
-                render_status_bar();
                 g_need_status_render = 0;
+            } else {
+                if (g_need_line_render) {
+                    render_current_line();
+                    g_need_line_render = 0;
+                }
+                if (g_need_status_render) {
+                    render_status_bar();
+                    g_need_status_render = 0;
+                }
             }
+            locate_cursor();
         }
-        locate_cursor();
 
         key = hal_console_getkey();
         if (key > 0) {

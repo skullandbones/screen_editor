@@ -19,6 +19,12 @@
 #include "../include/file_io.h"
 #include "../include/hal.h"
 
+#ifdef __CPM__
+#define MODAL_BOX_WIDTH   50
+#else
+#define MODAL_BOX_WIDTH   52
+#endif
+
 static void modal_puts_centered(uint8_t row, uint8_t left,
                                 uint8_t width, const char *str)
 {
@@ -37,13 +43,36 @@ static void modal_puts_centered(uint8_t row, uint8_t left,
     }
 }
 
+static void modal_draw_row_centered(uint8_t row, uint8_t left,
+                                    uint8_t width, const char *str)
+{
+    size_t len = str ? strlen(str) : 0;
+    uint8_t interior_w = (width > 2) ? (width - 2) : 0;
+    uint8_t pad, i;
+
+    if (len > interior_w) {
+        len = interior_w;
+    }
+    pad = (uint8_t)((interior_w - len) / 2);
+    hal_console_locate(row, left);
+    hal_console_putc('|');
+    for (i = 0; i < pad; i++) {
+        hal_console_putc(' ');
+    }
+    for (i = 0; i < len; i++) {
+        hal_console_putc(str[i]);
+    }
+    for (i = pad + (uint8_t)len; i < interior_w; i++) {
+        hal_console_putc(' ');
+    }
+    hal_console_putc('|');
+}
+
 void modal_draw_frame(uint8_t top, uint8_t left,
                       uint8_t width, uint8_t height,
                       const char *title)
 {
     uint8_t r, c;
-    uint8_t title_len = (title && *title) ? (uint8_t)strlen(title) : 0;
-    uint8_t title_pad = 0;
 
     /* Row 0: Top Border */
     hal_console_locate(top, left);
@@ -54,22 +83,7 @@ void modal_draw_frame(uint8_t top, uint8_t left,
     hal_console_putc('+');
 
     /* Row 1: Title Row */
-    hal_console_locate(top + 1, left);
-    hal_console_putc('|');
-    if (title_len > width - 2) {
-        title_len = width - 2;
-    }
-    title_pad = (width - 2 - title_len) / 2;
-    for (c = 0; c < title_pad; c++) {
-        hal_console_putc(' ');
-    }
-    for (c = 0; c < title_len; c++) {
-        hal_console_putc(title[c]);
-    }
-    for (c = title_pad + title_len; c < width - 2; c++) {
-        hal_console_putc(' ');
-    }
-    hal_console_putc('|');
+    modal_draw_row_centered(top + 1, left, width, title ? title : "");
 
     /* Row 2: Title Separator Divider (+---+) */
     hal_console_locate(top + 2, left);
@@ -100,7 +114,7 @@ void modal_draw_frame(uint8_t top, uint8_t left,
 
 int modal_alert(const char *title, const char *msg1, const char *msg2)
 {
-    uint8_t width = 52;
+    uint8_t width = MODAL_BOX_WIDTH;
     uint8_t height = 7;
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
@@ -109,12 +123,12 @@ int modal_alert(const char *title, const char *msg1, const char *msg2)
     modal_draw_frame(top, left, width, height, title);
 
     if (msg1 && *msg1) {
-        modal_puts_centered(top + 3, left, width, msg1);
+        modal_draw_row_centered(top + 3, left, width, msg1);
     }
     if (msg2 && *msg2) {
-        modal_puts_centered(top + 4, left, width, msg2);
+        modal_draw_row_centered(top + 4, left, width, msg2);
     }
-    modal_puts_centered(top + 5, left, width, "Press any key to continue");
+    modal_draw_row_centered(top + 5, left, width, "Press any key to continue");
 
     hal_console_getkey();
     g_need_screen_render = 1;
@@ -124,8 +138,8 @@ int modal_alert(const char *title, const char *msg1, const char *msg2)
 int modal_confirm(const char *title, const char *msg,
                   const char *btn1, const char *btn2)
 {
-    uint8_t width = 52;
-    uint8_t height = 8;
+    uint8_t width = MODAL_BOX_WIDTH;
+    uint8_t height = 7;
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
     uint8_t selected = 0;
@@ -136,13 +150,18 @@ int modal_confirm(const char *title, const char *msg,
     modal_draw_frame(top, left, width, height, title);
 
     if (msg && *msg) {
-        modal_puts_centered(top + 3, left, width, msg);
+        modal_draw_row_centered(top + 3, left, width, msg);
     }
-    modal_puts_centered(top + 4, left, width, "Save changes?");
+    modal_draw_row_centered(top + 4, left, width, "Save changes?");
 
     while (1) {
         /* Render Options: [Y]es      [N]o      [ESC]=Cancel */
-        hal_console_locate(top + 6, left + 6);
+        hal_console_locate(top + 5, left);
+#ifdef __CPM__
+        hal_console_puts("|        ");
+#else
+        hal_console_puts("|         ");
+#endif
         if (selected == 0) hal_console_inverse_on();
         hal_console_puts("[Y]es");
         if (selected == 0) hal_console_inverse_off();
@@ -152,7 +171,11 @@ int modal_confirm(const char *title, const char *msg,
         hal_console_puts("[N]o");
         if (selected == 1) hal_console_inverse_off();
 
-        hal_console_puts("      [ESC]=Cancel");
+#ifdef __CPM__
+        hal_console_puts("      [ESC]=Cancel       |");
+#else
+        hal_console_puts("      [ESC]=Cancel        |");
+#endif
 
         int k = hal_console_getkey();
         if (k == KEY_ENTER || k == ' ') {
@@ -316,7 +339,7 @@ int modal_confirm_save_changes(void)
 
 void modal_show_notification(const char *title, const char *message)
 {
-    uint8_t width = 52;
+    uint8_t width = 50;
     uint8_t height = 7;
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
@@ -325,9 +348,9 @@ void modal_show_notification(const char *title, const char *message)
     modal_draw_frame(top, left, width, height, title);
 
     if (message && *message) {
-        modal_puts_centered(top + 3, left, width, message);
+        modal_draw_row_centered(top + 3, left, width, message);
     }
-    modal_puts_centered(top + 5, left, width, "Press any key to continue");
+    modal_draw_row_centered(top + 5, left, width, "Press any key to continue");
 
     while (hal_console_getkey() <= 0) {
         /* Wait for user keystroke */

@@ -41,6 +41,7 @@ CPMCP ?= $(ROMWBW_TOOLS)/cpmcp
 CPMRM ?= $(ROMWBW_TOOLS)/cpmrm
 
 TARGET = SE.COM
+TARGET_SEC = SEC.COM
 ASM_SRC = src/se.asm
 
 TARGET_NEXT_CPM = SE_NEXT.COM
@@ -59,12 +60,20 @@ C_HAL_LINUX_SRCS = src/hal/linux/hal_linux_console.c \
 	src/hal/linux/hal_linux_keyboard.c src/hal/linux/hal_linux_memory.c \
 	src/hal/linux/hal_linux_storage.c
 LINUX_MAIN_SRC = src/se_linux.c
+C_HAL_CPM_SRCS = src/hal/cpm/hal_cpm_console.c \
+	src/hal/cpm/hal_cpm_keyboard.c src/hal/cpm/hal_cpm_memory.c \
+	src/hal/cpm/hal_cpm_storage.c
+CPM_MAIN_SRC = src/sec_cpm.c
+ZCC ?= $(TOOLS_ROOT)/z88dk/bin/zcc
+ZCCCFG ?= $(TOOLS_ROOT)/z88dk/lib/config
+export ZCCCFG
+export PATH := $(TOOLS_ROOT)/z88dk/bin:$(PATH)
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
 
-.PHONY: all se-py test-py test-linux se-next-cpm se-next-native test-next \
-	demo-next plugins image init-image clean-image check-tpa check-plugins \
-	check-lines test \
+.PHONY: all sec-cpm se-py test-py test-linux se-next-cpm se-next-native \
+	test-next demo-next plugins image init-image clean-image check-tpa \
+	check-plugins check-lines test test-sec \
 	test-sanity test-conformity test-paging test-config test-32k \
 	test-cpm3 test-plugins test-beautifier test-popup test-slots \
 	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
@@ -72,7 +81,14 @@ CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
 
 
 
-all: $(TARGET) plugins
+all: $(TARGET) $(TARGET_SEC) plugins
+
+sec-cpm: $(TARGET_SEC)
+
+$(TARGET_SEC): $(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
+	@echo "==> Compiling $(TARGET_SEC) with zcc +cpm..."
+	$(ZCC) +cpm -O3 -create-app -m -Isrc/include -o $(TARGET_SEC) \
+		$(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
 
 $(TARGET_LINUX): $(LINUX_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_LINUX_SRCS)
 	@echo "==> Compiling $(TARGET_LINUX) with $(CC)..."
@@ -135,10 +151,12 @@ init-image: $(IMAGE)
 clean-image:
 	rm -rf $(IMAGE_DIR)
 
-image: $(IMAGE) $(TARGET) plugins
-	@echo "==> Injecting $(TARGET) and plugins into hd1k image (0 & 3)..."
+image: $(IMAGE) $(TARGET) $(TARGET_SEC) plugins
+	@echo "==> Injecting binaries & plugins into hd1k image (0 & 3)..."
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 0:se.com 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SEC.COM 0:sec.com 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET_SEC) 0:SEC.COM
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.CFG 2>/dev/null || true
@@ -169,6 +187,8 @@ image: $(IMAGE) $(TARGET) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) 2.TXT 0:2.TXT
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 0:se.com 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SEC.COM 0:sec.com 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET_SEC) 0:SEC.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.CFG 2>/dev/null || true
@@ -203,6 +223,10 @@ test: test-sanity
 test-sanity: image
 	@echo "==> Running fast SE.COM sanity test suite..."
 	python3 tests/test_sanity.py
+
+test-sec: image
+	@echo "==> Running fast SEC.COM sanity test suite..."
+	python3 tests/test_sanity.py --sec
 
 test-conformity: image
 	@echo "==> Running full SE.COM conformity regression test suite..."
@@ -292,12 +316,13 @@ test-py:
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
 	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-next test-linux \
-	test-paging test-monkey test-py
+	test-sec test-paging test-monkey test-py
 
 
 clean:
-	rm -f $(TARGET) $(TARGET_LINUX) $(TARGET_NEXT_CPM) $(TARGET_NEXT_NEX) \
-		SE.nex $(TARGET_NEXT_DOT) SE SE_NEX.BIN dot_se.bin *.lst \
+	rm -f $(TARGET) $(TARGET_SEC) $(TARGET_LINUX) $(TARGET_NEXT_CPM) \
+		$(TARGET_NEXT_NEX) SE.nex $(TARGET_NEXT_DOT) SE SE_NEX.BIN \
+		dot_se.bin SEC.map *.lst \
 		src/*.lst *.obj src/*.obj *.lis *.def *.map *.sym src/*.o \
 		src/*.map src/*.sym plugins/*.PRL plugins/*.OVL plugins/*.bin \
 		plugins/*.lst plugins/*.sym
