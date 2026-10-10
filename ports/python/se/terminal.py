@@ -162,6 +162,17 @@ class Terminal:
         """Clear entire terminal surface and home cursor."""
         self.write(ANSI_CLEAR_SCREEN)
 
+    def term_init(self):
+        """
+        Canonical terminal initialization (TERM_INIT):
+        Resets rendition attributes (\x1b[0m), enables cursor visibility
+        (\x1b[?25h), and clears the screen to home (\x1b[2J\x1b[H).
+        """
+        self.inverse_off()
+        self.show_cursor()
+        self.clear_screen()
+        self.flush()
+
     def clear_eol(self):
         """Clear from cursor to end of active row."""
         self.write(ANSI_CLEAR_EOL)

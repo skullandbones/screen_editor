@@ -601,7 +601,7 @@ have been resolved and archived.
       triggering lookahead pan when cursor rests at `VIEW_RIGHT_COL - 1`
       on lines extending beyond column 79. Validated via
       `test_horizontal_pan_left_boundary_and_lookahead` in `test_buffer.py`.
-  - [ ] **Bug 2.7.27: Terminal Startup Screen Clear & Mode Reset Defect**:
+  - [x] **Bug 2.7.27: Terminal Startup Screen Clear & Mode Reset Defect**:
     - *Symptom*: Launching `se-py` fails to clear the terminal screen or reset
       rendition attributes. Pre-existing shell text or scrollback remains
       visible behind centered workspaces and in empty margin rows.
@@ -610,9 +610,10 @@ have been resolved and archived.
       `TERM_INIT` sequence (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`) is never emitted
       prior to displaying the initial workspace.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 2.5 and Section 12.1.
-    - *Resolution Plan*: Emit `TERM_INIT` (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`)
-      in `editor.run()` before rendering the splash screen or editor workspace.
-      Validate via PTY headless test in `test_headless.py`.
+    - *Resolution*: Implemented `term_init()` in `terminal.py` emitting
+      `\x1b[0m\x1b[?25h\x1b[2J\x1b[H`, and invoked `self.terminal.term_init()`
+      in `editor.run()` before rendering workspaces. Validated via
+      `test_startup_term_init_clears_screen` in `test_editor.py`.
   - [ ] **Bug 2.7.28: Missing Exit Screen Clear and Canonical Exit Banner**:
     - *Symptom*: Quitting `se-py` leaves dirty viewport contents and status bar
       text on the terminal without clearing the display or emitting the exit

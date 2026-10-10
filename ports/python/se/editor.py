@@ -76,6 +76,7 @@ class Editor:
     def run(self):
         """Run the main interactive editor event loop."""
         self.terminal.enter_raw_mode()
+        self.terminal.term_init()
         self.running = True
 
         if not self.buffer.has_file:

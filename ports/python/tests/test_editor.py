@@ -720,6 +720,48 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_startup_term_init_clears_screen(self):
+        """Step 20: Verify startup invokes term_init clear (Bug 2.7.27)."""
+        print(
+            "[*] Step 20: Testing startup invokes term_init screen clear...",
+            flush=True,
+        )
+        self.editor.terminal.term_init = MagicMock()
+        self.editor.action_splash_screen = MagicMock()
+        self.editor.renderer.render_editor = MagicMock()
+
+        def mock_get_key(timeout=None):
+            self.editor.running = False
+            return None
+
+        self.editor.terminal.get_key = mock_get_key
+        self.editor.run()
+
+        self.editor.terminal.enter_raw_mode.assert_called_once()
+        self.editor.terminal.term_init.assert_called_once()
+
+        from se.terminal import (
+            Terminal,
+            ANSI_CLEAR_SCREEN,
+            ANSI_INVERSE_OFF,
+            ANSI_SHOW_CURSOR,
+        )
+        real_term = Terminal()
+        real_written = []
+        real_term.write = lambda s: real_written.append(s)
+        real_term.flush = MagicMock()
+        real_term.term_init()
+
+        self.assertIn(ANSI_INVERSE_OFF, real_written)
+        self.assertIn(ANSI_SHOW_CURSOR, real_written)
+        self.assertIn(ANSI_CLEAR_SCREEN, real_written)
+        real_term.flush.assert_called_once()
+
+        print(
+            "[+] Step 20: Startup term_init screen clear verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
