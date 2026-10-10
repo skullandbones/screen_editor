@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.26 Closed).
+- **Status**: Active / 5 Defects Open (Bugs 2.7.27–2.7.31).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -601,6 +601,73 @@ have been resolved and archived.
       triggering lookahead pan when cursor rests at `VIEW_RIGHT_COL - 1`
       on lines extending beyond column 79. Validated via
       `test_horizontal_pan_left_boundary_and_lookahead` in `test_buffer.py`.
+  - [ ] **Bug 2.7.27: Terminal Startup Screen Clear & Mode Reset Defect**:
+    - *Symptom*: Launching `se-py` fails to clear the terminal screen or reset
+      rendition attributes. Pre-existing shell text or scrollback remains
+      visible behind centered workspaces and in empty margin rows.
+    - *Root Cause*: In `ports/python/se/editor.py:78` (`run()`), only
+      `self.terminal.enter_raw_mode()` is invoked. The mandatory startup
+      `TERM_INIT` sequence (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`) is never emitted
+      prior to displaying the initial workspace.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 2.5 and Section 12.1.
+    - *Resolution Plan*: Emit `TERM_INIT` (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`)
+      in `editor.run()` before rendering the splash screen or editor workspace.
+      Validate via PTY headless test in `test_headless.py`.
+  - [ ] **Bug 2.7.28: Missing Exit Screen Clear and Canonical Exit Banner**:
+    - *Symptom*: Quitting `se-py` leaves dirty viewport contents and status bar
+      text on the terminal without clearing the display or emitting the exit
+      message banner. The host shell prompt appears misplaced on the screen.
+    - *Root Cause*: In `ports/python/se/editor.py:100` (`finally:
+      self.terminal.exit_raw_mode()`), `exit_raw_mode()` restores termios mode
+      and cursor visibility, but never clears the terminal screen and never
+      emits the canonical exit message string.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 2.5 and Section 12.1.
+    - *Resolution Plan*: On clean exit in `editor.py` / `terminal.py`, invoke
+      `clear_screen()` (`\x1b[2J\x1b[H`), emit canonical exit message string
+      `\r\nExiting SE. Returned to OS prompt.\r\n`, restore cursor visibility,
+      and flush stdout before terminating. Validate via `test_headless.py`.
+  - [ ] **Bug 2.7.29: Status Bar Field 5 Shows Raw Col Across Tabs**:
+    - *Symptom*: When the cursor is located on a line containing tab characters,
+      Field 5 of the universal status bar displays the raw buffer byte offset
+      rather than the document visual column (e.g. `Col 1` instead of `Col 4`
+      when resting immediately after a tab stop).
+    - *Root Cause*: In `ports/python/se/ui.py:77` (`render_status_bar()`),
+      `cur_col = buf.cursor_col` formats raw buffer byte offset into
+      `pos_field` instead of formatting `buf.get_visual_col()`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3 and Section 6.2;
+      `src/core/ui_render.asm:1308` (`CALL CALC_VISUAL_COL`).
+    - *Resolution Plan*: Update `render_status_bar()` in `ui.py` to format
+      Field 5 using `buf.get_visual_col()` so the status bar column matches
+      screen cursor position across tabs. Validate via `test_editor.py`.
+  - [ ] **Bug 2.7.30: Tab Key Intercept Replaces Tab Bytes with Spaces**:
+    - *Symptom*: Pressing `Tab` in the editor inserts multiple ASCII spaces
+      (`0x20`) instead of inserting a literal ASCII `0x09` (`KEY_TAB`) byte into
+      the document line buffer. Documents edited in `se-py` lose tab character
+      semantics and cannot contain true tabs.
+    - *Root Cause*: In `ports/python/se/editor.py:133-140`, `KEY_TAB` is
+      intercepted to calculate spaces to the next tab stop and inserts spaces
+      via `insert_char(" ")`, violating the canonical model where tabs are
+      stored as literal byte `0x09` in buffer space.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.2 ("In-Memory Storage")
+      and canonical `SE.COM` (`src/se.asm:1420` `DO_TAB_INSERT`).
+    - *Resolution Plan*: Update `editor.py` so `KEY_TAB` calls
+      `self.buffer.insert_char("\t")`, preserving literal `0x09` tab bytes in
+      the line buffer while letting the discrete tab traversal engine handle
+      visual leaping. Validate via `test_editor.py`.
+  - [ ] **Bug 2.7.31: Sticky Target Column Corrupted on Delete and Paste**:
+    - *Symptom*: Forward deleting a character under cursor (`Ctrl+D` / `Delete`)
+      does not synchronize sticky `target_col`. Pasting clipboard text
+      (`Ctrl+V` / `paste_block()`) assigns raw byte offset `self.target_col =
+      self.cursor_col` (and omits `target_col` update on multi-line paste),
+      corrupting sticky vertical navigation targets on lines with tabs.
+    - *Root Cause*: In `ports/python/se/buffer.py:200` (`delete_char()`),
+      `self.target_col` is not updated after line mutation. In `buffer.py:405`,
+      `paste_block()` sets `self.target_col = self.cursor_col` instead of
+      `self.get_visual_col()`, and line 421 omits `target_col` update entirely.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, and 6.4.
+    - *Resolution Plan*: In `ports/python/se/buffer.py`, update `delete_char()`
+      and both branches of `paste_block()` to synchronize `self.target_col =
+      self.get_visual_col()`. Validate via `test_buffer.py`.
 
 ---
 
