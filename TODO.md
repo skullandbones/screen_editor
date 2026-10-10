@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 3 Defects Open (Bugs 2.7.34–2.7.36).
+- **Status**: Active / 2 Defects Open (Bugs 2.7.35–2.7.36).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -706,7 +706,7 @@ have been resolved and archived.
       position without replacing existing lines. Added `Ctrl+K R` prefix
       dispatch. Validated via `test_block_active_file_insert` in
       `test_editor.py`.
-  - [ ] **Bug 2.7.34: Block-Active Save (Ctrl+S) Saves Full Buffer**:
+  - [x] **Bug 2.7.34: Block-Active Save (Ctrl+S) Saves Full Buffer**:
     - *Symptom*: Pressing `Ctrl+S` while a block is highlighted overwrites the
       target file with the full document buffer rather than saving only the
       highlighted visual block range. Additionally, `Ctrl+K S` is unhandled.
@@ -715,10 +715,12 @@ have been resolved and archived.
       `self.buffer.block_active > 0` and no `action_block_save()` routine.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.8, Section 10, and
       `src/se.asm:1046-1052`.
-    - *Resolution Plan*: Intercept `KEY_CTRL_S` when active block exists in
-      `dispatch_key()` and implement `action_block_save()`, prompting for a
-      target filename and writing only the selected block lines/characters to
-      disk while retaining the active block selection.
+    - *Resolution*: Intercepted `KEY_CTRL_S` when `self.buffer.block_active > 0`
+      in `dispatch_key()` and implemented `action_block_save()` in `editor.py`
+      along with `save_block()` in `DocumentBuffer`, writing only highlighted
+      block lines and characters to target file while retaining active block
+      selection. Added `Ctrl+K S` prefix dispatch. Validated via
+      `test_block_active_save` in `test_editor.py`.
   - [ ] **Bug 2.7.35: Document Close (Ctrl+W) Unhandled in Editor Loop**:
     - *Symptom*: Pressing `Ctrl+W` while editing a document is ignored. The
       editor cannot close an open document back to the splash screen from the

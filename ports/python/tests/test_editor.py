@@ -985,6 +985,90 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_block_active_save(self):
+        """Step 26: Verify block-active Ctrl+S and Ctrl+K S (Bug 2.7.34)."""
+        print(
+            "[*] Step 26: Testing block-active save and Ctrl+K S...",
+            flush=True,
+        )
+        import tempfile
+
+        # 1. When block_active == 0, Ctrl+S invokes action_save_file
+        self.editor.action_save_file = MagicMock()
+        self.editor.action_block_save = MagicMock()
+        self.editor.buffer.block_active = 0
+        self.editor.dispatch_key(KEY_CTRL_S)
+        self.editor.action_save_file.assert_called_once()
+        self.editor.action_block_save.assert_not_called()
+
+        # 2. When block_active == 1, Ctrl+S invokes action_block_save
+        self.editor.action_save_file.reset_mock()
+        self.editor.action_block_save.reset_mock()
+        self.editor.buffer.block_active = 1
+        self.editor.dispatch_key(KEY_CTRL_S)
+        self.editor.action_save_file.assert_not_called()
+        self.editor.action_block_save.assert_called_once()
+
+        # 3. Ctrl+K S invokes action_block_save via WordStar prefix
+        self.editor.action_block_save.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(return_value="s")
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_block_save.assert_called_once()
+
+        # 4. End-to-end: save only highlighted block to disk file
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            block_file = os.path.join(tmp_dir, "block_out.txt")
+            self.editor.buffer.lines = [
+                "Alpha Line",
+                "Beta Line to Save",
+                "Gamma Line",
+            ]
+            self.editor.buffer.filename = "my_doc.txt"
+            self.editor.buffer.format_cpm = False
+            self.editor.buffer.block_active = 2
+            self.editor.buffer.block_start_row = 1
+            self.editor.buffer.block_start_col = 0
+            self.editor.buffer.block_end_row = 1
+            self.editor.buffer.block_end_col = len("Beta Line to Save")
+
+            captured = []
+            orig_write = self.editor.terminal.write
+
+            def mock_write(s):
+                captured.append(s)
+                orig_write(s)
+
+            self.editor.terminal.write = mock_write
+            key_seq = list(block_file) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=key_seq)
+
+            from se.editor import Editor
+            self.editor.action_block_save = Editor.action_block_save.__get__(
+                self.editor, Editor
+            )
+            ok = self.editor.action_block_save()
+            self.assertTrue(ok)
+            self.assertTrue(os.path.isfile(block_file))
+
+            with open(block_file, "rb") as f:
+                saved_content = f.read()
+            # Must save ONLY the block, not the full document buffer!
+            self.assertEqual(saved_content, b"Beta Line to Save")
+            # Block active is retained at state 2 per canonical spec
+            self.assertEqual(self.editor.buffer.block_active, 2)
+            # Original filename and lines are completely untouched
+            self.assertEqual(self.editor.buffer.filename, "my_doc.txt")
+            self.assertEqual(len(self.editor.buffer.lines), 3)
+
+            browser_output = "".join(captured)
+            self.assertIn("SAVE BLOCK (DIRECTORY -", browser_output)
+
+        print(
+            "[+] Step 26: Block-active save and Ctrl+K S verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

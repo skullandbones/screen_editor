@@ -365,6 +365,41 @@ class DocumentBuffer:
         self.clipboard = text
         return text
 
+    def save_block(
+        self, path: str, format_cpm: Optional[bool] = None
+    ) -> bool:
+        """
+        Save selected block text to target file without modifying document.
+        """
+        if self.block_active == 0:
+            return False
+        if self.block_active == 1:
+            self.solidify_block()
+        if format_cpm is None:
+            format_cpm = self.format_cpm
+
+        r1, c1, r2, c2 = self.get_normalized_block()
+        if r1 == r2:
+            parts = [self.lines[r1][c1:c2]]
+        else:
+            parts = [self.lines[r1][c1:]]
+            for r in range(r1 + 1, r2):
+                parts.append(self.lines[r])
+            parts.append(self.lines[r2][:c2])
+
+        sep = b"\r\n" if format_cpm else b"\n"
+        try:
+            with open(path, "wb") as f:
+                for idx, line in enumerate(parts):
+                    if idx > 0:
+                        f.write(sep)
+                    f.write(line.encode("ascii", errors="replace"))
+                if format_cpm:
+                    f.write(b"\x1a")
+            return True
+        except OSError:
+            return False
+
     def cut_block(self) -> str:
         """Cut selected block text, deleting it from document."""
         if self.block_active == 0:

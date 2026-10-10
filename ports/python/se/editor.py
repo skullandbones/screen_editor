@@ -161,6 +161,8 @@ class Editor:
                 next_k = self.terminal.get_key()
                 if next_k in ("r", "R"):
                     self.action_insert_file()
+                elif next_k in ("s", "S"):
+                    self.action_block_save()
                 elif next_k in ("q", "Q", "x", "X"):
                     self.action_quit()
                 else:
@@ -173,7 +175,10 @@ class Editor:
             else:
                 self.action_open_file()
         elif key == KEY_CTRL_S:
-            self.action_save_file()
+            if self.buffer.block_active > 0:
+                self.action_block_save()
+            else:
+                self.action_save_file()
         elif key == KEY_CTRL_P:
             self.action_plugin_palette()
         elif key == KEY_CTRL_Y:
@@ -386,7 +391,7 @@ class Editor:
         input_text = initial_text
         cursor_pos = len(input_text)
         page_idx = 0
-        fmt_cpm = self.config.format_cpm
+        fmt_cpm = self.buffer.format_cpm
         geometry_str = f"{self.terminal.cols}x{self.terminal.rows}"
         if geometry_str not in ("80x24", "120x40"):
             geometry_str = "80x24"
@@ -545,6 +550,41 @@ class Editor:
             self.modal.show_notification(
                 title="Save Complete",
                 message=f"Saved to {os.path.basename(target_name)}",
+            )
+            return True
+        else:
+            self.modal.show_notification(
+                title="Save Error", message=f"Could not write to {target_name}"
+            )
+            return False
+
+    def action_block_save(self) -> bool:
+        """Display Tier 1 Save Block workspace and save block to file."""
+        if self.buffer.block_active == 0:
+            return False
+        if self.buffer.block_active == 1:
+            self.buffer.solidify_block()
+
+        target = self.action_directory_browser(
+            mode="save_block", initial_text=""
+        )
+        if not target:
+            return False
+        target_name, fmt_cpm = target
+        if os.path.exists(target_name) and target_name != self.buffer.filename:
+            ans = self.modal.show_confirm(
+                title="Overwrite Warning",
+                desc="File already exists on disk.",
+                query=f"Overwrite {os.path.basename(target_name)}?",
+            )
+            if ans != "y":
+                return False
+
+        ok = self.buffer.save_block(target_name, format_cpm=fmt_cpm)
+        if ok:
+            self.modal.show_notification(
+                title="Save Complete",
+                message=f"Block saved to {os.path.basename(target_name)}",
             )
             return True
         else:
