@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 5 Defects Open (Bugs 2.4.8–2.4.12).
+- **Status**: Active / 12 Defects Open (Bugs 2.4.8–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -254,6 +254,104 @@ have been resolved and archived.
       `Ctrl+C` cannot be pasted.
     - *Required Fix*: Implement `do_paste_block()` in `block.c` and bind
       `KEY_CTRL_V` in `editor.c` to paste clipboard contents at current cursor.
+  - [ ] **Bug 2.4.13: Terminal Lifecycle, Startup Clear & Clean Exit Missing**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.5, 12.1.
+    - *Issue*: On launch, `src/se_linux.c` fails to emit canonical `TERM_INIT`
+      (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`), risking leaving unreset attributes or
+      scrollback artifacts. On exit, `se_linux.c` clears screen and shows
+      cursor, but fails to emit the canonical exit message followed by CRLF:
+      `\r\nExiting SE. Returned to OS prompt.\r\n`. Additionally,
+      `hal_console_clear()` in `hal_linux_console.c` emits `\x1b[H\x1b[2J`
+      (home then clear) rather than standard ANSI clear then home
+      (`\x1b[2J\x1b[H`).
+    - *Required Fix*: Implement `TERM_INIT` startup clear in `se_linux.c` /
+      `hal_linux_console.c`, emit canonical exit banner on program termination,
+      and standardize `hal_console_clear()` sequence order.
+  - [ ] **Bug 2.4.14: Viewport Column 1 Space & Cursor Locator Offset**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1.3, 5.3, 6.7.
+    - *Issue*: In `src/core/ui_render.c:82` (`render_row_content`), allocated
+      document rows unconditionally print a leading space
+      `hal_console_putc(' ')` at column 1 under the mistaken notion of a
+      "Column 0 Margin", constraining text width to `g_active_cols - 2` and
+      shifting all document text right by one column. Section 5.3 strictly
+      excludes column 0 tildes or margin spaces from active document lines.
+      Due to this space, `locate_cursor()` in `src/core/editor.c:120` hardcodes
+      `screen_col = (uint8_t)(vis_col + 2)` instead of the canonical 1-based
+      coordinate formula `(vis_col - VIEW_LEFT_COL) + 1` specified in
+      Section 6.7.
+    - *Required Fix*: Remove `hal_console_putc(' ')` on allocated document rows
+      in `ui_render.c`, start document text at screen column 1, and update
+      `locate_cursor()` in `editor.c` to use canonical `(vis_col - pan) + 1`.
+  - [ ] **Bug 2.4.15: Missing Sticky Target Column & Vertical Tab Clamping**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, 6.4.
+    - *Issue*: In `src/core/editor.c`, vertical navigation primitives
+      (`cursor_up`, `cursor_down`, `page_up`, `page_down`) lack sticky
+      `TARGET_COL` persistence. Passing through shorter or blank lines
+      permanently clamps `g_cur_col` to `g_active_line_len`, losing the visual
+      column. Furthermore, `adjust_col_to_target()` is never called on vertical
+      movement, and its internal logic sets `g_cur_col` to `i` (after the tab,
+      where `calc_visual_col >= target`) violating the Tab Exclusion Mandate,
+      which requires clamping to the beginning of the tab (`vis_acc < TARGET_COL
+      < vis_acc + spaces`).
+    - *Required Fix*: Introduce `TARGET_COL`, update it on horizontal movements,
+      preserve it across vertical navigation, and implement the canonical
+      `ADJUST_COL_TO_TARGET` algorithm in `editor.c` with tab start clamping.
+  - [ ] **Bug 2.4.16: Status Bar Field Squatting & Field 5 Column Reporting**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 11.1.
+    - *Issue*: In `src/core/ui_render.c:210-241` (`render_status_bar`), Field 4
+      is overwritten with selection metrics (`Sel: ...`, `Block: ...`) or
+      horizontal panning (`[Pan +40]`), clobbering the mandatory universal help
+      hint `^K: Editor keys |`. Per Section 4.3, selection state (`[SEL]` /
+      `[BLK LOCK]`) and panning (`[Pan +40]`) belong in Field 5. Furthermore,
+      Field 5 formats column position using raw byte index `g_cur_col` instead
+      of visual document column `calc_visual_col()`, displaying raw byte offsets
+      when tabs are present.
+    - *Required Fix*: Preserve `^K: Editor keys |` in Field 4 unconditionally,
+      route `[Pan +40]` and block status flags into Field 5, and compute Field 5
+      column display using `calc_visual_col(g_active_line_buf, g_cur_col)`.
+  - [ ] **Bug 2.4.17: Tier 1 File Open/Save Workspaces & Directory Scanning**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 7.5, 7.6, 7.7, 7.8, 14.2.
+    - *Issue*: `ui_browser_open_dialog` in `src/core/ui_browser.c` renders a
+      56x18 Tier 2 modal dialog with a 1-column list of files, and
+      `ui_browser_save_dialog` delegates to `modal_prompt_text` (a single-line
+      prompt). Section 7.5–7.8 mandate that File Open, Insert, Save, and Save
+      Block are dedicated Tier 1 Full-Screen Workspaces with multi-column
+      grids (5 cols x 12 rows on 80x24; 7 cols x 28 rows on 120x40), double
+      rules (`~====...====`), column 0 tilde margins, `<PgUp>`/`<PgDn>`
+      pagination, line ending toggle (`Ctrl+F`), and status bar at row 24.
+      Furthermore, `hal_linux_scan_directory` in `hal_linux_storage.c` is an
+      empty stub with no directory entry population.
+    - *Required Fix*: Upgrade File Open/Save to Tier 1 centered workspaces,
+      implement multi-column directory pagination, and implement POSIX `opendir`
+      / `readdir` scanning in `hal_linux_storage.c` with path normalization.
+  - [ ] **Bug 2.4.18: Non-Canonical Configuration Parser & Serialization**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 13.1, 13.2.
+    - *Issue*: `src/core/config.c` uses non-canonical, case-sensitive key names
+      (`TAB_WIDTH`, `LINES_MODE`, `SCREEN_MODE`, `SAVE_FMT`, `PLUGIN_MODE`)
+      rather than canonical keys `SCREEN`, `TAB`/`TABS`, `FORMAT`,
+      `LINES`/`MAXLINES`, `RAMDRIVE`/`RAMDISK`, `PLUGIN`/`PLUGINS`. It fails to
+      parse canonical symbolic values (`16K`/`32K`, `PRESERVE`/`ON`/`HIB`,
+      `AUTOLOAD`/`DEMAND`/`OFF`), does not strip surrounding whitespace around
+      keys and values, does not ignore `;` comment lines, defaults `SCREEN` to
+      `MODE_80X24` instead of canonical `120X40`, and serializes using
+      non-canonical key names.
+    - *Required Fix*: Refactor `config.c` to parse canonical keys
+      case-insensitively, handle canonical symbolic values and comments,
+      default `SCREEN` to `120X40`, and serialize canonical `SE.CFG` format.
+  - [ ] **Bug 2.4.19: Panning Edge Trigger & Dynamic Geometry Adaptation**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6, 14.1.
+    - *Issue*: In `src/core/editor.c:65-98` (`update_horizontal_pan`),
+      horizontal panning lacks the canonical lookahead edge trigger: when
+      `vis_col == VIEW_RIGHT_COL - 1` (column 79) and the active line continues
+      beyond `CUR_COL` (character at `CUR_COL` and next character are
+      non-null), the viewport must pan right by 40 columns. Furthermore,
+      `update_horizontal_pan()` hardcodes `g_horiz_pan_offset = 0` whenever
+      `screen_mode == MODE_120X40`, ignoring dynamic terminal width
+      (`g_active_cols`) and preventing panning on terminals with intermediate
+      or non-standard column widths.
+    - *Required Fix*: Implement the lookahead edge trigger in
+      `update_horizontal_pan()` per Section 6.6 and dynamically compute
+      viewport boundaries against `g_active_cols`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
