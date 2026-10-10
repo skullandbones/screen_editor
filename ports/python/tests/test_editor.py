@@ -1326,6 +1326,56 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_typing_and_tab_block_cancel(self):
+        """Step 32: Verify typing & Tab cancel active block (Bug 2.7.41)."""
+        print(
+            "[*] Step 32: Testing typing & Tab active block cancel...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Original Text"]
+
+        # 1. Dynamic block (block_active == 1): typing cancels block
+        # without inserting the character.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 8
+
+        self.editor.dispatch_key("X")
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Original Text")
+        self.assertEqual(self.editor.buffer.cursor_col, 8)
+
+        # 2. Dynamic block (block_active == 1): Tab cancels block
+        # without inserting tab.
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.dispatch_key(KEY_TAB)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Original Text")
+
+        # 3. Solidified block (block_active == 2): typing clears block
+        # and inserts character.
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.assertEqual(self.editor.buffer.block_active, 2)
+
+        self.editor.dispatch_key("Z")
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "OriginalZ Text")
+
+        # 4. Solidified block (block_active == 2): Tab clears block
+        # and inserts tab byte.
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.editor.dispatch_key(KEY_TAB)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "OriginalZ\t Text")
+
+        print(
+            "[+] Step 32: typing & Tab active block cancel verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

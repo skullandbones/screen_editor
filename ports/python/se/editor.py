@@ -152,7 +152,12 @@ class Editor:
             else:
                 self.buffer.delete_char()
         elif key == KEY_TAB:
-            self.buffer.insert_char("\t")
+            if self.buffer.block_active == 1:
+                self.buffer.cancel_block()
+            else:
+                if self.buffer.block_active > 0:
+                    self.buffer.cancel_block()
+                self.buffer.insert_char("\t")
 
         # 3. Block Selection & Clipboard
         elif key == KEY_CTRL_B:
@@ -207,13 +212,18 @@ class Editor:
             self.action_quit()
         elif key == KEY_ESC:
             if self.buffer.block_active > 0:
-                self.buffer.block_active = 0
+                self.buffer.cancel_block()
             else:
                 self.action_splash_screen()
 
         # 5. Printable Character Insertion
         elif len(key) == 1 and 32 <= ord(key) <= 126:
-            self.buffer.insert_char(key)
+            if self.buffer.block_active == 1:
+                self.buffer.cancel_block()
+            else:
+                if self.buffer.block_active > 0:
+                    self.buffer.cancel_block()
+                self.buffer.insert_char(key)
 
     def action_quit(self):
         """Prompt to save changes if modified, then exit cleanly."""

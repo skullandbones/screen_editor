@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 1 Defect Open (Bug 2.7.41).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.41 Closed).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -815,7 +815,7 @@ have been resolved and archived.
       sticky target column and anchoring hardware cursor at the join junction.
       Validated via `test_delete_char_eol_junction_cursor_col` in
       `test_buffer.py`.
-  - [ ] **Bug 2.7.41: Typing and Tab Fail to Clear Active Block Selection**:
+  - [x] **Bug 2.7.41: Typing and Tab Fail to Clear Active Block Selection**:
     - *Symptom*: Typing printable ASCII characters or pressing `Tab` while a
       block selection is active inserts characters into the line without
       canceling the block, corrupting highlight coordinates and selection
@@ -826,11 +826,11 @@ have been resolved and archived.
       `self.buffer.insert_char()` without inspecting `self.buffer.block_active`.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2, and 10.1;
       `src/se.asm:1361-1399` (`CHECK_PRINTABLE_CHAR`, `DO_INSERT_CHAR`).
-    - *Resolution Plan*: In `editor.py`, update `KEY_TAB` and printable
-      character dispatch: if `self.buffer.block_active == 1`, cancel the block
-      selection (`self.buffer.block_active = 0`) without inserting the character
-      or tab. If `self.buffer.block_active == 2`, cancel the block selection
-      before proceeding with insertion.
+    - *Resolution*: Updated `KEY_TAB` and printable character dispatch in
+      `editor.py` to cancel dynamic block selection (`block_active == 1`)
+      without inserting characters or tab bytes, while clearing active blocks
+      prior to insertion when solidified (`block_active == 2`). Validated via
+      `test_typing_and_tab_block_cancel` in `test_editor.py`.
 
 ---
 
