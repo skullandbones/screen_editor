@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.36 Closed).
+- **Status**: Active / 5 Defects Open (Bugs 2.7.37–2.7.41).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -755,6 +755,80 @@ have been resolved and archived.
       Validated via `test_secfg_canonical_default_and_discovery` in
       `test_config.py` and `test_editor_secfg_discovery_and_geometry_default`
       in `test_editor.py`.
+  - [ ] **Bug 2.7.37: Delete Key Ignores Active Block (Ctrl+D / DEL)**:
+    - *Symptom*: Pressing `Delete` or `Ctrl+D` while a block selection is active
+      (dynamic or solidified) deletes only a single character under the cursor
+      and leaves the block highlighted or desynchronized, rather than deleting
+      the highlighted block range.
+    - *Root Cause*: In `ports/python/se/editor.py:139-140`, `KEY_DELETE` and
+      `KEY_CTRL_D` unconditionally execute `self.buffer.delete_char()` without
+      inspecting `self.buffer.block_active`. Furthermore, `DocumentBuffer`
+      lacks a dedicated `delete_block()` method.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.8 and 10.1;
+      `src/se.asm:1176-1188` (`DO_CTRL_D_BLOCK`) and `src/core/block.asm:847`.
+    - *Resolution Plan*: Update `dispatch_key()` in `editor.py` to check
+      `self.buffer.block_active > 0` on `KEY_DELETE` / `KEY_CTRL_D`, solidify
+      dynamic selections, and call `delete_block()` on `DocumentBuffer`.
+      Implement `delete_block()` in `buffer.py` to remove the selected block
+      text, reposition cursor at block start, clear `block_active`, and mark
+      the document modified without modifying the clipboard.
+  - [ ] **Bug 2.7.38: Backspace Fails to Cancel Dynamic Block Selection**:
+    - *Symptom*: Pressing `Backspace` while dynamically highlighting text
+      deletes the character preceding the cursor, mutating buffer contents
+      while keeping the dynamic block active.
+    - *Root Cause*: In `ports/python/se/editor.py:137-138`, `KEY_BACKSPACE`
+      unconditionally calls `self.buffer.backspace()` without checking
+      `self.buffer.block_active == 1`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.8 and 10.1;
+      `src/se.asm:1328-1331` (`DO_BS_CANCEL_SETUP`).
+    - *Resolution Plan*: Update `KEY_BACKSPACE` dispatch in `editor.py` to
+      intercept `self.buffer.block_active == 1` and cancel the dynamic block
+      (`self.buffer.block_active = 0`) without deleting any characters or
+      altering buffer contents. If `block_active == 2`, cancel the block before
+      performing character deletion.
+  - [ ] **Bug 2.7.39: Enter Key in Dynamic Block Mode Splits Line**:
+    - *Symptom*: Pressing `Enter` while extending a dynamic block selection
+      splits the current line and moves cursor to a new line instead of
+      solidifying the highlighted block boundaries.
+    - *Root Cause*: In `ports/python/se/editor.py:135-136`, `KEY_ENTER`
+      unconditionally executes `self.buffer.split_line()`, corrupting block
+      selection coordinates and mutating the document.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 9.1 and
+      `src/se.asm:1299-1313` (`CHECK_ENTER`, `DO_ENTER_SOLIDIFY_SETUP`).
+    - *Resolution Plan*: Intercept `KEY_ENTER` in `editor.py`: if
+      `self.buffer.block_active == 1`, call `self.buffer.solidify_block()` and
+      return immediately without splitting the line. If `block_active == 2`,
+      cancel the block before splitting the line.
+  - [ ] **Bug 2.7.40: Forward Delete Line Join Desynchronizes Cursor Column**:
+    - *Symptom*: Pressing `Delete` / `Ctrl+D` at the end of a line when the
+      cursor column exceeds the line length (`cursor_col > len(line)`) joins the
+      next line but leaves the cursor positioned past the join point inside the
+      appended text rather than anchored at the junction boundary.
+    - *Root Cause*: In `ports/python/se/buffer.py:214-223`, `delete_char()`
+      appends `next_line` to `line` and pops row `cursor_row + 1`, but never
+      clamps or assigns `self.cursor_col = len(line)`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.8 and 10.1;
+      `src/se.asm:1172-1188`.
+    - *Resolution Plan*: Explicitly assign `self.cursor_col = len(line)` in
+      `delete_char()` prior to concatenation and update
+      `self.target_col = self.get_visual_col()` to keep the hardware cursor
+      strictly anchored at the junction boundary.
+  - [ ] **Bug 2.7.41: Typing and Tab Fail to Clear Active Block Selection**:
+    - *Symptom*: Typing printable ASCII characters or pressing `Tab` while a
+      block selection is active inserts characters into the line without
+      canceling the block, corrupting highlight coordinates and selection
+      boundaries. In dynamic mode (`block_active == 1`), typing modifies the
+      buffer instead of canceling selection.
+    - *Root Cause*: In `ports/python/se/editor.py:141-143` and `202-203`,
+      `KEY_TAB` and printable character typing directly call
+      `self.buffer.insert_char()` without inspecting `self.buffer.block_active`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2, and 10.1;
+      `src/se.asm:1361-1399` (`CHECK_PRINTABLE_CHAR`, `DO_INSERT_CHAR`).
+    - *Resolution Plan*: In `editor.py`, update `KEY_TAB` and printable
+      character dispatch: if `self.buffer.block_active == 1`, cancel the block
+      selection (`self.buffer.block_active = 0`) without inserting the character
+      or tab. If `self.buffer.block_active == 2`, cancel the block selection
+      before proceeding with insertion.
 
 ---
 
