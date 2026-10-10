@@ -804,6 +804,30 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_status_bar_field5_visual_col_across_tabs(self):
+        """Step 22: Verify Field 5 visual col across tabs (Bug 2.7.29)."""
+        print(
+            "[*] Step 22: Testing status bar Field 5 visual col with tabs...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+
+        self.editor.buffer.tab_width = 4
+        self.editor.buffer.lines = ["\tHello"]
+        self.editor.buffer.cursor_col = 1
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        full_bar = "".join(written)
+        self.assertIn("Col 4", full_bar)
+        self.assertNotIn("Col 1", full_bar)
+
+        print(
+            "[+] Step 22: Status bar Field 5 visual col with tabs verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

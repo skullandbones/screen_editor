@@ -74,7 +74,7 @@ class UIRenderer:
         # Cursor and pan position field
         cur_line = buf.cursor_row + 1
         tot_lines = buf.total_lines
-        cur_col = buf.cursor_col
+        cur_col = buf.get_visual_col()
         pan_str = f" [Pan +{buf.pan_col}]" if buf.pan_col > 0 else ""
 
         pos_field = (

@@ -628,7 +628,7 @@ have been resolved and archived.
       banner `\r\nExiting SE. Returned to OS prompt.\r\n`, and restores cursor,
       invoking it in `editor.run()` finally block. Validated via
       `test_editor.py` and PTY exit assertion in `test_headless.py`.
-  - [ ] **Bug 2.7.29: Status Bar Field 5 Shows Raw Col Across Tabs**:
+  - [x] **Bug 2.7.29: Status Bar Field 5 Shows Raw Col Across Tabs**:
     - *Symptom*: When the cursor is located on a line containing tab characters,
       Field 5 of the universal status bar displays the raw buffer byte offset
       rather than the document visual column (e.g. `Col 1` instead of `Col 4`
@@ -638,9 +638,10 @@ have been resolved and archived.
       `pos_field` instead of formatting `buf.get_visual_col()`.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3 and Section 6.2;
       `src/core/ui_render.asm:1308` (`CALL CALC_VISUAL_COL`).
-    - *Resolution Plan*: Update `render_status_bar()` in `ui.py` to format
-      Field 5 using `buf.get_visual_col()` so the status bar column matches
-      screen cursor position across tabs. Validate via `test_editor.py`.
+    - *Resolution*: Updated `render_status_bar()` in `ui.py` to format Field 5
+      using `buf.get_visual_col()` so that cursor position aligns with screen
+      visual column coordinates across tabs. Validated via
+      `test_status_bar_field5_visual_col_across_tabs` in `test_editor.py`.
   - [ ] **Bug 2.7.30: Tab Key Intercept Replaces Tab Bytes with Spaces**:
     - *Symptom*: Pressing `Tab` in the editor inserts multiple ASCII spaces
       (`0x20`) instead of inserting a literal ASCII `0x09` (`KEY_TAB`) byte into
