@@ -54,6 +54,31 @@ keybindings.
    - Hide cursor          : `\x1b[?25l`
    - Show cursor          : `\x1b[?25h`
 
+5. Terminal Lifecycle, Session Startup & Exit Discipline:
+   - Startup Screen Clear & Initialization:
+     On launch, SE initializes the terminal subsystem via `TERM_INIT`:
+     1. Disables reverse video and resets text rendition (`\x1b[0m`).
+     2. Ensures the hardware cursor is visible (`\x1b[?25h`).
+     3. Clears the entire terminal screen and homes cursor to `(1, 1)`
+        via ANSI escape sequence (`\x1b[2J\x1b[H`).
+     This guarantees that any preceding shell command output, scrollback, or
+     stray attributes are completely wiped before rendering the initial
+     workspace or splash screen.
+   - Clean Session Exit & Exit Message:
+     On program termination (e.g. `Ctrl+K X` or `Ctrl+Q` exit confirmed), SE
+     restores host terminal discipline via `EXIT_PROGRAM`:
+     1. Flushes buffers and cleans up temporary swap files.
+     2. Clears the entire terminal screen via `TERM_INIT`
+        (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`).
+     3. Emits the canonical exit message string followed by CRLF:
+        `\r\nExiting SE.COM. Returned to CP/M.\r\n` (on CP/M targets), or
+        `\r\nExiting SE. Returned to OS prompt.\r\n` (on host/Linux targets).
+     4. Explicitly restores hardware cursor visibility (`TERM_SHOW_CURSOR`).
+     5. Restores original host/CP/M environment state (user area, RAM drive,
+        saved stack pointer) and exits cleanly.
+     Under no circumstances may an SE port terminate leaving dirty viewport
+     contents, hidden cursors, or unreset video attributes in the terminal.
+
 3. Screen Surface Taxonomy (The Three Tiers)
 --------------------------------------------------------------------------------
 Every visual surface in SE belongs strictly to one of three tiers. Ports must
@@ -197,13 +222,30 @@ viewport panning algorithms defined in `src/core/editor.asm` and
         - Else:
           `vis_col += 1`.
      3. Clamp `vis_col` to `MAX_LINE_CHARS - 1`.
-   - Discrete Traversal Rule:
-     The cursor is pinned to discrete character boundaries in the buffer.
-     It NEVER rests inside an expanded tab on the screen.
-     - Moving right over a Tab leaps forward from `vis_col` to
-       `vis_col + tab_spaces` in a single keypress.
-     - Moving left over a Tab leaps backward to the visual column preceding
-       the Tab in a single keypress.
+   - Discrete Traversal & Tab Exclusion Mandate:
+     The cursor is pinned strictly to discrete character boundaries in buffer
+     space. The cursor jumps over tabs and can NEVER be within a tab:
+     - Discrete Jump Over Tabs: In buffer space, a tab is a single byte at
+       offset `CUR_COL`. In visual and screen space, a tab expands across
+       `tab_spaces` display cells. The cursor always jumps over the entire tab
+       in a single keypress leap rather than stepping through spaces.
+     - Tab Interior Exclusion: The cursor can NEVER be positioned, placed,
+       or rest within an expanded tab. No valid cursor coordinate exists
+       between `vis_col + 1` and `vis_col + tab_spaces - 1`.
+     - Moving Right: Advancing past a tab leaps the cursor forward from
+       `vis_col` across the full tab width to `vis_col + tab_spaces` in
+       a single keypress.
+     - Moving Left: Retreating over a tab leaps the cursor backward from
+       `vis_col + tab_spaces` to the visual column preceding the tab in a
+       single keypress.
+     - Universal Exclusion: All navigation modes (horizontal arrows, word
+       skips, vertical line navigation, and horizontal panning) must preserve
+       this rule. The cursor must never land inside a tab.
+     - Vertical Alignment Clamping (`ADJUST_COL_TO_TARGET`): If the sticky
+       target column `TARGET_COL` falls within the span of an expanded tab
+       (`vis_acc < TARGET_COL < vis_acc + spaces`), the cursor must clamp to
+       the beginning of the tab (`char_idx` / `vis_acc`) rather than resting
+       within the tab.
 
 3. Horizontal Navigation (Left, Right, Home, End) & Line Wrapping:
    Horizontal cursor movements update both `CUR_COL` and sticky `TARGET_COL`.
@@ -327,6 +369,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - Clamped to: `1 <= ScreenCol <= ACTIVE_COLS`.
    - Hardware Escape Sequence:
      `\x1b[{ScreenRow};{ScreenCol}H`.
+   Because `ScreenCol` derives strictly from `CALC_VISUAL_COL(CUR_COL)` where
+   `CUR_COL` is an integer byte offset, the hardware cursor always aligns to
+   discrete character boundaries and can never be positioned within a tab.
 
 7. Tier 1 Centered Workspaces
 --------------------------------------------------------------------------------
@@ -630,10 +675,14 @@ design and look-and-feel compliance:
 
 1. Headless PTY Verification:
    - Must boot the editor inside a real pseudo-terminal (`openpty`).
+   - Must verify terminal startup clear sequence (`\x1b[2J\x1b[H`).
    - Must verify universal status bar presence on `HOST_ROWS`.
    - Must verify column 0 tilde filling on empty rows.
    - Must verify modal dialog centering, border framing, and child isolation.
-   - Must verify clean shutdown and exit code 0.
+   - Must verify tab jump mechanics and tab exclusion (cursor never within
+     a tab).
+   - Must verify clean shutdown, exit screen clear, exit message banner, and
+     exit code 0.
 
 2. Comparative & Emulator Testing:
    - Parallel comparative tests (`compare_cpm_linux.py`, `compare_parallel.py`)
