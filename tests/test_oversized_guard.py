@@ -16,7 +16,7 @@ import tty
 import select
 import subprocess
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -36,7 +36,9 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(
+        repo_root, "SEC.COM" if use_sec else "SE.COM"
+    )
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -78,8 +80,13 @@ def drain_all(master_fd, quiet_time=0.2):
             break
     return buf
 
-def main():
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+def main(use_sec=False):
+    (
+        emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     test_file = "/tmp/SHORT34.TXT"
     cpm_user = "0:SHORT34.TXT"
 
@@ -92,13 +99,19 @@ def main():
     print(f"[+] Created {test_file} ({orig_size} bytes).")
 
     # Inject into disk image
-    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, target_cpm],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, cpm_user],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"], check=True)
+    subprocess.run(
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
+        check=True
+    )
     subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, test_file, cpm_user], check=True)
-    print("[+] Injected SE.COM and SHORT34.TXT into disk image.")
+    print(
+        f"[+] Injected {target_name} and SHORT34.TXT into disk "
+        f"image."
+    )
 
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -118,9 +131,9 @@ def main():
         read_until(master, b"C>")
         time.sleep(0.5)
 
-        print("[*] Launching 'se SHORT34.TXT'...")
+        print(f"[*] Launching '{cmd_name.decode()} SHORT34.TXT'...")
         t0 = time.time()
-        os.write(master, b"se SHORT34.TXT\r")
+        os.write(master, cmd_name + b" SHORT34.TXT\r")
         out = read_until(master, b"Line    1/", timeout=35.0)
         dt = time.time() - t0
         time.sleep(0.3)
@@ -193,5 +206,6 @@ def main():
             os.remove(test_file)
 
 if __name__ == "__main__":
-    success = main()
+    use_sec_arg = "--sec" in sys.argv
+    success = main(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

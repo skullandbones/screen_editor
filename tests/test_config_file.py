@@ -30,7 +30,7 @@ import tty
 import select
 import subprocess
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -50,7 +50,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -149,8 +149,13 @@ def get_cfg_from_image(cpmcp_bin, img_file):
     os.remove(tmp_path)
     return data
 
-def run_tests():
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+def run_tests(use_sec=False):
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     print("=================================================================", flush=True)
     print("  SE.CFG Configuration Subsystem Regression Test Suite           ", flush=True)
     print("=================================================================", flush=True)
@@ -171,7 +176,7 @@ def run_tests():
 
         # Run SE
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"120x40 (Modern Default)", timeout=25.0)
         assert b"120x40 (Modern Default)" in out, f"Splash did not show 120x40 default: {out}"
         assert b"type   [C]              to configure" in out, (
@@ -231,7 +236,7 @@ def run_tests():
 
         # Run SE
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"80x24 (Classic Terminal)", timeout=25.0)
         assert b"80x24 (Classic Terminal)" in out, f"Splash did not load 80x24 from SE.CFG: {out}"
         print("    [+] Splash screen shows 80x24 (Classic Terminal) loaded from SE.CFG")
@@ -280,7 +285,7 @@ def run_tests():
 
         # Run SE
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"80x24 (Classic Terminal)", timeout=25.0)
         assert b"80x24 (Classic Terminal)" in out
 
@@ -363,7 +368,7 @@ def run_tests():
         # Re-launch SE to verify persistent load
         drain_all(master)
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Active Screen : [120x40 (Modern Default)]", timeout=60.0
         )
@@ -482,7 +487,7 @@ def run_tests():
         os.write(master, b"c:\r")
         read_until(master, b"C>", timeout=10.0)
         time.sleep(0.3)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         read_until(master, b"120x40 (Modern Default)", timeout=25.0)
 
         # Enter editor, type some text, then exit
@@ -551,7 +556,7 @@ def run_tests():
 
         # Launch SE.COM - should trigger hibernation of A: into C:RAMDRV.IMG
         time.sleep(0.3)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"80x24 (Classic Terminal)", timeout=180.0)
         assert (b"Hibernating RAM drive (" in out and
                 b") to RAMDRV.IMG" in out), f"Missing hibernation msg: {out}"
@@ -665,7 +670,7 @@ def run_tests():
 
         # Launch SE targeting file on RAM drive: SE B:RAMFILE.TXT
         time.sleep(0.3)
-        os.write(master, b"se b:ramfile.txt\r")
+        os.write(master, cmd_name + b" b:ramfile.txt\r")
         out = read_until(master, b"Target file is on RAM drive (B:). RAM drive protected.", timeout=20.0)
         assert b"Target file is on RAM drive (B:). RAM drive protected." in out, f"Missing target protection message: {out}"
         print("    [+] Verified dynamic detection & protection: [SE] Target file is on RAM drive (B:). RAM drive protected.")
@@ -697,7 +702,7 @@ def run_tests():
 
         # Now launch SE without arguments to inspect Configuration Screen with B: as RAM drive
         time.sleep(0.3)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"80x24 (Classic Terminal)", timeout=180.0)
         assert (b"Hibernating RAM drive (" in out and
                 b") to RAMDRV.IMG" in out), (
@@ -765,7 +770,7 @@ def run_tests():
 
         # Launch SE
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"120x40 (Modern Default)", timeout=25.0)
 
         # Enter Configuration Screen ('c')
@@ -823,7 +828,7 @@ def run_tests():
         # Re-launch SE to verify TAB=4 is loaded automatically from SE.CFG
         drain_all(master)
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Active Screen : [120x40 (Modern Default)]", timeout=25.0
         )
@@ -879,7 +884,7 @@ def run_tests():
 
         # Launch SE TABTEST.TXT
         time.sleep(0.4)
-        os.write(master, b"se tabtest.txt\r")
+        os.write(master, cmd_name + b" tabtest.txt\r")
         out = read_until(master, b"Col 0", timeout=45.0)
         assert b"Col 0" in out, f"Editor did not open at Col 0: {out}"
         print("    [+] Opened TABTEST.TXT in 4-space tab mode at Col 0")
@@ -921,7 +926,7 @@ def run_tests():
 
         # Launch SE TABTEST.TXT
         time.sleep(0.4)
-        os.write(master, b"se tabtest.txt\r")
+        os.write(master, cmd_name + b" tabtest.txt\r")
         out = read_until(master, b"Col 0", timeout=45.0)
         assert b"Col 0" in out
 
@@ -966,7 +971,7 @@ def run_tests():
 
         # Run SE
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"to configure", timeout=25.0)
         assert b"to configure" in out
 
@@ -1036,5 +1041,6 @@ def run_tests():
     return True
 
 if __name__ == "__main__":
-    success = run_tests()
+    use_sec_arg = "--sec" in sys.argv
+    success = run_tests(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

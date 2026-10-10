@@ -14,7 +14,7 @@ import select
 import subprocess
 import re
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -34,7 +34,9 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(
+        repo_root, "SEC.COM" if use_sec else "SE.COM"
+    )
     diskdefs_path = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "cpmtools", "diskdefs"
     )
@@ -44,7 +46,8 @@ def find_paths():
     return emu_bin, rom_file, img_file, se_bin
 
 SPLASH_FREE_TARGETS = [
-    b"Free: 320 KB", b"Free: 352 KB", b"Free: 384 KB", b"Free: 416 KB"
+    b"Free: 320 KB", b"Free: 352 KB", b"Free: 384 KB", b"Free: 416 KB",
+    b"Free: 48 KB"
 ]
 
 def has_free_mem(buf):
@@ -86,8 +89,12 @@ def drain_all(master_fd, quiet_time=0.2):
             break
     return buf
 
-def test_se_execution():
-    emu_bin, rom_file, img_file, se_bin = find_paths()
+def test_se_execution(use_sec=False):
+    emu_bin, rom_file, img_file, se_bin = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    target_cpm_bytes = target_name.encode("ascii")
+    cmd_name = b"sec" if use_sec else b"se"
 
     if not os.path.isfile(emu_bin):
         print(f"[-] Emulator binary not found: {emu_bin}", flush=True)
@@ -132,6 +139,10 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:se.com"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SEC.COM"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:sec.com"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],
@@ -170,7 +181,7 @@ def test_se_execution():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if os.path.isfile(se_bin):
             subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin,
-                            "0:SE.COM"],
+                            target_cpm],
                            stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL)
         ins1_tmp = "/tmp/INS1.TXT"
@@ -265,7 +276,7 @@ def test_se_execution():
         # 4. Run SE.COM
         print("[*] Step 4: Running SE.COM...", flush=True)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
         if b"for about" not in out or not has_free_mem(out):
             print(f"[-] Step 4: Splash or free memory missing: {repr(out)}",
@@ -740,7 +751,7 @@ def test_se_execution():
         # 19. Test File Loading: Open 2-line file 'se 2.TXT'
         print("[*] Step 19: Testing file loading ('se 2.TXT')...", flush=True)
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         out_load = read_until(master, b"Line    1/2", timeout=30.0)
         if b"C:2.TXT" not in out_load:
             print(f"[-] Failed to load file 2.TXT into SE.COM. Buffer: {repr(out_load)}", flush=True)
@@ -774,7 +785,7 @@ def test_se_execution():
         print("[*] Step 20: Testing multi-sector file loading ('se 30.TXT')...",
               flush=True)
         time.sleep(0.5)
-        os.write(master, b"se 30.TXT\r")
+        os.write(master, cmd_name + b" 30.TXT\r")
         out_load_30 = read_until(master, b"Line    1/30", timeout=30.0)
         if b"C:30.TXT" not in out_load_30:
             print(f"[-] Failed to load file 30.TXT into SE.COM. Buffer: {repr(out_load_30)}", flush=True)
@@ -2502,7 +2513,7 @@ def test_se_execution():
 
         # Launch SE directly with line number: 'se 30.TXT:15'
         time.sleep(0.5)
-        os.write(master, b"se 30.TXT:15\r")
+        os.write(master, cmd_name + b" 30.TXT:15\r")
         out_s44_l15 = read_until(master, b"Line   15/30", timeout=35.0)
         if b"Line   15/30" not in out_s44_l15 or b"Line 15 of test file content" not in out_s44_l15:
             print(f"[-] Step 44 failed: 'se 30.TXT:15' did not position at Line 15. Buffer: {repr(out_s44_l15)}", flush=True)
@@ -2519,7 +2530,7 @@ def test_se_execution():
 
         # Launch SE with line number beyond EOF: 'se 30.TXT:999' (should clamp to max line)
         time.sleep(0.5)
-        os.write(master, b"se 30.TXT:999\r")
+        os.write(master, cmd_name + b" 30.TXT:999\r")
         out_s44_l30 = read_until(master, b"Line   30/30", timeout=35.0)
         if b"Line   30/30" not in out_s44_l30 or b"Line 30 of test file content" not in out_s44_l30:
             print(f"[-] Step 44 failed: 'se 30.TXT:999' did not clamp to Line 30. Buffer: {repr(out_s44_l30)}", flush=True)
@@ -2539,7 +2550,7 @@ def test_se_execution():
 
         # Launch SE on 30.TXT
         time.sleep(0.5)
-        os.write(master, b"se 30.TXT\r")
+        os.write(master, cmd_name + b" 30.TXT\r")
         out_s45_init = read_until(master, b"Line    1/30", timeout=35.0)
         if b"Line    1/30" not in out_s45_init:
             print(f"[-] Step 45 failed: 30.TXT did not load. Buffer: {repr(out_s45_init)}", flush=True)
@@ -3001,7 +3012,7 @@ def test_se_execution():
 
         # 7. Verify clean exit without prompt when file is unmodified: 'se 2.TXT'
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         read_until(master, b"Line    1/2", timeout=30.0)
         time.sleep(0.2)
         os.write(master, b"\x11")
@@ -3019,7 +3030,7 @@ def test_se_execution():
 
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         read_until(master, b"Line    1/2", timeout=30.0)
 
         # 2. Modify buffer and send Ctrl+W (\x17)
@@ -3114,7 +3125,7 @@ def test_se_execution():
 
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         read_until(master, b"Line    1/2", timeout=30.0)
 
         # 2. Modify buffer and send Ctrl+O (\x0f)
@@ -3230,7 +3241,7 @@ def test_se_execution():
 
         # 1. Launch 'se 2.TXT'
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         read_until(master, b"Line    1/2", timeout=30.0)
 
         # 2. In editor mode, press Ctrl+O and open '30.TXT:15'
@@ -3318,7 +3329,7 @@ def test_se_execution():
               "HBIOS Bank 0x80 protection...", flush=True)
         drain_all(master)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s56 = read_until(master, SPLASH_FREE_TARGETS, timeout=35.0)
         if not has_free_mem(out_s56):
             print(f"[-] Step 56 failed: Free memory missing: {repr(out_s56)}",
@@ -3365,7 +3376,7 @@ def test_se_execution():
               "revert on keypress...", flush=True)
         drain_all(master)
         time.sleep(0.3)
-        os.write(master, b"se BIG.TXT\r")
+        os.write(master, cmd_name + b" BIG.TXT\r")
         out_s57 = read_until(master, b"Line    1/3072", timeout=100.0)
         if b"Line    1/3072" not in out_s57 or b"^K: Editor keys" not in out_s57:
             print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing "
@@ -3425,7 +3436,7 @@ def test_se_execution():
         print("[*] Step 58: Verifying Horizontal Scrolling in 80x24 Mode...", flush=True)
         drain_all(master)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s58_sp = read_until(master, b"for about", timeout=30.0)
         if b"for about" not in out_s58_sp:
             print(f"[-] Step 58 failed: Splash screen failed to display. Buffer: {repr(out_s58_sp)}", flush=True)
@@ -3541,7 +3552,7 @@ def test_se_execution():
         print("[*] Step 59: Verifying Column 79 continuation highlighting and block suppression in 80x24 mode...", flush=True)
         drain_all(master)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s59_splash = read_until(master, b"for about", timeout=30.0)
         if b"for about" not in out_s59_splash:
             print(f"[-] Step 59 failed: Splash screen not displayed: {repr(out_s59_splash[-200:])}", flush=True)
@@ -3685,7 +3696,7 @@ def test_se_execution():
 
         # 1. Launch 'se 2.TXT' (Line 1: "First line of two", Line 2: "Second line of two")
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         out_s60_boot = read_until(master, b"Line    1/2", timeout=30.0)
         if b"Line    1/2" not in out_s60_boot:
             print(f"[-] Step 60 failed: Launching se 2.TXT failed. Buffer: {repr(out_s60_boot)}", flush=True)
@@ -3786,7 +3797,7 @@ def test_se_execution():
 
         # 1. Launch 'se 2.TXT' in default 120x40 mode
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         out_s61_120 = read_until(master, b"Line    1/2", timeout=30.0)
         time.sleep(0.2)
         out_s61_120 += drain_all(master)
@@ -3869,7 +3880,7 @@ def test_se_execution():
 
         # 1. Launch 'se 30.TXT' in default 120x40 mode
         time.sleep(0.5)
-        os.write(master, b"se 30.TXT\r")
+        os.write(master, cmd_name + b" 30.TXT\r")
         out_s62_120 = read_until(master, b"Line    1/30", timeout=35.0)
         if b"Line    1/30" not in out_s62_120:
             print(f"[-] Step 62 failed: Could not open 30.TXT in 120x40 mode: {repr(out_s62_120[-300:])}", flush=True)
@@ -3947,7 +3958,7 @@ def test_se_execution():
 
         # 1. Launch SE.COM
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
         time.sleep(0.3)
         drain_all(master)
@@ -4013,7 +4024,7 @@ def test_se_execution():
 
         # 1. Launch SE.COM
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s64_sp = read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
         time.sleep(0.2)
         out_s64_sp += drain_all(master)
@@ -4062,7 +4073,7 @@ def test_se_execution():
 
         # 1. Launch SE.COM
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s65_sp = read_until(master, SPLASH_FREE_TARGETS, timeout=30.0)
         time.sleep(0.2)
         out_s65_sp += drain_all(master)
@@ -4146,7 +4157,7 @@ def test_se_execution():
         print("[*] STEP 66: Testing Block Insert File feature...", flush=True)
         # Launch SE.COM directly into new document
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s66_boot = read_until(master, b"Col 0", timeout=35.0)
         time.sleep(0.3)
         drain_all(master)
@@ -4535,7 +4546,7 @@ def test_se_execution():
 
         # Subtest 1: File Save progress on 300-line file (BIG300.TXT)
         time.sleep(0.5)
-        os.write(master, b"se BIG300.TXT\r")
+        os.write(master, cmd_name + b" BIG300.TXT\r")
         out_s68_load = read_until(master, b"1/300", timeout=35.0)
         drain_all(master)
         if b"1/300" not in out_s68_load:
@@ -4732,7 +4743,7 @@ def test_se_execution():
         # Subtest 1: Open existing file 2.TXT, verify clean, modify, verify '*', save with Ctrl+S, verify clean
         time.sleep(0.5)
         drain_all(master)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         out_s69_load = read_until(master, b"^K: Editor keys", timeout=35.0)
         out_s69_load += drain_all(master)
 
@@ -4818,7 +4829,7 @@ def test_se_execution():
         # Subtest 3: Maximum-length (14 characters) filename field capping
         time.sleep(0.5)
         drain_all(master)
-        os.write(master, b"se LONGNAME.TXT\r")
+        os.write(master, cmd_name + b" LONGNAME.TXT\r")
         out_s69_long = read_until(master, b"^K: Editor keys", timeout=35.0)
         out_s69_long += drain_all(master)
 
@@ -4859,7 +4870,7 @@ def test_se_execution():
         # 1. Start SE from CP/M prompt
         time.sleep(0.5)
         drain_all(master)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s70_splash = read_until(master, b"Free: ", timeout=35.0)
         out_s70_splash += drain_all(master, quiet_time=0.1)
         if b"Free: " not in out_s70_splash:
@@ -4884,10 +4895,10 @@ def test_se_execution():
                 flush=True
             )
             return False
-        if b"SE.COM" not in out_s70_open:
+        if target_cpm_bytes not in out_s70_open:
             print(
-                "[-] Step 70 failed: SE.COM not found in unfiltered directory "
-                "listing.",
+                f"[-] Step 70 failed: {target_name} not found in unfiltered "
+                f"directory listing.",
                 flush=True
             )
             return False
@@ -4906,10 +4917,10 @@ def test_se_execution():
             )
             return False
         new_s70_txt = out_s70_filt[out_s70_filt.rfind(b"[*.TXT]"):]
-        if b"SE.COM" in new_s70_txt:
+        if target_cpm_bytes in new_s70_txt:
             print(
-                f"[-] Step 70 failed: SE.COM unexpectedly found in *.TXT "
-                f"filtered listing! Buffer: {repr(new_s70_txt)}",
+                f"[-] Step 70 failed: {target_name} unexpectedly found in "
+                f"*.TXT filtered listing! Buffer: {repr(new_s70_txt)}",
                 flush=True
             )
             return False
@@ -4931,9 +4942,10 @@ def test_se_execution():
                 flush=True
             )
             return False
-        if b"SE.COM" not in last_s70_reset:
+        if target_cpm_bytes not in last_s70_reset:
             print(
-                "[-] Step 70 failed: SE.COM not restored after *.* reset.",
+                f"[-] Step 70 failed: {target_name} not restored after "
+                f"*.* reset.",
                 flush=True
             )
             return False
@@ -5215,7 +5227,7 @@ def test_se_execution():
 
         # Subtest 1: Command line invocation with c1: prefix
         time.sleep(0.5)
-        os.write(master, b"se c1:u1file.txt\r")
+        os.write(master, cmd_name + b" c1:u1file.txt\r")
         out_s71_sub1 = read_until(master, b"Hello from User 1 area!", timeout=30.0)
         if b"Hello from User 1 area!" not in out_s71_sub1:
             print(f"[-] Step 71 Subtest 1 failed: 'se c1:u1file.txt' did not display file. Buffer: {repr(out_s71_sub1)}", flush=True)
@@ -5246,7 +5258,7 @@ def test_se_execution():
 
         # Subtest 3: Command line invocation with 1c: prefix
         time.sleep(0.5)
-        os.write(master, b"se 1c:u1file.txt\r")
+        os.write(master, cmd_name + b" 1c:u1file.txt\r")
         out_s71_sub3 = read_until(master, b"Hello from User 1 area!", timeout=30.0)
         if b"Hello from User 1 area!" not in out_s71_sub3:
             print(f"[-] Step 71 Subtest 3 failed: 'se 1c:u1file.txt' did not display file. Buffer: {repr(out_s71_sub3)}", flush=True)
@@ -5421,7 +5433,7 @@ def test_se_execution():
         )
         drain_all(master)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s72_splash = read_until(master, b"for memory info", timeout=35.0)
         time.sleep(0.2)
         out_s72_splash += drain_all(master)
@@ -5589,7 +5601,7 @@ def test_se_execution():
                            stderr=subprocess.DEVNULL)
 
         # Launch editor with 30.TXT
-        os.write(master, b"se 30.TXT\r")
+        os.write(master, cmd_name + b" 30.TXT\r")
         out_s73_ed = read_until(master, b"1/30", timeout=30.0)
         drain_all(master)
         time.sleep(0.3)
@@ -5764,7 +5776,7 @@ def test_se_execution():
 
         # 2. Launch SE without file arguments
         time.sleep(0.3)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_s74_splash = read_until(master, b"RAM Drive (", timeout=35.0)
         out_s74_splash += read_until(master, b"Free: ", timeout=10.0)
 
@@ -5981,7 +5993,7 @@ def test_se_execution():
 
         # 1. Launch SE with CPM1.TXT (CRLF format)
         time.sleep(0.3)
-        os.write(master, b"se cpm1.txt\r")
+        os.write(master, cmd_name + b" cpm1.txt\r")
         out_s75_1 = read_until(master, b"CPM1 Line 0038", timeout=30.0)
         out_s75_1 += drain_all(master, 0.4)
         if (b"CP/M  | " not in out_s75_1 or
@@ -6146,7 +6158,8 @@ def test_se_execution():
             pass
 
 if __name__ == "__main__":
-    success = test_se_execution()
+    use_sec_arg = "--sec" in sys.argv
+    success = test_se_execution(use_sec=use_sec_arg)
     if success:
         print("[+] All automated SE.COM emulator tests PASSED.", flush=True)
         sys.exit(0)

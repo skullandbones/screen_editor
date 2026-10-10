@@ -40,7 +40,7 @@ import time
 import tty
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -60,7 +60,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     help_bin = os.path.join(repo_root, "plugins", "HELP.OVL")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
@@ -112,7 +112,15 @@ def drain_all(master_fd, quiet_time=0.2):
     return buf
 
 
-def setup_disk_files(img_file, se_bin, help_bin, cpmcp, cpmrm, repo_root):
+def setup_disk_files(
+    img_file,
+    se_bin,
+    help_bin,
+    cpmcp,
+    cpmrm,
+    repo_root,
+    use_sec=False
+):
     if os.path.isfile(cpmrm):
         for fname in ["0:SE.COM", "0:se.com", "0:HELP.OVL", "0:help.ovl",
                       "0:SE.CFG", "0:se.cfg"]:
@@ -122,7 +130,9 @@ def setup_disk_files(img_file, se_bin, help_bin, cpmcp, cpmrm, repo_root):
                 stderr=subprocess.DEVNULL,
             )
     subprocess.run(
-        [cpmcp, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    subprocess.run(
+        [cpmcp, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
         check=True,
     )
     if os.path.isfile(help_bin):
@@ -150,12 +160,20 @@ def boot_cpm(master):
     return True, "Booted to C>"
 
 
-def run_test():
-    paths = find_paths()
+def run_test(use_sec=False):
+    paths = find_paths(use_sec=use_sec)
     (repo_root, emu_bin, rom_file, img_file, se_bin, help_bin,
      cpmcp, cpmrm) = paths
 
-    setup_disk_files(img_file, se_bin, help_bin, cpmcp, cpmrm, repo_root)
+    setup_disk_files(
+        img_file,
+        se_bin,
+        help_bin,
+        cpmcp,
+        cpmrm,
+        repo_root,
+        use_sec=use_sec
+    )
 
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -176,7 +194,7 @@ def run_test():
         # Set 80x24 classic terminal mode via command line or switch
         print("[*] Launching 'se'...", flush=True)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"Active Screen :", timeout=30.0)
         assert b"Active Screen :" in out, "Failed reaching splash screen"
         drain_all(master, 0.3)
@@ -351,5 +369,6 @@ def run_test():
 
 
 if __name__ == "__main__":
-    success = run_test()
+    use_sec_arg = "--sec" in sys.argv
+    success = run_test(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

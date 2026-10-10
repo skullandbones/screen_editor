@@ -33,7 +33,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -43,7 +43,7 @@ def find_paths():
         workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
     )
     img_file = os.path.join(repo_root, "disks", "hd1k_combo.img")
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
 
     return repo_root, emu_bin, rom_file, img_file, se_bin
 
@@ -85,9 +85,11 @@ def drain_all(master_fd, timeout=0.2):
     return buf
 
 
-def test_dismissal_prompts():
+def test_dismissal_prompts(use_sec=False):
     print("[*] Starting Bug 2.22 Standardized Dismissal Prompts Test...")
-    repo_root, emu_bin, rom_file, img_file, se_bin = find_paths()
+    repo_root, emu_bin, rom_file, img_file, se_bin = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     for p, name in [
         (emu_bin, "RC2014 emulator"),
@@ -123,7 +125,7 @@ def test_dismissal_prompts():
         # Launch SE.COM
         time.sleep(0.3)
         drain_all(master)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         ok, out = read_until(master, b"SE - Screen Editor", timeout=35.0)
         assert ok, f"SE splash screen failed: {out}"
         print("[+] Splash screen loaded.")
@@ -397,4 +399,5 @@ def test_dismissal_prompts():
 
 
 if __name__ == "__main__":
-    sys.exit(test_dismissal_prompts())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(test_dismissal_prompts(use_sec=use_sec_arg))

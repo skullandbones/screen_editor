@@ -23,9 +23,11 @@ import subprocess
 import sys
 import time
 import tty
+USE_SEC = False
+CMD_NAME = b"se"
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -45,7 +47,9 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(
+        repo_root, "SEC.COM" if use_sec else "SE.COM"
+    )
     cpmrm_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm"
     )
@@ -99,7 +103,10 @@ def drain_all(master_fd, quiet_time=0.15):
     return buf
 
 
-def setup_disk_files(img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root):
+def setup_disk_files(
+    img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root, use_sec=False
+):
+    target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
     # Prepare BIG.TXT and BIG300.TXT
     big_tmp = "/tmp/BIG.TXT"
     with open(big_tmp, "w") as f:
@@ -126,7 +133,8 @@ def setup_disk_files(img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root):
     if os.path.isfile(cpmrm_bin):
         for fname in [
             "0:BIG.TXT", "0:BIG300.TXT", "0:SE.CFG", "0:se.cfg",
-            "0:SE.COM", "0:se.com", "0:INS1.TXT", "0:INS2.TXT",
+            "0:SE.COM", "0:se.com", "0:SEC.COM", "0:sec.com",
+            "0:INS1.TXT", "0:INS2.TXT",
             "0:BLKSGL.TXT", "0:SAV300.TXT", "0:BLK300.TXT",
             "0:LONGNAME.TXT", "0:TESTF.TXT", "1:U1FILE.TXT",
             "1:SAVEU1.TXT", "1:BLKU1.TXT", "0:CPM1.TXT",
@@ -174,7 +182,7 @@ def setup_disk_files(img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root):
         )
         if os.path.isfile(se_bin):
             subprocess.run(
-                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
         subprocess.run(
@@ -245,7 +253,7 @@ def run_step_27(master):
     print("[*] Running Isolated Step 27: Save Screen & Overwrite...")
     time.sleep(0.5)
     drain_all(master)
-    os.write(master, b"se 2.TXT\r")
+    os.write(master, CMD_NAME + b" 2.TXT\r")
     ok, out = read_until(master, b"Line    1/2", timeout=35.0)
     if not ok:
         return False, f"Failed to open 2.TXT: {out[-200:] if out else ''}"
@@ -321,7 +329,7 @@ def run_step_66(master):
     """Step 66: Block Insert File Feature Verification."""
     print("[*] Running Isolated Step 66: Block Insert File...")
     time.sleep(0.3)
-    os.write(master, b"se\r")
+    os.write(master, CMD_NAME + b"\r")
     ok, _ = read_until(master, b"Col 0", timeout=30.0)
     if not ok:
         return False, "Failed to launch SE.COM"
@@ -433,7 +441,7 @@ def run_step_68(master):
     """Step 68: Save Progress Indicator Verification."""
     print("[*] Running Isolated Step 68: Save Progress Indicator...")
     time.sleep(0.3)
-    os.write(master, b"se BIG300.TXT\r")
+    os.write(master, CMD_NAME + b" BIG300.TXT\r")
     ok, out_load = read_until(master, b"1/300", timeout=35.0)
     if not ok:
         return False, f"Failed to load BIG300.TXT: {out_load[-200:]}"
@@ -475,7 +483,7 @@ def run_step_70(master):
     """Step 70: Directory Listing Filter on Open, Save, Insert, Block Save."""
     print("[*] Running Isolated Step 70: Directory Listing Filter...")
     time.sleep(0.3)
-    os.write(master, b"se\r")
+    os.write(master, CMD_NAME + b"\r")
     ok, _ = read_until(master, b"Free: ", timeout=35.0)
     if not ok:
         return False, "Could not reach splash screen"
@@ -581,7 +589,7 @@ def run_step_73(master):
     """Step 73: In-line Filename Edit Box Navigation and Editing."""
     print("[*] Running Isolated Step 73: Filename Edit Box In-line Editing...")
     time.sleep(0.3)
-    os.write(master, b"se 30.TXT\r")
+    os.write(master, CMD_NAME + b" 30.TXT\r")
     ok, out_ed = read_until(master, b"1/30", timeout=30.0)
     if not ok:
         return False, f"Failed to load 30.TXT into editor: {out_ed}"
@@ -651,7 +659,7 @@ def run_step_74(master):
     read_until(master, b"C>", timeout=10.0)
 
     time.sleep(0.3)
-    os.write(master, b"se\r")
+    os.write(master, CMD_NAME + b"\r")
     ok, out_sp = read_until(master, b"RAM Drive (", timeout=35.0)
     ok2, out_sp_free = read_until(master, b"Free: ", timeout=10.0)
     out_sp += out_sp_free
@@ -709,7 +717,7 @@ def run_step_74(master):
 def run_step_65(master):
     """Step 65: Verifying About Screen ('a' key on splash screen)..."""
     time.sleep(0.5)
-    os.write(master, b"se\r")
+    os.write(master, CMD_NAME + b"\r")
     ok, out_sp = read_until(master, b"Free:", timeout=30.0)
     time.sleep(0.2)
     out_sp += drain_all(master)
@@ -758,7 +766,7 @@ def run_step_75(master):
     """Step 75: Regression Test for Bug 2.36 (Open Modal & Status Format)."""
     # 1. Launch SE with CPM1.TXT (CRLF format)
     time.sleep(0.3)
-    os.write(master, b"se cpm1.txt\r")
+    os.write(master, CMD_NAME + b" cpm1.txt\r")
     ok, out1 = read_until(master, b"CPM1 Line 0038", timeout=30.0)
     out1 += drain_all(master, 0.4)
     if not ok:
@@ -852,20 +860,23 @@ STEP_HANDLERS = {
 }
 
 
-def run_isolated(step_num):
-    paths = find_paths()
-    emu_bin, rom_file, img_file, se_bin, cpmcp, cpmrm, repo_root = paths
+def run_isolated(step_num, use_sec=False):
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp, cpmrm, repo_root
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
     for p, name in [
         (emu_bin, "RC2014 emulator"),
         (rom_file, "ROM file"),
         (img_file, "Disk image"),
-        (se_bin, "SE.COM")
+        (se_bin, target_name)
     ]:
         if not os.path.isfile(p):
             print(f"[-] Required file missing: {name} ({p})")
             return False
 
-    setup_disk_files(img_file, se_bin, cpmcp, cpmrm, repo_root)
+    setup_disk_files(img_file, se_bin, cpmcp, cpmrm, repo_root, use_sec=use_sec)
 
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -906,16 +917,21 @@ def run_isolated(step_num):
 
 
 def main():
-    if len(sys.argv) < 2:
+    global USE_SEC, CMD_NAME
+    USE_SEC = "--sec" in sys.argv
+    CMD_NAME = b"sec" if USE_SEC else b"se"
+    args = [a for a in sys.argv[1:] if a != "--sec"]
+    if len(args) < 1:
         steps_to_run = [27, 66, 68, 70, 73, 74, 75]
-    elif sys.argv[1].lower() == "all":
+    elif args[0].lower() == "all":
         steps_to_run = sorted(STEP_HANDLERS.keys())
     else:
         try:
-            steps_to_run = [int(arg) for arg in sys.argv[1:]]
+            steps_to_run = [int(arg) for arg in args]
         except ValueError:
             print(
-                "Usage: python3 tests/isolate_step.py [step_number ... | all]"
+                "Usage: python3 tests/isolate_step.py [--sec] "
+                "[step_number ... | all]"
             )
             return 1
 
@@ -926,7 +942,7 @@ def main():
             results[step] = False
             continue
         print(f"\n{'=' * 60}\n  RUNNING ISOLATED STEP {step}\n{'=' * 60}")
-        res = run_isolated(step)
+        res = run_isolated(step, use_sec=USE_SEC)
         results[step] = res
 
     print("\n" + "=" * 60)

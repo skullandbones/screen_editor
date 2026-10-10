@@ -60,7 +60,8 @@ def drain_all(master_fd, quiet_time=0.1):
         except (BlockingIOError, OSError):
             break
 
-def main():
+def main(use_sec=False):
+    cmd_name = b"sec" if use_sec else b"se"
     print("[*] Launching emulator to verify Plugin Manager column alignment...")
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -79,7 +80,7 @@ def main():
         os.write(master, b"c:\r")
         read_until(master, b"C>", timeout=8.0)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         read_until(master, b"Col 0", timeout=45.0)
         drain_all(master)
 
@@ -118,4 +119,5 @@ def main():
         os.close(master)
 
 if __name__ == "__main__":
-    main()
+    use_sec_arg = "--sec" in sys.argv
+    main(use_sec=use_sec_arg)

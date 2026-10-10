@@ -193,7 +193,9 @@ def ensure_fat_test_image(img_file):
 
 
 
-def main():
+def main(use_sec=False):
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     emu_bin, rom_file, img_file = find_paths()
     if not os.path.exists(emu_bin):
         print(f"[-] Emulator binary not found: {emu_bin}")
@@ -236,13 +238,16 @@ def main():
 
         # Launch fresh SE.COM without plugins loaded
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         ok, buf = read_until(master, b"Col 0", timeout=45.0)
         if not ok:
-            print("[-] SE.COM splash screen not displayed. Buffer:\n", buf)
+            print(
+                f"[-] {target_name} splash screen not displayed. "
+                f"Buffer:\n", buf
+            )
             sys.exit(1)
         drain_all(master, quiet_time=0.1)
-        print("[+] SE.COM splash screen displayed.")
+        print(f"[+] {target_name} splash screen displayed.")
 
         # --- Test 1: Missing Plugin Guard in Open Dialog ---
         print("[*] Testing missing plugin guard in Open File dialog...")
@@ -637,4 +642,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    use_sec_arg = "--sec" in sys.argv
+    main(use_sec=use_sec_arg)

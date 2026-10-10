@@ -831,7 +831,7 @@ class SessionReplayer:
         return char, delay, desc
 
 
-def find_paths():
+def find_paths(use_sec=False):
     """Locates workspace binaries and tools."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
@@ -852,7 +852,9 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(
+        repo_root, "SEC.COM" if use_sec else "SE.COM"
+    )
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -1002,14 +1004,20 @@ def run_drunken_monkey_test(
               f"(seed: {seed}, mode: {mode})", flush=True)
     print("=" * 76, flush=True)
 
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     # Pre-test binary & file checks
     for p, name in [
         (emu_bin, "Emulator"),
         (rom_file, "ROM"),
         (img_file, "Disk Image"),
-        (se_bin, "SE.COM"),
+        (se_bin, target_name),
     ]:
         if not os.path.isfile(p):
             print(f"[-] Required {name} not found: {p}", flush=True)
@@ -1040,7 +1048,7 @@ def run_drunken_monkey_test(
     # Sync latest SE.COM onto ephemeral disk image drive C:
     if os.path.isfile(cpmrm_bin):
         subprocess.run(
-            [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, "0:SE.COM"],
+            [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, target_cpm],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -1048,7 +1056,7 @@ def run_drunken_monkey_test(
         try:
             subprocess.run(
                 [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img, se_bin,
-                 "0:SE.COM"],
+                 target_cpm],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -1154,7 +1162,7 @@ def run_drunken_monkey_test(
 
         # 2. Launch SE.COM
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         splash_out = read_until(master, b"for about", timeout=30.0)
         if b"for about" not in splash_out and b"Col 0" not in splash_out:
             raise HangError(
@@ -1490,6 +1498,10 @@ def run_drunken_monkey_test(
 def main():
     parser = argparse.ArgumentParser(
         description="Drunken Monkey Chaos Test Suite for SE.COM"
+    )
+    parser.add_argument(
+        "--sec", action="store_true", default=False,
+        help="Run SEC.COM binary instead of SE.COM"
     )
     parser.add_argument(
         "--steps", type=int, default=100,

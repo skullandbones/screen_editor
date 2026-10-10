@@ -22,7 +22,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -41,7 +41,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools",
                              "Linux", "cpmcp")
     cpmrm_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools",
@@ -126,12 +126,17 @@ def read_cfg_from_image(cpmcp_bin, img_file):
     return raw.decode("latin1", errors="replace")
 
 
-def run_test():
+def run_test(use_sec=False):
     print("=" * 65)
     print("  SE.COM PLUGIN.CFG Save & Autoload Round-Trip Test")
     print("=" * 65)
 
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     # Reset default PLUGIN.CFG on disk
     write_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, DEFAULT_CFG)
@@ -163,7 +168,7 @@ def run_test():
         # 1. Launch SE.COM (Session 1)
         print("[*] Step 1: Launching SE.COM (Session 1)...", flush=True)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         ok, _ = read_until(master, b"Col 0", timeout=45.0)
         assert ok, "Failed to display splash screen"
         drain_all(master)
@@ -259,7 +264,7 @@ def run_test():
         # 8. Relaunch SE.COM (Session 2 - testing autoload)
         print("[*] Step 8: Relaunching SE.COM (Session 2)...", flush=True)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         ok, _ = read_until(master, b"Col 0", timeout=45.0)
         assert ok, "Failed to display splash screen on relaunch"
         drain_all(master)
@@ -324,5 +329,6 @@ def run_test():
 
 
 if __name__ == "__main__":
-    success = run_test()
+    use_sec_arg = "--sec" in sys.argv
+    success = run_test(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

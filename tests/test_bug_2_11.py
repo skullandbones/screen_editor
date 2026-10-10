@@ -30,7 +30,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -50,7 +50,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
 
     return emu_bin, rom_file, img_file, se_bin
 
@@ -92,11 +92,14 @@ def drain_all(master_fd, timeout=0.2):
     return buf
 
 
-def main():
-    emu_bin, rom_file, img_file, se_bin = find_paths()
+def main(use_sec=False):
+    emu_bin, rom_file, img_file, se_bin = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     for p, name in [(emu_bin, "RC2014 emulator"), (rom_file, "ROM file"),
-                    (img_file, "Disk image"), (se_bin, "SE.COM binary")]:
+                    (img_file, "Disk image"),
+                    (se_bin, f"{target_name} binary")]:
         if not os.path.isfile(p):
             print(f"[-] Error: {name} not found at {p}")
             sys.exit(1)
@@ -129,8 +132,8 @@ def main():
         read_until(master, b"C>", timeout=8.0)
         time.sleep(0.5)
 
-        # Launch SE.COM
-        os.write(master, b"se\r")
+        # Launch editor binary
+        os.write(master, cmd_name + b"\r")
         ok, out = read_until(master, b"for about", timeout=60.0)
         if not ok:
             print(f"[-] Splash screen not seen. Output: {repr(out)}")
@@ -283,4 +286,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(main(use_sec=use_sec_arg))

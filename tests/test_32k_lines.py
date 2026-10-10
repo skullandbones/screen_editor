@@ -18,7 +18,7 @@ import tty
 import select
 import subprocess
 
-def find_paths():
+def find_paths(use_sec=False):
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
     emu_bin = os.path.join(workspace_root, "tools", "rc2014_emu", "rc2014")
@@ -34,7 +34,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -110,8 +110,14 @@ def boot_cpm(emu_bin, rom_file, img_file):
 
     return proc, master
 
-def test_32k_lines():
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin, cpmls_bin = find_paths()
+def test_32k_lines(use_sec=False):
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin, cpmls_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     num_lines = 500
     test_file = f"/tmp/DOC{num_lines}.TXT"
     saved_file = f"/tmp/DOC{num_lines}_SAVED.TXT"
@@ -138,13 +144,16 @@ def test_32k_lines():
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
+    subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, target_cpm],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, cpm_user],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Inject SE.COM, SE.CFG, and test file
-    subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"], check=True)
+    subprocess.run(
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
+        check=True
+    )
     subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, cfg_file, "0:SE.CFG"], check=True)
     subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, test_file, cpm_user], check=True)
 
@@ -156,7 +165,7 @@ def test_32k_lines():
         # -------------------------------------------------------------
         print("\n[*] Part 1: Verify Far RAM Line Slot Allocation (LINES=32K)...")
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_splash = read_until(master, b"Max Lines", timeout=25.0)
         out_splash += read_until(master, b"Free: ", timeout=10.0)
         if b"to configure" not in out_splash:
@@ -262,7 +271,7 @@ def test_32k_lines():
         # Part 4: Document Editing & Saving in 32K Mode
         # -------------------------------------------------------------
         print(f"\n[*] Part 4: Loading and editing {num_lines}-line document in 32K mode...")
-        os.write(master, f"se {cpm_name}\r".encode())
+        os.write(master, cmd_name + f" {cpm_name}\r".encode())
         expected_top = f"1/{num_lines}".encode()
         out_doc = read_until(master, expected_top, timeout=90.0)
         time.sleep(0.3)
@@ -348,5 +357,6 @@ def test_32k_lines():
                     pass
 
 if __name__ == "__main__":
-    success = test_32k_lines()
+    use_sec_arg = "--sec" in sys.argv
+    success = test_32k_lines(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

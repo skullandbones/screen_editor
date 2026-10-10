@@ -26,7 +26,7 @@ import subprocess
 import tempfile
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -46,7 +46,9 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(
+        repo_root, "SEC.COM" if use_sec else "SE.COM"
+    )
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -109,7 +111,7 @@ def boot_cpm3(master_fd):
 
 
 def test_ramdrive_detection_and_mem_screen(
-    emu_bin, rom_file, img_file, cpmrm_bin
+    emu_bin, rom_file, img_file, cpmrm_bin, cmd_name=b"se"
 ):
     """Test RAM drive detection and Memory screen bank display on CP/M 3."""
     print(
@@ -144,7 +146,7 @@ def test_ramdrive_detection_and_mem_screen(
 
         time.sleep(0.5)
         # Launch SE.COM
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         ok, out = read_until(master, b"Col 0", timeout=25.0)
         if not ok and b"for about" not in out:
             print(
@@ -288,8 +290,11 @@ def test_large_file_exit(emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin):
 
             time.sleep(0.5)
             # Launch SE with DOC200.TXT
-            print("[*] Launching: se doc200.txt on CP/M 3.1...", flush=True)
-            os.write(master, b"se doc200.txt\r")
+            print(
+                f"[*] Launching: {cmd_name.decode()} doc200.txt "
+                f"on CP/M 3.1...", flush=True
+            )
+            os.write(master, cmd_name + b" doc200.txt\r")
 
             # Verify editor screen with DOC200.TXT fully loaded
             # (wait for 1/200 line count)
@@ -388,7 +393,7 @@ def test_large_file_exit(emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin):
 
 
 def test_ramdrive_hibernation(
-    emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin
+    emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin, cmd_name=b"se"
 ):
     """Test RAM drive hibernation (RAMDRIVE=HIBERNATE) on CP/M 3.1."""
     print("\n[*] Test 4: RAM Drive Hibernation on CP/M 3.1...")
@@ -439,8 +444,8 @@ def test_ramdrive_hibernation(
 
             time.sleep(0.5)
             # Launch SE with RAMDRIVE=HIBERNATE
-            print("[*] Launching SE.COM with RAMDRIVE=HIBERNATE...", flush=True)
-            os.write(master, b"se\r")
+            print("[*] Launching with RAMDRIVE=HIBERNATE...", flush=True)
+            os.write(master, cmd_name + b"\r")
 
             # Verify hibernation banner
             ok, out = read_until(master, b"Hibernating RAM drive", timeout=25.0)
@@ -501,15 +506,20 @@ def test_ramdrive_hibernation(
         )
 
 
-def main():
+def main(use_sec=False):
     t_start = time.time()
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     for path, name in [
         (emu_bin, "rc2014"),
         (rom_file, "RC2014_std.rom"),
         (img_file, "hd1k_combo.img"),
-        (se_bin, "SE.COM"),
+        (se_bin, target_name),
         (cpmcp_bin, "cpmcp"),
         (cpmrm_bin, "cpmrm"),
     ]:
@@ -523,21 +533,23 @@ def main():
 
     # Test 1 & 2: RAM Drive Detection and Memory Map Screen
     if not test_ramdrive_detection_and_mem_screen(
-        emu_bin, rom_file, img_file, cpmrm_bin
+        emu_bin, rom_file, img_file, cpmrm_bin, cmd_name=cmd_name
     ):
         print("\n[-] Test 1 & 2 FAILED!", flush=True)
         sys.exit(1)
 
     # Test 3: Large File Editing & Clean Exit without Hang
     if not test_large_file_exit(
-        emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin
+        emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin,
+        cmd_name=cmd_name
     ):
         print("\n[-] Test 3 FAILED!", flush=True)
         sys.exit(1)
 
     # Test 4: RAM Disk Hibernation
     if not test_ramdrive_hibernation(
-        emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin
+        emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin,
+        cmd_name=cmd_name
     ):
         print("\n[-] Test 4 FAILED!", flush=True)
         sys.exit(1)
@@ -550,4 +562,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    use_sec_arg = "--sec" in sys.argv
+    main(use_sec=use_sec_arg)

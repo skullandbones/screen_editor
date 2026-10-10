@@ -26,7 +26,7 @@ import time
 import tty
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -46,7 +46,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -97,7 +97,14 @@ def drain_all(master_fd, duration=0.2):
     return buf
 
 
-def setup_disk_files(repo_root, cpmcp_bin, cpmrm_bin, img_file, se_bin):
+def setup_disk_files(
+    repo_root,
+    cpmcp_bin,
+    cpmrm_bin,
+    img_file,
+    se_bin,
+    use_sec=False
+):
     if os.path.isfile(cpmrm_bin):
         for fname in ["0:SE.COM", "0:se.com", "0:LONG.TXT", "0:long.txt"]:
             subprocess.run(
@@ -108,7 +115,9 @@ def setup_disk_files(repo_root, cpmcp_bin, cpmrm_bin, img_file, se_bin):
 
     # Ensure fresh SE.COM is installed on drive C (user 0)
     subprocess.run(
-        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    subprocess.run(
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
         check=True,
     )
 
@@ -156,9 +165,14 @@ def boot_cpm(master):
     return True, "Booted to C>"
 
 
-def main():
-    paths = find_paths()
-    repo_root, emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = paths
+def main(use_sec=False):
+    paths = find_paths(use_sec=use_sec)
+    (
+        repo_root, emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = paths
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     for p, name in [
         (emu_bin, "RC2014 emulator"),
@@ -176,7 +190,14 @@ def main():
     print("  Bug 2.34: Progress Dialog Line Counter Debris Zero Test")
     print("=" * 65)
 
-    setup_disk_files(repo_root, cpmcp_bin, cpmrm_bin, img_file, se_bin)
+    setup_disk_files(
+        repo_root,
+        cpmcp_bin,
+        cpmrm_bin,
+        img_file,
+        se_bin,
+        use_sec=use_sec
+    )
 
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -198,7 +219,7 @@ def main():
         # Subtest 1: Verify Initial Progress Template Alignment
         # ---------------------------------------------------------------------
         print("[*] Subtest 1: Testing initial progress template alignment...")
-        os.write(master, b"se LONG.TXT\r")
+        os.write(master, cmd_name + b" LONG.TXT\r")
         ok, load_out = read_until(
             master, b"Please wait for completion", timeout=30.0
         )
@@ -302,4 +323,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(main(use_sec=use_sec_arg))
