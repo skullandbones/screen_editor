@@ -373,6 +373,77 @@ viewport panning algorithms defined in `src/core/editor.asm` and
    `CUR_COL` is an integer byte offset, the hardware cursor always aligns to
    discrete character boundaries and can never be positioned within a tab.
 
+8. Deletion Operations & Line Joining Dynamics (Backspace & Delete):
+   Deletion mechanics govern both inline character removal and line structure
+   mutations across buffer rows. All variants must implement identical
+   boundary, joining, and cursor synchronization rules:
+   - Backward Deletion (`BACKSPACE` / `KEY_BACKSPACE` / `0x08` / `Ctrl+H`):
+     - Inline Deletion (`CUR_COL > 0`):
+       - Removes character immediately preceding cursor (`CUR_COL - 1`).
+       - Characters from `CUR_COL` to end of line shift left by one column.
+       - Cursor decrements: `CUR_COL -= 1`.
+       - Updates sticky visual column: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+       - Marks document modified: `MODIFIED = 1`.
+       - Redraws active line (`NEED_LINE_RENDER = 1`) and updates status bar.
+     - Column 0 Line Joining (`CUR_COL == 0`):
+       - If `CUR_DOC_ROW > 0`:
+         - Let `prev_len = len(line[CUR_DOC_ROW - 1])` and
+           `cur_len = len(line[CUR_DOC_ROW])`.
+         - Combined Length Barrier Check:
+           If `prev_len + cur_len <= 120` (canonical `MAX_LINE` limit):
+           - Appends current line contents to previous line:
+             `line[CUR_DOC_ROW - 1] += line[CUR_DOC_ROW]`.
+           - Deletes row `CUR_DOC_ROW` from document line pointer table.
+           - Decrements total lines: `DOC_TOTAL_LINES -= 1`.
+           - Moves cursor up to previous row: `CUR_DOC_ROW -= 1`.
+           - Positions cursor at exact junction boundary: `CUR_COL = prev_len`.
+           - Updates sticky target: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+           - Marks document modified: `MODIFIED = 1`.
+           - Triggers full viewport re-render (`NEED_SCREEN_RENDER = 1`).
+           - Viewport Scroll: If `CUR_DOC_ROW < TOP_DOC_ROW`, scrolls up:
+             `TOP_DOC_ROW = CUR_DOC_ROW`.
+           If `prev_len + cur_len > 120`:
+           - Join is inhibited (no-op) to enforce the 120-column line limit
+             and prevent buffer overflow or unplanned line truncation.
+       - If `CUR_DOC_ROW == 0` (top of document):
+         - Blocked (no-op; beginning of file reached).
+     - Block Mode Interaction:
+       - If dynamic block selection is active (`BLOCK_ACTIVE == 1`), pressing
+         Backspace cancels selection (`BLOCK_ACTIVE = 0`) to safeguard
+         unintended content modification.
+   - Forward Deletion (`DELETE` / `KEY_DELETE` / `0x7F` / `Ctrl+D` / `0x04`):
+     - Inline Deletion (`CUR_COL < len(line[CUR_DOC_ROW])`):
+       - Removes the character directly under the cursor (`CUR_COL`).
+       - Characters following `CUR_COL` shift left by one column.
+       - Cursor position remains stationary (`CUR_COL` unchanged).
+       - Updates sticky visual column: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+       - Marks document modified: `MODIFIED = 1`.
+       - Redraws active line (`NEED_LINE_RENDER = 1`) and updates status bar.
+     - End of Line Pull-Up / Joining (`CUR_COL >= len(line[CUR_DOC_ROW])`):
+       - If `CUR_DOC_ROW + 1 < DOC_TOTAL_LINES`:
+         - Let `cur_len = len(line[CUR_DOC_ROW])` and
+           `next_len = len(line[CUR_DOC_ROW + 1])`.
+         - Combined Length Barrier Check:
+           If `cur_len + next_len <= 120` (canonical `MAX_LINE` limit):
+           - Appends next line contents to current line:
+             `line[CUR_DOC_ROW] += line[CUR_DOC_ROW + 1]`.
+           - Deletes row `CUR_DOC_ROW + 1` from document pointer table.
+           - Decrements total lines: `DOC_TOTAL_LINES -= 1`.
+           - Cursor remains stationary at `CUR_COL = cur_len` (junction point).
+           - Updates sticky target: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+           - Marks document modified: `MODIFIED = 1`.
+           - Triggers full viewport re-render (`NEED_SCREEN_RENDER = 1`).
+           If `cur_len + next_len > 120`:
+           - Pull-up is inhibited (no-op) to preserve 120-column line limit.
+       - If `CUR_DOC_ROW + 1 >= DOC_TOTAL_LINES` (end of document):
+         - Blocked (no-op; end of file reached).
+     - Block Mode Interaction:
+       - If a block is active (`BLOCK_ACTIVE == 1` or `2`):
+         - Pressing `Delete` or `Ctrl+D` solidifies dynamic selection and
+           deletes the entire highlighted block range (`DO_DELETE_BLOCK`).
+         - Resets `BLOCK_ACTIVE = 0`, repositions cursor at block start,
+           marks `MODIFIED = 1`, and re-renders the screen.
+
 7. Tier 1 Centered Workspaces
 --------------------------------------------------------------------------------
 Non-document full-screen workspaces are rendered as mathematically centered
@@ -632,6 +703,8 @@ or display notifications.
      Used for text parameters (Find string, Replace string, Goto Line).
      Target input field enclosed in bracket pair `[  text  ]`.
      Terminal cursor placed directly inside bracket field.
+     Supports standard editing keys: character entry, Backspace (deletes left),
+     Delete / Ctrl+D (deletes under cursor), Left/Right arrows, and Home/End.
      ```text
      +--------------------------------------------------+
      |                     Goto Line                    |
@@ -730,6 +803,36 @@ or display notifications.
 > WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is dropped
 > across CP/M and ported targets to eliminate command collision with Save,
 > Delete, End, and Cut.
+
+1. Operational Descriptions for Deletion Keys:
+   Canonical SE distinguishes between backward deletion, forward deletion, and
+   block range deletion across the primary editor, active blocks, and modal
+   dialogs:
+
+   - `Backspace` (`KEY_BACKSPACE`, `0x08`, `Ctrl+H`):
+     - Editor Workspace: Deletes character to the left of the cursor
+       (`CUR_COL - 1`) and moves cursor left. When pressed at column 0
+       (`CUR_COL == 0`), joins the current line to the previous line (landing
+       the cursor at the junction column) provided the combined line length
+       does not exceed 120 columns; blocked at Row 0 Column 0.
+     - Block-Active Context: Cancels dynamic block (`BLOCK_ACTIVE = 0`)
+       to safeguard highlighted text against accidental deletion.
+     - Modal Input Dialogs (Archetype C): Deletes character preceding the
+       input cursor inside the bracket field `[  ]`, shifting trailing text
+       left and decrementing cursor index; blocked at index 0.
+
+   - `Delete` (`KEY_DELETE`, `0x7F`, ANSI `\x1b[3~`) & `Ctrl+D` (`0x04`):
+     - Editor Workspace: Deletes the character directly under the cursor
+       without altering cursor column. When pressed at the end of a line
+       (`CUR_COL >= len(line)`), pulls up and joins the next line to the
+       current line provided the combined length does not exceed 120 columns;
+       blocked at the end of the last line.
+     - Block-Active Context: Solidifies selection and deletes the entire
+       highlighted block range (`DO_DELETE_BLOCK`), resetting block mode and
+       moving following text up to the block start.
+     - Modal Input Dialogs (Archetype C): Deletes the character directly under
+       the input cursor inside the bracket field `[  ]`, shifting trailing text
+       left without moving the cursor index; blocked at end of input text.
 
 11. The Ten UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
