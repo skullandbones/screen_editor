@@ -424,6 +424,70 @@ class TestBuffer(unittest.TestCase):
             flush=True,
         )
 
+    def test_delete_and_paste_sticky_target_col(self):
+        """
+        Step 12: Verify sticky target column on delete and paste (Bug 2.7.31).
+        """
+        print(
+            "[*] Step 12: Testing sticky target column on delete & paste...",
+            flush=True,
+        )
+        buf = DocumentBuffer(tab_width=4)
+
+        # 1. Single-line paste with tab synchronizes visual target_col
+        buf.lines = ["Hello", "0123456789"]
+        buf.cursor_row = 0
+        buf.cursor_col = 0
+        buf.clipboard = "\tA"
+        buf.paste_block()
+        # Line 0 is "\tAHello", cursor is at index 2 (after "\tA")
+        # Visual col: \t (width 4) + 'A' (1) = 5
+        self.assertEqual(buf.lines[0], "\tAHello")
+        self.assertEqual(buf.cursor_col, 2)
+        self.assertEqual(buf.target_col, 5)
+        # Move down to Line 1 ("0123456789") -> should land on col 5
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 5)
+
+        # 2. Multi-line paste ending with tab synchronizes visual target_col
+        buf.lines = ["Line 1", "0123456789"]
+        buf.cursor_row = 0
+        buf.cursor_col = 0
+        buf.clipboard = "First\n\tB"
+        buf.paste_block()
+        # Cursor is now at row 1, col 2 (after "\tB")
+        # Line 1 is "\tBLine 1" -> visual col is 4 + 1 = 5
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 2)
+        self.assertEqual(buf.target_col, 5)
+
+        # 3. delete_char() synchronizes visual target_col
+        buf.lines = ["\t1234", "0123456789"]
+        buf.cursor_row = 0
+        buf.cursor_col = 1
+        buf.target_col = 999  # deliberate stale target
+        # Delete '1' at index 1; cursor stays at index 1 ('2')
+        buf.delete_char()
+        self.assertEqual(buf.lines[0], "\t234")
+        self.assertEqual(buf.cursor_col, 1)
+        self.assertEqual(buf.target_col, 4)
+
+        # 4. delete_char() at end of line joining next line synchronizes target
+        buf.lines = ["\t", "XYZ"]
+        buf.cursor_row = 0
+        buf.cursor_col = 1
+        buf.target_col = 999  # deliberate stale target
+        buf.delete_char()
+        self.assertEqual(buf.lines[0], "\tXYZ")
+        self.assertEqual(buf.cursor_col, 1)
+        self.assertEqual(buf.target_col, 4)
+
+        print(
+            "[+] Step 12: Sticky target column on delete & paste verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     t0 = time.time()

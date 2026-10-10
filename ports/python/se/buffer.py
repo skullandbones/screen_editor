@@ -207,6 +207,7 @@ class DocumentBuffer:
             self.lines[self.cursor_row] = (
                 line[: self.cursor_col] + line[self.cursor_col + 1 :]
             )
+            self.target_col = self.get_visual_col()
             self.modified = True
             return True
 
@@ -216,6 +217,7 @@ class DocumentBuffer:
             if len(line) + len(next_line) <= MAX_LINE_LENGTH:
                 self.lines[self.cursor_row] = line + next_line
                 self.lines.pop(self.cursor_row + 1)
+                self.target_col = self.get_visual_col()
                 self.modified = True
                 return True
         return False
@@ -383,7 +385,7 @@ class DocumentBuffer:
 
         self.cursor_row = r1
         self.cursor_col = c1
-        self.target_col = c1
+        self.target_col = self.get_visual_col()
         self.block_active = 0
         self.modified = True
         return text
@@ -402,7 +404,7 @@ class DocumentBuffer:
                 line[:col] + to_insert + line[col:]
             )[:MAX_LINE_LENGTH]
             self.cursor_col = col + len(to_insert)
-            self.target_col = self.cursor_col
+            self.target_col = self.get_visual_col()
         else:
             line = self.current_line
             col = min(len(line), self.cursor_col)
@@ -419,7 +421,7 @@ class DocumentBuffer:
             )
             self.cursor_row = last_idx
             self.cursor_col = len(parts[-1])
-            self.target_col = self.cursor_col
+            self.target_col = self.get_visual_col()
 
         self.modified = True
         return True

@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 5 Defects Open (Bugs 2.7.27–2.7.31).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.31 Closed).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -658,7 +658,7 @@ have been resolved and archived.
       the line buffer while letting the discrete tab traversal engine handle
       visual leaping. Validated via `test_tab_key_inserts_literal_tab_byte` in
       `test_editor.py`.
-  - [ ] **Bug 2.7.31: Sticky Target Column Corrupted on Delete and Paste**:
+  - [x] **Bug 2.7.31: Sticky Target Column Corrupted on Delete and Paste**:
     - *Symptom*: Forward deleting a character under cursor (`Ctrl+D` / `Delete`)
       does not synchronize sticky `target_col`. Pasting clipboard text
       (`Ctrl+V` / `paste_block()`) assigns raw byte offset `self.target_col =
@@ -669,9 +669,10 @@ have been resolved and archived.
       `paste_block()` sets `self.target_col = self.cursor_col` instead of
       `self.get_visual_col()`, and line 421 omits `target_col` update entirely.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, and 6.4.
-    - *Resolution Plan*: In `ports/python/se/buffer.py`, update `delete_char()`
-      and both branches of `paste_block()` to synchronize `self.target_col =
-      self.get_visual_col()`. Validate via `test_buffer.py`.
+    - *Resolution*: Updated `delete_char()`, `cut_block()`, and both branches
+      of `paste_block()` in `ports/python/se/buffer.py` to synchronize
+      `self.target_col = self.get_visual_col()`. Validated via
+      `test_delete_and_paste_sticky_target_col` in `test_buffer.py`.
 
 ---
 
