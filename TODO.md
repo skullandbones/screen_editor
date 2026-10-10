@@ -425,7 +425,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 3 Defects Open (Bugs 2.7.42–2.7.44; Bug 2.7.45 Rejected).
+- **Status**: Active / 2 Defects Open (Bugs 2.7.43–2.7.44; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -973,7 +973,7 @@ have been resolved and archived.
       without inserting characters or tab bytes, while clearing active blocks
       prior to insertion when solidified (`block_active == 2`). Validated via
       `test_typing_and_tab_block_cancel` in `test_editor.py`.
-  - [ ] **Bug 2.7.42: Status Bar Field Squatting & Missing Block Indicators**:
+  - [x] **Bug 2.7.42: Status Bar Field Squatting & Missing Block Indicators**:
     - *Symptom*: When text block selection is active (`block_active > 0`),
       Field 4 on the universal status bar displays selection metrics (`Sel:
       X chars |` or `Block: Y lines |`), clobbering the mandatory universal
@@ -988,10 +988,12 @@ have been resolved and archived.
       in Section 4.3 and 9.2.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 9.2, and 11.1
       (Anti-Pattern #1: Status Bar Squatting); Linux Native Bug 2.4.16.
-    - *Resolution Plan*: Keep Field 4 persistently formatted as `" ^K: Editor
-      keys |"`. In Field 5, append ` [SEL]` when `buf.block_active == 1` and
-      ` [BLK LOCK]` when `buf.block_active == 2` alongside horizontal pan
-      indicator `[Pan +X]`.
+    - *Resolution*: Preserved `^K: Editor keys |` unconditionally in Field 4
+      and routed `[SEL]` (`block_active == 1`) and `[BLK LOCK]`
+      (`block_active == 2`) indicators into Field 5 alongside horizontal pan
+      flags with dynamic compact spacing in `render_status_bar` (`ui.py`).
+      Validated via Step 33 in `test_editor.py`
+      (`test_bug_2_7_42_status_bar_field4_invariance_and_block_indicators`).
   - [ ] **Bug 2.7.43: Missing Tier 2 Block Operations Modal Dialog on Ctrl+K**:
     - *Symptom*: When a block selection is active (`block_active > 0`),
       pressing `Ctrl+K` falls through to `action_help()` or prefix key

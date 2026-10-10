@@ -385,8 +385,8 @@ class TestEditor(unittest.TestCase):
 
         status_texts = [w for w in written if not w.startswith("\x1b")]
         self.assertEqual(len(status_texts[0]), 80)
-        self.assertIn("Sel: 5 chars", status_texts[0])
-        self.assertNotIn("[SEL]", status_texts[0])
+        self.assertIn("^K: Editor keys |", status_texts[0])
+        self.assertIn("[SEL]", status_texts[0])
 
         # Multi-line selection (dynamic follows cursor)
         written.clear()
@@ -397,7 +397,8 @@ class TestEditor(unittest.TestCase):
 
         status_texts_multi = [w for w in written if not w.startswith("\x1b")]
         self.assertEqual(len(status_texts_multi[0]), 80)
-        self.assertIn("Sel: 3 lines", status_texts_multi[0])
+        self.assertIn("^K: Editor keys |", status_texts_multi[0])
+        self.assertIn("[SEL]", status_texts_multi[0])
 
         # Solidified block (uses block_end_row / block_end_col)
         written.clear()
@@ -408,10 +409,11 @@ class TestEditor(unittest.TestCase):
 
         status_texts_solid = [w for w in written if not w.startswith("\x1b")]
         self.assertEqual(len(status_texts_solid[0]), 80)
-        self.assertIn("Block: 3 lines", status_texts_solid[0])
+        self.assertIn("^K: Editor keys |", status_texts_solid[0])
+        self.assertIn("[BLK LOCK]", status_texts_solid[0])
 
         print(
-            "[+] Step 11: Status bar block metrics verified without spill.",
+            "[+] Step 11: Status bar block indicators verified without spill.",
             flush=True,
         )
 
@@ -1373,6 +1375,85 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 32: typing & Tab active block cancel verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_42_status_bar_field4_invariance_and_block_indicators(self):
+        """Step 33: Verify status bar Field 4 and mode flags (Bug 2.7.42)."""
+        print(
+            "[*] Step 33: Testing status bar Field 4 invariance & flags...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+
+        # 1. No block active (block_active == 0)
+        self.editor.buffer.block_active = 0
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+        t0 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t0), 80)
+        self.assertIn("^K: Editor keys |", t0)
+        self.assertNotIn("[SEL]", t0)
+        self.assertNotIn("[BLK LOCK]", t0)
+
+        # 2. Dynamic block active (block_active == 1)
+        written.clear()
+        self.editor.buffer.block_active = 1
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 2
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 8
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+        t1 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t1), 80)
+        self.assertIn("^K: Editor keys |", t1)
+        self.assertIn("[SEL]", t1)
+        self.assertNotIn("[BLK LOCK]", t1)
+        self.assertNotIn("Sel:", t1)
+
+        # 3. Solidified block active (block_active == 2)
+        written.clear()
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 8
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+        t2 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t2), 80)
+        self.assertIn("^K: Editor keys |", t2)
+        self.assertIn("[BLK LOCK]", t2)
+        self.assertNotIn("[SEL]", t2)
+        self.assertNotIn("Block:", t2)
+
+        # 4. Horizontal pan indicator (pan_col > 0) on 80x24
+        written.clear()
+        self.editor.buffer.block_active = 0
+        self.editor.buffer.pan_col = 40
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+        t3 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t3), 80)
+        self.assertIn("^K: Editor keys |", t3)
+        self.assertIn("[Pan +40]", t3)
+
+        # 5. Pan and block mode flag simultaneously on 120x40
+        written.clear()
+        self.editor.terminal.cols = 120
+        self.editor.terminal.rows = 40
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 8
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="120x40"
+        )
+        t4 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t4), 120)
+        self.assertIn("^K: Editor keys |", t4)
+        self.assertIn("[Pan +40]", t4)
+        self.assertIn("[BLK LOCK]", t4)
+
+        print(
+            "[+] Step 33: Field 4 invariance & Field 5 flags verified.",
             flush=True,
         )
 
