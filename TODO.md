@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 3 Defects Open (Bugs 2.4.17–2.4.19).
+- **Status**: Active / 2 Defects Open (Bugs 2.4.18–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -340,7 +340,7 @@ have been resolved and archived.
       and computed Field 5 column display using `calc_visual_col()`. Validated
       via `test_bug_2_4_16_status_bar_field_invariance_and_visual_col` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.17: Tier 1 File Open/Save Workspaces & Directory Scanning**:
+  - [x] **Bug 2.4.17: Tier 1 File Open/Save Workspaces & Directory Scanning**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 7.5, 7.6, 7.7, 7.8, 14.2.
     - *Issue*: `ui_browser_open_dialog` in `src/core/ui_browser.c` renders a
       56x18 Tier 2 modal dialog with a 1-column list of files, and
@@ -352,9 +352,13 @@ have been resolved and archived.
       pagination, line ending toggle (`Ctrl+F`), and status bar at row 24.
       Furthermore, `hal_linux_scan_directory` in `hal_linux_storage.c` is an
       empty stub with no directory entry population.
-    - *Required Fix*: Upgrade File Open/Save to Tier 1 centered workspaces,
-      implement multi-column directory pagination, and implement POSIX `opendir`
-      / `readdir` scanning in `hal_linux_storage.c` with path normalization.
+    - *Resolution*: Upgraded File Open/Save/Insert/Save Block to full-screen
+      Tier 1 workspaces with multi-column grids, double rules, column 0 tilde
+      discipline, `<PgUp>`/`<PgDn>` pagination, line ending toggle (`Ctrl+F`),
+      and universal status bar. Implemented POSIX `opendir`/`readdir` directory
+      scanning in `hal_linux_storage.c`. Validated via
+      `test_bug_2_4_17_tier1_file_workspaces_and_directory_scan` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.18: Non-Canonical Configuration Parser & Serialization**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 13.1, 13.2.
     - *Issue*: `src/core/config.c` uses non-canonical, case-sensitive key names

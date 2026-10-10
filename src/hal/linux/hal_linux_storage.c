@@ -75,15 +75,43 @@ void hal_linux_scan_directory(const char *dir_path)
 {
     DIR *d;
     struct dirent *dir;
+    struct stat st;
+    char path_buf[512];
+    char clean_dir[512];
+    size_t dlen;
 
-    if (!dir_path) dir_path = ".";
-    d = opendir(dir_path);
-    if (!d) return;
+    if (!dir_path || dir_path[0] == '\0') {
+        dir_path = ".";
+    }
+
+    snprintf(clean_dir, sizeof(clean_dir), "%s", dir_path);
+    dlen = strlen(clean_dir);
+    while (dlen > 1 && clean_dir[dlen - 1] == '/') {
+        clean_dir[--dlen] = '\0';
+    }
+
+    d = opendir(clean_dir);
+    if (!d) {
+        return;
+    }
 
     while ((dir = readdir(d)) != NULL) {
-        /* Ignore hidden files */
-        if (dir->d_name[0] == '.') continue;
-        /* Found entry */
+        uint32_t size = 0;
+        uint8_t is_dir = 0;
+
+        /* Ignore hidden files and special entries */
+        if (dir->d_name[0] == '.') {
+            continue;
+        }
+
+        snprintf(path_buf, sizeof(path_buf), "%s/%s", clean_dir, dir->d_name);
+        if (stat(path_buf, &st) == 0) {
+            size = (uint32_t)st.st_size;
+            if (S_ISDIR(st.st_mode)) {
+                is_dir = 1;
+            }
+        }
+        ui_browser_add_entry(dir->d_name, size, is_dir);
     }
     closedir(d);
 }

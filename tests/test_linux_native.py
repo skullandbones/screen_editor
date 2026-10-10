@@ -1175,6 +1175,90 @@ def test_bug_2_4_16_status_bar_field_invariance_and_visual_col():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_17_tier1_file_workspaces_and_directory_scan():
+    """Verify Tier 1 File Open/Save workspaces & dir scanning (2.4.17)."""
+    print("[*] Testing Tier 1 file workspaces & dir scanning (2.4.17)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        read_all_available(master, 0.2)
+
+        # Launch File Open workspace from Splash screen via 'o'
+        os.write(master, b"o")
+        time.sleep(0.3)
+        open_out = read_all_available(master, 0.4).decode("utf-8",
+                                                          errors="replace")
+        assert "OPEN FILE (DIRECTORY)" in open_out, (
+            f"Expected 'OPEN FILE (DIRECTORY)' in workspace:\n{open_out}"
+        )
+        assert "~====" in open_out, (
+            f"Expected double rule '~====' in open workspace:\n{open_out}"
+        )
+        assert "Enter filename to open:" in open_out, (
+            f"Expected filename prompt in open workspace:\n{open_out}"
+        )
+        assert "<PgUp>/<PgDn>=Page" in open_out, (
+            f"Expected page controls in open workspace:\n{open_out}"
+        )
+        # Directory scanning verification: Makefile or TODO.md in grid
+        assert "Makefile" in open_out or "TODO.md" in open_out, (
+            f"Directory scan failed to list local repository files:\n{open_out}"
+        )
+
+        # Cancel out of Open workspace via ESC
+        os.write(master, b"\x1b")
+        time.sleep(0.2)
+        read_all_available(master, 0.2)
+
+        # Launch Save workspace from Splash screen via 's'
+        os.write(master, b"s")
+        time.sleep(0.3)
+        save_out = read_all_available(master, 0.4).decode("utf-8",
+                                                          errors="replace")
+        assert "SAVE FILE (DIRECTORY)" in save_out, (
+            f"Expected 'SAVE FILE (DIRECTORY)' in workspace:\n{save_out}"
+        )
+        assert "Format: [Linux]" in save_out or "Format: [CP/M]" in save_out, (
+            f"Expected format indicator in save workspace:\n{save_out}"
+        )
+        assert "[^F]=Toggle Format" in save_out, (
+            f"Expected format toggle hint in save workspace:\n{save_out}"
+        )
+
+        # Toggle format via Ctrl+F (0x06)
+        os.write(master, b"\x06")
+        time.sleep(0.2)
+        toggle_out = read_all_available(master, 0.4).decode("utf-8",
+                                                            errors="replace")
+        has_toggled = ("Format: [CP/M]" in toggle_out or
+                       "Format: [Linux]" in toggle_out)
+        assert has_toggled, (
+            f"Expected toggled format in save workspace:\n{toggle_out}"
+        )
+
+        # Cancel Save workspace via ESC
+        os.write(master, b"\x1b")
+        time.sleep(0.2)
+        read_all_available(master, 0.2)
+
+        # Exit cleanly from splash screen via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Tier 1 file workspaces & dir scanning verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1198,6 +1282,7 @@ def main():
     test_bug_2_4_14_viewport_col1_alignment()
     test_bug_2_4_15_sticky_target_col_and_tab_clamping()
     test_bug_2_4_16_status_bar_field_invariance_and_visual_col()
+    test_bug_2_4_17_tier1_file_workspaces_and_directory_scan()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

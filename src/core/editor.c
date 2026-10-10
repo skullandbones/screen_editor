@@ -518,8 +518,17 @@ int editor_handle_key(int key)
         break;
     case KEY_CTRL_F: do_ctrl_f_find(); break;
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
-    case KEY_CTRL_N: do_ctrl_n_find_next(); break;
-    case KEY_CTRL_S: file_save(NULL, g_config.save_format); break;
+    case KEY_CTRL_S:
+        if (g_current_filename[0] == '\0') {
+            char fname[64] = {0};
+            if (ui_browser_save_dialog(fname, sizeof(fname)) ==
+                MODAL_RES_OK && fname[0]) {
+                file_save(fname, g_config.save_format);
+            }
+        } else {
+            file_save(NULL, g_config.save_format);
+        }
+        break;
     case KEY_CTRL_L: {
         char buf[16] = {0};
         if (modal_prompt_text("Goto Line", "Enter destination line number:",
