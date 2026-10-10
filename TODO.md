@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.31 Closed).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.36 Closed).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -673,6 +673,88 @@ have been resolved and archived.
       of `paste_block()` in `ports/python/se/buffer.py` to synchronize
       `self.target_col = self.get_visual_col()`. Validated via
       `test_delete_and_paste_sticky_target_col` in `test_buffer.py`.
+  - [x] **Bug 2.7.32: File Open & Save Workspaces Using Tier 2 Modals**:
+    - *Symptom*: Pressing `Ctrl+O` / `:o` or `Ctrl+S` / `:s` presents a small
+      52-column Tier 2 text input modal (`show_input`) rather than the
+      full-screen Tier 1 Directory Browser workspace.
+    - *Root Cause*: `action_open_file()` and `action_save_file()` in
+      `ports/python/se/editor.py` invoke `self.modal.show_input()` instead of
+      rendering Tier 1 workspaces with multi-column file grid layouts (5 cols
+      on 80x24 / 7 cols on 120x40), `<PgUp>/<PgDn>` pagination, directory
+      filtering, and `Ctrl+F` format toggling.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, and 14.2.
+    - *Resolution*: Implemented `render_directory_workspace()` in `ui.py` and
+      `action_directory_browser()` in `editor.py`, replacing mini-modals
+      with full-screen Tier 1 directory workspaces supporting multi-column
+      file grids, pagination, path traversal, wildcard filtering, and `Ctrl+F`
+      format toggling. Validated via
+      `test_tier1_directory_browser_open_and_save` in `test_editor.py`.
+  - [x] **Bug 2.7.33: Block-Active File Insert (Ctrl+O) Unimplemented**:
+    - *Symptom*: Pressing `Ctrl+O` while a block selection is active invokes
+      the open file action (replacing active document) rather than streaming
+      the selected file contents into the buffer at the cursor. Additionally,
+      `Ctrl+K R` is unhandled.
+    - *Root Cause*: In `ports/python/se/editor.py:160`, `KEY_CTRL_O` does not
+      check `self.buffer.block_active`. The editor lacks `action_insert_file()`
+      and block insertion mechanics.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, Section 10, and
+      `src/se.asm:1064-1070`.
+    - *Resolution*: Added block-active detection to `KEY_CTRL_O` in
+      `dispatch_key()` and implemented `action_insert_file()` in `editor.py`
+      along with `insert_file()` in `DocumentBuffer`, solidifying block bounds
+      and streaming file contents directly into the document at the cursor
+      position without replacing existing lines. Added `Ctrl+K R` prefix
+      dispatch. Validated via `test_block_active_file_insert` in
+      `test_editor.py`.
+  - [x] **Bug 2.7.34: Block-Active Save (Ctrl+S) Saves Full Buffer**:
+    - *Symptom*: Pressing `Ctrl+S` while a block is highlighted overwrites the
+      target file with the full document buffer rather than saving only the
+      highlighted visual block range. Additionally, `Ctrl+K S` is unhandled.
+    - *Root Cause*: In `ports/python/se/editor.py:162`, `KEY_CTRL_S`
+      unconditionally calls `self.action_save_file()`. There is no check for
+      `self.buffer.block_active > 0` and no `action_block_save()` routine.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.8, Section 10, and
+      `src/se.asm:1046-1052`.
+    - *Resolution*: Intercepted `KEY_CTRL_S` when `self.buffer.block_active > 0`
+      in `dispatch_key()` and implemented `action_block_save()` in `editor.py`
+      along with `save_block()` in `DocumentBuffer`, writing only highlighted
+      block lines and characters to target file while retaining active block
+      selection. Added `Ctrl+K S` prefix dispatch. Validated via
+      `test_block_active_save` in `test_editor.py`.
+  - [x] **Bug 2.7.35: Document Close (Ctrl+W) Unhandled in Editor Loop**:
+    - *Symptom*: Pressing `Ctrl+W` while editing a document is ignored. The
+      editor cannot close an open document back to the splash screen from the
+      active editor workspace. Furthermore, `action_close_file()` contains
+      reversed confirmation prompt logic and fails to transition to Splash.
+    - *Root Cause*: In `ports/python/se/editor.py`, `dispatch_key()` completely
+      omits a branch for `KEY_CTRL_W`. In addition, `action_close_file()`
+      prompts to discard edits rather than save them, and resets the buffer
+      without launching `action_splash_screen()`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.9 and Section 10.
+    - *Resolution*: Bound `KEY_CTRL_W` in `dispatch_key()` to
+      `action_close_file()`. Updated `action_close_file()` to conform to
+      Section 7.9: if clean, immediately closes to Splash; if modified,
+      presents canonical Tier 2 modal (`Save changes?`), routes `[Y]es` to
+      save before closing, `[N]o` to discard and close to Splash, and `[ESC]`
+      to cancel. Validated via `test_document_close_lifecycle` in
+      `test_editor.py`.
+  - [x] **Bug 2.7.36: Missing Startup SE.CFG Discovery & Geometry Default**:
+    - *Symptom*: Running `se` without `--config` never probes or loads `SE.CFG`
+      from current working directory or program directory. Additionally,
+      `Config.DEFAULT_SCREEN` defaults to `"80x24"` instead of canonical CP/M
+      default `"120X40"`.
+    - *Root Cause*: In `ports/python/se/__main__.py:67`, `editor.config.load()`
+      only executes if `args.config` is explicitly passed. In
+      `ports/python/se/config.py:15`, `DEFAULT_SCREEN = "80x24"`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 13.2, 13.3, and 14.1.
+    - *Resolution*: Updated `DEFAULT_SCREEN = "120X40"` as canonical CP/M
+      default. Implemented `discover_and_load()` in `Config` following priority
+      order (custom path, `./SE.CFG` in current working directory, and
+      program directory). Integrated discovery into `Editor.__init__()` and
+      `__main__.py` before terminal initialization and buffer creation.
+      Validated via `test_secfg_canonical_default_and_discovery` in
+      `test_config.py` and `test_editor_secfg_discovery_and_geometry_default`
+      in `test_editor.py`.
 
 ---
 

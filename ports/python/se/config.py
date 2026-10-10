@@ -4,6 +4,7 @@ Supports standard SE.CFG formats, defaults, and overrides.
 """
 
 import os
+import sys
 from typing import Dict, Optional, Tuple
 
 
@@ -12,7 +13,7 @@ class Config:
     Manages editor configuration settings compatible with SE.CFG.
     """
 
-    DEFAULT_SCREEN = "80x24"
+    DEFAULT_SCREEN = "120X40"
     DEFAULT_TAB_WIDTH = 8
     DEFAULT_FORMAT = "CPM"
     DEFAULT_MAX_LINES = "16K"
@@ -34,9 +35,9 @@ class Config:
     def screen_geometry(self) -> Tuple[int, int]:
         """Return (cols, rows) tuple corresponding to SCREEN setting."""
         val = self.get("SCREEN", self.DEFAULT_SCREEN).upper()
-        if val == "120X40":
-            return (120, 40)
-        return (80, 24)
+        if val == "80X24":
+            return (80, 24)
+        return (120, 40)
 
     @property
     def screen_cols(self) -> int:
@@ -140,3 +141,40 @@ class Config:
             return True
         except OSError:
             return False
+
+    def discover_and_load(
+        self, custom_path: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Probe and load SE.CFG according to canonical discovery priority:
+        1. Explicit custom path if provided.
+        2. Current working directory (./SE.CFG).
+        3. Program directory (location of SE package/executable).
+        Returns the path loaded, or None if no configuration file was found.
+        """
+        if custom_path:
+            norm_path = os.path.abspath(custom_path)
+            if os.path.isfile(norm_path) and self.load(norm_path):
+                return norm_path
+            return None
+
+        # Priority 1: Current working directory
+        cwd_cfg = os.path.abspath("SE.CFG")
+        if os.path.isfile(cwd_cfg) and self.load(cwd_cfg):
+            return cwd_cfg
+
+        # Priority 2: Program directory
+        prog_dir = os.path.dirname(os.path.abspath(__file__))
+        prog_cfg = os.path.join(prog_dir, "SE.CFG")
+        if os.path.isfile(prog_cfg) and self.load(prog_cfg):
+            return prog_cfg
+
+        # Fallback: check sys.argv[0] directory if different
+        if getattr(sys, "argv", None) and sys.argv and sys.argv[0]:
+            argv_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+            argv_cfg = os.path.join(argv_dir, "SE.CFG")
+            if os.path.isfile(argv_cfg) and self.load(argv_cfg):
+                return argv_cfg
+
+        return None
+
