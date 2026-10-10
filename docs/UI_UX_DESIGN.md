@@ -23,6 +23,14 @@ workstation or Raspberry Pi must encounter an identical visual aesthetic,
 identical screen geometry, identical modal lifecycles, and identical canonical
 keybindings.
 
+Keybinding Discipline & WordStar Diamond Deprecation:
+All SE implementations adhere strictly to the canonical keybinding matrix
+(Section 10). Directional navigation is provided exclusively by standard
+ANSI VT100 arrow keys and standard navigation shortcuts. Legacy WordStar
+diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly not
+supported across any surface or modal dialog to eliminate command collision
+with Save, Delete, End, and Cut.
+
 2. Terminal Architecture, Geometries & Character Budget
 --------------------------------------------------------------------------------
 1. Standard Screen Geometries:
@@ -249,6 +257,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
 
 3. Horizontal Navigation (Left, Right, Home, End) & Line Wrapping:
    Horizontal cursor movements update both `CUR_COL` and sticky `TARGET_COL`.
+   Directional movement is handled exclusively by ANSI VT100 arrow keys;
+   legacy WordStar diamond navigation (`Ctrl+S` left, `Ctrl+D` right) is
+   unsupported to prevent collisions with Save File and Forward Delete.
    - Cursor Left (`CURSOR_LEFT` / Arrow Left):
      - If `CUR_COL > 0`: `CUR_COL -= 1`.
      - If `CUR_COL == 0` and `CUR_DOC_ROW > 0`:
@@ -281,6 +292,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
 
 4. Vertical Navigation & Sticky Visual Column (`TARGET_COL`):
    Vertical cursor movement preserves `TARGET_COL` across line boundaries.
+   Directional movement is handled exclusively by ANSI VT100 arrow keys;
+   legacy WordStar diamond navigation (`Ctrl+E` up, `Ctrl+X` down) is
+   unsupported to prevent collisions with End of Line and Cut/Move Block.
    Clamping cursor position when passing through shorter lines does NOT mutate
    `TARGET_COL`, allowing the cursor to return to its original visual column
    when encountering subsequent longer lines.
@@ -705,6 +719,7 @@ or display notifications.
      Terminal cursor placed directly inside bracket field.
      Supports standard editing keys: character entry, Backspace (deletes left),
      Delete / Ctrl+D (deletes under cursor), Left/Right arrows, and Home/End.
+     WordStar diamond key mappings (e.g. `Ctrl+S` for left) are not supported.
      ```text
      +--------------------------------------------------+
      |                     Goto Line                    |
@@ -793,16 +808,20 @@ or display notifications.
 | `Left Arrow` | ANSI  | `KEY_LEFT`    | Move cursor Left one character      |
 | `Right Arrow`| ANSI  | `KEY_RIGHT`   | Move cursor Right one character     |
 
-> [!NOTE]
-> Architectural Decision on Navigation Keys:
+> [!IMPORTANT]
+> Architectural Policy on Navigation Keys & WordStar Diamond Deprecation:
 > Canonical SE mappings designate `Ctrl+S` for Save File, `Ctrl+D` for Delete
 > Forward, `Ctrl+E` for End of Line, and `Ctrl+X` for Cut/Move Block.
-> Directional cursor navigation across all variants is provided via standard
-> ANSI VT100 arrow keys (`Up`, `Down`, `Left`, `Right`) and standard motion
-> shortcuts (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G` Bottom).
-> WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is dropped
-> across CP/M and ported targets to eliminate command collision with Save,
-> Delete, End, and Cut.
+> Directional cursor navigation across all variants and surfaces is provided
+> exclusively via standard ANSI VT100 arrow keys (`Up`, `Down`, `Left`,
+> `Right`) and standard motion shortcuts (`Ctrl+A` Home, `Ctrl+E` End,
+> `Ctrl+T` Top, `Ctrl+G` Bottom, `Ctrl+U` PgUp, `Ctrl+V` PgDn).
+>
+> WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly
+> NOT supported anywhere in SE (including the Document Editor, Centered
+> Workspaces, Directory Browsers, and Tier 2 Modal Dialogs). Implementations
+> must never alias WordStar diamond keys to directional navigation, as doing
+> so creates fatal command collisions with Save, Delete, End, and Cut.
 
 1. Operational Descriptions for Deletion Keys:
    Canonical SE distinguishes between backward deletion, forward deletion, and
@@ -833,6 +852,24 @@ or display notifications.
      - Modal Input Dialogs (Archetype C): Deletes the character directly under
        the input cursor inside the bracket field `[  ]`, shifting trailing text
        left without moving the cursor index; blocked at end of input text.
+
+2. Operational Descriptions for Directional Navigation:
+   Directional navigation across all surfaces is performed exclusively with
+   standard VT100 ANSI arrow keys and dedicated motion shortcuts:
+   - `Up Arrow` (`KEY_UP`): Moves cursor up one row; realigns to sticky
+     `TARGET_COL`. Blocked at top of document.
+   - `Down Arrow` (`KEY_DOWN`): Moves cursor down one row; realigns to sticky
+     `TARGET_COL`. Blocked at bottom of document.
+   - `Left Arrow` (`KEY_LEFT`): Moves cursor left one column; wraps to previous
+     line at column 0. In modal input fields, shifts cursor index left.
+   - `Right Arrow` (`KEY_RIGHT`): Moves cursor right one column; wraps to next
+     line at end of line. In modal input fields, shifts cursor index right.
+   - Motion Shortcuts: `Ctrl+A` (Home / Start of input), `Ctrl+E` (End of line
+     / End of input), `Ctrl+T` (Top of document), `Ctrl+G` (Bottom of
+     document), `Ctrl+U` (Page Up), `Ctrl+V` (Page Down without active block).
+   - WordStar Prohibition: WordStar diamond navigation keys (`Ctrl+S`,
+     `Ctrl+D`, `Ctrl+E`, `Ctrl+X`) are strictly not supported for navigation
+     in any editor workspace or modal input dialog.
 
 11. The Ten UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
@@ -868,9 +905,13 @@ ten anti-patterns:
    - Drawing a child pop-up directly over an unhidden parent pop-up.
    - Remedy: Hide parent before showing child; redraw parent on child close.
 
-8. Legacy Hotkey Forms & Delimiters:
+8. Legacy Hotkey Forms & WordStar Aliasing:
    - Using `Y:Yes, N:No` forms or delimiters like `/` and `|` between choices.
-   - Remedy: Format options with brackets `[Y]es   [N]o` separated by spaces.
+   - Aliasing legacy WordStar diamond navigation keys (`^S`, `^D`, `^E`, `^X`)
+     to cursor movement in editor or modal input loops, colliding with Save,
+     Forward Delete, End of Line, and Cut.
+   - Remedy: Format options with brackets `[Y]es   [N]o` separated by spaces;
+     restrict directional navigation strictly to standard ANSI arrow keys.
 
 9. Non-ESC Cancellation & Status Pop-up Lock:
    - Using `Ctrl+C` or `q`/`Q` to cancel inputs, or requiring specific keys
