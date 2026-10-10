@@ -14,6 +14,7 @@ Part of SE.COM / Linux Native Profile (x86_64 and AArch64).
 import os
 import pty
 import select
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -112,7 +113,7 @@ def test_interactive_pty_startup():
         assert b"SE.COM" in captured or b"SE v1.1.0" in captured, (
             "Screen output missing expected editor banner"
         )
-        assert b"80x24 |" in captured, (
+        assert b"80x24 |" in captured or b"120x40 |" in captured, (
             "Splash screen missing universal status bar geometry anchor"
         )
         assert b"^K: Editor keys |" in captured, (
@@ -207,8 +208,8 @@ def test_status_bar_canonical_layout():
             assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
             out_str = output.decode("utf-8", errors="replace")
 
-            assert "80x24 |" in out_str, (
-                "Status bar missing '80x24 |' geometry field"
+            assert "80x24 |" in out_str or "120x40 |" in out_str, (
+                "Status bar missing '80x24 |' or '120x40 |' geometry field"
             )
             assert "Linux |" in out_str or "CPM   |" in out_str, (
                 "Status bar missing format indicator ('Linux |' or 'CPM   |')"
@@ -348,6 +349,11 @@ def test_arrow_and_wordstar_navigation():
 def test_horizontal_panning_and_line_barrier():
     """Verify horizontal pan quantum (+40) and 120-char line limit (§6)."""
     print("[*] Testing horizontal panning engine & line barrier (§6)...")
+    temp_dir = tempfile.mkdtemp()
+    cfg_file = os.path.join(temp_dir, "SE.CFG")
+    with open(cfg_file, "w") as f:
+        f.write("SCREEN=80X24\r\n")
+
     with tempfile.NamedTemporaryFile("w+", prefix="testdoc_pan_",
                                      suffix=".txt", delete=False) as tf:
         tf.write("\n")
@@ -357,6 +363,7 @@ def test_horizontal_panning_and_line_barrier():
         master, slave = pty.openpty()
         pid = os.fork()
         if pid == 0:
+            os.chdir(temp_dir)
             os.close(master)
             os.dup2(slave, 0)
             os.dup2(slave, 1)
@@ -416,6 +423,7 @@ def test_horizontal_panning_and_line_barrier():
             print("    [+] Horizontal pan & 120-char line limit verified "
                   "[PASS]")
     finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
         if os.path.exists(test_file_path):
             os.remove(test_file_path)
 
@@ -459,7 +467,7 @@ def test_tier1_centering_and_tilde_discipline():
         assert "~" in help_out, (
             "Help screen missing column 0 tilde margin discipline"
         )
-        assert "80x24 |" in help_out, (
+        assert "80x24 |" in help_out or "120x40 |" in help_out, (
             "Help screen missing universal status bar presence"
         )
 
@@ -1093,6 +1101,11 @@ def test_bug_2_4_15_sticky_target_col_and_tab_clamping():
 def test_bug_2_4_16_status_bar_field_invariance_and_visual_col():
     """Verify Field 4 invariance and Field 5 visual col reporting (2.4.16)."""
     print("[*] Testing status bar Field 4 invariance & visual col (2.4.16)...")
+    temp_dir = tempfile.mkdtemp()
+    cfg_file = os.path.join(temp_dir, "SE.CFG")
+    with open(cfg_file, "w") as f:
+        f.write("SCREEN=80X24\r\n")
+
     long_line = "\tABCDEF" + ("X" * 80) + "\nSecond line\n"
     with tempfile.NamedTemporaryFile("w+", prefix="testdoc_statbar_",
                                      suffix=".txt", delete=False) as tf:
@@ -1103,6 +1116,7 @@ def test_bug_2_4_16_status_bar_field_invariance_and_visual_col():
         master, slave = pty.openpty()
         pid = os.fork()
         if pid == 0:
+            os.chdir(temp_dir)
             os.close(master)
             os.dup2(slave, 0)
             os.dup2(slave, 1)
@@ -1171,6 +1185,7 @@ def test_bug_2_4_16_status_bar_field_invariance_and_visual_col():
             assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
             print("    [+] Status bar Field 4 invariance & visual col [PASS]")
     finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
         if os.path.exists(test_file_path):
             os.remove(test_file_path)
 
@@ -1259,6 +1274,140 @@ def test_bug_2_4_17_tier1_file_workspaces_and_directory_scan():
         print("    [+] Tier 1 file workspaces & dir scanning verified [PASS]")
 
 
+def test_bug_2_4_18_canonical_config_parser_and_serialization():
+    """Verify canonical SE.CFG parser, defaults and serialization (2.4.18)."""
+    print("[*] Testing canonical SE.CFG parser & serialization (2.4.18)...")
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # 1. Compile C unit test harness for config.c
+        harness_c = os.path.join(temp_dir, "test_config_harness.c")
+        harness_bin = os.path.join(temp_dir, "test_config_harness")
+        with open(harness_c, "w") as f:
+            f.write(
+                "#include <stdio.h>\n"
+                "#include <stdlib.h>\n"
+                "#include <string.h>\n"
+                "#include <assert.h>\n"
+                '#include "config.h"\n\n'
+                "int main(void) {\n"
+                "    /* 1. Defaults verification (§13.2) */\n"
+                "    config_init_defaults();\n"
+                "    assert(g_config.screen_mode == MODE_120X40);\n"
+                "    assert(g_config.tab_width == 8);\n"
+                "    assert(g_config.save_format == FMT_CPM);\n"
+                "    assert(g_config.lines_mode == 0);\n"
+                "    assert(g_config.ramdrive_mode == "
+                "RAMDRV_MODE_PROTECTED);\n"
+                "    assert(g_config.plugin_mode == "
+                "PLUGIN_MODE_AUTOLOAD);\n"
+                "    assert(g_config.auto_indent == 1);\n\n"
+                "    /* 2. Canonical parsing with comments & whitespace */\n"
+                '    const char *cfg_data =\n'
+                '        "# Canonical SE.CFG test\\r\\n"\n'
+                '        "; Semicolon comment line\\r\\n"\n'
+                '        "  SCREEN = 80X24  \\r\\n"\n'
+                '        "  TAB = 4  \\r\\n"\n'
+                '        "  FORMAT = LINUX  \\r\\n"\n'
+                '        "  LINES = 32K  \\r\\n"\n'
+                '        "  RAMDRIVE = HIB  \\r\\n"\n'
+                '        "  PLUGIN = DEMAND  \\r\\n"\n'
+                '        "  AUTO_INDENT = 0  \\r\\n";\n'
+                '    FILE *fp = fopen("TEST.CFG", "wb");\n'
+                "    assert(fp != NULL);\n"
+                "    fputs(cfg_data, fp);\n"
+                "    fclose(fp);\n"
+                '    assert(config_load_file("TEST.CFG") == 0);\n'
+                "    assert(g_config.screen_mode == MODE_80X24);\n"
+                "    assert(g_config.tab_width == 4);\n"
+                "    assert(g_config.save_format == FMT_LINUX);\n"
+                "    assert(g_config.lines_mode == 1);\n"
+                "    assert(g_config.ramdrive_mode == "
+                "RAMDRV_MODE_HIBERNATE);\n"
+                "    assert(g_config.plugin_mode == "
+                "PLUGIN_MODE_ONDEMAND);\n"
+                "    assert(g_config.auto_indent == 0);\n\n"
+                "    /* 3. Canonical serialization with CRLF */\n"
+                '    assert(config_save_file("TEST_OUT.CFG") == 0);\n'
+                "    return 0;\n"
+                "}\n"
+            )
+        compile_cmd = [
+            "cc", "-Wall", "-Wextra", "-Werror", "-O2",
+            "-Isrc/include",
+            harness_c,
+            "src/core/config.c",
+            "-o", harness_bin,
+        ]
+        res = subprocess.run(compile_cmd, cwd=PROJECT_DIR,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, f"Compilation failed:\n{res.stderr}"
+
+        # Run C harness inside temp_dir
+        run_res = subprocess.run([harness_bin], cwd=temp_dir,
+                                 capture_output=True, text=True)
+        assert run_res.returncode == 0, (
+            f"Config harness execution failed:\n{run_res.stderr}"
+        )
+
+        # Verify serialized file contents on disk
+        out_cfg_path = os.path.join(temp_dir, "TEST_OUT.CFG")
+        with open(out_cfg_path, "rb") as f:
+            content = f.read()
+
+        assert b"\r\n" in content, "Serialized CFG missing CRLF endings"
+        text = content.decode("ascii")
+        assert "SCREEN=80X24\r\n" in text, (
+            f"Missing SCREEN in output:\n{text}"
+        )
+        assert "TAB=4\r\n" in text, f"Missing TAB in output:\n{text}"
+        assert "FORMAT=LINUX\r\n" in text, f"Missing FORMAT in output:\n{text}"
+        assert "LINES=32K\r\n" in text, f"Missing LINES in output:\n{text}"
+        assert "RAMDRIVE=HIB\r\n" in text, (
+            f"Missing RAMDRIVE in output:\n{text}"
+        )
+        assert "PLUGIN=DEMAND\r\n" in text, (
+            f"Missing PLUGIN in output:\n{text}"
+        )
+        assert "AUTO_INDENT=0\r\n" in text, (
+            f"Missing AUTO_INDENT in output:\n{text}"
+        )
+
+        # 4. End-to-end integration test with se-linux
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            if os.path.exists("SE.CFG"):
+                os.remove("SE.CFG")
+            shutil.copyfile("TEST_OUT.CFG", "SE.CFG")
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            splash_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            # Verify status bar reflects loaded configuration
+            assert "80x24 |" in splash_out, (
+                f"Expected 80x24 geometry in status bar:\n{splash_out}"
+            )
+            assert "Linux |" in splash_out, (
+                f"Expected Linux format in status bar:\n{splash_out}"
+            )
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Canonical SE.CFG parser & serialization [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1283,6 +1432,7 @@ def main():
     test_bug_2_4_15_sticky_target_col_and_tab_clamping()
     test_bug_2_4_16_status_bar_field_invariance_and_visual_col()
     test_bug_2_4_17_tier1_file_workspaces_and_directory_scan()
+    test_bug_2_4_18_canonical_config_parser_and_serialization()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

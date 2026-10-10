@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 2 Defects Open (Bugs 2.4.18–2.4.19).
+- **Status**: Active / 1 Defect Open (Bug 2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -359,7 +359,7 @@ have been resolved and archived.
       scanning in `hal_linux_storage.c`. Validated via
       `test_bug_2_4_17_tier1_file_workspaces_and_directory_scan` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.18: Non-Canonical Configuration Parser & Serialization**:
+  - [x] **Bug 2.4.18: Non-Canonical Configuration Parser & Serialization**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 13.1, 13.2.
     - *Issue*: `src/core/config.c` uses non-canonical, case-sensitive key names
       (`TAB_WIDTH`, `LINES_MODE`, `SCREEN_MODE`, `SAVE_FMT`, `PLUGIN_MODE`)
@@ -370,9 +370,13 @@ have been resolved and archived.
       keys and values, does not ignore `;` comment lines, defaults `SCREEN` to
       `MODE_80X24` instead of canonical `120X40`, and serializes using
       non-canonical key names.
-    - *Required Fix*: Refactor `config.c` to parse canonical keys
-      case-insensitively, handle canonical symbolic values and comments,
-      default `SCREEN` to `120X40`, and serialize canonical `SE.CFG` format.
+    - *Resolution*: Implemented case-insensitive parsing of canonical keys and
+      symbolic values in `src/core/config.c`, stripped leading and trailing
+      whitespace, ignored `#` and `;` comment lines and empty lines, defaulted
+      `SCREEN` to `MODE_120X40`, and serialized configuration using canonical
+      key names, symbolic values, and CRLF (`\r\n`) endings. Validated via
+      `test_bug_2_4_18_canonical_config_parser_and_serialization` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.19: Panning Edge Trigger & Dynamic Geometry Adaptation**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6, 14.1.
     - *Issue*: In `src/core/editor.c:65-98` (`update_horizontal_pan`),
