@@ -70,8 +70,11 @@ void update_horizontal_pan(void)
 {
     uint16_t vis_col;
     uint16_t old_pan = g_horiz_pan_offset;
+    uint16_t view_width = g_active_cols ? g_active_cols : SCREEN_COLS_80;
+    uint16_t view_right;
 
-    if (g_config.screen_mode == MODE_120X40) {
+    /* If terminal accommodates maximum line limit (120 cols), no pan */
+    if (view_width >= MAX_LINE) {
         g_horiz_pan_offset = 0;
         if (old_pan != 0) {
             g_need_screen_render = 1;
@@ -81,17 +84,34 @@ void update_horizontal_pan(void)
     }
 
     vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+    view_right = g_horiz_pan_offset + view_width;
 
-    if (vis_col >= 120) {
-        g_horiz_pan_offset = 80;
-    } else if (vis_col >= 80) {
-        g_horiz_pan_offset = 40;
-    } else if (vis_col < 40) {
-        g_horiz_pan_offset = 0;
-    } else {
-        /* In range 40..79: hysteresis retention */
-        if (old_pan == 80) {
-            g_horiz_pan_offset = 40;
+    /* Canonical lookahead edge trigger per §6.6:
+     * When vis_col == VIEW_RIGHT_COL - 1 and active line continues beyond
+     * CUR_COL (character at CUR_COL and next character are non-null),
+     * pan viewport right by 40 columns.
+     */
+    if (vis_col == (view_right - 1) &&
+        g_cur_col < g_active_line_len &&
+        g_active_line_buf[g_cur_col] != '\0' &&
+        (g_cur_col + 1) < g_active_line_len &&
+        g_active_line_buf[g_cur_col + 1] != '\0') {
+        g_horiz_pan_offset += 40;
+        view_right = g_horiz_pan_offset + view_width;
+    }
+
+    /* Pan right: shift by +40 quanta until viewport contains vis_col */
+    while (vis_col >= view_right) {
+        g_horiz_pan_offset += 40;
+        view_right = g_horiz_pan_offset + view_width;
+    }
+
+    /* Pan left: retreat to multiple of 40 when cursor steps <= pan offset */
+    if (g_horiz_pan_offset > 0 && vis_col <= g_horiz_pan_offset) {
+        if (vis_col > 0) {
+            g_horiz_pan_offset = (uint16_t)(((vis_col - 1) / 40) * 40);
+        } else {
+            g_horiz_pan_offset = 0;
         }
     }
 

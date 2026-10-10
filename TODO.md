@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 1 Defect Open (Bug 2.4.19).
+- **Status**: Resolved / Production Ready (Bugs 2.4.1–2.4.19 Closed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -377,7 +377,7 @@ have been resolved and archived.
       key names, symbolic values, and CRLF (`\r\n`) endings. Validated via
       `test_bug_2_4_18_canonical_config_parser_and_serialization` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.19: Panning Edge Trigger & Dynamic Geometry Adaptation**:
+  - [x] **Bug 2.4.19: Panning Edge Trigger & Dynamic Geometry Adaptation**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6, 14.1.
     - *Issue*: In `src/core/editor.c:65-98` (`update_horizontal_pan`),
       horizontal panning lacks the canonical lookahead edge trigger: when
@@ -388,9 +388,14 @@ have been resolved and archived.
       `screen_mode == MODE_120X40`, ignoring dynamic terminal width
       (`g_active_cols`) and preventing panning on terminals with intermediate
       or non-standard column widths.
-    - *Required Fix*: Implement the lookahead edge trigger in
-      `update_horizontal_pan()` per Section 6.6 and dynamically compute
-      viewport boundaries against `g_active_cols`.
+    - *Resolution*: Implemented canonical lookahead edge trigger at
+      `view_right - 1` in `src/core/editor.c`, panning viewport right by 40
+      columns when line continues past cursor. Adapted horizontal panning
+      boundaries dynamically against `g_active_cols` and terminal width,
+      bypassing panning when terminal accommodates the 120-column line limit
+      and preserving hysteresis retention. Validated via
+      `test_bug_2_4_19_panning_edge_trigger_and_geometry` in
+      `tests/test_linux_native.py`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.

@@ -11,13 +11,16 @@ Validates:
 Part of SE.COM / Linux Native Profile (x86_64 and AArch64).
 """
 
+import fcntl
 import os
 import pty
 import select
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
+import termios
 import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1408,6 +1411,115 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_19_panning_edge_trigger_and_geometry():
+    """Verify lookahead pan edge trigger and dynamic geometry (2.4.19)."""
+    print("[*] Testing lookahead pan edge trigger & geometry (2.4.19)...")
+    temp_dir = tempfile.mkdtemp()
+    doc_path = os.path.join(temp_dir, "testdoc_edge.txt")
+    with open(doc_path, "w") as f:
+        f.write(("A" * 78) + "BCDEFGHIJKL\n")
+
+    try:
+        # Part 1: Canonical lookahead edge trigger at col 79 (§6.6)
+        master, slave = pty.openpty()
+        winsize80 = struct.pack("HHHH", 24, 80, 0, 0)
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, winsize80)
+
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", doc_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            init_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "80x24 |" in init_out, (
+                f"Expected 80x24 geometry in status bar:\n{init_out}"
+            )
+            assert "[Pan +40]" not in init_out, (
+                f"Unexpected pan at col 0:\n{init_out}"
+            )
+
+            # Move right 79 times to reach column 79
+            os.write(master, b"\x04" * 79)
+            time.sleep(0.3)
+            edge_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            # Active line has 90 chars; at col 79 both char 79 ('B') and
+            # char 80 ('C') are non-null -> lookahead triggers [Pan +40]
+            assert "[Pan +40]" in edge_out, (
+                f"Expected lookahead '[Pan +40]' at col 79:\n{edge_out}"
+            )
+
+            # Retreat back home via Ctrl+A (\x01) -> pan cleared
+            os.write(master, b"\x01")
+            time.sleep(0.2)
+            home_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[Pan +40]" not in home_out, (
+                f"Expected pan cleared at home col 0:\n{home_out}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        # Part 2: Dynamic geometry adaptation on wide terminal (§14.1)
+        master2, slave2 = pty.openpty()
+        winsize = struct.pack("HHHH", 40, 120, 0, 0)
+        fcntl.ioctl(slave2, termios.TIOCSWINSZ, winsize)
+
+        pid2 = os.fork()
+        if pid2 == 0:
+            os.chdir(temp_dir)
+            os.close(master2)
+            os.dup2(slave2, 0)
+            os.dup2(slave2, 1)
+            os.dup2(slave2, 2)
+            os.close(slave2)
+            os.execl(SE_LINUX_BIN, "se-linux", doc_path)
+        else:
+            os.close(slave2)
+            time.sleep(0.3)
+            init_wide = read_all_available(master2, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "120x40 |" in init_wide, (
+                f"Expected 120x40 geometry in status bar:\n{init_wide}"
+            )
+
+            # Move right 85 times: fits within 120 cols -> NO pan
+            os.write(master2, b"\x04" * 85)
+            time.sleep(0.3)
+            wide_out = read_all_available(master2, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[Pan +40]" not in wide_out, (
+                f"120-column terminal should not pan for 85 chars:\n{wide_out}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master2, b"\x11\n")
+            exit_code2 = wait_pid_with_timeout(pid2, 2.0)
+            os.close(master2)
+            assert exit_code2 == 0, f"Expected exit code 0, got {exit_code2}"
+
+        print("    [+] Lookahead pan edge trigger & geometry verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1433,6 +1545,7 @@ def main():
     test_bug_2_4_16_status_bar_field_invariance_and_visual_col()
     test_bug_2_4_17_tier1_file_workspaces_and_directory_scan()
     test_bug_2_4_18_canonical_config_parser_and_serialization()
+    test_bug_2_4_19_panning_edge_trigger_and_geometry()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

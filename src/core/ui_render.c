@@ -174,7 +174,7 @@ void render_status_bar(void)
              g_doc_modified ? '*' : ' ');
     snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
 
-    geom_str = (g_config.screen_mode == MODE_120X40) ? "120x40" : "80x24";
+    geom_str = (g_active_cols >= SCREEN_COLS_120) ? "120x40" : "80x24";
     snprintf(field2, sizeof(field2), " %s |", geom_str);
 
     fmt_str = (g_file_format == FMT_CPM) ? "CPM  " : "Linux";
