@@ -116,13 +116,14 @@ def test_ramdrive_detection_and_mem_screen(
         "\n[*] Test 1 & 2: RAM Drive Detection & Memory Map Screen on "
         "CP/M 3.1..."
     )
+    for f in ["0:SE.CFG", "0:RAMDRV.IMG", "0:PLUGIN.CFG"]:
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_3", img_file, f],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_3", img_file, "0:SE.CFG"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_3", img_file, "0:RAMDRV.IMG"],
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

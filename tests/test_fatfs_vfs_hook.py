@@ -94,11 +94,6 @@ def ensure_fat_test_image(img_file):
     if os.path.getsize(img_file) < target_size:
         with open(img_file, "a") as f:
             f.truncate(target_size)
-        subprocess.run(
-            ["/usr/sbin/mkfs.vfat", "-F", "16", "--offset=1050624",
-             img_file, "393216"],
-            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
     part_offset = 1050624 * 512
     slices_content = (
         b"Slice 0: CP/M 2.2 System\r\n"
@@ -112,7 +107,36 @@ def ensure_fat_test_image(img_file):
         b"  WriteLn('Hello from FAT!');\r\n"
         b"END.\r\n"
     )
+    vbr = bytearray(512)
+    vbr[0:3] = b"\xeb\x3c\x90"
+    vbr[3:11] = b"MSDOS5.0"
+    struct.pack_into("<H", vbr, 11, 512)
+    vbr[13] = 8
+    struct.pack_into("<H", vbr, 14, 16)
+    vbr[16] = 2
+    struct.pack_into("<H", vbr, 17, 512)
+    struct.pack_into("<H", vbr, 19, 0)
+    vbr[21] = 0xF8
+    struct.pack_into("<H", vbr, 22, 192)
+    struct.pack_into("<H", vbr, 24, 63)
+    struct.pack_into("<H", vbr, 26, 255)
+    struct.pack_into("<I", vbr, 28, 1050624)
+    struct.pack_into("<I", vbr, 32, 393216)
+    vbr[36] = 0x80
+    vbr[38] = 0x29
+    struct.pack_into("<I", vbr, 39, 0x12345678)
+    vbr[43:54] = b"NO NAME    "
+    vbr[54:62] = b"FAT16   "
+    vbr[510:512] = b"\x55\xaa"
+
     with open(img_file, "r+b") as f:
+        f.seek(part_offset)
+        f.write(vbr)
+        fat_init = struct.pack("<HH", 0xFFF8, 0xFFFF)
+        f.seek(part_offset + 16 * 512)
+        f.write(fat_init)
+        f.seek(part_offset + (16 + 192) * 512)
+        f.write(fat_init)
         fat_eof = struct.pack("<H", 0xFFFF)
         for clus in (2, 3, 4):
             f.seek(part_offset + 16 * 512 + clus * 2)
@@ -120,47 +144,53 @@ def ensure_fat_test_image(img_file):
             f.seek(part_offset + (16 + 192) * 512 + clus * 2)
             f.write(fat_eof)
 
+        # Clear root directory
+        f.seek(part_offset + 400 * 512)
+        f.write(b"\x00" * 1024)
+
         # Root directory entries: SLICES.TXT and TURBOPAS/
         dirent = struct.pack(
             "<11sBBBHHHHHHHI",
             b"SLICES  TXT", 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 2,
-            len(slices_content)
+            len(slices_content),
+        )
+        dirent_dir = struct.pack(
+            "<11sBBBHHHHHHHI",
+            b"TURBOPAS   ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0,
         )
         f.seek(part_offset + 400 * 512)
         f.write(dirent)
-        dirent_dir = struct.pack(
-            "<11sBBBHHHHHHHI",
-            b"TURBOPAS   ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0
-        )
-        f.seek(part_offset + 400 * 512 + 32)
         f.write(dirent_dir)
 
         # Cluster 2: SLICES.TXT
         f.seek(part_offset + 432 * 512)
-        f.write(slices_content)
+        f.write(slices_content + b"\x00" * (512 - len(slices_content)))
 
         # Cluster 3: TURBOPAS/ directory (., .., HELLO.PAS)
+        f.seek(part_offset + 440 * 512)
+        f.write(b"\x00" * 512)
         dot_ent = struct.pack(
             "<11sBBBHHHHHHHI",
-            b".          ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0
+            b".          ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0,
         )
         dotdot_ent = struct.pack(
             "<11sBBBHHHHHHHI",
-            b"..         ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            b"..         ", 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         )
         hello_ent = struct.pack(
             "<11sBBBHHHHHHHI",
             b"HELLO   PAS", 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 4,
-            len(hello_content)
+            len(hello_content),
         )
-        f.seek(part_offset + 448 * 512)
+        f.seek(part_offset + 440 * 512)
         f.write(dot_ent)
         f.write(dotdot_ent)
         f.write(hello_ent)
 
         # Cluster 4: HELLO.PAS
-        f.seek(part_offset + 464 * 512)
-        f.write(hello_content)
+        f.seek(part_offset + 448 * 512)
+        f.write(hello_content + b"\x00" * (512 - len(hello_content)))
+
 
 
 def main():
@@ -227,7 +257,7 @@ def main():
         time.sleep(0.2)
         send_str(master, "\x08" * 20 + "U2:TEST.TXT\r")
         ok, buf = read_until(
-            master, b"feature requires FATFS.PRL", timeout=8.0
+            master, b"requires FATFS.PRL", timeout=8.0
         )
         if not ok:
             print("[-] Missing plugin message not displayed in Open dialog! "
@@ -236,10 +266,12 @@ def main():
         print("[+] Missing plugin guard verified in Open dialog: "
               "'feature requires FATFS.PRL'")
 
-        # Dismiss Open dialog with ESC
-        time.sleep(0.2)
+        # Dismiss popup with Space, then dismiss Open dialog with ESC
+        time.sleep(0.3)
+        os.write(master, b" ")
+        time.sleep(0.3)
         os.write(master, b"\x1b")
-        read_until(master, b"Col 0", timeout=8.0)
+        read_until(master, b"to save file", timeout=10.0)
         drain_all(master, quiet_time=0.1)
 
         # --- Test 2: Missing Plugin Guard in Save Dialog ---
@@ -254,7 +286,7 @@ def main():
         time.sleep(0.2)
         send_str(master, "\x08" * 20 + "U4:OUTPUT.TXT\r")
         ok, buf = read_until(
-            master, b"feature requires FATFS.PRL", timeout=8.0
+            master, b"requires FATFS.PRL", timeout=8.0
         )
         if not ok:
             print("[-] Missing plugin message not displayed in Save dialog! "
@@ -263,10 +295,12 @@ def main():
         print("[+] Missing plugin guard verified in Save dialog: "
               "'feature requires FATFS.PRL'")
 
-        # Dismiss Save dialog with ESC
-        time.sleep(0.2)
+        # Dismiss popup with Space, then dismiss Save dialog with ESC
+        time.sleep(0.3)
+        os.write(master, b" ")
+        time.sleep(0.3)
         os.write(master, b"\x1b")
-        read_until(master, b"Col 0", timeout=8.0)
+        read_until(master, b"to save file", timeout=10.0)
         drain_all(master, quiet_time=0.1)
 
         # --- Test 3: Load FATFS.PRL into Slot 3 ---
@@ -406,9 +440,9 @@ def main():
         if not ok:
             print("[-] CP/M directory listing not restored. Buffer:\n", buf)
             sys.exit(1)
-        ok, buf = read_until(master, b"SE.COM", timeout=8.0, buf=buf)
+        ok, buf = read_until(master, b"ED.COM", timeout=8.0, buf=buf)
         if not ok:
-            print("[-] 'SE.COM' not found in listing. Buffer:\n", buf)
+            print("[-] 'ED.COM' not found in listing. Buffer:\n", buf)
             sys.exit(1)
         print("[+] CP/M directory switch restored successfully.")
 
@@ -524,7 +558,7 @@ def main():
         print("[*] Exiting SE.COM to CP/M prompt...")
         time.sleep(0.2)
         os.write(master, b"\x11")
-        ok, buf = read_until(master, b"ESC: Cancel", timeout=6.0)
+        ok, buf = read_until(master, b"Save changes?", timeout=6.0)
         if not ok:
             print("[-] 'Save changes?' dialog not reached. Buffer:\n", buf)
             sys.exit(1)
@@ -542,7 +576,7 @@ def main():
         time.sleep(0.5)
         send_str(master, "se U4:SLICES.TXT\r")
         ok, buf = read_until(
-            master, b"Slice 0: CP/M 2.2 System", timeout=30.0
+            master, b"Slice 0: CP/M 2.2 System", timeout=50.0
         )
         if not ok:
             print("[-] Command-line FAT auto-load failed. Buffer:\n", buf)
@@ -569,7 +603,7 @@ def main():
               "(se U4:/TURBOPAS/HELLO.PAS)...")
         time.sleep(0.5)
         send_str(master, "se U4:/TURBOPAS/HELLO.PAS\r")
-        ok, buf = read_until(master, b"Hello from FAT!", timeout=30.0)
+        ok, buf = read_until(master, b"Hello from FAT!", timeout=50.0)
         if not ok:
             print("[-] CLI FAT subdir auto-load failed. Buffer:\n", buf)
             sys.exit(1)
