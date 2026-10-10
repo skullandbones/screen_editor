@@ -450,6 +450,118 @@ content blocks rather than top-aligned text.
      [STATUS BAR AT ROW 24]
      ```
 
+5. File Open Workspace (`Ctrl+O` / `:o` from Splash):
+   - Full-screen Tier 1 directory browser listing files on current drive/user.
+   - Screen mode capacity:
+     - 80x24 mode: 5 columns x 12 rows (60 files/page), column width 15 chars.
+     - 120x40 mode: 7 columns x 28 rows (196 files/page), width 16 chars.
+   - Paging navigation via `<PgUp>` and `<PgDn>` when file count exceeds page.
+   - Visual Structure (80x24 Mode):
+     ```text
+     ~====================================================================
+     ~                      OPEN FILE (DIRECTORY - DRIVE A:)
+     ~====================================================================
+     ~  FILE1   .TXT    FILE2   .ASM    README  .DOC    TEST    .C
+     ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
+     ~
+     ~  [Page 1/2]  <PgUp>/<PgDn>=Page
+     ~--------------------------------------------------------------------
+     ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
+     ~  Enter filename to open: [ README.DOC           ]
+     ~
+     [STATUS BAR AT ROW 24]
+     ```
+
+6. File Insert Workspace (`Ctrl+O` with Active Block / `Ctrl+K R`):
+   - Invoked when block selection is active or via `Ctrl+K R` shortcut.
+   - Solidifies dynamic block bounds and opens directory browser in insert mode.
+   - Streams selected file content into document at cursor without replacing
+     existing document lines.
+   - Visual Structure (80x24 Mode):
+     ```text
+     ~====================================================================
+     ~                     INSERT FILE (DIRECTORY - DRIVE A:)
+     ~====================================================================
+     ~  HEADER  .INC    MACROS  .LIB    SNIPPET .ASM    TEST    .C
+     ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
+     ~
+     ~  [Page 1/1]  <PgUp>/<PgDn>=Page
+     ~--------------------------------------------------------------------
+     ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
+     ~  Enter filename to insert: [ HEADER.INC          ]
+     ~
+     [STATUS BAR AT ROW 24]
+     ```
+
+7. Save File Workspace (`Ctrl+S` / `:s` from Splash):
+   - Full-screen Tier 1 save workspace displaying directory contents, target
+     filename input box, and line ending format indicator.
+   - Line ending format toggle: Pressing `Ctrl+F` toggles between CP/M (`CRLF`)
+     and Linux (`LF`) formats.
+   - Pre-fills active filename if document already has an associated file.
+   - Visual Structure (80x24 Mode):
+     ```text
+     ~====================================================================
+     ~                      SAVE FILE (DIRECTORY - DRIVE A:)
+     ~====================================================================
+     ~  FILE1   .TXT    FILE2   .ASM    README  .DOC    TEST    .C
+     ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
+     ~
+     ~  Format: [CP/M]   [^F]=Toggle Format
+     ~--------------------------------------------------------------------
+     ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
+     ~  Enter filename to save: [ MYPROG.ASM          ]
+     ~
+     [STATUS BAR AT ROW 24]
+     ```
+
+8. Block Save Workspace (`Ctrl+S` with Active Block / `Ctrl+K S`):
+   - Invoked when block selection is active or via `Ctrl+K S` shortcut.
+   - Solidifies dynamic block bounds and opens save dialog in block mode.
+   - Writes only the highlighted block lines and characters to target file.
+   - Retains block selection state upon completion for subsequent editing.
+   - Visual Structure (80x24 Mode):
+     ```text
+     ~====================================================================
+     ~                     SAVE BLOCK (DIRECTORY - DRIVE A:)
+     ~====================================================================
+     ~  FILE1   .TXT    FILE2   .ASM    README  .DOC    TEST    .C
+     ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
+     ~
+     ~  Format: [CP/M]   [^F]=Toggle Format
+     ~--------------------------------------------------------------------
+     ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
+     ~  Enter filename to save: [ SNIPPET.TXT         ]
+     ~
+     [STATUS BAR AT ROW 24]
+     ```
+
+9. Document Close Lifecycle (`Ctrl+W` / `:w` from Splash):
+   - Closing an active document returns the user directly to the Tier 1
+     Splash Screen workspace.
+   - Clean Document (`DOC_MODIFIED == 0`):
+     Immediately closes the active file, frees working buffers, and displays
+     the Splash Screen workspace without prompting.
+   - Modified Document (`DOC_MODIFIED == 1`):
+     Intercepts close and presents a Tier 2 Centered Boxed Modal Pop-up
+     querying whether to save unsaved modifications:
+     ```text
+     +--------------------------------------------------+
+     |              Unsaved Modifications               |
+     +--------------------------------------------------+
+     |   Any unsaved edits will be lost if discarded.   |
+     |                  Save changes?                   |
+     |                                                  |
+     |        [Y]es      [N]o      [ESC]=Cancel         |
+     +--------------------------------------------------+
+     ```
+     - Response `[Y]es`: Transitions to Save File workspace to write changes,
+       then closes document to Splash Screen.
+     - Response `[N]o`: Discards unsaved modifications and closes document to
+       Splash Screen.
+     - Response `[ESC]=Cancel`: Cancels close request and returns directly to
+       the active editor workspace with document state intact.
+
 8. Tier 2 Centered Boxed Modal Pop-ups
 --------------------------------------------------------------------------------
 Modal pop-ups appear centered over the active screen surface to request input
@@ -700,3 +812,123 @@ design and look-and-feel compliance:
 4. Buffer Capacity & Scratch Isolation Audit:
    - Ensure `SCRATCH_BUF` and local formatting buffers have adequate capacity
      for the maximum formatted string length plus null terminator.
+
+13. SE.CFG Configuration System & Canonical Defaults (SE.COM CP/M)
+--------------------------------------------------------------------------------
+The persistent configuration file `SE.CFG` defines startup settings, memory
+allocations, screen mode, tab stops, and subsystem behaviors.
+
+1. Configuration File Format:
+   - Plain ASCII text with key-value pairs formatted as `KEY=VALUE`.
+   - Keys are case-insensitive (`SCREEN`, `Screen`, `screen`).
+   - Leading and trailing whitespace around keys and values are ignored.
+   - Lines beginning with `#` or `;` are treated as comments and ignored.
+   - Blank lines are ignored.
+   - Stored on disk using standard CP/M CRLF line endings (`\r\n`).
+
+2. Canonical CP/M Defaults in SE.COM:
+   | Parameter | Default | Values | Description |
+   | :--- | :--- | :--- | :--- |
+   | `SCREEN` | `120X40` | `80X24`, `120X40` | Screen geometry mode |
+   | `TAB` | `8` | `4`, `8` | Tab stop spacing |
+   | `FORMAT` | `CPM` | `CPM`, `LINUX` | File line ending mode |
+   | `LINES` | `16K` | `16K`, `32K` | Document line ceiling |
+   | `RAMDRIVE` | `PRESERVE` | `PRESERVE`, `ON`, `HIB` | Far RAM bank usage |
+   | `PLUGIN` | `AUTOLOAD` | `AUTO`, `DEMAND`, `OFF` | Plugin loading mode |
+
+   - `SCREEN` (Default: `120X40`):
+     Geometry mode in `config.inc` (`MODE_120X40` = 0). On classic 80-column
+     CRT/terminals, `80X24` (`MODE_80X24` = 1) is selected.
+   - `TAB` / `TABS` (Default: `8`):
+     Tab stop column interval (`4` or `8`). In `se.asm`, default is 8
+     (`CFG_TAB_WIDTH = 8`, mask = 7).
+   - `FORMAT` (Default: `CPM`):
+     Default line ending format for new documents (`CPM` = CRLF `0x0D, 0x0A`,
+     `LINUX` = LF `0x0A`).
+   - `LINES` / `MAXLINES` (Default: `16K`):
+     Maximum document line pointer table capacity (`16K` = 16,384 lines,
+     `32K` = 32,768 lines).
+   - `RAMDRIVE` / `RAMDISK` (Default: `PRESERVE`):
+     Far RAM banking discipline:
+     - `PRESERVE` (`0`): Preserves RomWBW RAM disk banks 0x81..0x88.
+     - `ON` (`1`): Uses all 12 Far RAM banks (384 KB) for editor buffer heap.
+     - `HIBERNATE` (`2`): Automatically dumps RAM disk to `RAMDRV.IMG` on
+       startup and restores on exit.
+   - `PLUGIN` / `PLUGINS` (Default: `AUTOLOAD`):
+     Plugin subsystem dispatch:
+     - `AUTOLOAD` (`1`): Automatically loads `PLUGIN.PRL` at boot.
+     - `ONDEMAND` (`2`): Loads `PLUGIN.PRL` on demand when a plugin is invoked.
+     - `DISABLED` (`0`): Plugin manager completely disabled.
+
+3. Discovery & Persistence Rules:
+   - Loading Priority:
+     1. Probes the current logged-in default drive first (`0:SE.CFG`).
+     2. If not found on default drive, probes the program drive where `SE.COM`
+        was executed.
+     3. If no `SE.CFG` exists on either drive, internal hardcoded defaults
+        are activated.
+   - Saving Destination:
+     - Saving configuration (via Configuration Manager `[S]` or programmatic
+       save) always writes to the current logged-in default drive (`SE.CFG`),
+       preserving the program directory's template file if launched from a
+       shared drive.
+
+14. Cross-Platform Implementation Differences & Hardware Adaptation
+--------------------------------------------------------------------------------
+While cross-platform ports must preserve 100% visual and behavioral parity
+with canonical `SE.COM`, hardware and operating system differences require
+specific architectural adaptations.
+
+1. Terminal Dimensions & Dynamic Resizing:
+   - CP/M Fixed Geometries:
+     8-bit CP/M systems communicate with physical CRT or serial terminals having
+     fixed screen dimensions (classic `80x24` VT100 / Wyse / Kaypro or `120x40`
+     wide console). Screen modes are switched via escape sequences or hardware
+     switchers.
+   - Modern Native Terminal Dimensions:
+     Modern POSIX, Linux, macOS, and container environments run inside
+     dynamically resizable terminal emulators (e.g. `xterm`, `tmux`, `kitty`,
+     `alacritty`, `gnome-terminal`).
+   - Implementation Adaptation:
+     - Native ports (C, Python, Rust) query actual terminal dimensions on
+       startup via `ioctl(TIOCGWINSZ)` or standard libraries (e.g.
+       `os.get_terminal_size()`) instead of being constrained strictly to
+       120x40 or 80x24.
+     - Universal Status Bar is dynamically anchored to `Row == HOST_ROWS`.
+     - Centered workspaces (Splash, Help, Configuration Manager, File
+       browsers) recalculate top and left padding dynamically using:
+       `TopRow = max(1, ((HOST_ROWS - 1 - ContentHeight) // 2) + 1)`
+       `LeftCol = max(2, ((HOST_COLS - ContentWidth) // 2) + 1)`
+     - Horizontal viewport panning adapts its right edge threshold to
+       `view_cols = HOST_COLS`.
+     - Explicit fixed geometry emulation (`80x24` or `120x40`) can still be
+       selected via `SE.CFG` (`SCREEN=80x24`) to reproduce retro CRT fidelity.
+
+2. Native Filesystem Differences vs. CP/M:
+   - CP/M Flat Drive/User Namespace:
+     CP/M BDOS organizes storage into drive letters (`A:`..`P:`) and user
+     areas (`0`..`15`) containing 8.3 uppercase filenames. There are no
+     hierarchical subdirectories.
+   - Host POSIX Hierarchical Filesystems:
+     Linux and modern OSes use hierarchical directory trees (`/path/to/dir`),
+     case-sensitive long filenames, symlinks, and arbitrary path extensions.
+   - File Selection UI Adaptation:
+     - Native ports adapt the canonical Open/Save directory browser interface
+       to support navigating hierarchical paths or entering host paths while
+       retaining identical visual styling (double horizontal rules, tildes,
+       bracketed inputs).
+     - Status bar and title bars display truncated or normalized relative
+       pathnames to respect character budgets and prevent line spill.
+
+3. Foreign Filesystems via Modular Plugins:
+   - Different platforms operate on different native filesystems, but foreign
+     filesystems are supported across all architectures via modular plugins:
+     - CP/M FAT Plugin (`FATFS.PRL` / `FAT12.PRL`):
+       Enables 8-bit CP/M systems to mount and browse FAT12, FAT16, and FAT32
+       partitions on SD cards, CompactFlash, or IDE hard disks via RomWBW.
+       Maps foreign volumes to virtual drives (e.g. `U0:/SUBDIR/FILE.TXT`) with
+       directory browsing and file loading directly inside SE.
+     - Native Host Plugins (Retro VFS):
+       On modern platforms (Linux, macOS), plugins can mount virtual CP/M disk
+       images (`.DSK`, `.IMG`), retro archives (`.LBR`, `.ARK`), or remote
+       VFS streams, rendering them through SE's canonical directory browser.
