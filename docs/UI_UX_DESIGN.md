@@ -895,6 +895,21 @@ or display notifications.
      `Ctrl+D`, `Ctrl+E`, `Ctrl+X`) are strictly not supported for navigation
      in any editor workspace or modal input dialog.
 
+3. Escape Sequence Tokenization & Leakage Prevention:
+   - Atomic Escape Sequence Parsing:
+     All terminal implementations (CP/M BIOS, Linux POSIX stdin, Next)
+     must discretely tokenize multi-byte escape sequences (e.g. `\x1b[A`,
+     `\x1b[B`, `\x1b[C`, `\x1b[D`, `\x1b[1~`..`\x1b[6~`, `\x1bOA`..`\x1bOF`).
+   - Anti-Leakage Invariant:
+     When an escape sequence begins with `ESC` followed by `[` or `O`, the HAL
+     input decoder must wait with sufficient timeout to assemble the
+     entire sequence. If an incomplete or unrecognized escape sequence is
+     received, the HAL must drain and discard all sequence bytes
+     atomically. Under NO circumstances may trailing sequence characters
+     (such as `'C'` from `\x1b[C`) be leaked back into the console stream as
+     regular typed keystrokes, as doing so erroneously triggers hotkeys
+     (e.g. Configuration Manager on `'C'`) or corrupts text buffers.
+
 11. The Ten UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
 Port authors and maintainers must audit all visual routines against these
