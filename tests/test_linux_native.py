@@ -706,6 +706,53 @@ def test_bug_2_4_9_splash_screen_commands():
         print("    [+] Splash screen command matrix verified [PASS]")
 
 
+def test_bug_2_4_10_burst_escape_sequences():
+    """Verify rapid burst escape sequences parse discretely (Bug 2.4.10)."""
+    print("[*] Testing rapid burst escape sequences (Bug 2.4.10)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_burst_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("Line 1: 1234567890\nLine 2: 1234567890\nLine 3: 1234567890\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Send Down, Down, Right, Right in a single burst write
+            burst_nav = b"\x1b[B\x1b[B\x1b[C\x1b[C"
+            os.write(master, burst_nav)
+            time.sleep(0.3)
+            output = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            # Expect cursor moved to Line 3, Col 2
+            assert "Line    3/3" in output and "Col 2" in output, (
+                f"Burst arrow navigation failed:\n{output}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Rapid burst escape sequences verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -722,6 +769,7 @@ def main():
     test_modal_archetypes_and_framing()
     test_bug_2_4_8_modal_dispatchers()
     test_bug_2_4_9_splash_screen_commands()
+    test_bug_2_4_10_burst_escape_sequences()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

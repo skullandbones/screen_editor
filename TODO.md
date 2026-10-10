@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 10 Defects Open (Bugs 2.4.10–2.4.19).
+- **Status**: Active / 9 Defects Open (Bugs 2.4.11–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -234,16 +234,19 @@ have been resolved and archived.
       `1` (120x40), `2` (80x24), and `:q` (exit), ignoring unregistered keys.
       Validated via `test_bug_2_4_9_splash_screen_commands` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
+  - [x] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, the 30ms polling read
       loop reads up to 6 bytes into a single buffer. Rapid consecutive escape
       sequences (e.g. arrow navigation `\x1b[D\x1b[D\x1b[D`) are clumped into
       `seq`, causing CSI pattern match (`seq_len == 2`) to fail, defaulting to
       `KEY_ESC`, and corrupting cursor navigation.
-    - *Required Fix*: Process escape sequences discretely with a single CSI/SS3
-      token parser or token FIFO buffer so back-to-back escape sequences are
-      decoded without drops or clumping.
+    - *Resolution*: Implemented discrete byte FIFO queue and lookahead
+      tokenization in `src/hal/linux/hal_linux_keyboard.c`, decoding ANSI CSI
+      and SS3 escape sequences byte-by-byte with precise 30ms inter-byte timeout
+      and unget support. Rapid burst escape sequences parse discretely without
+      clumping. Validated via `test_bug_2_4_10_burst_escape_sequences` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2.
     - *Issue*: In `src/core/block.c`, `g_block_active_row` and
