@@ -317,8 +317,8 @@ void cursor_up(void)
             g_top_doc_row = g_cur_doc_row;
             g_need_screen_render = 1;
         }
-        g_need_status_render = 1;
     }
+    g_need_status_render = 1;
 }
 
 void cursor_down(void)
@@ -333,8 +333,8 @@ void cursor_down(void)
             g_top_doc_row = g_cur_doc_row - vis_lines + 1;
             g_need_screen_render = 1;
         }
-        g_need_status_render = 1;
     }
+    g_need_status_render = 1;
 }
 
 void cursor_left(void)
@@ -342,7 +342,6 @@ void cursor_left(void)
     if (g_cur_col > 0) {
         g_cur_col--;
         g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
-        g_need_status_render = 1;
     } else if (g_cur_doc_row > 0) {
         commit_active_line();
         g_cur_doc_row--;
@@ -353,8 +352,8 @@ void cursor_left(void)
             g_top_doc_row = g_cur_doc_row;
             g_need_screen_render = 1;
         }
-        g_need_status_render = 1;
     }
+    g_need_status_render = 1;
 }
 
 void cursor_right(void)
@@ -363,7 +362,6 @@ void cursor_right(void)
     if (g_cur_col < g_active_line_len) {
         g_cur_col++;
         g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
-        g_need_status_render = 1;
     } else if (g_cur_doc_row + 1 < g_doc_total_lines) {
         uint8_t vis_lines = g_active_rows ? (g_active_rows - 1) : 23;
         commit_active_line();
@@ -375,8 +373,8 @@ void cursor_right(void)
             g_top_doc_row = g_cur_doc_row - vis_lines + 1;
             g_need_screen_render = 1;
         }
-        g_need_status_render = 1;
     }
+    g_need_status_render = 1;
 }
 
 void cursor_home(void)

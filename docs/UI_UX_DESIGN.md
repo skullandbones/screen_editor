@@ -336,6 +336,12 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - If `CUR_DOC_ROW >= TOP_DOC_ROW + step`:
        `TOP_DOC_ROW = min(max_row, TOP_DOC_ROW + step)`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
+   - Boundary Clamping Status Bar Refresh:
+     - Cursor navigation movements (Arrow Up, Down, Left, Right, Home, End,
+       Page Up, Page Down) unconditionally set `NEED_STATUS_RENDER = 1`.
+     - Even when movement is clamped at document boundaries (e.g. Line 0,
+       EOF, Col 0, EOL at EOF), the status bar is refreshed upon console
+       idle to synchronize terminal state with the active position.
 
 5. Viewport Window Scrolling & Boundary Constraints:
    - Document Viewport Boundaries:
