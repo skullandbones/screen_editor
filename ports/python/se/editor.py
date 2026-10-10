@@ -133,13 +133,7 @@ class Editor:
         elif key == KEY_DELETE or key == KEY_CTRL_D:
             self.buffer.delete_char()
         elif key == KEY_TAB:
-            # Expand tab to spaces based on config tab width and visual col
-            vis_c = self.buffer.get_visual_col()
-            spaces = self.config.tab_width - (
-                vis_c % self.config.tab_width
-            )
-            for _ in range(spaces):
-                self.buffer.insert_char(" ")
+            self.buffer.insert_char("\t")
 
         # 3. Block Selection & Clipboard
         elif key == KEY_CTRL_B:

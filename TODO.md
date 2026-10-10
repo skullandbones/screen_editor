@@ -642,7 +642,7 @@ have been resolved and archived.
       using `buf.get_visual_col()` so that cursor position aligns with screen
       visual column coordinates across tabs. Validated via
       `test_status_bar_field5_visual_col_across_tabs` in `test_editor.py`.
-  - [ ] **Bug 2.7.30: Tab Key Intercept Replaces Tab Bytes with Spaces**:
+  - [x] **Bug 2.7.30: Tab Key Intercept Replaces Tab Bytes with Spaces**:
     - *Symptom*: Pressing `Tab` in the editor inserts multiple ASCII spaces
       (`0x20`) instead of inserting a literal ASCII `0x09` (`KEY_TAB`) byte into
       the document line buffer. Documents edited in `se-py` lose tab character
@@ -653,10 +653,11 @@ have been resolved and archived.
       stored as literal byte `0x09` in buffer space.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.2 ("In-Memory Storage")
       and canonical `SE.COM` (`src/se.asm:1420` `DO_TAB_INSERT`).
-    - *Resolution Plan*: Update `editor.py` so `KEY_TAB` calls
+    - *Resolution*: Updated `editor.py` so `KEY_TAB` calls
       `self.buffer.insert_char("\t")`, preserving literal `0x09` tab bytes in
       the line buffer while letting the discrete tab traversal engine handle
-      visual leaping. Validate via `test_editor.py`.
+      visual leaping. Validated via `test_tab_key_inserts_literal_tab_byte` in
+      `test_editor.py`.
   - [ ] **Bug 2.7.31: Sticky Target Column Corrupted on Delete and Paste**:
     - *Symptom*: Forward deleting a character under cursor (`Ctrl+D` / `Delete`)
       does not synchronize sticky `target_col`. Pasting clipboard text

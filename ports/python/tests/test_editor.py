@@ -828,6 +828,28 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_tab_key_inserts_literal_tab_byte(self):
+        """Step 23: Verify Tab key inserts literal tab byte (Bug 2.7.30)."""
+        print(
+            "[*] Step 23: Testing Tab key inserts literal tab byte 0x09...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Hello"]
+        self.editor.buffer.cursor_col = 5
+        self.editor.buffer.tab_width = 4
+
+        self.editor.dispatch_key(KEY_TAB)
+
+        self.assertEqual(self.editor.buffer.lines[0], "Hello\t")
+        self.assertEqual(self.editor.buffer.cursor_col, 6)
+        self.assertEqual(self.editor.buffer.get_visual_col(), 8)
+        self.assertEqual(self.editor.buffer.target_col, 8)
+
+        print(
+            "[+] Step 23: Tab key inserts literal tab byte 0x09 verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
