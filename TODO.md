@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / Look & Feel Conformance Audit.
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.31 Closed).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -518,6 +518,161 @@ have been resolved and archived.
       `editor.py` conforming to Tier 1 centered workspace layout, column 0
       tilde discipline, and canonical dismissal prompt. Validated via
       `test_about_and_mem_info_workspaces` in `test_editor.py`.
+  - [x] **Bug 2.7.21: Missing 3-Coordinate Space & Tab Traversal Engine**:
+    - *Symptom*: When files containing literal tab (`\t` / `0x09`) characters
+      are loaded, text lines wrap unpredictably, the terminal expands tabs
+      using hardware tab stops (8) instead of configured tab width (4/8),
+      and the hardware cursor is severely desynchronized from the text.
+    - *Root Cause*: `DocumentBuffer` and `UIRenderer` lack the canonical
+      3-coordinate system (Buffer Space `CUR_COL`, Visual Space `VisualCol`,
+      Screen Space `ScreenCol`) and `calc_visual_col()` mapping specified in
+      `docs/UI_UX_DESIGN.md` §6.1–§6.2. `ui.py` slices lines by raw byte index,
+      emits raw `\t` bytes to the terminal, and places cursor using raw
+      `cursor_col`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, 6.7.
+    - *Resolution*: Implemented `calc_visual_col()` and `expand_tabs_visual()`
+      in `buffer.py` and `ui.py`. Expanded tabs into spaces during line
+      rendering, pinned cursor navigation to discrete tab boundaries, and
+      synchronized terminal screen cursor column to visual space. Validated via
+      `test_tab_traversal_and_coordinates` in `test_buffer.py`.
+  - [x] **Bug 2.7.22: Vertical Navigation Target Column Tab Misalignment**:
+    - *Symptom*: Navigating vertically (`Up`, `Down`, `PageUp`, `PageDown`)
+      across lines containing tab characters causes the cursor to jump
+      erratically to incorrect columns on adjacent lines.
+    - *Root Cause*: `move_up()`, `move_down()`, `page_up()`, and `page_down()`
+      in `buffer.py` set `cursor_col = min(target_col, len(current_line))`
+      where `target_col` stores a raw character index rather than sticky visual
+      column coordinates.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.4.
+    - *Resolution*: Implemented `adjust_col_to_target()` in `buffer.py`
+      conforming to Section 6.4 algorithm, preserving `target_col` sticky
+      visual coordinates across `move_up()`, `move_down()`, `page_up()`, and
+      `page_down()`. Validated via `test_vertical_navigation_sticky_col` in
+      `test_buffer.py`.
+  - [x] **Bug 2.7.23: Ctrl+D Mapped to Cursor Right Instead of Forward Delete**:
+    - *Symptom*: Pressing `Ctrl+D` moves cursor one position to the right
+      instead of deleting the character forward under the cursor.
+    - *Root Cause*: In `editor.py:105`, `KEY_CTRL_D` is bound alongside
+      `KEY_RIGHT` (`elif key == KEY_RIGHT or key == KEY_CTRL_D:`). Similarly,
+      `modal.py` binds `KEY_CTRL_D` to move right.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 10 Keybinding Table and
+      Architectural Decision Note.
+    - *Resolution*: Rebound `KEY_CTRL_D` in `editor.py` to
+      `self.buffer.delete_char()` (forward delete), removed `KEY_CTRL_D` from
+      `KEY_RIGHT` navigation in `editor.py` and `modal.py`, and bound
+      `KEY_CTRL_D` to forward delete in modal input loops. Validated via
+      `test_ctrl_d_forward_delete` in `test_editor.py`.
+  - [x] **Bug 2.7.24: Tier 2 Modal Dialog Width Non-Conformance (50 cols)**:
+    - *Symptom*: Tier 2 confirmation query modals (`show_confirm`), text input
+      modals (`show_input`), and Find dialogs (`show_find_dialog`) are 50
+      columns wide with 48-hyphen borders instead of canonical 52 columns.
+    - *Root Cause*: `width = 50` is hard-coded in `modal.py` (lines 101, 144,
+      219).
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 8.3
+      (Archetypes B, C, D).
+    - *Resolution*: Standardized Tier 2 modal box width to canonical 52
+      columns (`width = 52`, 50-hyphen borders) across `show_confirm`,
+      `show_input`, `show_find_dialog`, and `show_notification` in `modal.py`.
+      Validated via `test_tier2_modal_52_col_width` in `test_editor.py`.
+  - [x] **Bug 2.7.25: Help Workspace Height & Obsolete WordStar Text**:
+    - *Symptom*: Help screen (`Ctrl+K`) renders 14 lines instead of canonical
+      17 lines and displays obsolete text `Arrows / WordStar (^S,^D,^E,^X)`
+      despite WordStar diamond navigation being dropped.
+    - *Root Cause*: `action_help()` in `editor.py` uses legacy 14-line text
+      containing obsolete WordStar navigation references.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.3 and Section 10.
+    - *Resolution*: Updated `action_help()` in `editor.py` to canonical
+      17-line by 70-column layout conforming to Section 7.3, displaying
+      `Arrows / ANSI VT100` with all WordStar references purged. Validated via
+      `test_help_workspace_canonical_dimensions_and_keys` in `test_editor.py`.
+  - [x] **Bug 2.7.26: Horizontal Pan Left Boundary Edge & Lookahead Defect**:
+    - *Symptom*: When horizontal pan is active (`[Pan +40]`), moving cursor
+      left to column 40 fails to reset the viewport back to column 0.
+      Additionally, editing at column 79 on lines extending past column 79 does
+      not trigger lookahead pan.
+    - *Root Cause*: `update_pan()` in `buffer.py` uses strict inequality
+      `elif self.cursor_col < 40: self.pan_col = 0` rather than inclusive
+      boundary `vis_col <= 40`, and lacks the lookahead edge trigger for active
+      lines extending past column 79.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
+    - *Resolution*: Updated `update_pan()` in `buffer.py` to implement canonical
+      `ADJUST_HORIZ_VIEWPORT` logic, ensuring retreat to `vis_col <= 40` resets
+      `pan_col` to 0, clamping `calc_visual_col` to `MAX_LINE_LENGTH`, and
+      triggering lookahead pan when cursor rests at `VIEW_RIGHT_COL - 1`
+      on lines extending beyond column 79. Validated via
+      `test_horizontal_pan_left_boundary_and_lookahead` in `test_buffer.py`.
+  - [x] **Bug 2.7.27: Terminal Startup Screen Clear & Mode Reset Defect**:
+    - *Symptom*: Launching `se-py` fails to clear the terminal screen or reset
+      rendition attributes. Pre-existing shell text or scrollback remains
+      visible behind centered workspaces and in empty margin rows.
+    - *Root Cause*: In `ports/python/se/editor.py:78` (`run()`), only
+      `self.terminal.enter_raw_mode()` is invoked. The mandatory startup
+      `TERM_INIT` sequence (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`) is never emitted
+      prior to displaying the initial workspace.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 2.5 and Section 12.1.
+    - *Resolution*: Implemented `term_init()` in `terminal.py` emitting
+      `\x1b[0m\x1b[?25h\x1b[2J\x1b[H`, and invoked `self.terminal.term_init()`
+      in `editor.run()` before rendering workspaces. Validated via
+      `test_startup_term_init_clears_screen` in `test_editor.py`.
+  - [x] **Bug 2.7.28: Missing Exit Screen Clear and Canonical Exit Banner**:
+    - *Symptom*: Quitting `se-py` leaves dirty viewport contents and status bar
+      text on the terminal without clearing the display or emitting the exit
+      message banner. The host shell prompt appears misplaced on the screen.
+    - *Root Cause*: In `ports/python/se/editor.py:100` (`finally:
+      self.terminal.exit_raw_mode()`), `exit_raw_mode()` restores termios mode
+      and cursor visibility, but never clears the terminal screen and never
+      emits the canonical exit message string.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 2.5 and Section 12.1.
+    - *Resolution*: Implemented `term_exit()` in `terminal.py` which emits
+      `term_init()` screen clear (`\x1b[2J\x1b[H`), prints canonical exit
+      banner `\r\nExiting SE. Returned to OS prompt.\r\n`, and restores cursor,
+      invoking it in `editor.run()` finally block. Validated via
+      `test_editor.py` and PTY exit assertion in `test_headless.py`.
+  - [x] **Bug 2.7.29: Status Bar Field 5 Shows Raw Col Across Tabs**:
+    - *Symptom*: When the cursor is located on a line containing tab characters,
+      Field 5 of the universal status bar displays the raw buffer byte offset
+      rather than the document visual column (e.g. `Col 1` instead of `Col 4`
+      when resting immediately after a tab stop).
+    - *Root Cause*: In `ports/python/se/ui.py:77` (`render_status_bar()`),
+      `cur_col = buf.cursor_col` formats raw buffer byte offset into
+      `pos_field` instead of formatting `buf.get_visual_col()`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3 and Section 6.2;
+      `src/core/ui_render.asm:1308` (`CALL CALC_VISUAL_COL`).
+    - *Resolution*: Updated `render_status_bar()` in `ui.py` to format Field 5
+      using `buf.get_visual_col()` so that cursor position aligns with screen
+      visual column coordinates across tabs. Validated via
+      `test_status_bar_field5_visual_col_across_tabs` in `test_editor.py`.
+  - [x] **Bug 2.7.30: Tab Key Intercept Replaces Tab Bytes with Spaces**:
+    - *Symptom*: Pressing `Tab` in the editor inserts multiple ASCII spaces
+      (`0x20`) instead of inserting a literal ASCII `0x09` (`KEY_TAB`) byte into
+      the document line buffer. Documents edited in `se-py` lose tab character
+      semantics and cannot contain true tabs.
+    - *Root Cause*: In `ports/python/se/editor.py:133-140`, `KEY_TAB` is
+      intercepted to calculate spaces to the next tab stop and inserts spaces
+      via `insert_char(" ")`, violating the canonical model where tabs are
+      stored as literal byte `0x09` in buffer space.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.2 ("In-Memory Storage")
+      and canonical `SE.COM` (`src/se.asm:1420` `DO_TAB_INSERT`).
+    - *Resolution*: Updated `editor.py` so `KEY_TAB` calls
+      `self.buffer.insert_char("\t")`, preserving literal `0x09` tab bytes in
+      the line buffer while letting the discrete tab traversal engine handle
+      visual leaping. Validated via `test_tab_key_inserts_literal_tab_byte` in
+      `test_editor.py`.
+  - [x] **Bug 2.7.31: Sticky Target Column Corrupted on Delete and Paste**:
+    - *Symptom*: Forward deleting a character under cursor (`Ctrl+D` / `Delete`)
+      does not synchronize sticky `target_col`. Pasting clipboard text
+      (`Ctrl+V` / `paste_block()`) assigns raw byte offset `self.target_col =
+      self.cursor_col` (and omits `target_col` update on multi-line paste),
+      corrupting sticky vertical navigation targets on lines with tabs.
+    - *Root Cause*: In `ports/python/se/buffer.py:200` (`delete_char()`),
+      `self.target_col` is not updated after line mutation. In `buffer.py:405`,
+      `paste_block()` sets `self.target_col = self.cursor_col` instead of
+      `self.get_visual_col()`, and line 421 omits `target_col` update entirely.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, and 6.4.
+    - *Resolution*: Updated `delete_char()`, `cut_block()`, and both branches
+      of `paste_block()` in `ports/python/se/buffer.py` to synchronize
+      `self.target_col = self.get_visual_col()`. Validated via
+      `test_delete_and_paste_sticky_target_col` in `test_buffer.py`.
 
 ---
 

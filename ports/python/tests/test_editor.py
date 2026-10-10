@@ -11,7 +11,9 @@ import unittest
 from unittest.mock import MagicMock
 
 from se.editor import Editor
+from se.modal import ModalDialog
 from se.terminal import (
+    KEY_CTRL_D,
     KEY_CTRL_S,
     KEY_CTRL_V,
     KEY_LEFT,
@@ -34,6 +36,7 @@ class TestEditor(unittest.TestCase):
         self.editor = Editor()
         self.editor.terminal.enter_raw_mode = MagicMock()
         self.editor.terminal.exit_raw_mode = MagicMock()
+        self.editor.terminal.term_exit = MagicMock()
 
     def test_ctrl_s_dispatches_save_file(self):
         """Step 1: Verify Ctrl+S invokes action_save_file (Bug 2.7.1)."""
@@ -597,6 +600,253 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 16: About and Memory Map workspaces verified.",
+            flush=True,
+        )
+
+    def test_ctrl_d_forward_delete(self):
+        """Step 17: Verify Ctrl+D deletes char forward (Bug 2.7.23)."""
+        print(
+            "[*] Step 17: Testing Ctrl+D deletes char forward...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Hello World"]
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0  # At 'H'
+
+        # Dispatch Ctrl+D
+        self.editor.dispatch_key(KEY_CTRL_D)
+
+        # 'H' must be deleted, leaving 'ello World' at col 0
+        self.assertEqual(self.editor.buffer.current_line, "ello World")
+        self.assertEqual(self.editor.buffer.cursor_col, 0)
+
+        # Dispatch KEY_RIGHT: must advance to col 1 without deleting
+        self.editor.dispatch_key(KEY_RIGHT)
+        self.assertEqual(self.editor.buffer.cursor_col, 1)
+
+        # Dispatch Ctrl+D again: deletes 'l' under cursor (col 1)
+        self.editor.dispatch_key(KEY_CTRL_D)
+        self.assertEqual(self.editor.buffer.current_line, "elo World")
+        self.assertEqual(self.editor.buffer.cursor_col, 1)
+
+        print(
+            "[+] Step 17: Ctrl+D forward delete verified successfully.",
+            flush=True,
+        )
+
+    def test_tier2_modal_52_col_width(self):
+        """Step 18: Verify Tier 2 modal 52-column width (Bug 2.7.24)."""
+        print(
+            "[*] Step 18: Testing Tier 2 modal 52-column width...",
+            flush=True,
+        )
+        captured = []
+        self.editor.modal.draw_box = (
+            lambda top, left, width, lines: captured.append(
+                (top, left, width)
+            )
+        )
+        self.editor.terminal.get_key = MagicMock(return_value="y")
+
+        # 1. Confirmation query (Archetype B)
+        self.editor.modal.show_confirm(
+            title="Save", desc="Unsaved edits", query="Save?"
+        )
+        self.assertEqual(len(captured), 1)
+        top, left, width = captured[-1]
+        self.assertEqual(width, 52)
+        # On 80-col screen, left should be (80 - 52) // 2 + 1 = 15
+        self.assertEqual(left, 15)
+
+        # 2. Text input modal (Archetype C)
+        self.editor.terminal.get_key = MagicMock(return_value="\r")
+        self.editor.modal.show_input(
+            title="Goto", desc="Jump line", label="Line:"
+        )
+        self.assertEqual(captured[-1][2], 52)
+
+        # 3. Find dialog (Archetype C with toggle)
+        self.editor.modal.show_find_dialog(initial_text="test")
+        self.assertEqual(captured[-1][2], 52)
+
+        # 4. Notification dialog (Archetype A)
+        self.editor.modal.show_notification("Info", "Operation complete")
+        self.assertEqual(captured[-1][2], 52)
+
+        # 5. Verify drawn borders produce exactly 52 chars (50 hyphens)
+        written = []
+        real_draw_box = ModalDialog(self.editor.terminal).draw_box
+        self.editor.terminal.write = lambda s: written.append(s)
+        real_draw_box(1, 15, 52, ["Title", "---", "Message"])
+        # Top border: + followed by 50 hyphens followed by +
+        self.assertIn("+" + ("-" * 50) + "+", written)
+
+        print(
+            "[+] Step 18: Tier 2 modal 52-column width verified.",
+            flush=True,
+        )
+
+    def test_help_workspace_canonical_dimensions_and_keys(self):
+        """Step 19: Verify Help workspace 17-line 70-col layout (Bug 2.7.25)."""
+        print(
+            "[*] Step 19: Testing Help workspace layout & keys...",
+            flush=True,
+        )
+        rendered_lines = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines.extend(
+                lines
+            )
+        )
+        self.editor.terminal.get_key = lambda timeout=None: " "
+
+        self.editor.action_help()
+
+        # 1. Height must be exactly 17 lines
+        self.assertEqual(len(rendered_lines), 17)
+
+        # 2. Width must be exactly 70 columns
+        max_w = max(len(ln) for ln in rendered_lines)
+        self.assertEqual(max_w, 70)
+
+        # 3. Must display Arrows / ANSI VT100 and no WordStar references
+        help_text = "\n".join(rendered_lines)
+        self.assertIn("Arrows / ANSI VT100", help_text)
+        self.assertNotIn("WordStar", help_text)
+        self.assertNotIn("^S,^D,^E,^X", help_text)
+        self.assertIn("Press any key to continue", help_text)
+
+        print(
+            "[+] Step 19: Help workspace layout & keys verified.",
+            flush=True,
+        )
+
+    def test_startup_term_init_clears_screen(self):
+        """Step 20: Verify startup invokes term_init clear (Bug 2.7.27)."""
+        print(
+            "[*] Step 20: Testing startup invokes term_init screen clear...",
+            flush=True,
+        )
+        self.editor.terminal.term_init = MagicMock()
+        self.editor.action_splash_screen = MagicMock()
+        self.editor.renderer.render_editor = MagicMock()
+
+        def mock_get_key(timeout=None):
+            self.editor.running = False
+            return None
+
+        self.editor.terminal.get_key = mock_get_key
+        self.editor.run()
+
+        self.editor.terminal.enter_raw_mode.assert_called_once()
+        self.editor.terminal.term_init.assert_called_once()
+
+        from se.terminal import (
+            Terminal,
+            ANSI_CLEAR_SCREEN,
+            ANSI_INVERSE_OFF,
+            ANSI_SHOW_CURSOR,
+        )
+        real_term = Terminal()
+        real_written = []
+        real_term.write = lambda s: real_written.append(s)
+        real_term.flush = MagicMock()
+        real_term.term_init()
+
+        self.assertIn(ANSI_INVERSE_OFF, real_written)
+        self.assertIn(ANSI_SHOW_CURSOR, real_written)
+        self.assertIn(ANSI_CLEAR_SCREEN, real_written)
+        real_term.flush.assert_called_once()
+
+        print(
+            "[+] Step 20: Startup term_init screen clear verified.",
+            flush=True,
+        )
+
+    def test_clean_exit_screen_clear_and_banner(self):
+        """Step 21: Verify clean exit invokes term_exit banner (Bug 2.7.28)."""
+        print(
+            "[*] Step 21: Testing clean exit invokes term_exit banner...",
+            flush=True,
+        )
+        self.editor.terminal.term_exit = MagicMock()
+        self.editor.action_splash_screen = MagicMock()
+        self.editor.renderer.render_editor = MagicMock()
+
+        def mock_get_key(timeout=None):
+            self.editor.running = False
+            return None
+
+        self.editor.terminal.get_key = mock_get_key
+        self.editor.run()
+
+        self.editor.terminal.term_exit.assert_called_once()
+        self.editor.terminal.exit_raw_mode.assert_called_once()
+
+        from se.terminal import (
+            Terminal,
+            ANSI_CLEAR_SCREEN,
+            ANSI_SHOW_CURSOR,
+        )
+        real_term = Terminal()
+        written = []
+        real_term.write = lambda s: written.append(s)
+        real_term.flush = MagicMock()
+        real_term.term_exit()
+
+        self.assertIn(ANSI_CLEAR_SCREEN, written)
+        self.assertIn("\r\nExiting SE. Returned to OS prompt.\r\n", written)
+        self.assertIn(ANSI_SHOW_CURSOR, written)
+        self.assertEqual(real_term.flush.call_count, 2)
+
+        print(
+            "[+] Step 21: Clean exit screen clear and banner verified.",
+            flush=True,
+        )
+
+    def test_status_bar_field5_visual_col_across_tabs(self):
+        """Step 22: Verify Field 5 visual col across tabs (Bug 2.7.29)."""
+        print(
+            "[*] Step 22: Testing status bar Field 5 visual col with tabs...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+
+        self.editor.buffer.tab_width = 4
+        self.editor.buffer.lines = ["\tHello"]
+        self.editor.buffer.cursor_col = 1
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        full_bar = "".join(written)
+        self.assertIn("Col 4", full_bar)
+        self.assertNotIn("Col 1", full_bar)
+
+        print(
+            "[+] Step 22: Status bar Field 5 visual col with tabs verified.",
+            flush=True,
+        )
+
+    def test_tab_key_inserts_literal_tab_byte(self):
+        """Step 23: Verify Tab key inserts literal tab byte (Bug 2.7.30)."""
+        print(
+            "[*] Step 23: Testing Tab key inserts literal tab byte 0x09...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Hello"]
+        self.editor.buffer.cursor_col = 5
+        self.editor.buffer.tab_width = 4
+
+        self.editor.dispatch_key(KEY_TAB)
+
+        self.assertEqual(self.editor.buffer.lines[0], "Hello\t")
+        self.assertEqual(self.editor.buffer.cursor_col, 6)
+        self.assertEqual(self.editor.buffer.get_visual_col(), 8)
+        self.assertEqual(self.editor.buffer.target_col, 8)
+
+        print(
+            "[+] Step 23: Tab key inserts literal tab byte 0x09 verified.",
             flush=True,
         )
 

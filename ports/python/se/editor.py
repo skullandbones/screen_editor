@@ -60,7 +60,9 @@ class Editor:
         self.terminal = Terminal(default_cols=cols, default_rows=rows)
         self.renderer = UIRenderer(self.terminal)
         self.modal = ModalDialog(self.terminal)
-        self.buffer = DocumentBuffer(filename=filename)
+        self.buffer = DocumentBuffer(
+            filename=filename, tab_width=self.config.tab_width
+        )
         self.search_query: str = ""
         self.replace_query: str = ""
         self.case_sensitive: bool = True
@@ -74,6 +76,7 @@ class Editor:
     def run(self):
         """Run the main interactive editor event loop."""
         self.terminal.enter_raw_mode()
+        self.terminal.term_init()
         self.running = True
 
         if not self.buffer.has_file:
@@ -95,6 +98,7 @@ class Editor:
 
                 self.dispatch_key(key)
         finally:
+            self.terminal.term_exit()
             self.terminal.exit_raw_mode()
 
     def dispatch_key(self, key: str):
@@ -102,7 +106,7 @@ class Editor:
         # 1. Navigation Keys
         if key == KEY_LEFT:
             self.buffer.move_left()
-        elif key == KEY_RIGHT or key == KEY_CTRL_D:
+        elif key == KEY_RIGHT:
             self.buffer.move_right()
         elif key == KEY_UP:
             self.buffer.move_up()
@@ -126,15 +130,10 @@ class Editor:
             self.buffer.split_line()
         elif key == KEY_BACKSPACE:
             self.buffer.backspace()
-        elif key == KEY_DELETE:
+        elif key == KEY_DELETE or key == KEY_CTRL_D:
             self.buffer.delete_char()
         elif key == KEY_TAB:
-            # Expand tab to spaces based on config tab width
-            spaces = self.config.tab_width - (
-                self.buffer.cursor_col % self.config.tab_width
-            )
-            for _ in range(spaces):
-                self.buffer.insert_char(" ")
+            self.buffer.insert_char("\t")
 
         # 3. Block Selection & Clipboard
         elif key == KEY_CTRL_B:
@@ -303,24 +302,27 @@ class Editor:
         )
 
     def action_help(self):
-        """Display full-screen Help workspace."""
+        """Display full-screen Help workspace (17 lines, 70 cols)."""
         lines = [
-            "SE.COM — EDITOR MODE KEYS",
+            "SE.COM — EDITOR MODE KEYS".center(70),
             "",
-            "Cursor Navigation:                 Block Operations:",
-            "  Arrows / WordStar (^S,^D,^E,^X)     Ctrl+B: Toggle Block",
-            "  Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block",
-            "  Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block",
-            "  Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block",
+            "  Cursor Navigation:".ljust(38) + "Block Operations:",
+            "    Arrows / ANSI VT100".ljust(38) + "Ctrl+B: Toggle Block",
+            "    Ctrl+A / Ctrl+E: Home / End".ljust(38) + "Ctrl+C: Copy Block",
+            "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38) + "Ctrl+X: Cut Block",
+            "    Ctrl+U / Ctrl+V: Page Up / Down".ljust(38)
+            + "Ctrl+V: Paste Block",
             "",
-            "Search & Replace:                  File & System:",
-            "  Ctrl+F: Find Text                   Ctrl+S: Save File",
-            "  Ctrl+N: Find Next                   Ctrl+O: Open File",
-            "  Ctrl+R: Search and Replace          Ctrl+Q: Safe Quit",
-            "  Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette",
-            "  Ctrl+Y: Beautify Source Code        ESC   : Splash Screen",
+            "  Search & Replace:".ljust(38) + "File & System:",
+            "    Ctrl+F: Find Text".ljust(38) + "Ctrl+S: Save File",
+            "    Ctrl+N: Find Next".ljust(38) + "Ctrl+O: Open File",
+            "    Ctrl+R: Search and Replace".ljust(38) + "Ctrl+Q: Safe Quit",
+            "    Ctrl+L: Goto Line Number".ljust(38) + "Ctrl+P: Plugin Palette",
+            "    Ctrl+Y: Beautify Source Code".ljust(38)
+            + "ESC   : Splash Screen",
             "",
-            "Press any key to continue",
+            "Press any key to continue".center(70),
+            "",
         ]
         geom = f"{self.terminal.cols}x{self.terminal.rows}"
         self.renderer.render_centered_workspace(
