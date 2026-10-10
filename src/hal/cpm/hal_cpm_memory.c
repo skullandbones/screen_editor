@@ -15,7 +15,7 @@
 #include "../../include/config.h"
 #include "../../include/hal.h"
 
-#define CPM_LOCAL_SLOTS 48
+#define CPM_LOCAL_SLOTS 4
 
 static uint8_t  s_cpm_local_slots[CPM_LOCAL_SLOTS][FAR_SLOT_SIZE];
 static uint8_t  s_hbios_present = 0;

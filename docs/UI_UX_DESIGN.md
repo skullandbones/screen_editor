@@ -1098,3 +1098,22 @@ specific architectural adaptations.
        On modern platforms (Linux, macOS), plugins can mount virtual CP/M disk
        images (`.DSK`, `.IMG`), retro archives (`.LBR`, `.ARK`), or remote
        VFS streams, rendering them through SE's canonical directory browser.
+
+4. CP/M Binary Footprint, TPA Headroom & BSS Trimming:
+   - Load Origin & BDOS Boundary:
+     On CP/M systems, `.COM` executables load at `0x0100` in the Transient
+     Program Area (TPA). The execution space is bounded by the BDOS entry
+     vector at `0x0006`, pointing to the base of BDOS (e.g. `0xD800` on
+     RomWBW RC2014 CP/M 2.2, giving a maximum capacity of 55,040 bytes /
+     53.75 KB).
+   - CCP Command Loading Safeguards:
+     When executing a command, the CP/M Console Command Processor (CCP) loads
+     the binary sequentially into the TPA. If the disk binary size extends to
+     or past the CCP/BDOS boundary, CCP rejects the command with `BAD LOAD`.
+   - BSS Separation & Memory Discipline:
+     All CP/M ports (`SE.COM`, `SEC.COM`) must ensure uninitialized buffers
+     (BSS) are not emitted as zero-fill bytes into the disk executable.
+     For C-based builds (`SEC.COM`), BSS trimming must be enabled
+     (`CRT_TRIM_BSS=1`) and total combined runtime memory (Code + Data + BSS)
+     must fit strictly below BDOS (`0xD800`), guaranteeing positive TPA
+     headroom.
