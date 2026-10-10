@@ -752,6 +752,23 @@ or display notifications.
      Supports standard editing keys: character entry, Backspace (deletes left),
      Delete / Ctrl+D (deletes under cursor), Left/Right arrows, and Home/End.
      WordStar diamond key mappings (e.g. `Ctrl+S` for left) are not supported.
+     Find Text Modal Dialog (50 cols x 7 rows):
+     ```text
+     +------------------------------------------------+
+     |                   Find Text                    |
+     +------------------------------------------------+
+     |       Search Pattern: [Case Sensitive  ]       |
+     |      Find: [                            ]      |
+     | [Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel |
+     +------------------------------------------------+
+     ```
+     - Toggle case mode with Tab / Ctrl+I (switches between `[Case Sensitive  ]`
+       and `[Case Insensitive]`).
+     - Terminal cursor positioned directly inside `Find: [ ... ]` at insertion
+       offset.
+     - When opened with an active block, the selection text is pre-filled.
+
+     Goto Line Modal Dialog (50 cols x 7 rows):
      ```text
      +--------------------------------------------------+
      |                     Goto Line                    |
