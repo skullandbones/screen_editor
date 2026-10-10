@@ -425,7 +425,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.41 Closed).
+- **Status**: Active / 4 Defects Open (Bugs 2.7.42–2.7.45).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -973,6 +973,72 @@ have been resolved and archived.
       without inserting characters or tab bytes, while clearing active blocks
       prior to insertion when solidified (`block_active == 2`). Validated via
       `test_typing_and_tab_block_cancel` in `test_editor.py`.
+  - [ ] **Bug 2.7.42: Status Bar Field Squatting & Missing Block Indicators**:
+    - *Symptom*: When text block selection is active (`block_active > 0`),
+      Field 4 on the universal status bar displays selection metrics (`Sel:
+      X chars |` or `Block: Y lines |`), clobbering the mandatory universal
+      help hint `" ^K: Editor keys |"`. Furthermore, Field 5 fails to display
+      the canonical ` [SEL]` (dynamic selection) or ` [BLK LOCK]` (solidified
+      selection) mode indicators.
+    - *Root Cause*: In `ports/python/se/ui.py:60-74` (`render_status_bar`), an
+      `if buf.block_active > 0:` branch replaces `help_field = " ^K: Editor
+      keys |"` with dynamic selection/line count strings, violating Section 4.3
+      and 11.1. In addition, Field 5 string assembly (`pos_field`) formats only
+      line, column, and pan offset, omitting the block mode indicators defined
+      in Section 4.3 and 9.2.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 9.2, and 11.1
+      (Anti-Pattern #1: Status Bar Squatting); Linux Native Bug 2.4.16.
+    - *Resolution Plan*: Keep Field 4 persistently formatted as `" ^K: Editor
+      keys |"`. In Field 5, append ` [SEL]` when `buf.block_active == 1` and
+      ` [BLK LOCK]` when `buf.block_active == 2` alongside horizontal pan
+      indicator `[Pan +X]`.
+  - [ ] **Bug 2.7.43: Missing Tier 2 Block Operations Modal Dialog on Ctrl+K**:
+    - *Symptom*: When a block selection is active (`block_active > 0`),
+      pressing `Ctrl+K` falls through to `action_help()` or prefix key
+      detection rather than presenting the canonical Tier 2 Block Operations
+      modal dialog.
+    - *Root Cause*: In `ports/python/se/editor.py:182-194`, `KEY_CTRL_K` does
+      not check `self.buffer.block_active`. Canonical SE
+      (`src/se.asm:1091-1099` and `src/core/block.asm:114-268`) routes `Ctrl+K`
+      with `BLOCK_ACTIVE > 0` directly to `DO_BLOCK_MENU_POPUP`, a 50x7 modal
+      pop-up displaying block metrics and keyboard commands (`[Enter]=Lock/Set`,
+      `[^C]=Copy`, `[^X]=Move`, `[^D]=Del`, `[^S]=Save`, `[^B]=Clear`,
+      `[ESC]=Close`).
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 10;
+      `src/se.asm:1091-1099` (`CHECK_CTRL_K`); `src/core/block.asm:114-268`
+      (`DO_BLOCK_MENU_POPUP`).
+    - *Resolution Plan*: Implement `action_block_popup()` in `editor.py` /
+      `modal.py` rendering the canonical 50x7 (or 52-col) Tier 2 Block
+      Operations modal dialog when `self.buffer.block_active > 0` upon
+      receiving `KEY_CTRL_K`, supporting Lock, Copy, Cut/Move, Delete, Save
+      Block, Clear, and Dismiss actions.
+  - [ ] **Bug 2.7.44: Ctrl+K Prefix Command Polling Blocks Interactive Chords**:
+    - *Symptom*: Pressing `Ctrl+K` followed by a secondary command key (`R` for
+      File Insert, `S` for Block Save, `Q`/`X` for Exit) fails to execute the
+      command and immediately falls back to displaying the Help workspace.
+    - *Root Cause*: In `ports/python/se/editor.py:183-194`, secondary key
+      polling queries `self.terminal.is_key_ready()` with the default
+      `timeout=0.0`. In interactive terminal sessions, human keystrokes cannot
+      arrive within 0.0 seconds of `Ctrl+K`, causing `is_key_ready()` to return
+      `False` immediately and dispatching `self.action_help()`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, and 10.
+    - *Resolution Plan*: Provide a reasonable interactive window (e.g.
+      `timeout=1.0` or interactive prompt) when polling for two-key chord
+      sequences after `Ctrl+K`, allowing human entry of `R`, `S`, `Q`, `X`
+      before falling through to `action_help()`.
+  - [ ] **Bug 2.7.45: WordStar Diamond Key Collision in Modal Input Dialogs**:
+    - *Symptom*: In Tier 2 modal text input prompts (e.g. Goto Line, Find
+      text), pressing `Ctrl+S` moves the input cursor left instead of being
+      ignored or treated per the keybinding specification, reintroducing
+      deprecated WordStar diamond navigation.
+    - *Root Cause*: In `ports/python/se/modal.py:188` (`show_input`) and
+      `modal.py:264` (`show_find_dialog`), `k in (KEY_LEFT, KEY_CTRL_S)` maps
+      `Ctrl+S` to left arrow cursor movement.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C) and
+      Section 10 (Architectural Decision Note on Keybinding Simplification).
+    - *Resolution Plan*: Remove `KEY_CTRL_S` from cursor movement branches in
+      `modal.py`, restricting left navigation strictly to `KEY_LEFT`
+      conforming to Section 8.3 and Section 10.
 
 ---
 
