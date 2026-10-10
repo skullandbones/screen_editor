@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 8 Defects Open (Bugs 2.4.12–2.4.19).
+- **Status**: Active / 7 Defects Open (Bugs 2.4.13–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -261,14 +261,18 @@ have been resolved and archived.
       triggering screen and status bar re-renders with inverse video highlights.
       Validated via `test_bug_2_4_11_block_selection_cursor_tracking` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
+  - [x] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.
     - *Issue*: In `src/core/editor.c`, `KEY_CTRL_V` is bound exclusively to
       `page_down()`. `src/core/block.c` implements `do_copy_block()` and
       `do_delete_block()`, but has no dedicated paste function. Text copied via
       `Ctrl+C` cannot be pasted.
-    - *Required Fix*: Implement `do_paste_block()` in `block.c` and bind
-      `KEY_CTRL_V` in `editor.c` to paste clipboard contents at current cursor.
+    - *Resolution*: Implemented `do_paste_block()`, `do_cut_block()`, and
+      clipboard buffer getters in `src/core/block.c`. Bound `KEY_CTRL_V` in
+      `src/core/editor.c` to paste clipboard contents at active cursor (falling
+      back to `page_down()` when clipboard is empty) and bound `KEY_CTRL_C` to
+      copy selection. Validated via `test_bug_2_4_12_clipboard_copy_paste`
+      in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.13: Terminal Lifecycle, Startup Clear & Clean Exit Missing**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.5, 12.1.
     - *Issue*: On launch, `src/se_linux.c` fails to emit canonical `TERM_INIT`

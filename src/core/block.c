@@ -172,6 +172,9 @@ int do_copy_block(void)
     if (g_block_mode == BLOCK_MODE_OFF) {
         return -1;
     }
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        solidify_block();
+    }
     normalize_block_bounds();
     s_clipboard_len = 0;
 
@@ -248,24 +251,50 @@ int do_delete_block(void)
     return 0;
 }
 
-int do_move_block(void)
+uint16_t get_clipboard_len(void)
+{
+    return s_clipboard_len;
+}
+
+const char *get_clipboard_buffer(void)
+{
+    return s_clipboard_buf;
+}
+
+int do_paste_block(void)
+{
+    uint16_t i;
+
+    if (s_clipboard_len == 0) {
+        return 0;
+    }
+    for (i = 0; i < s_clipboard_len; i++) {
+        if (s_clipboard_buf[i] == '\n') {
+            do_enter();
+        } else {
+            do_char_insert(s_clipboard_buf[i]);
+        }
+    }
+    g_doc_modified = 1;
+    g_need_screen_render = 1;
+    g_need_status_render = 1;
+    return 0;
+}
+
+int do_cut_block(void)
 {
     if (do_copy_block() < 0) {
         return -1;
     }
-    do_delete_block();
-    /* Paste clipboard at cursor */
-    if (s_clipboard_len > 0) {
-        uint16_t i;
-        for (i = 0; i < s_clipboard_len; i++) {
-            if (s_clipboard_buf[i] == '\n') {
-                do_enter();
-            } else {
-                do_char_insert(s_clipboard_buf[i]);
-            }
-        }
+    return do_delete_block();
+}
+
+int do_move_block(void)
+{
+    if (do_cut_block() < 0) {
+        return -1;
     }
-    return 0;
+    return do_paste_block();
 }
 
 int do_block_menu_popup(void)

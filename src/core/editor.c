@@ -473,9 +473,19 @@ int editor_handle_key(int key)
     case KEY_BACKSPACE: do_backspace(); break;
     case KEY_ENTER: do_enter(); break;
     case KEY_CTRL_U: page_up(); break;
-    case KEY_CTRL_V: page_down(); break;
+    case KEY_CTRL_V:
+        if (get_clipboard_len() > 0) {
+            do_paste_block();
+        } else {
+            page_down();
+        }
+        break;
     case KEY_CTRL_B: toggle_block_mode(); break;
-    case KEY_CTRL_C: cancel_block(); break;
+    case KEY_CTRL_C:
+        if (g_block_mode != BLOCK_MODE_OFF) {
+            do_copy_block();
+        }
+        break;
     case KEY_CTRL_F: do_ctrl_f_find(); break;
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
     case KEY_CTRL_N: do_ctrl_n_find_next(); break;
@@ -515,7 +525,7 @@ int editor_handle_key(int key)
     case KEY_ESC: show_splash_screen(); break;
     case KEY_CTRL_X:
         if (g_block_mode != BLOCK_MODE_OFF) {
-            do_move_block();
+            do_cut_block();
         } else {
             cursor_down();
         }

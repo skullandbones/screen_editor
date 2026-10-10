@@ -825,6 +825,81 @@ def test_bug_2_4_11_block_selection_cursor_tracking():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_12_clipboard_copy_paste():
+    """Verify clipboard copy (Ctrl+C) and paste (Ctrl+V) (Bug 2.4.12)."""
+    print("[*] Testing clipboard copy and paste operations (Bug 2.4.12)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_clip_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("12345 Hello World\nSecond Line\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Start block at (0, 0)
+            os.write(master, b"\x02")
+            time.sleep(0.1)
+
+            # Select 5 characters ("12345")
+            os.write(master, b"\x1b[C" * 5)
+            time.sleep(0.1)
+
+            # Copy via Ctrl+C
+            os.write(master, b"\x03")
+            time.sleep(0.1)
+            out_copy = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Block: 5 chars" in out_copy, (
+                f"Expected 'Block: 5 chars' status:\n{out_copy}"
+            )
+
+            # Move down to line 2 and jump to Col 0 via Ctrl+A
+            os.write(master, b"\x1b[B\x01")
+            time.sleep(0.1)
+
+            # Paste via Ctrl+V at beginning of line 2
+            os.write(master, b"\x16")
+            time.sleep(0.2)
+
+            # Save file via Ctrl+S
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            # Dismiss save notification modal (press enter or space)
+            os.write(master, b"\n")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(test_file_path, "r", encoding="utf-8") as f:
+                saved_content = f.read()
+
+            assert "12345Second Line" in saved_content, (
+                f"Pasted content '12345' missing from line 2:\n{saved_content}"
+            )
+            print("    [+] Clipboard copy & paste verified on disk [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -843,6 +918,7 @@ def main():
     test_bug_2_4_9_splash_screen_commands()
     test_bug_2_4_10_burst_escape_sequences()
     test_bug_2_4_11_block_selection_cursor_tracking()
+    test_bug_2_4_12_clipboard_copy_paste()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
