@@ -215,6 +215,7 @@ class DocumentBuffer:
         if self.cursor_row < len(self.lines) - 1:
             next_line = self.lines[self.cursor_row + 1]
             if len(line) + len(next_line) <= MAX_LINE_LENGTH:
+                self.cursor_col = len(line)
                 self.lines[self.cursor_row] = line + next_line
                 self.lines.pop(self.cursor_row + 1)
                 self.target_col = self.get_visual_col()

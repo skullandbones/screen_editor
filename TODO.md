@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 2 Defects Open (Bugs 2.7.40–2.7.41).
+- **Status**: Active / 1 Defect Open (Bug 2.7.41).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -800,7 +800,7 @@ have been resolved and archived.
       line, while clearing active blocks prior to splitting when solidified
       (`block_active == 2`). Validated via `test_enter_dynamic_block_solidify`
       in `test_editor.py`.
-  - [ ] **Bug 2.7.40: Forward Delete Line Join Desynchronizes Cursor Column**:
+  - [x] **Bug 2.7.40: Forward Delete Line Join Desynchronizes Cursor Column**:
     - *Symptom*: Pressing `Delete` / `Ctrl+D` at the end of a line when the
       cursor column exceeds the line length (`cursor_col > len(line)`) joins the
       next line but leaves the cursor positioned past the join point inside the
@@ -810,10 +810,11 @@ have been resolved and archived.
       clamps or assigns `self.cursor_col = len(line)`.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.8 and 10.1;
       `src/se.asm:1172-1188`.
-    - *Resolution Plan*: Explicitly assign `self.cursor_col = len(line)` in
-      `delete_char()` prior to concatenation and update
-      `self.target_col = self.get_visual_col()` to keep the hardware cursor
-      strictly anchored at the junction boundary.
+    - *Resolution*: Explicitly assigned `self.cursor_col = len(line)` in
+      `delete_char()` prior to concatenation in `buffer.py`, synchronizing
+      sticky target column and anchoring hardware cursor at the join junction.
+      Validated via `test_delete_char_eol_junction_cursor_col` in
+      `test_buffer.py`.
   - [ ] **Bug 2.7.41: Typing and Tab Fail to Clear Active Block Selection**:
     - *Symptom*: Typing printable ASCII characters or pressing `Tab` while a
       block selection is active inserts characters into the line without
