@@ -19,11 +19,9 @@
 /* Document Line Slots Array (Maps document row -> 16-bit Far Slot ID) */
 static uint16_t s_line_slots[MAX_DOC_LINES];
 
-/* Multi-Line Working Cache */
-static cache_line_t s_line_cache[CACHE_SIZE_LINES];
-
 /* Global Active Line Buffer & Document State */
 char     g_active_line_buf[MAX_ACTIVE_LINE_STRIDE];
+char     g_scratch_line_buf[MAX_ACTIVE_LINE_STRIDE];
 uint16_t g_active_line_len = 0;
 uint16_t g_active_line_row = 0;
 uint8_t  g_active_line_valid = 0;
@@ -36,6 +34,7 @@ void buffer_init(void)
     uint16_t i;
 
     memset(g_active_line_buf, 0, sizeof(g_active_line_buf));
+    memset(g_scratch_line_buf, 0, sizeof(g_scratch_line_buf));
     g_active_line_len = 0;
     g_active_line_row = 0;
     g_active_line_valid = 0;
@@ -45,13 +44,6 @@ void buffer_init(void)
 
     for (i = 0; i < MAX_DOC_LINES; i++) {
         s_line_slots[i] = SLOT_TERM;
-    }
-
-    for (i = 0; i < CACHE_SIZE_LINES; i++) {
-        s_line_cache[i].doc_row = 0xFFFF;
-        s_line_cache[i].dirty = 0;
-        s_line_cache[i].in_use = 0;
-        memset(s_line_cache[i].data, 0, LINE_STORAGE_STRIDE);
     }
 
     mem_init_paging();

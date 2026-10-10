@@ -65,7 +65,7 @@ void set_status_msg(const char *msg)
 
 static void render_row_content(uint8_t screen_row, uint16_t doc_row)
 {
-    char line_buf[MAX_ACTIVE_LINE_STRIDE];
+    const char *line_buf;
     uint16_t len;
     uint16_t vis_col = 0;
     uint16_t i;
@@ -81,7 +81,14 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
         return;
     }
 
-    len = fetch_line_to_buffer(doc_row, line_buf, MAX_ACTIVE_PAYLOAD);
+    if (g_active_line_valid && g_active_line_row == doc_row) {
+        line_buf = g_active_line_buf;
+        len = g_active_line_len;
+    } else {
+        len = fetch_line_to_buffer(doc_row, g_scratch_line_buf,
+                                   MAX_ACTIVE_PAYLOAD);
+        line_buf = g_scratch_line_buf;
+    }
 
     for (i = 0; i < len && vis_col < g_horiz_pan_offset + max_content_cols;
          i++) {

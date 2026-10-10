@@ -199,7 +199,7 @@ void do_backspace(void)
         g_need_status_render = 1;
     } else if (g_cur_doc_row > 0) {
         /* Join current line with previous line */
-        char prev_buf[MAX_ACTIVE_LINE_STRIDE];
+        char *prev_buf = g_scratch_line_buf;
         uint16_t prev_len = fetch_line_to_buffer(g_cur_doc_row - 1,
                                                  prev_buf,
                                                  MAX_ACTIVE_PAYLOAD);
@@ -248,7 +248,7 @@ void do_delete(void)
         g_need_status_render = 1;
     } else if (g_cur_doc_row + 1 < g_doc_total_lines) {
         /* Pull up next line and join */
-        char next_buf[MAX_ACTIVE_LINE_STRIDE];
+        char *next_buf = g_scratch_line_buf;
         uint16_t next_len = fetch_line_to_buffer(g_cur_doc_row + 1,
                                                  next_buf,
                                                  MAX_ACTIVE_PAYLOAD);
@@ -259,6 +259,7 @@ void do_delete(void)
             g_active_line_buf[g_active_line_len] = '\0';
 
             delete_doc_row(g_cur_doc_row + 1);
+            checkout_active_line(g_cur_doc_row);
             g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
             g_doc_modified = 1;
             g_need_screen_render = 1;
@@ -269,7 +270,7 @@ void do_delete(void)
 
 void do_enter(void)
 {
-    char tail_buf[MAX_ACTIVE_LINE_STRIDE];
+    char *tail_buf = g_scratch_line_buf;
     uint16_t tail_len = 0;
 
     checkout_active_line(g_cur_doc_row);
