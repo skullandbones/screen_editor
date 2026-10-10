@@ -67,6 +67,9 @@ ANSI_INVERSE_OFF = "\x1b[0m"
 ANSI_UNDERLINE_ON = "\x1b[4m"
 ANSI_UNDERLINE_OFF = "\x1b[24m"
 
+# Canonical Exit Banner
+MSG_EXIT_HOST = "\r\nExiting SE. Returned to OS prompt.\r\n"
+
 
 class Terminal:
     """
@@ -162,6 +165,27 @@ class Terminal:
         """Clear entire terminal surface and home cursor."""
         self.write(ANSI_CLEAR_SCREEN)
 
+    def term_init(self):
+        """
+        Canonical terminal initialization (TERM_INIT):
+        Resets rendition attributes (\x1b[0m), enables cursor visibility
+        (\x1b[?25h), and clears the screen to home (\x1b[2J\x1b[H).
+        """
+        self.inverse_off()
+        self.show_cursor()
+        self.clear_screen()
+        self.flush()
+
+    def term_exit(self, msg: str = MSG_EXIT_HOST):
+        """
+        Canonical terminal session exit (EXIT_PROGRAM):
+        Clears screen (\x1b[2J\x1b[H), emits exit banner, and restores cursor.
+        """
+        self.term_init()
+        self.write(msg)
+        self.show_cursor()
+        self.flush()
+
     def clear_eol(self):
         """Clear from cursor to end of active row."""
         self.write(ANSI_CLEAR_EOL)
@@ -184,24 +208,27 @@ class Terminal:
 
     def is_key_ready(self, timeout=0.0):
         """Check if characters are waiting to be read on stdin."""
-        if not hasattr(sys.stdin, "fileno"):
-            return True
-        try:
-            if not sys.stdin.isatty():
+        if hasattr(sys.stdin, "fileno"):
+            try:
+                fd = sys.stdin.fileno()
+                r, _, _ = select.select([fd], [], [], timeout)
+                return bool(r)
+            except (io.UnsupportedOperation, OSError, AttributeError):
                 return True
-            r, _, _ = select.select([sys.stdin], [], [], timeout)
-            return bool(r)
-        except (io.UnsupportedOperation, OSError):
-            return True
+        return True
 
     def get_char(self, timeout=None):
         """Read a single raw character from stdin with optional timeout."""
-        if timeout is not None and hasattr(sys.stdin, "fileno"):
+        if hasattr(sys.stdin, "fileno"):
             try:
-                r, _, _ = select.select([sys.stdin], [], [], timeout)
-                if not r:
-                    return None
-            except (io.UnsupportedOperation, OSError):
+                fd = sys.stdin.fileno()
+                if timeout is not None:
+                    r, _, _ = select.select([fd], [], [], timeout)
+                    if not r:
+                        return None
+                b = os.read(fd, 1)
+                return b.decode("latin1", errors="replace") if b else None
+            except (io.UnsupportedOperation, OSError, AttributeError):
                 pass
         ch = sys.stdin.read(1)
         return ch if ch else None
@@ -284,8 +311,12 @@ class Terminal:
 
             return KEY_ESC
 
-        # Map DEL (0x7F) and Backspace (0x08)
-        if ch in (KEY_DEL_CHAR, KEY_BACKSPACE):
+        # Map DEL (0x7F) to KEY_DELETE per Section 10
+        if ch == KEY_DEL_CHAR:
+            return KEY_DELETE
+
+        # Map Backspace (0x08)
+        if ch == KEY_BACKSPACE:
             return KEY_BACKSPACE
 
         # Enter / Carriage Return

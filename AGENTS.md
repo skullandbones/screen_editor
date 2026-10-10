@@ -522,9 +522,7 @@ port `se-py`, Rust native `se-rs`, CP/M-86 `SE.CMD`, or ZX Spectrum Next
 targets) must conform strictly to the canonical Look and Feel specification:
 
 - **Authoritative Specification Document**:
-  [`docs/LOOK_AND_FEEL_SPEC.md`](docs/LOOK_AND_FEEL_SPEC.md)
-  (and foundational UI/UX standards in
-  [`docs/UI_UX_DESIGN.md`](docs/UI_UX_DESIGN.md)).
+  [`docs/UI_UX_DESIGN.md`](docs/UI_UX_DESIGN.md).
 
 ### Mandatory Porting Invariance Rules:
 1. **Universal Status Bar (Row 24 / Row 40)**:

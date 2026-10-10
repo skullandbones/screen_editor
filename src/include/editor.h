@@ -40,6 +40,7 @@ void     do_enter(void);
 void     goto_line(uint16_t target_line);
 uint16_t calc_visual_col(const char *buf, uint16_t char_col);
 void     locate_cursor(void);
+void     update_horizontal_pan(void);
 
 /* Cursor Navigation Primitives */
 void     cursor_up(void);

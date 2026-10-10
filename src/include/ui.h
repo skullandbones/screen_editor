@@ -42,6 +42,7 @@ extern "C" {
 /* Global Display State Variables */
 extern uint8_t  g_active_cols;
 extern uint8_t  g_active_rows;
+extern uint8_t  g_is_splash_screen;
 extern uint8_t  g_need_screen_render;
 extern uint8_t  g_need_line_render;
 extern uint8_t  g_need_status_render;
@@ -53,6 +54,7 @@ void render_screen(void);
 void render_status_bar(void);
 void clear_screen(void);
 void show_splash_screen(void);
+void show_help_screen(void);
 void show_about_screen(void);
 void show_config_screen(void);
 void show_mem_info_screen(void);

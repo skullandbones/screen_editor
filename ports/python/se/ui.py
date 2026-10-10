@@ -4,7 +4,11 @@ Enforces column 0 tilde discipline, viewport clipping, and screen centering.
 """
 
 from typing import List, Optional, Tuple
-from se.buffer import DocumentBuffer
+from se.buffer import (
+    DocumentBuffer,
+    calc_visual_col,
+    expand_tabs_visual,
+)
 from se.terminal import Terminal
 
 
@@ -47,33 +51,35 @@ class UIRenderer:
         raw_name = buf.filename + mod_char
         name_field = f"| {raw_name:<14} |"
 
-        # Geometry and format fields
-        geom_field = f" {geometry_str} |"
-        fmt_str = "CPM  " if buf.format_cpm else "Linux"
+        # Geometry and format fields (8 chars each)
+        geom_field = f" {geometry_str:>6} |"
+        fmt_str = "CP/M " if buf.format_cpm else "Linux"
         fmt_field = f" {fmt_str} |"
 
-        # Key help prompt or transient status message
-        if status_msg:
-            help_field = f" {status_msg:<15} |"
+        # Field 4 (Help Hint / Context / Block Selection, 18 chars)
+        if buf.block_active > 0:
+            r1, c1, r2, c2 = buf.get_normalized_block()
+            prefix = "Sel: " if buf.block_active == 1 else "Block: "
+            if r1 == r2:
+                count = max(0, c2 - c1)
+                unit = "char" if count == 1 else "chars"
+            else:
+                count = (r2 - r1) + 1
+                unit = "line" if count == 1 else "lines"
+            metric = f"{prefix}{count} {unit}"
+            help_field = f" {metric[:14]:<15} |"
         else:
             help_field = " ^K: Editor keys |"
 
         # Cursor and pan position field
         cur_line = buf.cursor_row + 1
         tot_lines = buf.total_lines
-        cur_col = buf.cursor_col
+        cur_col = buf.get_visual_col()
         pan_str = f" [Pan +{buf.pan_col}]" if buf.pan_col > 0 else ""
-
-        # Block selection indicator
-        blk_str = ""
-        if buf.block_active == 1:
-            blk_str = " [SEL]"
-        elif buf.block_active == 2:
-            blk_str = " [BLK LOCK]"
 
         pos_field = (
             f" Line {cur_line:>4}/{tot_lines:<4} "
-            f"Col {cur_col:<3}{pan_str}{blk_str} |"
+            f"Col {cur_col:<3}{pan_str} |"
         )
 
         # Assemble full status bar content
@@ -101,6 +107,7 @@ class UIRenderer:
         buf: DocumentBuffer,
         geometry_str: str = "80x24",
         status_msg: Optional[str] = None,
+        tab_width: Optional[int] = None,
     ):
         """
         Render active document editor workspace with column 0 tildes.
@@ -108,6 +115,7 @@ class UIRenderer:
         cols = self.term.cols
         rows = self.term.rows
         body_rows = rows - 1  # Exclude status bar row
+        tab_w = tab_width if tab_width is not None else buf.tab_width
 
         # Adjust vertical scroll window
         if buf.cursor_row < buf.top_row:
@@ -123,10 +131,11 @@ class UIRenderer:
             self.term.locate(screen_r, 1)
 
             if doc_r < buf.total_lines:
-                # Render document line sliced by horizontal pan
-                line_text = buf.get_line(doc_r)
-                if buf.pan_col < len(line_text):
-                    visible = line_text[buf.pan_col : buf.pan_col + cols]
+                # Render line sliced by horizontal pan in visual space
+                raw_line = buf.get_line(doc_r)
+                vis_line = expand_tabs_visual(raw_line, tab_w)
+                if buf.pan_col < len(vis_line):
+                    visible = vis_line[buf.pan_col : buf.pan_col + cols]
                 else:
                     visible = ""
 
@@ -135,7 +144,15 @@ class UIRenderer:
                     r1, c1, r2, c2 = buf.get_normalized_block()
                     if r1 <= doc_r <= r2:
                         self._render_highlighted_line(
-                            visible, doc_r, buf.pan_col, r1, c1, r2, c2
+                            visible,
+                            raw_line,
+                            doc_r,
+                            buf.pan_col,
+                            r1,
+                            c1,
+                            r2,
+                            c2,
+                            tab_w,
                         )
                     else:
                         self.term.write(visible)
@@ -155,27 +172,36 @@ class UIRenderer:
 
         # Reposition terminal cursor at active document character
         sc_r = (buf.cursor_row - buf.top_row) + 1
-        sc_c = (buf.cursor_col - buf.pan_col) + 1
+        vis_c = calc_visual_col(buf.current_line, buf.cursor_col, tab_w)
+        sc_c = (vis_c - buf.pan_col) + 1
+        sc_r = max(1, min(body_rows, sc_r))
+        sc_c = max(1, min(cols, sc_c))
         self.term.locate(sc_r, sc_c)
         self.term.flush()
 
     def _render_highlighted_line(
         self,
         visible_text: str,
+        raw_line: str,
         doc_r: int,
         pan_col: int,
         r1: int,
         c1: int,
         r2: int,
         c2: int,
+        tab_w: int,
     ):
         """Render line with inverse video applied to selected block range."""
         start_c = c1 if doc_r == r1 else 0
-        end_c = c2 if doc_r == r2 else 9999
+        end_c = c2 if doc_r == r2 else len(raw_line)
+
+        # Map buffer byte offsets to document visual columns
+        start_vis_col = calc_visual_col(raw_line, start_c, tab_w)
+        end_vis_col = calc_visual_col(raw_line, end_c, tab_w)
 
         # Adjust for horizontal pan
-        start_vis = max(0, start_c - pan_col)
-        end_vis = max(0, min(len(visible_text), end_c - pan_col))
+        start_vis = max(0, start_vis_col - pan_col)
+        end_vis = max(0, min(len(visible_text), end_vis_col - pan_col))
 
         if start_vis >= len(visible_text):
             self.term.write(visible_text)
@@ -211,6 +237,9 @@ class UIRenderer:
             cols, rows, content_w, content_h
         )
 
+        prompt_row = None
+        prompt_col = None
+
         for screen_r in range(1, body_rows + 1):
             self.term.locate(screen_r, 1)
             # Column 0 tilde on all workspace rows
@@ -222,9 +251,19 @@ class UIRenderer:
                 line_str = lines[content_idx]
                 self.term.locate(screen_r, left_col)
                 self.term.write(line_str)
+                if any(
+                    p in line_str for p in ("Enter choice:", "Enter option:")
+                ):
+                    prompt_row = screen_r
+                    prompt_col = left_col + len(line_str)
 
             self.term.clear_eol()
 
         # Bottom row status bar
         self.render_status_bar(buf, geometry_str=geometry_str)
+
+        # Reposition cursor adjacent to prompt if present (Bug 2.7.9)
+        if prompt_row is not None and prompt_col is not None:
+            self.term.locate(prompt_row, prompt_col)
+
         self.term.flush()

@@ -10,7 +10,13 @@ import tempfile
 import time
 import unittest
 
-from se.buffer import DocumentBuffer, MAX_LINE_LENGTH
+from se.buffer import (
+    DocumentBuffer,
+    MAX_LINE_LENGTH,
+    adjust_col_to_target,
+    calc_visual_col,
+    expand_tabs_visual,
+)
 
 
 class TestBuffer(unittest.TestCase):
@@ -111,19 +117,43 @@ class TestBuffer(unittest.TestCase):
         print("[+] Step 4: Navigation verified.", flush=True)
 
     def test_horizontal_panning(self):
-        """Step 5: Verify horizontal pan offset [Pan +40]."""
+        """Step 5: Verify horizontal pan offset [Pan +40] (Bug 2.7.12)."""
         print("[*] Step 5: Testing horizontal pan [Pan +40]...", flush=True)
-        self.buf.cursor_col = 30
+        # Column 79 fits in 80 columns without panning (Bug 2.7.12)
+        self.buf.cursor_col = 79
         self.buf.update_pan(view_cols=80)
         self.assertEqual(self.buf.pan_col, 0)
 
-        self.buf.cursor_col = 85
+        # Column 80 triggers Pan +40
+        self.buf.cursor_col = 80
         self.buf.update_pan(view_cols=80)
         self.assertEqual(self.buf.pan_col, 40)
 
-        self.buf.cursor_col = 10
+        # Column 119 remains at Pan +40
+        self.buf.cursor_col = 119
+        self.buf.update_pan(view_cols=80)
+        self.assertEqual(self.buf.pan_col, 40)
+
+        # Column 120 triggers Pan +80
+        self.buf.cursor_col = 120
+        self.buf.update_pan(view_cols=80)
+        self.assertEqual(self.buf.pan_col, 80)
+
+        # Retreating below 80 returns to Pan +40
+        self.buf.cursor_col = 79
+        self.buf.update_pan(view_cols=80)
+        self.assertEqual(self.buf.pan_col, 40)
+
+        # Retreating below 40 returns to Pan 0
+        self.buf.cursor_col = 39
         self.buf.update_pan(view_cols=80)
         self.assertEqual(self.buf.pan_col, 0)
+
+        # 120-column geometry does not pan within 120 cols
+        self.buf.cursor_col = 100
+        self.buf.update_pan(view_cols=120)
+        self.assertEqual(self.buf.pan_col, 0)
+
         print("[+] Step 5: Horizontal panning verified.", flush=True)
 
     def test_block_copy_cut_paste(self):
@@ -138,9 +168,8 @@ class TestBuffer(unittest.TestCase):
         self.buf.toggle_block()
         self.assertEqual(self.buf.block_active, 1)
 
-        # Select "Beta"
-        self.buf.block_end_row = 0
-        self.buf.block_end_col = 10
+        # Select "Beta" by moving cursor
+        self.buf.cursor_col = 10
         copied = self.buf.copy_block()
         self.assertEqual(copied, "Beta")
 
@@ -155,6 +184,36 @@ class TestBuffer(unittest.TestCase):
         self.assertTrue(pasted)
         self.assertEqual(self.buf.get_line(0), "Alpha Beta Gamma")
         print("[+] Step 6: Block operations verified.", flush=True)
+
+    def test_block_dynamic_cursor_tracking(self):
+        """Step 8: Verify block selection dynamic tracking (Bug 2.7.2)."""
+        print(
+            "[*] Step 8: Testing dynamic block cursor tracking...",
+            flush=True,
+        )
+        self.buf.lines = ["First Line", "Second Line"]
+        self.buf.cursor_row = 0
+        self.buf.cursor_col = 0
+        self.buf.toggle_block()
+        self.assertEqual(self.buf.block_active, 1)
+
+        # Move cursor to col 5: dynamic block must span [0, 0] to [0, 5]
+        self.buf.cursor_col = 5
+        self.assertEqual(self.buf.get_normalized_block(), (0, 0, 0, 5))
+
+        # Move cursor down to next line: must span across rows
+        self.buf.cursor_row = 1
+        self.buf.cursor_col = 6
+        self.assertEqual(self.buf.get_normalized_block(), (0, 0, 1, 6))
+
+        # Copying dynamic block must solidify and capture text across lines
+        copied = self.buf.copy_block()
+        self.assertEqual(copied, "First Line\nSecond")
+        self.assertEqual(self.buf.block_active, 2)
+        print(
+            "[+] Step 8: Dynamic block cursor tracking verified.",
+            flush=True,
+        )
 
     def test_file_load_and_save(self):
         """Step 7: Verify file loading, saving, and format preservation."""
@@ -184,6 +243,250 @@ class TestBuffer(unittest.TestCase):
                 os.remove(tmp_path)
 
         print("[+] Step 7: File load and save verified.", flush=True)
+
+    def test_tab_traversal_and_coordinates(self):
+        """Step 9: Verify 3-coordinate space and tab traversal (Bug 2.7.21)."""
+        print(
+            "[*] Step 9: Testing 3-coordinate space & tab traversal...",
+            flush=True,
+        )
+        # 1. Visual column calculation with tab_width=4
+        line = "\tA\tB"
+        self.assertEqual(calc_visual_col(line, 0, tab_width=4), 0)
+        self.assertEqual(calc_visual_col(line, 1, tab_width=4), 4)
+        self.assertEqual(calc_visual_col(line, 2, tab_width=4), 5)
+        self.assertEqual(calc_visual_col(line, 3, tab_width=4), 8)
+        self.assertEqual(calc_visual_col(line, 4, tab_width=4), 9)
+
+        # 2. Visual column calculation with tab_width=8
+        self.assertEqual(calc_visual_col(line, 1, tab_width=8), 8)
+        self.assertEqual(calc_visual_col(line, 2, tab_width=8), 9)
+        self.assertEqual(calc_visual_col(line, 3, tab_width=8), 16)
+
+        # 3. Tab expansion
+        self.assertEqual(expand_tabs_visual("\tA", 4), "    A")
+        self.assertEqual(expand_tabs_visual("A\tB", 4), "A   B")
+
+        # 4. Discrete tab traversal in DocumentBuffer
+        buf = DocumentBuffer(tab_width=4)
+        buf.lines = ["\tXYZ"]
+        buf.cursor_col = 0
+        self.assertEqual(buf.get_visual_col(), 0)
+
+        # Move right leaps forward by tab_spaces (4 cols) in 1 keypress
+        buf.move_right()
+        self.assertEqual(buf.cursor_col, 1)
+        self.assertEqual(buf.get_visual_col(), 4)
+        self.assertEqual(buf.target_col, 4)
+
+        # Move left leaps backward to 0 in 1 keypress
+        buf.move_left()
+        self.assertEqual(buf.cursor_col, 0)
+        self.assertEqual(buf.get_visual_col(), 0)
+        self.assertEqual(buf.target_col, 0)
+
+        print(
+            "[+] Step 9: 3-coordinate space and tab traversal verified.",
+            flush=True,
+        )
+
+    def test_vertical_navigation_sticky_col(self):
+        """
+        Step 10: Verify vertical navigation sticky target column (Bug 2.7.22).
+        """
+        print(
+            "[*] Step 10: Testing vertical navigation & sticky target...",
+            flush=True,
+        )
+        buf = DocumentBuffer(tab_width=4)
+        buf.lines = [
+            "0123456789ABCDEF",  # Row 0: 16 chars
+            "SHORT",             # Row 1: 5 chars
+            "\t\tINDENTED",      # Row 2: 2 tabs (vis 0..7) + INDENTED (vis 8..)
+            "ANOTHER LONG LINE",  # Row 3: 17 chars
+        ]
+
+        # Place cursor at Row 0, col 10
+        buf.cursor_row = 0
+        buf.cursor_col = 10
+        buf.target_col = 10
+
+        # Move Down to Row 1 ("SHORT", len 5)
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 5)
+        # target_col must stay sticky at 10
+        self.assertEqual(buf.target_col, 10)
+
+        # Move Down to Row 2 ("\t\tINDENTED")
+        # Visual col 10 corresponds to char_idx 4 ('\t', '\t', 'I', 'N')
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 2)
+        self.assertEqual(buf.cursor_col, 4)
+        self.assertEqual(buf.get_visual_col(), 10)
+        self.assertEqual(buf.target_col, 10)
+
+        # Move Down to Row 3 ("ANOTHER LONG LINE")
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 3)
+        self.assertEqual(buf.cursor_col, 10)
+        self.assertEqual(buf.target_col, 10)
+
+        # Move Up back through rows, preserving sticky target_col 10
+        buf.move_up()
+        self.assertEqual(buf.cursor_row, 2)
+        self.assertEqual(buf.cursor_col, 4)
+        self.assertEqual(buf.get_visual_col(), 10)
+
+        buf.move_up()
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 5)
+
+        buf.move_up()
+        self.assertEqual(buf.cursor_row, 0)
+        self.assertEqual(buf.cursor_col, 10)
+
+        # Test tab boundary clamping when target falls inside a tab
+        buf.lines = ["0123", "\tXYZ", "012345"]
+        buf.cursor_row = 0
+        buf.cursor_col = 2
+        buf.target_col = 2
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 1)
+        # Target 2 falls inside the tab (0..3), so it must clamp to 0
+        self.assertEqual(buf.cursor_col, 0)
+        self.assertEqual(buf.target_col, 2)
+
+        # Moving down restores cursor to col 2 on line without leading tabs
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 2)
+        self.assertEqual(buf.cursor_col, 2)
+        self.assertEqual(buf.target_col, 2)
+
+        print(
+            "[+] Step 10: Vertical navigation sticky target verified.",
+            flush=True,
+        )
+
+    def test_horizontal_pan_left_boundary_and_lookahead(self):
+        """
+        Step 11: Verify pan left boundary <= 40 and lookahead (Bug 2.7.26).
+        """
+        print(
+            "[*] Step 11: Testing pan left boundary <= 40 & lookahead...",
+            flush=True,
+        )
+        buf = DocumentBuffer(tab_width=4)
+
+        # 1. Test pan left boundary: retreating to col 40 resets to pan 0
+        buf.cursor_col = 85
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 40)
+
+        # Move to exactly col 40: must reset pan_col to 0 (inclusive boundary)
+        buf.cursor_col = 40
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 0)
+
+        # Move to col 80 while in pan 80: resets to pan 40
+        buf.cursor_col = 120
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 80)
+
+        buf.cursor_col = 80
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 40)
+
+        # 2. Lookahead pan trigger on active line extending past col 79
+        buf.pan_col = 0
+        buf.lines = ["X" * 90]
+        buf.cursor_col = 79
+        buf.update_pan(view_cols=80)
+        # Active line has characters past col 79, so lookahead triggers +40
+        self.assertEqual(buf.pan_col, 40)
+
+        # 3. No lookahead when typing at end of line (col 79 on line of len 79)
+        buf.pan_col = 0
+        buf.lines = ["X" * 79]
+        buf.cursor_col = 79
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 0)
+
+        # 4. No lookahead on short lines
+        buf.pan_col = 0
+        buf.lines = ["SHORT"]
+        buf.cursor_col = 4
+        buf.update_pan(view_cols=80)
+        self.assertEqual(buf.pan_col, 0)
+
+        print(
+            "[+] Step 11: Pan left boundary & lookahead verified.",
+            flush=True,
+        )
+
+    def test_delete_and_paste_sticky_target_col(self):
+        """
+        Step 12: Verify sticky target column on delete and paste (Bug 2.7.31).
+        """
+        print(
+            "[*] Step 12: Testing sticky target column on delete & paste...",
+            flush=True,
+        )
+        buf = DocumentBuffer(tab_width=4)
+
+        # 1. Single-line paste with tab synchronizes visual target_col
+        buf.lines = ["Hello", "0123456789"]
+        buf.cursor_row = 0
+        buf.cursor_col = 0
+        buf.clipboard = "\tA"
+        buf.paste_block()
+        # Line 0 is "\tAHello", cursor is at index 2 (after "\tA")
+        # Visual col: \t (width 4) + 'A' (1) = 5
+        self.assertEqual(buf.lines[0], "\tAHello")
+        self.assertEqual(buf.cursor_col, 2)
+        self.assertEqual(buf.target_col, 5)
+        # Move down to Line 1 ("0123456789") -> should land on col 5
+        buf.move_down()
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 5)
+
+        # 2. Multi-line paste ending with tab synchronizes visual target_col
+        buf.lines = ["Line 1", "0123456789"]
+        buf.cursor_row = 0
+        buf.cursor_col = 0
+        buf.clipboard = "First\n\tB"
+        buf.paste_block()
+        # Cursor is now at row 1, col 2 (after "\tB")
+        # Line 1 is "\tBLine 1" -> visual col is 4 + 1 = 5
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 2)
+        self.assertEqual(buf.target_col, 5)
+
+        # 3. delete_char() synchronizes visual target_col
+        buf.lines = ["\t1234", "0123456789"]
+        buf.cursor_row = 0
+        buf.cursor_col = 1
+        buf.target_col = 999  # deliberate stale target
+        # Delete '1' at index 1; cursor stays at index 1 ('2')
+        buf.delete_char()
+        self.assertEqual(buf.lines[0], "\t234")
+        self.assertEqual(buf.cursor_col, 1)
+        self.assertEqual(buf.target_col, 4)
+
+        # 4. delete_char() at end of line joining next line synchronizes target
+        buf.lines = ["\t", "XYZ"]
+        buf.cursor_row = 0
+        buf.cursor_col = 1
+        buf.target_col = 999  # deliberate stale target
+        buf.delete_char()
+        self.assertEqual(buf.lines[0], "\tXYZ")
+        self.assertEqual(buf.cursor_col, 1)
+        self.assertEqual(buf.target_col, 4)
+
+        print(
+            "[+] Step 12: Sticky target column on delete & paste verified.",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

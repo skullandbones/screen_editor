@@ -8,10 +8,20 @@ from se.terminal import (
     Terminal,
     KEY_UP,
     KEY_DOWN,
+    KEY_LEFT,
+    KEY_RIGHT,
+    KEY_HOME,
+    KEY_END,
+    KEY_DELETE,
     KEY_ESC,
     KEY_ENTER,
     KEY_TAB,
     KEY_BACKSPACE,
+    KEY_CTRL_A,
+    KEY_CTRL_D,
+    KEY_CTRL_E,
+    KEY_CTRL_G,
+    KEY_CTRL_S,
 )
 
 
@@ -62,7 +72,7 @@ class ModalDialog:
         Display a Tier 2 status/notification pop-up.
         Dismissible by any key.
         """
-        width = max(50, len(title) + 10, len(message) + 8)
+        width = max(52, len(title) + 10, len(message) + 8)
         height = 7
         top, left = self.compute_popup_pos(width, height)
 
@@ -88,8 +98,8 @@ class ModalDialog:
         Display a Tier 2 query modal (e.g. Save Changes, Overwrite).
         Returns 'y'/'Y', 'n'/'N', or None on ESC.
         """
-        width = 50
-        height = 7
+        width = 52
+        height = 8
         top, left = self.compute_popup_pos(width, height)
 
         lines = [
@@ -97,6 +107,7 @@ class ModalDialog:
             "---",
             desc,
             query,
+            "",
             options_text,
         ]
         self.draw_box(top, left, width, lines)
@@ -130,8 +141,8 @@ class ModalDialog:
         Display a Tier 2 single-line text input modal (e.g. Goto Line, Find).
         Returns entered text or None on ESC.
         """
-        width = 50
-        height = 7
+        width = 52
+        height = 8
         top, left = self.compute_popup_pos(width, height)
 
         buf = list(initial_text[:max_len])
@@ -148,6 +159,7 @@ class ModalDialog:
                 "---",
                 desc,
                 query_line,
+                "",
                 options_text,
             ]
             self.draw_box(top, left, width, lines)
@@ -170,6 +182,95 @@ class ModalDialog:
                 if cursor_idx > 0:
                     cursor_idx -= 1
                     buf.pop(cursor_idx)
+            elif k in (KEY_DELETE, KEY_CTRL_D, KEY_CTRL_G):
+                if cursor_idx < len(buf):
+                    buf.pop(cursor_idx)
+            elif k in (KEY_LEFT, KEY_CTRL_S):
+                if cursor_idx > 0:
+                    cursor_idx -= 1
+            elif k == KEY_RIGHT:
+                if cursor_idx < len(buf):
+                    cursor_idx += 1
+            elif k in (KEY_HOME, KEY_CTRL_A):
+                cursor_idx = 0
+            elif k in (KEY_END, KEY_CTRL_E):
+                cursor_idx = len(buf)
+            elif k and len(k) == 1 and 32 <= ord(k) <= 126:
+                if len(buf) < max_len:
+                    buf.insert(cursor_idx, k)
+                    cursor_idx += 1
+
+    def show_find_dialog(
+        self,
+        initial_text: str = "",
+        initial_case_sensitive: bool = True,
+        max_len: int = 20,
+    ) -> Tuple[Optional[str], bool]:
+        """
+        Display Archetype C Find Text modal with dynamic [Tab] case toggle.
+        Returns (search_query, is_case_sensitive) or (None, is_case_sensitive).
+        """
+        width = 52
+        height = 8
+        top, left = self.compute_popup_pos(width, height)
+
+        buf = list(initial_text[:max_len])
+        cursor_idx = len(buf)
+        case_sensitive = initial_case_sensitive
+
+        while True:
+            case_label = (
+                "Case Sensitive  " if case_sensitive else "Case Insensitive"
+            )
+            desc = f"Search Pattern: [{case_label}]"
+            field = "".join(buf).ljust(max_len)
+            query_line = f"Find: [{field}]"
+            options_text = "[Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel"
+
+            lines = [
+                "Find Text",
+                "---",
+                desc,
+                query_line,
+                "",
+                options_text,
+            ]
+            self.draw_box(top, left, width, lines)
+
+            # Position cursor inside the input bracket
+            query_row = top + 4
+            interior_w = width - 2
+            lead_spaces = (interior_w - len(query_line)) // 2
+            box_start_c = left + 1 + lead_spaces + len("Find:") + 2
+            self.term.locate(query_row, box_start_c + cursor_idx)
+            self.term.show_cursor()
+            self.term.flush()
+
+            k = self.term.get_key()
+            if k == KEY_ESC:
+                return None, case_sensitive
+            if k == KEY_ENTER:
+                return "".join(buf), case_sensitive
+            if k == KEY_TAB:
+                case_sensitive = not case_sensitive
+                continue
+            if k == KEY_BACKSPACE:
+                if cursor_idx > 0:
+                    cursor_idx -= 1
+                    buf.pop(cursor_idx)
+            elif k in (KEY_DELETE, KEY_CTRL_D, KEY_CTRL_G):
+                if cursor_idx < len(buf):
+                    buf.pop(cursor_idx)
+            elif k in (KEY_LEFT, KEY_CTRL_S):
+                if cursor_idx > 0:
+                    cursor_idx -= 1
+            elif k == KEY_RIGHT:
+                if cursor_idx < len(buf):
+                    cursor_idx += 1
+            elif k in (KEY_HOME, KEY_CTRL_A):
+                cursor_idx = 0
+            elif k in (KEY_END, KEY_CTRL_E):
+                cursor_idx = len(buf)
             elif k and len(k) == 1 and 32 <= ord(k) <= 126:
                 if len(buf) < max_len:
                     buf.insert(cursor_idx, k)

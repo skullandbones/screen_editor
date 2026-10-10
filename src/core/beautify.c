@@ -18,6 +18,7 @@
 #include "../include/block.h"
 #include "../include/beautify.h"
 #include "../include/ui.h"
+#include "../include/ui_modal.h"
 
 void parse_asm_line(const char *src,
                     char *label, size_t label_max,
@@ -221,6 +222,7 @@ int do_ctrl_y_beautify(void)
     } else {
         beautify_document();
     }
-    set_status_msg("Assembly Beautifier Complete.");
+    modal_show_notification("Beautify Complete",
+                            "Assembly formatting applied.");
     return 0;
 }

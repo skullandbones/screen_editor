@@ -9,12 +9,71 @@ from typing import List, Optional, Tuple
 MAX_LINE_LENGTH = 120
 
 
+def calc_visual_col(line: str, cur_col: int, tab_width: int = 4) -> int:
+    """
+    Map buffer byte offset cur_col to 0-indexed document visual column.
+    Expands tab characters (0x09) to tab stops according to tab_width.
+    """
+    vis_col = 0
+    line_len = len(line)
+    limit = max(0, min(cur_col, line_len))
+    for i in range(limit):
+        if line[i] == "\t":
+            vis_col += tab_width - (vis_col % tab_width)
+        else:
+            vis_col += 1
+    if cur_col > line_len:
+        vis_col += cur_col - line_len
+    return min(vis_col, MAX_LINE_LENGTH)
+
+
+def expand_tabs_visual(line: str, tab_width: int = 4) -> str:
+    """
+    Expand tab characters in line into visual space for terminal display.
+    """
+    result = []
+    vis_col = 0
+    for ch in line:
+        if ch == "\t":
+            spaces = tab_width - (vis_col % tab_width)
+            result.append(" " * spaces)
+            vis_col += spaces
+        else:
+            result.append(ch)
+            vis_col += 1
+    return "".join(result)
+
+
+def adjust_col_to_target(
+    line: str, target_col: int, tab_width: int = 4
+) -> int:
+    """
+    Compute buffer column offset aligned with target visual column
+    according to docs/UI_UX_DESIGN.md Section 6.4 algorithm.
+    """
+    char_idx = 0
+    vis_acc = 0
+    while char_idx < len(line) and vis_acc < target_col:
+        if line[char_idx] == "\t":
+            spaces = tab_width - (vis_acc % tab_width)
+            if vis_acc + spaces > target_col:
+                break
+            vis_acc += spaces
+            char_idx += 1
+        else:
+            vis_acc += 1
+            char_idx += 1
+    return char_idx
+
+
 class DocumentBuffer:
     """
     Manages document lines, cursor positioning, and block selections.
     """
 
-    def __init__(self, filename: Optional[str] = None):
+    def __init__(
+        self, filename: Optional[str] = None, tab_width: int = 4
+    ):
         self.filename: str = filename if filename else "(Untitled)"
         self.has_file: bool = bool(filename)
         self.lines: List[str] = [""]
@@ -23,6 +82,7 @@ class DocumentBuffer:
         self.target_col: int = 0
         self.top_row: int = 0
         self.pan_col: int = 0
+        self.tab_width: int = tab_width
         self.modified: bool = False
         self.format_cpm: bool = True  # True = CP/M CRLF, False = Linux LF
         self.clipboard: str = ""
@@ -58,15 +118,50 @@ class DocumentBuffer:
             self.lines[row] = text[:MAX_LINE_LENGTH]
             self.modified = True
 
+    def get_visual_col(self, col: Optional[int] = None) -> int:
+        """Return visual column for cursor_col or specified col."""
+        c = self.cursor_col if col is None else col
+        return calc_visual_col(self.current_line, c, self.tab_width)
+
+    def adjust_col_to_target(self, target_vis_col: Optional[int] = None):
+        """
+        Adjust cursor_col to align with sticky target_col visual column.
+        """
+        target = self.target_col if target_vis_col is None else target_vis_col
+        self.cursor_col = adjust_col_to_target(
+            self.current_line, target, self.tab_width
+        )
+
     def update_pan(self, view_cols: int):
         """
-        Calculate horizontal viewport pan offset [Pan +40] based on cursor.
+        Calculate horizontal viewport pan offset [Pan +40] based on visual col
+        and lookahead edge trigger according to docs/UI_UX_DESIGN.md §6.6.
         """
-        usable_cols = max(10, view_cols - 1)
-        if self.cursor_col >= usable_cols:
-            self.pan_col = 40 if self.cursor_col < usable_cols + 40 else 80
-        elif self.cursor_col < 40:
+        if view_cols >= MAX_LINE_LENGTH:
             self.pan_col = 0
+            return
+
+        vis_col = self.get_visual_col()
+
+        # 1. Pan Right
+        while vis_col >= self.pan_col + view_cols:
+            self.pan_col += 40
+
+        # Lookahead Edge Trigger: if at VIEW_RIGHT_COL - 1 and active line
+        # continues beyond CUR_COL (character at CUR_COL and next are non-null)
+        view_right = self.pan_col + view_cols
+        if (
+            vis_col == view_right - 1
+            and self.cursor_col + 1 < len(self.current_line)
+        ):
+            self.pan_col += 40
+
+        # 2. Pan Left
+        if self.pan_col > 0 and vis_col <= self.pan_col:
+            if vis_col <= 0:
+                self.pan_col = 0
+            else:
+                self.pan_col = max(0, ((vis_col - 1) // 40) * 40)
 
     def insert_char(self, ch: str) -> bool:
         """
@@ -81,7 +176,7 @@ class DocumentBuffer:
         new_line = line[:col] + ch + line[col:]
         self.lines[self.cursor_row] = new_line
         self.cursor_col = col + 1
-        self.target_col = self.cursor_col
+        self.target_col = self.get_visual_col()
         self.modified = True
         return True
 
@@ -112,6 +207,7 @@ class DocumentBuffer:
             self.lines[self.cursor_row] = (
                 line[: self.cursor_col] + line[self.cursor_col + 1 :]
             )
+            self.target_col = self.get_visual_col()
             self.modified = True
             return True
 
@@ -121,6 +217,7 @@ class DocumentBuffer:
             if len(line) + len(next_line) <= MAX_LINE_LENGTH:
                 self.lines[self.cursor_row] = line + next_line
                 self.lines.pop(self.cursor_row + 1)
+                self.target_col = self.get_visual_col()
                 self.modified = True
                 return True
         return False
@@ -135,7 +232,7 @@ class DocumentBuffer:
             col = min(len(line), self.cursor_col)
             self.lines[self.cursor_row] = line[: col - 1] + line[col:]
             self.cursor_col = col - 1
-            self.target_col = self.cursor_col
+            self.target_col = self.get_visual_col()
             self.modified = True
             return True
 
@@ -149,7 +246,7 @@ class DocumentBuffer:
                 self.lines.pop(self.cursor_row)
                 self.cursor_row -= 1
                 self.cursor_col = join_col
-                self.target_col = join_col
+                self.target_col = self.get_visual_col()
                 self.modified = True
                 return True
         return False
@@ -161,7 +258,7 @@ class DocumentBuffer:
         elif self.cursor_row > 0:
             self.cursor_row -= 1
             self.cursor_col = len(self.lines[self.cursor_row])
-        self.target_col = self.cursor_col
+        self.target_col = self.get_visual_col()
 
     def move_right(self):
         """Move cursor right one column or wrap to start of next line."""
@@ -171,19 +268,19 @@ class DocumentBuffer:
         elif self.cursor_row < len(self.lines) - 1:
             self.cursor_row += 1
             self.cursor_col = 0
-        self.target_col = self.cursor_col
+        self.target_col = self.get_visual_col()
 
     def move_up(self):
         """Move cursor up one line, preserving target column."""
         if self.cursor_row > 0:
             self.cursor_row -= 1
-            self.cursor_col = min(self.target_col, len(self.current_line))
+            self.adjust_col_to_target()
 
     def move_down(self):
         """Move cursor down one line, preserving target column."""
         if self.cursor_row < len(self.lines) - 1:
             self.cursor_row += 1
-            self.cursor_col = min(self.target_col, len(self.current_line))
+            self.adjust_col_to_target()
 
     def move_home(self):
         """Move cursor to beginning of current line."""
@@ -193,7 +290,7 @@ class DocumentBuffer:
     def move_end(self):
         """Move cursor to end of current line."""
         self.cursor_col = len(self.current_line)
-        self.target_col = self.cursor_col
+        self.target_col = self.get_visual_col()
 
     def move_top(self):
         """Jump to top of document (Line 1, Col 0)."""
@@ -211,12 +308,12 @@ class DocumentBuffer:
     def page_up(self, page_size: int):
         """Navigate up by page_size lines."""
         self.cursor_row = max(0, self.cursor_row - page_size)
-        self.cursor_col = min(self.target_col, len(self.current_line))
+        self.adjust_col_to_target()
 
     def page_down(self, page_size: int):
         """Navigate down by page_size lines."""
         self.cursor_row = min(len(self.lines) - 1, self.cursor_row + page_size)
-        self.cursor_col = min(self.target_col, len(self.current_line))
+        self.adjust_col_to_target()
 
     def toggle_block(self):
         """Toggle block selection state (Ctrl+B)."""
@@ -232,15 +329,20 @@ class DocumentBuffer:
     def solidify_block(self):
         """Solidify dynamic block selection to locked bounds."""
         if self.block_active == 1:
+            self.block_end_row = self.cursor_row
+            self.block_end_col = self.cursor_col
             self.block_active = 2
 
     def get_normalized_block(self) -> Tuple[int, int, int, int]:
         """
         Return normalized (start_row, start_col, end_row, end_col)
-        where start <= end.
+        where start <= end. Dynamic blocks follow the active cursor.
         """
         r1, c1 = self.block_start_row, self.block_start_col
-        r2, c2 = self.block_end_row, self.block_end_col
+        if self.block_active == 1:
+            r2, c2 = self.cursor_row, self.cursor_col
+        else:
+            r2, c2 = self.block_end_row, self.block_end_col
         if (r1, c1) > (r2, c2):
             return r2, c2, r1, c1
         return r1, c1, r2, c2
@@ -249,6 +351,8 @@ class DocumentBuffer:
         """Copy selected block text into clipboard buffer."""
         if self.block_active == 0:
             return ""
+        if self.block_active == 1:
+            self.solidify_block()
         r1, c1, r2, c2 = self.get_normalized_block()
         if r1 == r2:
             text = self.lines[r1][c1:c2]
@@ -265,6 +369,8 @@ class DocumentBuffer:
         """Cut selected block text, deleting it from document."""
         if self.block_active == 0:
             return ""
+        if self.block_active == 1:
+            self.solidify_block()
         text = self.copy_block()
         r1, c1, r2, c2 = self.get_normalized_block()
         if r1 == r2:
@@ -279,7 +385,7 @@ class DocumentBuffer:
 
         self.cursor_row = r1
         self.cursor_col = c1
-        self.target_col = c1
+        self.target_col = self.get_visual_col()
         self.block_active = 0
         self.modified = True
         return text
@@ -298,7 +404,7 @@ class DocumentBuffer:
                 line[:col] + to_insert + line[col:]
             )[:MAX_LINE_LENGTH]
             self.cursor_col = col + len(to_insert)
-            self.target_col = self.cursor_col
+            self.target_col = self.get_visual_col()
         else:
             line = self.current_line
             col = min(len(line), self.cursor_col)
@@ -315,7 +421,7 @@ class DocumentBuffer:
             )
             self.cursor_row = last_idx
             self.cursor_col = len(parts[-1])
-            self.target_col = self.cursor_col
+            self.target_col = self.get_visual_col()
 
         self.modified = True
         return True

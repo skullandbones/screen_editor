@@ -69,16 +69,21 @@ class TestEditorHeadless(unittest.TestCase):
         os.close(slave_fd)
 
         try:
-            # Step 1: Wait for status bar to render
+            # Step 1: Wait for splash screen and status bar to render
             output = read_pty_until(master_fd, "(Untitled)", timeout=3.0)
             if "(Untitled)" not in output:
                 print(
-                    f"[-] Step 1: Failed to boot editor. Buffer: "
+                    f"[-] Step 1: Failed to boot splash. Buffer: "
                     f"{repr(output[-300:])}",
                     flush=True,
                 )
+            self.assertIn("Screen Editor", output)
             self.assertIn("(Untitled)", output)
-            print("[+] Step 1: Editor booted with status bar.", flush=True)
+            print("[+] Step 1: Editor booted to splash screen.", flush=True)
+
+            # Enter editor workspace from splash screen
+            os.write(master_fd, b"e")
+            time.sleep(0.2)
 
             # Step 2: Inject text
             print("[*] Step 2: Typing text into editor...", flush=True)
@@ -122,6 +127,11 @@ class TestEditorHeadless(unittest.TestCase):
             output = read_pty_until(master_fd, "Save changes?", timeout=2.0)
             if "Save changes?" in output:
                 os.write(master_fd, b"n")
+
+            exit_output = read_pty_until(
+                master_fd, "Exiting SE. Returned to OS prompt.", timeout=3.0
+            )
+            self.assertIn("Exiting SE. Returned to OS prompt.", exit_output)
 
             proc.wait(timeout=3.0)
             self.assertEqual(proc.returncode, 0)

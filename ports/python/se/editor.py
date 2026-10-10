@@ -42,6 +42,7 @@ from se.terminal import (
     KEY_CTRL_T,
     KEY_CTRL_U,
     KEY_CTRL_V,
+    KEY_CTRL_W,
     KEY_CTRL_X,
     KEY_CTRL_Y,
 )
@@ -59,7 +60,9 @@ class Editor:
         self.terminal = Terminal(default_cols=cols, default_rows=rows)
         self.renderer = UIRenderer(self.terminal)
         self.modal = ModalDialog(self.terminal)
-        self.buffer = DocumentBuffer(filename=filename)
+        self.buffer = DocumentBuffer(
+            filename=filename, tab_width=self.config.tab_width
+        )
         self.search_query: str = ""
         self.replace_query: str = ""
         self.case_sensitive: bool = True
@@ -73,7 +76,11 @@ class Editor:
     def run(self):
         """Run the main interactive editor event loop."""
         self.terminal.enter_raw_mode()
+        self.terminal.term_init()
         self.running = True
+
+        if not self.buffer.has_file:
+            self.action_splash_screen()
 
         try:
             while self.running:
@@ -91,14 +98,15 @@ class Editor:
 
                 self.dispatch_key(key)
         finally:
+            self.terminal.term_exit()
             self.terminal.exit_raw_mode()
 
     def dispatch_key(self, key: str):
         """Dispatch a single keypress or symbolic action."""
         # 1. Navigation Keys
-        if key == KEY_LEFT or key == KEY_CTRL_S:
+        if key == KEY_LEFT:
             self.buffer.move_left()
-        elif key == KEY_RIGHT or key == KEY_CTRL_D:
+        elif key == KEY_RIGHT:
             self.buffer.move_right()
         elif key == KEY_UP:
             self.buffer.move_up()
@@ -114,7 +122,7 @@ class Editor:
             self.buffer.move_bottom()
         elif key == KEY_PGUP or key == KEY_CTRL_U:
             self.buffer.page_up(self.terminal.rows - 2)
-        elif key == KEY_PGDN or key == KEY_CTRL_V:
+        elif key == KEY_PGDN:
             self.buffer.page_down(self.terminal.rows - 2)
 
         # 2. Text Editing & Layout
@@ -122,27 +130,21 @@ class Editor:
             self.buffer.split_line()
         elif key == KEY_BACKSPACE:
             self.buffer.backspace()
-        elif key == KEY_DELETE:
+        elif key == KEY_DELETE or key == KEY_CTRL_D:
             self.buffer.delete_char()
         elif key == KEY_TAB:
-            # Expand tab to spaces based on config tab width
-            spaces = self.config.tab_width - (
-                self.buffer.cursor_col % self.config.tab_width
-            )
-            for _ in range(spaces):
-                self.buffer.insert_char(" ")
+            self.buffer.insert_char("\t")
 
         # 3. Block Selection & Clipboard
         elif key == KEY_CTRL_B:
             self.buffer.toggle_block()
         elif key == KEY_CTRL_C:
-            copied = self.buffer.copy_block()
-            if copied:
-                self.status_msg = f"Copied {len(copied)}c"
+            self.buffer.copy_block()
         elif key == KEY_CTRL_X:
-            cut = self.buffer.cut_block()
-            if cut:
-                self.status_msg = f"Cut {len(cut)}c"
+            self.buffer.cut_block()
+        elif key == KEY_CTRL_V:
+            if not self.buffer.paste_block():
+                self.buffer.page_down(self.terminal.rows - 2)
 
         # 4. Modals and Workspaces
         elif key == KEY_CTRL_F:
@@ -166,7 +168,10 @@ class Editor:
         elif key == KEY_CTRL_Q:
             self.action_quit()
         elif key == KEY_ESC:
-            self.action_splash_screen()
+            if self.buffer.block_active > 0:
+                self.buffer.block_active = 0
+            else:
+                self.action_splash_screen()
 
         # 5. Printable Character Insertion
         elif len(key) == 1 and 32 <= ord(key) <= 126:
@@ -195,7 +200,6 @@ class Editor:
             title="Goto Line",
             desc="Enter target line number to jump to",
             label="Goto line:",
-            options_text="[Enter]=Goto Line      [ESC]=Cancel",
         )
         if ans and ans.strip().isdigit():
             target_line = int(ans.strip())
@@ -208,14 +212,12 @@ class Editor:
             self.buffer.target_col = 0
 
     def action_find(self):
-        """Prompt for search text and search forward from cursor."""
-        query = self.modal.show_input(
-            title="Find Text",
-            desc="Enter search string to locate",
-            label="Find:",
+        """Prompt for search text with Tab case toggle and search forward."""
+        query, case_sens = self.modal.show_find_dialog(
             initial_text=self.search_query,
-            options_text="[Enter]=Find      [ESC]=Cancel",
+            initial_case_sensitive=self.case_sensitive,
         )
+        self.case_sensitive = case_sens
         if query:
             self.search_query = query
             self.action_find_next()
@@ -300,24 +302,27 @@ class Editor:
         )
 
     def action_help(self):
-        """Display full-screen Help workspace."""
+        """Display full-screen Help workspace (17 lines, 70 cols)."""
         lines = [
-            "SE.COM — EDITOR MODE KEYS",
+            "SE.COM — EDITOR MODE KEYS".center(70),
             "",
-            "Cursor Navigation:                 Block Operations:",
-            "  Arrows / WordStar (^S,^D,^E,^X)     Ctrl+B: Toggle Block",
-            "  Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block",
-            "  Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block",
-            "  Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block",
+            "  Cursor Navigation:".ljust(38) + "Block Operations:",
+            "    Arrows / ANSI VT100".ljust(38) + "Ctrl+B: Toggle Block",
+            "    Ctrl+A / Ctrl+E: Home / End".ljust(38) + "Ctrl+C: Copy Block",
+            "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38) + "Ctrl+X: Cut Block",
+            "    Ctrl+U / Ctrl+V: Page Up / Down".ljust(38)
+            + "Ctrl+V: Paste Block",
             "",
-            "Search & Replace:                  File & System:",
-            "  Ctrl+F: Find Text                   Ctrl+S: Save File",
-            "  Ctrl+N: Find Next                   Ctrl+O: Open File",
-            "  Ctrl+R: Search and Replace          Ctrl+Q: Safe Quit",
-            "  Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette",
-            "  Ctrl+Y: Beautify Source Code        ESC   : Splash Screen",
+            "  Search & Replace:".ljust(38) + "File & System:",
+            "    Ctrl+F: Find Text".ljust(38) + "Ctrl+S: Save File",
+            "    Ctrl+N: Find Next".ljust(38) + "Ctrl+O: Open File",
+            "    Ctrl+R: Search and Replace".ljust(38) + "Ctrl+Q: Safe Quit",
+            "    Ctrl+L: Goto Line Number".ljust(38) + "Ctrl+P: Plugin Palette",
+            "    Ctrl+Y: Beautify Source Code".ljust(38)
+            + "ESC   : Splash Screen",
             "",
-            "Press any key to return to editor",
+            "Press any key to continue".center(70),
+            "",
         ]
         geom = f"{self.terminal.cols}x{self.terminal.rows}"
         self.renderer.render_centered_workspace(
@@ -375,58 +380,175 @@ class Editor:
             )
             return False
 
-    def action_splash_screen(self):
-        """Display full-screen Splash screen workspace."""
+    def action_new_file(self):
+        """Create new empty document (prompting if unsaved edits)."""
+        if self.buffer.modified:
+            ans = self.modal.show_confirm(
+                title="Unsaved Modifications",
+                desc="Discard current modifications for new document?",
+                query="Discard edits? [y/n]:",
+            )
+            if ans != "y":
+                return
+        self.buffer = DocumentBuffer(filename="(Untitled)")
+        self.buffer.has_file = False
+
+    def action_close_file(self):
+        """Close active document and return to blank untitled state."""
+        if self.buffer.modified:
+            ans = self.modal.show_confirm(
+                title="Unsaved Modifications",
+                desc="Discard current modifications before closing?",
+                query="Discard edits? [y/n]:",
+            )
+            if ans != "y":
+                return
+        self.buffer = DocumentBuffer(filename="(Untitled)")
+        self.buffer.has_file = False
+
+    def action_about(self):
+        """Display Tier 1 About screen workspace."""
         lines = [
-            "SE — Screen Editor",
-            "Version v1.1.0 (Python Native Linux)",
+            "SE - Screen Editor",
+            "version 1.1.0 (2026-10-09)",
+            "by Dean Jenkins",
             "",
-            "Free Memory: [Dynamic Heap]   Lines: [32K Max]",
+            "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high",
             "",
-            ":e to edit",
-            ":o to open file",
-            ":s to save file",
-            ":c for config",
-            ":p for plugins",
-            ":? for help",
-            ":q to quit",
+            "Open source software under the MIT License",
             "",
-            "Enter choice: ",
+            "Press any key to continue",
         ]
         geom = f"{self.terminal.cols}x{self.terminal.rows}"
         self.renderer.render_centered_workspace(
             lines, self.buffer, geometry_str=geom
         )
+        self.terminal.get_key()
 
+    def action_mem_info(self):
+        """Display Tier 1 Memory Information workspace."""
+        ram_lbl = (
+            "Preserved (Active)"
+            if self.config.ramdrive_enabled
+            else "None Detected"
+        )
+        plugin_lbl = (
+            "Operational" if self.plugin_mgr.list_plugins() else "Disabled"
+        )
+        lines = [
+            "SE - Extended Memory Map",
+            f"OS: Linux | RAM: Dynamic Heap | Plugins: {plugin_lbl}",
+            "",
+            "Bank  Phys   Size   System / OS Role        SE Usage",
+            "----  ----   ----   ---------------------   "
+            "----------------------------",
+            "0     0x00   64KB   Linux OS / Python VM    Code & Runtime Buffer",
+            "1     0x01   64KB   Document Buffer         Active Lines & Cache",
+            "2     0x02   32KB   Plugin Subsystem        Dynamic Plugin Memory",
+            "3     0x03   32KB   Clipboard Buffer        Cut/Copy Storage",
+            f"4     0x04   RAM    RAM Drive Storage       {ram_lbl}",
+            "",
+            "Press any key to continue",
+        ]
+        geom = f"{self.terminal.cols}x{self.terminal.rows}"
+        self.renderer.render_centered_workspace(
+            lines, self.buffer, geometry_str=geom
+        )
+        self.terminal.get_key()
+
+    def action_splash_screen(self):
+        """Display full-screen Splash screen workspace."""
         while True:
+            screen_lbl = (
+                "120x40 (Modern Default)"
+                if self.terminal.cols == 120
+                else "80x24 (Classic Terminal)"
+            )
+            ram_lbl = (
+                "Preserved (Active)"
+                if self.config.ramdrive_enabled
+                else "None Detected"
+            )
+            plugin_lbl = (
+                "Operational"
+                if self.plugin_mgr.list_plugins()
+                else "Disabled"
+            )
+            max_lines_str = (
+                "32,768 lines"
+                if self.config.max_lines == "32K"
+                else "16,384 lines"
+            )
+
+            lines = [
+                "SE - Screen Editor",
+                "",
+                "  type   [E]  or  [Enter] to edit",
+                "  type   [N]              to new file",
+                "  type   [O]              to open file",
+                "  type   [S]              to save file",
+                "  type   [W]  or  [^W]    to close file",
+                "  type   [L]  or  [^L]    to goto line",
+                "  type   [A]              for about",
+                "  type   [M]              for memory info",
+                "  type   [P]              for plugins",
+                "  type   [^P]             for context plugin menu",
+                "  type   [C]              to configure",
+                "  type   [1]              set 120x40",
+                "  type   [2]              set 80x24",
+                "  type   [Q]  or  [^Q]    to exit",
+                "",
+                f"Active Screen : [{screen_lbl}]",
+                f"RAM Drive     : [{ram_lbl}]",
+                f"Plugin System : [{plugin_lbl}]",
+                f"Max Lines     : [{max_lines_str}]",
+                "",
+                "Enter choice: ",
+            ]
+            geom = f"{self.terminal.cols}x{self.terminal.rows}"
+            self.renderer.render_centered_workspace(
+                lines, self.buffer, geometry_str=geom
+            )
+
             k = self.terminal.get_key()
             if not k:
                 continue
             ch = k.lower()
-            if ch in ("e", "\r"):
+            if ch in ("e", "\r") or k == KEY_ESC:
                 return  # Return to editor
-            elif ch == "o":
+            elif ch == "n":
+                self.action_new_file()
+                return
+            elif ch == "o" or k == KEY_CTRL_O:
                 self.action_open_file()
                 return
             elif ch == "s":
                 self.action_save_file()
                 return
+            elif ch == "w" or k == KEY_CTRL_W:
+                self.action_close_file()
+            elif ch == "l" or k == KEY_CTRL_L:
+                self.action_goto_line()
+                return
+            elif ch == "a":
+                self.action_about()
+            elif ch == "m":
+                self.action_mem_info()
+            elif ch == "p" or k == KEY_CTRL_P:
+                self.action_plugin_palette()
             elif ch == "c":
                 self.action_config_screen()
-                self.renderer.render_centered_workspace(
-                    lines, self.buffer, geometry_str=geom
-                )
-            elif ch == "p":
-                self.action_plugin_palette()
-                self.renderer.render_centered_workspace(
-                    lines, self.buffer, geometry_str=geom
-                )
             elif ch == "?":
                 self.action_help()
-                self.renderer.render_centered_workspace(
-                    lines, self.buffer, geometry_str=geom
-                )
-            elif ch == "q":
+            elif ch == "1":
+                self.config.set("SCREEN", "120x40")
+                self.terminal.cols = self.config.screen_cols
+                self.terminal.rows = self.config.screen_rows
+            elif ch == "2":
+                self.config.set("SCREEN", "80x24")
+                self.terminal.cols = self.config.screen_cols
+                self.terminal.rows = self.config.screen_rows
+            elif ch == "q" or k == KEY_CTRL_Q:
                 self.action_quit()
                 return
 
@@ -446,6 +568,9 @@ class Editor:
             items=plugins,
         )
         if choice is not None and 0 <= choice < len(plugins):
+            # Child pop-up isolation protocol (Section 8.4): clear parent menu
+            geom = f"{self.terminal.cols}x{self.terminal.rows}"
+            self.renderer.render_editor(self.buffer, geometry_str=geom)
             plugin_name, _ = plugins[choice]
             self.plugin_mgr.execute(plugin_name)
 
@@ -473,7 +598,7 @@ class Editor:
                 f"3. Max Line Capacity: {self.config.max_lines}",
                 f"4. RAM Drive Mode   : {ram}",
                 "",
-                "[S] Save to SE.CFG    [ESC]/[Enter] Return to Splash",
+                "[S] Save to SE.CFG    [ESC]/[Enter] Return",
                 "",
                 "Enter option: ",
             ]
@@ -490,15 +615,22 @@ class Editor:
                 return
             elif ch == "1":
                 if self.config.screen_cols == 80:
-                    self.config.screen_cols = 120
-                    self.config.screen_rows = 40
+                    self.config.set("SCREEN", "120x40")
                 else:
-                    self.config.screen_cols = 80
-                    self.config.screen_rows = 24
+                    self.config.set("SCREEN", "80x24")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
             elif ch == "2":
-                self.config.tab_width = 8 if self.config.tab_width == 4 else 4
+                new_tab = "4" if self.config.tab_width == 8 else "8"
+                self.config.set("TAB", new_tab)
+            elif ch == "3":
+                cur_cap = self.config.max_lines
+                new_cap = "32K" if cur_cap == "16K" else "16K"
+                self.config.set("MAXLINES", new_cap)
+            elif ch == "4":
+                cur_ram = self.config.get("RAMDRIVE", "PRESERVE").upper()
+                new_ram = "DISABLED" if cur_ram != "DISABLED" else "PRESERVE"
+                self.config.set("RAMDRIVE", new_ram)
             elif ch == "s":
                 self.config.save_config()
                 self.modal.show_notification(

@@ -18,6 +18,7 @@
 #include "../include/block.h"
 #include "../include/file_io.h"
 #include "../include/ui.h"
+#include "../include/ui_modal.h"
 
 /* Global File Filename and Format State */
 char    g_current_filename[64] = {0};
@@ -195,7 +196,8 @@ int file_save(const char *filename, uint8_t format)
 
     g_doc_modified = 0;
     checkout_active_line(g_cur_doc_row);
-    set_status_msg("File saved successfully.");
+    modal_show_notification("Save Complete",
+                            filename ? filename : g_current_filename);
     return 0;
 }
 
@@ -233,6 +235,6 @@ int file_save_block(const char *filename,
 
     fclose(fp);
     checkout_active_line(g_cur_doc_row);
-    set_status_msg("Block exported successfully.");
+    modal_show_notification("Export Complete", filename);
     return 0;
 }
