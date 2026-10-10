@@ -98,6 +98,7 @@ class Editor:
 
                 self.dispatch_key(key)
         finally:
+            self.terminal.term_exit()
             self.terminal.exit_raw_mode()
 
     def dispatch_key(self, key: str):

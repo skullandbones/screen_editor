@@ -614,7 +614,7 @@ have been resolved and archived.
       `\x1b[0m\x1b[?25h\x1b[2J\x1b[H`, and invoked `self.terminal.term_init()`
       in `editor.run()` before rendering workspaces. Validated via
       `test_startup_term_init_clears_screen` in `test_editor.py`.
-  - [ ] **Bug 2.7.28: Missing Exit Screen Clear and Canonical Exit Banner**:
+  - [x] **Bug 2.7.28: Missing Exit Screen Clear and Canonical Exit Banner**:
     - *Symptom*: Quitting `se-py` leaves dirty viewport contents and status bar
       text on the terminal without clearing the display or emitting the exit
       message banner. The host shell prompt appears misplaced on the screen.
@@ -623,10 +623,11 @@ have been resolved and archived.
       and cursor visibility, but never clears the terminal screen and never
       emits the canonical exit message string.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 2.5 and Section 12.1.
-    - *Resolution Plan*: On clean exit in `editor.py` / `terminal.py`, invoke
-      `clear_screen()` (`\x1b[2J\x1b[H`), emit canonical exit message string
-      `\r\nExiting SE. Returned to OS prompt.\r\n`, restore cursor visibility,
-      and flush stdout before terminating. Validate via `test_headless.py`.
+    - *Resolution*: Implemented `term_exit()` in `terminal.py` which emits
+      `term_init()` screen clear (`\x1b[2J\x1b[H`), prints canonical exit
+      banner `\r\nExiting SE. Returned to OS prompt.\r\n`, and restores cursor,
+      invoking it in `editor.run()` finally block. Validated via
+      `test_editor.py` and PTY exit assertion in `test_headless.py`.
   - [ ] **Bug 2.7.29: Status Bar Field 5 Shows Raw Col Across Tabs**:
     - *Symptom*: When the cursor is located on a line containing tab characters,
       Field 5 of the universal status bar displays the raw buffer byte offset

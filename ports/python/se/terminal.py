@@ -67,6 +67,9 @@ ANSI_INVERSE_OFF = "\x1b[0m"
 ANSI_UNDERLINE_ON = "\x1b[4m"
 ANSI_UNDERLINE_OFF = "\x1b[24m"
 
+# Canonical Exit Banner
+MSG_EXIT_HOST = "\r\nExiting SE. Returned to OS prompt.\r\n"
+
 
 class Terminal:
     """
@@ -171,6 +174,16 @@ class Terminal:
         self.inverse_off()
         self.show_cursor()
         self.clear_screen()
+        self.flush()
+
+    def term_exit(self, msg: str = MSG_EXIT_HOST):
+        """
+        Canonical terminal session exit (EXIT_PROGRAM):
+        Clears screen (\x1b[2J\x1b[H), emits exit banner, and restores cursor.
+        """
+        self.term_init()
+        self.write(msg)
+        self.show_cursor()
         self.flush()
 
     def clear_eol(self):

@@ -128,6 +128,11 @@ class TestEditorHeadless(unittest.TestCase):
             if "Save changes?" in output:
                 os.write(master_fd, b"n")
 
+            exit_output = read_pty_until(
+                master_fd, "Exiting SE. Returned to OS prompt.", timeout=3.0
+            )
+            self.assertIn("Exiting SE. Returned to OS prompt.", exit_output)
+
             proc.wait(timeout=3.0)
             self.assertEqual(proc.returncode, 0)
             print("[+] Step 5: Editor cleanly exited with code 0.", flush=True)

@@ -36,6 +36,7 @@ class TestEditor(unittest.TestCase):
         self.editor = Editor()
         self.editor.terminal.enter_raw_mode = MagicMock()
         self.editor.terminal.exit_raw_mode = MagicMock()
+        self.editor.terminal.term_exit = MagicMock()
 
     def test_ctrl_s_dispatches_save_file(self):
         """Step 1: Verify Ctrl+S invokes action_save_file (Bug 2.7.1)."""
@@ -759,6 +760,47 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 20: Startup term_init screen clear verified.",
+            flush=True,
+        )
+
+    def test_clean_exit_screen_clear_and_banner(self):
+        """Step 21: Verify clean exit invokes term_exit banner (Bug 2.7.28)."""
+        print(
+            "[*] Step 21: Testing clean exit invokes term_exit banner...",
+            flush=True,
+        )
+        self.editor.terminal.term_exit = MagicMock()
+        self.editor.action_splash_screen = MagicMock()
+        self.editor.renderer.render_editor = MagicMock()
+
+        def mock_get_key(timeout=None):
+            self.editor.running = False
+            return None
+
+        self.editor.terminal.get_key = mock_get_key
+        self.editor.run()
+
+        self.editor.terminal.term_exit.assert_called_once()
+        self.editor.terminal.exit_raw_mode.assert_called_once()
+
+        from se.terminal import (
+            Terminal,
+            ANSI_CLEAR_SCREEN,
+            ANSI_SHOW_CURSOR,
+        )
+        real_term = Terminal()
+        written = []
+        real_term.write = lambda s: written.append(s)
+        real_term.flush = MagicMock()
+        real_term.term_exit()
+
+        self.assertIn(ANSI_CLEAR_SCREEN, written)
+        self.assertIn("\r\nExiting SE. Returned to OS prompt.\r\n", written)
+        self.assertIn(ANSI_SHOW_CURSOR, written)
+        self.assertEqual(real_term.flush.call_count, 2)
+
+        print(
+            "[+] Step 21: Clean exit screen clear and banner verified.",
             flush=True,
         )
 
