@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 1 Defect Open (Bug 2.7.36).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.36 Closed).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -738,7 +738,7 @@ have been resolved and archived.
       save before closing, `[N]o` to discard and close to Splash, and `[ESC]`
       to cancel. Validated via `test_document_close_lifecycle` in
       `test_editor.py`.
-  - [ ] **Bug 2.7.36: Missing Startup SE.CFG Discovery & Geometry Default**:
+  - [x] **Bug 2.7.36: Missing Startup SE.CFG Discovery & Geometry Default**:
     - *Symptom*: Running `se` without `--config` never probes or loads `SE.CFG`
       from current working directory or program directory. Additionally,
       `Config.DEFAULT_SCREEN` defaults to `"80x24"` instead of canonical CP/M
@@ -747,11 +747,14 @@ have been resolved and archived.
       only executes if `args.config` is explicitly passed. In
       `ports/python/se/config.py:15`, `DEFAULT_SCREEN = "80x24"`.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 13.2, 13.3, and 14.1.
-    - *Resolution Plan*: Update `Config` and `__main__.py` to implement the
-      canonical discovery rules: probe `./SE.CFG`, then probe the program
-      directory, falling back to internal defaults. Set `DEFAULT_SCREEN =`
-      "120X40" as canonical profile default while allowing native terminal
-      auto-sizing adaptation when running on Linux PTYs.
+    - *Resolution*: Updated `DEFAULT_SCREEN = "120X40"` as canonical CP/M
+      default. Implemented `discover_and_load()` in `Config` following priority
+      order (custom path, `./SE.CFG` in current working directory, and
+      program directory). Integrated discovery into `Editor.__init__()` and
+      `__main__.py` before terminal initialization and buffer creation.
+      Validated via `test_secfg_canonical_default_and_discovery` in
+      `test_config.py` and `test_editor_secfg_discovery_and_geometry_default`
+      in `test_editor.py`.
 
 ---
 

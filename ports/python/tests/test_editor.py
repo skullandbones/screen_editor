@@ -7,6 +7,7 @@ Strictly adheres to Rule 9 logging standards and <= 80 characters line length.
 
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock
 
@@ -370,6 +371,8 @@ class TestEditor(unittest.TestCase):
         )
         written = []
         self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
 
         # Single-line selection (dynamic follows cursor)
         self.editor.buffer.block_active = 1
@@ -419,6 +422,8 @@ class TestEditor(unittest.TestCase):
         )
         written = []
         self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
 
         # CP/M format default
         self.editor.buffer.format_cpm = True
@@ -441,10 +446,13 @@ class TestEditor(unittest.TestCase):
 
         # 120x40 geometry
         written.clear()
+        self.editor.terminal.cols = 120
+        self.editor.terminal.rows = 40
         self.editor.renderer.render_status_bar(
             self.editor.buffer, geometry_str="120x40"
         )
         texts_120 = [w for w in written if not w.startswith("\x1b")]
+        self.assertEqual(len(texts_120[0]), 120)
         self.assertIn(" 120x40 | Linux |", texts_120[0])
 
         print(
@@ -653,6 +661,8 @@ class TestEditor(unittest.TestCase):
         self.editor.terminal.get_key = MagicMock(return_value="y")
 
         # 1. Confirmation query (Archetype B)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
         self.editor.modal.show_confirm(
             title="Save", desc="Unsaved edits", query="Save?"
         )
@@ -661,6 +671,16 @@ class TestEditor(unittest.TestCase):
         self.assertEqual(width, 52)
         # On 80-col screen, left should be (80 - 52) // 2 + 1 = 15
         self.assertEqual(left, 15)
+
+        # On 120-col screen, left should be (120 - 52) // 2 + 1 = 35
+        self.editor.terminal.cols = 120
+        self.editor.terminal.rows = 40
+        self.editor.modal.show_confirm(
+            title="Save", desc="Unsaved edits", query="Save?"
+        )
+        top, left, width = captured[-1]
+        self.assertEqual(width, 52)
+        self.assertEqual(left, 35)
 
         # 2. Text input modal (Archetype C)
         self.editor.terminal.get_key = MagicMock(return_value="\r")
@@ -1135,6 +1155,46 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_editor_secfg_discovery_and_geometry_default(self):
+        """Step 28: Verify Editor startup SE.CFG discovery (Bug 2.7.36)."""
+        print(
+            "[*] Step 28: Testing Editor startup SE.CFG discovery...",
+            flush=True,
+        )
+        # Default Editor instance defaults to 120x40 canonical geometry
+        ed_default = Editor()
+        self.assertEqual(ed_default.config.DEFAULT_SCREEN, "120X40")
+        self.assertEqual(ed_default.config.screen_geometry, (120, 40))
+        self.assertEqual(ed_default.terminal.cols, 120)
+        self.assertEqual(ed_default.terminal.rows, 40)
+        self.assertEqual(ed_default.buffer.tab_width, 8)
+
+        # Editor with custom config path overrides geometry and tab width
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".cfg"
+        ) as tmp_file:
+            tmp_path = tmp_file.name
+        try:
+            with open(tmp_path, "wb") as f:
+                f.write(b"SCREEN=80x24\r\nTAB=4\r\n")
+
+            ed_custom = Editor(config_path=tmp_path)
+            self.assertEqual(
+                ed_custom.loaded_config_path, os.path.abspath(tmp_path)
+            )
+            self.assertEqual(ed_custom.terminal.cols, 80)
+            self.assertEqual(ed_custom.terminal.rows, 24)
+            self.assertEqual(ed_custom.buffer.tab_width, 4)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+        print(
+            "[+] Step 28: Editor startup SE.CFG discovery verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+

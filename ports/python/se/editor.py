@@ -55,8 +55,13 @@ class Editor:
     Main editor application controller.
     """
 
-    def __init__(self, filename: Optional[str] = None):
+    def __init__(
+        self,
+        filename: Optional[str] = None,
+        config_path: Optional[str] = None,
+    ):
         self.config = Config()
+        self.loaded_config_path = self.config.discover_and_load(config_path)
         cols, rows = self.config.screen_geometry
         self.terminal = Terminal(default_cols=cols, default_rows=rows)
         self.renderer = UIRenderer(self.terminal)
