@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 from se.editor import Editor
 from se.modal import ModalDialog
 from se.terminal import (
+    KEY_CTRL_B,
     KEY_CTRL_D,
     KEY_CTRL_F,
     KEY_CTRL_K,
@@ -1191,6 +1192,187 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 28: Editor startup SE.CFG discovery verified.",
+            flush=True,
+        )
+
+    def test_delete_key_active_block(self):
+        """Step 29: Verify Delete and Ctrl+D block deletion (Bug 2.7.37)."""
+        print(
+            "[*] Step 29: Testing Delete and Ctrl+D block deletion...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Alpha Beta Gamma", "Second Line"]
+        self.editor.buffer.clipboard = "ORIGINAL_CLIPBOARD"
+
+        # 1. Dynamic block delete via KEY_DELETE
+        # Block from (0, 6) to (0, 10): "Beta"
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 6
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 10
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_DELETE)
+        self.assertEqual(self.editor.buffer.lines[0], "Alpha  Gamma")
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 6)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertTrue(self.editor.buffer.modified)
+        # Clipboard must remain unaffected
+        self.assertEqual(self.editor.buffer.clipboard, "ORIGINAL_CLIPBOARD")
+
+        # 2. Solidified multi-line block delete via KEY_CTRL_D
+        self.editor.buffer.lines = [
+            "Start Line",
+            "Middle To Delete",
+            "End Line",
+        ]
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 6
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.cursor_row = 2
+        self.editor.buffer.cursor_col = 4
+        self.editor.buffer.solidify_block()  # block_active = 2
+
+        self.editor.dispatch_key(KEY_CTRL_D)
+        # Joined line: "Start Line"[:6] + "End Line"[4:] -> "Start Line"
+        self.assertEqual(self.editor.buffer.lines, ["Start Line"])
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 6)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.clipboard, "ORIGINAL_CLIPBOARD")
+
+        print(
+            "[+] Step 29: Delete and Ctrl+D block deletion verified.",
+            flush=True,
+        )
+
+    def test_backspace_dynamic_block_cancel(self):
+        """Step 30: Verify Backspace cancels dynamic block (Bug 2.7.38)."""
+        print(
+            "[*] Step 30: Testing Backspace dynamic block cancel...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Hello World"]
+
+        # 1. Dynamic block (block_active == 1): Backspace cancels selection
+        # without deleting any character or altering buffer contents.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 5
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 11
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_BACKSPACE)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Hello World")
+        self.assertEqual(self.editor.buffer.cursor_col, 11)
+
+        # 2. Solidified block (block_active == 2): Backspace cancels block
+        # and performs backward character deletion.
+        self.editor.buffer.cursor_col = 5
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.assertEqual(self.editor.buffer.block_active, 2)
+
+        self.editor.dispatch_key(KEY_BACKSPACE)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Hell World")
+        self.assertEqual(self.editor.buffer.cursor_col, 4)
+
+        print(
+            "[+] Step 30: Backspace dynamic block cancel verified.",
+            flush=True,
+        )
+
+    def test_enter_dynamic_block_solidify(self):
+        """Step 31: Verify Enter solidifies dynamic block (Bug 2.7.39)."""
+        print(
+            "[*] Step 31: Testing Enter dynamic block solidify...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["First Line", "Second Line"]
+
+        # 1. Dynamic block (block_active == 1): Enter solidifies selection
+        # without splitting the current line.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 5
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_ENTER)
+        self.assertEqual(self.editor.buffer.block_active, 2)
+        self.assertEqual(self.editor.buffer.block_end_row, 0)
+        self.assertEqual(self.editor.buffer.block_end_col, 5)
+        self.assertEqual(
+            self.editor.buffer.lines, ["First Line", "Second Line"]
+        )
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 5)
+
+        # 2. Solidified block (block_active == 2): Enter cancels block
+        # and splits line.
+        self.editor.dispatch_key(KEY_ENTER)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(
+            self.editor.buffer.lines, ["First", " Line", "Second Line"]
+        )
+        self.assertEqual(self.editor.buffer.cursor_row, 1)
+        self.assertEqual(self.editor.buffer.cursor_col, 0)
+
+        print(
+            "[+] Step 31: Enter dynamic block solidify verified.",
+            flush=True,
+        )
+
+    def test_typing_and_tab_block_cancel(self):
+        """Step 32: Verify typing & Tab cancel active block (Bug 2.7.41)."""
+        print(
+            "[*] Step 32: Testing typing & Tab active block cancel...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Original Text"]
+
+        # 1. Dynamic block (block_active == 1): typing cancels block
+        # without inserting the character.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 8
+
+        self.editor.dispatch_key("X")
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Original Text")
+        self.assertEqual(self.editor.buffer.cursor_col, 8)
+
+        # 2. Dynamic block (block_active == 1): Tab cancels block
+        # without inserting tab.
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.dispatch_key(KEY_TAB)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Original Text")
+
+        # 3. Solidified block (block_active == 2): typing clears block
+        # and inserts character.
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.assertEqual(self.editor.buffer.block_active, 2)
+
+        self.editor.dispatch_key("Z")
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "OriginalZ Text")
+
+        # 4. Solidified block (block_active == 2): Tab clears block
+        # and inserts tab byte.
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.editor.dispatch_key(KEY_TAB)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "OriginalZ\t Text")
+
+        print(
+            "[+] Step 32: typing & Tab active block cancel verified.",
             flush=True,
         )
 

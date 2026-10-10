@@ -488,6 +488,30 @@ class TestBuffer(unittest.TestCase):
             flush=True,
         )
 
+    def test_delete_char_eol_junction_cursor_col(self):
+        """Step 13: Verify delete_char eol junction cursor (Bug 2.7.40)."""
+        print(
+            "[*] Step 13: Testing delete_char EOL junction cursor anchoring...",
+            flush=True,
+        )
+        buf = DocumentBuffer(tab_width=8)
+        buf.lines = ["Short", "Long trailing line"]
+        buf.cursor_row = 0
+        # Simulate cursor_col past len(line) (e.g. from sticky target or pan)
+        buf.cursor_col = 15
+        self.assertTrue(buf.delete_char())
+        # Line 0 is joined: "Short" + "Long trailing line"
+        self.assertEqual(buf.lines[0], "ShortLong trailing line")
+        # cursor_col must be pinned to len("Short") == 5, NOT remaining at 15
+        self.assertEqual(buf.cursor_col, 5)
+        self.assertEqual(buf.target_col, 5)
+        self.assertTrue(buf.modified)
+
+        print(
+            "[+] Step 13: delete_char EOL junction cursor anchoring verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     t0 = time.time()
