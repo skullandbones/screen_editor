@@ -180,7 +180,9 @@ class Editor:
         elif key == KEY_CTRL_L:
             self.action_goto_line()
         elif key == KEY_CTRL_K:
-            if self.terminal.is_key_ready():
+            if self.buffer.block_active > 0:
+                self.action_block_popup()
+            elif self.terminal.is_key_ready():
                 next_k = self.terminal.get_key()
                 if next_k in ("r", "R"):
                     self.action_insert_file()
@@ -622,6 +624,31 @@ class Editor:
                 title="Save Error", message=f"Could not write to {target_name}"
             )
             return False
+
+    def action_block_popup(self):
+        """
+        Display canonical Tier 2 Block Operations modal dialog (Ctrl+K
+        when block_active > 0) and dispatch the selected action.
+        """
+        if self.buffer.block_active == 0:
+            return
+
+        action = self.modal.show_block_operations_dialog(self.buffer)
+        if action == "enter":
+            self.buffer.solidify_block()
+        elif action == "clear":
+            self.buffer.cancel_block()
+        elif action == "copy":
+            self.buffer.copy_block()
+        elif action == "cut":
+            self.buffer.cut_block()
+        elif action == "delete":
+            self.buffer.delete_block()
+        elif action == "save":
+            self.buffer.solidify_block()
+            self.action_block_save()
+
+        self.terminal.show_cursor()
 
     def action_new_file(self):
         """Create new empty document (prompting if unsaved edits)."""

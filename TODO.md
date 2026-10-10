@@ -425,7 +425,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 2 Defects Open (Bugs 2.7.43–2.7.44; Bug 2.7.45 Rejected).
+- **Status**: Active / 1 Defect Open (Bug 2.7.44; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -994,7 +994,7 @@ have been resolved and archived.
       flags with dynamic compact spacing in `render_status_bar` (`ui.py`).
       Validated via Step 33 in `test_editor.py`
       (`test_bug_2_7_42_status_bar_field4_invariance_and_block_indicators`).
-  - [ ] **Bug 2.7.43: Missing Tier 2 Block Operations Modal Dialog on Ctrl+K**:
+  - [x] **Bug 2.7.43: Missing Tier 2 Block Operations Modal Dialog on Ctrl+K**:
     - *Symptom*: When a block selection is active (`block_active > 0`),
       pressing `Ctrl+K` falls through to `action_help()` or prefix key
       detection rather than presenting the canonical Tier 2 Block Operations
@@ -1009,11 +1009,14 @@ have been resolved and archived.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 10;
       `src/se.asm:1091-1099` (`CHECK_CTRL_K`); `src/core/block.asm:114-268`
       (`DO_BLOCK_MENU_POPUP`).
-    - *Resolution Plan*: Implement `action_block_popup()` in `editor.py` /
-      `modal.py` rendering the canonical 50x7 (or 52-col) Tier 2 Block
-      Operations modal dialog when `self.buffer.block_active > 0` upon
-      receiving `KEY_CTRL_K`, supporting Lock, Copy, Cut/Move, Delete, Save
-      Block, Clear, and Dismiss actions.
+    - *Resolution*: Implemented `show_block_operations_dialog()` in `modal.py`
+      rendering the canonical 50x7 Tier 2 Block Operations modal dialog with
+      live metrics (`Selection:` vs `Marked Block:`, char/line counts) and
+      command options. Added `action_block_popup()` in `editor.py` and routed
+      `KEY_CTRL_K` when `block_active > 0` directly to the modal dialog,
+      supporting Lock, Clear, Copy, Move, Del, Save, and Dismiss actions.
+      Validated via Step 34 in `test_editor.py`
+      (`test_bug_2_7_43_block_operations_modal_dialog`).
   - [ ] **Bug 2.7.44: Ctrl+K Prefix Command Polling Blocks Interactive Chords**:
     - *Symptom*: Pressing `Ctrl+K` followed by a secondary command key (`R` for
       File Insert, `S` for Block Save, `Q`/`X` for Exit) fails to execute the

@@ -3,7 +3,7 @@ Tier 2 centered modal pop-up dialog engine for SE editor.
 Implements framed pop-up boxes, query modals, and single-level lifecycles.
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 from se.terminal import (
     Terminal,
     KEY_UP,
@@ -18,11 +18,17 @@ from se.terminal import (
     KEY_TAB,
     KEY_BACKSPACE,
     KEY_CTRL_A,
+    KEY_CTRL_B,
+    KEY_CTRL_C,
     KEY_CTRL_D,
     KEY_CTRL_E,
     KEY_CTRL_G,
     KEY_CTRL_S,
+    KEY_CTRL_X,
 )
+
+if TYPE_CHECKING:
+    from se.buffer import DocumentBuffer
 
 
 class ModalDialog:
@@ -324,4 +330,69 @@ class ModalDialog:
                 num = int(k) - 1
                 if 0 <= num < len(items):
                     return num
+
+    def show_block_operations_dialog(
+        self, buf: "DocumentBuffer"
+    ) -> Optional[str]:
+        """
+        Display canonical Tier 2 Block Operations modal dialog (50x7).
+        Returns one of: 'enter', 'clear', 'copy', 'cut', 'delete', 'save',
+        or None on ESC.
+        """
+        width = 50
+        height = 7
+        top, left = self.compute_popup_pos(width, height)
+
+        r1, c1, r2, c2 = buf.get_normalized_block()
+        if r1 == r2:
+            chars = c2 - c1
+            unit = "char" if chars == 1 else "chars"
+            metric = f"{chars} {unit}"
+        else:
+            lines_spanned = r2 - r1 + (1 if c2 > 0 else 0)
+            unit = "line" if lines_spanned == 1 else "lines"
+            metric = f"{lines_spanned} {unit}"
+
+        prefix = "Marked Block: " if buf.block_active == 2 else "Selection: "
+        msg = f"{prefix}{metric}"
+
+        if buf.block_active == 2:
+            line5 = "      [^C]=Copy Block      [^X]=Move Block      "
+        else:
+            line5 = "  [Enter]=Lock/Set    [^C]=Copy    [^X]=Move    "
+
+        line6 = "  [^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close  "
+
+        lines = [
+            "Block Operations",
+            "---",
+            msg,
+            line5,
+            line6,
+        ]
+        self.draw_box(top, left, width, lines)
+
+        while True:
+            k = self.term.get_key()
+            if k is None or k == KEY_ESC:
+                self.term.show_cursor()
+                return None
+            if k == KEY_ENTER:
+                self.term.show_cursor()
+                return "enter"
+            if k in (KEY_CTRL_B, "b", "B"):
+                self.term.show_cursor()
+                return "clear"
+            if k in (KEY_CTRL_C, "c", "C"):
+                self.term.show_cursor()
+                return "copy"
+            if k in (KEY_CTRL_X, "x", "X"):
+                self.term.show_cursor()
+                return "cut"
+            if k in (KEY_CTRL_D, "d", "D", KEY_DELETE):
+                self.term.show_cursor()
+                return "delete"
+            if k in (KEY_CTRL_S, "s", "S"):
+                self.term.show_cursor()
+                return "save"
 
