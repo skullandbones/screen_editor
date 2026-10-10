@@ -936,6 +936,57 @@ def test_bug_2_4_13_terminal_lifecycle():
         print("    [+] Startup TERM_INIT & clean exit banner verified [PASS]")
 
 
+def test_bug_2_4_14_viewport_col1_alignment():
+    """Verify document rows start at screen col 1 without space (Bug 2.4.14)."""
+    print("[*] Testing viewport col 1 alignment & cursor locator (2.4.14)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_col1_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("ABCDEFGH\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            out_bytes = read_all_available(master, 0.3)
+
+            # Active document line 1 must start at col 1 with "ABCDEFGH"
+            assert b"\x1b[1;1HABCDEFGH" in out_bytes, (
+                f"Expected document row at col 1 without leading space:\n"
+                f"{out_bytes!r}"
+            )
+
+            # Hardware cursor at Col 0 must locate at \x1b[1;1H
+            assert b"\x1b[1;1H" in out_bytes, (
+                f"Expected cursor located at (1, 1):\n{out_bytes!r}"
+            )
+
+            # Row 2 (beyond EOF) must display tilde margin at col 1 (\x1b[2;1H~)
+            assert b"\x1b[2;1H~" in out_bytes, (
+                f"Expected tilde at row 2 col 1:\n{out_bytes!r}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Viewport col 1 & cursor locator verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -956,6 +1007,7 @@ def main():
     test_bug_2_4_11_block_selection_cursor_tracking()
     test_bug_2_4_12_clipboard_copy_paste()
     test_bug_2_4_13_terminal_lifecycle()
+    test_bug_2_4_14_viewport_col1_alignment()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

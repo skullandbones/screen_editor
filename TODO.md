@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 6 Defects Open (Bugs 2.4.14–2.4.19).
+- **Status**: Active / 5 Defects Open (Bugs 2.4.15–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -289,7 +289,7 @@ have been resolved and archived.
       banner `\r\nExiting SE. Returned to OS prompt.\r\n` upon termination in
       `src/se_linux.c`. Validated via `test_bug_2_4_13_terminal_lifecycle` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.14: Viewport Column 1 Space & Cursor Locator Offset**:
+  - [x] **Bug 2.4.14: Viewport Column 1 Space & Cursor Locator Offset**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1.3, 5.3, 6.7.
     - *Issue*: In `src/core/ui_render.c:82` (`render_row_content`), allocated
       document rows unconditionally print a leading space
@@ -301,9 +301,12 @@ have been resolved and archived.
       `screen_col = (uint8_t)(vis_col + 2)` instead of the canonical 1-based
       coordinate formula `(vis_col - VIEW_LEFT_COL) + 1` specified in
       Section 6.7.
-    - *Required Fix*: Remove `hal_console_putc(' ')` on allocated document rows
-      in `ui_render.c`, start document text at screen column 1, and update
-      `locate_cursor()` in `editor.c` to use canonical `(vis_col - pan) + 1`.
+    - *Resolution*: Removed leading space on allocated document rows in
+      `src/core/ui_render.c`, expanded text viewport width to `g_active_cols`,
+      and realigned `locate_cursor()` in `src/core/editor.c` to canonical
+      1-based coordinate `(vis_col - pan) + 1`. Validated via
+      `test_bug_2_4_14_viewport_col1_alignment` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.15: Missing Sticky Target Column & Vertical Tab Clamping**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, 6.4.
     - *Issue*: In `src/core/editor.c`, vertical navigation primitives

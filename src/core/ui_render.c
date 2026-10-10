@@ -70,7 +70,7 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
     uint16_t vis_col = 0;
     uint16_t i;
     uint8_t tab_w = g_config.tab_width ? g_config.tab_width : 8;
-    uint8_t max_content_cols = g_active_cols - 2;
+    uint8_t max_content_cols = g_active_cols;
 
     hal_console_locate(screen_row, 1);
 
@@ -80,9 +80,6 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
         hal_console_clear_eol();
         return;
     }
-
-    /* Column 0 Margin: Space or Block Marker */
-    hal_console_putc(' ');
 
     len = fetch_line_to_buffer(doc_row, line_buf, MAX_ACTIVE_PAYLOAD);
 

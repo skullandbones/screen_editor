@@ -118,8 +118,8 @@ void locate_cursor(void)
         vis_col = 0;
     }
 
-    /* Column 0 has tilde margin on screen; text starts at col 2 */
-    screen_col = (uint8_t)(vis_col + 2);
+    /* Screen coordinates are 1-based; text starts at screen col 1 */
+    screen_col = (uint8_t)(vis_col + 1);
     if (screen_col > g_active_cols) {
         screen_col = g_active_cols;
     }
