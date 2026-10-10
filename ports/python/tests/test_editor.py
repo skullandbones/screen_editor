@@ -14,6 +14,7 @@ from se.editor import Editor
 from se.modal import ModalDialog
 from se.terminal import (
     KEY_CTRL_D,
+    KEY_CTRL_F,
     KEY_CTRL_S,
     KEY_CTRL_V,
     KEY_LEFT,
@@ -847,6 +848,60 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 23: Tab key inserts literal tab byte 0x09 verified.",
+            flush=True,
+        )
+
+    def test_tier1_directory_browser_open_and_save(self):
+        """Step 24: Verify Tier 1 Open and Save workspaces (Bug 2.7.32)."""
+        print(
+            "[*] Step 24: Testing Tier 1 Directory Browser Open and Save...",
+            flush=True,
+        )
+        import tempfile
+
+        # Test Open Workspace renders Tier 1 layout
+        captured = []
+        orig_write = self.editor.terminal.write
+
+        def mock_write(s):
+            captured.append(s)
+            orig_write(s)
+
+        self.editor.terminal.write = mock_write
+        self.editor.terminal.get_key = MagicMock(side_effect=[KEY_ESC])
+        self.editor.action_open_file()
+
+        full_output = "".join(captured)
+        self.assertIn("OPEN FILE (DIRECTORY -", full_output)
+        self.assertIn("======", full_output)
+        self.assertIn("Enter filename to open: [", full_output)
+        self.assertIn("[ESC]=Cancel", full_output)
+
+        # Test Save Workspace renders format toggle and handles Ctrl+F
+        captured.clear()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "test_out.txt")
+            key_seq = [KEY_CTRL_F] + list(save_path) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=key_seq)
+            self.editor.buffer.lines = ["Line 1", "Line 2"]
+            self.editor.buffer.format_cpm = True
+
+            ok = self.editor.action_save_file()
+            self.assertTrue(ok)
+            self.assertTrue(os.path.isfile(save_path))
+            self.assertFalse(self.editor.buffer.format_cpm)
+            with open(save_path, "rb") as f:
+                content = f.read()
+            self.assertEqual(content, b"Line 1\nLine 2\n")
+
+            save_output = "".join(captured)
+            self.assertIn("SAVE FILE (DIRECTORY -", save_output)
+            self.assertIn("Format:", save_output)
+            self.assertIn("[^F]=Toggle Format", save_output)
+            self.assertIn("Enter filename to save: [", save_output)
+
+        print(
+            "[+] Step 24: Tier 1 Directory Browser Open and Save verified.",
             flush=True,
         )
 

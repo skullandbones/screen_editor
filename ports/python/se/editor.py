@@ -3,8 +3,9 @@ Core Editor controller and interactive command dispatch loop for SE editor.
 Implements WordStar keybindings, workspace transitions, and modal workflows.
 """
 
+import fnmatch
 import os
-from typing import Optional
+from typing import List, Optional, Tuple
 from se.buffer import DocumentBuffer
 from se.config import Config
 from se.modal import ModalDialog
@@ -330,48 +331,181 @@ class Editor:
         )
         self.terminal.get_key()
 
-    def action_open_file(self):
-        """Display directory browser and open selected file."""
-        filename = self.modal.show_input(
-            title="Open File",
-            desc="Enter filename to open",
-            label="Filename:",
-            initial_text="",
-        )
-        if filename:
-            if os.path.isfile(filename):
-                self.buffer.load_file(filename)
+    @staticmethod
+    def _get_dir_entries(
+        dir_path: str, pattern: Optional[str] = None
+    ) -> List[str]:
+        """List subdirectories and files matching optional filter pattern."""
+        try:
+            raw_entries = os.listdir(dir_path)
+        except OSError:
+            return []
+        dirs = []
+        files = []
+        if dir_path != "/":
+            dirs.append("../")
+        for name in sorted(raw_entries, key=lambda s: s.lower()):
+            if name.startswith(".") and not (
+                pattern and pattern.startswith(".")
+            ):
+                continue
+            full = os.path.join(dir_path, name)
+            if os.path.isdir(full):
+                dirs.append(name + "/")
             else:
-                self.modal.show_notification(
-                    title="Open Error", message="File not found"
+                if pattern:
+                    if fnmatch.fnmatch(name.lower(), pattern.lower()):
+                        files.append(name)
+                else:
+                    files.append(name)
+        return dirs + files
+
+    def action_directory_browser(
+        self,
+        mode: str = "open",
+        initial_text: str = "",
+    ) -> Optional[Tuple[str, bool]]:
+        """
+        Interactive full-screen Tier 1 Directory Browser workspace.
+        Supports Open, Save, Insert, and Block Save modes.
+        """
+        current_dir = os.path.abspath(os.getcwd())
+        filter_pattern: Optional[str] = None
+        input_text = initial_text
+        cursor_pos = len(input_text)
+        page_idx = 0
+        fmt_cpm = self.config.format_cpm
+        geometry_str = f"{self.terminal.cols}x{self.terminal.rows}"
+        if geometry_str not in ("80x24", "120x40"):
+            geometry_str = "80x24"
+
+        while True:
+            if self.terminal.resized:
+                self.terminal.update_geometry()
+                geometry_str = f"{self.terminal.cols}x{self.terminal.rows}"
+                if geometry_str not in ("80x24", "120x40"):
+                    geometry_str = "80x24"
+
+            all_entries = self._get_dir_entries(current_dir, filter_pattern)
+            num_cols = 7 if self.terminal.cols >= 120 else 5
+            grid_rows = 28 if self.terminal.rows >= 40 else 12
+            page_capacity = num_cols * grid_rows
+            page_count = max(
+                1, (len(all_entries) + page_capacity - 1) // page_capacity
+            )
+            page_idx = max(0, min(page_idx, page_count - 1))
+
+            self.renderer.render_directory_workspace(
+                mode=mode,
+                current_dir=current_dir,
+                files=all_entries,
+                page_idx=page_idx,
+                page_count=page_count,
+                input_text=input_text,
+                cursor_pos=cursor_pos,
+                buf=self.buffer,
+                format_cpm=fmt_cpm,
+                geometry_str=geometry_str,
+            )
+
+            key = self.terminal.get_key()
+            if key is None:
+                continue
+
+            if key == KEY_ESC:
+                return None
+            elif key == KEY_ENTER:
+                cleaned = input_text.strip()
+                if not cleaned:
+                    continue
+                if any(ch in cleaned for ch in ("*", "?")):
+                    filter_pattern = cleaned
+                    input_text = ""
+                    cursor_pos = 0
+                    page_idx = 0
+                    continue
+                target = os.path.abspath(os.path.join(current_dir, cleaned))
+                if os.path.isdir(target):
+                    current_dir = target
+                    input_text = ""
+                    cursor_pos = 0
+                    page_idx = 0
+                    continue
+                return (target, fmt_cpm)
+            elif key == KEY_PGUP or key == KEY_CTRL_U:
+                page_idx = max(0, page_idx - 1)
+            elif key == KEY_PGDN or key == KEY_CTRL_V:
+                if (page_idx + 1) * page_capacity < len(all_entries):
+                    page_idx += 1
+            elif key == KEY_CTRL_F and mode in ("save", "save_block"):
+                fmt_cpm = not fmt_cpm
+            elif key == KEY_LEFT:
+                cursor_pos = max(0, cursor_pos - 1)
+            elif key == KEY_RIGHT:
+                cursor_pos = min(len(input_text), cursor_pos + 1)
+            elif key in (KEY_HOME, KEY_CTRL_A):
+                cursor_pos = 0
+            elif key in (KEY_END, KEY_CTRL_E):
+                cursor_pos = len(input_text)
+            elif key == KEY_BACKSPACE:
+                if cursor_pos > 0:
+                    input_text = (
+                        input_text[: cursor_pos - 1] + input_text[cursor_pos:]
+                    )
+                    cursor_pos -= 1
+            elif key in (KEY_DELETE, KEY_CTRL_D):
+                if cursor_pos < len(input_text):
+                    input_text = (
+                        input_text[:cursor_pos] + input_text[cursor_pos + 1 :]
+                    )
+            elif len(key) == 1 and 32 <= ord(key) <= 126:
+                input_text = (
+                    input_text[:cursor_pos] + key + input_text[cursor_pos:]
                 )
+                cursor_pos += 1
+
+        return None
+
+    def action_open_file(self):
+        """Display Tier 1 Directory Browser and open selected file."""
+        target = self.action_directory_browser(mode="open")
+        if not target:
+            return
+        filename, _fmt = target
+        if os.path.isfile(filename):
+            self.buffer.load_file(filename)
+        else:
+            self.modal.show_notification(
+                title="Open Error", message="File not found"
+            )
 
     def action_save_file(self) -> bool:
-        """Prompt for filename and save document."""
-        is_untitled = self.buffer.filename == "(Untitled)"
-        initial = "" if is_untitled else self.buffer.filename
-        target_name = self.modal.show_input(
-            title="Save File",
-            desc="Enter filename to save",
-            label="Filename:",
-            initial_text=initial,
+        """Display Tier 1 Save File workspace and save document."""
+        initial = (
+            "" if self.buffer.filename == "(Untitled)" else self.buffer.filename
         )
-        if not target_name:
+        target = self.action_directory_browser(
+            mode="save", initial_text=initial
+        )
+        if not target:
             return False
-
+        target_name, fmt_cpm = target
         if os.path.exists(target_name) and target_name != self.buffer.filename:
             ans = self.modal.show_confirm(
                 title="Overwrite Warning",
                 desc="File already exists on disk.",
-                query=f"Overwrite {target_name}?",
+                query=f"Overwrite {os.path.basename(target_name)}?",
             )
             if ans != "y":
                 return False
 
-        ok = self.buffer.save_file(target_name)
+        self.buffer.format_cpm = fmt_cpm
+        self.config.set("FORMAT", "CPM" if fmt_cpm else "LINUX")
+        ok = self.buffer.save_file(target_name, format_cpm=fmt_cpm)
         if ok:
             self.modal.show_notification(
-                title="Save Complete", message=f"Saved to {target_name}"
+                title="Save Complete",
+                message=f"Saved to {os.path.basename(target_name)}",
             )
             return True
         else:

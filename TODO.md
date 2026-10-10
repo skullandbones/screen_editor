@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 5 Defects Open (Bugs 2.7.32–2.7.36).
+- **Status**: Active / 4 Defects Open (Bugs 2.7.33–2.7.36).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -673,7 +673,7 @@ have been resolved and archived.
       of `paste_block()` in `ports/python/se/buffer.py` to synchronize
       `self.target_col = self.get_visual_col()`. Validated via
       `test_delete_and_paste_sticky_target_col` in `test_buffer.py`.
-  - [ ] **Bug 2.7.32: File Open & Save Workspaces Using Tier 2 Modals**:
+  - [x] **Bug 2.7.32: File Open & Save Workspaces Using Tier 2 Modals**:
     - *Symptom*: Pressing `Ctrl+O` / `:o` or `Ctrl+S` / `:s` presents a small
       52-column Tier 2 text input modal (`show_input`) rather than the
       full-screen Tier 1 Directory Browser workspace.
@@ -683,10 +683,12 @@ have been resolved and archived.
       on 80x24 / 7 cols on 120x40), `<PgUp>/<PgDn>` pagination, directory
       filtering, and `Ctrl+F` format toggling.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, and 14.2.
-    - *Resolution Plan*: Implement full-screen Tier 1 Directory Browser
-      workspaces for file opening and saving in `editor.py` / `ui.py`,
-      supporting directory enumeration, pagination, path navigation, and
-      format toggle (`Ctrl+F`), fully replacing the mini-modals.
+    - *Resolution*: Implemented `render_directory_workspace()` in `ui.py` and
+      `action_directory_browser()` in `editor.py`, replacing mini-modals
+      with full-screen Tier 1 directory workspaces supporting multi-column
+      file grids, pagination, path traversal, wildcard filtering, and `Ctrl+F`
+      format toggling. Validated via
+      `test_tier1_directory_browser_open_and_save` in `test_editor.py`.
   - [ ] **Bug 2.7.33: Block-Active File Insert (Ctrl+O) Unimplemented**:
     - *Symptom*: Pressing `Ctrl+O` while a block selection is active invokes
       the open file action (replacing active document) rather than streaming
