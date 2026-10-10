@@ -14,6 +14,7 @@
 #include "../include/config.h"
 #include "../include/buffer.h"
 #include "../include/memory.h"
+#include "../include/file_io.h"
 
 /* Document Line Slots Array (Maps document row -> 16-bit Far Slot ID) */
 static uint16_t s_line_slots[MAX_DOC_LINES];
@@ -67,6 +68,7 @@ void init_empty_document(void)
     g_active_line_len = 0;
     g_active_line_buf[0] = '\0';
     g_doc_modified = 0;
+    g_file_format = g_config.save_format;
 }
 
 uint16_t get_line_slot(uint16_t line_idx, int *err)

@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 5 Defects Open (Bugs 2.4.8–2.4.12).
+- **Status**: Resolved / Production Ready (Bugs 2.4.1–2.4.19 Closed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -206,7 +206,7 @@ have been resolved and archived.
       and omits bracket framing `[ text ]` on text input prompts.
     - *Required Fix*: Implement canonical Archetypes A, B, C, D with title
       dividers, 1-based centering, and strict key dismissal rules.
-  - [ ] **Bug 2.4.8: Missing Modal & Command Dispatchers in Editor Mode**:
+  - [x] **Bug 2.4.8: Missing Modal & Command Dispatchers in Editor Mode**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.
     - *Issue*: In `src/core/editor.c`, `editor_handle_key()` lacks cases for
       `KEY_CTRL_L` (Goto Line), `KEY_CTRL_O` (Open File), `KEY_CTRL_P` (Plugin
@@ -214,46 +214,188 @@ have been resolved and archived.
       `modal_input_goto_line()` is implemented in `ui_modal.c` and
       `goto_line()` exists in `editor.c`, `Ctrl+L` is silently dropped as a
       no-op.
-    - *Required Fix*: Bind `KEY_CTRL_L` to invoke `modal_input_goto_line()` and
-      dispatch `goto_line()`, and bind `KEY_CTRL_O`, `KEY_CTRL_P`, and
-      `KEY_CTRL_W` to their respective modal and editor actions.
-  - [ ] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
+    - *Resolution*: Bound `KEY_CTRL_L` to prompt for line number via Archetype C
+      modal and jump via `goto_line()`, `KEY_CTRL_O` to open file browser dialog
+      and load document, `KEY_CTRL_P` to display plugin manager UI, and
+      `KEY_CTRL_W` to confirm unsaved modifications and close to splash screen.
+      Validated via `test_bug_2_4_8_modal_dispatchers` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Issue*: `show_splash_screen` in `src/core/ui_render.c` renders the
       canonical 14-line matrix displaying `:e`, `:o`, `:s`, `:c`, `:p`, `:?`,
       `:q`, but only checks for `q`/`Q` and treats any other key as an
       unconditional exit into the editor. Pressing `:o`, `:s`, `:c`, `:p`,
       `:?`, `1`, or `2` fails to trigger the corresponding modals/workspaces.
-    - *Required Fix*: Implement an interactive splash event loop in
-      `ui_render.c` / `editor.c` dispatching `:e`, `:o`, `:s`, `:c`, `:p`,
-      `:?`, `1`, `2`, and `:q`.
-  - [ ] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
+    - *Resolution*: Implemented interactive event loop in `show_splash_screen`
+      supporting prefix colon (`:`) syntax and bare keys, dispatching `:e`
+      (editor), `:o` (open file), `:s` (save file), `:w` (close file), `:l`
+      (goto line), `:c` (config screen), `:p` (plugin manager), `:?` (help),
+      `1` (120x40), `2` (80x24), and `:q` (exit), ignoring unregistered keys.
+      Validated via `test_bug_2_4_9_splash_screen_commands` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, the 30ms polling read
       loop reads up to 6 bytes into a single buffer. Rapid consecutive escape
       sequences (e.g. arrow navigation `\x1b[D\x1b[D\x1b[D`) are clumped into
       `seq`, causing CSI pattern match (`seq_len == 2`) to fail, defaulting to
       `KEY_ESC`, and corrupting cursor navigation.
-    - *Required Fix*: Process escape sequences discretely with a single CSI/SS3
-      token parser or token FIFO buffer so back-to-back escape sequences are
-      decoded without drops or clumping.
-  - [ ] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
+    - *Resolution*: Implemented discrete byte FIFO queue and lookahead
+      tokenization in `src/hal/linux/hal_linux_keyboard.c`, decoding ANSI CSI
+      and SS3 escape sequences byte-by-byte with precise 30ms inter-byte timeout
+      and unget support. Rapid burst escape sequences parse discretely without
+      clumping. Validated via `test_bug_2_4_10_burst_escape_sequences` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2.
     - *Issue*: In `src/core/block.c`, `g_block_active_row` and
       `g_block_active_col` are only updated on `start_new_block_at_cursor()`
       and `solidify_block()`. As cursor moves in `editor.c`, block bounds are
       never updated, resulting in 0 characters selected and no visual highlight
       while navigating in selection mode.
-    - *Required Fix*: Track cursor position dynamically during
-      `BLOCK_MODE_SELECTING` and update normalized block bounds on movement.
-  - [ ] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
+    - *Resolution*: Dynamically updated `g_block_active_row` and
+      `g_block_active_col` from cursor position in `normalize_block_bounds()`
+      and implemented `update_block_selection()` in `src/core/block.c`.
+      Integrated cursor tracking at editor key dispatch in `src/core/editor.c`
+      triggering screen and status bar re-renders with inverse video highlights.
+      Validated via `test_bug_2_4_11_block_selection_cursor_tracking` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.
     - *Issue*: In `src/core/editor.c`, `KEY_CTRL_V` is bound exclusively to
       `page_down()`. `src/core/block.c` implements `do_copy_block()` and
       `do_delete_block()`, but has no dedicated paste function. Text copied via
       `Ctrl+C` cannot be pasted.
-    - *Required Fix*: Implement `do_paste_block()` in `block.c` and bind
-      `KEY_CTRL_V` in `editor.c` to paste clipboard contents at current cursor.
+    - *Resolution*: Implemented `do_paste_block()`, `do_cut_block()`, and
+      clipboard buffer getters in `src/core/block.c`. Bound `KEY_CTRL_V` in
+      `src/core/editor.c` to paste clipboard contents at active cursor (falling
+      back to `page_down()` when clipboard is empty) and bound `KEY_CTRL_C` to
+      copy selection. Validated via `test_bug_2_4_12_clipboard_copy_paste`
+      in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.13: Terminal Lifecycle, Startup Clear & Clean Exit Missing**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.5, 12.1.
+    - *Issue*: On launch, `src/se_linux.c` fails to emit canonical `TERM_INIT`
+      (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`), risking leaving unreset attributes or
+      scrollback artifacts. On exit, `se_linux.c` clears screen and shows
+      cursor, but fails to emit the canonical exit message followed by CRLF:
+      `\r\nExiting SE. Returned to OS prompt.\r\n`. Additionally,
+      `hal_console_clear()` in `hal_linux_console.c` emits `\x1b[H\x1b[2J`
+      (home then clear) rather than standard ANSI clear then home
+      (`\x1b[2J\x1b[H`).
+    - *Resolution*: Emitted canonical `TERM_INIT` on `hal_console_init()` in
+      `src/hal/linux/hal_linux_console.c`, standardized `hal_console_clear()` to
+      `\x1b[2J\x1b[H`, and emitted `TERM_INIT` followed by the canonical exit
+      banner `\r\nExiting SE. Returned to OS prompt.\r\n` upon termination in
+      `src/se_linux.c`. Validated via `test_bug_2_4_13_terminal_lifecycle` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.14: Viewport Column 1 Space & Cursor Locator Offset**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1.3, 5.3, 6.7.
+    - *Issue*: In `src/core/ui_render.c:82` (`render_row_content`), allocated
+      document rows unconditionally print a leading space
+      `hal_console_putc(' ')` at column 1 under the mistaken notion of a
+      "Column 0 Margin", constraining text width to `g_active_cols - 2` and
+      shifting all document text right by one column. Section 5.3 strictly
+      excludes column 0 tildes or margin spaces from active document lines.
+      Due to this space, `locate_cursor()` in `src/core/editor.c:120` hardcodes
+      `screen_col = (uint8_t)(vis_col + 2)` instead of the canonical 1-based
+      coordinate formula `(vis_col - VIEW_LEFT_COL) + 1` specified in
+      Section 6.7.
+    - *Resolution*: Removed leading space on allocated document rows in
+      `src/core/ui_render.c`, expanded text viewport width to `g_active_cols`,
+      and realigned `locate_cursor()` in `src/core/editor.c` to canonical
+      1-based coordinate `(vis_col - pan) + 1`. Validated via
+      `test_bug_2_4_14_viewport_col1_alignment` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.15: Missing Sticky Target Column & Vertical Tab Clamping**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, 6.4.
+    - *Issue*: In `src/core/editor.c`, vertical navigation primitives
+      (`cursor_up`, `cursor_down`, `page_up`, `page_down`) lack sticky
+      `TARGET_COL` persistence. Passing through shorter or blank lines
+      permanently clamps `g_cur_col` to `g_active_line_len`, losing the visual
+      column. Furthermore, `adjust_col_to_target()` is never called on vertical
+      movement, and its internal logic sets `g_cur_col` to `i` (after the tab,
+      where `calc_visual_col >= target`) violating the Tab Exclusion Mandate,
+      which requires clamping to the beginning of the tab (`vis_acc < TARGET_COL
+      < vis_acc + spaces`).
+    - *Resolution*: Implemented `g_target_col` in `src/core/editor.c` and
+      declared in `src/include/editor.h`, tracking visual target column across
+      horizontal movement and text editing. Implemented canonical
+      `adjust_col_to_target()` with tab start clamping, preserving target
+      column across `cursor_up`, `cursor_down`, `page_up`, and `page_down`.
+      Validated via `test_bug_2_4_15_sticky_target_col_and_tab_clamping` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.16: Status Bar Field Squatting & Field 5 Column Reporting**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 11.1.
+    - *Issue*: In `src/core/ui_render.c:210-241` (`render_status_bar`), Field 4
+      is overwritten with selection metrics (`Sel: ...`, `Block: ...`) or
+      horizontal panning (`[Pan +40]`), clobbering the mandatory universal help
+      hint `^K: Editor keys |`. Per Section 4.3, selection state (`[SEL]` /
+      `[BLK LOCK]`) and panning (`[Pan +40]`) belong in Field 5. Furthermore,
+      Field 5 formats column position using raw byte index `g_cur_col` instead
+      of visual document column `calc_visual_col()`, displaying raw byte offsets
+      when tabs are present.
+    - *Resolution*: Unconditionally preserved `^K: Editor keys |` in Field 4,
+      routed `[Pan +40]`, `[SEL]`, and `[BLK LOCK]` indicators into Field 5,
+      and computed Field 5 column display using `calc_visual_col()`. Validated
+      via `test_bug_2_4_16_status_bar_field_invariance_and_visual_col` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.17: Tier 1 File Open/Save Workspaces & Directory Scanning**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 7.5, 7.6, 7.7, 7.8, 14.2.
+    - *Issue*: `ui_browser_open_dialog` in `src/core/ui_browser.c` renders a
+      56x18 Tier 2 modal dialog with a 1-column list of files, and
+      `ui_browser_save_dialog` delegates to `modal_prompt_text` (a single-line
+      prompt). Section 7.5–7.8 mandate that File Open, Insert, Save, and Save
+      Block are dedicated Tier 1 Full-Screen Workspaces with multi-column
+      grids (5 cols x 12 rows on 80x24; 7 cols x 28 rows on 120x40), double
+      rules (`~====...====`), column 0 tilde margins, `<PgUp>`/`<PgDn>`
+      pagination, line ending toggle (`Ctrl+F`), and status bar at row 24.
+      Furthermore, `hal_linux_scan_directory` in `hal_linux_storage.c` is an
+      empty stub with no directory entry population.
+    - *Resolution*: Upgraded File Open/Save/Insert/Save Block to full-screen
+      Tier 1 workspaces with multi-column grids, double rules, column 0 tilde
+      discipline, `<PgUp>`/`<PgDn>` pagination, line ending toggle (`Ctrl+F`),
+      and universal status bar. Implemented POSIX `opendir`/`readdir` directory
+      scanning in `hal_linux_storage.c`. Validated via
+      `test_bug_2_4_17_tier1_file_workspaces_and_directory_scan` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.18: Non-Canonical Configuration Parser & Serialization**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 13.1, 13.2.
+    - *Issue*: `src/core/config.c` uses non-canonical, case-sensitive key names
+      (`TAB_WIDTH`, `LINES_MODE`, `SCREEN_MODE`, `SAVE_FMT`, `PLUGIN_MODE`)
+      rather than canonical keys `SCREEN`, `TAB`/`TABS`, `FORMAT`,
+      `LINES`/`MAXLINES`, `RAMDRIVE`/`RAMDISK`, `PLUGIN`/`PLUGINS`. It fails to
+      parse canonical symbolic values (`16K`/`32K`, `PRESERVE`/`ON`/`HIB`,
+      `AUTOLOAD`/`DEMAND`/`OFF`), does not strip surrounding whitespace around
+      keys and values, does not ignore `;` comment lines, defaults `SCREEN` to
+      `MODE_80X24` instead of canonical `120X40`, and serializes using
+      non-canonical key names.
+    - *Resolution*: Implemented case-insensitive parsing of canonical keys and
+      symbolic values in `src/core/config.c`, stripped leading and trailing
+      whitespace, ignored `#` and `;` comment lines and empty lines, defaulted
+      `SCREEN` to `MODE_120X40`, and serialized configuration using canonical
+      key names, symbolic values, and CRLF (`\r\n`) endings. Validated via
+      `test_bug_2_4_18_canonical_config_parser_and_serialization` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.19: Panning Edge Trigger & Dynamic Geometry Adaptation**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6, 14.1.
+    - *Issue*: In `src/core/editor.c:65-98` (`update_horizontal_pan`),
+      horizontal panning lacks the canonical lookahead edge trigger: when
+      `vis_col == VIEW_RIGHT_COL - 1` (column 79) and the active line continues
+      beyond `CUR_COL` (character at `CUR_COL` and next character are
+      non-null), the viewport must pan right by 40 columns. Furthermore,
+      `update_horizontal_pan()` hardcodes `g_horiz_pan_offset = 0` whenever
+      `screen_mode == MODE_120X40`, ignoring dynamic terminal width
+      (`g_active_cols`) and preventing panning on terminals with intermediate
+      or non-standard column widths.
+    - *Resolution*: Implemented canonical lookahead edge trigger at
+      `view_right - 1` in `src/core/editor.c`, panning viewport right by 40
+      columns when line continues past cursor. Adapted horizontal panning
+      boundaries dynamically against `g_active_cols` and terminal width,
+      bypassing panning when terminal accommodates the 120-column line limit
+      and preserving hysteresis retention. Validated via
+      `test_bug_2_4_19_panning_edge_trigger_and_geometry` in
+      `tests/test_linux_native.py`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.

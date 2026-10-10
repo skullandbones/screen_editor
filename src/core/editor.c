@@ -11,6 +11,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "../include/config.h"
 #include "../include/buffer.h"
 #include "../include/editor.h"
@@ -18,6 +19,7 @@
 #include "../include/search.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/ui_browser.h"
 #include "../include/file_io.h"
 #include "../include/beautify.h"
 #include "../include/plugin.h"
@@ -25,6 +27,7 @@
 
 /* Global Editor Navigation & State Variables */
 uint16_t g_cur_col = 0;
+uint16_t g_target_col = 0;
 uint16_t g_top_doc_row = 0;
 uint16_t g_horiz_pan_offset = 0;
 uint8_t  g_insert_mode = 1;
@@ -34,6 +37,7 @@ uint8_t  g_action_code = ACTION_EXIT;
 void editor_init(void)
 {
     g_cur_col = 0;
+    g_target_col = 0;
     g_top_doc_row = 0;
     g_horiz_pan_offset = 0;
     g_insert_mode = 1;
@@ -66,8 +70,11 @@ void update_horizontal_pan(void)
 {
     uint16_t vis_col;
     uint16_t old_pan = g_horiz_pan_offset;
+    uint16_t view_width = g_active_cols ? g_active_cols : SCREEN_COLS_80;
+    uint16_t view_right;
 
-    if (g_config.screen_mode == MODE_120X40) {
+    /* If terminal accommodates maximum line limit (120 cols), no pan */
+    if (view_width >= MAX_LINE) {
         g_horiz_pan_offset = 0;
         if (old_pan != 0) {
             g_need_screen_render = 1;
@@ -77,17 +84,34 @@ void update_horizontal_pan(void)
     }
 
     vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+    view_right = g_horiz_pan_offset + view_width;
 
-    if (vis_col >= 120) {
-        g_horiz_pan_offset = 80;
-    } else if (vis_col >= 80) {
-        g_horiz_pan_offset = 40;
-    } else if (vis_col < 40) {
-        g_horiz_pan_offset = 0;
-    } else {
-        /* In range 40..79: hysteresis retention */
-        if (old_pan == 80) {
-            g_horiz_pan_offset = 40;
+    /* Canonical lookahead edge trigger per §6.6:
+     * When vis_col == VIEW_RIGHT_COL - 1 and active line continues beyond
+     * CUR_COL (character at CUR_COL and next character are non-null),
+     * pan viewport right by 40 columns.
+     */
+    if (vis_col == (view_right - 1) &&
+        g_cur_col < g_active_line_len &&
+        g_active_line_buf[g_cur_col] != '\0' &&
+        (g_cur_col + 1) < g_active_line_len &&
+        g_active_line_buf[g_cur_col + 1] != '\0') {
+        g_horiz_pan_offset += 40;
+        view_right = g_horiz_pan_offset + view_width;
+    }
+
+    /* Pan right: shift by +40 quanta until viewport contains vis_col */
+    while (vis_col >= view_right) {
+        g_horiz_pan_offset += 40;
+        view_right = g_horiz_pan_offset + view_width;
+    }
+
+    /* Pan left: retreat to multiple of 40 when cursor steps <= pan offset */
+    if (g_horiz_pan_offset > 0 && vis_col <= g_horiz_pan_offset) {
+        if (vis_col > 0) {
+            g_horiz_pan_offset = (uint16_t)(((vis_col - 1) / 40) * 40);
+        } else {
+            g_horiz_pan_offset = 0;
         }
     }
 
@@ -116,8 +140,8 @@ void locate_cursor(void)
         vis_col = 0;
     }
 
-    /* Column 0 has tilde margin on screen; text starts at col 2 */
-    screen_col = (uint8_t)(vis_col + 2);
+    /* Screen coordinates are 1-based; text starts at screen col 1 */
+    screen_col = (uint8_t)(vis_col + 1);
     if (screen_col > g_active_cols) {
         screen_col = g_active_cols;
     }
@@ -158,6 +182,7 @@ int do_char_insert(char c)
 
     g_active_line_buf[g_active_line_len] = '\0';
     g_cur_col++;
+    g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
     g_doc_modified = 1;
     g_need_line_render = 1;
     g_need_status_render = 1;
@@ -179,6 +204,7 @@ void do_backspace(void)
             g_active_line_buf[g_active_line_len] = '\0';
         }
         g_cur_col--;
+        g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
         g_doc_modified = 1;
         g_need_line_render = 1;
         g_need_status_render = 1;
@@ -200,13 +226,11 @@ void do_backspace(void)
 
             memcpy(g_active_line_buf, prev_buf, prev_len + 1);
             g_active_line_len = prev_len;
-            g_cur_col = (uint16_t)(prev_len - (g_active_line_len - prev_len));
-            g_cur_col = prev_len - (prev_len - (prev_len - g_active_line_len));
-            /* Cursor lands at boundary between previous and joined line */
             g_cur_col = prev_len - (g_active_line_len > 0 ?
                                     (prev_len - (prev_len - 0)) : 0);
             g_cur_col = prev_len - (g_active_line_len);
 
+            g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
             g_doc_modified = 1;
             g_need_screen_render = 1;
         }
@@ -225,6 +249,7 @@ void do_delete(void)
         }
         g_active_line_len--;
         g_active_line_buf[g_active_line_len] = '\0';
+        g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
         g_doc_modified = 1;
         g_need_line_render = 1;
         g_need_status_render = 1;
@@ -241,6 +266,7 @@ void do_delete(void)
             g_active_line_buf[g_active_line_len] = '\0';
 
             delete_doc_row(g_cur_doc_row + 1);
+            g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
             g_doc_modified = 1;
             g_need_screen_render = 1;
         }
@@ -275,6 +301,7 @@ void do_enter(void)
     }
 
     g_cur_col = 0;
+    g_target_col = 0;
     g_doc_modified = 1;
     g_need_screen_render = 1;
 }
@@ -285,9 +312,7 @@ void cursor_up(void)
         commit_active_line();
         g_cur_doc_row--;
         checkout_active_line(g_cur_doc_row);
-        if (g_cur_col > g_active_line_len) {
-            g_cur_col = g_active_line_len;
-        }
+        adjust_col_to_target(g_target_col);
         if (g_cur_doc_row < g_top_doc_row) {
             g_top_doc_row = g_cur_doc_row;
             g_need_screen_render = 1;
@@ -303,9 +328,7 @@ void cursor_down(void)
         commit_active_line();
         g_cur_doc_row++;
         checkout_active_line(g_cur_doc_row);
-        if (g_cur_col > g_active_line_len) {
-            g_cur_col = g_active_line_len;
-        }
+        adjust_col_to_target(g_target_col);
         if (g_cur_doc_row >= g_top_doc_row + vis_lines) {
             g_top_doc_row = g_cur_doc_row - vis_lines + 1;
             g_need_screen_render = 1;
@@ -318,10 +341,18 @@ void cursor_left(void)
 {
     if (g_cur_col > 0) {
         g_cur_col--;
+        g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
         g_need_status_render = 1;
     } else if (g_cur_doc_row > 0) {
-        cursor_up();
+        commit_active_line();
+        g_cur_doc_row--;
+        checkout_active_line(g_cur_doc_row);
         g_cur_col = g_active_line_len;
+        g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
+        if (g_cur_doc_row < g_top_doc_row) {
+            g_top_doc_row = g_cur_doc_row;
+            g_need_screen_render = 1;
+        }
         g_need_status_render = 1;
     }
 }
@@ -331,10 +362,19 @@ void cursor_right(void)
     checkout_active_line(g_cur_doc_row);
     if (g_cur_col < g_active_line_len) {
         g_cur_col++;
+        g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
         g_need_status_render = 1;
     } else if (g_cur_doc_row + 1 < g_doc_total_lines) {
-        cursor_down();
+        uint8_t vis_lines = g_active_rows ? (g_active_rows - 1) : 23;
+        commit_active_line();
+        g_cur_doc_row++;
+        checkout_active_line(g_cur_doc_row);
         g_cur_col = 0;
+        g_target_col = 0;
+        if (g_cur_doc_row >= g_top_doc_row + vis_lines) {
+            g_top_doc_row = g_cur_doc_row - vis_lines + 1;
+            g_need_screen_render = 1;
+        }
         g_need_status_render = 1;
     }
 }
@@ -342,6 +382,7 @@ void cursor_right(void)
 void cursor_home(void)
 {
     g_cur_col = 0;
+    g_target_col = 0;
     g_need_status_render = 1;
 }
 
@@ -349,6 +390,7 @@ void cursor_end(void)
 {
     checkout_active_line(g_cur_doc_row);
     g_cur_col = g_active_line_len;
+    g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
     g_need_status_render = 1;
 }
 
@@ -366,9 +408,7 @@ void page_up(void)
         g_top_doc_row = 0;
     }
     checkout_active_line(g_cur_doc_row);
-    if (g_cur_col > g_active_line_len) {
-        g_cur_col = g_active_line_len;
-    }
+    adjust_col_to_target(g_target_col);
     g_need_screen_render = 1;
 }
 
@@ -385,9 +425,7 @@ void page_down(void)
         g_top_doc_row = (g_doc_total_lines > 1) ? g_doc_total_lines - 1 : 0;
     }
     checkout_active_line(g_cur_doc_row);
-    if (g_cur_col > g_active_line_len) {
-        g_cur_col = g_active_line_len;
-    }
+    adjust_col_to_target(g_target_col);
     g_need_screen_render = 1;
 }
 
@@ -396,6 +434,7 @@ void jump_file_top(void)
     g_cur_doc_row = 0;
     g_top_doc_row = 0;
     g_cur_col = 0;
+    g_target_col = 0;
     checkout_active_line(0);
     g_need_screen_render = 1;
 }
@@ -409,6 +448,7 @@ void jump_file_bottom(void)
     }
     checkout_active_line(g_cur_doc_row);
     g_cur_col = 0;
+    g_target_col = 0;
     g_need_screen_render = 1;
 }
 
@@ -420,15 +460,26 @@ void toggle_insert_mode(void)
 
 void adjust_col_to_target(uint16_t target_vis_col)
 {
-    uint16_t i;
+    uint16_t char_idx = 0;
+    uint16_t vis_acc = 0;
+    uint8_t tab_w = g_config.tab_width ? g_config.tab_width : 8;
+
     checkout_active_line(g_cur_doc_row);
-    for (i = 0; i <= g_active_line_len; i++) {
-        if (calc_visual_col(g_active_line_buf, i) >= target_vis_col) {
-            g_cur_col = i;
-            return;
+
+    while (char_idx < g_active_line_len && vis_acc < target_vis_col) {
+        if (g_active_line_buf[char_idx] == '\t') {
+            uint16_t spaces = (uint16_t)(tab_w - (vis_acc % tab_w));
+            if (vis_acc + spaces > target_vis_col) {
+                break;
+            }
+            vis_acc += spaces;
+            char_idx++;
+        } else {
+            vis_acc++;
+            char_idx++;
         }
     }
-    g_cur_col = g_active_line_len;
+    g_cur_col = char_idx;
 }
 
 void goto_line(uint16_t target_line)
@@ -443,6 +494,7 @@ void goto_line(uint16_t target_line)
     g_cur_doc_row = target_line - 1;
     checkout_active_line(g_cur_doc_row);
     g_cur_col = 0;
+    g_target_col = 0;
     if (g_cur_doc_row < g_top_doc_row ||
         g_cur_doc_row >= g_top_doc_row + 20) {
         g_top_doc_row = (g_cur_doc_row > 10) ? (g_cur_doc_row - 10) : 0;
@@ -471,20 +523,68 @@ int editor_handle_key(int key)
     case KEY_BACKSPACE: do_backspace(); break;
     case KEY_ENTER: do_enter(); break;
     case KEY_CTRL_U: page_up(); break;
-    case KEY_CTRL_V: page_down(); break;
+    case KEY_CTRL_V:
+        if (get_clipboard_len() > 0) {
+            do_paste_block();
+        } else {
+            page_down();
+        }
+        break;
     case KEY_CTRL_B: toggle_block_mode(); break;
-    case KEY_CTRL_C: cancel_block(); break;
+    case KEY_CTRL_C:
+        if (g_block_mode != BLOCK_MODE_OFF) {
+            do_copy_block();
+        }
+        break;
     case KEY_CTRL_F: do_ctrl_f_find(); break;
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
-    case KEY_CTRL_N: do_ctrl_n_find_next(); break;
-    case KEY_CTRL_S: file_save(NULL, g_config.save_format); break;
+    case KEY_CTRL_S:
+        if (g_current_filename[0] == '\0') {
+            char fname[64] = {0};
+            if (ui_browser_save_dialog(fname, sizeof(fname)) ==
+                MODAL_RES_OK && fname[0]) {
+                file_save(fname, g_config.save_format);
+            }
+        } else {
+            file_save(NULL, g_config.save_format);
+        }
+        break;
+    case KEY_CTRL_L: {
+        char buf[16] = {0};
+        if (modal_prompt_text("Goto Line", "Enter destination line number:",
+                              buf, sizeof(buf)) == MODAL_RES_OK && buf[0]) {
+            int line_num = atoi(buf);
+            if (line_num > 0) {
+                goto_line((uint16_t)line_num);
+            }
+        }
+        break;
+    }
+    case KEY_CTRL_O: {
+        char fname[64] = {0};
+        if (ui_browser_open_dialog(fname, sizeof(fname)) == MODAL_RES_OK &&
+            fname[0]) {
+            if (modal_confirm_save_changes() == MODAL_RES_OK) {
+                file_load(fname);
+                g_need_screen_render = 1;
+            }
+        }
+        break;
+    }
+    case KEY_CTRL_P: plugin_manager_ui(); break;
+    case KEY_CTRL_W:
+        if (modal_confirm_save_changes() == MODAL_RES_OK) {
+            init_empty_document();
+            show_splash_screen();
+        }
+        break;
     case KEY_CTRL_Y: do_ctrl_y_beautify(); break;
     case KEY_CTRL_Z: plugin_manager_ui(); break;
     case KEY_CTRL_K: show_help_screen(); break;
     case KEY_ESC: show_splash_screen(); break;
     case KEY_CTRL_X:
         if (g_block_mode != BLOCK_MODE_OFF) {
-            do_move_block();
+            do_cut_block();
         } else {
             cursor_down();
         }
@@ -501,6 +601,9 @@ int editor_handle_key(int key)
             do_char_insert('\t');
         }
         break;
+    }
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        update_block_selection();
     }
     return 0;
 }

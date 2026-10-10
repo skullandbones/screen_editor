@@ -85,6 +85,10 @@ void hal_console_init(void)
             g_active_rows = SCREEN_ROWS_24;
         }
     }
+
+    /* Emit canonical TERM_INIT: reset attributes, show cursor, clear & home */
+    fputs("\033[0m\033[?25h\033[2J\033[H", stdout);
+    fflush(stdout);
 }
 
 void hal_console_putc(char c)
@@ -121,7 +125,7 @@ void hal_console_inverse_off(void)
 
 void hal_console_clear(void)
 {
-    fputs("\033[H\033[2J", stdout);
+    fputs("\033[2J\033[H", stdout);
     fflush(stdout);
 }
 

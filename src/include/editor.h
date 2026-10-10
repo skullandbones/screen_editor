@@ -23,6 +23,7 @@ extern "C" {
 
 /* Global Editor Navigation & State Variables */
 extern uint16_t g_cur_col;             /* Document character column (0-based) */
+extern uint16_t g_target_col;          /* Sticky visual target column */
 extern uint16_t g_top_doc_row;         /* Top visible document row */
 extern uint16_t g_horiz_pan_offset;    /* Horizontal scroll offset in cols */
 extern uint8_t  g_insert_mode;         /* 1 = Insert mode, 0 = Overwrite */
