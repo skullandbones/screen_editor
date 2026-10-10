@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 4 Defects Open (Bugs 2.4.16–2.4.19).
+- **Status**: Active / 3 Defects Open (Bugs 2.4.17–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -325,7 +325,7 @@ have been resolved and archived.
       column across `cursor_up`, `cursor_down`, `page_up`, and `page_down`.
       Validated via `test_bug_2_4_15_sticky_target_col_and_tab_clamping` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.16: Status Bar Field Squatting & Field 5 Column Reporting**:
+  - [x] **Bug 2.4.16: Status Bar Field Squatting & Field 5 Column Reporting**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 11.1.
     - *Issue*: In `src/core/ui_render.c:210-241` (`render_status_bar`), Field 4
       is overwritten with selection metrics (`Sel: ...`, `Block: ...`) or
@@ -335,9 +335,11 @@ have been resolved and archived.
       Field 5 formats column position using raw byte index `g_cur_col` instead
       of visual document column `calc_visual_col()`, displaying raw byte offsets
       when tabs are present.
-    - *Required Fix*: Preserve `^K: Editor keys |` in Field 4 unconditionally,
-      route `[Pan +40]` and block status flags into Field 5, and compute Field 5
-      column display using `calc_visual_col(g_active_line_buf, g_cur_col)`.
+    - *Resolution*: Unconditionally preserved `^K: Editor keys |` in Field 4,
+      routed `[Pan +40]`, `[SEL]`, and `[BLK LOCK]` indicators into Field 5,
+      and computed Field 5 column display using `calc_visual_col()`. Validated
+      via `test_bug_2_4_16_status_bar_field_invariance_and_visual_col` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.17: Tier 1 File Open/Save Workspaces & Directory Scanning**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 7.5, 7.6, 7.7, 7.8, 14.2.
     - *Issue*: `ui_browser_open_dialog` in `src/core/ui_browser.c` renders a

@@ -151,7 +151,7 @@ void render_status_bar(void)
     char field2[16];
     char field3[16];
     char field4[32];
-    char field5[64];
+    char field5[80];
     const char *fname;
     const char *geom_str;
     const char *fmt_str;
@@ -185,69 +185,56 @@ void render_status_bar(void)
         snprintf(field4, sizeof(field4), " Free: 48 KB     |");
     } else
 #endif
-    if (g_block_mode == BLOCK_MODE_SELECTING) {
-        char blk_info[32];
-        normalize_block_bounds();
-        if (g_norm_start_row == g_norm_end_row) {
-            uint16_t chars = (g_norm_end_col >= g_norm_start_col)
-                ? (g_norm_end_col - g_norm_start_col) : 0;
-            if (chars == 1) {
-                snprintf(blk_info, sizeof(blk_info), "Sel: 1 char");
-            } else {
-                snprintf(blk_info, sizeof(blk_info), "Sel: %u chars",
-                         (unsigned)chars);
-            }
-        } else {
-            uint16_t lines = (g_norm_end_row >= g_norm_start_row)
-                ? (g_norm_end_row - g_norm_start_row + 1) : 1;
-            if (lines == 1) {
-                snprintf(blk_info, sizeof(blk_info), "Sel: 1 line");
-            } else {
-                snprintf(blk_info, sizeof(blk_info), "Sel: %u lines",
-                         (unsigned)lines);
-            }
-        }
-        snprintf(field4, sizeof(field4), " %-15.15s |", blk_info);
-    } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
-        char blk_info[32];
-        normalize_block_bounds();
-        if (g_norm_start_row == g_norm_end_row) {
-            uint16_t chars = (g_norm_end_col >= g_norm_start_col)
-                ? (g_norm_end_col - g_norm_start_col) : 0;
-            if (chars == 1) {
-                snprintf(blk_info, sizeof(blk_info), "Block: 1 char");
-            } else {
-                snprintf(blk_info, sizeof(blk_info), "Block: %u chars",
-                         (unsigned)chars);
-            }
-        } else {
-            uint16_t lines = (g_norm_end_row >= g_norm_start_row)
-                ? (g_norm_end_row - g_norm_start_row + 1) : 1;
-            if (lines == 1) {
-                snprintf(blk_info, sizeof(blk_info), "Block: 1 line");
-            } else {
-                snprintf(blk_info, sizeof(blk_info), "Block: %u lines",
-                         (unsigned)lines);
-            }
-        }
-        snprintf(field4, sizeof(field4), " %-15.15s |", blk_info);
-    } else if (g_horiz_pan_offset > 0) {
-        char pan_info[16];
-        snprintf(pan_info, sizeof(pan_info), "[Pan +%u]",
-                 (unsigned)g_horiz_pan_offset);
-        snprintf(field4, sizeof(field4), " %-15.15s |", pan_info);
-    } else {
+    {
         snprintf(field4, sizeof(field4), " ^K: Editor keys |");
     }
 
-    snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u |",
-             (unsigned)(g_cur_doc_row + 1),
-             (unsigned)g_doc_total_lines,
-             (unsigned)g_cur_col);
+    {
+        uint16_t vis_col = 0;
+        char mode_flags[32];
+        mode_flags[0] = '\0';
 
-    snprintf(core, sizeof(core), "%s%s%s%s%s",
-             field1, field2, field3, field4, field5);
-    core_len = strlen(core);
+        if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
+            checkout_active_line(g_cur_doc_row);
+            vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+        }
+
+        if (g_horiz_pan_offset > 0) {
+            char pan_buf[16];
+            snprintf(pan_buf, sizeof(pan_buf), " [Pan +%u]",
+                     (unsigned)g_horiz_pan_offset);
+            strncat(mode_flags, pan_buf,
+                    sizeof(mode_flags) - strlen(mode_flags) - 1);
+        }
+        if (g_block_mode == BLOCK_MODE_SELECTING) {
+            strncat(mode_flags, " [SEL]",
+                    sizeof(mode_flags) - strlen(mode_flags) - 1);
+        } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
+            strncat(mode_flags, " [BLK LOCK]",
+                    sizeof(mode_flags) - strlen(mode_flags) - 1);
+        }
+
+        snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u%s |",
+                 (unsigned)(g_cur_doc_row + 1),
+                 (unsigned)g_doc_total_lines,
+                 (unsigned)vis_col,
+                 mode_flags);
+
+        snprintf(core, sizeof(core), "%s%s%s%s%s",
+                 field1, field2, field3, field4, field5);
+        core_len = strlen(core);
+
+        if (core_len > g_active_cols && mode_flags[0] != '\0') {
+            snprintf(field5, sizeof(field5), " Line %u/%u Col %u%s |",
+                     (unsigned)(g_cur_doc_row + 1),
+                     (unsigned)g_doc_total_lines,
+                     (unsigned)vis_col,
+                     mode_flags);
+            snprintf(core, sizeof(core), "%s%s%s%s%s",
+                     field1, field2, field3, field4, field5);
+            core_len = strlen(core);
+        }
+    }
 
     if (core_len < g_active_cols) {
         size_t pad = g_active_cols - core_len;
@@ -265,8 +252,12 @@ void render_status_bar(void)
         }
         full_bar[idx] = '\0';
     } else {
-        strncpy(full_bar, core, g_active_cols);
-        full_bar[g_active_cols] = '\0';
+        size_t copy_len = (size_t)g_active_cols;
+        if (copy_len >= sizeof(full_bar)) {
+            copy_len = sizeof(full_bar) - 1;
+        }
+        memcpy(full_bar, core, copy_len);
+        full_bar[copy_len] = '\0';
     }
 
     hal_console_locate(g_active_rows, 1);

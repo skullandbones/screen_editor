@@ -786,8 +786,11 @@ def test_bug_2_4_11_block_selection_cursor_tracking():
             out_sel_chars = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Sel: 5 chars" in out_sel_chars, (
-                f"Expected 'Sel: 5 chars' in output:\n{out_sel_chars}"
+            assert "[SEL]" in out_sel_chars, (
+                f"Expected '[SEL]' indicator in output:\n{out_sel_chars}"
+            )
+            assert "^K: Editor keys" in out_sel_chars, (
+                f"Expected '^K: Editor keys' invariant:\n{out_sel_chars}"
             )
             assert "\x1b[7m" in out_sel_chars, (
                 f"Expected inverse video highlight '\\x1b[7m':\n{out_sel_chars}"
@@ -799,8 +802,11 @@ def test_bug_2_4_11_block_selection_cursor_tracking():
             out_sel_lines = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Sel: 2 lines" in out_sel_lines, (
-                f"Expected 'Sel: 2 lines' in output:\n{out_sel_lines}"
+            assert "[SEL]" in out_sel_lines, (
+                f"Expected '[SEL]' indicator in multi-line:\n{out_sel_lines}"
+            )
+            assert "^K: Editor keys" in out_sel_lines, (
+                f"Expected '^K: Editor keys' invariant:\n{out_sel_lines}"
             )
 
             # Cancel block selection via Ctrl+B toggle
@@ -808,6 +814,9 @@ def test_bug_2_4_11_block_selection_cursor_tracking():
             time.sleep(0.2)
             out_cancel = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
+            )
+            assert "[SEL]" not in out_cancel, (
+                f"Expected '[SEL]' cleared on toggle:\n{out_cancel}"
             )
             assert "^K: Editor keys" in out_cancel, (
                 f"Expected '^K: Editor keys' restored:\n{out_cancel}"
@@ -862,8 +871,11 @@ def test_bug_2_4_12_clipboard_copy_paste():
             out_copy = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Block: 5 chars" in out_copy, (
-                f"Expected 'Block: 5 chars' status:\n{out_copy}"
+            assert "[BLK LOCK]" in out_copy, (
+                f"Expected '[BLK LOCK]' status indicator:\n{out_copy}"
+            )
+            assert "^K: Editor keys |" in out_copy, (
+                f"Expected Field 4 preserved after copy:\n{out_copy}"
             )
 
             # Move down to line 2 and jump to Col 0 via Ctrl+A
@@ -1078,6 +1090,91 @@ def test_bug_2_4_15_sticky_target_col_and_tab_clamping():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_16_status_bar_field_invariance_and_visual_col():
+    """Verify Field 4 invariance and Field 5 visual col reporting (2.4.16)."""
+    print("[*] Testing status bar Field 4 invariance & visual col (2.4.16)...")
+    long_line = "\tABCDEF" + ("X" * 80) + "\nSecond line\n"
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_statbar_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write(long_line)
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            init_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "^K: Editor keys |" in init_out, (
+                f"Expected Field 4 '^K: Editor keys |':\n{init_out}"
+            )
+            assert "Col 0" in init_out, f"Expected Col 0 initially:\n{init_out}"
+
+            # Move right 1 character past tab: visual column must leap to 8
+            os.write(master, b"\x1b[C")
+            time.sleep(0.1)
+            out_tab = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Col 8" in out_tab, (
+                f"Expected visual Col 8 after tab leap:\n{out_tab}"
+            )
+            assert "^K: Editor keys |" in out_tab, (
+                f"Expected Field 4 preserved:\n{out_tab}"
+            )
+
+            # Start block selection: [SEL] in Field 5, Field 4 preserved
+            os.write(master, b"\x02")
+            time.sleep(0.1)
+            out_sel = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[SEL]" in out_sel, (
+                f"Expected '[SEL]' indicator in Field 5:\n{out_sel}"
+            )
+            assert "^K: Editor keys |" in out_sel, (
+                f"Expected Field 4 preserved during selection:\n{out_sel}"
+            )
+
+            # Cancel selection
+            os.write(master, b"\x02")
+            time.sleep(0.1)
+
+            # Move to end of line to trigger pan (+40)
+            os.write(master, b"\x1b[F")
+            time.sleep(0.2)
+            out_pan = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[Pan +40]" in out_pan, (
+                f"Expected '[Pan +40]' in Field 5:\n{out_pan}"
+            )
+            assert "^K: Editor keys |" in out_pan, (
+                f"Expected Field 4 preserved during horizontal pan:\n{out_pan}"
+            )
+
+            # Exit cleanly via Ctrl+Q (no modification dialog)
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Status bar Field 4 invariance & visual col [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1100,6 +1197,7 @@ def main():
     test_bug_2_4_13_terminal_lifecycle()
     test_bug_2_4_14_viewport_col1_alignment()
     test_bug_2_4_15_sticky_target_col_and_tab_clamping()
+    test_bug_2_4_16_status_bar_field_invariance_and_visual_col()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
