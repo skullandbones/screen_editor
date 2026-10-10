@@ -76,6 +76,10 @@ void toggle_block_mode(void)
 
 void normalize_block_bounds(void)
 {
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        g_block_active_row = g_cur_doc_row;
+        g_block_active_col = g_cur_col;
+    }
     if (g_block_anchor_row < g_block_active_row) {
         g_norm_start_row = g_block_anchor_row;
         g_norm_start_col = g_block_anchor_col;
@@ -96,6 +100,17 @@ void normalize_block_bounds(void)
             g_norm_start_col = g_block_active_col;
             g_norm_end_col = g_block_anchor_col;
         }
+    }
+}
+
+void update_block_selection(void)
+{
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        g_block_active_row = g_cur_doc_row;
+        g_block_active_col = g_cur_col;
+        normalize_block_bounds();
+        g_need_screen_render = 1;
+        g_need_status_render = 1;
     }
 }
 

@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 9 Defects Open (Bugs 2.4.11–2.4.19).
+- **Status**: Active / 8 Defects Open (Bugs 2.4.12–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -247,15 +247,20 @@ have been resolved and archived.
       and unget support. Rapid burst escape sequences parse discretely without
       clumping. Validated via `test_bug_2_4_10_burst_escape_sequences` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
+  - [x] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2.
     - *Issue*: In `src/core/block.c`, `g_block_active_row` and
       `g_block_active_col` are only updated on `start_new_block_at_cursor()`
       and `solidify_block()`. As cursor moves in `editor.c`, block bounds are
       never updated, resulting in 0 characters selected and no visual highlight
       while navigating in selection mode.
-    - *Required Fix*: Track cursor position dynamically during
-      `BLOCK_MODE_SELECTING` and update normalized block bounds on movement.
+    - *Resolution*: Dynamically updated `g_block_active_row` and
+      `g_block_active_col` from cursor position in `normalize_block_bounds()`
+      and implemented `update_block_selection()` in `src/core/block.c`.
+      Integrated cursor tracking at editor key dispatch in `src/core/editor.c`
+      triggering screen and status bar re-renders with inverse video highlights.
+      Validated via `test_bug_2_4_11_block_selection_cursor_tracking` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.
     - *Issue*: In `src/core/editor.c`, `KEY_CTRL_V` is bound exclusively to

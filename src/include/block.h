@@ -49,6 +49,7 @@ int  do_move_block(void);
 int  check_cursor_in_block(uint16_t row, uint16_t col);
 int  get_line_block_range(uint16_t row, uint16_t *start_col, uint16_t *end_col);
 void start_new_block_at_cursor(void);
+void update_block_selection(void);
 
 #ifdef __cplusplus
 }

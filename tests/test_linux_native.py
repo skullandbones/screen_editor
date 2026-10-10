@@ -753,6 +753,78 @@ def test_bug_2_4_10_burst_escape_sequences():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_11_block_selection_cursor_tracking():
+    """Verify block bounds track cursor dynamically (Bug 2.4.11)."""
+    print("[*] Testing dynamic block selection cursor tracking (Bug 2.4.11)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_block_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("Line 1: 1234567890\nLine 2: ABCDEFGHIJKLMNOP\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Start block selection at (0, 0) via Ctrl+B
+            os.write(master, b"\x02")
+            time.sleep(0.1)
+
+            # Move right 5 characters
+            os.write(master, b"\x1b[C" * 5)
+            time.sleep(0.2)
+            out_sel_chars = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Sel: 5 chars" in out_sel_chars, (
+                f"Expected 'Sel: 5 chars' in output:\n{out_sel_chars}"
+            )
+            assert "\x1b[7m" in out_sel_chars, (
+                f"Expected inverse video highlight '\\x1b[7m':\n{out_sel_chars}"
+            )
+
+            # Move down 1 line to expand to multi-line block
+            os.write(master, b"\x1b[B")
+            time.sleep(0.2)
+            out_sel_lines = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Sel: 2 lines" in out_sel_lines, (
+                f"Expected 'Sel: 2 lines' in output:\n{out_sel_lines}"
+            )
+
+            # Cancel block selection via Ctrl+B toggle
+            os.write(master, b"\x02")
+            time.sleep(0.2)
+            out_cancel = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "^K: Editor keys" in out_cancel, (
+                f"Expected '^K: Editor keys' restored:\n{out_cancel}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Block cursor tracking & highlight verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -770,6 +842,7 @@ def main():
     test_bug_2_4_8_modal_dispatchers()
     test_bug_2_4_9_splash_screen_commands()
     test_bug_2_4_10_burst_escape_sequences()
+    test_bug_2_4_11_block_selection_cursor_tracking()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

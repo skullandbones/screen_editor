@@ -533,6 +533,9 @@ int editor_handle_key(int key)
         }
         break;
     }
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        update_block_selection();
+    }
     return 0;
 }
 
