@@ -900,6 +900,42 @@ def test_bug_2_4_12_clipboard_copy_paste():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_13_terminal_lifecycle():
+    """Verify startup TERM_INIT clear and exit message banner (Bug 2.4.13)."""
+    print("[*] Testing startup TERM_INIT and exit banner (Bug 2.4.13)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        startup_bytes = read_all_available(master, 0.2)
+
+        # Verify startup TERM_INIT sequence (\x1b[0m\x1b[?25h\x1b[2J\x1b[H)
+        assert b"\x1b[0m\x1b[?25h\x1b[2J\x1b[H" in startup_bytes, (
+            f"Expected startup TERM_INIT sequence in output:\n{startup_bytes!r}"
+        )
+
+        # Send Ctrl+Q followed by Enter to quit
+        os.write(master, b"\x11\n")
+        time.sleep(0.2)
+        exit_bytes = read_all_available(master, 0.2)
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        assert b"Exiting SE. Returned to OS prompt." in exit_bytes, (
+            f"Expected canonical exit message in output:\n{exit_bytes!r}"
+        )
+        print("    [+] Startup TERM_INIT & clean exit banner verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -919,6 +955,7 @@ def main():
     test_bug_2_4_10_burst_escape_sequences()
     test_bug_2_4_11_block_selection_cursor_tracking()
     test_bug_2_4_12_clipboard_copy_paste()
+    test_bug_2_4_13_terminal_lifecycle()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

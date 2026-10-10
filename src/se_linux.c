@@ -53,9 +53,9 @@ int main(int argc, char **argv)
 
     editor_main_loop();
 
-    /* Clean exit: Clear screen and restore terminal */
-    hal_console_clear();
-    hal_console_locate(1, 1);
+    /* Clean exit: Clear screen via TERM_INIT and emit canonical exit banner */
+    hal_console_puts("\033[0m\033[?25h\033[2J\033[H");
+    hal_console_puts("\r\nExiting SE. Returned to OS prompt.\r\n");
     hal_console_show_cursor();
     return 0;
 }

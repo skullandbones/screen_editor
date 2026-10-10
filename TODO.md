@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 7 Defects Open (Bugs 2.4.13–2.4.19).
+- **Status**: Active / 6 Defects Open (Bugs 2.4.14–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -273,7 +273,7 @@ have been resolved and archived.
       back to `page_down()` when clipboard is empty) and bound `KEY_CTRL_C` to
       copy selection. Validated via `test_bug_2_4_12_clipboard_copy_paste`
       in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.13: Terminal Lifecycle, Startup Clear & Clean Exit Missing**:
+  - [x] **Bug 2.4.13: Terminal Lifecycle, Startup Clear & Clean Exit Missing**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.5, 12.1.
     - *Issue*: On launch, `src/se_linux.c` fails to emit canonical `TERM_INIT`
       (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`), risking leaving unreset attributes or
@@ -283,9 +283,12 @@ have been resolved and archived.
       `hal_console_clear()` in `hal_linux_console.c` emits `\x1b[H\x1b[2J`
       (home then clear) rather than standard ANSI clear then home
       (`\x1b[2J\x1b[H`).
-    - *Required Fix*: Implement `TERM_INIT` startup clear in `se_linux.c` /
-      `hal_linux_console.c`, emit canonical exit banner on program termination,
-      and standardize `hal_console_clear()` sequence order.
+    - *Resolution*: Emitted canonical `TERM_INIT` on `hal_console_init()` in
+      `src/hal/linux/hal_linux_console.c`, standardized `hal_console_clear()` to
+      `\x1b[2J\x1b[H`, and emitted `TERM_INIT` followed by the canonical exit
+      banner `\r\nExiting SE. Returned to OS prompt.\r\n` upon termination in
+      `src/se_linux.c`. Validated via `test_bug_2_4_13_terminal_lifecycle` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.14: Viewport Column 1 Space & Cursor Locator Offset**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1.3, 5.3, 6.7.
     - *Issue*: In `src/core/ui_render.c:82` (`render_row_content`), allocated
