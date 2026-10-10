@@ -72,17 +72,6 @@ void update_horizontal_pan(void)
     uint16_t old_pan = g_horiz_pan_offset;
     uint16_t view_width = g_active_cols ? g_active_cols : SCREEN_COLS_80;
     uint16_t view_right;
-
-    /* If terminal accommodates maximum line limit (120 cols), no pan */
-    if (view_width >= MAX_LINE) {
-        g_horiz_pan_offset = 0;
-        if (old_pan != 0) {
-            g_need_screen_render = 1;
-            g_need_status_render = 1;
-        }
-        return;
-    }
-
     vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
     view_right = g_horiz_pan_offset + view_width;
 

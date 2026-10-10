@@ -146,23 +146,22 @@ void render_buffer_line(uint16_t row)
 
 void render_status_bar(void)
 {
-    char raw_name[80];
+    char raw_name[32];
     char field1[32];
     char field2[16];
     char field3[16];
     char field4[32];
-    char field5[80];
+    char field5[40];
     const char *fname;
-    const char *geom_str;
-    const char *fmt_str;
-    char core[256];
-    char full_bar[256];
-    size_t core_len;
+    char core[128];
+    char full_bar[160];
+    size_t pad, right_pad;
     size_t i, idx;
+    uint16_t vis_col = 0;
 
     fname = g_current_filename[0] ? g_current_filename : "(Untitled)";
 #ifdef __CPM__
-    char cpm_disp_name[64];
+    char cpm_disp_name[32];
     if (g_current_filename[0] != '\0' && g_current_filename[1] != ':') {
         char drv = (char)('A' + bdos(25, 0));
         snprintf(cpm_disp_name, sizeof(cpm_disp_name), "%c:%s",
@@ -172,93 +171,85 @@ void render_status_bar(void)
 #endif
     snprintf(raw_name, sizeof(raw_name), "%s%c", fname,
              g_doc_modified ? '*' : ' ');
-    snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
+    snprintf(field1, sizeof(field1), "| %-14.14s | ", raw_name);
 
-    geom_str = (g_active_cols >= SCREEN_COLS_120) ? "120x40" : "80x24";
-    snprintf(field2, sizeof(field2), " %s |", geom_str);
+    snprintf(field2, sizeof(field2), "%s | ",
+             (g_active_cols >= SCREEN_COLS_120) ? "120x40" : " 80x24");
 
-    fmt_str = (g_file_format == FMT_CPM) ? "CPM  " : "Linux";
-    snprintf(field3, sizeof(field3), " %s |", fmt_str);
+    snprintf(field3, sizeof(field3), "%s | ",
+             (g_file_format == FMT_CPM) ? "CP/M " : "Linux");
 
 #if defined(__CPM__)
     if (g_is_splash_screen) {
-        snprintf(field4, sizeof(field4), " Free: 48 KB     |");
+        snprintf(field4, sizeof(field4), "Free: 48 KB     | ");
     } else
 #endif
-    {
-        snprintf(field4, sizeof(field4), " ^K: Editor keys |");
-    }
-
-    {
-        uint16_t vis_col = 0;
-        char mode_flags[32];
-        mode_flags[0] = '\0';
-
-        if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
-            checkout_active_line(g_cur_doc_row);
-            vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        normalize_block_bounds();
+        if (g_norm_start_row == g_norm_end_row) {
+            uint16_t b_chars = (g_norm_end_col >= g_norm_start_col) ?
+                (g_norm_end_col - g_norm_start_col) : 0;
+            char sbuf[16];
+            snprintf(sbuf, sizeof(sbuf), "Sel: %u", (unsigned)b_chars);
+            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
+        } else {
+            uint16_t b_lines = (g_norm_end_row >= g_norm_start_row) ?
+                (g_norm_end_row - g_norm_start_row + 1) : 1;
+            char sbuf[16];
+            snprintf(sbuf, sizeof(sbuf), "Sel: %u lines", (unsigned)b_lines);
+            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
         }
-
-        if (g_horiz_pan_offset > 0) {
-            char pan_buf[16];
-            snprintf(pan_buf, sizeof(pan_buf), " [Pan +%u]",
-                     (unsigned)g_horiz_pan_offset);
-            strncat(mode_flags, pan_buf,
-                    sizeof(mode_flags) - strlen(mode_flags) - 1);
+    } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
+        normalize_block_bounds();
+        if (g_norm_start_row == g_norm_end_row) {
+            uint16_t b_chars = (g_norm_end_col >= g_norm_start_col) ?
+                (g_norm_end_col - g_norm_start_col) : 0;
+            char sbuf[16];
+            snprintf(sbuf, sizeof(sbuf), "Block: %u chars", (unsigned)b_chars);
+            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
+        } else {
+            uint16_t b_lines = (g_norm_end_row >= g_norm_start_row) ?
+                (g_norm_end_row - g_norm_start_row + 1) : 1;
+            char sbuf[16];
+            snprintf(sbuf, sizeof(sbuf), "Block: %u lines", (unsigned)b_lines);
+            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
         }
-        if (g_block_mode == BLOCK_MODE_SELECTING) {
-            strncat(mode_flags, " [SEL]",
-                    sizeof(mode_flags) - strlen(mode_flags) - 1);
-        } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
-            strncat(mode_flags, " [BLK LOCK]",
-                    sizeof(mode_flags) - strlen(mode_flags) - 1);
-        }
-
-        snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u%s |",
-                 (unsigned)(g_cur_doc_row + 1),
-                 (unsigned)g_doc_total_lines,
-                 (unsigned)vis_col,
-                 mode_flags);
-
-        snprintf(core, sizeof(core), "%s%s%s%s%s",
-                 field1, field2, field3, field4, field5);
-        core_len = strlen(core);
-
-        if (core_len > g_active_cols && mode_flags[0] != '\0') {
-            snprintf(field5, sizeof(field5), " Line %u/%u Col %u%s |",
-                     (unsigned)(g_cur_doc_row + 1),
-                     (unsigned)g_doc_total_lines,
-                     (unsigned)vis_col,
-                     mode_flags);
-            snprintf(core, sizeof(core), "%s%s%s%s%s",
-                     field1, field2, field3, field4, field5);
-            core_len = strlen(core);
-        }
-    }
-
-    if (core_len < g_active_cols) {
-        size_t pad = g_active_cols - core_len;
-        size_t left_pad = pad / 2;
-        size_t right_pad = pad - left_pad;
-        idx = 0;
-        for (i = 0; i < left_pad && idx + 1 < sizeof(full_bar); i++) {
-            full_bar[idx++] = ' ';
-        }
-        for (i = 0; i < core_len && idx + 1 < sizeof(full_bar); i++) {
-            full_bar[idx++] = core[i];
-        }
-        for (i = 0; i < right_pad && idx + 1 < sizeof(full_bar); i++) {
-            full_bar[idx++] = ' ';
-        }
-        full_bar[idx] = '\0';
+    } else if (g_horiz_pan_offset > 0) {
+        char pbuf[16];
+        snprintf(pbuf, sizeof(pbuf), "[Pan +%u]", (unsigned)g_horiz_pan_offset);
+        snprintf(field4, sizeof(field4), "%-15s | ", pbuf);
+    } else if (!g_insert_mode) {
+        snprintf(field4, sizeof(field4), "[Overwrite]     | ");
     } else {
-        size_t copy_len = (size_t)g_active_cols;
-        if (copy_len >= sizeof(full_bar)) {
-            copy_len = sizeof(full_bar) - 1;
-        }
-        memcpy(full_bar, core, copy_len);
-        full_bar[copy_len] = '\0';
+        snprintf(field4, sizeof(field4), "^K: Editor keys | ");
     }
+
+    if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
+        checkout_active_line(g_cur_doc_row);
+        vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+    }
+    snprintf(field5, sizeof(field5), "Line %4u/%-4u Col %-3u |",
+             (unsigned)(g_cur_doc_row + 1),
+             (unsigned)g_doc_total_lines,
+             (unsigned)vis_col);
+
+    snprintf(core, sizeof(core), "%s%s%s%s%s",
+             field1, field2, field3, field4, field5);
+
+    pad = (g_active_cols > 78) ? (g_active_cols - 78) / 2 : 1;
+    right_pad = (g_active_cols > (78 + pad)) ? (g_active_cols - 78 - pad) : 1;
+
+    idx = 0;
+    for (i = 0; i < pad && idx + 1 < sizeof(full_bar); i++) {
+        full_bar[idx++] = ' ';
+    }
+    for (i = 0; i < 78 && core[i] != '\0' && idx + 1 < sizeof(full_bar); i++) {
+        full_bar[idx++] = core[i];
+    }
+    for (i = 0; i < right_pad && idx + 1 < sizeof(full_bar); i++) {
+        full_bar[idx++] = ' ';
+    }
+    full_bar[idx] = '\0';
 
     hal_console_locate(g_active_rows, 1);
     hal_console_inverse_on();

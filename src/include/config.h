@@ -28,10 +28,10 @@ extern "C" {
 #define CMD_TAIL                0x0081
 
 /* Buffer & Document Capacity Limits */
-#define MAX_LINE                120
+#define MAX_LINE                1000
 #define MAX_LINE_STRIDE         128
-#define MAX_LINE_CHARS          120
-#define MAX_INPUT_LINE_CHARS    120
+#define MAX_LINE_CHARS          1000
+#define MAX_INPUT_LINE_CHARS    1000
 #define MAX_CACHE_LINE_CHARS    250
 #define MAX_ACTIVE_LINE_STRIDE  1024
 #define MAX_ACTIVE_PAYLOAD      1022

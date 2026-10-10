@@ -355,10 +355,12 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - If `CUR_DOC_ROW < TOP_DOC_ROW`: `CUR_DOC_ROW = TOP_DOC_ROW`.
      - Realign `CUR_COL` via `ADJUST_COL_TO_TARGET()`.
 
-6. Horizontal Panning Engine (`[Pan +40]`) & 120-Column Line Barrier:
-   - Physical Line Length Barrier:
-     - Maximum physical line length is strictly 120 characters
-       (`MAX_LINE = 120`). Character insertion beyond 120 is blocked.
+6. Horizontal Panning Engine (`[Pan +40]`) & Line Capacity Limit:
+   - Line Capacity Limit:
+     - Maximum visual/input line length is 1,000 characters
+       (`MAX_INPUT_LINE_CHARS = 1000`, `MAX_LINE_CHARS = 1000`).
+     - Backed by dynamic multi-stride Far RAM allocation and 1,024-byte
+       active line buffers. Character insertion beyond 1,000 is blocked.
    - Horizontal Pan Quantum (+40 Columns):
      - On standard 80-column screens, columns beyond column 79 are accessed via
        horizontal viewport panning in increments of 40 columns.
