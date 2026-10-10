@@ -157,9 +157,21 @@ class Editor:
         elif key == KEY_CTRL_L:
             self.action_goto_line()
         elif key == KEY_CTRL_K:
-            self.action_help()
+            if self.terminal.is_key_ready():
+                next_k = self.terminal.get_key()
+                if next_k in ("r", "R"):
+                    self.action_insert_file()
+                elif next_k in ("q", "Q", "x", "X"):
+                    self.action_quit()
+                else:
+                    self.action_help()
+            else:
+                self.action_help()
         elif key == KEY_CTRL_O:
-            self.action_open_file()
+            if self.buffer.block_active > 0:
+                self.action_insert_file()
+            else:
+                self.action_open_file()
         elif key == KEY_CTRL_S:
             self.action_save_file()
         elif key == KEY_CTRL_P:
@@ -477,6 +489,33 @@ class Editor:
         else:
             self.modal.show_notification(
                 title="Open Error", message="File not found"
+            )
+
+    def action_insert_file(self):
+        """Insert disk file contents into document buffer at cursor."""
+        if self.buffer.block_active == 1:
+            self.buffer.solidify_block()
+
+        target = self.action_directory_browser(mode="insert")
+        if not target:
+            return
+        filename, _fmt = target
+        if not os.path.isfile(filename):
+            self.modal.show_notification(
+                title="Insert Error", message="File not found"
+            )
+            return
+
+        ok = self.buffer.insert_file(filename)
+        if ok:
+            self.modal.show_notification(
+                title="Insert Complete",
+                message=f"Inserted {os.path.basename(filename)}",
+            )
+        else:
+            self.modal.show_notification(
+                title="Insert Error",
+                message=f"Could not read {os.path.basename(filename)}",
             )
 
     def action_save_file(self) -> bool:

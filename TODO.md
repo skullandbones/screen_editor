@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 4 Defects Open (Bugs 2.7.33–2.7.36).
+- **Status**: Active / 3 Defects Open (Bugs 2.7.34–2.7.36).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -689,7 +689,7 @@ have been resolved and archived.
       file grids, pagination, path traversal, wildcard filtering, and `Ctrl+F`
       format toggling. Validated via
       `test_tier1_directory_browser_open_and_save` in `test_editor.py`.
-  - [ ] **Bug 2.7.33: Block-Active File Insert (Ctrl+O) Unimplemented**:
+  - [x] **Bug 2.7.33: Block-Active File Insert (Ctrl+O) Unimplemented**:
     - *Symptom*: Pressing `Ctrl+O` while a block selection is active invokes
       the open file action (replacing active document) rather than streaming
       the selected file contents into the buffer at the cursor. Additionally,
@@ -699,10 +699,13 @@ have been resolved and archived.
       and block insertion mechanics.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, Section 10, and
       `src/se.asm:1064-1070`.
-    - *Resolution Plan*: Add block-active detection to `KEY_CTRL_O` in
-      `dispatch_key()` and implement `action_insert_file()`, solidifying block
-      bounds, opening the directory browser in insert mode, and streaming file
-      content directly into `DocumentBuffer` at the cursor position.
+    - *Resolution*: Added block-active detection to `KEY_CTRL_O` in
+      `dispatch_key()` and implemented `action_insert_file()` in `editor.py`
+      along with `insert_file()` in `DocumentBuffer`, solidifying block bounds
+      and streaming file contents directly into the document at the cursor
+      position without replacing existing lines. Added `Ctrl+K R` prefix
+      dispatch. Validated via `test_block_active_file_insert` in
+      `test_editor.py`.
   - [ ] **Bug 2.7.34: Block-Active Save (Ctrl+S) Saves Full Buffer**:
     - *Symptom*: Pressing `Ctrl+S` while a block is highlighted overwrites the
       target file with the full document buffer rather than saving only the

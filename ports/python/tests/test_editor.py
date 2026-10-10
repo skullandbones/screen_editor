@@ -15,6 +15,8 @@ from se.modal import ModalDialog
 from se.terminal import (
     KEY_CTRL_D,
     KEY_CTRL_F,
+    KEY_CTRL_K,
+    KEY_CTRL_O,
     KEY_CTRL_S,
     KEY_CTRL_V,
     KEY_LEFT,
@@ -902,6 +904,84 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 24: Tier 1 Directory Browser Open and Save verified.",
+            flush=True,
+        )
+
+    def test_block_active_file_insert(self):
+        """Step 25: Verify block-active Ctrl+O and Ctrl+K R (Bug 2.7.33)."""
+        print(
+            "[*] Step 25: Testing block-active file insert and Ctrl+K R...",
+            flush=True,
+        )
+        import tempfile
+
+        # 1. When block_active == 0, Ctrl+O invokes action_open_file
+        self.editor.action_open_file = MagicMock()
+        self.editor.action_insert_file = MagicMock()
+        self.editor.buffer.block_active = 0
+        self.editor.dispatch_key(KEY_CTRL_O)
+        self.editor.action_open_file.assert_called_once()
+        self.editor.action_insert_file.assert_not_called()
+
+        # 2. When block_active == 1, Ctrl+O invokes action_insert_file
+        self.editor.action_open_file.reset_mock()
+        self.editor.action_insert_file.reset_mock()
+        self.editor.buffer.block_active = 1
+        self.editor.dispatch_key(KEY_CTRL_O)
+        self.editor.action_open_file.assert_not_called()
+        self.editor.action_insert_file.assert_called_once()
+
+        # 3. Ctrl+K R invokes action_insert_file via WordStar prefix
+        self.editor.action_insert_file.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(return_value="r")
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_insert_file.assert_called_once()
+
+        # 4. End-to-end: insert file into buffer at cursor
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            snippet_path = os.path.join(tmp_dir, "snippet.txt")
+            with open(snippet_path, "wb") as f:
+                f.write(b"Inserted line 1\nInserted line 2\n")
+
+            self.editor.buffer.lines = ["Line 1", "Line 2", "Line 3"]
+            self.editor.buffer.cursor_row = 1
+            self.editor.buffer.cursor_col = 0
+            self.editor.buffer.block_active = 1
+
+            captured = []
+            orig_write = self.editor.terminal.write
+
+            def mock_write(s):
+                captured.append(s)
+                orig_write(s)
+
+            self.editor.terminal.write = mock_write
+            key_seq = list(snippet_path) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=key_seq)
+
+            from se.editor import Editor
+            self.editor.action_insert_file = Editor.action_insert_file.__get__(
+                self.editor, Editor
+            )
+            self.editor.action_insert_file()
+
+            self.assertEqual(self.editor.buffer.block_active, 2)
+            self.assertEqual(
+                self.editor.buffer.lines,
+                [
+                    "Line 1",
+                    "Inserted line 1",
+                    "Inserted line 2Line 2",
+                    "Line 3",
+                ],
+            )
+            browser_output = "".join(captured)
+            self.assertIn("INSERT FILE (DIRECTORY -", browser_output)
+            self.assertIn("Enter filename to insert: [", browser_output)
+
+        print(
+            "[+] Step 25: Block-active file insert and Ctrl+K R verified.",
             flush=True,
         )
 
