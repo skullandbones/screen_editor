@@ -137,7 +137,10 @@ class Editor:
         elif key == KEY_BACKSPACE:
             self.buffer.backspace()
         elif key == KEY_DELETE or key == KEY_CTRL_D:
-            self.buffer.delete_char()
+            if self.buffer.block_active > 0:
+                self.buffer.delete_block()
+            else:
+                self.buffer.delete_char()
         elif key == KEY_TAB:
             self.buffer.insert_char("\t")
 

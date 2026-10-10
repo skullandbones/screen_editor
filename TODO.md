@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 5 Defects Open (Bugs 2.7.37–2.7.41).
+- **Status**: Active / 4 Defects Open (Bugs 2.7.38–2.7.41).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -755,7 +755,7 @@ have been resolved and archived.
       Validated via `test_secfg_canonical_default_and_discovery` in
       `test_config.py` and `test_editor_secfg_discovery_and_geometry_default`
       in `test_editor.py`.
-  - [ ] **Bug 2.7.37: Delete Key Ignores Active Block (Ctrl+D / DEL)**:
+  - [x] **Bug 2.7.37: Delete Key Ignores Active Block (Ctrl+D / DEL)**:
     - *Symptom*: Pressing `Delete` or `Ctrl+D` while a block selection is active
       (dynamic or solidified) deletes only a single character under the cursor
       and leaves the block highlighted or desynchronized, rather than deleting
@@ -766,12 +766,12 @@ have been resolved and archived.
       lacks a dedicated `delete_block()` method.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.8 and 10.1;
       `src/se.asm:1176-1188` (`DO_CTRL_D_BLOCK`) and `src/core/block.asm:847`.
-    - *Resolution Plan*: Update `dispatch_key()` in `editor.py` to check
-      `self.buffer.block_active > 0` on `KEY_DELETE` / `KEY_CTRL_D`, solidify
-      dynamic selections, and call `delete_block()` on `DocumentBuffer`.
-      Implement `delete_block()` in `buffer.py` to remove the selected block
-      text, reposition cursor at block start, clear `block_active`, and mark
-      the document modified without modifying the clipboard.
+    - *Resolution*: Implemented `delete_block()` in `DocumentBuffer` to remove
+      selected block text, position cursor at block start, clear `block_active`,
+      and mark document modified without altering clipboard. Updated
+      `dispatch_key()` in `editor.py` to check `block_active > 0` on
+      `KEY_DELETE` / `KEY_CTRL_D` and invoke `delete_block()`. Validated via
+      `test_delete_key_active_block` in `test_editor.py`.
   - [ ] **Bug 2.7.38: Backspace Fails to Cancel Dynamic Block Selection**:
     - *Symptom*: Pressing `Backspace` while dynamically highlighting text
       deletes the character preceding the cursor, mutating buffer contents

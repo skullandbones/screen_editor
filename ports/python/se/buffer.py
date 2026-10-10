@@ -400,13 +400,14 @@ class DocumentBuffer:
         except OSError:
             return False
 
-    def cut_block(self) -> str:
-        """Cut selected block text, deleting it from document."""
+    def delete_block(self) -> bool:
+        """
+        Delete selected block text without modifying clipboard buffer.
+        """
         if self.block_active == 0:
-            return ""
+            return False
         if self.block_active == 1:
             self.solidify_block()
-        text = self.copy_block()
         r1, c1, r2, c2 = self.get_normalized_block()
         if r1 == r2:
             line = self.lines[r1]
@@ -418,11 +419,21 @@ class DocumentBuffer:
             del self.lines[r1 + 1 : r2 + 1]
             self.lines[r1] = combined[:MAX_LINE_LENGTH]
 
+        if not self.lines:
+            self.lines = [""]
         self.cursor_row = r1
         self.cursor_col = c1
         self.target_col = self.get_visual_col()
         self.block_active = 0
         self.modified = True
+        return True
+
+    def cut_block(self) -> str:
+        """Cut selected block text, deleting it from document."""
+        if self.block_active == 0:
+            return ""
+        text = self.copy_block()
+        self.delete_block()
         return text
 
     def paste_block(self) -> bool:

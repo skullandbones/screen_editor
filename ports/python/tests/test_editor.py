@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 from se.editor import Editor
 from se.modal import ModalDialog
 from se.terminal import (
+    KEY_CTRL_B,
     KEY_CTRL_D,
     KEY_CTRL_F,
     KEY_CTRL_K,
@@ -1191,6 +1192,58 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 28: Editor startup SE.CFG discovery verified.",
+            flush=True,
+        )
+
+    def test_delete_key_active_block(self):
+        """Step 29: Verify Delete and Ctrl+D block deletion (Bug 2.7.37)."""
+        print(
+            "[*] Step 29: Testing Delete and Ctrl+D block deletion...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Alpha Beta Gamma", "Second Line"]
+        self.editor.buffer.clipboard = "ORIGINAL_CLIPBOARD"
+
+        # 1. Dynamic block delete via KEY_DELETE
+        # Block from (0, 6) to (0, 10): "Beta"
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 6
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 10
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_DELETE)
+        self.assertEqual(self.editor.buffer.lines[0], "Alpha  Gamma")
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 6)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertTrue(self.editor.buffer.modified)
+        # Clipboard must remain unaffected
+        self.assertEqual(self.editor.buffer.clipboard, "ORIGINAL_CLIPBOARD")
+
+        # 2. Solidified multi-line block delete via KEY_CTRL_D
+        self.editor.buffer.lines = [
+            "Start Line",
+            "Middle To Delete",
+            "End Line",
+        ]
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 6
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.cursor_row = 2
+        self.editor.buffer.cursor_col = 4
+        self.editor.buffer.solidify_block()  # block_active = 2
+
+        self.editor.dispatch_key(KEY_CTRL_D)
+        # Joined line: "Start Line"[:6] + "End Line"[4:] -> "Start Line"
+        self.assertEqual(self.editor.buffer.lines, ["Start Line"])
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 6)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.clipboard, "ORIGINAL_CLIPBOARD")
+
+        print(
+            "[+] Step 29: Delete and Ctrl+D block deletion verified.",
             flush=True,
         )
 
