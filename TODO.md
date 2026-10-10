@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 12 Defects Open (Bugs 2.4.8–2.4.19).
+- **Status**: Active / 11 Defects Open (Bugs 2.4.9–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -206,7 +206,7 @@ have been resolved and archived.
       and omits bracket framing `[ text ]` on text input prompts.
     - *Required Fix*: Implement canonical Archetypes A, B, C, D with title
       dividers, 1-based centering, and strict key dismissal rules.
-  - [ ] **Bug 2.4.8: Missing Modal & Command Dispatchers in Editor Mode**:
+  - [x] **Bug 2.4.8: Missing Modal & Command Dispatchers in Editor Mode**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.
     - *Issue*: In `src/core/editor.c`, `editor_handle_key()` lacks cases for
       `KEY_CTRL_L` (Goto Line), `KEY_CTRL_O` (Open File), `KEY_CTRL_P` (Plugin
@@ -214,9 +214,12 @@ have been resolved and archived.
       `modal_input_goto_line()` is implemented in `ui_modal.c` and
       `goto_line()` exists in `editor.c`, `Ctrl+L` is silently dropped as a
       no-op.
-    - *Required Fix*: Bind `KEY_CTRL_L` to invoke `modal_input_goto_line()` and
-      dispatch `goto_line()`, and bind `KEY_CTRL_O`, `KEY_CTRL_P`, and
-      `KEY_CTRL_W` to their respective modal and editor actions.
+    - *Resolution*: Bound `KEY_CTRL_L` to prompt for line number via Archetype C
+      modal and jump via `goto_line()`, `KEY_CTRL_O` to open file browser dialog
+      and load document, `KEY_CTRL_P` to display plugin manager UI, and
+      `KEY_CTRL_W` to confirm unsaved modifications and close to splash screen.
+      Validated via `test_bug_2_4_8_modal_dispatchers` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Issue*: `show_splash_screen` in `src/core/ui_render.c` renders the

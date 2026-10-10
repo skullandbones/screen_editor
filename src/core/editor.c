@@ -11,6 +11,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "../include/config.h"
 #include "../include/buffer.h"
 #include "../include/editor.h"
@@ -18,6 +19,7 @@
 #include "../include/search.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/ui_browser.h"
 #include "../include/file_io.h"
 #include "../include/beautify.h"
 #include "../include/plugin.h"
@@ -478,6 +480,35 @@ int editor_handle_key(int key)
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
     case KEY_CTRL_N: do_ctrl_n_find_next(); break;
     case KEY_CTRL_S: file_save(NULL, g_config.save_format); break;
+    case KEY_CTRL_L: {
+        char buf[16] = {0};
+        if (modal_prompt_text("Goto Line", "Enter destination line number:",
+                              buf, sizeof(buf)) == MODAL_RES_OK && buf[0]) {
+            int line_num = atoi(buf);
+            if (line_num > 0) {
+                goto_line((uint16_t)line_num);
+            }
+        }
+        break;
+    }
+    case KEY_CTRL_O: {
+        char fname[64] = {0};
+        if (ui_browser_open_dialog(fname, sizeof(fname)) == MODAL_RES_OK &&
+            fname[0]) {
+            if (modal_confirm_save_changes() == MODAL_RES_OK) {
+                file_load(fname);
+                g_need_screen_render = 1;
+            }
+        }
+        break;
+    }
+    case KEY_CTRL_P: plugin_manager_ui(); break;
+    case KEY_CTRL_W:
+        if (modal_confirm_save_changes() == MODAL_RES_OK) {
+            init_empty_document();
+            show_splash_screen();
+        }
+        break;
     case KEY_CTRL_Y: do_ctrl_y_beautify(); break;
     case KEY_CTRL_Z: plugin_manager_ui(); break;
     case KEY_CTRL_K: show_help_screen(); break;

@@ -570,6 +570,71 @@ def test_modal_archetypes_and_framing():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_8_modal_dispatchers():
+    """Verify Ctrl+L Goto Line and Ctrl+W Close File modals (Bug 2.4.8)."""
+    print("[*] Testing modal dispatchers in editor mode (Bug 2.4.8)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_disp_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Send Ctrl+L (0x0C) for Goto Line prompt
+            os.write(master, b"\x0c")
+            time.sleep(0.2)
+            modal_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Goto Line" in modal_out, (
+                f"Ctrl+L failed to trigger 'Goto Line' modal:\n{modal_out}"
+            )
+
+            # Type line 4 and press Enter
+            os.write(master, b"4\n")
+            time.sleep(0.2)
+            goto_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    4/" in goto_out, (
+                f"Goto Line failed to position cursor at line 4:\n{goto_out}"
+            )
+
+            # Send Ctrl+W (0x17) to close document to splash screen
+            os.write(master, b"\x17")
+            time.sleep(0.2)
+            splash_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SE.COM — Screen Editor" in splash_out, (
+                f"Ctrl+W failed to transition to splash screen:\n{splash_out}"
+            )
+
+            # Exit cleanly via 'q' on splash screen
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Modal & command dispatchers verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -584,6 +649,7 @@ def main():
     test_horizontal_panning_and_line_barrier()
     test_tier1_centering_and_tilde_discipline()
     test_modal_archetypes_and_framing()
+    test_bug_2_4_8_modal_dispatchers()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
