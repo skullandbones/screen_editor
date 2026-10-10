@@ -215,7 +215,8 @@ void do_backspace(void)
                                                  prev_buf,
                                                  MAX_ACTIVE_PAYLOAD);
 
-        if (prev_len + g_active_line_len < MAX_INPUT_LINE_CHARS) {
+        if (prev_len + g_active_line_len <= MAX_INPUT_LINE_CHARS) {
+            uint16_t join_col = prev_len;
             memcpy(prev_buf + prev_len, g_active_line_buf, g_active_line_len);
             prev_len += g_active_line_len;
             prev_buf[prev_len] = '\0';
@@ -226,13 +227,16 @@ void do_backspace(void)
 
             memcpy(g_active_line_buf, prev_buf, prev_len + 1);
             g_active_line_len = prev_len;
-            g_cur_col = prev_len - (g_active_line_len > 0 ?
-                                    (prev_len - (prev_len - 0)) : 0);
-            g_cur_col = prev_len - (g_active_line_len);
+            g_cur_col = join_col;
+
+            if (g_cur_doc_row < g_top_doc_row) {
+                g_top_doc_row = g_cur_doc_row;
+            }
 
             g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
             g_doc_modified = 1;
             g_need_screen_render = 1;
+            g_need_status_render = 1;
         }
     }
 }
@@ -260,7 +264,7 @@ void do_delete(void)
                                                  next_buf,
                                                  MAX_ACTIVE_PAYLOAD);
 
-        if (g_active_line_len + next_len < MAX_INPUT_LINE_CHARS) {
+        if (g_active_line_len + next_len <= MAX_INPUT_LINE_CHARS) {
             memcpy(g_active_line_buf + g_active_line_len, next_buf, next_len);
             g_active_line_len += next_len;
             g_active_line_buf[g_active_line_len] = '\0';
@@ -269,6 +273,7 @@ void do_delete(void)
             g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
             g_doc_modified = 1;
             g_need_screen_render = 1;
+            g_need_status_render = 1;
         }
     }
 }
