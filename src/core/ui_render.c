@@ -329,8 +329,8 @@ void show_splash_screen(void)
     int k;
 
     g_is_splash_screen = 1;
+    render_tier1_workspace_screen(s_splash_lines, 18, 54);
     while (1) {
-        render_tier1_workspace_screen(s_splash_lines, 18, 54);
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }
@@ -358,17 +358,20 @@ void show_splash_screen(void)
                 file_load(open_fname);
                 break;
             }
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == 's' || k == 'S' || k == KEY_CTRL_S) {
             char save_fname[64] = {0};
             if (ui_browser_save_dialog(save_fname, sizeof(save_fname)) ==
                 MODAL_RES_OK && save_fname[0]) {
                 file_save(save_fname, g_config.save_format);
             }
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == 'w' || k == 'W' || k == KEY_CTRL_W) {
             if (modal_confirm_save_changes() == MODAL_RES_OK) {
                 init_empty_document();
                 g_current_filename[0] = '\0';
             }
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == 'l' || k == 'L' || k == KEY_CTRL_L) {
             char lbuf[16] = {0};
             if (modal_prompt_text("Goto Line", "Enter destination line:",
@@ -380,24 +383,32 @@ void show_splash_screen(void)
                     break;
                 }
             }
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == 'c' || k == 'C') {
             show_config_screen();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == 'a' || k == 'A') {
             show_about_screen();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == 'm' || k == 'M') {
             show_mem_info_screen();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == 'p' || k == 'P' || k == KEY_CTRL_P) {
             plugin_manager_ui();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == '?' || k == 'h' || k == 'H' || k == KEY_CTRL_K) {
             show_help_screen();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == '1') {
             g_config.screen_mode = MODE_120X40;
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == '2') {
             g_config.screen_mode = MODE_80X24;
             g_active_cols = SCREEN_COLS_80;
             g_active_rows = SCREEN_ROWS_24;
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         }
     }
     clear_screen();

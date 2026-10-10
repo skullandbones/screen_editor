@@ -508,10 +508,12 @@ content blocks rather than top-aligned text.
        - `1`: Toggle 120x40 modern terminal mode (`DO_SET_120X40`).
        - `2`: Toggle 80x24 classic terminal mode (`DO_SET_80X24`).
        - `Q` / `q` / `Ctrl+Q`: Safe quit / exit back to OS.
-     - Non-Entry Key Exclusion Mandate:
+     - Non-Entry Key Exclusion & Silent Rejection Mandate:
        - The Space bar (`0x20`), ANSI cursor arrow keys (`Up`, `Down`, `Left`,
          `Right`), and all unassigned keystrokes MUST NOT enter editor mode.
-         They must be ignored without altering document or buffer state.
+         They must be silently ignored without altering document or buffer
+         state and without re-rendering the splash workspace or emitting
+         terminal escape sequences.
 
 
 3. Help Screen Layout (`Ctrl+K`):
