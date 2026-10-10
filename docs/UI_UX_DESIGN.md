@@ -491,6 +491,28 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Keyboard Dispatch & Keystroke Protocol:
+     - Document Entry Keys: Only `E` / `e` or `Enter` (`KEY_ENTER`) may
+       enter or resume the editor workspace.
+     - Direct Action Hotkeys:
+       - `N` / `n`: Create new empty document (`HANDLE_SPLASH_NEW`).
+       - `O` / `o` / `Ctrl+O`: Open File browser (`HANDLE_SPLASH_OPEN`).
+       - `S` / `s` / `Ctrl+S`: Save File workspace (`DO_SPLASH_SAVE`).
+       - `W` / `w` / `Ctrl+W`: Close active file (`HANDLE_SPLASH_CLOSE`).
+       - `L` / `l` / `Ctrl+L`: Goto Line prompt (`DO_SPLASH_GOTO_LINE`).
+       - `A` / `a`: Show About dialog (`DO_ABOUT_SCREEN`).
+       - `M` / `m`: Show Memory Map screen (`DO_MEM_INFO_SCREEN`).
+       - `P` / `p`: Show Plugin Manager screen (`DO_SPLASH_PLUGIN_SCREEN`).
+       - `Ctrl+P`: Context-Aware Plugin Palette (`DO_CONTEXT_PLUGIN_POPUP`).
+       - `C` / `c`: Open Configuration Manager (`DO_CONFIG_SCREEN`).
+       - `1`: Toggle 120x40 modern terminal mode (`DO_SET_120X40`).
+       - `2`: Toggle 80x24 classic terminal mode (`DO_SET_80X24`).
+       - `Q` / `q` / `Ctrl+Q`: Safe quit / exit back to OS.
+     - Non-Entry Key Exclusion Mandate:
+       - The Space bar (`0x20`), ANSI cursor arrow keys (`Up`, `Down`, `Left`,
+         `Right`), and all unassigned keystrokes MUST NOT enter editor mode.
+         They must be ignored without altering document or buffer state.
+
 
 3. Help Screen Layout (`Ctrl+K`):
    - Content Width: 70 columns, Content Height: 17 lines.

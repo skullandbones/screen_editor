@@ -540,10 +540,10 @@ int editor_handle_key(int key)
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
     case KEY_CTRL_S:
         if (g_current_filename[0] == '\0') {
-            char fname[64] = {0};
-            if (ui_browser_save_dialog(fname, sizeof(fname)) ==
-                MODAL_RES_OK && fname[0]) {
-                file_save(fname, g_config.save_format);
+            char save_fname[64] = {0};
+            if (ui_browser_save_dialog(save_fname, sizeof(save_fname)) ==
+                MODAL_RES_OK && save_fname[0]) {
+                file_save(save_fname, g_config.save_format);
             }
         } else {
             file_save(NULL, g_config.save_format);
@@ -561,11 +561,11 @@ int editor_handle_key(int key)
         break;
     }
     case KEY_CTRL_O: {
-        char fname[64] = {0};
-        if (ui_browser_open_dialog(fname, sizeof(fname)) == MODAL_RES_OK &&
-            fname[0]) {
+        char open_fname[64] = {0};
+        if (ui_browser_open_dialog(open_fname, sizeof(open_fname)) ==
+            MODAL_RES_OK && open_fname[0]) {
             if (modal_confirm_save_changes() == MODAL_RES_OK) {
-                file_load(fname);
+                file_load(open_fname);
                 g_need_screen_render = 1;
             }
         }

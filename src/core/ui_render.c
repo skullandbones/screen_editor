@@ -345,24 +345,24 @@ void show_splash_screen(void)
         if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
             g_editor_exit_flag = 1;
             break;
-        } else if (k == 'e' || k == 'E' || k == KEY_ENTER || k == ' ') {
+        } else if (k == 'e' || k == 'E' || k == KEY_ENTER) {
             break;
         } else if (k == 'n' || k == 'N') {
             init_empty_document();
             g_current_filename[0] = '\0';
             break;
         } else if (k == 'o' || k == 'O' || k == KEY_CTRL_O) {
-            char fname[64] = {0};
-            if (ui_browser_open_dialog(fname, sizeof(fname)) == MODAL_RES_OK &&
-                fname[0]) {
-                file_load(fname);
+            char open_fname[64] = {0};
+            if (ui_browser_open_dialog(open_fname, sizeof(open_fname)) ==
+                MODAL_RES_OK && open_fname[0]) {
+                file_load(open_fname);
                 break;
             }
         } else if (k == 's' || k == 'S' || k == KEY_CTRL_S) {
-            char fname[64] = {0};
-            if (ui_browser_save_dialog(fname, sizeof(fname)) == MODAL_RES_OK &&
-                fname[0]) {
-                file_save(fname, g_config.save_format);
+            char save_fname[64] = {0};
+            if (ui_browser_save_dialog(save_fname, sizeof(save_fname)) ==
+                MODAL_RES_OK && save_fname[0]) {
+                file_save(save_fname, g_config.save_format);
             }
         } else if (k == 'w' || k == 'W' || k == KEY_CTRL_W) {
             if (modal_confirm_save_changes() == MODAL_RES_OK) {
