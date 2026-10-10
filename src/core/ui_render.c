@@ -21,10 +21,14 @@
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
 #include "../include/hal.h"
+#ifdef __CPM__
+#include <cpm.h>
+#endif
 
 /* Global Display State Variables */
 uint8_t g_active_cols = SCREEN_COLS_80;
 uint8_t g_active_rows = SCREEN_ROWS_24;
+uint8_t g_is_splash_screen = 0;
 uint8_t g_need_screen_render = 1;
 uint8_t g_need_line_render = 0;
 uint8_t g_need_status_render = 1;
@@ -148,8 +152,6 @@ void render_status_bar(void)
     char field3[16];
     char field4[32];
     char field5[64];
-    char pan_str[16];
-    const char *blk_str;
     const char *fname;
     const char *geom_str;
     const char *fmt_str;
@@ -159,6 +161,15 @@ void render_status_bar(void)
     size_t i, idx;
 
     fname = g_current_filename[0] ? g_current_filename : "(Untitled)";
+#ifdef __CPM__
+    char cpm_disp_name[64];
+    if (g_current_filename[0] != '\0' && g_current_filename[1] != ':') {
+        char drv = (char)('A' + bdos(25, 0));
+        snprintf(cpm_disp_name, sizeof(cpm_disp_name), "%c:%s",
+                 drv, g_current_filename);
+        fname = cpm_disp_name;
+    }
+#endif
     snprintf(raw_name, sizeof(raw_name), "%s%c", fname,
              g_doc_modified ? '*' : ' ');
     snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
@@ -169,33 +180,70 @@ void render_status_bar(void)
     fmt_str = (g_file_format == FMT_CPM) ? "CPM  " : "Linux";
     snprintf(field3, sizeof(field3), " %s |", fmt_str);
 
-    snprintf(field4, sizeof(field4), " ^K: Editor keys |");
-
-    pan_str[0] = '\0';
-    if (g_horiz_pan_offset > 0) {
-        snprintf(pan_str, sizeof(pan_str), " [Pan +%u]",
-                 (unsigned)g_horiz_pan_offset);
-    }
-
-    blk_str = "";
+#if defined(__CPM__)
+    if (g_is_splash_screen) {
+        snprintf(field4, sizeof(field4), " Free: 48 KB     |");
+    } else
+#endif
     if (g_block_mode == BLOCK_MODE_SELECTING) {
-        blk_str = " [SEL]";
+        char blk_info[32];
+        normalize_block_bounds();
+        if (g_norm_start_row == g_norm_end_row) {
+            uint16_t chars = (g_norm_end_col >= g_norm_start_col)
+                ? (g_norm_end_col - g_norm_start_col) : 0;
+            if (chars == 1) {
+                snprintf(blk_info, sizeof(blk_info), "Sel: 1 char");
+            } else {
+                snprintf(blk_info, sizeof(blk_info), "Sel: %u chars",
+                         (unsigned)chars);
+            }
+        } else {
+            uint16_t lines = (g_norm_end_row >= g_norm_start_row)
+                ? (g_norm_end_row - g_norm_start_row + 1) : 1;
+            if (lines == 1) {
+                snprintf(blk_info, sizeof(blk_info), "Sel: 1 line");
+            } else {
+                snprintf(blk_info, sizeof(blk_info), "Sel: %u lines",
+                         (unsigned)lines);
+            }
+        }
+        snprintf(field4, sizeof(field4), " %-15.15s |", blk_info);
     } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
-        blk_str = " [BLK LOCK]";
+        char blk_info[32];
+        normalize_block_bounds();
+        if (g_norm_start_row == g_norm_end_row) {
+            uint16_t chars = (g_norm_end_col >= g_norm_start_col)
+                ? (g_norm_end_col - g_norm_start_col) : 0;
+            if (chars == 1) {
+                snprintf(blk_info, sizeof(blk_info), "Block: 1 char");
+            } else {
+                snprintf(blk_info, sizeof(blk_info), "Block: %u chars",
+                         (unsigned)chars);
+            }
+        } else {
+            uint16_t lines = (g_norm_end_row >= g_norm_start_row)
+                ? (g_norm_end_row - g_norm_start_row + 1) : 1;
+            if (lines == 1) {
+                snprintf(blk_info, sizeof(blk_info), "Block: 1 line");
+            } else {
+                snprintf(blk_info, sizeof(blk_info), "Block: %u lines",
+                         (unsigned)lines);
+            }
+        }
+        snprintf(field4, sizeof(field4), " %-15.15s |", blk_info);
+    } else if (g_horiz_pan_offset > 0) {
+        char pan_info[16];
+        snprintf(pan_info, sizeof(pan_info), "[Pan +%u]",
+                 (unsigned)g_horiz_pan_offset);
+        snprintf(field4, sizeof(field4), " %-15.15s |", pan_info);
+    } else {
+        snprintf(field4, sizeof(field4), " ^K: Editor keys |");
     }
 
-    if (pan_str[0] != '\0' || blk_str[0] != '\0') {
-        snprintf(field5, sizeof(field5), " Line %u/%u Col %u%s%s |",
-                 (unsigned)(g_cur_doc_row + 1),
-                 (unsigned)g_doc_total_lines,
-                 (unsigned)g_cur_col,
-                 pan_str, blk_str);
-    } else {
-        snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u |",
-                 (unsigned)(g_cur_doc_row + 1),
-                 (unsigned)g_doc_total_lines,
-                 (unsigned)g_cur_col);
-    }
+    snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u |",
+             (unsigned)(g_cur_doc_row + 1),
+             (unsigned)g_doc_total_lines,
+             (unsigned)g_cur_col);
 
     snprintf(core, sizeof(core), "%s%s%s%s%s",
              field1, field2, field3, field4, field5);
@@ -267,32 +315,61 @@ static void render_tier1_workspace_screen(const char **lines,
 
 void show_splash_screen(void)
 {
-    static const char *s_splash_lines[14] = {
-        "              SE.COM — Screen Editor              ",
-        "              Version v1.1.0 (Linux)              ",
-        "                                                  ",
-        "       Free Memory: [Dynamic Heap]   Lines: [32K] ",
-        "                                                  ",
-        "                     :e to edit                   ",
-        "                     :o to open file              ",
-        "                     :s to save file              ",
-        "                     :c for config                ",
-        "                     :p for plugins               ",
-        "                     :? for help                  ",
-        "                     :q to quit                   ",
-        "                                                  ",
-        "                   Enter choice: _                "
+    static const char *s_splash_lines[18] = {
+        "                SE.COM — Screen Editor                ",
+        "                    Version v1.1.0                    ",
+        "                                                      ",
+        "        type   [E]  or  [Enter] to edit               ",
+        "        type   [N]              to new file           ",
+        "        type   [O]              to open file          ",
+        "        type   [S]              to save file          ",
+        "        type   [W]  or  [^W]    to close file         ",
+        "        type   [L]  or  [^L]    to goto line          ",
+        "        type   [A]              for about             ",
+        "        type   [M]              for memory info       ",
+        "        type   [P]              for plugins           ",
+        "        type   [^P]             for context plugin menu",
+        "        type   [C]              to configure          ",
+        "        type   [1]              set 120x40            ",
+        "        type   [2]              set 80x24             ",
+        "        type   [Q]  or  [^Q]    to exit               ",
+        "                                                      "
     };
     int k;
 
-    render_tier1_workspace_screen(s_splash_lines, 14, 50);
-    while ((k = hal_console_getkey()) <= 0) {
-        /* Wait for user keystroke */
-    }
-    if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
-        g_editor_exit_flag = 1;
+    g_is_splash_screen = 1;
+    while (1) {
+        render_tier1_workspace_screen(s_splash_lines, 18, 54);
+        while ((k = hal_console_getkey()) <= 0) {
+            /* Wait for user keystroke */
+        }
+        if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
+            g_editor_exit_flag = 1;
+            break;
+        } else if (k == 'e' || k == 'E' || k == KEY_ENTER || k == ' ') {
+            break;
+        } else if (k == 'n' || k == 'N') {
+            init_empty_document();
+            g_current_filename[0] = '\0';
+            break;
+        } else if (k == 'c' || k == 'C') {
+            show_config_screen();
+        } else if (k == 'a' || k == 'A' || k == '?') {
+            show_about_screen();
+        } else if (k == '1') {
+            g_config.screen_mode = MODE_120X40;
+            g_active_cols = SCREEN_COLS_120;
+            g_active_rows = SCREEN_ROWS_40;
+        } else if (k == '2') {
+            g_config.screen_mode = MODE_80X24;
+            g_active_cols = SCREEN_COLS_80;
+            g_active_rows = SCREEN_ROWS_24;
+        } else {
+            break;
+        }
     }
     clear_screen();
+    g_is_splash_screen = 0;
     g_need_screen_render = 1;
 }
 
@@ -312,7 +389,7 @@ static const char *s_help_lines[17] = {
     "    Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette        ",
     "    Ctrl+Y: Beautify Source Code        ESC   : Splash Screen         ",
     "                                                                      ",
-    "                   Press any key to return to editor                  ",
+    "                      Press any key to continue                       ",
     "                                                                      "
 };
 

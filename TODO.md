@@ -883,9 +883,15 @@ platform hardware abstraction, targeting three primary operating profiles:
 
 ## 7. Multi-Language & Multi-Platform Profiles
 
-### 7.1 C Semantic Equivalent Implementations (Drop-in Replacement Modules)
-- [x] Write C semantic equivalent implementations for each modular Z80 assembly
-  component (`src/core/*.asm`):
+### 7.1 C Semantic Equivalent Modules & CP/M Target (`SEC.COM`)
+- [x] Compile C semantic equivalent core modules to produce `SEC.COM` for CP/M:
+  - The C drop-in replacement modules (`src/core/*.c`) shall be used to build
+    `SEC.COM`, a native CP/M executable that runs directly on CP/M systems.
+  - From a black box point of view, `SEC.COM` in principle should be completely
+    identical to `SE.COM` (matching terminal behavior, visual layout, status
+    bar, modal dialogs, cursor mechanics, keybindings, and file I/O).
+- [x] Maintain drop-in replacement capability conforming to module header API
+  and ABI specifications (`src/include/*.h` mirroring `src/include/*.inc`):
   - `src/core/buffer.c`: Document line cache, slot indexing, split/join logic.
   - `src/core/memory.c`: Virtual slot allocation, cache eviction, swap paging.
   - `src/core/editor.c`: Command dispatch, cursor navigation, text editing.
@@ -897,16 +903,22 @@ platform hardware abstraction, targeting three primary operating profiles:
   - `src/core/config.c`: `SE.CFG` reader, parser, serializer, and defaults.
   - `src/core/plugin_mgr.c`: Relocation loader, slot table, host API bridge.
   - `src/core/beautify.c`: Z80 assembly code formatter and operand aligner.
-- [x] Maintain drop-in replacement capability conforming to module header API
-  and ABI specifications (`src/include/*.h` mirroring `src/include/*.inc`):
-  - Function signatures, parameter passing, and return codes must match.
-  - Support hybrid linking (e.g. C core modules with Z80 HAL or vice-versa
-    under Z88DK / SDCC / GCC).
-  - Ensure zero behavioral deviation across line limits and modal layouts.
+- [x] Integrate CP/M build target in `Makefile` for `SEC.COM`:
+  - Link C core modules with CP/M platform HAL (`src/hal/cpm/`) via Z88DK / SDCC
+    cross-compiler toolchain.
+  - Update `send_binaries.py` so that it transfers `SEC.COM` to the target CP/M
+    hardware board alongside `SE.COM`.
+  - Validate black-box functional and behavioral equivalence between `SEC.COM`
+    and `SE.COM` using automated comparative and emulator test suites.
 
-### 7.2 Linux Native Executable using C Equivalent Modules
-- [x] Construct native Linux SE executable compiled from the C core modules.
-- [x] Implement POSIX / Linux Hardware Abstraction Layer (`src/hal/linux/`):
+### 7.2 Linux Native Executable using C Equivalent Modules (`se-linux`)
+- **Mandate**: `se-linux` SHALL be built directly using the portable C core
+  modules from Section 7.1 (`src/core/*.c`), ensuring shared logic and zero
+  behavioral divergence, except where adaptation is strictly required for
+  Linux (which must be isolated within the Linux HAL `src/hal/linux/`).
+- [ ] Construct native Linux SE executable compiled from the Section 7.1 C core
+  modules (`src/se_linux.c` + `src/core/*.c`).
+- [ ] Implement POSIX / Linux Hardware Abstraction Layer (`src/hal/linux/`):
   - `hal_linux_console.c`: ANSI escape sequences, `termios` raw mode, and
     terminal resize handling (`SIGWINCH`) for 80x24 / 120x40 geometries.
   - `hal_linux_keyboard.c`: Non-blocking POSIX stdin read, escape sequence
@@ -915,10 +927,10 @@ platform hardware abstraction, targeting three primary operating profiles:
     TPA banking while preserving identical slot semantics and limits.
   - `hal_linux_storage.c`: Standard POSIX file I/O (`open`, `read`, `write`)
     and directory enumeration (`opendir`, `readdir`) for Linux paths.
-- [x] Target platforms:
+- [ ] Target platforms:
   - PC / Workstation: `x86_64` (Linux).
   - Raspberry Pi: `aarch64` (Raspberry Pi 4 and Raspberry Pi 5).
-- [x] Add `se-linux` target in `Makefile` with cross-compilation support.
+- [ ] Add `se-linux` target in `Makefile` with cross-compilation support.
 
 ### 7.3 CP/M-86 Executable using C Modules
 - [ ] Construct CP/M-86 executable (`SE.CMD`) compiled from C core modules.
