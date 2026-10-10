@@ -516,8 +516,8 @@ int editor_handle_key(int key)
     case KEY_INS: toggle_insert_mode(); break;
     case KEY_DEL: do_delete(); break;
     case KEY_CTRL_A: cursor_home(); break;
-    case KEY_CTRL_E: cursor_up(); break;
-    case KEY_CTRL_D: cursor_right(); break;
+    case KEY_CTRL_E: cursor_end(); break;
+    case KEY_CTRL_D: do_delete(); break;
     case KEY_CTRL_G: jump_file_bottom(); break;
     case KEY_CTRL_T: jump_file_top(); break;
     case KEY_BACKSPACE: do_backspace(); break;
