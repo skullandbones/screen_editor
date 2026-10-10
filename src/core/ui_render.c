@@ -12,6 +12,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "../include/config.h"
 #include "../include/buffer.h"
 #include "../include/editor.h"
@@ -20,6 +21,8 @@
 #include "../include/file_io.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/ui_browser.h"
+#include "../include/plugin.h"
 #include "../include/hal.h"
 #ifdef __CPM__
 #include <cpm.h>
@@ -343,6 +346,14 @@ void show_splash_screen(void)
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }
+        if (k == ':') {
+            int next_k = 0;
+            while ((next_k = hal_console_getkey()) <= 0) {
+                /* Wait for following char */
+            }
+            k = next_k;
+        }
+
         if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
             g_editor_exit_flag = 1;
             break;
@@ -352,10 +363,45 @@ void show_splash_screen(void)
             init_empty_document();
             g_current_filename[0] = '\0';
             break;
+        } else if (k == 'o' || k == 'O' || k == KEY_CTRL_O) {
+            char fname[64] = {0};
+            if (ui_browser_open_dialog(fname, sizeof(fname)) == MODAL_RES_OK &&
+                fname[0]) {
+                file_load(fname);
+                break;
+            }
+        } else if (k == 's' || k == 'S' || k == KEY_CTRL_S) {
+            char fname[64] = {0};
+            if (ui_browser_save_dialog(fname, sizeof(fname)) == MODAL_RES_OK &&
+                fname[0]) {
+                file_save(fname, g_config.save_format);
+            }
+        } else if (k == 'w' || k == 'W' || k == KEY_CTRL_W) {
+            if (modal_confirm_save_changes() == MODAL_RES_OK) {
+                init_empty_document();
+                g_current_filename[0] = '\0';
+            }
+        } else if (k == 'l' || k == 'L' || k == KEY_CTRL_L) {
+            char lbuf[16] = {0};
+            if (modal_prompt_text("Goto Line", "Enter destination line:",
+                                  lbuf, sizeof(lbuf)) == MODAL_RES_OK &&
+                lbuf[0]) {
+                int line_num = atoi(lbuf);
+                if (line_num > 0) {
+                    goto_line((uint16_t)line_num);
+                    break;
+                }
+            }
         } else if (k == 'c' || k == 'C') {
             show_config_screen();
-        } else if (k == 'a' || k == 'A' || k == '?') {
+        } else if (k == 'a' || k == 'A') {
             show_about_screen();
+        } else if (k == 'm' || k == 'M') {
+            show_mem_info_screen();
+        } else if (k == 'p' || k == 'P' || k == KEY_CTRL_P) {
+            plugin_manager_ui();
+        } else if (k == '?' || k == 'h' || k == 'H' || k == KEY_CTRL_K) {
+            show_help_screen();
         } else if (k == '1') {
             g_config.screen_mode = MODE_120X40;
             g_active_cols = SCREEN_COLS_120;
@@ -364,8 +410,6 @@ void show_splash_screen(void)
             g_config.screen_mode = MODE_80X24;
             g_active_cols = SCREEN_COLS_80;
             g_active_rows = SCREEN_ROWS_24;
-        } else {
-            break;
         }
     }
     clear_screen();
@@ -437,7 +481,9 @@ void show_config_screen(void)
         "                                                  "
     };
     render_tier1_workspace_screen(s_config_lines, 11, 50);
-    hal_console_getkey();
+    while (hal_console_getkey() <= 0) {
+        /* Wait for user keystroke */
+    }
     clear_screen();
     g_need_screen_render = 1;
 }

@@ -635,6 +635,77 @@ def test_bug_2_4_8_modal_dispatchers():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_9_splash_screen_commands():
+    """Verify interactive splash screen command matrix dispatch (Bug 2.4.9)."""
+    print("[*] Testing splash screen command matrix (Bug 2.4.9)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        read_all_available(master, 0.2)
+
+        # Dispatch 'c' for Configuration Manager
+        os.write(master, b"c")
+        time.sleep(0.2)
+        cfg_out = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert "Configuration Manager" in cfg_out, (
+            f"Splash 'c' failed to open Configuration Manager:\n{cfg_out}"
+        )
+
+        # Press ESC to return to Splash screen
+        os.write(master, b"\x1b")
+        time.sleep(0.2)
+        splash_out = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert "SE.COM — Screen Editor" in splash_out, (
+            f"Return from Config failed to render Splash screen:\n{splash_out}"
+        )
+
+        # Dispatch '?' for Help screen
+        os.write(master, b"?")
+        time.sleep(0.2)
+        help_out = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert "EDITOR MODE KEYS" in help_out, (
+            f"Splash '?' failed to open Help screen:\n{help_out}"
+        )
+
+        # Press space to return to Splash screen
+        os.write(master, b" ")
+        time.sleep(0.2)
+        read_all_available(master, 0.2)
+
+        # Dispatch ':e' to enter editor mode
+        os.write(master, b":e")
+        time.sleep(0.2)
+        editor_out = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert "Line    1/" in editor_out, (
+            f"Splash ':e' failed to enter editor mode:\n{editor_out}"
+        )
+
+        # Safe exit via Ctrl+Q
+        os.write(master, b"\x11\n")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Splash screen command matrix verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -650,6 +721,7 @@ def main():
     test_tier1_centering_and_tilde_discipline()
     test_modal_archetypes_and_framing()
     test_bug_2_4_8_modal_dispatchers()
+    test_bug_2_4_9_splash_screen_commands()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

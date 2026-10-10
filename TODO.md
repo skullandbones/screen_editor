@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 11 Defects Open (Bugs 2.4.9–2.4.19).
+- **Status**: Active / 10 Defects Open (Bugs 2.4.10–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -220,16 +220,20 @@ have been resolved and archived.
       `KEY_CTRL_W` to confirm unsaved modifications and close to splash screen.
       Validated via `test_bug_2_4_8_modal_dispatchers` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
+  - [x] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Issue*: `show_splash_screen` in `src/core/ui_render.c` renders the
       canonical 14-line matrix displaying `:e`, `:o`, `:s`, `:c`, `:p`, `:?`,
       `:q`, but only checks for `q`/`Q` and treats any other key as an
       unconditional exit into the editor. Pressing `:o`, `:s`, `:c`, `:p`,
       `:?`, `1`, or `2` fails to trigger the corresponding modals/workspaces.
-    - *Required Fix*: Implement an interactive splash event loop in
-      `ui_render.c` / `editor.c` dispatching `:e`, `:o`, `:s`, `:c`, `:p`,
-      `:?`, `1`, `2`, and `:q`.
+    - *Resolution*: Implemented interactive event loop in `show_splash_screen`
+      supporting prefix colon (`:`) syntax and bare keys, dispatching `:e`
+      (editor), `:o` (open file), `:s` (save file), `:w` (close file), `:l`
+      (goto line), `:c` (config screen), `:p` (plugin manager), `:?` (help),
+      `1` (120x40), `2` (80x24), and `:q` (exit), ignoring unregistered keys.
+      Validated via `test_bug_2_4_9_splash_screen_commands` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, the 30ms polling read
