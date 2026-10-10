@@ -425,7 +425,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 4 Defects Open (Bugs 2.7.42–2.7.45).
+- **Status**: Active / 3 Defects Open (Bugs 2.7.42–2.7.44; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1026,19 +1026,13 @@ have been resolved and archived.
       `timeout=1.0` or interactive prompt) when polling for two-key chord
       sequences after `Ctrl+K`, allowing human entry of `R`, `S`, `Q`, `X`
       before falling through to `action_help()`.
-  - [ ] **Bug 2.7.45: WordStar Diamond Key Collision in Modal Input Dialogs**:
-    - *Symptom*: In Tier 2 modal text input prompts (e.g. Goto Line, Find
-      text), pressing `Ctrl+S` moves the input cursor left instead of being
-      ignored or treated per the keybinding specification, reintroducing
-      deprecated WordStar diamond navigation.
-    - *Root Cause*: In `ports/python/se/modal.py:188` (`show_input`) and
-      `modal.py:264` (`show_find_dialog`), `k in (KEY_LEFT, KEY_CTRL_S)` maps
-      `Ctrl+S` to left arrow cursor movement.
-    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C) and
-      Section 10 (Architectural Decision Note on Keybinding Simplification).
-    - *Resolution Plan*: Remove `KEY_CTRL_S` from cursor movement branches in
-      `modal.py`, restricting left navigation strictly to `KEY_LEFT`
-      conforming to Section 8.3 and Section 10.
+  - [x] **Bug 2.7.45: WordStar Diamond Key Mapping [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10, 11.8.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: WordStar diamond key mappings (`^S`, `^D`, `^E`, `^X`) are
+      explicitly not supported across all editor workspaces, dialogs, and modal
+      surfaces. Modal text input prompts adhere strictly to standard VT100/ANSI
+      editing primitives, eliminating WordStar navigation by design.
 
 ---
 
