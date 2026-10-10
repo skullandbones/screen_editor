@@ -182,7 +182,7 @@ class Editor:
         elif key == KEY_CTRL_K:
             if self.buffer.block_active > 0:
                 self.action_block_popup()
-            elif self.terminal.is_key_ready():
+            elif self.terminal.is_key_ready(timeout=1.0):
                 next_k = self.terminal.get_key()
                 if next_k in ("r", "R"):
                     self.action_insert_file()
@@ -190,6 +190,8 @@ class Editor:
                     self.action_block_save()
                 elif next_k in ("q", "Q", "x", "X"):
                     self.action_quit()
+                elif next_k == KEY_ESC:
+                    pass
                 else:
                     self.action_help()
             else:

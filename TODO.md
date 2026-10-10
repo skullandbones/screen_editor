@@ -425,7 +425,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 1 Defect Open (Bug 2.7.44; Bug 2.7.45 Rejected).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44 Resolved;
+  Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1017,7 +1018,7 @@ have been resolved and archived.
       supporting Lock, Clear, Copy, Move, Del, Save, and Dismiss actions.
       Validated via Step 34 in `test_editor.py`
       (`test_bug_2_7_43_block_operations_modal_dialog`).
-  - [ ] **Bug 2.7.44: Ctrl+K Prefix Command Polling Blocks Interactive Chords**:
+  - [x] **Bug 2.7.44: Ctrl+K Prefix Command Polling Blocks Interactive Chords**:
     - *Symptom*: Pressing `Ctrl+K` followed by a secondary command key (`R` for
       File Insert, `S` for Block Save, `Q`/`X` for Exit) fails to execute the
       command and immediately falls back to displaying the Help workspace.
@@ -1027,10 +1028,12 @@ have been resolved and archived.
       arrive within 0.0 seconds of `Ctrl+K`, causing `is_key_ready()` to return
       `False` immediately and dispatching `self.action_help()`.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, and 10.
-    - *Resolution Plan*: Provide a reasonable interactive window (e.g.
-      `timeout=1.0` or interactive prompt) when polling for two-key chord
-      sequences after `Ctrl+K`, allowing human entry of `R`, `S`, `Q`, `X`
-      before falling through to `action_help()`.
+    - *Resolution*: Updated `KEY_CTRL_K` prefix chord polling in `editor.py` to
+      query `self.terminal.is_key_ready(timeout=1.0)`, providing a 1.0-second
+      interactive window for secondary key arrival (`R`, `S`, `Q`, `X`) and
+      allowing `KEY_ESC` to cancel the chord gracefully without triggering Help.
+      Validated via Step 35 in `test_editor.py`
+      (`test_bug_2_7_44_ctrl_k_prefix_command_interactive_chords`).
   - [x] **Bug 2.7.45: WordStar Diamond Key Mapping [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10, 11.8.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.

@@ -1675,8 +1675,78 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_44_ctrl_k_prefix_command_interactive_chords(self):
+        """
+        Step 35: Verify Bug 2.7.44 resolution:
+        Ctrl+K prefix command polling provides an interactive window
+        (timeout=1.0) allowing human key chords (R, S, Q, X, ESC) when
+        block_active == 0 before falling through to action_help().
+        """
+        self.editor.buffer.block_active = 0
+        self.editor.action_insert_file = MagicMock()
+        self.editor.action_block_save = MagicMock()
+        self.editor.action_quit = MagicMock()
+        self.editor.action_help = MagicMock()
+
+        # 1. Verify timeout=1.0 is passed to is_key_ready
+        self.editor.terminal.is_key_ready = MagicMock(return_value=False)
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.terminal.is_key_ready.assert_called_once_with(timeout=1.0)
+        self.editor.action_help.assert_called_once()
+
+        # 2. Interactive chords with timeout=1.0
+        # a. Ctrl+K R / r -> action_insert_file
+        for r_key in ("r", "R"):
+            self.editor.action_insert_file.reset_mock()
+            self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+            self.editor.terminal.get_key = MagicMock(return_value=r_key)
+            self.editor.dispatch_key(KEY_CTRL_K)
+            self.editor.action_insert_file.assert_called_once()
+
+        # b. Ctrl+K S / s -> action_block_save
+        for s_key in ("s", "S"):
+            self.editor.action_block_save.reset_mock()
+            self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+            self.editor.terminal.get_key = MagicMock(return_value=s_key)
+            self.editor.dispatch_key(KEY_CTRL_K)
+            self.editor.action_block_save.assert_called_once()
+
+        # c. Ctrl+K Q / q / X / x -> action_quit
+        for q_key in ("q", "Q", "x", "X"):
+            self.editor.action_quit.reset_mock()
+            self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+            self.editor.terminal.get_key = MagicMock(return_value=q_key)
+            self.editor.dispatch_key(KEY_CTRL_K)
+            self.editor.action_quit.assert_called_once()
+
+        # d. Ctrl+K ESC -> cancels chord, no help
+        self.editor.action_help.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(return_value=KEY_ESC)
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_help.assert_not_called()
+
+        # e. Ctrl+K with unknown key (e.g. 'h') -> falls through to action_help
+        self.editor.action_help.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(return_value="h")
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_help.assert_called_once()
+
+        # 3. Timeout expiration (is_key_ready returns False) -> action_help
+        self.editor.action_help.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=False)
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_help.assert_called_once()
+
+        print(
+            "[+] Step 35: Interactive Ctrl+K chords & timeout verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
