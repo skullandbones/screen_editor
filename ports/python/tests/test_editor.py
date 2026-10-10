@@ -1247,6 +1247,44 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_backspace_dynamic_block_cancel(self):
+        """Step 30: Verify Backspace cancels dynamic block (Bug 2.7.38)."""
+        print(
+            "[*] Step 30: Testing Backspace dynamic block cancel...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Hello World"]
+
+        # 1. Dynamic block (block_active == 1): Backspace cancels selection
+        # without deleting any character or altering buffer contents.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 5
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 11
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_BACKSPACE)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Hello World")
+        self.assertEqual(self.editor.buffer.cursor_col, 11)
+
+        # 2. Solidified block (block_active == 2): Backspace cancels block
+        # and performs backward character deletion.
+        self.editor.buffer.cursor_col = 5
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.assertEqual(self.editor.buffer.block_active, 2)
+
+        self.editor.dispatch_key(KEY_BACKSPACE)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Hell World")
+        self.assertEqual(self.editor.buffer.cursor_col, 4)
+
+        print(
+            "[+] Step 30: Backspace dynamic block cancel verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

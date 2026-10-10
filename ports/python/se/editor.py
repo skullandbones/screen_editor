@@ -135,7 +135,12 @@ class Editor:
         elif key == KEY_ENTER:
             self.buffer.split_line()
         elif key == KEY_BACKSPACE:
-            self.buffer.backspace()
+            if self.buffer.block_active == 1:
+                self.buffer.cancel_block()
+            else:
+                if self.buffer.block_active > 0:
+                    self.buffer.cancel_block()
+                self.buffer.backspace()
         elif key == KEY_DELETE or key == KEY_CTRL_D:
             if self.buffer.block_active > 0:
                 self.buffer.delete_block()

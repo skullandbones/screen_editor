@@ -326,6 +326,10 @@ class DocumentBuffer:
         else:
             self.block_active = 0
 
+    def cancel_block(self):
+        """Cancel active block selection."""
+        self.block_active = 0
+
     def solidify_block(self):
         """Solidify dynamic block selection to locked bounds."""
         if self.block_active == 1:
