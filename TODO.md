@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 5 Defects Open (Bugs 2.4.15–2.4.19).
+- **Status**: Active / 4 Defects Open (Bugs 2.4.16–2.4.19).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -307,7 +307,7 @@ have been resolved and archived.
       1-based coordinate `(vis_col - pan) + 1`. Validated via
       `test_bug_2_4_14_viewport_col1_alignment` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.15: Missing Sticky Target Column & Vertical Tab Clamping**:
+  - [x] **Bug 2.4.15: Missing Sticky Target Column & Vertical Tab Clamping**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, 6.4.
     - *Issue*: In `src/core/editor.c`, vertical navigation primitives
       (`cursor_up`, `cursor_down`, `page_up`, `page_down`) lack sticky
@@ -318,9 +318,13 @@ have been resolved and archived.
       where `calc_visual_col >= target`) violating the Tab Exclusion Mandate,
       which requires clamping to the beginning of the tab (`vis_acc < TARGET_COL
       < vis_acc + spaces`).
-    - *Required Fix*: Introduce `TARGET_COL`, update it on horizontal movements,
-      preserve it across vertical navigation, and implement the canonical
-      `ADJUST_COL_TO_TARGET` algorithm in `editor.c` with tab start clamping.
+    - *Resolution*: Implemented `g_target_col` in `src/core/editor.c` and
+      declared in `src/include/editor.h`, tracking visual target column across
+      horizontal movement and text editing. Implemented canonical
+      `adjust_col_to_target()` with tab start clamping, preserving target
+      column across `cursor_up`, `cursor_down`, `page_up`, and `page_down`.
+      Validated via `test_bug_2_4_15_sticky_target_col_and_tab_clamping` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.16: Status Bar Field Squatting & Field 5 Column Reporting**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 11.1.
     - *Issue*: In `src/core/ui_render.c:210-241` (`render_status_bar`), Field 4

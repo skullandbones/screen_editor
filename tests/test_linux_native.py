@@ -987,6 +987,97 @@ def test_bug_2_4_14_viewport_col1_alignment():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_15_sticky_target_col_and_tab_clamping():
+    """Verify sticky TARGET_COL persistence and tab clamping (Bug 2.4.15)."""
+    print("[*] Testing sticky target column and tab clamping (Bug 2.4.15)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_target_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("0123456789ABCDEF\nShort\n\tXYZ\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move right 10 columns on line 1: TARGET_COL = 10
+            os.write(master, b"\x1b[C" * 10)
+            time.sleep(0.1)
+            out_l1 = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    1/3" in out_l1 and "Col 10" in out_l1, (
+                f"Expected Line 1 Col 10:\n{out_l1}"
+            )
+
+            # Move down to Line 2 (len 5): cur_col clamped to 5
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+            out_l2 = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    2/3" in out_l2 and "Col 5" in out_l2, (
+                f"Expected Line 2 Col 5:\n{out_l2}"
+            )
+
+            # Move up back to Line 1: cursor restores sticky TARGET_COL 10!
+            os.write(master, b"\x1b[A")
+            time.sleep(0.1)
+            out_l1_back = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    1/3" in out_l1_back and "Col 10" in out_l1_back, (
+                f"Expected restored Line 1 Col 10:\n{out_l1_back}"
+            )
+
+            # Set TARGET_COL to 4 (home then 4 right)
+            os.write(master, b"\x01" + b"\x1b[C" * 4)
+            time.sleep(0.1)
+            read_all_available(master, 0.2)
+
+            # Move down 2 lines to Line 3 (\tXYZ). Target 4 is inside tab.
+            # Must clamp to beginning of tab (index 0, Col 0).
+            os.write(master, b"\x1b[B\x1b[B")
+            time.sleep(0.1)
+            out_tab = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    3/3" in out_tab and "Col 0" in out_tab, (
+                f"Expected tab interior clamped to Col 0:\n{out_tab}"
+            )
+
+            # Move up 2 lines back to Line 1: TARGET_COL 4 preserved!
+            os.write(master, b"\x1b[A\x1b[A")
+            time.sleep(0.1)
+            out_tab_back = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    1/3" in out_tab_back and "Col 4" in out_tab_back, (
+                f"Expected Line 1 Col 4 restored:\n{out_tab_back}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Sticky TARGET_COL & tab clamping verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1008,6 +1099,7 @@ def main():
     test_bug_2_4_12_clipboard_copy_paste()
     test_bug_2_4_13_terminal_lifecycle()
     test_bug_2_4_14_viewport_col1_alignment()
+    test_bug_2_4_15_sticky_target_col_and_tab_clamping()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
