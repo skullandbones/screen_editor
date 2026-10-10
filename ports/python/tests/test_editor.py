@@ -1285,6 +1285,47 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_enter_dynamic_block_solidify(self):
+        """Step 31: Verify Enter solidifies dynamic block (Bug 2.7.39)."""
+        print(
+            "[*] Step 31: Testing Enter dynamic block solidify...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["First Line", "Second Line"]
+
+        # 1. Dynamic block (block_active == 1): Enter solidifies selection
+        # without splitting the current line.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 5
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_ENTER)
+        self.assertEqual(self.editor.buffer.block_active, 2)
+        self.assertEqual(self.editor.buffer.block_end_row, 0)
+        self.assertEqual(self.editor.buffer.block_end_col, 5)
+        self.assertEqual(
+            self.editor.buffer.lines, ["First Line", "Second Line"]
+        )
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 5)
+
+        # 2. Solidified block (block_active == 2): Enter cancels block
+        # and splits line.
+        self.editor.dispatch_key(KEY_ENTER)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(
+            self.editor.buffer.lines, ["First", " Line", "Second Line"]
+        )
+        self.assertEqual(self.editor.buffer.cursor_row, 1)
+        self.assertEqual(self.editor.buffer.cursor_col, 0)
+
+        print(
+            "[+] Step 31: Enter dynamic block solidify verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

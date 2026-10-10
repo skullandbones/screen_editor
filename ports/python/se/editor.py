@@ -133,7 +133,12 @@ class Editor:
 
         # 2. Text Editing & Layout
         elif key == KEY_ENTER:
-            self.buffer.split_line()
+            if self.buffer.block_active == 1:
+                self.buffer.solidify_block()
+            else:
+                if self.buffer.block_active > 0:
+                    self.buffer.cancel_block()
+                self.buffer.split_line()
         elif key == KEY_BACKSPACE:
             if self.buffer.block_active == 1:
                 self.buffer.cancel_block()

@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 3 Defects Open (Bugs 2.7.39–2.7.41).
+- **Status**: Active / 2 Defects Open (Bugs 2.7.40–2.7.41).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -786,7 +786,7 @@ have been resolved and archived.
       and cancel selection without deleting text, while clearing active blocks
       prior to deletion when solidified (`block_active == 2`). Validated via
       `test_backspace_dynamic_block_cancel` in `test_editor.py`.
-  - [ ] **Bug 2.7.39: Enter Key in Dynamic Block Mode Splits Line**:
+  - [x] **Bug 2.7.39: Enter Key in Dynamic Block Mode Splits Line**:
     - *Symptom*: Pressing `Enter` while extending a dynamic block selection
       splits the current line and moves cursor to a new line instead of
       solidifying the highlighted block boundaries.
@@ -795,10 +795,11 @@ have been resolved and archived.
       selection coordinates and mutating the document.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 9.1 and
       `src/se.asm:1299-1313` (`CHECK_ENTER`, `DO_ENTER_SOLIDIFY_SETUP`).
-    - *Resolution Plan*: Intercept `KEY_ENTER` in `editor.py`: if
-      `self.buffer.block_active == 1`, call `self.buffer.solidify_block()` and
-      return immediately without splitting the line. If `block_active == 2`,
-      cancel the block before splitting the line.
+    - *Resolution*: Updated `KEY_ENTER` dispatch in `editor.py` to check
+      `block_active == 1` and call `solidify_block()` without splitting the
+      line, while clearing active blocks prior to splitting when solidified
+      (`block_active == 2`). Validated via `test_enter_dynamic_block_solidify`
+      in `test_editor.py`.
   - [ ] **Bug 2.7.40: Forward Delete Line Join Desynchronizes Cursor Column**:
     - *Symptom*: Pressing `Delete` / `Ctrl+D` at the end of a line when the
       cursor column exceeds the line length (`cursor_col > len(line)`) joins the
