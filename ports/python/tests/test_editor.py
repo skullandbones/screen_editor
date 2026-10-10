@@ -19,6 +19,7 @@ from se.terminal import (
     KEY_CTRL_O,
     KEY_CTRL_S,
     KEY_CTRL_V,
+    KEY_CTRL_W,
     KEY_LEFT,
     KEY_RIGHT,
     KEY_HOME,
@@ -1066,6 +1067,71 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 26: Block-active save and Ctrl+K S verified.",
+            flush=True,
+        )
+
+    def test_document_close_lifecycle(self):
+        """Step 27: Verify Ctrl+W close lifecycle and prompt (Bug 2.7.35)."""
+        print(
+            "[*] Step 27: Testing Ctrl+W document close lifecycle...",
+            flush=True,
+        )
+        # 1. Dispatching KEY_CTRL_W invokes action_close_file
+        self.editor.action_close_file = MagicMock()
+        self.editor.dispatch_key(KEY_CTRL_W)
+        self.editor.action_close_file.assert_called_once_with(to_splash=True)
+
+        from se.editor import Editor
+        self.editor.action_close_file = Editor.action_close_file.__get__(
+            self.editor, Editor
+        )
+        self.editor.action_splash_screen = MagicMock()
+        self.editor.action_save_file = MagicMock(return_value=True)
+
+        # 2. Clean document: immediately closes to Splash without prompt
+        self.editor.buffer.filename = "clean.txt"
+        self.editor.buffer.modified = False
+        self.editor.modal.show_confirm = MagicMock()
+
+        self.editor.action_close_file(to_splash=True)
+        self.editor.modal.show_confirm.assert_not_called()
+        self.assertEqual(self.editor.buffer.filename, "(Untitled)")
+        self.assertFalse(self.editor.buffer.has_file)
+        self.editor.action_splash_screen.assert_called_once()
+
+        # 3. Modified document with [ESC]=Cancel: keeps document state
+        self.editor.action_splash_screen.reset_mock()
+        self.editor.buffer.filename = "dirty.txt"
+        self.editor.buffer.modified = True
+        self.editor.modal.show_confirm = MagicMock(return_value=None)
+
+        closed = self.editor.action_close_file(to_splash=True)
+        self.assertFalse(closed)
+        self.assertEqual(self.editor.buffer.filename, "dirty.txt")
+        self.assertTrue(self.editor.buffer.modified)
+        self.editor.action_splash_screen.assert_not_called()
+
+        # 4. Modified document with [N]o: discards and transitions to Splash
+        self.editor.modal.show_confirm = MagicMock(return_value="n")
+        closed = self.editor.action_close_file(to_splash=True)
+        self.assertTrue(closed)
+        self.assertEqual(self.editor.buffer.filename, "(Untitled)")
+        self.editor.action_splash_screen.assert_called_once()
+
+        # 5. Modified document with [Y]es: saves and transitions to Splash
+        self.editor.action_splash_screen.reset_mock()
+        self.editor.buffer.filename = "dirty2.txt"
+        self.editor.buffer.modified = True
+        self.editor.modal.show_confirm = MagicMock(return_value="y")
+
+        closed = self.editor.action_close_file(to_splash=True)
+        self.assertTrue(closed)
+        self.editor.action_save_file.assert_called_once()
+        self.assertEqual(self.editor.buffer.filename, "(Untitled)")
+        self.editor.action_splash_screen.assert_called_once()
+
+        print(
+            "[+] Step 27: Ctrl+W close lifecycle and prompt verified.",
             flush=True,
         )
 

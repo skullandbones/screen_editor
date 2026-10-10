@@ -283,7 +283,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 2 Defects Open (Bugs 2.7.35–2.7.36).
+- **Status**: Active / 1 Defect Open (Bug 2.7.36).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -721,7 +721,7 @@ have been resolved and archived.
       block lines and characters to target file while retaining active block
       selection. Added `Ctrl+K S` prefix dispatch. Validated via
       `test_block_active_save` in `test_editor.py`.
-  - [ ] **Bug 2.7.35: Document Close (Ctrl+W) Unhandled in Editor Loop**:
+  - [x] **Bug 2.7.35: Document Close (Ctrl+W) Unhandled in Editor Loop**:
     - *Symptom*: Pressing `Ctrl+W` while editing a document is ignored. The
       editor cannot close an open document back to the splash screen from the
       active editor workspace. Furthermore, `action_close_file()` contains
@@ -731,11 +731,13 @@ have been resolved and archived.
       prompts to discard edits rather than save them, and resets the buffer
       without launching `action_splash_screen()`.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.9 and Section 10.
-    - *Resolution Plan*: Bind `KEY_CTRL_W` in `dispatch_key()` to
-      `action_close_file()`. Update `action_close_file()` to conform to
-      Section 7.9: if clean, immediately close to Splash; if modified, present
-      canonical Tier 2 modal (`Save changes?`), route `[Y]es` to save before
-      closing, `[N]o` to discard and close to Splash, and `[ESC]` to cancel.
+    - *Resolution*: Bound `KEY_CTRL_W` in `dispatch_key()` to
+      `action_close_file()`. Updated `action_close_file()` to conform to
+      Section 7.9: if clean, immediately closes to Splash; if modified,
+      presents canonical Tier 2 modal (`Save changes?`), routes `[Y]es` to
+      save before closing, `[N]o` to discard and close to Splash, and `[ESC]`
+      to cancel. Validated via `test_document_close_lifecycle` in
+      `test_editor.py`.
   - [ ] **Bug 2.7.36: Missing Startup SE.CFG Discovery & Geometry Default**:
     - *Symptom*: Running `se` without `--config` never probes or loads `SE.CFG`
       from current working directory or program directory. Additionally,

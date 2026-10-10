@@ -179,6 +179,8 @@ class Editor:
                 self.action_block_save()
             else:
                 self.action_save_file()
+        elif key == KEY_CTRL_W:
+            self.action_close_file(to_splash=True)
         elif key == KEY_CTRL_P:
             self.action_plugin_palette()
         elif key == KEY_CTRL_Y:
@@ -606,18 +608,29 @@ class Editor:
         self.buffer = DocumentBuffer(filename="(Untitled)")
         self.buffer.has_file = False
 
-    def action_close_file(self):
-        """Close active document and return to blank untitled state."""
+    def action_close_file(self, to_splash: bool = True) -> bool:
+        """Close active document and return to Splash Screen workspace."""
         if self.buffer.modified:
             ans = self.modal.show_confirm(
                 title="Unsaved Modifications",
-                desc="Discard current modifications before closing?",
-                query="Discard edits? [y/n]:",
+                desc="Any unsaved edits will be lost if discarded.",
+                query="Save changes?",
+                options_text="[Y]es      [N]o      [ESC]=Cancel",
             )
-            if ans != "y":
-                return
-        self.buffer = DocumentBuffer(filename="(Untitled)")
+            if ans is None:
+                return False  # Cancelled with ESC, keep document state intact
+            if ans == "y":
+                if not self.action_save_file():
+                    return False  # Save cancelled or failed
+
+        self.buffer = DocumentBuffer(
+            filename="(Untitled)", tab_width=self.config.tab_width
+        )
         self.buffer.has_file = False
+
+        if to_splash:
+            self.action_splash_screen()
+        return True
 
     def action_about(self):
         """Display Tier 1 About screen workspace."""
@@ -739,7 +752,7 @@ class Editor:
                 self.action_save_file()
                 return
             elif ch == "w" or k == KEY_CTRL_W:
-                self.action_close_file()
+                self.action_close_file(to_splash=False)
             elif ch == "l" or k == KEY_CTRL_L:
                 self.action_goto_line()
                 return
