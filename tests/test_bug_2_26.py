@@ -21,7 +21,7 @@ import time
 import tty
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -41,7 +41,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -91,7 +91,14 @@ def drain_all(master_fd, quiet_time=0.2):
     return buf
 
 
-def setup_disk_files(img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root):
+def setup_disk_files(
+    img_file,
+    se_bin,
+    cpmcp_bin,
+    cpmrm_bin,
+    repo_root,
+    use_sec=False
+):
     cfg_tmp = "/tmp/SE.CFG"
     with open(cfg_tmp, "w") as f:
         f.write("SCREEN=120x40\r\nRAMDRIVE=ON\r\n")
@@ -116,7 +123,9 @@ def setup_disk_files(img_file, se_bin, cpmcp_bin, cpmrm_bin, repo_root):
         )
         if os.path.isfile(se_bin):
             subprocess.run(
-                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+                target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    subprocess.run(
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
 
@@ -139,11 +148,15 @@ def boot_cpm(master):
     return True, "Booted to C>"
 
 
-def run_test():
-    paths = find_paths()
+def run_test(use_sec=False):
+    paths = find_paths(use_sec=use_sec)
     repo_root, emu_bin, rom_file, img_file, se_bin, cpmcp, cpmrm = paths
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
-    setup_disk_files(img_file, se_bin, cpmcp, cpmrm, repo_root)
+    setup_disk_files(img_file, se_bin, cpmcp, cpmrm, repo_root, use_sec=use_sec)
 
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -163,7 +176,7 @@ def run_test():
 
         print("[*] Launching 'se 2.TXT'...", flush=True)
         time.sleep(0.3)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         out = read_until(master, b"Line    1/2", timeout=35.0)
         if b"Line    1/2" not in out:
             print(f"[-] Failed to open 2.TXT: {out[-200:]}")
@@ -228,5 +241,6 @@ def run_test():
 
 
 if __name__ == "__main__":
-    success = run_test()
+    use_sec_arg = "--sec" in sys.argv
+    success = run_test(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

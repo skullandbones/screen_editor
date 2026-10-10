@@ -22,7 +22,7 @@ import time
 import tty
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -32,7 +32,7 @@ def find_paths():
         workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
     )
     img_file = os.path.join(repo_root, "disks", "hd1k_combo.img")
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -94,7 +94,7 @@ def inject_file(cpmcp, cpmrm, img, local_path, user_disk):
     )
 
 
-def test_block_modal_workflow():
+def test_block_modal_workflow(use_sec=False):
     emu_bin, rom_file, img_file, se_bin, cpmcp, cpmrm, repo_root = find_paths()
 
     # Create test document with 4 lines
@@ -103,7 +103,7 @@ def test_block_modal_workflow():
         f.write(b"Line One: Apple\r\nLine Two: Banana\r\n"
                 b"Line Three: Cherry\r\nLine Four: Date\r\n")
 
-    inject_file(cpmcp, cpmrm, img_file, se_bin, "0:SE.COM")
+    inject_file(cpmcp, cpmrm, img_file, se_bin, target_cpm)
     inject_file(cpmcp, cpmrm, img_file, test_doc_path, "0:BLKTEST.TXT")
 
     master, slave = os.openpty()
@@ -142,7 +142,7 @@ def test_block_modal_workflow():
         # Launch editor
         drain_all(master)
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         splash = read_until(master, b"Screen Editor", timeout=25.0)
         if b"Screen Editor" not in splash:
             print(f"[-] Splash screen not reached. Buffer: {repr(splash)}",
@@ -336,5 +336,6 @@ def test_block_modal_workflow():
 
 
 if __name__ == "__main__":
-    if not test_block_modal_workflow():
+    use_sec_arg = "--sec" in sys.argv
+    if not test_block_modal_workflow(use_sec=use_sec_arg):
         sys.exit(1)

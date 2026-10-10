@@ -19,7 +19,7 @@ import tty
 from typing import Dict, List, Optional, Tuple
 
 
-def find_paths():
+def find_paths(use_sec=False):
     """Locate emulator, ROM, disk image, and SE binaries."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
@@ -30,7 +30,9 @@ def find_paths():
         workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
     )
     img_file = os.path.join(repo_root, "disks", "hd1k_combo.img")
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(
+        repo_root, "SEC.COM" if use_sec else "SE.COM"
+    )
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -197,13 +199,19 @@ def set_pty_size(fd: int, cols: int = 80, rows: int = 24):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
 
 
-def main():
+def main(use_sec=False):
     print("=" * 60, flush=True)
     print("SE Parallel Comparative Engine: CP/M SE.COM vs Python SE",
           flush=True)
     print("=" * 60, flush=True)
 
-    repo_root, emu_bin, rom_file, img_file, se_bin, cpmcp_bin = find_paths()
+    (
+        repo_root, emu_bin, rom_file, img_file,
+        se_bin, cpmcp_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     cfg_tmp = "/tmp/SE_TEST.CFG"
     with open(cfg_tmp, "w") as f:
@@ -211,7 +219,7 @@ def main():
 
     if os.path.isfile(cpmcp_bin):
         subprocess.run(
-            [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+            [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -286,7 +294,7 @@ def main():
 
     # 3. Start CP/M SE.COM
     time.sleep(0.3)
-    os.write(cpm_master, b"se\r")
+    os.write(cpm_master, cmd_name + b"\r")
 
     cpm_screen = AnsiScreen(80, 24)
     py_screen = AnsiScreen(80, 24)
@@ -385,4 +393,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(main(use_sec=use_sec_arg))

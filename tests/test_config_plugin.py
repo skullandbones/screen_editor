@@ -43,7 +43,7 @@ import tty
 import select
 import subprocess
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -65,7 +65,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -160,9 +160,11 @@ def get_cfg_from_image(cpmcp_bin, img_file):
     os.remove(tmp_path)
     return data
 
-def run_tests():
-    paths = find_paths()
+def run_tests(use_sec=False):
+    paths = find_paths(use_sec=use_sec)
     emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = paths
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     print("=" * 65, flush=True)
     print("  SE.CFG PLUGIN Configuration Tests", flush=True)
     print("=" * 65, flush=True)
@@ -183,7 +185,7 @@ def run_tests():
         assert b"C>" in out, f"Failed switching to C: {out}"
 
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Plugin System : [Disabled]", timeout=25.0
         )
@@ -382,7 +384,7 @@ def run_tests():
         # --------------------------------------------------------------
         print("\n[*] TEST 3: Toggle to On Demand and Save...", flush=True)
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Plugin System : [Disabled]", timeout=25.0
         )
@@ -426,7 +428,7 @@ def run_tests():
 
         # Reload SE and verify splash shows On Demand
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Plugin System : [On Demand]", timeout=25.0
         )
@@ -481,7 +483,7 @@ def run_tests():
             flush=True
         )
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Plugin System : [Operational]", timeout=25.0
         )
@@ -550,7 +552,7 @@ def run_tests():
         os.write(master, b"c:\r")
         read_until(master, b"C>", timeout=15.0)
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Plugin System : [On Demand]", timeout=25.0
         )
@@ -577,7 +579,7 @@ def run_tests():
         os.write(master, b"c:\r")
         read_until(master, b"C>", timeout=15.0)
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Plugin System : [On Demand]", timeout=25.0
         )
@@ -604,7 +606,7 @@ def run_tests():
         os.write(master, b"c:\r")
         read_until(master, b"C>", timeout=15.0)
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Plugin System : [Disabled]", timeout=25.0
         )
@@ -631,7 +633,7 @@ def run_tests():
         os.write(master, b"c:\r")
         read_until(master, b"C>", timeout=15.0)
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(
             master, b"Plugin System : [Operational]", timeout=25.0
         )
@@ -658,4 +660,5 @@ def run_tests():
     print("=" * 65, flush=True)
 
 if __name__ == "__main__":
-    run_tests()
+    use_sec_arg = "--sec" in sys.argv
+    run_tests(use_sec=use_sec_arg)

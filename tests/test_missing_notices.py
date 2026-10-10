@@ -17,7 +17,7 @@ import sys
 import time
 import tty
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -27,7 +27,9 @@ def find_paths():
         workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
     )
     img_file = os.path.join(repo_root, "disks", "hd1k_combo.img")
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(
+        repo_root, "SEC.COM" if use_sec else "SE.COM"
+    )
     cpmcp = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -91,8 +93,10 @@ def inject_to_img(cpmcp, img, filepath, filename):
             stderr=subprocess.DEVNULL,
         )
 
-def main():
-    paths = find_paths()
+def main(use_sec=False):
+    paths = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     emu_bin, rom_file, img_file, se_bin, cpmcp, cpmrm, plugins_dir = paths
 
     # Step 1: Temporarily remove HELP.OVL, BEAUTIFY.PRL, and PLUGIN.PRL
@@ -125,10 +129,10 @@ def main():
         time.sleep(0.5)
 
         # Launch SE
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"Screen Editor", timeout=25.0)
         assert b"Screen Editor" in out, f"Failed splash screen: {repr(out)}"
-        print("[+] SE.COM splash screen reached.")
+        print(f"[+] {target_name} splash screen reached.")
 
         # Test 1: Press 'p' on splash screen without PLUGIN.PRL
         time.sleep(0.4)
@@ -247,4 +251,5 @@ def main():
         print("[+] Files restored.")
 
 if __name__ == "__main__":
-    sys.exit(main())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(main(use_sec=use_sec_arg))

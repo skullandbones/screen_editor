@@ -24,7 +24,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -44,7 +44,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -148,15 +148,19 @@ def cleanup_disk_files(repo_root, cpmrm_bin, img_file):
     )
 
 
-def main():
-    paths = find_paths()
-    repo_root, emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = paths
+def main(use_sec=False):
+    paths = find_paths(use_sec=use_sec)
+    (
+        repo_root, emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
+    ) = paths
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     for p, name in [
         (emu_bin, "RC2014 emulator"),
         (rom_file, "ROM file"),
         (img_file, "Disk image"),
-        (se_bin, "SE.COM binary"),
+        (se_bin, f"{target_name} binary"),
         (cpmcp_bin, "cpmcp binary"),
         (cpmrm_bin, "cpmrm binary"),
     ]:
@@ -198,7 +202,7 @@ def main():
         # Subtest 1: Open File Load Progress Modal
         # ---------------------------------------------------------------------
         print("[*] Subtest 1: Testing File Load Progress Modal with 2.TXT...")
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         ok, load_out = read_until(master, b"Line    1/2", timeout=45.0)
         load_out += drain_all(master)
         if not ok:
@@ -358,8 +362,8 @@ def main():
         time.sleep(0.5)
         drain_all(master)
 
-        # Launch SE with User 1 file: se 1C:U1FILE.TXT
-        os.write(master, b"se 1C:U1FILE.TXT\r")
+        # Launch editor binary with User 1 file: <cmd> 1C:U1FILE.TXT
+        os.write(master, cmd_name + b" 1C:U1FILE.TXT\r")
         ok, u1_out = read_until(
             master, b"Please wait for completion", timeout=45.0
         )
@@ -405,4 +409,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(main(use_sec=use_sec_arg))
