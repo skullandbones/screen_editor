@@ -143,6 +143,9 @@ DOT_CMD_DONE:
 	; Initialize Direct BIOS Console Vectors
 	CALL INIT_BIOS_JUMPS
 
+	; Initialize native keyboard driver and wait for launch key release
+	CALL HAL_KEYBOARD_INIT
+
 	; Initialize Screen Geometry to Default 80x24 for Next hardware
 	CALL SET_MODE_80X24
 
@@ -504,6 +507,8 @@ SHOW_SPLASH_SCREEN:
 	LD (STATUS_OOM_FLAG),A
 SPLASH_START:
 	CALL RENDER_SPLASH
+	; Flush any residual keystrokes before accepting splash input
+	CALL HAL_KEYBOARD_INIT
 
 ;------------------------------------------------------------------------------
 ; SPLASH_LOOP: Interactive event loop for splash screen
