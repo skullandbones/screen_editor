@@ -20,7 +20,7 @@
 #include "include/file_io.h"
 #include "include/hal.h"
 
-static char s_cpm_cmd_buf[64];
+extern char g_scratch_line_buf[MAX_ACTIVE_LINE_STRIDE];
 
 static const char *parse_target_filename(int argc, char **argv)
 {
@@ -28,6 +28,7 @@ static const char *parse_target_filename(int argc, char **argv)
     const char *tail;
     uint8_t i = 0;
     uint8_t out_idx = 0;
+    char *cmd_buf = g_scratch_line_buf;
 
     if (argc > 1 && argv[1][0] != '\0') {
         return argv[1];
@@ -43,12 +44,12 @@ static const char *parse_target_filename(int argc, char **argv)
         i++;
     }
     while (i < cpm_cmd_len && tail[i] > ' ' &&
-           out_idx + 1 < sizeof(s_cpm_cmd_buf)) {
-        s_cpm_cmd_buf[out_idx++] = tail[i++];
+           out_idx + 1 < 64) {
+        cmd_buf[out_idx++] = tail[i++];
     }
-    s_cpm_cmd_buf[out_idx] = '\0';
+    cmd_buf[out_idx] = '\0';
 
-    return (out_idx > 0) ? s_cpm_cmd_buf : NULL;
+    return (out_idx > 0) ? cmd_buf : NULL;
 }
 
 int main(int argc, char **argv)
@@ -58,8 +59,8 @@ int main(int argc, char **argv)
     if (target_file) {
         if (strcmp(target_file, "-h") == 0 ||
             strcmp(target_file, "--help") == 0) {
-            printf("Usage: SEC [filename]\n");
-            printf("SE Screen Editor - CP/M C Profile (v1.1.0)\n");
+            puts("Usage: SEC [filename]");
+            puts("SE Screen Editor - CP/M C Profile (v1.1.0)");
             return 0;
         }
     }
@@ -89,5 +90,6 @@ int main(int argc, char **argv)
     hal_console_clear();
     hal_console_locate(1, 1);
     hal_console_show_cursor();
+    hal_console_puts("\r\nExiting SE.COM. Returned to CP/M.\r\n");
     return 0;
 }
