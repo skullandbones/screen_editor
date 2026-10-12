@@ -744,6 +744,39 @@ content blocks rather than top-aligned text.
      - Response `[ESC]=Cancel`: Cancels close request and returns directly to
        the active editor workspace with document state intact.
 
+10. Workspace Prompt Input & Keystroke Rendering Discipline (SE.COM Parity):
+    When entering filenames, paths, or drive specs in Tier 1 directory browsers
+    (File Open, Insert, Save, Save Block):
+    - In-Place Character Echo (Reference Architecture):
+      - As ASCII keystrokes (`0x20..0x7E`) are received, they are appended or
+        inserted into `INPUT_FILENAME_BUF` and echoed directly to the console
+        at the current hardware cursor position (`PUTC`), advancing
+        `cursor_pos`.
+      - Inline deletions (`Backspace` deleting left of cursor, `Delete`
+        deleting character under cursor) and in-place insertions redraw only
+        the bracketed input field on the prompt row and reposition the cursor
+        via `\x1b[{row};{col}H`.
+      - Directional navigation (`Left`, `Right`, `Home`, `End`) repositions the
+        hardware cursor within the bracket boundaries without emitting text.
+    - Prohibition of Full-Screen Redraw During Typing:
+      - Implementations MUST NOT re-render the 24-row (or 40-row) screen,
+        file grid, borders, or Row 24 status bar upon receiving individual
+        text input keystrokes.
+      - Re-emitting the status bar or repainting the file grid on every
+        keystroke creates severe display flicker and serial latency on
+        4–10 MHz Z80 CP/M systems, overflows input FIFO buffers during rapid
+        typing, and emits premature status bar updates (e.g. `Line    1/1`)
+        that break automated test harness synchronization.
+    - Discrete Full-Screen Redraw Triggers:
+      - Full-screen re-renders (`RENDER_SAVE_PAGE`, `RENDER_OPEN_PAGE`) are
+        strictly reserved for macroscopic state changes:
+        1. Initial entry into the workspace.
+        2. Page changes via `<PgUp>` or `<PgDn>`.
+        3. Drive, user, or wildcard filter pattern changes applied upon
+           pressing `Enter` (e.g. `B:`, `1C:`, `*.TXT`).
+        4. Line ending format toggling via `Ctrl+F` in the Save workspace.
+        5. Dismissal of child modal dialogs (e.g. Overwrite Confirmation).
+
 8. Tier 2 Centered Boxed Modal Pop-ups
 --------------------------------------------------------------------------------
 Modal pop-ups appear centered over the active screen surface to request input
@@ -872,6 +905,13 @@ or display notifications.
      |          [Enter]=Confirm      [ESC]=Cancel       |
      +--------------------------------------------------+
      ```
+     - Keystroke Rendering Discipline (In-Place Echo):
+       Single-line modal text input fields adhere strictly to the in-place
+       echo discipline defined in Section 7.10: character entry, inline
+       deletion, and cursor navigation update only the contents within the
+       bracketed input field `[  text  ]` and the hardware cursor position.
+       Modal frame borders, background rows, and underlying screen surfaces
+       MUST NOT be redrawn on individual text-entry keystrokes.
 
    Archetype D: Selection Menu (`show_menu` / Plugin Palette)
      Used for choosing from dynamic list (Plugin Palette, Directory list).
