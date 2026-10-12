@@ -619,22 +619,33 @@ content blocks rather than top-aligned text.
      ```
 
 4. Configuration Manager Workspace (`:c` from Splash):
-   - Displays active parameters and allows direct hotkey toggling:
+   - Displays active parameters, config file origin, and instant hotkey
+     toggling:
      ```text
      ~
      ~                      SE — Configuration Manager
      ~
+     ~                   Config Status: Loaded from A:SE.CFG
+     ~
      ~                   1. Screen Geometry  : 80x24
-     ~                   2. Tab Width        : 4
-     ~                   3. Max Line Capacity: 32K
-     ~                   4. RAM Drive Mode   : Disabled
+     ~                   2. RAM Drive Mode   : Protected
+     ~                   3. Max Doc Lines    : 32K
+     ~                   4. Tab Width        : 8
+     ~                   5. Plugin Manager   : Autoload
      ~
-     ~             [S] Save to SE.CFG    [ESC]/[Enter] Return
-     ~
-     ~                          Enter option: _
+     ~             [1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Instant Keystroke Dispatch Protocol:
+     - Keys `1` through `5` immediately toggle the corresponding configuration
+       parameter and redraw the workspace.
+     - Key `S` / `s` immediately saves active settings to `SE.CFG`.
+     - `ESC`, `Q` / `q`, or `Enter` immediately exits back to the Splash
+       screen.
+     - The workspace operates as a non-buffered, instant-response hotkey menu.
+       An `Enter option: _` prompt line is strictly prohibited and the
+       terminal hardware cursor is cleanly hidden (`TERM_HIDE_CURSOR`).
 
 5. File Open Workspace (`Ctrl+O` / `:o` from Splash):
    - Full-screen Tier 1 directory browser listing files on current drive/user.
