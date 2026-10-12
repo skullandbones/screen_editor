@@ -152,7 +152,8 @@ int modal_confirm(const char *title, const char *msg,
     if (msg && *msg) {
         modal_draw_row_centered(top + 3, left, width, msg);
     }
-    modal_draw_row_centered(top + 4, left, width, "Save changes?");
+    modal_draw_row_centered(top + 4, left, width,
+                            btn1 ? btn1 : "Save changes?");
 
     while (1) {
         /* Render Options: [Y]es      [N]o      [ESC]=Cancel */
@@ -341,6 +342,14 @@ int modal_confirm_save_changes(void)
         return MODAL_RES_OK;
     }
     return MODAL_RES_CANCEL;
+}
+
+int modal_confirm_overwrite(void)
+{
+    return modal_confirm("Overwrite File",
+                         "Existing file contents will be lost",
+                         "File already exists. Overwrite?",
+                         NULL);
 }
 
 void modal_show_notification(const char *title, const char *message)
