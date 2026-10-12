@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 17 Defects Open (Bugs 2.4.23–2.4.25, 2.4.27–2.4.40).
+- **Status**: Active / 16 Defects Open (Bugs 2.4.24–2.4.25, 2.4.27–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -461,7 +461,7 @@ have been resolved and archived.
       selecting, invokes `do_delete_block()`, and recalculates sticky visual
       column target. Validated via `test_bug_2_4_22_delete_active_block` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.23: Backspace Fails to Cancel Dynamic Block Selection**:
+  - [x] **Bug 2.4.23: Backspace Fails to Cancel Dynamic Block Selection**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:192-238` (`do_backspace`), pressing
       Backspace while dynamic block selection is underway
@@ -471,10 +471,11 @@ have been resolved and archived.
       selection (`g_block_mode = BLOCK_MODE_OFF`) to safeguard highlighted
       text against unintended modification, keeping the cursor stationary
       without deleting text.
-    - *Required Fix*: In `do_backspace()`, check if `g_block_mode ==
-      BLOCK_MODE_SELECTING`. If so, invoke `cancel_block()`, set
-      `g_need_status_render = 1`, and return immediately without modifying line
-      buffer contents or cursor column.
+    - *Resolution*: Updated `do_backspace()` in `src/core/editor.c` to inspect
+      `g_block_mode`. When `BLOCK_MODE_SELECTING`, it cancels the block via
+      `cancel_block()`, triggers status bar re-rendering, and returns
+      immediately without mutating text or moving cursor. Validated via
+      `test_bug_2_4_23_backspace_cancels_block` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.24: Enter Key in Dynamic Block Mode Splits Active Line**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 9.1, 10.
     - *Issue*: In `src/core/editor.c:276-307` (`do_enter`), pressing Enter

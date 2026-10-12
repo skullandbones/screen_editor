@@ -1666,6 +1666,87 @@ def test_bug_2_4_22_delete_active_block():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_23_backspace_cancels_block():
+    """Verify Backspace cancels dynamic block selection (§6.8, §10.1)."""
+    print("[*] Testing Bug 2.4.23: Backspace cancels dynamic block...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_b23_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("Line 1: Hello World\nLine 2: Test\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move right 8 columns to position after "Line 1: "
+            for _ in range(8):
+                os.write(master, b"\x1b[C")
+                time.sleep(0.02)
+            time.sleep(0.1)
+
+            # Toggle block selection (Ctrl+B / 0x02)
+            os.write(master, b"\x02")
+            time.sleep(0.1)
+
+            # Move right 5 columns to select "Hello"
+            for _ in range(5):
+                os.write(master, b"\x1b[C")
+                time.sleep(0.02)
+            time.sleep(0.1)
+
+            out = read_all_available(master, 0.1)
+            assert "[SEL]" in out.decode("utf-8", errors="replace"), (
+                "Expected [SEL] in status bar"
+            )
+
+            # Send Backspace (0x08) to cancel block
+            os.write(master, b"\x08")
+            time.sleep(0.2)
+
+            out_bs = read_all_available(master, 0.3)
+            out_str = out_bs.decode("utf-8", errors="replace")
+            assert "[SEL]" not in out_str, f"Block still active:\n{out_str}"
+
+            # Save file (Ctrl+S)
+            os.write(master, b"\x13")
+            time.sleep(0.3)
+            read_all_available(master, 0.3)
+            # Dismiss save modal with space
+            os.write(master, b" ")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(test_file_path, "r") as f:
+                content = f.read()
+            assert content == "Line 1: Hello World\nLine 2: Test\n", (
+                f"Expected unmodified content, got:\n{content}"
+            )
+
+        print("    [+] Backspace cancels dynamic block verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1694,6 +1775,7 @@ def main():
     test_bug_2_4_19_panning_edge_trigger_and_geometry()
     test_bug_2_4_21_backspace_line_join()
     test_bug_2_4_22_delete_active_block()
+    test_bug_2_4_23_backspace_cancels_block()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
