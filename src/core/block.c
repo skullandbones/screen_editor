@@ -164,16 +164,13 @@ int get_line_block_range(uint16_t row, uint16_t *start_col, uint16_t *end_col)
     return 1;
 }
 
-int do_copy_block(void)
+static int copy_block_to_clipboard(void)
 {
     uint16_t row;
     char line_buf[MAX_ACTIVE_LINE_STRIDE];
 
     if (g_block_mode == BLOCK_MODE_OFF) {
         return -1;
-    }
-    if (g_block_mode == BLOCK_MODE_SELECTING) {
-        solidify_block();
     }
     normalize_block_bounds();
     s_clipboard_len = 0;
@@ -209,6 +206,71 @@ int do_copy_block(void)
     return 0;
 }
 
+int do_copy_block(void)
+{
+    uint16_t orig_cur_row;
+    uint16_t orig_cur_col;
+    uint16_t lines_added = 0;
+    uint16_t i;
+
+    if (g_block_mode == BLOCK_MODE_OFF) {
+        return -1;
+    }
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        solidify_block();
+    }
+    normalize_block_bounds();
+
+    /* If cursor is inside block: ignore copy! */
+    if (check_cursor_in_block(g_cur_doc_row, g_cur_col)) {
+        return 0;
+    }
+
+    if (copy_block_to_clipboard() != 0 || s_clipboard_len == 0) {
+        return 0;
+    }
+
+    for (i = 0; i < s_clipboard_len; i++) {
+        if (s_clipboard_buf[i] == '\n') {
+            lines_added++;
+        }
+    }
+
+    orig_cur_row = g_cur_doc_row;
+    orig_cur_col = g_cur_col;
+
+    /* Paste the extracted block at current cursor */
+    for (i = 0; i < s_clipboard_len; i++) {
+        if (s_clipboard_buf[i] == '\n') {
+            do_enter();
+        } else {
+            do_char_insert(s_clipboard_buf[i]);
+        }
+    }
+
+    /* If copied before or on the block, adjust block coordinates */
+    if (lines_added > 0) {
+        if (orig_cur_row < g_norm_start_row) {
+            g_block_anchor_row += lines_added;
+            g_block_active_row += lines_added;
+            normalize_block_bounds();
+        }
+    } else {
+        /* Single-line block */
+        if (orig_cur_row == g_norm_start_row &&
+            orig_cur_col <= g_norm_start_col) {
+            g_block_anchor_col += s_clipboard_len;
+            g_block_active_col += s_clipboard_len;
+            normalize_block_bounds();
+        }
+    }
+
+    g_doc_modified = 1;
+    g_need_screen_render = 1;
+    g_need_status_render = 1;
+    return 0;
+}
+
 int do_delete_block(void)
 {
     uint16_t row;
@@ -229,18 +291,34 @@ int do_delete_block(void)
                         g_active_line_buf + cut_end, shift_len);
                 g_active_line_len -= (cut_end - g_norm_start_col);
                 g_active_line_buf[g_active_line_len] = '\0';
+                commit_active_line();
             }
         }
     } else {
         /* Multi-line deletion */
+        char tail_buf[MAX_ACTIVE_PAYLOAD];
+        uint16_t tail_len = fetch_line_to_buffer(g_norm_end_row, tail_buf,
+                                                 sizeof(tail_buf));
+        uint16_t tail_start = g_norm_end_col;
+        if (tail_start > tail_len) tail_start = tail_len;
+
         for (row = g_norm_end_row; row > g_norm_start_row; row--) {
             delete_doc_row(row);
         }
         checkout_active_line(g_norm_start_row);
         if (g_norm_start_col < g_active_line_len) {
             g_active_line_len = g_norm_start_col;
-            g_active_line_buf[g_active_line_len] = '\0';
         }
+        if (tail_len > tail_start) {
+            uint16_t copy_cnt = tail_len - tail_start;
+            if (g_active_line_len + copy_cnt < MAX_INPUT_LINE_CHARS) {
+                memcpy(g_active_line_buf + g_active_line_len,
+                       tail_buf + tail_start, copy_cnt);
+                g_active_line_len += copy_cnt;
+            }
+        }
+        g_active_line_buf[g_active_line_len] = '\0';
+        commit_active_line();
     }
 
     cancel_block();
@@ -248,6 +326,7 @@ int do_delete_block(void)
     g_cur_col = g_norm_start_col;
     g_doc_modified = 1;
     g_need_screen_render = 1;
+    g_need_status_render = 1;
     return 0;
 }
 
@@ -283,7 +362,7 @@ int do_paste_block(void)
 
 int do_cut_block(void)
 {
-    if (do_copy_block() < 0) {
+    if (copy_block_to_clipboard() < 0) {
         return -1;
     }
     return do_delete_block();
@@ -291,10 +370,93 @@ int do_cut_block(void)
 
 int do_move_block(void)
 {
-    if (do_cut_block() < 0) {
+    uint16_t move_dest_row;
+    uint16_t move_dest_col;
+    uint16_t src_start_row;
+    uint16_t src_start_col;
+    uint16_t src_end_row;
+    uint16_t src_end_col;
+    uint8_t  dest_is_before = 0;
+
+    if (g_block_mode != BLOCK_MODE_SOLIDIFIED) {
         return -1;
     }
-    return do_paste_block();
+    normalize_block_bounds();
+
+    /* Cannot move block into itself */
+    if (check_cursor_in_block(g_cur_doc_row, g_cur_col)) {
+        return 0;
+    }
+
+    move_dest_row = g_cur_doc_row;
+    move_dest_col = g_cur_col;
+
+    src_start_row = g_norm_start_row;
+    src_start_col = g_norm_start_col;
+    src_end_row = g_norm_end_row;
+    src_end_col = g_norm_end_col;
+
+    if (move_dest_row < src_start_row ||
+        (move_dest_row == src_start_row && move_dest_col < src_start_col)) {
+        dest_is_before = 1;
+    }
+
+    /* 1. Copy block to destination */
+    if (do_copy_block() != 0) {
+        return -1;
+    }
+
+    /* 2. Delete original block */
+    if (dest_is_before) {
+        do_delete_block();
+        g_cur_doc_row = move_dest_row;
+        g_cur_col = move_dest_col;
+    } else {
+        g_block_anchor_row = src_start_row;
+        g_block_anchor_col = src_start_col;
+        g_block_active_row = src_end_row;
+        g_block_active_col = src_end_col;
+        g_block_mode = BLOCK_MODE_SOLIDIFIED;
+        normalize_block_bounds();
+        do_delete_block();
+
+        if (src_start_row == src_end_row) {
+            if (move_dest_row == src_start_row) {
+                uint16_t blk_len = src_end_col - src_start_col;
+                g_cur_doc_row = move_dest_row;
+                g_cur_col = (move_dest_col >= blk_len) ?
+                            (move_dest_col - blk_len) : 0;
+            } else {
+                g_cur_doc_row = move_dest_row;
+                g_cur_col = move_dest_col;
+            }
+        } else {
+            uint16_t k = src_end_row - src_start_row;
+            g_cur_doc_row = (move_dest_row >= k) ?
+                            (move_dest_row - k) : 0;
+            g_cur_col = move_dest_col;
+        }
+    }
+
+    /* Restore solidified block around the moved text */
+    g_block_mode = BLOCK_MODE_SOLIDIFIED;
+    g_block_anchor_row = g_cur_doc_row;
+    g_block_anchor_col = g_cur_col;
+    if (src_start_row == src_end_row) {
+        g_block_active_row = g_cur_doc_row;
+        g_block_active_col = g_cur_col + (src_end_col - src_start_col);
+    } else {
+        uint16_t k = src_end_row - src_start_row;
+        g_block_active_row = g_cur_doc_row + k;
+        g_block_active_col = src_end_col;
+    }
+    normalize_block_bounds();
+
+    g_target_col = g_cur_col;
+    g_doc_modified = 1;
+    g_need_screen_render = 1;
+    g_need_status_render = 1;
+    return 0;
 }
 
 int do_block_menu_popup(void)
