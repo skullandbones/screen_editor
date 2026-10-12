@@ -15,9 +15,9 @@
 #include "../../include/config.h"
 #include "../../include/hal.h"
 
-#define CPM_LOCAL_SLOTS 4
+#define CPM_LOCAL_SLOTS 2
 
-static uint8_t  s_cpm_local_slots[CPM_LOCAL_SLOTS][FAR_SLOT_SIZE];
+extern char     g_scratch_line_buf[MAX_ACTIVE_LINE_STRIDE];
 static uint8_t  s_hbios_present = 0;
 static uint8_t  s_user_bank = 0;
 static uint8_t  s_first_app_bank = 0;
@@ -110,7 +110,7 @@ int hal_mem_init(void)
         }
         return 12;
     }
-    memset(s_cpm_local_slots, 0, sizeof(s_cpm_local_slots));
+    memset(g_scratch_line_buf, 0, CPM_LOCAL_SLOTS * FAR_SLOT_SIZE);
     return 1;
 }
 
@@ -130,7 +130,9 @@ int hal_mem_read_slot(uint16_t slot_id, uint8_t *dest)
         return 0;
     }
     if (slot_id < CPM_LOCAL_SLOTS) {
-        memcpy(dest, s_cpm_local_slots[slot_id], FAR_SLOT_SIZE);
+        const uint8_t *src_buf =
+            (const uint8_t *)&g_scratch_line_buf[slot_id * FAR_SLOT_SIZE];
+        memcpy(dest, src_buf, FAR_SLOT_SIZE);
         return 0;
     }
     return -1;
@@ -152,7 +154,8 @@ int hal_mem_write_slot(uint16_t slot_id, const uint8_t *src)
         return 0;
     }
     if (slot_id < CPM_LOCAL_SLOTS) {
-        memcpy(s_cpm_local_slots[slot_id], src, FAR_SLOT_SIZE);
+        memcpy((uint8_t *)&g_scratch_line_buf[slot_id * FAR_SLOT_SIZE], src,
+               FAR_SLOT_SIZE);
         return 0;
     }
     return -1;

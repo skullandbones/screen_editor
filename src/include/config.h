@@ -31,26 +31,27 @@ extern "C" {
 #define MAX_LINE                1000
 #define MAX_LINE_STRIDE         128
 #define MAX_LINE_CHARS          1000
-#define MAX_INPUT_LINE_CHARS    1000
 #define MAX_CACHE_LINE_CHARS    250
-#define MAX_ACTIVE_LINE_STRIDE  1024
-#define MAX_ACTIVE_PAYLOAD      1022
-#define MAX_ACTIVE_PAYLOAD_LO   254
-#define MAX_ACTIVE_PAYLOAD_HI   3
 #define FAR_SLOT_SIZE           128
 #define FAR_SLOT_PAYLOAD        126
 #define SLOT_TERM               0xFFFF
 #define MAX_COPY_LINE_CHARS     120
 #define MAX_FAR_BANKS           12
 #ifdef __CPM__
+#define MAX_ACTIVE_LINE_STRIDE  256
+#define MAX_ACTIVE_PAYLOAD      254
+#define MAX_INPUT_LINE_CHARS    250
 #define CACHE_SIZE_LINES        16
-#define MAX_DOC_LINES_16K       1024
-#define MAX_DOC_LINES_32K       1024
-#define MAX_DOC_LINES           1024
+#define MAX_DOC_LINES_16K       320
+#define MAX_DOC_LINES_32K       320
+#define MAX_DOC_LINES           320
 #define MAX_VIRTUAL_SLOTS       512
 #define MAX_ACTIVE_SLOTS        512
-#define CLIPBOARD_MAX_CHARS     1024
+#define CLIPBOARD_MAX_CHARS     128
 #else
+#define MAX_ACTIVE_LINE_STRIDE  1024
+#define MAX_ACTIVE_PAYLOAD      1022
+#define MAX_INPUT_LINE_CHARS    1000
 #define CACHE_SIZE_LINES        40
 #define MAX_DOC_LINES_16K       16384
 #define MAX_DOC_LINES_32K       32768
@@ -100,6 +101,10 @@ extern "C" {
 #define KEY_PGUP                262
 #define KEY_PGDN                263
 #define KEY_INS                 264
+#define KEY_SHIFT_UP            265
+#define KEY_SHIFT_DOWN          266
+#define KEY_SHIFT_LEFT          267
+#define KEY_SHIFT_RIGHT         268
 
 #define ESC_TIMEOUT_LOOPS       5000 /* Escape debounce timeout */
 
