@@ -508,7 +508,11 @@ int editor_handle_key(int key)
     case KEY_INS: toggle_insert_mode(); break;
     case KEY_DEL: do_delete(); break;
     case KEY_CTRL_A: cursor_home(); break;
+#ifdef __CPM__
     case KEY_CTRL_E: cursor_end(); break;
+#else
+    case KEY_CTRL_E: cursor_up(); break;
+#endif
     case KEY_CTRL_D: cursor_right(); break;
     case KEY_CTRL_G: jump_file_bottom(); break;
     case KEY_CTRL_T: jump_file_top(); break;
@@ -540,6 +544,7 @@ int editor_handle_key(int key)
                                 g_norm_end_row, g_config.save_format);
             }
         } else {
+#ifdef __CPM__
             strncpy(s_editor_fname, g_current_filename,
                     sizeof(s_editor_fname) - 1);
             s_editor_fname[sizeof(s_editor_fname) - 1] = '\0';
@@ -548,6 +553,18 @@ int editor_handle_key(int key)
                 MODAL_RES_OK && s_editor_fname[0]) {
                 file_save(s_editor_fname, g_config.save_format);
             }
+#else
+            if (g_current_filename[0] == '\0') {
+                s_editor_fname[0] = '\0';
+                if (ui_browser_save_dialog(s_editor_fname,
+                                           sizeof(s_editor_fname)) ==
+                    MODAL_RES_OK && s_editor_fname[0]) {
+                    file_save(s_editor_fname, g_config.save_format);
+                }
+            } else {
+                file_save(NULL, g_config.save_format);
+            }
+#endif
         }
         g_need_screen_render = 1;
         g_need_status_render = 1;
