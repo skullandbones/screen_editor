@@ -277,9 +277,11 @@ viewport panning algorithms defined in `src/core/editor.asm` and
        this rule. The cursor must never land inside a tab.
      - Vertical Alignment Clamping (`ADJUST_COL_TO_TARGET`): If the sticky
        target column `TARGET_COL` falls within the span of an expanded tab
-       (`vis_acc < TARGET_COL < vis_acc + spaces`), the cursor must clamp to
-       the beginning of the tab (`char_idx` / `vis_acc`) rather than resting
-       within the tab.
+       (`vis_acc < TARGET_COL < vis_acc + spaces`), the editor employs
+       snap-forward alignment: the cursor snaps forward to the discrete
+       character boundary directly following the tab (`vis_acc + spaces`),
+       preserving the Tab Exclusion Mandate while keeping the cursor adjacent
+       to indented code rather than retreating to the margin.
 
 3. Horizontal Navigation (Left, Right, Home, End) & Line Wrapping:
    Horizontal cursor movements update both `CUR_COL` and sticky `TARGET_COL`.
@@ -330,13 +332,15 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      2. While `char_idx < len(line)` and `vis_acc < TARGET_COL`:
         - If `line[char_idx] == 0x09` (`KEY_TAB`):
           `spaces = tab_width - (vis_acc % tab_width)`.
-          If `vis_acc + spaces > TARGET_COL`: Break (stop at tab boundary).
-          `vis_acc += spaces`.
+          Advance across tab (snap-forward): `vis_acc += spaces`,
           `char_idx += 1`.
         - Else:
           `vis_acc += 1`.
           `char_idx += 1`.
      3. Set `CUR_COL = char_idx`.
+     Note: When `TARGET_COL` falls across an expanded tab, the loop advances
+     through the tab to snap-forward to the character immediately following
+     the tab, preserving tab exclusion and keeping cursor on indented text.
    - Cursor Up (`CURSOR_UP` / Arrow Up):
      - If `CUR_DOC_ROW == 0`: Blocked (no-op).
      - `CUR_DOC_ROW -= 1`.
