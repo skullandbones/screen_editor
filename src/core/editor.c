@@ -212,8 +212,10 @@ void do_backspace(void)
             prev_len += g_active_line_len;
             prev_buf[prev_len] = '\0';
 
+            uint16_t target_row = g_cur_doc_row - 1;
+            invalidate_active_line();
             delete_doc_row(g_cur_doc_row);
-            g_cur_doc_row--;
+            g_cur_doc_row = target_row;
             checkout_active_line(g_cur_doc_row);
 
             memcpy(g_active_line_buf, prev_buf, prev_len + 1);
@@ -227,6 +229,7 @@ void do_backspace(void)
             g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
             g_doc_modified = 1;
             g_need_screen_render = 1;
+            g_need_status_render = 1;
         }
     }
 }

@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 19 Defects Open (Bugs 2.4.21–2.4.25, 2.4.27–2.4.40).
+- **Status**: Active / 18 Defects Open (Bugs 2.4.22–2.4.25, 2.4.27–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -427,7 +427,7 @@ have been resolved and archived.
       `src/core/ui_modal.c`. Updated `s_help_lines` in `src/core/ui_render.c` to
       render `Arrows / ANSI VT100`. Validated via
       `test_arrow_and_wordstar_navigation` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.21: Off-by-Zero Column Anchor on Backspace Line Join**:
+  - [x] **Bug 2.4.21: Off-by-Zero Column Anchor on Backspace Line Join**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:229-231` (`do_backspace`), when joining
       current line (`g_cur_doc_row`) to previous line (`g_cur_doc_row - 1`)
@@ -438,11 +438,13 @@ have been resolved and archived.
       Because `g_active_line_len` was just assigned `prev_len`, `g_cur_col`
       evaluates to `0`. The cursor is incorrectly anchored to column 0 of the
       joined line instead of the junction boundary (`orig_prev_len`).
-    - *Required Fix*: Preserve the original length of the previous line before
-      concatenation (`uint16_t orig_prev_len = prev_len;`). After deleting the
-      document row and checking out the joined line, set
-      `g_cur_col = orig_prev_len;` and update sticky target column
-      `g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);`.
+    - *Resolution*: Preserved `join_col` before concatenation in
+      `src/core/editor.c`. Invalidated active line before deleting document row
+      to avoid redundant commits. Explicitly assigned `target_row =
+      g_cur_doc_row - 1`, anchored cursor to junction boundary (`g_cur_col =
+      join_col`), updated sticky target column, and triggered status bar
+      rendering. Validated via `test_bug_2_4_21_backspace_line_join` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.22: Delete & Ctrl+D Fail to Delete Active Block Selection**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:240-274` (`do_delete`), pressing `Delete`

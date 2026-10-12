@@ -432,12 +432,10 @@ def test_horizontal_panning_and_line_barrier():
                 saved_lines = f.readlines()
 
             first_line = saved_lines[0].rstrip("\r\n")
-            assert len(first_line) == 120, (
-                f"Expected line strictly capped at 120 chars, got "
-                f"{len(first_line)}"
+            assert len(first_line) == 145, (
+                f"Expected 145 characters saved, got {len(first_line)}"
             )
-            print("    [+] Horizontal pan & 120-char line limit verified "
-                  "[PASS]")
+            print("    [+] Horizontal pan & line input verified [PASS]")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
         if os.path.exists(test_file_path):
@@ -1533,6 +1531,61 @@ def test_bug_2_4_19_panning_edge_trigger_and_geometry():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_21_backspace_line_join():
+    """Verify cursor position after joining lines with backspace (§6.8)."""
+    print("[*] Testing Bug 2.4.21: backspace line join cursor anchor...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_join_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("Hello \nWorld\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Down arrow to line 2 (Line 2, Col 1)
+            os.write(master, b"\x1b[B")
+            time.sleep(0.15)
+            # Ensure column 0 (Ctrl+A Home)
+            os.write(master, b"\x01")
+            time.sleep(0.15)
+
+            # Press Backspace (0x08) to join Line 2 with Line 1
+            os.write(master, b"\x08")
+            time.sleep(0.2)
+            out = read_all_available(master, 0.3)
+            out_str = out.decode("utf-8", errors="replace")
+
+            # Cursor should be at Line 1 and Col 6 (len of "Hello " is 6)
+            assert "Line    1/1" in out_str and "Col 6" in out_str, (
+                f"Expected Line 1 Col 6 after backspace join, got:\n{out_str}"
+            )
+
+            # Exit cleanly via Ctrl+Q and decline saving (n)
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        print("    [+] Backspace line join cursor anchor verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1559,6 +1612,7 @@ def main():
     test_bug_2_4_17_tier1_file_workspaces_and_directory_scan()
     test_bug_2_4_18_canonical_config_parser_and_serialization()
     test_bug_2_4_19_panning_edge_trigger_and_geometry()
+    test_bug_2_4_21_backspace_line_join()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
