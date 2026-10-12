@@ -21,13 +21,32 @@
 #define MAX_ACTIVE_SLOTS        4096
 #endif
 
-static uint8_t    s_slot_allocated[MAX_ACTIVE_SLOTS];
+#define SLOT_BITMAP_BYTES       ((MAX_ACTIVE_SLOTS + 7) / 8)
+static uint8_t    s_slot_bitmap[SLOT_BITMAP_BYTES];
 static uint16_t   s_free_slot_hint = 0;
-static uint32_t   s_total_allocations = 0;
+static uint16_t   s_total_allocations = 0;
+static const uint8_t s_bit_mask[8] = {
+    0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80
+};
+
+static int is_slot_allocated(uint16_t id)
+{
+    return (s_slot_bitmap[id >> 3] & s_bit_mask[id & 7]) != 0;
+}
+
+static void set_slot_allocated(uint16_t id)
+{
+    s_slot_bitmap[id >> 3] |= s_bit_mask[id & 7];
+}
+
+static void clear_slot_allocated(uint16_t id)
+{
+    s_slot_bitmap[id >> 3] &= (uint8_t)~s_bit_mask[id & 7];
+}
 
 void mem_init_paging(void)
 {
-    memset(s_slot_allocated, 0, sizeof(s_slot_allocated));
+    memset(s_slot_bitmap, 0, sizeof(s_slot_bitmap));
     s_free_slot_hint = 0;
     s_total_allocations = 0;
     hal_mem_init();
@@ -38,9 +57,9 @@ uint16_t mem_alloc_slot(void)
     uint16_t i;
     for (i = 0; i < MAX_ACTIVE_SLOTS; i++) {
         uint16_t idx = (s_free_slot_hint + i) % MAX_ACTIVE_SLOTS;
-        if (!s_slot_allocated[idx]) {
+        if (!is_slot_allocated(idx)) {
             far_slot_t slot_init;
-            s_slot_allocated[idx] = 1;
+            set_slot_allocated(idx);
             slot_init.next_slot = SLOT_TERM;
             memset(slot_init.payload, 0, FAR_SLOT_PAYLOAD);
             hal_mem_write_slot(idx, (const uint8_t *)&slot_init);
@@ -54,8 +73,8 @@ uint16_t mem_alloc_slot(void)
 
 void mem_free_slot(uint16_t slot_id)
 {
-    if (slot_id < MAX_ACTIVE_SLOTS && s_slot_allocated[slot_id]) {
-        s_slot_allocated[slot_id] = 0;
+    if (slot_id < MAX_ACTIVE_SLOTS && is_slot_allocated(slot_id)) {
+        clear_slot_allocated(slot_id);
         if (s_total_allocations > 0) {
             s_total_allocations--;
         }
@@ -85,7 +104,7 @@ void mem_free_line_chain(uint16_t slot_id)
 
 int mem_write_slot(uint16_t slot_id, const uint8_t *src)
 {
-    if (slot_id >= MAX_ACTIVE_SLOTS || !s_slot_allocated[slot_id] || !src) {
+    if (slot_id >= MAX_ACTIVE_SLOTS || !is_slot_allocated(slot_id) || !src) {
         return -1;
     }
     return hal_mem_write_slot(slot_id, src);
@@ -93,7 +112,7 @@ int mem_write_slot(uint16_t slot_id, const uint8_t *src)
 
 int mem_read_slot(uint16_t slot_id, uint8_t *dest)
 {
-    if (slot_id >= MAX_ACTIVE_SLOTS || !s_slot_allocated[slot_id] || !dest) {
+    if (slot_id >= MAX_ACTIVE_SLOTS || !is_slot_allocated(slot_id) || !dest) {
         return -1;
     }
     return hal_mem_read_slot(slot_id, dest);
