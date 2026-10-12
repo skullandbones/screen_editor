@@ -167,6 +167,24 @@ class TestConfig(unittest.TestCase):
 
         print("[+] Step 4: Canonical discovery rules verified.", flush=True)
 
+    def test_native_screen_geometry(self):
+        """Step 5: Verify NATIVE screen geometry handling (Bug 2.7.57)."""
+        print(
+            "[*] Step 5: Testing NATIVE screen geometry handling...",
+            flush=True,
+        )
+        self.cfg.set("screen", "NATIVE")
+        self.assertTrue(self.cfg.is_native_screen)
+
+        from unittest.mock import patch
+        mock_sz = os.terminal_size((140, 48))
+        with patch("os.get_terminal_size", return_value=mock_sz):
+            self.assertEqual(self.cfg.screen_geometry, (140, 48))
+            self.assertEqual(self.cfg.screen_cols, 140)
+            self.assertEqual(self.cfg.screen_rows, 48)
+
+        print("[+] Step 5: NATIVE screen geometry verified.", flush=True)
+
 
 if __name__ == "__main__":
     t0 = time.time()

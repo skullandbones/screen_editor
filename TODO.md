@@ -648,8 +648,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.56
-  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.57–2.7.59 Open).
+- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.57
+  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.58–2.7.59 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1409,15 +1409,18 @@ have been resolved and archived.
       (option 1), clearing the screen to prevent visual debris. Validated via
       Step 45 in `test_editor.py`
       (`test_bug_2_7_56_screen_clear_on_geometry_switch`).
-  - [ ] **Bug 2.7.57: Config Subsystem Lacks NATIVE Screen Geometry Support**:
+  - [x] **Bug 2.7.57: Config Subsystem Lacks NATIVE Screen Geometry Support**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
     - *Symptom*: Setting `SCREEN=NATIVE` in `SE.CFG` or via `config.set()`
       evaluates to fixed `(120, 40)` instead of native host terminal size.
     - *Root Cause*: In `ports/python/se/config.py:35-50`, `screen_geometry`
       only checks if `SCREEN == "80X24"` and falls back to `(120, 40)` for all
       other values, lacking support for Option 3 (`NATIVE`).
-    - *Action Required*: Support `"NATIVE"` in `Config.screen_geometry` to
-      query dynamic terminal dimensions. Add unit test in `test_config.py`.
+    - *Resolution*: In `ports/python/se/config.py`, added `NATIVE` screen
+      geometry handling to `Config.screen_geometry`, querying dynamic
+      terminal dimensions via `os.get_terminal_size()` with safe fallback, and
+      added `is_native_screen` property. Validated via Step 5 in
+      `test_config.py` (`test_native_screen_geometry`).
   - [ ] **Bug 2.7.58: Configuration Manager Lacks Native Screen Mode Toggle**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
     - *Symptom*: Configuration Manager option 1 only toggles between 80x24 and
