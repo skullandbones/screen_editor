@@ -29,7 +29,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -49,7 +49,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -104,8 +104,10 @@ def drain_all(master_fd, quiet_time=0.1):
     return buf
 
 
-def main():
-    emu_bin, rom_file, img_file, se_bin = find_paths()
+def main(use_sec=False):
+    emu_bin, rom_file, img_file, se_bin = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     master, slave = os.openpty()
     tty.setraw(slave)
@@ -142,10 +144,11 @@ def main():
 
         print("[+] Step 2: Switched to Drive C>.", flush=True)
 
-        # Launch SE with file 2.TXT
-        print("[*] Step 3: Launching: se 2.TXT...", flush=True)
+        # Launch editor binary with file 2.TXT
+        print(f"[*] Step 3: Launching: {cmd_name.decode()} 2.TXT...",
+              flush=True)
         time.sleep(0.5)
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
 
         # Capture loader screen output until editor mode reached
         ed_out = read_until(master, b"C:2.TXT", timeout=35.0)
@@ -281,4 +284,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(main(use_sec=use_sec_arg))

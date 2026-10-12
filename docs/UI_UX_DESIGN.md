@@ -23,6 +23,14 @@ workstation or Raspberry Pi must encounter an identical visual aesthetic,
 identical screen geometry, identical modal lifecycles, and identical canonical
 keybindings.
 
+Keybinding Discipline & WordStar Diamond Deprecation:
+All SE implementations adhere strictly to the canonical keybinding matrix
+(Section 10). Directional navigation is provided exclusively by standard
+ANSI VT100 arrow keys and standard navigation shortcuts. Legacy WordStar
+diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly not
+supported across any surface or modal dialog to eliminate command collision
+with Save, Delete, End, and Cut.
+
 2. Terminal Architecture, Geometries & Character Budget
 --------------------------------------------------------------------------------
 1. Standard Screen Geometries:
@@ -249,6 +257,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
 
 3. Horizontal Navigation (Left, Right, Home, End) & Line Wrapping:
    Horizontal cursor movements update both `CUR_COL` and sticky `TARGET_COL`.
+   Directional movement is handled exclusively by ANSI VT100 arrow keys;
+   legacy WordStar diamond navigation (`Ctrl+S` left, `Ctrl+D` right) is
+   unsupported to prevent collisions with Save File and Forward Delete.
    - Cursor Left (`CURSOR_LEFT` / Arrow Left):
      - If `CUR_COL > 0`: `CUR_COL -= 1`.
      - If `CUR_COL == 0` and `CUR_DOC_ROW > 0`:
@@ -281,6 +292,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
 
 4. Vertical Navigation & Sticky Visual Column (`TARGET_COL`):
    Vertical cursor movement preserves `TARGET_COL` across line boundaries.
+   Directional movement is handled exclusively by ANSI VT100 arrow keys;
+   legacy WordStar diamond navigation (`Ctrl+E` up, `Ctrl+X` down) is
+   unsupported to prevent collisions with End of Line and Cut/Move Block.
    Clamping cursor position when passing through shorter lines does NOT mutate
    `TARGET_COL`, allowing the cursor to return to its original visual column
    when encountering subsequent longer lines.
@@ -322,6 +336,12 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - If `CUR_DOC_ROW >= TOP_DOC_ROW + step`:
        `TOP_DOC_ROW = min(max_row, TOP_DOC_ROW + step)`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
+   - Boundary Clamping Status Bar Refresh:
+     - Cursor navigation movements (Arrow Up, Down, Left, Right, Home, End,
+       Page Up, Page Down) unconditionally set `NEED_STATUS_RENDER = 1`.
+     - Even when movement is clamped at document boundaries (e.g. Line 0,
+       EOF, Col 0, EOL at EOF), the status bar is refreshed upon console
+       idle to synchronize terminal state with the active position.
 
 5. Viewport Window Scrolling & Boundary Constraints:
    - Document Viewport Boundaries:
@@ -335,10 +355,12 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - If `CUR_DOC_ROW < TOP_DOC_ROW`: `CUR_DOC_ROW = TOP_DOC_ROW`.
      - Realign `CUR_COL` via `ADJUST_COL_TO_TARGET()`.
 
-6. Horizontal Panning Engine (`[Pan +40]`) & 120-Column Line Barrier:
-   - Physical Line Length Barrier:
-     - Maximum physical line length is strictly 120 characters
-       (`MAX_LINE = 120`). Character insertion beyond 120 is blocked.
+6. Horizontal Panning Engine (`[Pan +40]`) & Line Capacity Limit:
+   - Line Capacity Limit:
+     - Maximum visual/input line length is 1,000 characters
+       (`MAX_INPUT_LINE_CHARS = 1000`, `MAX_LINE_CHARS = 1000`).
+     - Backed by dynamic multi-stride Far RAM allocation and 1,024-byte
+       active line buffers. Character insertion beyond 1,000 is blocked.
    - Horizontal Pan Quantum (+40 Columns):
      - On standard 80-column screens, columns beyond column 79 are accessed via
        horizontal viewport panning in increments of 40 columns.
@@ -373,6 +395,77 @@ viewport panning algorithms defined in `src/core/editor.asm` and
    `CUR_COL` is an integer byte offset, the hardware cursor always aligns to
    discrete character boundaries and can never be positioned within a tab.
 
+8. Deletion Operations & Line Joining Dynamics (Backspace & Delete):
+   Deletion mechanics govern both inline character removal and line structure
+   mutations across buffer rows. All variants must implement identical
+   boundary, joining, and cursor synchronization rules:
+   - Backward Deletion (`BACKSPACE` / `KEY_BACKSPACE` / `0x08` / `Ctrl+H`):
+     - Inline Deletion (`CUR_COL > 0`):
+       - Removes character immediately preceding cursor (`CUR_COL - 1`).
+       - Characters from `CUR_COL` to end of line shift left by one column.
+       - Cursor decrements: `CUR_COL -= 1`.
+       - Updates sticky visual column: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+       - Marks document modified: `MODIFIED = 1`.
+       - Redraws active line (`NEED_LINE_RENDER = 1`) and updates status bar.
+     - Column 0 Line Joining (`CUR_COL == 0`):
+       - If `CUR_DOC_ROW > 0`:
+         - Let `prev_len = len(line[CUR_DOC_ROW - 1])` and
+           `cur_len = len(line[CUR_DOC_ROW])`.
+         - Combined Length Barrier Check:
+           If `prev_len + cur_len <= 120` (canonical `MAX_LINE` limit):
+           - Appends current line contents to previous line:
+             `line[CUR_DOC_ROW - 1] += line[CUR_DOC_ROW]`.
+           - Deletes row `CUR_DOC_ROW` from document line pointer table.
+           - Decrements total lines: `DOC_TOTAL_LINES -= 1`.
+           - Moves cursor up to previous row: `CUR_DOC_ROW -= 1`.
+           - Positions cursor at exact junction boundary: `CUR_COL = prev_len`.
+           - Updates sticky target: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+           - Marks document modified: `MODIFIED = 1`.
+           - Triggers full viewport re-render (`NEED_SCREEN_RENDER = 1`).
+           - Viewport Scroll: If `CUR_DOC_ROW < TOP_DOC_ROW`, scrolls up:
+             `TOP_DOC_ROW = CUR_DOC_ROW`.
+           If `prev_len + cur_len > 120`:
+           - Join is inhibited (no-op) to enforce the 120-column line limit
+             and prevent buffer overflow or unplanned line truncation.
+       - If `CUR_DOC_ROW == 0` (top of document):
+         - Blocked (no-op; beginning of file reached).
+     - Block Mode Interaction:
+       - If dynamic block selection is active (`BLOCK_ACTIVE == 1`), pressing
+         Backspace cancels selection (`BLOCK_ACTIVE = 0`) to safeguard
+         unintended content modification.
+   - Forward Deletion (`DELETE` / `KEY_DELETE` / `0x7F` / `Ctrl+D` / `0x04`):
+     - Inline Deletion (`CUR_COL < len(line[CUR_DOC_ROW])`):
+       - Removes the character directly under the cursor (`CUR_COL`).
+       - Characters following `CUR_COL` shift left by one column.
+       - Cursor position remains stationary (`CUR_COL` unchanged).
+       - Updates sticky visual column: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+       - Marks document modified: `MODIFIED = 1`.
+       - Redraws active line (`NEED_LINE_RENDER = 1`) and updates status bar.
+     - End of Line Pull-Up / Joining (`CUR_COL >= len(line[CUR_DOC_ROW])`):
+       - If `CUR_DOC_ROW + 1 < DOC_TOTAL_LINES`:
+         - Let `cur_len = len(line[CUR_DOC_ROW])` and
+           `next_len = len(line[CUR_DOC_ROW + 1])`.
+         - Combined Length Barrier Check:
+           If `cur_len + next_len <= 120` (canonical `MAX_LINE` limit):
+           - Appends next line contents to current line:
+             `line[CUR_DOC_ROW] += line[CUR_DOC_ROW + 1]`.
+           - Deletes row `CUR_DOC_ROW + 1` from document pointer table.
+           - Decrements total lines: `DOC_TOTAL_LINES -= 1`.
+           - Cursor remains stationary at `CUR_COL = cur_len` (junction point).
+           - Updates sticky target: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+           - Marks document modified: `MODIFIED = 1`.
+           - Triggers full viewport re-render (`NEED_SCREEN_RENDER = 1`).
+           If `cur_len + next_len > 120`:
+           - Pull-up is inhibited (no-op) to preserve 120-column line limit.
+       - If `CUR_DOC_ROW + 1 >= DOC_TOTAL_LINES` (end of document):
+         - Blocked (no-op; end of file reached).
+     - Block Mode Interaction:
+       - If a block is active (`BLOCK_ACTIVE == 1` or `2`):
+         - Pressing `Delete` or `Ctrl+D` solidifies dynamic selection and
+           deletes the entire highlighted block range (`DO_DELETE_BLOCK`).
+         - Resets `BLOCK_ACTIVE = 0`, repositions cursor at block start,
+           marks `MODIFIED = 1`, and re-renders the screen.
+
 7. Tier 1 Centered Workspaces
 --------------------------------------------------------------------------------
 Non-document full-screen workspaces are rendered as mathematically centered
@@ -406,6 +499,30 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Keyboard Dispatch & Keystroke Protocol:
+     - Document Entry Keys: Only `E` / `e` or `Enter` (`KEY_ENTER`) may
+       enter or resume the editor workspace.
+     - Direct Action Hotkeys:
+       - `N` / `n`: Create new empty document (`HANDLE_SPLASH_NEW`).
+       - `O` / `o` / `Ctrl+O`: Open File browser (`HANDLE_SPLASH_OPEN`).
+       - `S` / `s` / `Ctrl+S`: Save File workspace (`DO_SPLASH_SAVE`).
+       - `W` / `w` / `Ctrl+W`: Close active file (`HANDLE_SPLASH_CLOSE`).
+       - `L` / `l` / `Ctrl+L`: Goto Line prompt (`DO_SPLASH_GOTO_LINE`).
+       - `A` / `a`: Show About dialog (`DO_ABOUT_SCREEN`).
+       - `M` / `m`: Show Memory Map screen (`DO_MEM_INFO_SCREEN`).
+       - `P` / `p`: Show Plugin Manager screen (`DO_SPLASH_PLUGIN_SCREEN`).
+       - `Ctrl+P`: Context-Aware Plugin Palette (`DO_CONTEXT_PLUGIN_POPUP`).
+       - `C` / `c`: Open Configuration Manager (`DO_CONFIG_SCREEN`).
+       - `1`: Toggle 120x40 modern terminal mode (`DO_SET_120X40`).
+       - `2`: Toggle 80x24 classic terminal mode (`DO_SET_80X24`).
+       - `Q` / `q` / `Ctrl+Q`: Safe quit / exit back to OS.
+     - Non-Entry Key Exclusion & Silent Rejection Mandate:
+       - The Space bar (`0x20`), ANSI cursor arrow keys (`Up`, `Down`, `Left`,
+         `Right`), and all unassigned keystrokes MUST NOT enter editor mode.
+         They must be silently ignored without altering document or buffer
+         state and without re-rendering the splash workspace or emitting
+         terminal escape sequences.
+
 
 3. Help Screen Layout (`Ctrl+K`):
    - Content Width: 70 columns, Content Height: 17 lines.
@@ -612,6 +729,20 @@ or display notifications.
      +--------------------------------------------------+
      ```
 
+     File Not Found Modal Alert (50 cols x 7 rows):
+     ```text
+     +--------------------------------------------------+
+     |                  File Not Found                  |
+     +--------------------------------------------------+
+     |            'FILENAME' was not found.             |
+     |        Specified file not found on disk.         |
+     |            Press any key to continue             |
+     +--------------------------------------------------+
+     ```
+     - Displays upon attempting to open or insert a non-existent file.
+     - Dismissible by any keystroke; returns user directly back to the
+       open or insert directory browser workspace with input buffer preserved.
+
    Archetype B: Confirmation Query (`show_confirm`)
      Used for binary decisions (Save modifications?, Overwrite file?).
      Options formatted with spaces only—no slashes `/` or pipes `|`.
@@ -627,11 +758,45 @@ or display notifications.
      |           [Y]es      [N]o      [ESC]=Cancel      |
      +--------------------------------------------------+
      ```
+     Overwrite File Modal Dialog (50 cols x 7 rows):
+     ```text
+     +--------------------------------------------------+
+     |                  Overwrite File                  |
+     +--------------------------------------------------+
+     |       Existing file contents will be lost        |
+     |         File already exists. Overwrite?          |
+     |          [Y]es      [N]o      [ESC]=Cancel       |
+     +--------------------------------------------------+
+     ```
+     - Displays upon attempting to save to an existing destination file.
+     - Terminal cursor positioned directly on prompt line after `Overwrite? `
+       (Col 40).
+     - Confirmed via `Y`/`y`, cancelled via `N`/`n` or `ESC`.
 
    Archetype C: Single-Line Text Input (`show_input`)
      Used for text parameters (Find string, Replace string, Goto Line).
      Target input field enclosed in bracket pair `[  text  ]`.
      Terminal cursor placed directly inside bracket field.
+     Supports standard editing keys: character entry, Backspace (deletes left),
+     Delete / Ctrl+D (deletes under cursor), Left/Right arrows, and Home/End.
+     WordStar diamond key mappings (e.g. `Ctrl+S` for left) are not supported.
+     Find Text Modal Dialog (50 cols x 7 rows):
+     ```text
+     +------------------------------------------------+
+     |                   Find Text                    |
+     +------------------------------------------------+
+     |       Search Pattern: [Case Sensitive  ]       |
+     |      Find: [                            ]      |
+     | [Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel |
+     +------------------------------------------------+
+     ```
+     - Toggle case mode with Tab / Ctrl+I (switches between `[Case Sensitive  ]`
+       and `[Case Insensitive]`).
+     - Terminal cursor positioned directly inside `Find: [ ... ]` at insertion
+       offset.
+     - When opened with an active block, the selection text is pre-filled.
+
+     Goto Line Modal Dialog (50 cols x 7 rows):
      ```text
      +--------------------------------------------------+
      |                     Goto Line                    |
@@ -720,16 +885,83 @@ or display notifications.
 | `Left Arrow` | ANSI  | `KEY_LEFT`    | Move cursor Left one character      |
 | `Right Arrow`| ANSI  | `KEY_RIGHT`   | Move cursor Right one character     |
 
-> [!NOTE]
-> Architectural Decision on Navigation Keys:
+> [!IMPORTANT]
+> Architectural Policy on Navigation Keys & WordStar Diamond Deprecation:
 > Canonical SE mappings designate `Ctrl+S` for Save File, `Ctrl+D` for Delete
 > Forward, `Ctrl+E` for End of Line, and `Ctrl+X` for Cut/Move Block.
-> Directional cursor navigation across all variants is provided via standard
-> ANSI VT100 arrow keys (`Up`, `Down`, `Left`, `Right`) and standard motion
-> shortcuts (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G` Bottom).
-> WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is dropped
-> across CP/M and ported targets to eliminate command collision with Save,
-> Delete, End, and Cut.
+> Directional cursor navigation across all variants and surfaces is provided
+> exclusively via standard ANSI VT100 arrow keys (`Up`, `Down`, `Left`,
+> `Right`) and standard motion shortcuts (`Ctrl+A` Home, `Ctrl+E` End,
+> `Ctrl+T` Top, `Ctrl+G` Bottom, `Ctrl+U` PgUp, `Ctrl+V` PgDn).
+>
+> WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly
+> NOT supported anywhere in SE (including the Document Editor, Centered
+> Workspaces, Directory Browsers, and Tier 2 Modal Dialogs). Implementations
+> must never alias WordStar diamond keys to directional navigation, as doing
+> so creates fatal command collisions with Save, Delete, End, and Cut.
+
+1. Operational Descriptions for Deletion Keys:
+   Canonical SE distinguishes between backward deletion, forward deletion, and
+   block range deletion across the primary editor, active blocks, and modal
+   dialogs:
+
+   - `Backspace` (`KEY_BACKSPACE`, `0x08`, `Ctrl+H`):
+     - Editor Workspace: Deletes character to the left of the cursor
+       (`CUR_COL - 1`) and moves cursor left. When pressed at column 0
+       (`CUR_COL == 0`), joins the current line to the previous line (landing
+       the cursor at the junction column) provided the combined line length
+       does not exceed 120 columns; blocked at Row 0 Column 0.
+     - Block-Active Context: Cancels dynamic block (`BLOCK_ACTIVE = 0`)
+       to safeguard highlighted text against accidental deletion.
+     - Modal Input Dialogs (Archetype C): Deletes character preceding the
+       input cursor inside the bracket field `[  ]`, shifting trailing text
+       left and decrementing cursor index; blocked at index 0.
+
+   - `Delete` (`KEY_DELETE`, `0x7F`, ANSI `\x1b[3~`) & `Ctrl+D` (`0x04`):
+     - Editor Workspace: Deletes the character directly under the cursor
+       without altering cursor column. When pressed at the end of a line
+       (`CUR_COL >= len(line)`), pulls up and joins the next line to the
+       current line provided the combined length does not exceed 120 columns;
+       blocked at the end of the last line.
+     - Block-Active Context: Solidifies selection and deletes the entire
+       highlighted block range (`DO_DELETE_BLOCK`), resetting block mode and
+       moving following text up to the block start.
+     - Modal Input Dialogs (Archetype C): Deletes the character directly under
+       the input cursor inside the bracket field `[  ]`, shifting trailing text
+       left without moving the cursor index; blocked at end of input text.
+
+2. Operational Descriptions for Directional Navigation:
+   Directional navigation across all surfaces is performed exclusively with
+   standard VT100 ANSI arrow keys and dedicated motion shortcuts:
+   - `Up Arrow` (`KEY_UP`): Moves cursor up one row; realigns to sticky
+     `TARGET_COL`. Blocked at top of document.
+   - `Down Arrow` (`KEY_DOWN`): Moves cursor down one row; realigns to sticky
+     `TARGET_COL`. Blocked at bottom of document.
+   - `Left Arrow` (`KEY_LEFT`): Moves cursor left one column; wraps to previous
+     line at column 0. In modal input fields, shifts cursor index left.
+   - `Right Arrow` (`KEY_RIGHT`): Moves cursor right one column; wraps to next
+     line at end of line. In modal input fields, shifts cursor index right.
+   - Motion Shortcuts: `Ctrl+A` (Home / Start of input), `Ctrl+E` (End of line
+     / End of input), `Ctrl+T` (Top of document), `Ctrl+G` (Bottom of
+     document), `Ctrl+U` (Page Up), `Ctrl+V` (Page Down without active block).
+   - WordStar Prohibition: WordStar diamond navigation keys (`Ctrl+S`,
+     `Ctrl+D`, `Ctrl+E`, `Ctrl+X`) are strictly not supported for navigation
+     in any editor workspace or modal input dialog.
+
+3. Escape Sequence Tokenization & Leakage Prevention:
+   - Atomic Escape Sequence Parsing:
+     All terminal implementations (CP/M BIOS, Linux POSIX stdin, Next)
+     must discretely tokenize multi-byte escape sequences (e.g. `\x1b[A`,
+     `\x1b[B`, `\x1b[C`, `\x1b[D`, `\x1b[1~`..`\x1b[6~`, `\x1bOA`..`\x1bOF`).
+   - Anti-Leakage Invariant:
+     When an escape sequence begins with `ESC` followed by `[` or `O`, the HAL
+     input decoder must wait with sufficient timeout to assemble the
+     entire sequence. If an incomplete or unrecognized escape sequence is
+     received, the HAL must drain and discard all sequence bytes
+     atomically. Under NO circumstances may trailing sequence characters
+     (such as `'C'` from `\x1b[C`) be leaked back into the console stream as
+     regular typed keystrokes, as doing so erroneously triggers hotkeys
+     (e.g. Configuration Manager on `'C'`) or corrupts text buffers.
 
 11. The Ten UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
@@ -765,9 +997,13 @@ ten anti-patterns:
    - Drawing a child pop-up directly over an unhidden parent pop-up.
    - Remedy: Hide parent before showing child; redraw parent on child close.
 
-8. Legacy Hotkey Forms & Delimiters:
+8. Legacy Hotkey Forms & WordStar Aliasing:
    - Using `Y:Yes, N:No` forms or delimiters like `/` and `|` between choices.
-   - Remedy: Format options with brackets `[Y]es   [N]o` separated by spaces.
+   - Aliasing legacy WordStar diamond navigation keys (`^S`, `^D`, `^E`, `^X`)
+     to cursor movement in editor or modal input loops, colliding with Save,
+     Forward Delete, End of Line, and Cut.
+   - Remedy: Format options with brackets `[Y]es   [N]o` separated by spaces;
+     restrict directional navigation strictly to standard ANSI arrow keys.
 
 9. Non-ESC Cancellation & Status Pop-up Lock:
    - Using `Ctrl+C` or `q`/`Q` to cancel inputs, or requiring specific keys
@@ -932,3 +1168,22 @@ specific architectural adaptations.
        On modern platforms (Linux, macOS), plugins can mount virtual CP/M disk
        images (`.DSK`, `.IMG`), retro archives (`.LBR`, `.ARK`), or remote
        VFS streams, rendering them through SE's canonical directory browser.
+
+4. CP/M Binary Footprint, TPA Headroom & BSS Trimming:
+   - Load Origin & BDOS Boundary:
+     On CP/M systems, `.COM` executables load at `0x0100` in the Transient
+     Program Area (TPA). The execution space is bounded by the BDOS entry
+     vector at `0x0006`, pointing to the base of BDOS (e.g. `0xD800` on
+     RomWBW RC2014 CP/M 2.2, giving a maximum capacity of 55,040 bytes /
+     53.75 KB).
+   - CCP Command Loading Safeguards:
+     When executing a command, the CP/M Console Command Processor (CCP) loads
+     the binary sequentially into the TPA. If the disk binary size extends to
+     or past the CCP/BDOS boundary, CCP rejects the command with `BAD LOAD`.
+   - BSS Separation & Memory Discipline:
+     All CP/M ports (`SE.COM`, `SEC.COM`) must ensure uninitialized buffers
+     (BSS) are not emitted as zero-fill bytes into the disk executable.
+     For C-based builds (`SEC.COM`), BSS trimming must be enabled
+     (`CRT_TRIM_BSS=1`) and total combined runtime memory (Code + Data + BSS)
+     must fit strictly below BDOS (`0xD800`), guaranteeing positive TPA
+     headroom.

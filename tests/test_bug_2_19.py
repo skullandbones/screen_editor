@@ -30,7 +30,7 @@ import subprocess
 import re
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -50,7 +50,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     help_bin = os.path.join(repo_root, "plugins", "HELP.OVL")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
@@ -107,11 +107,13 @@ def setup_disk_files(
 ):
     # Remove and copy SE.COM
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
+        target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    subprocess.run(
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, target_cpm],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     subprocess.run(
-        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
         check=True
     )
     # Remove and copy HELP.OVL
@@ -125,7 +127,7 @@ def setup_disk_files(
     )
 
 
-def test_help_screen_centering():
+def test_help_screen_centering(use_sec=False):
     print("[*] Starting Bug 2.19 Help Screen Centering Test...")
     (
         repo_root, emu_bin, rom_file, img_file, se_bin, help_bin,
@@ -162,7 +164,7 @@ def test_help_screen_centering():
         time.sleep(0.3)
 
         # Launch SE.COM to splash screen
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         ok, out = read_until(master, b"SE - Screen Editor", timeout=45.0)
         assert ok, f"Splash screen not displayed: {out}"
         print("[+] Splash screen loaded.")
@@ -357,4 +359,5 @@ def test_help_screen_centering():
 
 
 if __name__ == "__main__":
-    sys.exit(test_help_screen_centering())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(test_help_screen_centering(use_sec=use_sec_arg))

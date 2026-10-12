@@ -26,7 +26,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -46,7 +46,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -100,11 +100,13 @@ def setup_disk_files(
     repo_root, cpmcp_bin, cpmrm_bin, img_file, se_bin, exist_file
 ):
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
+        target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    subprocess.run(
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, target_cpm],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     subprocess.run(
-        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
         check=True
     )
     subprocess.run(
@@ -117,11 +119,13 @@ def setup_disk_files(
     )
 
 
-def test_overwrite_cancellation():
+def test_overwrite_cancellation(use_sec=False):
     print("[*] Starting Bug 2.21 Overwrite Cancellation Test...")
     (
         repo_root, emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
-    ) = find_paths()
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     exist_tmp = "/tmp/TEST_BUG_2_21_EXIST.TXT"
     with open(exist_tmp, "wb") as f:
@@ -158,7 +162,7 @@ def test_overwrite_cancellation():
         time.sleep(0.3)
 
         # Launch SE.COM directly into editor with existing document
-        os.write(master, b"se EXIST.TXT\r")
+        os.write(master, cmd_name + b" EXIST.TXT\r")
         ok, out = read_until(master, b"^K: Editor keys", timeout=30.0)
         assert ok, f"Editor not loaded: {out}"
         print("[+] Editor loaded with existing document.")
@@ -275,4 +279,5 @@ def test_overwrite_cancellation():
 
 
 if __name__ == "__main__":
-    sys.exit(test_overwrite_cancellation())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(test_overwrite_cancellation(use_sec=use_sec_arg))

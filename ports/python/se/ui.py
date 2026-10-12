@@ -3,6 +3,7 @@ UI rendering engine, universal status bar, and surface taxonomy for SE editor.
 Enforces column 0 tilde discipline, viewport clipping, and screen centering.
 """
 
+import os
 from typing import List, Optional, Tuple
 from se.buffer import (
     DocumentBuffer,
@@ -267,3 +268,125 @@ class UIRenderer:
             self.term.locate(prompt_row, prompt_col)
 
         self.term.flush()
+
+    def render_directory_workspace(
+        self,
+        mode: str,
+        current_dir: str,
+        files: List[str],
+        page_idx: int,
+        page_count: int,
+        input_text: str,
+        cursor_pos: int,
+        buf: DocumentBuffer,
+        format_cpm: bool = True,
+        geometry_str: str = "80x24",
+    ):
+        """
+        Render full-screen Tier 1 Directory Browser workspace.
+        Supports Open, Save, Insert, and Block Save modes.
+        """
+        cols = self.term.cols
+        rows = self.term.rows
+        body_rows = rows - 1
+
+        num_cols = 7 if cols >= 120 else 5
+        col_width = 16 if cols >= 120 else 15
+        grid_rows = 28 if rows >= 40 else 12
+        rule_width = min(cols - 2, 108 if cols >= 120 else 68)
+        page_capacity = num_cols * grid_rows
+
+        mode_titles = {
+            "open": "OPEN FILE",
+            "save": "SAVE FILE",
+            "insert": "INSERT FILE",
+            "save_block": "SAVE BLOCK",
+        }
+        title_mode = mode_titles.get(mode, "DIRECTORY")
+        dir_label = os.path.basename(current_dir) or current_dir
+        title_str = f"{title_mode} (DIRECTORY - {dir_label}/)"
+        if len(title_str) > rule_width:
+            title_str = title_str[: rule_width - 4] + "...)"
+
+        hr_eq = "=" * rule_width
+        hr_dash = "-" * rule_width
+        title_centered = title_str.center(rule_width)
+
+        start_idx = page_idx * page_capacity
+        page_files = files[start_idx : start_idx + page_capacity]
+
+        grid_lines = []
+        for r in range(grid_rows):
+            r_files = page_files[r * num_cols : (r + 1) * num_cols]
+            if r_files:
+                line_items = [
+                    f[: col_width - 1].ljust(col_width) for f in r_files
+                ]
+                grid_lines.append("  " + "".join(line_items).rstrip())
+            elif r == 0 and not files:
+                grid_lines.append("  [No files found on current drive]")
+            else:
+                grid_lines.append("")
+
+        if mode in ("save", "save_block"):
+            fmt_str = "CP/M" if format_cpm else "Linux"
+            if page_count > 1:
+                info_line = (
+                    f"  [Page {page_idx + 1}/{page_count}]"
+                    f"  <PgUp>/<PgDn>=Page   "
+                    f"Format: [{fmt_str}]   [^F]=Toggle Format"
+                )
+            else:
+                info_line = f"  Format: [{fmt_str}]   [^F]=Toggle Format"
+        else:
+            if page_count > 1:
+                info_line = (
+                    f"  [Page {page_idx + 1}/{page_count}]"
+                    f"  <PgUp>/<PgDn>=Page"
+                )
+            else:
+                info_line = ""
+
+        verb_map = {
+            "open": "open",
+            "insert": "insert",
+            "save": "save",
+            "save_block": "save",
+        }
+        verb = verb_map.get(mode, "open")
+        prompt_prefix = f"  Enter filename to {verb}: ["
+        box_width = min(30, max(12, cols - len(prompt_prefix) - 6))
+        offset = max(0, cursor_pos - box_width + 1)
+        visible_text = input_text[offset : offset + box_width].ljust(box_width)
+        prompt_line = f"{prompt_prefix} {visible_text} ]"
+
+        esc_line = (
+            "  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)"
+        )
+
+        content = (
+            [hr_eq, title_centered, hr_eq]
+            + grid_lines
+            + [info_line, hr_dash, esc_line, prompt_line]
+        )
+
+        content_h = len(content)
+        top_row = max(1, (body_rows - content_h) // 2 + 1)
+        prompt_screen_row = top_row + content_h - 1
+        cursor_offset = cursor_pos - offset
+        prompt_cursor_col = len(prompt_prefix) + cursor_offset + 3
+
+        for screen_r in range(1, body_rows + 1):
+            self.term.locate(screen_r, 1)
+            self.term.write("~")
+            content_idx = screen_r - top_row
+            if 0 <= content_idx < content_h:
+                ln = content[content_idx]
+                if ln:
+                    self.term.write(ln)
+            self.term.clear_eol()
+
+        self.render_status_bar(buf, geometry_str=geometry_str)
+        self.term.locate(prompt_screen_row, prompt_cursor_col)
+        self.term.flush()
+

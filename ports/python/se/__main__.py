@@ -4,7 +4,6 @@ Supports syntax: se [filename[:line]] [-l line] [--config path]
 """
 
 import argparse
-import os
 import sys
 from se import __version__
 from se.editor import Editor
@@ -62,10 +61,7 @@ def main():
         if parsed_line is not None and target_line is None:
             target_line = parsed_line
 
-    editor = Editor(filename=filename)
-
-    if args.config and os.path.isfile(args.config):
-        editor.config.load(args.config)
+    editor = Editor(filename=filename, config_path=args.config)
 
     if target_line is not None and target_line > 0:
         editor.buffer.cursor_row = max(

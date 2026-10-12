@@ -7,15 +7,21 @@ Strictly adheres to Rule 9 logging standards and <= 80 characters line length.
 
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock
 
 from se.editor import Editor
 from se.modal import ModalDialog
 from se.terminal import (
+    KEY_CTRL_B,
     KEY_CTRL_D,
+    KEY_CTRL_F,
+    KEY_CTRL_K,
+    KEY_CTRL_O,
     KEY_CTRL_S,
     KEY_CTRL_V,
+    KEY_CTRL_W,
     KEY_LEFT,
     KEY_RIGHT,
     KEY_HOME,
@@ -366,6 +372,8 @@ class TestEditor(unittest.TestCase):
         )
         written = []
         self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
 
         # Single-line selection (dynamic follows cursor)
         self.editor.buffer.block_active = 1
@@ -415,6 +423,8 @@ class TestEditor(unittest.TestCase):
         )
         written = []
         self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
 
         # CP/M format default
         self.editor.buffer.format_cpm = True
@@ -437,10 +447,13 @@ class TestEditor(unittest.TestCase):
 
         # 120x40 geometry
         written.clear()
+        self.editor.terminal.cols = 120
+        self.editor.terminal.rows = 40
         self.editor.renderer.render_status_bar(
             self.editor.buffer, geometry_str="120x40"
         )
         texts_120 = [w for w in written if not w.startswith("\x1b")]
+        self.assertEqual(len(texts_120[0]), 120)
         self.assertIn(" 120x40 | Linux |", texts_120[0])
 
         print(
@@ -649,6 +662,8 @@ class TestEditor(unittest.TestCase):
         self.editor.terminal.get_key = MagicMock(return_value="y")
 
         # 1. Confirmation query (Archetype B)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
         self.editor.modal.show_confirm(
             title="Save", desc="Unsaved edits", query="Save?"
         )
@@ -657,6 +672,16 @@ class TestEditor(unittest.TestCase):
         self.assertEqual(width, 52)
         # On 80-col screen, left should be (80 - 52) // 2 + 1 = 15
         self.assertEqual(left, 15)
+
+        # On 120-col screen, left should be (120 - 52) // 2 + 1 = 35
+        self.editor.terminal.cols = 120
+        self.editor.terminal.rows = 40
+        self.editor.modal.show_confirm(
+            title="Save", desc="Unsaved edits", query="Save?"
+        )
+        top, left, width = captured[-1]
+        self.assertEqual(width, 52)
+        self.assertEqual(left, 35)
 
         # 2. Text input modal (Archetype C)
         self.editor.terminal.get_key = MagicMock(return_value="\r")
@@ -850,6 +875,508 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_tier1_directory_browser_open_and_save(self):
+        """Step 24: Verify Tier 1 Open and Save workspaces (Bug 2.7.32)."""
+        print(
+            "[*] Step 24: Testing Tier 1 Directory Browser Open and Save...",
+            flush=True,
+        )
+        import tempfile
+
+        # Test Open Workspace renders Tier 1 layout
+        captured = []
+        orig_write = self.editor.terminal.write
+
+        def mock_write(s):
+            captured.append(s)
+            orig_write(s)
+
+        self.editor.terminal.write = mock_write
+        self.editor.terminal.get_key = MagicMock(side_effect=[KEY_ESC])
+        self.editor.action_open_file()
+
+        full_output = "".join(captured)
+        self.assertIn("OPEN FILE (DIRECTORY -", full_output)
+        self.assertIn("======", full_output)
+        self.assertIn("Enter filename to open: [", full_output)
+        self.assertIn("[ESC]=Cancel", full_output)
+
+        # Test Save Workspace renders format toggle and handles Ctrl+F
+        captured.clear()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "test_out.txt")
+            key_seq = [KEY_CTRL_F] + list(save_path) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=key_seq)
+            self.editor.buffer.lines = ["Line 1", "Line 2"]
+            self.editor.buffer.format_cpm = True
+
+            ok = self.editor.action_save_file()
+            self.assertTrue(ok)
+            self.assertTrue(os.path.isfile(save_path))
+            self.assertFalse(self.editor.buffer.format_cpm)
+            with open(save_path, "rb") as f:
+                content = f.read()
+            self.assertEqual(content, b"Line 1\nLine 2\n")
+
+            save_output = "".join(captured)
+            self.assertIn("SAVE FILE (DIRECTORY -", save_output)
+            self.assertIn("Format:", save_output)
+            self.assertIn("[^F]=Toggle Format", save_output)
+            self.assertIn("Enter filename to save: [", save_output)
+
+        print(
+            "[+] Step 24: Tier 1 Directory Browser Open and Save verified.",
+            flush=True,
+        )
+
+    def test_block_active_file_insert(self):
+        """Step 25: Verify block-active Ctrl+O and Ctrl+K R (Bug 2.7.33)."""
+        print(
+            "[*] Step 25: Testing block-active file insert and Ctrl+K R...",
+            flush=True,
+        )
+        import tempfile
+
+        # 1. When block_active == 0, Ctrl+O invokes action_open_file
+        self.editor.action_open_file = MagicMock()
+        self.editor.action_insert_file = MagicMock()
+        self.editor.buffer.block_active = 0
+        self.editor.dispatch_key(KEY_CTRL_O)
+        self.editor.action_open_file.assert_called_once()
+        self.editor.action_insert_file.assert_not_called()
+
+        # 2. When block_active == 1, Ctrl+O invokes action_insert_file
+        self.editor.action_open_file.reset_mock()
+        self.editor.action_insert_file.reset_mock()
+        self.editor.buffer.block_active = 1
+        self.editor.dispatch_key(KEY_CTRL_O)
+        self.editor.action_open_file.assert_not_called()
+        self.editor.action_insert_file.assert_called_once()
+
+        # 3. Ctrl+K R invokes action_insert_file via WordStar prefix
+        self.editor.action_insert_file.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(return_value="r")
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_insert_file.assert_called_once()
+
+        # 4. End-to-end: insert file into buffer at cursor
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            snippet_path = os.path.join(tmp_dir, "snippet.txt")
+            with open(snippet_path, "wb") as f:
+                f.write(b"Inserted line 1\nInserted line 2\n")
+
+            self.editor.buffer.lines = ["Line 1", "Line 2", "Line 3"]
+            self.editor.buffer.cursor_row = 1
+            self.editor.buffer.cursor_col = 0
+            self.editor.buffer.block_active = 1
+
+            captured = []
+            orig_write = self.editor.terminal.write
+
+            def mock_write(s):
+                captured.append(s)
+                orig_write(s)
+
+            self.editor.terminal.write = mock_write
+            key_seq = list(snippet_path) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=key_seq)
+
+            from se.editor import Editor
+            self.editor.action_insert_file = Editor.action_insert_file.__get__(
+                self.editor, Editor
+            )
+            self.editor.action_insert_file()
+
+            self.assertEqual(self.editor.buffer.block_active, 2)
+            self.assertEqual(
+                self.editor.buffer.lines,
+                [
+                    "Line 1",
+                    "Inserted line 1",
+                    "Inserted line 2Line 2",
+                    "Line 3",
+                ],
+            )
+            browser_output = "".join(captured)
+            self.assertIn("INSERT FILE (DIRECTORY -", browser_output)
+            self.assertIn("Enter filename to insert: [", browser_output)
+
+        print(
+            "[+] Step 25: Block-active file insert and Ctrl+K R verified.",
+            flush=True,
+        )
+
+    def test_block_active_save(self):
+        """Step 26: Verify block-active Ctrl+S and Ctrl+K S (Bug 2.7.34)."""
+        print(
+            "[*] Step 26: Testing block-active save and Ctrl+K S...",
+            flush=True,
+        )
+        import tempfile
+
+        # 1. When block_active == 0, Ctrl+S invokes action_save_file
+        self.editor.action_save_file = MagicMock()
+        self.editor.action_block_save = MagicMock()
+        self.editor.buffer.block_active = 0
+        self.editor.dispatch_key(KEY_CTRL_S)
+        self.editor.action_save_file.assert_called_once()
+        self.editor.action_block_save.assert_not_called()
+
+        # 2. When block_active == 1, Ctrl+S invokes action_block_save
+        self.editor.action_save_file.reset_mock()
+        self.editor.action_block_save.reset_mock()
+        self.editor.buffer.block_active = 1
+        self.editor.dispatch_key(KEY_CTRL_S)
+        self.editor.action_save_file.assert_not_called()
+        self.editor.action_block_save.assert_called_once()
+
+        # 3. Ctrl+K S invokes action_block_save via WordStar prefix
+        self.editor.action_block_save.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(return_value="s")
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_block_save.assert_called_once()
+
+        # 4. End-to-end: save only highlighted block to disk file
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            block_file = os.path.join(tmp_dir, "block_out.txt")
+            self.editor.buffer.lines = [
+                "Alpha Line",
+                "Beta Line to Save",
+                "Gamma Line",
+            ]
+            self.editor.buffer.filename = "my_doc.txt"
+            self.editor.buffer.format_cpm = False
+            self.editor.buffer.block_active = 2
+            self.editor.buffer.block_start_row = 1
+            self.editor.buffer.block_start_col = 0
+            self.editor.buffer.block_end_row = 1
+            self.editor.buffer.block_end_col = len("Beta Line to Save")
+
+            captured = []
+            orig_write = self.editor.terminal.write
+
+            def mock_write(s):
+                captured.append(s)
+                orig_write(s)
+
+            self.editor.terminal.write = mock_write
+            key_seq = list(block_file) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=key_seq)
+
+            from se.editor import Editor
+            self.editor.action_block_save = Editor.action_block_save.__get__(
+                self.editor, Editor
+            )
+            ok = self.editor.action_block_save()
+            self.assertTrue(ok)
+            self.assertTrue(os.path.isfile(block_file))
+
+            with open(block_file, "rb") as f:
+                saved_content = f.read()
+            # Must save ONLY the block, not the full document buffer!
+            self.assertEqual(saved_content, b"Beta Line to Save")
+            # Block active is retained at state 2 per canonical spec
+            self.assertEqual(self.editor.buffer.block_active, 2)
+            # Original filename and lines are completely untouched
+            self.assertEqual(self.editor.buffer.filename, "my_doc.txt")
+            self.assertEqual(len(self.editor.buffer.lines), 3)
+
+            browser_output = "".join(captured)
+            self.assertIn("SAVE BLOCK (DIRECTORY -", browser_output)
+
+        print(
+            "[+] Step 26: Block-active save and Ctrl+K S verified.",
+            flush=True,
+        )
+
+    def test_document_close_lifecycle(self):
+        """Step 27: Verify Ctrl+W close lifecycle and prompt (Bug 2.7.35)."""
+        print(
+            "[*] Step 27: Testing Ctrl+W document close lifecycle...",
+            flush=True,
+        )
+        # 1. Dispatching KEY_CTRL_W invokes action_close_file
+        self.editor.action_close_file = MagicMock()
+        self.editor.dispatch_key(KEY_CTRL_W)
+        self.editor.action_close_file.assert_called_once_with(to_splash=True)
+
+        from se.editor import Editor
+        self.editor.action_close_file = Editor.action_close_file.__get__(
+            self.editor, Editor
+        )
+        self.editor.action_splash_screen = MagicMock()
+        self.editor.action_save_file = MagicMock(return_value=True)
+
+        # 2. Clean document: immediately closes to Splash without prompt
+        self.editor.buffer.filename = "clean.txt"
+        self.editor.buffer.modified = False
+        self.editor.modal.show_confirm = MagicMock()
+
+        self.editor.action_close_file(to_splash=True)
+        self.editor.modal.show_confirm.assert_not_called()
+        self.assertEqual(self.editor.buffer.filename, "(Untitled)")
+        self.assertFalse(self.editor.buffer.has_file)
+        self.editor.action_splash_screen.assert_called_once()
+
+        # 3. Modified document with [ESC]=Cancel: keeps document state
+        self.editor.action_splash_screen.reset_mock()
+        self.editor.buffer.filename = "dirty.txt"
+        self.editor.buffer.modified = True
+        self.editor.modal.show_confirm = MagicMock(return_value=None)
+
+        closed = self.editor.action_close_file(to_splash=True)
+        self.assertFalse(closed)
+        self.assertEqual(self.editor.buffer.filename, "dirty.txt")
+        self.assertTrue(self.editor.buffer.modified)
+        self.editor.action_splash_screen.assert_not_called()
+
+        # 4. Modified document with [N]o: discards and transitions to Splash
+        self.editor.modal.show_confirm = MagicMock(return_value="n")
+        closed = self.editor.action_close_file(to_splash=True)
+        self.assertTrue(closed)
+        self.assertEqual(self.editor.buffer.filename, "(Untitled)")
+        self.editor.action_splash_screen.assert_called_once()
+
+        # 5. Modified document with [Y]es: saves and transitions to Splash
+        self.editor.action_splash_screen.reset_mock()
+        self.editor.buffer.filename = "dirty2.txt"
+        self.editor.buffer.modified = True
+        self.editor.modal.show_confirm = MagicMock(return_value="y")
+
+        closed = self.editor.action_close_file(to_splash=True)
+        self.assertTrue(closed)
+        self.editor.action_save_file.assert_called_once()
+        self.assertEqual(self.editor.buffer.filename, "(Untitled)")
+        self.editor.action_splash_screen.assert_called_once()
+
+        print(
+            "[+] Step 27: Ctrl+W close lifecycle and prompt verified.",
+            flush=True,
+        )
+
+    def test_editor_secfg_discovery_and_geometry_default(self):
+        """Step 28: Verify Editor startup SE.CFG discovery (Bug 2.7.36)."""
+        print(
+            "[*] Step 28: Testing Editor startup SE.CFG discovery...",
+            flush=True,
+        )
+        # Default Editor instance defaults to 120x40 canonical geometry
+        ed_default = Editor()
+        self.assertEqual(ed_default.config.DEFAULT_SCREEN, "120X40")
+        self.assertEqual(ed_default.config.screen_geometry, (120, 40))
+        self.assertEqual(ed_default.terminal.cols, 120)
+        self.assertEqual(ed_default.terminal.rows, 40)
+        self.assertEqual(ed_default.buffer.tab_width, 8)
+
+        # Editor with custom config path overrides geometry and tab width
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".cfg"
+        ) as tmp_file:
+            tmp_path = tmp_file.name
+        try:
+            with open(tmp_path, "wb") as f:
+                f.write(b"SCREEN=80x24\r\nTAB=4\r\n")
+
+            ed_custom = Editor(config_path=tmp_path)
+            self.assertEqual(
+                ed_custom.loaded_config_path, os.path.abspath(tmp_path)
+            )
+            self.assertEqual(ed_custom.terminal.cols, 80)
+            self.assertEqual(ed_custom.terminal.rows, 24)
+            self.assertEqual(ed_custom.buffer.tab_width, 4)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+        print(
+            "[+] Step 28: Editor startup SE.CFG discovery verified.",
+            flush=True,
+        )
+
+    def test_delete_key_active_block(self):
+        """Step 29: Verify Delete and Ctrl+D block deletion (Bug 2.7.37)."""
+        print(
+            "[*] Step 29: Testing Delete and Ctrl+D block deletion...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Alpha Beta Gamma", "Second Line"]
+        self.editor.buffer.clipboard = "ORIGINAL_CLIPBOARD"
+
+        # 1. Dynamic block delete via KEY_DELETE
+        # Block from (0, 6) to (0, 10): "Beta"
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 6
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 10
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_DELETE)
+        self.assertEqual(self.editor.buffer.lines[0], "Alpha  Gamma")
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 6)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertTrue(self.editor.buffer.modified)
+        # Clipboard must remain unaffected
+        self.assertEqual(self.editor.buffer.clipboard, "ORIGINAL_CLIPBOARD")
+
+        # 2. Solidified multi-line block delete via KEY_CTRL_D
+        self.editor.buffer.lines = [
+            "Start Line",
+            "Middle To Delete",
+            "End Line",
+        ]
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 6
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.cursor_row = 2
+        self.editor.buffer.cursor_col = 4
+        self.editor.buffer.solidify_block()  # block_active = 2
+
+        self.editor.dispatch_key(KEY_CTRL_D)
+        # Joined line: "Start Line"[:6] + "End Line"[4:] -> "Start Line"
+        self.assertEqual(self.editor.buffer.lines, ["Start Line"])
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 6)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.clipboard, "ORIGINAL_CLIPBOARD")
+
+        print(
+            "[+] Step 29: Delete and Ctrl+D block deletion verified.",
+            flush=True,
+        )
+
+    def test_backspace_dynamic_block_cancel(self):
+        """Step 30: Verify Backspace cancels dynamic block (Bug 2.7.38)."""
+        print(
+            "[*] Step 30: Testing Backspace dynamic block cancel...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Hello World"]
+
+        # 1. Dynamic block (block_active == 1): Backspace cancels selection
+        # without deleting any character or altering buffer contents.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 5
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 11
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_BACKSPACE)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Hello World")
+        self.assertEqual(self.editor.buffer.cursor_col, 11)
+
+        # 2. Solidified block (block_active == 2): Backspace cancels block
+        # and performs backward character deletion.
+        self.editor.buffer.cursor_col = 5
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.assertEqual(self.editor.buffer.block_active, 2)
+
+        self.editor.dispatch_key(KEY_BACKSPACE)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Hell World")
+        self.assertEqual(self.editor.buffer.cursor_col, 4)
+
+        print(
+            "[+] Step 30: Backspace dynamic block cancel verified.",
+            flush=True,
+        )
+
+    def test_enter_dynamic_block_solidify(self):
+        """Step 31: Verify Enter solidifies dynamic block (Bug 2.7.39)."""
+        print(
+            "[*] Step 31: Testing Enter dynamic block solidify...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["First Line", "Second Line"]
+
+        # 1. Dynamic block (block_active == 1): Enter solidifies selection
+        # without splitting the current line.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 5
+        self.assertEqual(self.editor.buffer.block_active, 1)
+
+        self.editor.dispatch_key(KEY_ENTER)
+        self.assertEqual(self.editor.buffer.block_active, 2)
+        self.assertEqual(self.editor.buffer.block_end_row, 0)
+        self.assertEqual(self.editor.buffer.block_end_col, 5)
+        self.assertEqual(
+            self.editor.buffer.lines, ["First Line", "Second Line"]
+        )
+        self.assertEqual(self.editor.buffer.cursor_row, 0)
+        self.assertEqual(self.editor.buffer.cursor_col, 5)
+
+        # 2. Solidified block (block_active == 2): Enter cancels block
+        # and splits line.
+        self.editor.dispatch_key(KEY_ENTER)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(
+            self.editor.buffer.lines, ["First", " Line", "Second Line"]
+        )
+        self.assertEqual(self.editor.buffer.cursor_row, 1)
+        self.assertEqual(self.editor.buffer.cursor_col, 0)
+
+        print(
+            "[+] Step 31: Enter dynamic block solidify verified.",
+            flush=True,
+        )
+
+    def test_typing_and_tab_block_cancel(self):
+        """Step 32: Verify typing & Tab cancel active block (Bug 2.7.41)."""
+        print(
+            "[*] Step 32: Testing typing & Tab active block cancel...",
+            flush=True,
+        )
+        self.editor.buffer.lines = ["Original Text"]
+
+        # 1. Dynamic block (block_active == 1): typing cancels block
+        # without inserting the character.
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.buffer.cursor_col = 8
+
+        self.editor.dispatch_key("X")
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Original Text")
+        self.assertEqual(self.editor.buffer.cursor_col, 8)
+
+        # 2. Dynamic block (block_active == 1): Tab cancels block
+        # without inserting tab.
+        self.editor.dispatch_key(KEY_CTRL_B)  # block_active = 1
+        self.editor.dispatch_key(KEY_TAB)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "Original Text")
+
+        # 3. Solidified block (block_active == 2): typing clears block
+        # and inserts character.
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.assertEqual(self.editor.buffer.block_active, 2)
+
+        self.editor.dispatch_key("Z")
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "OriginalZ Text")
+
+        # 4. Solidified block (block_active == 2): Tab clears block
+        # and inserts tab byte.
+        self.editor.dispatch_key(KEY_CTRL_B)
+        self.editor.buffer.solidify_block()  # block_active = 2
+        self.editor.dispatch_key(KEY_TAB)
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], "OriginalZ\t Text")
+
+        print(
+            "[+] Step 32: typing & Tab active block cancel verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+

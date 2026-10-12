@@ -215,6 +215,7 @@ class DocumentBuffer:
         if self.cursor_row < len(self.lines) - 1:
             next_line = self.lines[self.cursor_row + 1]
             if len(line) + len(next_line) <= MAX_LINE_LENGTH:
+                self.cursor_col = len(line)
                 self.lines[self.cursor_row] = line + next_line
                 self.lines.pop(self.cursor_row + 1)
                 self.target_col = self.get_visual_col()
@@ -326,6 +327,10 @@ class DocumentBuffer:
         else:
             self.block_active = 0
 
+    def cancel_block(self):
+        """Cancel active block selection."""
+        self.block_active = 0
+
     def solidify_block(self):
         """Solidify dynamic block selection to locked bounds."""
         if self.block_active == 1:
@@ -365,13 +370,49 @@ class DocumentBuffer:
         self.clipboard = text
         return text
 
-    def cut_block(self) -> str:
-        """Cut selected block text, deleting it from document."""
+    def save_block(
+        self, path: str, format_cpm: Optional[bool] = None
+    ) -> bool:
+        """
+        Save selected block text to target file without modifying document.
+        """
         if self.block_active == 0:
-            return ""
+            return False
         if self.block_active == 1:
             self.solidify_block()
-        text = self.copy_block()
+        if format_cpm is None:
+            format_cpm = self.format_cpm
+
+        r1, c1, r2, c2 = self.get_normalized_block()
+        if r1 == r2:
+            parts = [self.lines[r1][c1:c2]]
+        else:
+            parts = [self.lines[r1][c1:]]
+            for r in range(r1 + 1, r2):
+                parts.append(self.lines[r])
+            parts.append(self.lines[r2][:c2])
+
+        sep = b"\r\n" if format_cpm else b"\n"
+        try:
+            with open(path, "wb") as f:
+                for idx, line in enumerate(parts):
+                    if idx > 0:
+                        f.write(sep)
+                    f.write(line.encode("ascii", errors="replace"))
+                if format_cpm:
+                    f.write(b"\x1a")
+            return True
+        except OSError:
+            return False
+
+    def delete_block(self) -> bool:
+        """
+        Delete selected block text without modifying clipboard buffer.
+        """
+        if self.block_active == 0:
+            return False
+        if self.block_active == 1:
+            self.solidify_block()
         r1, c1, r2, c2 = self.get_normalized_block()
         if r1 == r2:
             line = self.lines[r1]
@@ -383,11 +424,21 @@ class DocumentBuffer:
             del self.lines[r1 + 1 : r2 + 1]
             self.lines[r1] = combined[:MAX_LINE_LENGTH]
 
+        if not self.lines:
+            self.lines = [""]
         self.cursor_row = r1
         self.cursor_col = c1
         self.target_col = self.get_visual_col()
         self.block_active = 0
         self.modified = True
+        return True
+
+    def cut_block(self) -> str:
+        """Cut selected block text, deleting it from document."""
+        if self.block_active == 0:
+            return ""
+        text = self.copy_block()
+        self.delete_block()
         return text
 
     def paste_block(self) -> bool:
@@ -425,6 +476,63 @@ class DocumentBuffer:
 
         self.modified = True
         return True
+
+    def insert_file(self, path: str) -> bool:
+        """
+        Insert disk file contents into document buffer at cursor position.
+        """
+        if not os.path.isfile(path):
+            return False
+        try:
+            with open(path, "rb") as f:
+                content = f.read()
+            content = content.split(b"\x1a")[0]
+            if b"\r\n" in content:
+                raw_lines = content.split(b"\r\n")
+            else:
+                raw_lines = content.split(b"\n")
+            if raw_lines and raw_lines[-1] == b"":
+                raw_lines.pop()
+            if not raw_lines:
+                return True
+            parts = [
+                ln.decode("ascii", errors="replace")[:MAX_LINE_LENGTH]
+                for ln in raw_lines
+            ]
+            if len(parts) == 1:
+                line = self.current_line
+                col = min(len(line), self.cursor_col)
+                rem = MAX_LINE_LENGTH - len(line)
+                to_insert = parts[0][:rem]
+                self.lines[self.cursor_row] = (
+                    line[:col] + to_insert + line[col:]
+                )[:MAX_LINE_LENGTH]
+                self.cursor_col = col + len(to_insert)
+                self.target_col = self.get_visual_col()
+            else:
+                line = self.current_line
+                col = min(len(line), self.cursor_col)
+                prefix = line[:col]
+                suffix = line[col:]
+                self.lines[self.cursor_row] = (
+                    prefix + parts[0]
+                )[:MAX_LINE_LENGTH]
+                for i in range(1, len(parts) - 1):
+                    self.lines.insert(
+                        self.cursor_row + i, parts[i][:MAX_LINE_LENGTH]
+                    )
+                last_idx = self.cursor_row + len(parts) - 1
+                self.lines.insert(
+                    last_idx, (parts[-1] + suffix)[:MAX_LINE_LENGTH]
+                )
+                self.cursor_row = last_idx
+                self.cursor_col = len(parts[-1])
+                self.target_col = self.get_visual_col()
+
+            self.modified = True
+            return True
+        except OSError:
+            return False
 
     def load_file(self, path: str) -> bool:
         """

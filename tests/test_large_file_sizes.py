@@ -34,7 +34,7 @@ def find_workspace_root(start_dir):
         curr = os.path.dirname(curr)
     raise RuntimeError("Could not locate tools/romwbw_src")
 
-def find_paths():
+def find_paths(use_sec=False):
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     workspace_root = find_workspace_root(repo_root)
     emu_bin = os.path.join(
@@ -54,7 +54,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -185,7 +185,7 @@ def boot_cpm(emu_bin, rom_file, img_file):
     return proc, master
 
 def run_single_size_test(target_bytes, cpm_filename, description):
-    paths = find_paths()
+    paths = find_paths(use_sec=use_sec)
     emu_bin, rom_file, img_file, se_bin = paths[0], paths[1], paths[2], paths[3]
     cpmcp_bin, cpmrm_bin = paths[4], paths[5]
 
@@ -224,18 +224,21 @@ def run_single_size_test(target_bytes, cpm_filename, description):
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, target_cpm],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     subprocess.run(
-        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
         check=True
     )
     subprocess.run(
         [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, test_file, cpm_user],
         check=True
     )
-    print(f"[+] Step 2: Injected SE.COM and {cpm_filename} into disk image.")
+    print(
+        f"[+] Step 2: Injected {target_name} and {cpm_filename} "
+        f"into disk image."
+    )
 
     # 3. Boot emulator
     print("[*] Step 3: Booting emulator...")
@@ -255,8 +258,8 @@ def run_single_size_test(target_bytes, cpm_filename, description):
         print("[+] Step 4: Drive C directory logged in.")
 
         # 5. Launch editor
-        cmd_str = f"se {cpm_filename}\r".encode("ascii")
-        print(f"[*] Step 5: Executing 'se {cpm_filename}'...")
+        cmd_str = f"{cmd_name} {cpm_filename}\r".encode("ascii")
+        print(f"[*] Step 5: Executing '{cmd_name} {cpm_filename}'...")
         t0 = time.time()
         os.write(master, cmd_str)
 
@@ -402,20 +405,21 @@ def run_single_size_test(target_bytes, cpm_filename, description):
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
 
-def main():
+def main(use_sec=False):
     print("==================================================================")
     print("  SE.COM Large File Size Test Suite (16,384 B to 32,768 B)        ")
     print("==================================================================")
 
     sizes_to_test = TEST_SIZES
-    if len(sys.argv) > 1:
-        target = int(sys.argv[1])
+    args = [a for a in sys.argv[1:] if a != "--sec"]
+    if len(args) > 0:
+        target = int(args[0])
         sizes_to_test = [
             (target, f"F{target//1024}K.TXT", f"Custom {target} bytes")
         ]
 
     for target_bytes, cpm_fn, desc in sizes_to_test:
-        ok = run_single_size_test(target_bytes, cpm_fn, desc)
+        ok = run_single_size_test(target_bytes, cpm_fn, desc, use_sec=use_sec)
         if not ok:
             print(f"\n[-] FAILED on {desc} ({target_bytes} bytes)")
             return False
@@ -426,5 +430,6 @@ def main():
     return True
 
 if __name__ == "__main__":
-    success = main()
+    use_sec_arg = "--sec" in sys.argv
+    success = main(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

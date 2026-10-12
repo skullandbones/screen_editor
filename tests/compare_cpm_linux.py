@@ -186,7 +186,9 @@ def drain(fd, quiet_time=0.1, max_wait=2.0):
     return b"".join(chunks)
 
 
-def run_comparison():
+def run_comparison(use_sec=False):
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     emu_bin, rom_file, img_file, se_linux_bin = find_paths()
 
     print("[*] Launching CP/M RC2014 emulator...", flush=True)
@@ -237,9 +239,9 @@ def run_comparison():
         vt_lin = VirtualTerminal(rows=24, cols=80)
 
         # Launch SE.COM
-        print("[*] Launching SE.COM on CP/M...", flush=True)
+        print(f"[*] Launching {target_name} on CP/M...", flush=True)
         time.sleep(0.3)
-        os.write(cpm_master, b"se\r")
+        os.write(cpm_master, cmd_name + b"\r")
         cpm_splash_raw = read_until_match(cpm_master, b"for about",
                                           timeout=25.0)
         cpm_splash_raw += drain(cpm_master, quiet_time=0.2, max_wait=2.0)
@@ -481,4 +483,5 @@ def run_comparison():
 
 
 if __name__ == "__main__":
-    run_comparison()
+    use_sec_arg = "--sec" in sys.argv
+    run_comparison(use_sec=use_sec_arg)

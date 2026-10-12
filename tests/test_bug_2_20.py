@@ -25,7 +25,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -45,7 +45,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -106,7 +106,9 @@ def setup_disk_files(
         )
     # Inject SE.COM, SE.CFG, BIG350.TXT
     subprocess.run(
-        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    subprocess.run(
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
         check=True
     )
     subprocess.run(
@@ -119,11 +121,13 @@ def setup_disk_files(
     )
 
 
-def test_truncated_save_blocked_popup():
+def test_truncated_save_blocked_popup(use_sec=False):
     print("[*] Starting Bug 2.20 Truncated Save Blocked Modal Test...")
     (
         repo_root, emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
-    ) = find_paths()
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     # Create SE.CFG with RAMDRIVE=PRESERVE (limits Far RAM to 32KB / 256 lines)
     cfg_tmp = "/tmp/TEST_BUG_2_20_SE.CFG"
@@ -171,7 +175,7 @@ def test_truncated_save_blocked_popup():
 
         # Launch SE.COM with BIG350.TXT
         print("[*] Launching 'se big350.txt'...")
-        os.write(master, b"se big350.txt\r")
+        os.write(master, cmd_name + b" big350.txt\r")
 
         # Initial load detects truncation and displays modal pop-up
         ok, out = read_until(master, b"File Truncated", timeout=30.0)
@@ -278,4 +282,7 @@ def test_truncated_save_blocked_popup():
 
 
 if __name__ == "__main__":
-    sys.exit(test_truncated_save_blocked_popup())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(
+        test_truncated_save_blocked_popup(use_sec=use_sec_arg)
+    )

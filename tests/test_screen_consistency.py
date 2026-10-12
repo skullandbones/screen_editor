@@ -17,7 +17,7 @@ import tty
 import select
 import subprocess
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -37,7 +37,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
 
     return emu_bin, rom_file, img_file, se_bin
 
@@ -76,7 +76,9 @@ def run_screen_consistency_test(mode_name="80x24"):
     print(f"[*] Running Screen Consistency Test in {mode_name} mode", flush=True)
     print(f"=======================================================", flush=True)
 
-    emu_bin, rom_file, img_file, se_bin = find_paths()
+    emu_bin, rom_file, img_file, se_bin = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     master, slave = os.openpty()
     tty.setraw(slave)
     os.set_blocking(master, False)
@@ -109,7 +111,7 @@ def run_screen_consistency_test(mode_name="80x24"):
         # Start SE.COM
         time.sleep(0.5)
         drain_all(master)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_splash = read_until(master, b"SE - Screen Editor", timeout=45.0)
         if b"SE - Screen Editor" not in out_splash:
             print(f"[-] SE splash not displayed. Buffer: {repr(out_splash)}", flush=True)
@@ -358,11 +360,12 @@ def run_screen_consistency_test(mode_name="80x24"):
             proc.kill()
 
 if __name__ == "__main__":
-    ok_80 = run_screen_consistency_test("80x24")
+    use_sec_arg = "--sec" in sys.argv
+    ok_80 = run_screen_consistency_test("80x24", use_sec=use_sec_arg)
     if not ok_80:
         sys.exit(1)
 
-    ok_120 = run_screen_consistency_test("120x40")
+    ok_120 = run_screen_consistency_test("120x40", use_sec=use_sec_arg)
     if not ok_120:
         sys.exit(1)
 

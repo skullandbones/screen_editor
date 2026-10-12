@@ -44,8 +44,6 @@ bios_call_hl_conout:
 
 void hal_console_init(void)
 {
-    g_active_cols = SCREEN_COLS_80;
-    g_active_rows = SCREEN_ROWS_24;
     hal_console_inverse_off();
     hal_console_show_cursor();
 }

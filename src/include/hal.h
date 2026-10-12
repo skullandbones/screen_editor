@@ -50,6 +50,7 @@ int  hal_storage_make(const char *path, void *handle);
 int  hal_storage_close(void *handle);
 int  hal_storage_read_sec(void *handle, uint8_t *buf);
 int  hal_storage_write_sec(void *handle, const uint8_t *buf);
+void hal_linux_scan_directory(const char *dir_path);
 
 #ifdef __cplusplus
 }

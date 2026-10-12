@@ -25,7 +25,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -45,7 +45,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -142,10 +142,17 @@ def put_cfg_to_image(cpmcp_bin, cpmrm_bin, img_file, content_str):
         os.remove(tmp_path)
 
 
-def test_bug_2_1():
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+def test_bug_2_1(use_sec=False):
+    (
+        emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
-    print("[*] Running Bug 2.1 isolated reproduction test...", flush=True)
+    print(
+        f"[*] Running Bug 2.1 isolated reproduction test ({target_name})...",
+        flush=True
+    )
 
     # Configure SE.CFG: Overwrite RAM drive to provide Far RAM for plugins
     put_cfg_to_image(
@@ -159,9 +166,9 @@ def test_bug_2_1():
         os.write(master, b"c:\r")
         read_until(master, b"C>", timeout=15.0)
 
-        # Launch SE.COM
+        # Launch editor binary
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out_splash = read_until(
             master, b"Plugin System : [Operational]", timeout=25.0
         )
@@ -231,4 +238,5 @@ def test_bug_2_1():
 
 
 if __name__ == "__main__":
-    test_bug_2_1()
+    use_sec_arg = "--sec" in sys.argv
+    test_bug_2_1(use_sec=use_sec_arg)

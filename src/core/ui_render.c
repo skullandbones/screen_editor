@@ -12,6 +12,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "../include/config.h"
 #include "../include/buffer.h"
 #include "../include/editor.h"
@@ -20,6 +21,8 @@
 #include "../include/file_io.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/ui_browser.h"
+#include "../include/plugin.h"
 #include "../include/hal.h"
 #ifdef __CPM__
 #include <cpm.h>
@@ -62,12 +65,12 @@ void set_status_msg(const char *msg)
 
 static void render_row_content(uint8_t screen_row, uint16_t doc_row)
 {
-    char line_buf[MAX_ACTIVE_LINE_STRIDE];
+    const char *line_buf;
     uint16_t len;
     uint16_t vis_col = 0;
     uint16_t i;
     uint8_t tab_w = g_config.tab_width ? g_config.tab_width : 8;
-    uint8_t max_content_cols = g_active_cols - 2;
+    uint8_t max_content_cols = g_active_cols;
 
     hal_console_locate(screen_row, 1);
 
@@ -78,10 +81,14 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
         return;
     }
 
-    /* Column 0 Margin: Space or Block Marker */
-    hal_console_putc(' ');
-
-    len = fetch_line_to_buffer(doc_row, line_buf, MAX_ACTIVE_PAYLOAD);
+    if (g_active_line_valid && g_active_line_row == doc_row) {
+        line_buf = g_active_line_buf;
+        len = g_active_line_len;
+    } else {
+        len = fetch_line_to_buffer(doc_row, g_scratch_line_buf,
+                                   MAX_ACTIVE_PAYLOAD);
+        line_buf = g_scratch_line_buf;
+    }
 
     for (i = 0; i < len && vis_col < g_horiz_pan_offset + max_content_cols;
          i++) {
@@ -146,23 +153,22 @@ void render_buffer_line(uint16_t row)
 
 void render_status_bar(void)
 {
-    char raw_name[80];
+    char raw_name[32];
     char field1[32];
     char field2[16];
     char field3[16];
     char field4[32];
-    char field5[64];
+    char field5[40];
     const char *fname;
-    const char *geom_str;
-    const char *fmt_str;
-    char core[256];
-    char full_bar[256];
-    size_t core_len;
+    char core[128];
+    char full_bar[160];
+    size_t pad, right_pad;
     size_t i, idx;
+    uint16_t vis_col = 0;
 
     fname = g_current_filename[0] ? g_current_filename : "(Untitled)";
 #ifdef __CPM__
-    char cpm_disp_name[64];
+    char cpm_disp_name[32];
     if (g_current_filename[0] != '\0' && g_current_filename[1] != ':') {
         char drv = (char)('A' + bdos(25, 0));
         snprintf(cpm_disp_name, sizeof(cpm_disp_name), "%c:%s",
@@ -172,102 +178,85 @@ void render_status_bar(void)
 #endif
     snprintf(raw_name, sizeof(raw_name), "%s%c", fname,
              g_doc_modified ? '*' : ' ');
-    snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
+    snprintf(field1, sizeof(field1), "| %-14.14s | ", raw_name);
 
-    geom_str = (g_config.screen_mode == MODE_120X40) ? "120x40" : "80x24";
-    snprintf(field2, sizeof(field2), " %s |", geom_str);
+    snprintf(field2, sizeof(field2), "%s | ",
+             (g_active_cols >= SCREEN_COLS_120) ? "120x40" : " 80x24");
 
-    fmt_str = (g_file_format == FMT_CPM) ? "CPM  " : "Linux";
-    snprintf(field3, sizeof(field3), " %s |", fmt_str);
+    snprintf(field3, sizeof(field3), "%s | ",
+             (g_file_format == FMT_CPM) ? "CP/M " : "Linux");
 
 #if defined(__CPM__)
     if (g_is_splash_screen) {
-        snprintf(field4, sizeof(field4), " Free: 48 KB     |");
+        snprintf(field4, sizeof(field4), "Free: 48 KB     | ");
     } else
 #endif
     if (g_block_mode == BLOCK_MODE_SELECTING) {
-        char blk_info[32];
         normalize_block_bounds();
         if (g_norm_start_row == g_norm_end_row) {
-            uint16_t chars = (g_norm_end_col >= g_norm_start_col)
-                ? (g_norm_end_col - g_norm_start_col) : 0;
-            if (chars == 1) {
-                snprintf(blk_info, sizeof(blk_info), "Sel: 1 char");
-            } else {
-                snprintf(blk_info, sizeof(blk_info), "Sel: %u chars",
-                         (unsigned)chars);
-            }
+            uint16_t b_chars = (g_norm_end_col >= g_norm_start_col) ?
+                (g_norm_end_col - g_norm_start_col) : 0;
+            char sbuf[16];
+            snprintf(sbuf, sizeof(sbuf), "Sel: %u", (unsigned)b_chars);
+            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
         } else {
-            uint16_t lines = (g_norm_end_row >= g_norm_start_row)
-                ? (g_norm_end_row - g_norm_start_row + 1) : 1;
-            if (lines == 1) {
-                snprintf(blk_info, sizeof(blk_info), "Sel: 1 line");
-            } else {
-                snprintf(blk_info, sizeof(blk_info), "Sel: %u lines",
-                         (unsigned)lines);
-            }
+            uint16_t b_lines = (g_norm_end_row >= g_norm_start_row) ?
+                (g_norm_end_row - g_norm_start_row + 1) : 1;
+            char sbuf[16];
+            snprintf(sbuf, sizeof(sbuf), "Sel: %u lines", (unsigned)b_lines);
+            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
         }
-        snprintf(field4, sizeof(field4), " %-15.15s |", blk_info);
     } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
-        char blk_info[32];
         normalize_block_bounds();
         if (g_norm_start_row == g_norm_end_row) {
-            uint16_t chars = (g_norm_end_col >= g_norm_start_col)
-                ? (g_norm_end_col - g_norm_start_col) : 0;
-            if (chars == 1) {
-                snprintf(blk_info, sizeof(blk_info), "Block: 1 char");
-            } else {
-                snprintf(blk_info, sizeof(blk_info), "Block: %u chars",
-                         (unsigned)chars);
-            }
+            uint16_t b_chars = (g_norm_end_col >= g_norm_start_col) ?
+                (g_norm_end_col - g_norm_start_col) : 0;
+            char sbuf[16];
+            snprintf(sbuf, sizeof(sbuf), "Block: %u chars", (unsigned)b_chars);
+            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
         } else {
-            uint16_t lines = (g_norm_end_row >= g_norm_start_row)
-                ? (g_norm_end_row - g_norm_start_row + 1) : 1;
-            if (lines == 1) {
-                snprintf(blk_info, sizeof(blk_info), "Block: 1 line");
-            } else {
-                snprintf(blk_info, sizeof(blk_info), "Block: %u lines",
-                         (unsigned)lines);
-            }
+            uint16_t b_lines = (g_norm_end_row >= g_norm_start_row) ?
+                (g_norm_end_row - g_norm_start_row + 1) : 1;
+            char sbuf[16];
+            snprintf(sbuf, sizeof(sbuf), "Block: %u lines", (unsigned)b_lines);
+            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
         }
-        snprintf(field4, sizeof(field4), " %-15.15s |", blk_info);
     } else if (g_horiz_pan_offset > 0) {
-        char pan_info[16];
-        snprintf(pan_info, sizeof(pan_info), "[Pan +%u]",
-                 (unsigned)g_horiz_pan_offset);
-        snprintf(field4, sizeof(field4), " %-15.15s |", pan_info);
+        char pbuf[16];
+        snprintf(pbuf, sizeof(pbuf), "[Pan +%u]", (unsigned)g_horiz_pan_offset);
+        snprintf(field4, sizeof(field4), "%-15s | ", pbuf);
+    } else if (!g_insert_mode) {
+        snprintf(field4, sizeof(field4), "[Overwrite]     | ");
     } else {
-        snprintf(field4, sizeof(field4), " ^K: Editor keys |");
+        snprintf(field4, sizeof(field4), "^K: Editor keys | ");
     }
 
-    snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u |",
+    if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
+        checkout_active_line(g_cur_doc_row);
+        vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+    }
+    snprintf(field5, sizeof(field5), "Line %4u/%-4u Col %-3u |",
              (unsigned)(g_cur_doc_row + 1),
              (unsigned)g_doc_total_lines,
-             (unsigned)g_cur_col);
+             (unsigned)vis_col);
 
     snprintf(core, sizeof(core), "%s%s%s%s%s",
              field1, field2, field3, field4, field5);
-    core_len = strlen(core);
 
-    if (core_len < g_active_cols) {
-        size_t pad = g_active_cols - core_len;
-        size_t left_pad = pad / 2;
-        size_t right_pad = pad - left_pad;
-        idx = 0;
-        for (i = 0; i < left_pad && idx + 1 < sizeof(full_bar); i++) {
-            full_bar[idx++] = ' ';
-        }
-        for (i = 0; i < core_len && idx + 1 < sizeof(full_bar); i++) {
-            full_bar[idx++] = core[i];
-        }
-        for (i = 0; i < right_pad && idx + 1 < sizeof(full_bar); i++) {
-            full_bar[idx++] = ' ';
-        }
-        full_bar[idx] = '\0';
-    } else {
-        strncpy(full_bar, core, g_active_cols);
-        full_bar[g_active_cols] = '\0';
+    pad = (g_active_cols > 78) ? (g_active_cols - 78) / 2 : 1;
+    right_pad = (g_active_cols > (78 + pad)) ? (g_active_cols - 78 - pad) : 1;
+
+    idx = 0;
+    for (i = 0; i < pad && idx + 1 < sizeof(full_bar); i++) {
+        full_bar[idx++] = ' ';
     }
+    for (i = 0; i < 78 && core[i] != '\0' && idx + 1 < sizeof(full_bar); i++) {
+        full_bar[idx++] = core[i];
+    }
+    for (i = 0; i < right_pad && idx + 1 < sizeof(full_bar); i++) {
+        full_bar[idx++] = ' ';
+    }
+    full_bar[idx] = '\0';
 
     hal_console_locate(g_active_rows, 1);
     hal_console_inverse_on();
@@ -338,34 +327,86 @@ void show_splash_screen(void)
     int k;
 
     g_is_splash_screen = 1;
+    render_tier1_workspace_screen(s_splash_lines, 18, 54);
     while (1) {
-        render_tier1_workspace_screen(s_splash_lines, 18, 54);
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }
+        if (k == ':') {
+            int next_k = 0;
+            while ((next_k = hal_console_getkey()) <= 0) {
+                /* Wait for following char */
+            }
+            k = next_k;
+        }
+
         if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
             g_editor_exit_flag = 1;
             break;
-        } else if (k == 'e' || k == 'E' || k == KEY_ENTER || k == ' ') {
+        } else if (k == 'e' || k == 'E' || k == KEY_ENTER) {
             break;
         } else if (k == 'n' || k == 'N') {
             init_empty_document();
             g_current_filename[0] = '\0';
             break;
+        } else if (k == 'o' || k == 'O' || k == KEY_CTRL_O) {
+            char open_fname[64] = {0};
+            if (ui_browser_open_dialog(open_fname, sizeof(open_fname)) ==
+                MODAL_RES_OK && open_fname[0]) {
+                file_load(open_fname);
+                break;
+            }
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+        } else if (k == 's' || k == 'S' || k == KEY_CTRL_S) {
+            char save_fname[64] = {0};
+            if (ui_browser_save_dialog(save_fname, sizeof(save_fname)) ==
+                MODAL_RES_OK && save_fname[0]) {
+                file_save(save_fname, g_config.save_format);
+            }
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+        } else if (k == 'w' || k == 'W' || k == KEY_CTRL_W) {
+            if (modal_confirm_save_changes() == MODAL_RES_OK) {
+                init_empty_document();
+                g_current_filename[0] = '\0';
+            }
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+        } else if (k == 'l' || k == 'L' || k == KEY_CTRL_L) {
+            char lbuf[16] = {0};
+            if (modal_prompt_text("Goto Line", "Enter destination line:",
+                                  lbuf, sizeof(lbuf)) == MODAL_RES_OK &&
+                lbuf[0]) {
+                int line_num = atoi(lbuf);
+                if (line_num > 0) {
+                    goto_line((uint16_t)line_num);
+                    break;
+                }
+            }
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == 'c' || k == 'C') {
             show_config_screen();
-        } else if (k == 'a' || k == 'A' || k == '?') {
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+        } else if (k == 'a' || k == 'A') {
             show_about_screen();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+        } else if (k == 'm' || k == 'M') {
+            show_mem_info_screen();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+        } else if (k == 'p' || k == 'P' || k == KEY_CTRL_P) {
+            plugin_manager_ui();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+        } else if (k == '?' || k == 'h' || k == 'H' || k == KEY_CTRL_K) {
+            show_help_screen();
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == '1') {
             g_config.screen_mode = MODE_120X40;
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         } else if (k == '2') {
             g_config.screen_mode = MODE_80X24;
             g_active_cols = SCREEN_COLS_80;
             g_active_rows = SCREEN_ROWS_24;
-        } else {
-            break;
+            render_tier1_workspace_screen(s_splash_lines, 18, 54);
         }
     }
     clear_screen();
@@ -437,7 +478,9 @@ void show_config_screen(void)
         "                                                  "
     };
     render_tier1_workspace_screen(s_config_lines, 11, 50);
-    hal_console_getkey();
+    while (hal_console_getkey() <= 0) {
+        /* Wait for user keystroke */
+    }
     clear_screen();
     g_need_screen_render = 1;
 }

@@ -75,7 +75,8 @@ def drain_all(master_fd, timeout=0.2):
         except (BlockingIOError, OSError):
             break
 
-def main():
+def main(use_sec=False):
+    cmd_name = b"sec" if use_sec else b"se"
     repo_root, emu_bin, rom_file, base_img, cpmcp, cpmrm = find_paths()
     test_img = "/tmp/test_splash_plugin_load.img"
     shutil.copyfile(base_img, test_img)
@@ -132,7 +133,7 @@ def main():
         time.sleep(0.3)
         drain_all(master)
         print("[*] Launching: se 2.TXT")
-        os.write(master, b"se 2.TXT\r")
+        os.write(master, cmd_name + b" 2.TXT\r")
         ok, out = read_until(master, b"Line    1/2", timeout=35.0)
         assert ok, f"Failed editor entry: {out}"
         print("[+] Entered editor with 2.TXT")
@@ -218,4 +219,5 @@ def main():
     print("\n[PASS] test_splash_plugin_load_crash passed successfully.")
 
 if __name__ == "__main__":
-    main()
+    use_sec_arg = "--sec" in sys.argv
+    main(use_sec=use_sec_arg)

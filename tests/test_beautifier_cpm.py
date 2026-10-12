@@ -28,7 +28,7 @@ import tty
 import select
 import subprocess
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -48,7 +48,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -158,7 +158,12 @@ def get_file_from_image(cpmcp_bin, img_file, cpm_filename):
 
 def test_config_screen_beautifier_options():
     print("\n[*] TEST 1: Beautifier Plugin Configuration & SE.COM Options Decoupling...", flush=True)
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     # Remove existing SE.CFG and BEAUTIFY.CFG to ensure defaults
     for cfg in ["0:SE.CFG", "0:se.cfg", "0:BEAUTIFY.CFG", "0:beautify.cfg"]:
@@ -169,7 +174,7 @@ def test_config_screen_beautifier_options():
     try:
         # Launch SE.COM
         time.sleep(0.4)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         out = read_until(master, b"Col 0", timeout=45.0)
         assert b"Col 0" in out or b"to configure" in out, f"Failed launching SE.COM: {out}"
 
@@ -306,7 +311,7 @@ def test_config_screen_beautifier_options():
     proc2, master2 = boot_cpm(emu_bin, rom_file, img_file)
     try:
         time.sleep(0.4)
-        os.write(master2, b"se\r")
+        os.write(master2, cmd_name + b"\r")
         read_until(master2, b"Col 0", timeout=45.0)
 
         # Enter Plugin Manager ('p')
@@ -345,7 +350,12 @@ def test_config_screen_beautifier_options():
 
 def test_ctrl_y_whole_file_beautify():
     print("\n[*] TEST 2: Whole-File Beautification via Ctrl+Y...", flush=True)
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     # Prepare unformatted raw Z80 file
     raw_asm = (
@@ -371,7 +381,7 @@ def test_ctrl_y_whole_file_beautify():
     try:
         # Launch SE.COM RAW.ASM
         time.sleep(0.4)
-        os.write(master, b"se raw.asm\r")
+        os.write(master, cmd_name + b" raw.asm\r")
         out = read_until(master, b"^K: Editor keys", timeout=45.0)
         assert b"^K: Editor keys" in out
         drain_all(master, 0.2)
@@ -461,7 +471,12 @@ def test_ctrl_y_whole_file_beautify():
 
 def test_ctrl_y_block_beautify():
     print("\n[*] TEST 3: Block-Scoped Beautification via Ctrl+Y...", flush=True)
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     # Prepare unformatted raw Z80 file
     blk_asm = (
@@ -476,7 +491,7 @@ def test_ctrl_y_block_beautify():
     try:
         # Launch SE.COM BLK.ASM
         time.sleep(0.4)
-        os.write(master, b"se blk.asm\r")
+        os.write(master, cmd_name + b" blk.asm\r")
         out = read_until(master, b"BLK.ASM", timeout=45.0)
         assert b"BLK.ASM" in out
         print("    [+] Opened BLK.ASM in editor")
@@ -579,7 +594,12 @@ def test_cross_platform_parity():
     from tools.z80_beautifier.formatter import Formatter
 
     # 1. Load config from SE.CFG using meta loader
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
     cfg_data = get_file_from_image(cpmcp_bin, img_file, "SE.CFG")
     assert cfg_data is not None
     cfg_tmp = "/tmp/PARITY_SE.CFG"
@@ -620,7 +640,12 @@ def test_cross_platform_parity():
 
 def test_compact_beautification():
     print("\n[*] TEST 5: Custom Plugin Config (BEAUTIFY.CFG) & Cross-Platform Parity...", flush=True)
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     # Raw assembly to format with compact schema
     raw_asm = (
@@ -650,7 +675,7 @@ def test_compact_beautification():
     proc, master = boot_cpm(emu_bin, rom_file, img_file)
     try:
         time.sleep(0.4)
-        os.write(master, b"se compact.asm\r")
+        os.write(master, cmd_name + b" compact.asm\r")
         out = read_until(master, b"^K: Editor keys", timeout=45.0)
         assert b"^K: Editor keys" in out
         drain_all(master, 0.2)
@@ -724,7 +749,7 @@ def test_compact_beautification():
 
     print("[+] Test 5 PASSED: Custom BEAUTIFY.CFG cross-platform parity 100% confirmed!")
 
-def main():
+def main(use_sec=False):
     print("=" * 65)
     print("  SE.COM Z80 Beautifier Subsystem Regression Test Suite")
     print("=" * 65)
@@ -740,4 +765,5 @@ def main():
     print("=" * 65)
 
 if __name__ == "__main__":
-    main()
+    use_sec_arg = "--sec" in sys.argv
+    main(use_sec=use_sec_arg)

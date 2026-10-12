@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 5 Defects Open (Bugs 2.4.8–2.4.12).
+- **Status**: Active / 6 Defects Open (Bugs 2.4.20–2.4.25).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -206,7 +206,7 @@ have been resolved and archived.
       and omits bracket framing `[ text ]` on text input prompts.
     - *Required Fix*: Implement canonical Archetypes A, B, C, D with title
       dividers, 1-based centering, and strict key dismissal rules.
-  - [ ] **Bug 2.4.8: Missing Modal & Command Dispatchers in Editor Mode**:
+  - [x] **Bug 2.4.8: Missing Modal & Command Dispatchers in Editor Mode**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.
     - *Issue*: In `src/core/editor.c`, `editor_handle_key()` lacks cases for
       `KEY_CTRL_L` (Goto Line), `KEY_CTRL_O` (Open File), `KEY_CTRL_P` (Plugin
@@ -214,46 +214,290 @@ have been resolved and archived.
       `modal_input_goto_line()` is implemented in `ui_modal.c` and
       `goto_line()` exists in `editor.c`, `Ctrl+L` is silently dropped as a
       no-op.
-    - *Required Fix*: Bind `KEY_CTRL_L` to invoke `modal_input_goto_line()` and
-      dispatch `goto_line()`, and bind `KEY_CTRL_O`, `KEY_CTRL_P`, and
-      `KEY_CTRL_W` to their respective modal and editor actions.
-  - [ ] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
+    - *Resolution*: Bound `KEY_CTRL_L` to prompt for line number via Archetype C
+      modal and jump via `goto_line()`, `KEY_CTRL_O` to open file browser dialog
+      and load document, `KEY_CTRL_P` to display plugin manager UI, and
+      `KEY_CTRL_W` to confirm unsaved modifications and close to splash screen.
+      Validated via `test_bug_2_4_8_modal_dispatchers` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.9: Non-Functional Splash Screen Interactive Command Matrix**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Issue*: `show_splash_screen` in `src/core/ui_render.c` renders the
       canonical 14-line matrix displaying `:e`, `:o`, `:s`, `:c`, `:p`, `:?`,
       `:q`, but only checks for `q`/`Q` and treats any other key as an
       unconditional exit into the editor. Pressing `:o`, `:s`, `:c`, `:p`,
       `:?`, `1`, or `2` fails to trigger the corresponding modals/workspaces.
-    - *Required Fix*: Implement an interactive splash event loop in
-      `ui_render.c` / `editor.c` dispatching `:e`, `:o`, `:s`, `:c`, `:p`,
-      `:?`, `1`, `2`, and `:q`.
-  - [ ] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
+    - *Resolution*: Implemented interactive event loop in `show_splash_screen`
+      supporting prefix colon (`:`) syntax and bare keys, dispatching `:e`
+      (editor), `:o` (open file), `:s` (save file), `:w` (close file), `:l`
+      (goto line), `:c` (config screen), `:p` (plugin manager), `:?` (help),
+      `1` (120x40), `2` (80x24), and `:q` (exit), ignoring unregistered keys.
+      Validated via `test_bug_2_4_9_splash_screen_commands` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.10: Keyboard HAL Escape Sequence Clumping on Burst Input**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c`, the 30ms polling read
       loop reads up to 6 bytes into a single buffer. Rapid consecutive escape
       sequences (e.g. arrow navigation `\x1b[D\x1b[D\x1b[D`) are clumped into
       `seq`, causing CSI pattern match (`seq_len == 2`) to fail, defaulting to
       `KEY_ESC`, and corrupting cursor navigation.
-    - *Required Fix*: Process escape sequences discretely with a single CSI/SS3
-      token parser or token FIFO buffer so back-to-back escape sequences are
-      decoded without drops or clumping.
-  - [ ] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
+    - *Resolution*: Implemented discrete byte FIFO queue and lookahead
+      tokenization in `src/hal/linux/hal_linux_keyboard.c`, decoding ANSI CSI
+      and SS3 escape sequences byte-by-byte with precise 30ms inter-byte timeout
+      and unget support. Rapid burst escape sequences parse discretely without
+      clumping. Validated via `test_bug_2_4_10_burst_escape_sequences` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.11: Block Selection Dynamic Cursor Tracking Missing**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2.
     - *Issue*: In `src/core/block.c`, `g_block_active_row` and
       `g_block_active_col` are only updated on `start_new_block_at_cursor()`
       and `solidify_block()`. As cursor moves in `editor.c`, block bounds are
       never updated, resulting in 0 characters selected and no visual highlight
       while navigating in selection mode.
-    - *Required Fix*: Track cursor position dynamically during
-      `BLOCK_MODE_SELECTING` and update normalized block bounds on movement.
-  - [ ] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
+    - *Resolution*: Dynamically updated `g_block_active_row` and
+      `g_block_active_col` from cursor position in `normalize_block_bounds()`
+      and implemented `update_block_selection()` in `src/core/block.c`.
+      Integrated cursor tracking at editor key dispatch in `src/core/editor.c`
+      triggering screen and status bar re-renders with inverse video highlights.
+      Validated via `test_bug_2_4_11_block_selection_cursor_tracking` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.12: Clipboard Paste Unbound & Unimplemented (Ctrl+V)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.
     - *Issue*: In `src/core/editor.c`, `KEY_CTRL_V` is bound exclusively to
       `page_down()`. `src/core/block.c` implements `do_copy_block()` and
       `do_delete_block()`, but has no dedicated paste function. Text copied via
       `Ctrl+C` cannot be pasted.
-    - *Required Fix*: Implement `do_paste_block()` in `block.c` and bind
-      `KEY_CTRL_V` in `editor.c` to paste clipboard contents at current cursor.
+    - *Resolution*: Implemented `do_paste_block()`, `do_cut_block()`, and
+      clipboard buffer getters in `src/core/block.c`. Bound `KEY_CTRL_V` in
+      `src/core/editor.c` to paste clipboard contents at active cursor (falling
+      back to `page_down()` when clipboard is empty) and bound `KEY_CTRL_C` to
+      copy selection. Validated via `test_bug_2_4_12_clipboard_copy_paste`
+      in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.13: Terminal Lifecycle, Startup Clear & Clean Exit Missing**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.5, 12.1.
+    - *Issue*: On launch, `src/se_linux.c` fails to emit canonical `TERM_INIT`
+      (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`), risking leaving unreset attributes or
+      scrollback artifacts. On exit, `se_linux.c` clears screen and shows
+      cursor, but fails to emit the canonical exit message followed by CRLF:
+      `\r\nExiting SE. Returned to OS prompt.\r\n`. Additionally,
+      `hal_console_clear()` in `hal_linux_console.c` emits `\x1b[H\x1b[2J`
+      (home then clear) rather than standard ANSI clear then home
+      (`\x1b[2J\x1b[H`).
+    - *Resolution*: Emitted canonical `TERM_INIT` on `hal_console_init()` in
+      `src/hal/linux/hal_linux_console.c`, standardized `hal_console_clear()` to
+      `\x1b[2J\x1b[H`, and emitted `TERM_INIT` followed by the canonical exit
+      banner `\r\nExiting SE. Returned to OS prompt.\r\n` upon termination in
+      `src/se_linux.c`. Validated via `test_bug_2_4_13_terminal_lifecycle` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.14: Viewport Column 1 Space & Cursor Locator Offset**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1.3, 5.3, 6.7.
+    - *Issue*: In `src/core/ui_render.c:82` (`render_row_content`), allocated
+      document rows unconditionally print a leading space
+      `hal_console_putc(' ')` at column 1 under the mistaken notion of a
+      "Column 0 Margin", constraining text width to `g_active_cols - 2` and
+      shifting all document text right by one column. Section 5.3 strictly
+      excludes column 0 tildes or margin spaces from active document lines.
+      Due to this space, `locate_cursor()` in `src/core/editor.c:120` hardcodes
+      `screen_col = (uint8_t)(vis_col + 2)` instead of the canonical 1-based
+      coordinate formula `(vis_col - VIEW_LEFT_COL) + 1` specified in
+      Section 6.7.
+    - *Resolution*: Removed leading space on allocated document rows in
+      `src/core/ui_render.c`, expanded text viewport width to `g_active_cols`,
+      and realigned `locate_cursor()` in `src/core/editor.c` to canonical
+      1-based coordinate `(vis_col - pan) + 1`. Validated via
+      `test_bug_2_4_14_viewport_col1_alignment` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.15: Missing Sticky Target Column & Vertical Tab Clamping**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.1, 6.2, 6.4.
+    - *Issue*: In `src/core/editor.c`, vertical navigation primitives
+      (`cursor_up`, `cursor_down`, `page_up`, `page_down`) lack sticky
+      `TARGET_COL` persistence. Passing through shorter or blank lines
+      permanently clamps `g_cur_col` to `g_active_line_len`, losing the visual
+      column. Furthermore, `adjust_col_to_target()` is never called on vertical
+      movement, and its internal logic sets `g_cur_col` to `i` (after the tab,
+      where `calc_visual_col >= target`) violating the Tab Exclusion Mandate,
+      which requires clamping to the beginning of the tab (`vis_acc < TARGET_COL
+      < vis_acc + spaces`).
+    - *Resolution*: Implemented `g_target_col` in `src/core/editor.c` and
+      declared in `src/include/editor.h`, tracking visual target column across
+      horizontal movement and text editing. Implemented canonical
+      `adjust_col_to_target()` with tab start clamping, preserving target
+      column across `cursor_up`, `cursor_down`, `page_up`, and `page_down`.
+      Validated via `test_bug_2_4_15_sticky_target_col_and_tab_clamping` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.16: Status Bar Field Squatting & Field 5 Column Reporting**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 11.1.
+    - *Issue*: In `src/core/ui_render.c:210-241` (`render_status_bar`), Field 4
+      is overwritten with selection metrics (`Sel: ...`, `Block: ...`) or
+      horizontal panning (`[Pan +40]`), clobbering the mandatory universal help
+      hint `^K: Editor keys |`. Per Section 4.3, selection state (`[SEL]` /
+      `[BLK LOCK]`) and panning (`[Pan +40]`) belong in Field 5. Furthermore,
+      Field 5 formats column position using raw byte index `g_cur_col` instead
+      of visual document column `calc_visual_col()`, displaying raw byte offsets
+      when tabs are present.
+    - *Resolution*: Unconditionally preserved `^K: Editor keys |` in Field 4,
+      routed `[Pan +40]`, `[SEL]`, and `[BLK LOCK]` indicators into Field 5,
+      and computed Field 5 column display using `calc_visual_col()`. Validated
+      via `test_bug_2_4_16_status_bar_field_invariance_and_visual_col` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.17: Tier 1 File Open/Save Workspaces & Directory Scanning**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 7.5, 7.6, 7.7, 7.8, 14.2.
+    - *Issue*: `ui_browser_open_dialog` in `src/core/ui_browser.c` renders a
+      56x18 Tier 2 modal dialog with a 1-column list of files, and
+      `ui_browser_save_dialog` delegates to `modal_prompt_text` (a single-line
+      prompt). Section 7.5–7.8 mandate that File Open, Insert, Save, and Save
+      Block are dedicated Tier 1 Full-Screen Workspaces with multi-column
+      grids (5 cols x 12 rows on 80x24; 7 cols x 28 rows on 120x40), double
+      rules (`~====...====`), column 0 tilde margins, `<PgUp>`/`<PgDn>`
+      pagination, line ending toggle (`Ctrl+F`), and status bar at row 24.
+      Furthermore, `hal_linux_scan_directory` in `hal_linux_storage.c` is an
+      empty stub with no directory entry population.
+    - *Resolution*: Upgraded File Open/Save/Insert/Save Block to full-screen
+      Tier 1 workspaces with multi-column grids, double rules, column 0 tilde
+      discipline, `<PgUp>`/`<PgDn>` pagination, line ending toggle (`Ctrl+F`),
+      and universal status bar. Implemented POSIX `opendir`/`readdir` directory
+      scanning in `hal_linux_storage.c`. Validated via
+      `test_bug_2_4_17_tier1_file_workspaces_and_directory_scan` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.18: Non-Canonical Configuration Parser & Serialization**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 13.1, 13.2.
+    - *Issue*: `src/core/config.c` uses non-canonical, case-sensitive key names
+      (`TAB_WIDTH`, `LINES_MODE`, `SCREEN_MODE`, `SAVE_FMT`, `PLUGIN_MODE`)
+      rather than canonical keys `SCREEN`, `TAB`/`TABS`, `FORMAT`,
+      `LINES`/`MAXLINES`, `RAMDRIVE`/`RAMDISK`, `PLUGIN`/`PLUGINS`. It fails to
+      parse canonical symbolic values (`16K`/`32K`, `PRESERVE`/`ON`/`HIB`,
+      `AUTOLOAD`/`DEMAND`/`OFF`), does not strip surrounding whitespace around
+      keys and values, does not ignore `;` comment lines, defaults `SCREEN` to
+      `MODE_80X24` instead of canonical `120X40`, and serializes using
+      non-canonical key names.
+    - *Resolution*: Implemented case-insensitive parsing of canonical keys and
+      symbolic values in `src/core/config.c`, stripped leading and trailing
+      whitespace, ignored `#` and `;` comment lines and empty lines, defaulted
+      `SCREEN` to `MODE_120X40`, and serialized configuration using canonical
+      key names, symbolic values, and CRLF (`\r\n`) endings. Validated via
+      `test_bug_2_4_18_canonical_config_parser_and_serialization` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.19: Panning Edge Trigger & Dynamic Geometry Adaptation**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6, 14.1.
+    - *Issue*: In `src/core/editor.c:65-98` (`update_horizontal_pan`),
+      horizontal panning lacks the canonical lookahead edge trigger: when
+      `vis_col == VIEW_RIGHT_COL - 1` (column 79) and the active line continues
+      beyond `CUR_COL` (character at `CUR_COL` and next character are
+      non-null), the viewport must pan right by 40 columns. Furthermore,
+      `update_horizontal_pan()` hardcodes `g_horiz_pan_offset = 0` whenever
+      `screen_mode == MODE_120X40`, ignoring dynamic terminal width
+      (`g_active_cols`) and preventing panning on terminals with intermediate
+      or non-standard column widths.
+    - *Resolution*: Implemented canonical lookahead edge trigger at
+      `view_right - 1` in `src/core/editor.c`, panning viewport right by 40
+      columns when line continues past cursor. Adapted horizontal panning
+      boundaries dynamically against `g_active_cols` and terminal width,
+      bypassing panning when terminal accommodates the 120-column line limit
+      and preserving hysteresis retention. Validated via
+      `test_bug_2_4_19_panning_edge_trigger_and_geometry` in
+      `tests/test_linux_native.py`.
+  - [ ] **Bug 2.4.20: Deprecated WordStar Diamond Navigation & Key Aliases**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 6.3, 6.4, 7.3, 10, 11
+      (Anti-Pattern #8).
+    - *Issue*: Directional cursor navigation across all surfaces is mandated
+      to be handled exclusively via standard ANSI VT100 arrow keys and standard
+      motion shortcuts (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G`
+      Bottom). WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`)
+      is deprecated and strictly unsupported to prevent command collisions.
+      In Linux SE:
+      1. In `src/core/editor.c:519-520`, `KEY_CTRL_E` (`0x05`) is aliased to
+         `cursor_up()` rather than canonical End of Line (`cursor_end()`), and
+         `KEY_CTRL_D` (`0x04`) is aliased to `cursor_right()` rather than
+         forward character deletion (`do_delete()`).
+      2. In `src/core/editor.c:589`, `KEY_CTRL_X` (`0x18`) falls back to
+         `cursor_down()` when no block is active.
+      3. In `src/core/ui_browser.c:336,349`, `KEY_CTRL_E` and `KEY_CTRL_X` are
+         aliased to grid Up and Down.
+      4. In `src/core/ui_modal.c:189,250,252`, `modal_confirm_2btn` and
+         `modal_confirm_3btn` alias `KEY_CTRL_S` and `KEY_CTRL_D` to button
+         navigation.
+      5. In `src/core/ui_render.c:412`, `s_help_lines` advertises
+         `Arrows / WordStar (^S,^D,^E,^X)` instead of canonical
+         `Arrows / ANSI VT100`.
+    - *Required Fix*: Disassociate WordStar diamond keys from cursor movement
+      across all modules. Bind `KEY_CTRL_E` to `cursor_end()`, `KEY_CTRL_D` to
+      `do_delete()`, and remove `cursor_down()` fallback on `KEY_CTRL_X` in
+      `editor.c`. Remove WordStar key aliases from `ui_browser.c` and
+      `ui_modal.c`. Update `s_help_lines` in `ui_render.c` to display
+      `Arrows / ANSI VT100`.
+  - [ ] **Bug 2.4.21: Off-by-Zero Column Anchor on Backspace Line Join**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Issue*: In `src/core/editor.c:229-231` (`do_backspace`), when joining
+      current line (`g_cur_doc_row`) to previous line (`g_cur_doc_row - 1`)
+      at column 0 (`g_cur_col == 0`), the code appends current line to
+      `prev_buf`, updates `prev_len += g_active_line_len`, copies back to
+      `g_active_line_buf`, and then calculates:
+      `g_cur_col = prev_len - (g_active_line_len);`
+      Because `g_active_line_len` was just assigned `prev_len`, `g_cur_col`
+      evaluates to `0`. The cursor is incorrectly anchored to column 0 of the
+      joined line instead of the junction boundary (`orig_prev_len`).
+    - *Required Fix*: Preserve the original length of the previous line before
+      concatenation (`uint16_t orig_prev_len = prev_len;`). After deleting the
+      document row and checking out the joined line, set
+      `g_cur_col = orig_prev_len;` and update sticky target column
+      `g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);`.
+  - [ ] **Bug 2.4.22: Delete & Ctrl+D Fail to Delete Active Block Selection**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Issue*: In `src/core/editor.c:240-274` (`do_delete`), pressing `Delete`
+      or `Ctrl+D` unconditionally performs inline character deletion under the
+      cursor or pulls up the next line. If a block selection is active
+      (`g_block_mode == BLOCK_MODE_SELECTING` or `BLOCK_MODE_SOLIDIFIED`), the
+      specification requires that pressing `Delete` or `Ctrl+D` solidifies
+      dynamic selection and deletes the entire highlighted block range
+      (`do_delete_block()`), resetting `g_block_mode = BLOCK_MODE_OFF`.
+      Currently, active selection is ignored and only a single character under
+      the cursor is deleted.
+    - *Required Fix*: In `do_delete()` (and `editor_handle_key` on `KEY_DEL` /
+      `KEY_CTRL_D`), inspect `g_block_mode`. When `g_block_mode !=`
+      `BLOCK_MODE_OFF`, solidify selection if selecting, invoke
+      `do_delete_block()`, reset `g_block_mode = BLOCK_MODE_OFF`, mark
+      `g_doc_modified = 1`, and trigger screen re-render
+      (`g_need_screen_render = 1`).
+  - [ ] **Bug 2.4.23: Backspace Fails to Cancel Dynamic Block Selection**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Issue*: In `src/core/editor.c:192-238` (`do_backspace`), pressing
+      Backspace while dynamic block selection is underway
+      (`g_block_mode == BLOCK_MODE_SELECTING`) deletes the character preceding
+      the cursor and mutates document contents. Section 6.8 strictly mandates
+      that pressing Backspace during dynamic block selection must cancel
+      selection (`g_block_mode = BLOCK_MODE_OFF`) to safeguard highlighted
+      text against unintended modification, keeping the cursor stationary
+      without deleting text.
+    - *Required Fix*: In `do_backspace()`, check if `g_block_mode ==
+      BLOCK_MODE_SELECTING`. If so, invoke `cancel_block()`, set
+      `g_need_status_render = 1`, and return immediately without modifying line
+      buffer contents or cursor column.
+  - [ ] **Bug 2.4.24: Enter Key in Dynamic Block Mode Splits Active Line**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 9.1, 10.
+    - *Issue*: In `src/core/editor.c:276-307` (`do_enter`), pressing Enter
+      unconditionally splits the active line at `g_cur_col` and creates a new
+      line. When dynamic block selection is active (`g_block_mode ==
+      BLOCK_MODE_SELECTING`), pressing Enter must solidify the selection
+      (`solidify_block()`, locking `g_block_mode = BLOCK_MODE_SOLIDIFIED`)
+      without splitting the line or mutating document text.
+    - *Required Fix*: In `do_enter()`, check if `g_block_mode ==
+      BLOCK_MODE_SELECTING`. If so, invoke `solidify_block()`, set
+      `g_need_status_render = 1`, and return without splitting the line.
+  - [ ] **Bug 2.4.25: Missing In-Field Editing Keys in Archetype C Modals**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
+    - *Issue*: In `src/core/ui_modal.c:258-318` (`modal_prompt_text`), the
+      parametric input field pins the cursor to the end of the input string
+      (`cur_len`). It does not track an internal cursor index, completely
+      ignoring directional navigation (`KEY_LEFT`, `KEY_RIGHT`, `KEY_HOME`,
+      `KEY_END`, `KEY_CTRL_A`, `KEY_CTRL_E`). Furthermore, `KEY_DEL` is mapped
+      to backspace (deleting the last character), and `KEY_CTRL_D` is unhandled,
+      violating the mandate for forward character deletion under the cursor.
+    - *Required Fix*: Implement in-field cursor position tracking (`cursor_pos`)
+      in `modal_prompt_text()`. Support character insertion at cursor position,
+      Backspace deleting left of cursor (`cursor_pos - 1`), Delete and `Ctrl+D`
+      deleting character under cursor (`cursor_pos`), Left/Right arrow keys
+      shifting cursor index, and Home (`Ctrl+A`) / End (`Ctrl+E`) moving to
+      boundaries.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
@@ -283,7 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.31 Closed).
+- **Status**: Active / 3 Defects Open (Bugs 2.7.42–2.7.44; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -673,6 +917,224 @@ have been resolved and archived.
       of `paste_block()` in `ports/python/se/buffer.py` to synchronize
       `self.target_col = self.get_visual_col()`. Validated via
       `test_delete_and_paste_sticky_target_col` in `test_buffer.py`.
+  - [x] **Bug 2.7.32: File Open & Save Workspaces Using Tier 2 Modals**:
+    - *Symptom*: Pressing `Ctrl+O` / `:o` or `Ctrl+S` / `:s` presents a small
+      52-column Tier 2 text input modal (`show_input`) rather than the
+      full-screen Tier 1 Directory Browser workspace.
+    - *Root Cause*: `action_open_file()` and `action_save_file()` in
+      `ports/python/se/editor.py` invoke `self.modal.show_input()` instead of
+      rendering Tier 1 workspaces with multi-column file grid layouts (5 cols
+      on 80x24 / 7 cols on 120x40), `<PgUp>/<PgDn>` pagination, directory
+      filtering, and `Ctrl+F` format toggling.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, and 14.2.
+    - *Resolution*: Implemented `render_directory_workspace()` in `ui.py` and
+      `action_directory_browser()` in `editor.py`, replacing mini-modals
+      with full-screen Tier 1 directory workspaces supporting multi-column
+      file grids, pagination, path traversal, wildcard filtering, and `Ctrl+F`
+      format toggling. Validated via
+      `test_tier1_directory_browser_open_and_save` in `test_editor.py`.
+  - [x] **Bug 2.7.33: Block-Active File Insert (Ctrl+O) Unimplemented**:
+    - *Symptom*: Pressing `Ctrl+O` while a block selection is active invokes
+      the open file action (replacing active document) rather than streaming
+      the selected file contents into the buffer at the cursor. Additionally,
+      `Ctrl+K R` is unhandled.
+    - *Root Cause*: In `ports/python/se/editor.py:160`, `KEY_CTRL_O` does not
+      check `self.buffer.block_active`. The editor lacks `action_insert_file()`
+      and block insertion mechanics.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, Section 10, and
+      `src/se.asm:1064-1070`.
+    - *Resolution*: Added block-active detection to `KEY_CTRL_O` in
+      `dispatch_key()` and implemented `action_insert_file()` in `editor.py`
+      along with `insert_file()` in `DocumentBuffer`, solidifying block bounds
+      and streaming file contents directly into the document at the cursor
+      position without replacing existing lines. Added `Ctrl+K R` prefix
+      dispatch. Validated via `test_block_active_file_insert` in
+      `test_editor.py`.
+  - [x] **Bug 2.7.34: Block-Active Save (Ctrl+S) Saves Full Buffer**:
+    - *Symptom*: Pressing `Ctrl+S` while a block is highlighted overwrites the
+      target file with the full document buffer rather than saving only the
+      highlighted visual block range. Additionally, `Ctrl+K S` is unhandled.
+    - *Root Cause*: In `ports/python/se/editor.py:162`, `KEY_CTRL_S`
+      unconditionally calls `self.action_save_file()`. There is no check for
+      `self.buffer.block_active > 0` and no `action_block_save()` routine.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.8, Section 10, and
+      `src/se.asm:1046-1052`.
+    - *Resolution*: Intercepted `KEY_CTRL_S` when `self.buffer.block_active > 0`
+      in `dispatch_key()` and implemented `action_block_save()` in `editor.py`
+      along with `save_block()` in `DocumentBuffer`, writing only highlighted
+      block lines and characters to target file while retaining active block
+      selection. Added `Ctrl+K S` prefix dispatch. Validated via
+      `test_block_active_save` in `test_editor.py`.
+  - [x] **Bug 2.7.35: Document Close (Ctrl+W) Unhandled in Editor Loop**:
+    - *Symptom*: Pressing `Ctrl+W` while editing a document is ignored. The
+      editor cannot close an open document back to the splash screen from the
+      active editor workspace. Furthermore, `action_close_file()` contains
+      reversed confirmation prompt logic and fails to transition to Splash.
+    - *Root Cause*: In `ports/python/se/editor.py`, `dispatch_key()` completely
+      omits a branch for `KEY_CTRL_W`. In addition, `action_close_file()`
+      prompts to discard edits rather than save them, and resets the buffer
+      without launching `action_splash_screen()`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.9 and Section 10.
+    - *Resolution*: Bound `KEY_CTRL_W` in `dispatch_key()` to
+      `action_close_file()`. Updated `action_close_file()` to conform to
+      Section 7.9: if clean, immediately closes to Splash; if modified,
+      presents canonical Tier 2 modal (`Save changes?`), routes `[Y]es` to
+      save before closing, `[N]o` to discard and close to Splash, and `[ESC]`
+      to cancel. Validated via `test_document_close_lifecycle` in
+      `test_editor.py`.
+  - [x] **Bug 2.7.36: Missing Startup SE.CFG Discovery & Geometry Default**:
+    - *Symptom*: Running `se` without `--config` never probes or loads `SE.CFG`
+      from current working directory or program directory. Additionally,
+      `Config.DEFAULT_SCREEN` defaults to `"80x24"` instead of canonical CP/M
+      default `"120X40"`.
+    - *Root Cause*: In `ports/python/se/__main__.py:67`, `editor.config.load()`
+      only executes if `args.config` is explicitly passed. In
+      `ports/python/se/config.py:15`, `DEFAULT_SCREEN = "80x24"`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 13.2, 13.3, and 14.1.
+    - *Resolution*: Updated `DEFAULT_SCREEN = "120X40"` as canonical CP/M
+      default. Implemented `discover_and_load()` in `Config` following priority
+      order (custom path, `./SE.CFG` in current working directory, and
+      program directory). Integrated discovery into `Editor.__init__()` and
+      `__main__.py` before terminal initialization and buffer creation.
+      Validated via `test_secfg_canonical_default_and_discovery` in
+      `test_config.py` and `test_editor_secfg_discovery_and_geometry_default`
+      in `test_editor.py`.
+  - [x] **Bug 2.7.37: Delete Key Ignores Active Block (Ctrl+D / DEL)**:
+    - *Symptom*: Pressing `Delete` or `Ctrl+D` while a block selection is active
+      (dynamic or solidified) deletes only a single character under the cursor
+      and leaves the block highlighted or desynchronized, rather than deleting
+      the highlighted block range.
+    - *Root Cause*: In `ports/python/se/editor.py:139-140`, `KEY_DELETE` and
+      `KEY_CTRL_D` unconditionally execute `self.buffer.delete_char()` without
+      inspecting `self.buffer.block_active`. Furthermore, `DocumentBuffer`
+      lacks a dedicated `delete_block()` method.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.8 and 10.1;
+      `src/se.asm:1176-1188` (`DO_CTRL_D_BLOCK`) and `src/core/block.asm:847`.
+    - *Resolution*: Implemented `delete_block()` in `DocumentBuffer` to remove
+      selected block text, position cursor at block start, clear `block_active`,
+      and mark document modified without altering clipboard. Updated
+      `dispatch_key()` in `editor.py` to check `block_active > 0` on
+      `KEY_DELETE` / `KEY_CTRL_D` and invoke `delete_block()`. Validated via
+      `test_delete_key_active_block` in `test_editor.py`.
+  - [x] **Bug 2.7.38: Backspace Fails to Cancel Dynamic Block Selection**:
+    - *Symptom*: Pressing `Backspace` while dynamically highlighting text
+      deletes the character preceding the cursor, mutating buffer contents
+      while keeping the dynamic block active.
+    - *Root Cause*: In `ports/python/se/editor.py:137-138`, `KEY_BACKSPACE`
+      unconditionally calls `self.buffer.backspace()` without checking
+      `self.buffer.block_active == 1`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.8 and 10.1;
+      `src/se.asm:1328-1331` (`DO_BS_CANCEL_SETUP`).
+    - *Resolution*: Implemented `cancel_block()` on `DocumentBuffer`. Updated
+      `KEY_BACKSPACE` dispatch in `editor.py` to intercept `block_active == 1`
+      and cancel selection without deleting text, while clearing active blocks
+      prior to deletion when solidified (`block_active == 2`). Validated via
+      `test_backspace_dynamic_block_cancel` in `test_editor.py`.
+  - [x] **Bug 2.7.39: Enter Key in Dynamic Block Mode Splits Line**:
+    - *Symptom*: Pressing `Enter` while extending a dynamic block selection
+      splits the current line and moves cursor to a new line instead of
+      solidifying the highlighted block boundaries.
+    - *Root Cause*: In `ports/python/se/editor.py:135-136`, `KEY_ENTER`
+      unconditionally executes `self.buffer.split_line()`, corrupting block
+      selection coordinates and mutating the document.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 9.1 and
+      `src/se.asm:1299-1313` (`CHECK_ENTER`, `DO_ENTER_SOLIDIFY_SETUP`).
+    - *Resolution*: Updated `KEY_ENTER` dispatch in `editor.py` to check
+      `block_active == 1` and call `solidify_block()` without splitting the
+      line, while clearing active blocks prior to splitting when solidified
+      (`block_active == 2`). Validated via `test_enter_dynamic_block_solidify`
+      in `test_editor.py`.
+  - [x] **Bug 2.7.40: Forward Delete Line Join Desynchronizes Cursor Column**:
+    - *Symptom*: Pressing `Delete` / `Ctrl+D` at the end of a line when the
+      cursor column exceeds the line length (`cursor_col > len(line)`) joins the
+      next line but leaves the cursor positioned past the join point inside the
+      appended text rather than anchored at the junction boundary.
+    - *Root Cause*: In `ports/python/se/buffer.py:214-223`, `delete_char()`
+      appends `next_line` to `line` and pops row `cursor_row + 1`, but never
+      clamps or assigns `self.cursor_col = len(line)`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 6.8 and 10.1;
+      `src/se.asm:1172-1188`.
+    - *Resolution*: Explicitly assigned `self.cursor_col = len(line)` in
+      `delete_char()` prior to concatenation in `buffer.py`, synchronizing
+      sticky target column and anchoring hardware cursor at the join junction.
+      Validated via `test_delete_char_eol_junction_cursor_col` in
+      `test_buffer.py`.
+  - [x] **Bug 2.7.41: Typing and Tab Fail to Clear Active Block Selection**:
+    - *Symptom*: Typing printable ASCII characters or pressing `Tab` while a
+      block selection is active inserts characters into the line without
+      canceling the block, corrupting highlight coordinates and selection
+      boundaries. In dynamic mode (`block_active == 1`), typing modifies the
+      buffer instead of canceling selection.
+    - *Root Cause*: In `ports/python/se/editor.py:141-143` and `202-203`,
+      `KEY_TAB` and printable character typing directly call
+      `self.buffer.insert_char()` without inspecting `self.buffer.block_active`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2, and 10.1;
+      `src/se.asm:1361-1399` (`CHECK_PRINTABLE_CHAR`, `DO_INSERT_CHAR`).
+    - *Resolution*: Updated `KEY_TAB` and printable character dispatch in
+      `editor.py` to cancel dynamic block selection (`block_active == 1`)
+      without inserting characters or tab bytes, while clearing active blocks
+      prior to insertion when solidified (`block_active == 2`). Validated via
+      `test_typing_and_tab_block_cancel` in `test_editor.py`.
+  - [ ] **Bug 2.7.42: Status Bar Field Squatting & Missing Block Indicators**:
+    - *Symptom*: When text block selection is active (`block_active > 0`),
+      Field 4 on the universal status bar displays selection metrics (`Sel:
+      X chars |` or `Block: Y lines |`), clobbering the mandatory universal
+      help hint `" ^K: Editor keys |"`. Furthermore, Field 5 fails to display
+      the canonical ` [SEL]` (dynamic selection) or ` [BLK LOCK]` (solidified
+      selection) mode indicators.
+    - *Root Cause*: In `ports/python/se/ui.py:60-74` (`render_status_bar`), an
+      `if buf.block_active > 0:` branch replaces `help_field = " ^K: Editor
+      keys |"` with dynamic selection/line count strings, violating Section 4.3
+      and 11.1. In addition, Field 5 string assembly (`pos_field`) formats only
+      line, column, and pan offset, omitting the block mode indicators defined
+      in Section 4.3 and 9.2.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 9.2, and 11.1
+      (Anti-Pattern #1: Status Bar Squatting); Linux Native Bug 2.4.16.
+    - *Resolution Plan*: Keep Field 4 persistently formatted as `" ^K: Editor
+      keys |"`. In Field 5, append ` [SEL]` when `buf.block_active == 1` and
+      ` [BLK LOCK]` when `buf.block_active == 2` alongside horizontal pan
+      indicator `[Pan +X]`.
+  - [ ] **Bug 2.7.43: Missing Tier 2 Block Operations Modal Dialog on Ctrl+K**:
+    - *Symptom*: When a block selection is active (`block_active > 0`),
+      pressing `Ctrl+K` falls through to `action_help()` or prefix key
+      detection rather than presenting the canonical Tier 2 Block Operations
+      modal dialog.
+    - *Root Cause*: In `ports/python/se/editor.py:182-194`, `KEY_CTRL_K` does
+      not check `self.buffer.block_active`. Canonical SE
+      (`src/se.asm:1091-1099` and `src/core/block.asm:114-268`) routes `Ctrl+K`
+      with `BLOCK_ACTIVE > 0` directly to `DO_BLOCK_MENU_POPUP`, a 50x7 modal
+      pop-up displaying block metrics and keyboard commands (`[Enter]=Lock/Set`,
+      `[^C]=Copy`, `[^X]=Move`, `[^D]=Del`, `[^S]=Save`, `[^B]=Clear`,
+      `[ESC]=Close`).
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 10;
+      `src/se.asm:1091-1099` (`CHECK_CTRL_K`); `src/core/block.asm:114-268`
+      (`DO_BLOCK_MENU_POPUP`).
+    - *Resolution Plan*: Implement `action_block_popup()` in `editor.py` /
+      `modal.py` rendering the canonical 50x7 (or 52-col) Tier 2 Block
+      Operations modal dialog when `self.buffer.block_active > 0` upon
+      receiving `KEY_CTRL_K`, supporting Lock, Copy, Cut/Move, Delete, Save
+      Block, Clear, and Dismiss actions.
+  - [ ] **Bug 2.7.44: Ctrl+K Prefix Command Polling Blocks Interactive Chords**:
+    - *Symptom*: Pressing `Ctrl+K` followed by a secondary command key (`R` for
+      File Insert, `S` for Block Save, `Q`/`X` for Exit) fails to execute the
+      command and immediately falls back to displaying the Help workspace.
+    - *Root Cause*: In `ports/python/se/editor.py:183-194`, secondary key
+      polling queries `self.terminal.is_key_ready()` with the default
+      `timeout=0.0`. In interactive terminal sessions, human keystrokes cannot
+      arrive within 0.0 seconds of `Ctrl+K`, causing `is_key_ready()` to return
+      `False` immediately and dispatching `self.action_help()`.
+    - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, and 10.
+    - *Resolution Plan*: Provide a reasonable interactive window (e.g.
+      `timeout=1.0` or interactive prompt) when polling for two-key chord
+      sequences after `Ctrl+K`, allowing human entry of `R`, `S`, `Q`, `X`
+      before falling through to `action_help()`.
+  - [x] **Bug 2.7.45: WordStar Diamond Key Mapping [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10, 11.8.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: WordStar diamond key mappings (`^S`, `^D`, `^E`, `^X`) are
+      explicitly not supported across all editor workspaces, dialogs, and modal
+      surfaces. Modal text input prompts adhere strictly to standard VT100/ANSI
+      editing primitives, eliminating WordStar navigation by design.
 
 ---
 
