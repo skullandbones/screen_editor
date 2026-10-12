@@ -176,8 +176,15 @@ void render_status_bar(void)
              g_doc_modified ? '*' : ' ');
     snprintf(field1, sizeof(field1), "| %-14.14s | ", raw_name);
 
-    snprintf(field2, sizeof(field2), "%s | ",
-             (g_active_cols > 80) ? "120x40" : " 80x24");
+    if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
+        snprintf(field2, sizeof(field2), " 80x24 | ");
+    } else if (g_active_cols == SCREEN_COLS_120 &&
+               g_active_rows == SCREEN_ROWS_40) {
+        snprintf(field2, sizeof(field2), "120x40 | ");
+    } else {
+        snprintf(field2, sizeof(field2), "%3ux%-2u | ",
+                 (unsigned)g_active_cols, (unsigned)g_active_rows);
+    }
 
     snprintf(field3, sizeof(field3), "%s | ",
              (g_file_format == FMT_CPM) ? "CP/M " : "Linux");
@@ -268,7 +275,6 @@ void render_status_bar(void)
     char field4[32];
     char field5[80];
     const char *fname;
-    const char *geom_str;
     const char *fmt_str;
     char core[256];
     char full_bar[256];
@@ -280,8 +286,15 @@ void render_status_bar(void)
              g_doc_modified ? '*' : ' ');
     snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
 
-    geom_str = (g_active_cols >= SCREEN_COLS_120) ? "120x40" : "80x24";
-    snprintf(field2, sizeof(field2), " %s |", geom_str);
+    if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
+        snprintf(field2, sizeof(field2), " 80x24 |");
+    } else if (g_active_cols == SCREEN_COLS_120 &&
+               g_active_rows == SCREEN_ROWS_40) {
+        snprintf(field2, sizeof(field2), " 120x40 |");
+    } else {
+        snprintf(field2, sizeof(field2), " %ux%u |",
+                 (unsigned)g_active_cols, (unsigned)g_active_rows);
+    }
 
     fmt_str = (g_file_format == FMT_CPM) ? "CPM  " : "Linux";
     snprintf(field3, sizeof(field3), " %s |", fmt_str);
@@ -406,9 +419,9 @@ static void render_tier1_workspace_screen(const char **lines,
 
 void show_splash_screen(void)
 {
-    static const char *s_splash_lines[18] = {
-        "                SE.COM — Screen Editor                ",
-        "                    Version v1.1.0                    ",
+    static const char *s_splash_lines[19] = {
+        "                  SE — Screen Editor                  ",
+        "                  Version v1.1.0 (C)                  ",
         "                                                      ",
         "        type   [E]  or  [Enter] to edit               ",
         "        type   [N]              to new file           ",
@@ -421,8 +434,9 @@ void show_splash_screen(void)
         "        type   [P]              for plugins           ",
         "        type   [^P]             for context plugin menu",
         "        type   [C]              to configure          ",
-        "        type   [1]              set 120x40            ",
-        "        type   [2]              set 80x24             ",
+        "        type   [1]              set 80x24             ",
+        "        type   [2]              set 120x40            ",
+        "        type   [3]              set native            ",
         "        type   [Q]  or  [^Q]    to exit               ",
         "                                                      "
     };
@@ -433,7 +447,7 @@ void show_splash_screen(void)
     g_is_splash_screen = 1;
     while (1) {
         if (need_render) {
-            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+            render_tier1_workspace_screen(s_splash_lines, 19, 54);
             need_render = 0;
         }
         while ((k = hal_console_getkey()) <= 0) {
@@ -505,14 +519,29 @@ void show_splash_screen(void)
             show_help_screen();
             need_render = 1;
         } else if (k == '1') {
+            clear_screen();
+            g_config.screen_mode = MODE_80X24;
+            g_active_cols = SCREEN_COLS_80;
+            g_active_rows = SCREEN_ROWS_24;
+            need_render = 1;
+        } else if (k == '2') {
+            clear_screen();
             g_config.screen_mode = MODE_120X40;
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
             need_render = 1;
-        } else if (k == '2') {
-            g_config.screen_mode = MODE_80X24;
-            g_active_cols = SCREEN_COLS_80;
-            g_active_rows = SCREEN_ROWS_24;
+        } else if (k == '3') {
+            uint8_t ncols = 0, nrows = 0;
+            clear_screen();
+            g_config.screen_mode = MODE_NATIVE;
+            if (hal_console_get_native_size(&ncols, &nrows) == 0 &&
+                ncols >= SCREEN_COLS_80 && nrows >= SCREEN_ROWS_24) {
+                g_active_cols = ncols;
+                g_active_rows = nrows;
+            } else {
+                g_active_cols = SCREEN_COLS_80;
+                g_active_rows = SCREEN_ROWS_24;
+            }
             need_render = 1;
         }
     }
@@ -525,7 +554,7 @@ static const char *s_help_lines[17] = {
     "                       SE.COM — EDITOR MODE KEYS                      ",
     "                                                                      ",
     "  Cursor Navigation:                 Block Operations:                ",
-    "    Arrows / WordStar (^S,^D,^E,^X)     Ctrl+B: Toggle Block          ",
+    "    Arrows / ANSI VT100                 Ctrl+B: Toggle Block          ",
     "    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block            ",
     "    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block             ",
     "    Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block           ",
@@ -571,22 +600,109 @@ void show_about_screen(void)
 
 void show_config_screen(void)
 {
-    static const char *s_config_lines[11] = {
-        "            SE — Configuration Manager            ",
-        "                                                  ",
-        "         1. Screen Geometry  : 80x24              ",
-        "         2. Tab Width        : 8                  ",
-        "         3. Max Line Capacity: 32K                ",
-        "         4. RAM Drive Mode   : Disabled           ",
-        "                                                  ",
-        "   [S] Save to SE.CFG    [ESC]/[Enter] Return     ",
-        "                                                  ",
-        "                Enter option: _                   ",
-        "                                                  "
-    };
-    render_tier1_workspace_screen(s_config_lines, 11, 50);
-    while (hal_console_getkey() <= 0) {
-        /* Wait for user keystroke */
+    char line_geom[64];
+    char line_tab[64];
+    char line_lines[64];
+    char line_ram[64];
+    const char *cfg_lines[11];
+    const char *geom_str;
+    const char *ram_str;
+    int k;
+    uint8_t need_render = 1;
+
+    while (1) {
+        if (g_config.screen_mode == MODE_120X40) {
+            geom_str = "120x40";
+        } else if (g_config.screen_mode == MODE_NATIVE) {
+            geom_str = "Native";
+        } else {
+            geom_str = "80x24";
+        }
+
+        if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
+            ram_str = "Enabled";
+        } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
+            ram_str = "Hibernate";
+        } else {
+            ram_str = "Disabled";
+        }
+
+        snprintf(line_geom, sizeof(line_geom),
+                 "         1. Screen Geometry  : %-19s", geom_str);
+        snprintf(line_tab, sizeof(line_tab),
+                 "         2. Tab Width        : %-19u",
+                 (unsigned)g_config.tab_width);
+        snprintf(line_lines, sizeof(line_lines),
+                 "         3. Max Line Capacity: %-19s",
+                 (g_config.lines_mode == 1) ? "32K" : "16K");
+        snprintf(line_ram, sizeof(line_ram),
+                 "         4. RAM Drive Mode   : %-19s", ram_str);
+
+        cfg_lines[0]  = "            SE — Configuration Manager            ";
+        cfg_lines[1]  = "                                                  ";
+        cfg_lines[2]  = line_geom;
+        cfg_lines[3]  = line_tab;
+        cfg_lines[4]  = line_lines;
+        cfg_lines[5]  = line_ram;
+        cfg_lines[6]  = "                                                  ";
+        cfg_lines[7]  = "   [S] Save to SE.CFG    [ESC]/[Enter] Return     ";
+        cfg_lines[8]  = "                                                  ";
+        cfg_lines[9]  = "                Enter option: _                   ";
+        cfg_lines[10] = "                                                  ";
+
+        if (need_render) {
+            render_tier1_workspace_screen(cfg_lines, 11, 50);
+            need_render = 0;
+        }
+
+        while ((k = hal_console_getkey()) <= 0) {
+            /* Wait for user keystroke */
+        }
+
+        if (k == KEY_ESC || k == KEY_ENTER) {
+            break;
+        } else if (k == '1') {
+            clear_screen();
+            if (g_config.screen_mode == MODE_80X24) {
+                g_config.screen_mode = MODE_120X40;
+                g_active_cols = SCREEN_COLS_120;
+                g_active_rows = SCREEN_ROWS_40;
+            } else if (g_config.screen_mode == MODE_120X40) {
+                uint8_t ncols = 0, nrows = 0;
+                g_config.screen_mode = MODE_NATIVE;
+                if (hal_console_get_native_size(&ncols, &nrows) == 0 &&
+                    ncols >= SCREEN_COLS_80 && nrows >= SCREEN_ROWS_24) {
+                    g_active_cols = ncols;
+                    g_active_rows = nrows;
+                } else {
+                    g_active_cols = SCREEN_COLS_80;
+                    g_active_rows = SCREEN_ROWS_24;
+                }
+            } else {
+                g_config.screen_mode = MODE_80X24;
+                g_active_cols = SCREEN_COLS_80;
+                g_active_rows = SCREEN_ROWS_24;
+            }
+            need_render = 1;
+        } else if (k == '2') {
+            g_config.tab_width = (g_config.tab_width == 4) ? 8 : 4;
+            need_render = 1;
+        } else if (k == '3') {
+            g_config.lines_mode = (g_config.lines_mode == 0) ? 1 : 0;
+            need_render = 1;
+        } else if (k == '4') {
+            if (g_config.ramdrive_mode == RAMDRV_MODE_PROTECTED) {
+                g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
+            } else if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
+                g_config.ramdrive_mode = RAMDRV_MODE_HIBERNATE;
+            } else {
+                g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
+            }
+            need_render = 1;
+        } else if (k == 's' || k == 'S') {
+            config_save();
+            need_render = 1;
+        }
     }
     clear_screen();
     g_need_screen_render = 1;

@@ -37,6 +37,7 @@ void hal_console_clear(void);
 void hal_console_clear_eol(void);
 void hal_console_hide_cursor(void);
 void hal_console_show_cursor(void);
+int  hal_console_get_native_size(uint8_t *cols, uint8_t *rows);
 
 /* HAL Memory & Far Banking Sub-system Interface */
 int  hal_mem_init(void);

@@ -114,3 +114,10 @@ void hal_console_show_cursor(void)
 {
     hal_console_puts("\033[?25h");
 }
+
+int hal_console_get_native_size(uint8_t *cols, uint8_t *rows)
+{
+    (void)cols;
+    (void)rows;
+    return -1;
+}
