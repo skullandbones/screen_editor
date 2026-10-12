@@ -25,8 +25,8 @@
 #define MODAL_BOX_WIDTH   52
 #endif
 
-static void modal_puts_centered(uint8_t row, uint8_t left,
-                                uint8_t width, const char *str)
+void modal_puts_centered(uint8_t row, uint8_t left,
+                        uint8_t width, const char *str)
 {
     size_t len = str ? strlen(str) : 0;
     uint8_t interior_w = width - 2;
@@ -43,8 +43,8 @@ static void modal_puts_centered(uint8_t row, uint8_t left,
     }
 }
 
-static void modal_draw_row_centered(uint8_t row, uint8_t left,
-                                    uint8_t width, const char *str)
+void modal_draw_row_centered(uint8_t row, uint8_t left,
+                             uint8_t width, const char *str)
 {
     size_t len = str ? strlen(str) : 0;
     uint8_t interior_w = (width > 2) ? (width - 2) : 0;
@@ -304,6 +304,12 @@ int modal_prompt_text(const char *title, const char *prompt,
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
+        } else if (k == KEY_DOWN || k == KEY_UP ||
+                   k == KEY_PGDN || k == KEY_CTRL_V ||
+                   k == KEY_PGUP || k == KEY_CTRL_U) {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return k;
         } else if (k == KEY_BACKSPACE || k == KEY_DEL) {
             if (cur_len > 0) {
                 cur_len--;

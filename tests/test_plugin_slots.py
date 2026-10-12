@@ -31,7 +31,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -51,7 +51,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     mkprl_bin = os.path.join(repo_root, "tools", "mkprl.py")
 
     return emu_bin, rom_file, img_file, se_bin, mkprl_bin
@@ -135,9 +135,13 @@ def drain_all(master_fd, quiet_time=0.1):
             break
 
 
-def run_slots_test():
+def run_slots_test(use_sec=False):
     t_start = time.time()
-    emu_bin, rom_file, img_file, se_bin, mkprl_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin, mkprl_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     if not test_tooling_validations(mkprl_bin):
         return False
@@ -188,7 +192,7 @@ def run_slots_test():
 
         # 2. Launch SE.COM
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         ok, out = read_until(master, b"Col 0", timeout=45.0)
         if not ok:
             print(f"[-] Splash screen failed to display.", flush=True)
@@ -406,5 +410,6 @@ def run_slots_test():
 
 
 if __name__ == "__main__":
-    success = run_slots_test()
+    use_sec_arg = "--sec" in sys.argv
+    success = run_slots_test(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

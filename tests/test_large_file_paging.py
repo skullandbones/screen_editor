@@ -22,7 +22,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
     emu_bin = os.path.join(workspace_root, "tools", "rc2014_emu", "rc2014")
@@ -40,7 +40,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -118,7 +118,7 @@ def run_paging_test(num_lines, ramdrive_mode="OFF"):
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM"],
+        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, target_cpm],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     subprocess.run(
@@ -128,7 +128,7 @@ def run_paging_test(num_lines, ramdrive_mode="OFF"):
 
     # Inject SE.COM and test file
     subprocess.run(
-        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
         check=True,
     )
     subprocess.run(
@@ -168,11 +168,11 @@ def run_paging_test(num_lines, ramdrive_mode="OFF"):
         time.sleep(0.3)
 
         print(
-            f"[*] Launching 'se {cmd_arg}' (streaming {num_lines} "
+            f"[*] Launching '{cmd_name} {cmd_arg}' (streaming {num_lines} "
             "lines into virtual paging engine)..."
         )
         t0 = time.time()
-        os.write(master, f"se {cmd_arg}\r".encode())
+        os.write(master, f"{cmd_name} {cmd_arg}\r".encode())
         expected_top = f"1/{num_lines}".encode()
         load_timeout = max(120.0, num_lines * 0.08)
         out = read_until(master, expected_top, timeout=load_timeout)
@@ -390,15 +390,15 @@ def run_paging_test(num_lines, ramdrive_mode="OFF"):
         )
 
 
-def main():
+def main(use_sec=False):
     # Test 1: Protected Mode Paging (1,200 lines > 1,024 physical slots)
-    ok1 = run_paging_test(1200, ramdrive_mode="OFF")
+    ok1 = run_paging_test(1200, ramdrive_mode="OFF", use_sec=use_sec)
     if not ok1:
         print("[-] Protected Mode Paging test FAILED.")
         return False
 
     # Test 2: Max RAM Mode Paging (3,400 lines > 3,072 physical slots)
-    ok2 = run_paging_test(3400, ramdrive_mode="ON")
+    ok2 = run_paging_test(3400, ramdrive_mode="ON", use_sec=use_sec)
     if not ok2:
         print("[-] Max RAM Mode Paging test FAILED.")
         return False
@@ -410,5 +410,6 @@ def main():
 
 
 if __name__ == "__main__":
-    success = main()
+    use_sec_arg = "--sec" in sys.argv
+    success = main(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)

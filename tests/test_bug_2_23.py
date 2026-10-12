@@ -30,7 +30,7 @@ import time
 import tty
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -50,7 +50,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     fatfs_prl = os.path.join(repo_root, "plugins", "FATFS.PRL")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
@@ -166,7 +166,7 @@ def ensure_fat_test_image(img_file):
         f.write(slices_content)
 
 
-def test_bug_2_23():
+def test_bug_2_23(use_sec=False):
     print("[*] Starting Bug 2.23 FAT Plugin Dialogs Compliance Test...")
     paths = find_paths()
     (
@@ -195,11 +195,15 @@ def test_bug_2_23():
 
     # Inject latest SE.COM and FATFS.PRL into test image
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM", "0:se.com"],
+        target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+        target_lower = "0:sec.com" if use_sec else "0:se.com"
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, target_cpm,
+             target_lower],
         check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     subprocess.run(
-        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, "0:SE.COM"],
+        [cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin, target_cpm],
         check=True,
     )
     subprocess.run(
@@ -236,7 +240,7 @@ def test_bug_2_23():
 
         # Launch SE.COM
         time.sleep(0.5)
-        os.write(master, b"se\r")
+        os.write(master, cmd_name + b"\r")
         ok, out = read_until(master, b"SE - Screen Editor", timeout=25.0)
         assert ok, f"Failed to display splash screen: {out}"
         print("[+] Splash screen loaded.")
@@ -488,7 +492,8 @@ def test_bug_2_23():
 
 if __name__ == "__main__":
     t0 = time.time()
-    success = test_bug_2_23()
+    use_sec_arg = "--sec" in sys.argv
+    success = test_bug_2_23(use_sec=use_sec_arg)
     elapsed = time.time() - t0
     if not success:
         sys.exit(1)

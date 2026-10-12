@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Resolved / Production Ready (Bugs 2.4.1–2.4.19 Closed).
+- **Status**: Active / 6 Defects Open (Bugs 2.4.20–2.4.25).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -396,6 +396,108 @@ have been resolved and archived.
       and preserving hysteresis retention. Validated via
       `test_bug_2_4_19_panning_edge_trigger_and_geometry` in
       `tests/test_linux_native.py`.
+  - [ ] **Bug 2.4.20: Deprecated WordStar Diamond Navigation & Key Aliases**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 6.3, 6.4, 7.3, 10, 11
+      (Anti-Pattern #8).
+    - *Issue*: Directional cursor navigation across all surfaces is mandated
+      to be handled exclusively via standard ANSI VT100 arrow keys and standard
+      motion shortcuts (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G`
+      Bottom). WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`)
+      is deprecated and strictly unsupported to prevent command collisions.
+      In Linux SE:
+      1. In `src/core/editor.c:519-520`, `KEY_CTRL_E` (`0x05`) is aliased to
+         `cursor_up()` rather than canonical End of Line (`cursor_end()`), and
+         `KEY_CTRL_D` (`0x04`) is aliased to `cursor_right()` rather than
+         forward character deletion (`do_delete()`).
+      2. In `src/core/editor.c:589`, `KEY_CTRL_X` (`0x18`) falls back to
+         `cursor_down()` when no block is active.
+      3. In `src/core/ui_browser.c:336,349`, `KEY_CTRL_E` and `KEY_CTRL_X` are
+         aliased to grid Up and Down.
+      4. In `src/core/ui_modal.c:189,250,252`, `modal_confirm_2btn` and
+         `modal_confirm_3btn` alias `KEY_CTRL_S` and `KEY_CTRL_D` to button
+         navigation.
+      5. In `src/core/ui_render.c:412`, `s_help_lines` advertises
+         `Arrows / WordStar (^S,^D,^E,^X)` instead of canonical
+         `Arrows / ANSI VT100`.
+    - *Required Fix*: Disassociate WordStar diamond keys from cursor movement
+      across all modules. Bind `KEY_CTRL_E` to `cursor_end()`, `KEY_CTRL_D` to
+      `do_delete()`, and remove `cursor_down()` fallback on `KEY_CTRL_X` in
+      `editor.c`. Remove WordStar key aliases from `ui_browser.c` and
+      `ui_modal.c`. Update `s_help_lines` in `ui_render.c` to display
+      `Arrows / ANSI VT100`.
+  - [ ] **Bug 2.4.21: Off-by-Zero Column Anchor on Backspace Line Join**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Issue*: In `src/core/editor.c:229-231` (`do_backspace`), when joining
+      current line (`g_cur_doc_row`) to previous line (`g_cur_doc_row - 1`)
+      at column 0 (`g_cur_col == 0`), the code appends current line to
+      `prev_buf`, updates `prev_len += g_active_line_len`, copies back to
+      `g_active_line_buf`, and then calculates:
+      `g_cur_col = prev_len - (g_active_line_len);`
+      Because `g_active_line_len` was just assigned `prev_len`, `g_cur_col`
+      evaluates to `0`. The cursor is incorrectly anchored to column 0 of the
+      joined line instead of the junction boundary (`orig_prev_len`).
+    - *Required Fix*: Preserve the original length of the previous line before
+      concatenation (`uint16_t orig_prev_len = prev_len;`). After deleting the
+      document row and checking out the joined line, set
+      `g_cur_col = orig_prev_len;` and update sticky target column
+      `g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);`.
+  - [ ] **Bug 2.4.22: Delete & Ctrl+D Fail to Delete Active Block Selection**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Issue*: In `src/core/editor.c:240-274` (`do_delete`), pressing `Delete`
+      or `Ctrl+D` unconditionally performs inline character deletion under the
+      cursor or pulls up the next line. If a block selection is active
+      (`g_block_mode == BLOCK_MODE_SELECTING` or `BLOCK_MODE_SOLIDIFIED`), the
+      specification requires that pressing `Delete` or `Ctrl+D` solidifies
+      dynamic selection and deletes the entire highlighted block range
+      (`do_delete_block()`), resetting `g_block_mode = BLOCK_MODE_OFF`.
+      Currently, active selection is ignored and only a single character under
+      the cursor is deleted.
+    - *Required Fix*: In `do_delete()` (and `editor_handle_key` on `KEY_DEL` /
+      `KEY_CTRL_D`), inspect `g_block_mode`. When `g_block_mode !=`
+      `BLOCK_MODE_OFF`, solidify selection if selecting, invoke
+      `do_delete_block()`, reset `g_block_mode = BLOCK_MODE_OFF`, mark
+      `g_doc_modified = 1`, and trigger screen re-render
+      (`g_need_screen_render = 1`).
+  - [ ] **Bug 2.4.23: Backspace Fails to Cancel Dynamic Block Selection**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Issue*: In `src/core/editor.c:192-238` (`do_backspace`), pressing
+      Backspace while dynamic block selection is underway
+      (`g_block_mode == BLOCK_MODE_SELECTING`) deletes the character preceding
+      the cursor and mutates document contents. Section 6.8 strictly mandates
+      that pressing Backspace during dynamic block selection must cancel
+      selection (`g_block_mode = BLOCK_MODE_OFF`) to safeguard highlighted
+      text against unintended modification, keeping the cursor stationary
+      without deleting text.
+    - *Required Fix*: In `do_backspace()`, check if `g_block_mode ==
+      BLOCK_MODE_SELECTING`. If so, invoke `cancel_block()`, set
+      `g_need_status_render = 1`, and return immediately without modifying line
+      buffer contents or cursor column.
+  - [ ] **Bug 2.4.24: Enter Key in Dynamic Block Mode Splits Active Line**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 9.1, 10.
+    - *Issue*: In `src/core/editor.c:276-307` (`do_enter`), pressing Enter
+      unconditionally splits the active line at `g_cur_col` and creates a new
+      line. When dynamic block selection is active (`g_block_mode ==
+      BLOCK_MODE_SELECTING`), pressing Enter must solidify the selection
+      (`solidify_block()`, locking `g_block_mode = BLOCK_MODE_SOLIDIFIED`)
+      without splitting the line or mutating document text.
+    - *Required Fix*: In `do_enter()`, check if `g_block_mode ==
+      BLOCK_MODE_SELECTING`. If so, invoke `solidify_block()`, set
+      `g_need_status_render = 1`, and return without splitting the line.
+  - [ ] **Bug 2.4.25: Missing In-Field Editing Keys in Archetype C Modals**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
+    - *Issue*: In `src/core/ui_modal.c:258-318` (`modal_prompt_text`), the
+      parametric input field pins the cursor to the end of the input string
+      (`cur_len`). It does not track an internal cursor index, completely
+      ignoring directional navigation (`KEY_LEFT`, `KEY_RIGHT`, `KEY_HOME`,
+      `KEY_END`, `KEY_CTRL_A`, `KEY_CTRL_E`). Furthermore, `KEY_DEL` is mapped
+      to backspace (deleting the last character), and `KEY_CTRL_D` is unhandled,
+      violating the mandate for forward character deletion under the cursor.
+    - *Required Fix*: Implement in-field cursor position tracking (`cursor_pos`)
+      in `modal_prompt_text()`. Support character insertion at cursor position,
+      Backspace deleting left of cursor (`cursor_pos - 1`), Delete and `Ctrl+D`
+      deleting character under cursor (`cursor_pos`), Left/Right arrow keys
+      shifting cursor index, and Home (`Ctrl+A`) / End (`Ctrl+E`) moving to
+      boundaries.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.

@@ -22,7 +22,7 @@ import time
 import tty
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = repo_root
@@ -48,7 +48,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -169,13 +169,19 @@ class ScreenBuffer:
         return "\n".join(lines)
 
 
-def main():
+def main(use_sec=False):
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+    (
+        emu_bin, rom_file, img_file, se_bin,
+        cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    target_cpm = "0:SEC.COM" if use_sec else "0:SE.COM"
+    cmd_name = b"sec" if use_sec else b"se"
 
     for p, name in [
         (emu_bin, "RC2014 emulator"), (rom_file, "ROM file"),
-        (img_file, "Disk image"), (se_bin, "SE.COM binary"),
+        (img_file, "Disk image"), (se_bin, f"{target_name} binary"),
         (cpmcp_bin, "cpmcp binary"), (cpmrm_bin, "cpmrm binary")
     ]:
         if not os.path.isfile(p):
@@ -223,7 +229,7 @@ def main():
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, "0:SE.COM"],
+        [cpmrm_bin, "-f", "wbw_hd1k_0", ephemeral_img, target_cpm],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     subprocess.run(
@@ -231,7 +237,7 @@ def main():
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     subprocess.run(
-        [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img, se_bin, "0:SE.COM"],
+        [cpmcp_bin, "-f", "wbw_hd1k_0", ephemeral_img, se_bin, target_cpm],
         check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     subprocess.run(
@@ -290,7 +296,7 @@ def main():
         # Open 3000-line file in SE.COM
         time.sleep(0.5)
         t0 = time.time()
-        os.write(master, b"se 3000.txt\r")
+        os.write(master, cmd_name + b" 3000.txt\r")
         print("[*] Loading 3000.TXT into SE.COM (standard 80x24)...")
         ed_out = read_until(master, b"1/3000", timeout=120.0)
         dt = time.time() - t0
@@ -546,4 +552,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    use_sec_arg = "--sec" in sys.argv
+    sys.exit(main(use_sec=use_sec_arg))

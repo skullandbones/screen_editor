@@ -15,10 +15,12 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef __linux__
 #include <strings.h>
 #include <fnmatch.h>
 #ifndef FNM_CASEFOLD
 #define FNM_CASEFOLD 0
+#endif
 #endif
 #include "../include/config.h"
 #include "../include/buffer.h"
@@ -42,9 +44,8 @@ int ui_browser_add_entry(const char *name, uint32_t size, uint8_t is_dir)
         return -1;
     }
     strncpy(s_browser_files[s_browser_count].filename, name,
-            sizeof(s_browser_files[s_browser_count].filename) - 1);
-    s_browser_files[s_browser_count].filename[
-        sizeof(s_browser_files[s_browser_count].filename) - 1] = '\0';
+            BROWSER_FILENAME_LEN - 1);
+    s_browser_files[s_browser_count].filename[BROWSER_FILENAME_LEN - 1] = '\0';
     s_browser_files[s_browser_count].size_bytes = size;
     s_browser_files[s_browser_count].is_dir = is_dir;
     s_browser_files[s_browser_count].drive = 0;
@@ -60,8 +61,51 @@ static int compare_entries(const void *a, const void *b)
     if (ea->is_dir != eb->is_dir) {
         return eb->is_dir - ea->is_dir;
     }
+#ifdef __linux__
     return strcasecmp(ea->filename, eb->filename);
+#else
+    const char *s1 = ea->filename;
+    const char *s2 = eb->filename;
+    while (*s1 && *s2) {
+        char c1 = *s1++;
+        char c2 = *s2++;
+        if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+        if (c2 >= 'a' && c2 <= 'z') c2 -= 32;
+        if (c1 != c2) return (int)c1 - (int)c2;
+    }
+    return (int)*s1 - (int)*s2;
+#endif
 }
+
+#ifndef __linux__
+static int match_wildcard(const char *pat, const char *txt)
+{
+    while (*pat) {
+        if (*pat == '*') {
+            pat++;
+            if (!*pat) return 1;
+            while (*txt) {
+                if (match_wildcard(pat, txt)) return 1;
+                txt++;
+            }
+            return 0;
+        } else if (*pat == '?') {
+            if (!*txt) return 0;
+            pat++;
+            txt++;
+        } else {
+            char cp = *pat;
+            char ct = *txt;
+            if (cp >= 'a' && cp <= 'z') cp -= 32;
+            if (ct >= 'a' && ct <= 'z') ct -= 32;
+            if (cp != ct) return 0;
+            pat++;
+            txt++;
+        }
+    }
+    return (*txt == '\0');
+}
+#endif
 
 void ui_browser_refresh_directory(const char *mask)
 {
@@ -72,7 +116,11 @@ void ui_browser_refresh_directory(const char *mask)
     if (mask && mask[0] != '\0' && (strchr(mask, '*') || strchr(mask, '?'))) {
         int i, write_idx = 0;
         for (i = 0; i < s_browser_count; i++) {
+#ifdef __linux__
             if (fnmatch(mask, s_browser_files[i].filename, FNM_CASEFOLD) == 0) {
+#else
+            if (match_wildcard(mask, s_browser_files[i].filename)) {
+#endif
                 if (write_idx != i) {
                     s_browser_files[write_idx] = s_browser_files[i];
                 }
@@ -284,6 +332,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                     cursor_pos = 0;
                     continue;
                 }
+#ifdef __linux__
                 if (input_buf[strlen(input_buf) - 1] == '/') {
                     hal_linux_scan_directory(input_buf);
                     cur_page = 0;
@@ -292,6 +341,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                     cursor_pos = 0;
                     continue;
                 }
+#endif
                 strncpy(selected_filename, input_buf, max_len - 1);
                 selected_filename[max_len - 1] = '\0';
                 return MODAL_RES_OK;

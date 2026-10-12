@@ -23,7 +23,7 @@ import select
 import subprocess
 
 
-def find_paths():
+def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -43,7 +43,7 @@ def find_paths():
             ["cp", "--sparse=always", golden_img, img_file], check=True
         )
         os.chmod(img_file, 0o644)
-    se_bin = os.path.join(repo_root, "SE.COM")
+    se_bin = os.path.join(repo_root, "SEC.COM" if use_sec else "SE.COM")
     cpmcp_bin = os.path.join(
         workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp"
     )
@@ -134,19 +134,23 @@ def put_file_to_image(cpmcp_bin, img_file, local_path, cpm_filename):
     )
 
 
-def test_bug_2_2():
-    emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
+def test_bug_2_2(use_sec=False):
+    (
+        emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin
+    ) = find_paths(use_sec=use_sec)
+    target_name = "SEC.COM" if use_sec else "SE.COM"
+    cmd_name = b"sec" if use_sec else b"se" 
 
     print("[*] Running Bug 2.2 isolated reproduction test...", flush=True)
 
     # 1. Clean up old test files
     remove_files_from_image(
         cpmrm_bin, img_file,
-        ["SE.CFG", "BIG350.TXT", "SE.COM", "$$$SE$$$.SWP"]
+        ["SE.CFG", "BIG350.TXT", target_name, "$$$SE$$$.SWP"]
     )
 
     # 2. Inject current SE.COM
-    put_file_to_image(cpmcp_bin, img_file, se_bin, "SE.COM")
+    put_file_to_image(cpmcp_bin, img_file, se_bin, target_name)
 
     # 3. Create SE.CFG: RAMDRIVE=PRESERVE, LINES=32K, PLUGIN=AUTOLOAD
     cfg_tmp = "/tmp/TEST_BUG_2_2_SE.CFG"
@@ -175,7 +179,7 @@ def test_bug_2_2():
         # Launch SE.COM on BIG350.TXT
         print("[*] Launching: se big350.txt...", flush=True)
         time.sleep(0.4)
-        os.write(master, b"se big350.txt\r")
+        os.write(master, cmd_name + b" big350.txt\r")
 
         # Wait for file loading to complete (either truncation alert or editor)
         t_start = time.time()
@@ -249,5 +253,6 @@ def test_bug_2_2():
 
 
 if __name__ == "__main__":
-    success = test_bug_2_2()
+    use_sec_arg = "--sec" in sys.argv
+    success = test_bug_2_2(use_sec=use_sec_arg)
     sys.exit(0 if success else 1)
