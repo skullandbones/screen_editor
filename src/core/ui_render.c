@@ -407,8 +407,8 @@ static void render_tier1_workspace_screen(const char **lines,
 void show_splash_screen(void)
 {
     static const char *s_splash_lines[18] = {
-        "                SE.COM — Screen Editor                ",
-        "                    Version v1.1.0                    ",
+        "                  SE — Screen Editor                  ",
+        "                  Version v1.1.0 (C)                  ",
         "                                                      ",
         "        type   [E]  or  [Enter] to edit               ",
         "        type   [N]              to new file           ",

@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 7 Defects Open (Bugs 2.4.34–2.4.40).
+- **Status**: Active / 6 Defects Open (Bugs 2.4.35–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -663,7 +663,7 @@ have been resolved and archived.
       selection before proceeding with normal character insertion.
       Validated via `test_bug_2_4_33_block_typing_cancellation` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.34: Missing Predominant Language Indication on Splash**:
+  - [x] **Bug 2.4.34: Missing Predominant Language Indication on Splash**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.6.
     - *Issue*: Section 7.2 and Section 14.6 mandate that row 2 of the 14-line
       splash content block display `Version <version> (<Language>)`, explicitly
@@ -674,6 +674,11 @@ have been resolved and archived.
       mandatory language indicator.
     - *Required Fix*: Update `s_splash_lines` in `src/core/ui_render.c` to
       render `SE — Screen Editor` on row 1 and `Version v1.1.0 (C)` on row 2.
+    - *Resolution*: Updated `s_splash_lines` in `src/core/ui_render.c` to render
+      canonical title `SE — Screen Editor` on row 1 and release version with
+      predominant language indicator `Version v1.1.0 (C)` on row 2.
+      Validated via `test_bug_2_4_34_splash_language_indication` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.35: Splash Screen Hotkey Inversion & Missing Native Mode**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Issue*: Section 2.1 and Section 7.2 designate Option 1 (`80x24`) as

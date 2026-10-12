@@ -462,7 +462,7 @@ def test_tier1_centering_and_tilde_discipline():
         assert "~" in splash_out, (
             "Splash screen missing column 0 tilde margin discipline"
         )
-        assert "SE.COM — Screen Editor" in splash_out, (
+        assert "SE — Screen Editor" in splash_out, (
             "Splash screen missing canonical centered title"
         )
 
@@ -642,7 +642,7 @@ def test_bug_2_4_8_modal_dispatchers():
             splash_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "SE.COM — Screen Editor" in splash_out, (
+            assert "SE — Screen Editor" in splash_out, (
                 f"Ctrl+W failed to transition to splash screen:\n{splash_out}"
             )
 
@@ -691,7 +691,7 @@ def test_bug_2_4_9_splash_screen_commands():
         splash_out = read_all_available(master, 0.3).decode(
             "utf-8", errors="replace"
         )
-        assert "SE.COM — Screen Editor" in splash_out, (
+        assert "SE — Screen Editor" in splash_out, (
             f"Return from Config failed to render Splash screen:\n{splash_out}"
         )
 
@@ -2499,7 +2499,7 @@ def test_bug_2_4_32_escape_sequence_leakage():
             splash_out = read_all_available(master2, 0.4).decode(
                 "utf-8", errors="replace"
             )
-            assert "SE.COM — Screen Editor" in splash_out
+            assert "SE — Screen Editor" in splash_out
 
             # Send unrecognized escape sequence that would contain 'C' if leaked
             os.write(master2, b"\x1b[1;5C")
@@ -2605,6 +2605,39 @@ def test_bug_2_4_33_block_typing_cancellation():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_34_splash_language_indication():
+    """Verify predominant language indicator on splash screen (Bug 2.4.34)."""
+    print("[*] Testing splash predominant language indication (2.4.34)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        splash_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "SE — Screen Editor" in splash_out, (
+            f"Expected 'SE — Screen Editor' on row 1:\n{splash_out}"
+        )
+        assert "Version v1.1.0 (C)" in splash_out, (
+            f"Expected 'Version v1.1.0 (C)' on row 2:\n{splash_out}"
+        )
+
+        # Exit cleanly via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Splash predominant language indicator verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2643,6 +2676,7 @@ def main():
     test_bug_2_4_31_find_modal_cursor_navigation()
     test_bug_2_4_32_escape_sequence_leakage()
     test_bug_2_4_33_block_typing_cancellation()
+    test_bug_2_4_34_splash_language_indication()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
