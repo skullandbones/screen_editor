@@ -177,6 +177,11 @@ NATIVE_CONOUT:
 	PUSH DE
 	PUSH HL
 
+	IFDEF TEST_UART_BRIDGE
+	; Mirror raw console stream character to Next hardware UART
+	CALL HAL_NEXT_UART_TX
+	ENDIF
+
 	; Keep Sinclair ROM scroll counter at 255 to prevent "scroll?" prompt
 	LD A,0FFH
 	LD (05C8CH),A
@@ -456,6 +461,39 @@ ACO_DONE:
 	POP DE
 	POP BC
 	RET
+
+	IFDEF TEST_UART_BRIDGE
+;------------------------------------------------------------------------------
+; HAL_NEXT_UART_TX: Transmit character in C to Next hardware UART (Port $133B)
+;
+; Inputs:
+;   C = Character byte to transmit.
+;
+; Preserves:
+;   BC, DE, HL, AF.
+;------------------------------------------------------------------------------
+HAL_NEXT_UART_TX:
+	PUSH AF
+	PUSH BC
+	PUSH DE
+	LD D,100			; Bounded poll timeout
+HNUT_WAIT:
+	LD BC,0133BH			; UART TX / Status port
+	IN A,(C)
+	BIT 1,A				; Bit 1: TX busy (1 = busy, 0 = ready)
+	JR Z,HNUT_SEND
+	DEC D
+	JR NZ,HNUT_WAIT
+	JR HNUT_DONE
+HNUT_SEND:
+	LD A,C
+	OUT (C),A			; Transmit byte to UART TX
+HNUT_DONE:
+	POP DE
+	POP BC
+	POP AF
+	RET
+	ENDIF
 
 ; Working storage for ANSI parser
 ANSI_STATE:		DB	0
