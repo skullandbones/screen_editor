@@ -527,7 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 8 Defects Open (Bugs 2.7.46–2.7.53; Bug 2.7.45 Rejected).
+- **Status**: Active / 7 Defects Open (Bugs 2.7.47–2.7.53; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1142,7 +1142,7 @@ have been resolved and archived.
       explicitly not supported across all editor workspaces, dialogs, and modal
       surfaces. Modal text input prompts adhere strictly to standard VT100/ANSI
       editing primitives, eliminating WordStar navigation by design.
-  - [ ] **Bug 2.7.46: WordStar Diamond Key Aliasing in Modal Inputs (Ctrl+S)**:
+  - [x] **Bug 2.7.46: WordStar Diamond Key Aliasing in Modal Inputs (Ctrl+S)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 8.3, 10, 11.8.
     - *Issue*: In `ports/python/se/modal.py:194` (`show_input`) and
       `modal.py:270` (`show_find_dialog`), `KEY_CTRL_S` is aliased alongside
@@ -1150,9 +1150,11 @@ have been resolved and archived.
       This violates the architectural prohibition against WordStar diamond
       aliasing in modal input loops (Anti-Pattern #8), where navigation must
       strictly be standard ANSI arrow keys.
-    - *Required Fix*: Remove `KEY_CTRL_S` from cursor navigation branches in
+    - *Resolution*: Removed `KEY_CTRL_S` from cursor navigation branches in
       `show_input` and `show_find_dialog` in `ports/python/se/modal.py`,
-      relying strictly on `KEY_LEFT` and standard editing primitives.
+      restricting directional navigation to `KEY_LEFT` and standard editing
+      keys. Validated via Step 36 in `test_editor.py`
+      (`test_bug_2_7_46_wordstar_diamond_modal_exclusion`).
   - [ ] **Bug 2.7.47: Line Capacity Limit Clamped to 120 Chars (vs 1,000)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
     - *Issue*: In `ports/python/se/buffer.py:9`, `MAX_LINE_LENGTH` is hardcoded

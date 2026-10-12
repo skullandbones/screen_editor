@@ -1744,6 +1744,42 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_46_wordstar_diamond_modal_exclusion(self):
+        """Step 36: Verify Ctrl+S is not aliased to Left arrow (Bug 2.7.46)."""
+        print(
+            "[*] Step 36: Testing WordStar Ctrl+S exclusion in modals...",
+            flush=True,
+        )
+        self.editor.modal.draw_box = MagicMock()
+
+        # 1. show_input: KEY_CTRL_S must not move cursor left
+        keys_input = [KEY_CTRL_S, "C", KEY_ENTER]
+        iter_input = iter(keys_input)
+        self.editor.terminal.get_key = lambda: next(iter_input)
+        res_input = self.editor.modal.show_input(
+            title="Input",
+            desc="Prompt",
+            label="Name:",
+            initial_text="AB",
+        )
+        # If Ctrl+S moved left, 'C' would be inserted before 'B' -> "ACB".
+        # Because Ctrl+S is ignored, cursor stays at end -> "ABC".
+        self.assertEqual(res_input, "ABC")
+
+        # 2. show_find_dialog: KEY_CTRL_S must not move cursor left
+        keys_find = [KEY_CTRL_S, "D", KEY_ENTER]
+        iter_find = iter(keys_find)
+        self.editor.terminal.get_key = lambda: next(iter_find)
+        res_find, _ = self.editor.modal.show_find_dialog(
+            initial_text="AB",
+        )
+        self.assertEqual(res_find, "ABD")
+
+        print(
+            "[+] Step 36: WordStar Ctrl+S exclusion in modals verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
