@@ -176,8 +176,15 @@ void render_status_bar(void)
              g_doc_modified ? '*' : ' ');
     snprintf(field1, sizeof(field1), "| %-14.14s | ", raw_name);
 
-    snprintf(field2, sizeof(field2), "%s | ",
-             (g_active_cols > 80) ? "120x40" : " 80x24");
+    if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
+        snprintf(field2, sizeof(field2), " 80x24 | ");
+    } else if (g_active_cols == SCREEN_COLS_120 &&
+               g_active_rows == SCREEN_ROWS_40) {
+        snprintf(field2, sizeof(field2), "120x40 | ");
+    } else {
+        snprintf(field2, sizeof(field2), "%3ux%-2u | ",
+                 (unsigned)g_active_cols, (unsigned)g_active_rows);
+    }
 
     snprintf(field3, sizeof(field3), "%s | ",
              (g_file_format == FMT_CPM) ? "CP/M " : "Linux");
@@ -268,7 +275,6 @@ void render_status_bar(void)
     char field4[32];
     char field5[80];
     const char *fname;
-    const char *geom_str;
     const char *fmt_str;
     char core[256];
     char full_bar[256];
@@ -280,8 +286,15 @@ void render_status_bar(void)
              g_doc_modified ? '*' : ' ');
     snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
 
-    geom_str = (g_active_cols >= SCREEN_COLS_120) ? "120x40" : "80x24";
-    snprintf(field2, sizeof(field2), " %s |", geom_str);
+    if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
+        snprintf(field2, sizeof(field2), " 80x24 |");
+    } else if (g_active_cols == SCREEN_COLS_120 &&
+               g_active_rows == SCREEN_ROWS_40) {
+        snprintf(field2, sizeof(field2), " 120x40 |");
+    } else {
+        snprintf(field2, sizeof(field2), " %ux%u |",
+                 (unsigned)g_active_cols, (unsigned)g_active_rows);
+    }
 
     fmt_str = (g_file_format == FMT_CPM) ? "CPM  " : "Linux";
     snprintf(field3, sizeof(field3), " %s |", fmt_str);
@@ -406,7 +419,7 @@ static void render_tier1_workspace_screen(const char **lines,
 
 void show_splash_screen(void)
 {
-    static const char *s_splash_lines[18] = {
+    static const char *s_splash_lines[19] = {
         "                  SE — Screen Editor                  ",
         "                  Version v1.1.0 (C)                  ",
         "                                                      ",
@@ -421,8 +434,9 @@ void show_splash_screen(void)
         "        type   [P]              for plugins           ",
         "        type   [^P]             for context plugin menu",
         "        type   [C]              to configure          ",
-        "        type   [1]              set 120x40            ",
-        "        type   [2]              set 80x24             ",
+        "        type   [1]              set 80x24             ",
+        "        type   [2]              set 120x40            ",
+        "        type   [3]              set native            ",
         "        type   [Q]  or  [^Q]    to exit               ",
         "                                                      "
     };
@@ -433,7 +447,7 @@ void show_splash_screen(void)
     g_is_splash_screen = 1;
     while (1) {
         if (need_render) {
-            render_tier1_workspace_screen(s_splash_lines, 18, 54);
+            render_tier1_workspace_screen(s_splash_lines, 19, 54);
             need_render = 0;
         }
         while ((k = hal_console_getkey()) <= 0) {
@@ -505,14 +519,26 @@ void show_splash_screen(void)
             show_help_screen();
             need_render = 1;
         } else if (k == '1') {
+            g_config.screen_mode = MODE_80X24;
+            g_active_cols = SCREEN_COLS_80;
+            g_active_rows = SCREEN_ROWS_24;
+            need_render = 1;
+        } else if (k == '2') {
             g_config.screen_mode = MODE_120X40;
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
             need_render = 1;
-        } else if (k == '2') {
-            g_config.screen_mode = MODE_80X24;
-            g_active_cols = SCREEN_COLS_80;
-            g_active_rows = SCREEN_ROWS_24;
+        } else if (k == '3') {
+            uint8_t ncols = 0, nrows = 0;
+            g_config.screen_mode = MODE_NATIVE;
+            if (hal_console_get_native_size(&ncols, &nrows) == 0 &&
+                ncols >= SCREEN_COLS_80 && nrows >= SCREEN_ROWS_24) {
+                g_active_cols = ncols;
+                g_active_rows = nrows;
+            } else {
+                g_active_cols = SCREEN_COLS_80;
+                g_active_rows = SCREEN_ROWS_24;
+            }
             need_render = 1;
         }
     }

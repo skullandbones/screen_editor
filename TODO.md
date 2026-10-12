@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 6 Defects Open (Bugs 2.4.35–2.4.40).
+- **Status**: Active / 5 Defects Open (Bugs 2.4.36–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -679,7 +679,7 @@ have been resolved and archived.
       predominant language indicator `Version v1.1.0 (C)` on row 2.
       Validated via `test_bug_2_4_34_splash_language_indication` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.35: Splash Screen Hotkey Inversion & Missing Native Mode**:
+  - [x] **Bug 2.4.35: Splash Screen Hotkey Inversion & Missing Native Mode**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Issue*: Section 2.1 and Section 7.2 designate Option 1 (`80x24`) as
       standard classic terminal mode triggered by hotkey `1`, Option 2
@@ -696,6 +696,14 @@ have been resolved and archived.
       `ui_render.c`, map `1` to Option 1 (`80x24`), `2` to Option 2 (`120x40`),
       and add `3` for Option 3 (`Native host terminal`). Support dynamic host
       terminal dimensions when native mode is active in `hal_linux_console.c`.
+    - *Resolution*: Updated `s_splash_lines` and hotkey dispatch in
+      `src/core/ui_render.c` mapping `1` to 80x24 (`MODE_80X24`), `2` to 120x40
+      (`MODE_120X40`), and `3` to Native (`MODE_NATIVE`). Implemented
+      `hal_console_get_native_size` and dynamic terminal querying via
+      `ioctl(TIOCGWINSZ)` in `src/hal/linux/hal_linux_console.c`. Updated
+      status bar geometry formatting to dynamically render native dimensions.
+      Validated via `test_bug_2_4_35_splash_hotkeys_and_native_mode` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.36: Missing Screen Clearance on Screen Geometry Switching**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Issue*: Sections 2.1, 7.2, and 14.1 mandate that prior to switching

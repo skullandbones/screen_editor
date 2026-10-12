@@ -121,6 +121,7 @@ extern "C" {
 /* Screen Geometry Modes */
 #define MODE_120X40             0   /* Modern 120 columns x 40 rows */
 #define MODE_80X24              1   /* Classic 80 columns x 24 rows */
+#define MODE_NATIVE             2   /* Native host terminal dimensions */
 
 /* RAM Drive Modes */
 #define RAMDRV_MODE_PROTECTED   0   /* Preserve RAM disk (81h..88h safe) */

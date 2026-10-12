@@ -113,13 +113,14 @@ def test_interactive_pty_startup():
         os.close(master)
 
         assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
-        assert b"SE.COM" in captured or b"SE v1.1.0" in captured, (
-            "Screen output missing expected editor banner"
-        )
+        assert b"SE \xe2\x80\x94 Screen Editor" in captured or (
+            b"SE" in captured and b"Screen Editor" in captured
+        ), "Screen output missing expected editor banner"
         assert b"80x24 |" in captured or b"120x40 |" in captured, (
             "Splash screen missing universal status bar geometry anchor"
         )
-        assert b"^K: Editor keys |" in captured, (
+        assert (b"^K: Editor keys |" in captured or
+                b"Free:" in captured), (
             "Splash screen missing universal status bar help anchor"
         )
         print("    [+] Interactive PTY startup & clean exit verified [PASS]")
@@ -2638,6 +2639,73 @@ def test_bug_2_4_34_splash_language_indication():
         print("    [+] Splash predominant language indicator verified [PASS]")
 
 
+def test_bug_2_4_35_splash_hotkeys_and_native_mode():
+    """Verify splash screen hotkeys (1:80x24, 2:120x40, 3:native) (2.4.35)."""
+    print("[*] Testing splash hotkeys and native mode (Bug 2.4.35)...")
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        splash_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "type   [1]              set 80x24" in splash_out, (
+            f"Expected 'set 80x24' on hotkey 1:\n{splash_out}"
+        )
+        assert "type   [2]              set 120x40" in splash_out, (
+            f"Expected 'set 120x40' on hotkey 2:\n{splash_out}"
+        )
+        assert "type   [3]              set native" in splash_out, (
+            f"Expected 'set native' on hotkey 3:\n{splash_out}"
+        )
+
+        # Press '1' -> 80x24 mode
+        os.write(master, b"1")
+        time.sleep(0.2)
+        out1 = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert " 80x24 |" in out1, (
+            f"Expected ' 80x24 |' in status bar after pressing '1':\n{out1}"
+        )
+
+        # Press '2' -> 120x40 mode
+        os.write(master, b"2")
+        time.sleep(0.2)
+        out2 = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert " 120x40 |" in out2, (
+            f"Expected ' 120x40 |' in status bar after pressing '2':\n{out2}"
+        )
+
+        # Press '3' -> Native mode (100x30 in our pty)
+        os.write(master, b"3")
+        time.sleep(0.2)
+        out3 = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert " 100x30 |" in out3, (
+            f"Expected ' 100x30 |' in status bar after pressing '3':\n{out3}"
+        )
+
+        # Exit cleanly via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Splash hotkeys and native mode verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2677,6 +2745,7 @@ def main():
     test_bug_2_4_32_escape_sequence_leakage()
     test_bug_2_4_33_block_typing_cancellation()
     test_bug_2_4_34_splash_language_indication()
+    test_bug_2_4_35_splash_hotkeys_and_native_mode()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

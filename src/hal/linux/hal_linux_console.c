@@ -39,7 +39,16 @@ static void sigwinch_handler(int sig)
     (void)sig;
 
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0) {
-        if (ws.ws_col >= SCREEN_COLS_120 && ws.ws_row >= SCREEN_ROWS_40) {
+        if (g_config.screen_mode == MODE_NATIVE) {
+            if (ws.ws_col >= SCREEN_COLS_80 && ws.ws_row >= SCREEN_ROWS_24) {
+                g_active_cols = (uint8_t)(ws.ws_col > 255 ? 255 : ws.ws_col);
+                g_active_rows = (uint8_t)(ws.ws_row > 255 ? 255 : ws.ws_row);
+            } else {
+                g_active_cols = SCREEN_COLS_80;
+                g_active_rows = SCREEN_ROWS_24;
+            }
+        } else if (ws.ws_col >= SCREEN_COLS_120 &&
+                   ws.ws_row >= SCREEN_ROWS_40) {
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
         } else {
@@ -48,6 +57,23 @@ static void sigwinch_handler(int sig)
         }
         g_need_screen_render = 1;
     }
+}
+
+int hal_console_get_native_size(uint8_t *cols, uint8_t *rows)
+{
+    struct winsize ws;
+
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 &&
+        ws.ws_row > 0) {
+        if (cols) {
+            *cols = (uint8_t)(ws.ws_col > 255 ? 255 : ws.ws_col);
+        }
+        if (rows) {
+            *rows = (uint8_t)(ws.ws_row > 255 ? 255 : ws.ws_row);
+        }
+        return 0;
+    }
+    return -1;
 }
 
 void hal_console_init(void)
@@ -77,7 +103,16 @@ void hal_console_init(void)
     signal(SIGWINCH, sigwinch_handler);
 
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
-        if (ws.ws_col >= SCREEN_COLS_120 && ws.ws_row >= SCREEN_ROWS_40) {
+        if (g_config.screen_mode == MODE_NATIVE) {
+            if (ws.ws_col >= SCREEN_COLS_80 && ws.ws_row >= SCREEN_ROWS_24) {
+                g_active_cols = (uint8_t)(ws.ws_col > 255 ? 255 : ws.ws_col);
+                g_active_rows = (uint8_t)(ws.ws_row > 255 ? 255 : ws.ws_row);
+            } else {
+                g_active_cols = SCREEN_COLS_80;
+                g_active_rows = SCREEN_ROWS_24;
+            }
+        } else if (ws.ws_col >= SCREEN_COLS_120 &&
+                   ws.ws_row >= SCREEN_ROWS_40) {
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
         } else {
