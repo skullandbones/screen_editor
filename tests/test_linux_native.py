@@ -2430,6 +2430,99 @@ def test_bug_2_4_31_find_modal_cursor_navigation():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_32_escape_sequence_leakage():
+    """Verify atomic draining of unrecognized escape sequences (Bug 2.4.32)."""
+    print("[*] Testing atomic escape sequence draining (Bug 2.4.32)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_leakage_")
+    try:
+        # 1. Leakage in editor mode
+        sample_path = os.path.join(temp_dir, "LEAK_TEST.TXT")
+        with open(sample_path, "w") as f:
+            f.write("Line 1: \n")
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", "LEAK_TEST.TXT")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.4)
+
+            # Send complex/unrecognized CSI sequences followed by CLEAN_INPUT
+            payload = b"\x1b[99~\x1b[1;5C\x1b[?1049hCLEAN_INPUT"
+            os.write(master, payload)
+            time.sleep(0.4)
+
+            out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "CLEAN_INPUT" in out, (
+                f"Expected CLEAN_INPUT in output:\n{out}"
+            )
+            assert "99~" not in out, f"Leaked 99~ in output:\n{out}"
+            assert "1;5C" not in out and "5C" not in out, (
+                f"Leaked 5C in output:\n{out}"
+            )
+            assert "?1049h" not in out and "1049h" not in out, (
+                f"Leaked 1049h in output:\n{out}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        # 2. Leakage on splash screen must not trigger hotkeys
+        master2, slave2 = pty.openpty()
+        pid2 = os.fork()
+        if pid2 == 0:
+            os.chdir(temp_dir)
+            os.close(master2)
+            os.dup2(slave2, 0)
+            os.dup2(slave2, 1)
+            os.dup2(slave2, 2)
+            os.close(slave2)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave2)
+            time.sleep(0.3)
+            splash_out = read_all_available(master2, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SE.COM — Screen Editor" in splash_out
+
+            # Send unrecognized escape sequence that would contain 'C' if leaked
+            os.write(master2, b"\x1b[1;5C")
+            time.sleep(0.3)
+            after_esc = read_all_available(master2, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Configuration Manager" not in after_esc, (
+                "Leaked 'C' triggered Configuration Manager on splash screen:\n"
+                f"{after_esc}"
+            )
+
+            # Exit cleanly via 'q'
+            os.write(master2, b"q")
+            exit_code2 = wait_pid_with_timeout(pid2, 2.0)
+            os.close(master2)
+            assert exit_code2 == 0, f"Expected exit code 0, got {exit_code2}"
+
+            print("    [+] Escape sequence leakage prevention verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2466,6 +2559,7 @@ def main():
     test_bug_2_4_29_block_save_and_insert()
     test_bug_2_4_30_block_menu_popup()
     test_bug_2_4_31_find_modal_cursor_navigation()
+    test_bug_2_4_32_escape_sequence_leakage()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

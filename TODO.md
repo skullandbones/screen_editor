@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 9 Defects Open (Bugs 2.4.32–2.4.40).
+- **Status**: Active / 8 Defects Open (Bugs 2.4.33–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -621,7 +621,7 @@ have been resolved and archived.
       `Ctrl+D` forward character deletion, and in-field character insertion.
       Validated via `test_bug_2_4_31_find_modal_cursor_navigation` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.32: Multi-Byte Escape Sequence Trailing Byte Leakage**:
+  - [x] **Bug 2.4.32: Multi-Byte Escape Sequence Trailing Byte Leakage**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c:142-145`, when an
       unrecognized escape prefix is encountered, the HAL calls
@@ -635,6 +635,13 @@ have been resolved and archived.
     - *Required Fix*: In `hal_linux_keyboard.c`, implement atomic escape
       sequence draining on unrecognized or malformed sequences following
       `ESC [` or `ESC O`, ensuring zero trailing bytes leak into standard input.
+    - *Resolution*: Implemented `drain_csi_sequence()` in
+      `src/hal/linux/hal_linux_keyboard.c` consuming intermediate and final
+      bytes (0x40..0x7E) atomically upon encountering unrecognized or
+      unhandled CSI / SS3 escape sequences, returning 0 without leaking
+      trailing bytes or triggering spurious hotkeys.
+      Validated via `test_bug_2_4_32_escape_sequence_leakage` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.33: Typing Characters and Tab Fail to Clear Active Block**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2, 10.1;
       `src/se.asm:1361-1399`.
