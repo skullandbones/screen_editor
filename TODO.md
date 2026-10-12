@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 12 Open (Bugs 2.1.3, 2.1.7-2.1.9 Rejected).
+- **Status**: Active / 12 Open (Bugs 2.1.3, 2.1.7-2.1.10 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -129,24 +129,21 @@ have been resolved and archived.
       column 0). This preserves alignment with indented text during vertical
       navigation. `docs/UI_UX_DESIGN.md` has been updated to explicitly codify
       snap-forward alignment.
-  - [ ] **Bug 2.1.10: Missing In-Field Cursor Movement in Archetype C Modals**:
+  - [x] **Bug 2.1.10: Modal In-Field Cursor Movement [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
-    - *Issue*: In `src/core/editor.asm` (`DO_GOTO_LINE_UI:1333-1420`) and
-      `src/core/search.asm` (`DO_FIND_UI:50-125` and `DO_REPLACE_UI:1876-1960`):
-      - Input loops pin the cursor to the end of the text buffer and do not
-        maintain an internal cursor insertion index.
-      - Pressing Left or Right arrow keys transmits escape sequences that
-        trigger `GOTO_UI_CHECK_ESC`, `FIND_GOT_ESC_SEQ`, or `REP_GOT_ESC_SEQ`,
-        erroneously cancelling the modal dialog.
-      - Home (`Ctrl+A`) and End (`Ctrl+E`) are unhandled.
-      - `KEY_DEL` (`0x7F`) is aliased to Backspace (deleting the last character
-        in the buffer rather than the character under the cursor).
-      - Forward deletion via `Ctrl+D` (`0x04`) is completely unhandled.
-    - *Required Fix*: Implement in-field cursor position tracking and discrete
-      editing handlers in `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`:
-      Left/Right arrows shifting the insertion cursor inside input brackets,
-      Home/End jumping to boundaries, Backspace deleting left of cursor, and
-      Delete / `Ctrl+D` deleting under the cursor.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: In-field cursor movement behaviors are identical across all
+      SE variants. Full in-field cursor movement (Left/Right arrows, Delete
+      under cursor, Backspace, Home, and End) is supported across all variants
+      in the Tier 1 directory filename input screens (Section 7.9). In
+      contrast, Archetype C single-line modals (Find, Replace, Goto Line) are
+      intentionally designed as lightweight append/backspace linear input
+      fields across all variants to conserve memory, preserve CP/M TPA
+      headroom, and keep modal interactions robust. The requirement for
+      intra-field cursor tracking and mid-string insertion inside Archetype C
+      modals is rejected. The separate defect where unexpected keystrokes (such
+      as cursor arrow keys) cancel the modal dialog has been split out and
+      tracked as Bug 2.1.17.
   - [ ] **Bug 2.1.11: Config Manager Tier 1 Layout & Menu Inconsistency**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
     - *Issue*: In `src/se.asm:3086-3300`, `SHOW_CONFIG_SCREEN` renders a 5-item
@@ -221,6 +218,23 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
+  - [ ] **Bug 2.1.17: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
+    - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
+      `src/core/search.asm:214-233` (`DO_FIND_UI`), and
+      `src/core/search.asm:1940-1960` (`DO_REPLACE_UI`):
+      - Receiving unexpected keys or escape sequences (such as cursor arrow
+        keys, PgUp/PgDn, or function keys) routes into `GOT_ESC_SEQ` handlers.
+      - These handlers invoke `CALL GOT_ESC_BYTE`, executing cursor navigation
+        commands on the underlying document beneath the modal and abruptly
+        dismissing the dialog.
+      - Modals must only be dismissed by explicit `Enter` (confirm) or
+        standalone `ESC` (cancel); unexpected keys and multi-byte escape
+        sequences must be cleanly drained and discarded without executing
+        background actions or aborting the active dialog.
+    - *Required Fix*: In `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`,
+      drain and discard unexpected escape sequences and unassigned keys,
+      preserving the active modal dialog and retaining input buffer state.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
