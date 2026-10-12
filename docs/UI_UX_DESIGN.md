@@ -44,23 +44,30 @@ breaks another.
 2. Terminal Architecture, Geometries & Character Budget
 --------------------------------------------------------------------------------
 1. Standard Screen Geometries:
-   - Option 1 — Standard Terminal: 80 columns x 24 rows (`80x24`).
+   - Option 1 — Standard Terminal (Default): 80 columns x 24 rows (`80x24`).
      - Rows 1 to 23: Workspace / Document text viewport.
      - Row 24: Universal Status Bar (fixed bottom anchor).
-     - Universal baseline standard supported across all hardware targets.
-   - Option 2 — Wide Console: 120 columns x 40 rows (`120x40`).
+     - Universal baseline standard and default screen size across all SE
+       implementations and hardware targets because 80x24 is supported on all
+       systems.
+     - On splash screens, hotkey `1` is universally assigned to `80x24`.
+   - Option 2 — Wide Console (if supported): 120 columns x 40 rows (`120x40`).
      - Rows 1 to 39: Workspace / Document text viewport.
      - Row 40: Universal Status Bar (fixed bottom anchor).
-     - Note: If 120x40 screen size is not supported on a target platform,
-       option 2 on the splash screen will not be shown and 120x40 screen size
-       will not be supported on that target.
-   - Option 3 — Native Host Terminal:
+     - On platforms supporting 120x40 wide console mode, hotkey `2` is
+       assigned to `120x40`.
+     - If 120x40 screen size is not supported on a target platform, Option 2 on
+       the splash screen will not be shown and 120x40 screen size will not be
+       supported on that target.
+   - Option 3 — Native Host Terminal (if supported):
      - Dynamic host terminal dimensions (`HOST_COLS x HOST_ROWS`).
      - Supported on native platforms (Linux, POSIX, macOS) capable of querying
        actual terminal emulator dimensions (via `ioctl(TIOCGWINSZ)` or
        `os.get_terminal_size()`).
-     - Option 3 is added to the splash screen when a native screen size is also
-       supported.
+     - On platforms supporting dynamic native resizing, hotkey `3` is assigned
+       to `Native` mode.
+     - If dynamic host sizing is not supported on a target platform, Option 3
+       will not be shown on the splash screen.
    - Screen Switching Debris Prevention Mandate:
      Prior to switching screen sizes (between 80x24, 120x40, or Native), the
      terminal screen must be explicitly cleared (emitting ANSI clear sequence
@@ -510,14 +517,17 @@ content blocks rather than top-aligned text.
    - Content Height: 14 lines, Content Width: 50 columns.
    - All rows above `TopRow` and below `TopRow + 14` (up to Row 23) display `~`.
    - Screen Geometry Option Presentation:
-     On splash screens where screen geometry options are presented:
-     - `Option 1`: Standard `80x24` classic terminal mode (universal).
-     - `Option 2`: Wide `120x40` modern console mode. Note: If 120x40 screen
-       size is not supported on the target platform, option 2 on the splash
-       screen will not be shown and 120x40 screen size will not be supported.
-     - `Option 3`: Native host terminal mode. Added to the splash screen when
-       a native screen size is also supported (e.g. on native Linux ports
-       running in modern terminal emulators).
+     80x24 is the default screen size because it is supported on all systems.
+     Going forward, splash screen geometry options are standardized to:
+     - `Option 1`: Standard `80x24` classic terminal mode (universal baseline
+       and default on all systems). Hotkey `1` (`DO_SET_80X24`).
+     - `Option 2`: Wide `120x40` modern console mode (if supported). Hotkey `2`
+       (`DO_SET_120X40`). Note: If 120x40 screen size is not supported on the
+       target platform, Option 2 on the splash screen will not be shown and
+       120x40 screen size will not be supported on that target.
+     - `Option 3`: Native host terminal mode (if supported). Hotkey `3`
+       (`DO_SET_NATIVE`). Added to the splash screen only when dynamic host
+       terminal sizing is supported (e.g. on native Linux/POSIX ports).
    - Predominant Programming Language Display Mandate:
      The splash screen shall show which programming language was predominantly
      used to create SE. Specifically, row 2 of the 14-line splash screen
@@ -569,14 +579,12 @@ content blocks rather than top-aligned text.
        - `Ctrl+P`: Context-Aware Plugin Palette (`DO_CONTEXT_PLUGIN_POPUP`).
        - `C` / `c`: Open Configuration Manager (`DO_CONFIG_SCREEN`).
        - `1`: Set 80x24 classic terminal mode (`DO_SET_80X24`). Universal
-         baseline standard.
-       - `2`: Set 120x40 modern terminal mode (`DO_SET_120X40`). Note: If
-         120x40 screen size is not supported on the target platform, option 2
-         on the splash screen will not be shown and 120x40 screen size will not
-         be supported.
-       - `3`: Set Native dynamic terminal mode (`DO_SET_NATIVE`). Added to the
-         splash screen when a native screen size is also supported (e.g. Linux
-         native ports). Reverts geometry to auto-detected host terminal size.
+         baseline standard and default screen size across all platforms.
+       - `2`: Set 120x40 modern console mode (`DO_SET_120X40`), if supported
+         on the target platform. If unsupported, Option 2 is omitted.
+       - `3`: Set Native dynamic terminal mode (`DO_SET_NATIVE`), if supported
+         on the target platform (e.g. Linux native ports). If dynamic resizing
+         is unsupported, Option 3 is omitted.
        - `Q` / `q` / `Ctrl+Q`: Safe quit / exit back to OS.
      - Non-Entry Key Exclusion & Silent Rejection Mandate:
        - The Space bar (`0x20`), ANSI cursor arrow keys (`Up`, `Down`, `Left`,
