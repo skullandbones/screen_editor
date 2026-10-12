@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 14 Defects Open (Bugs 2.1.3, 2.1.7 Rejected).
+- **Status**: Active / 13 Defects Open (Bugs 2.1.3, 2.1.7, 2.1.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -106,19 +106,17 @@ have been resolved and archived.
       respect CP/M TPA headroom, and eliminate state desynchronization.
       Directional page navigation is handled exclusively via dedicated `PgUp`
       and `PgDn` keys; `Ctrl+U` and `Ctrl+V` are removed as paging shortcuts.
-  - [ ] **Bug 2.1.8: Combined Length Barrier Non-Conformity on Line Joining**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
-    - *Issue*: In `src/core/editor.asm:2078-2088` (`JOIN_TWO_LINES`), when
-      lines are joined via Backspace at column 0 (`DO_BS_JOIN_PREV`) or Delete
-      at EOL (`DO_DEL_FWD_JOIN_NEXT`), the combined length check tests
-      `len_1 + len_2 <= MAX_INPUT_LINE_CHARS` (1,000 characters). Section 6.8
-      strictly mandates that line joining must enforce the 120-column physical
-      line barrier (`prev_len + cur_len <= 120` or `cur_len + next_len <= 120`);
-      joining must be inhibited (no-op) if the merged length exceeds 120.
-    - *Required Fix*: In `src/core/editor.asm:2081`, compare `len_1 + len_2`
-      against 120 (`MAX_LINE_CHARS` / 120) instead of `MAX_INPUT_LINE_CHARS`.
-      Inhibit line joining (set Carry = 1 and return) if the combined length
-      exceeds 120 characters.
+  - [x] **Bug 2.1.8: Line Join Length Barrier [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The 120-column limit in `docs/UI_UX_DESIGN.md` was an error
+      in the design specification that conflated terminal screen width (120x40
+      console mode) with document line buffer capacity. `SE.COM` correctly
+      enforces `MAX_INPUT_LINE_CHARS` (1,000 characters) across `src/core/`
+      (`JOIN_TWO_LINES` in `editor.asm`, `do_backspace` / `do_delete` in
+      `editor.c`), fully supported by horizontal panning (`[Pan +40]`).
+      `docs/UI_UX_DESIGN.md` has been corrected to reference the canonical
+      1,000-character barrier.
   - [ ] **Bug 2.1.9: Sticky Target Column Clamping within Expanded Tab**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
     - *Issue*: In `src/core/editor.asm:581-618` (`ADJUST_COL_TO_TARGET`), during
