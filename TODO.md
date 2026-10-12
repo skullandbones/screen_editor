@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 5 Defects Open (Bugs 2.4.36–2.4.40).
+- **Status**: Active / 4 Defects Open (Bugs 2.4.37–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -704,7 +704,7 @@ have been resolved and archived.
       status bar geometry formatting to dynamically render native dimensions.
       Validated via `test_bug_2_4_35_splash_hotkeys_and_native_mode` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.36: Missing Screen Clearance on Screen Geometry Switching**:
+  - [x] **Bug 2.4.36: Missing Screen Clearance on Screen Geometry Switching**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Issue*: Sections 2.1, 7.2, and 14.1 mandate that prior to switching
       screen geometries, the editor must explicitly clear the entire terminal
@@ -718,6 +718,12 @@ have been resolved and archived.
     - *Required Fix*: In `show_splash_screen()`, invoke `clear_screen()` /
       `hal_console_clear()` before updating dimensions and re-rendering on
       geometry switch keys.
+    - *Resolution*: Invoked `clear_screen()` prior to mutating active dimensions
+      and triggering screen repaint on keys `1`, `2`, and `3` in
+      `show_splash_screen()` (`src/core/ui_render.c`), completely wiping dirty
+      screen remnants and viewport artifacts.
+      Validated via `test_bug_2_4_36_geometry_switch_clear` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.37: Non-Interactive Configuration Manager Workspace**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 13.1, 13.2.
     - *Issue*: In `src/core/ui_render.c:572-593` (`show_config_screen`), the

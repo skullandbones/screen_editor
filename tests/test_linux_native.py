@@ -2706,6 +2706,55 @@ def test_bug_2_4_35_splash_hotkeys_and_native_mode():
         print("    [+] Splash hotkeys and native mode verified [PASS]")
 
 
+def test_bug_2_4_36_geometry_switch_clear():
+    """Verify screen clearance on geometry mode switching (Bug 2.4.36)."""
+    print("[*] Testing screen clearance on geometry switch (Bug 2.4.36)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        read_all_available(master, 0.4)
+
+        # Switch to 80x24 mode and verify ANSI screen clear emitted
+        os.write(master, b"1")
+        time.sleep(0.2)
+        raw1 = read_all_available(master, 0.3)
+        assert b"\x1b[2J\x1b[H" in raw1, (
+            "Screen switch to 80x24 missing ANSI clear (\\x1b[2J\\x1b[H)"
+        )
+
+        # Switch to 120x40 mode and verify ANSI screen clear emitted
+        os.write(master, b"2")
+        time.sleep(0.2)
+        raw2 = read_all_available(master, 0.3)
+        assert b"\x1b[2J\x1b[H" in raw2, (
+            "Screen switch to 120x40 missing ANSI clear sequence"
+        )
+
+        # Switch to native mode and verify ANSI screen clear emitted
+        os.write(master, b"3")
+        time.sleep(0.2)
+        raw3 = read_all_available(master, 0.3)
+        assert b"\x1b[2J\x1b[H" in raw3, (
+            "Screen switch to Native missing ANSI clear sequence"
+        )
+
+        # Exit cleanly via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Screen clearance on geometry switch verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2746,6 +2795,7 @@ def main():
     test_bug_2_4_33_block_typing_cancellation()
     test_bug_2_4_34_splash_language_indication()
     test_bug_2_4_35_splash_hotkeys_and_native_mode()
+    test_bug_2_4_36_geometry_switch_clear()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

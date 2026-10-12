@@ -519,17 +519,20 @@ void show_splash_screen(void)
             show_help_screen();
             need_render = 1;
         } else if (k == '1') {
+            clear_screen();
             g_config.screen_mode = MODE_80X24;
             g_active_cols = SCREEN_COLS_80;
             g_active_rows = SCREEN_ROWS_24;
             need_render = 1;
         } else if (k == '2') {
+            clear_screen();
             g_config.screen_mode = MODE_120X40;
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
             need_render = 1;
         } else if (k == '3') {
             uint8_t ncols = 0, nrows = 0;
+            clear_screen();
             g_config.screen_mode = MODE_NATIVE;
             if (hal_console_get_native_size(&ncols, &nrows) == 0 &&
                 ncols >= SCREEN_COLS_80 && nrows >= SCREEN_ROWS_24) {
