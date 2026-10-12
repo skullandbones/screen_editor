@@ -648,8 +648,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.53
-  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.54–2.7.59 Open).
+- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.54
+  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.55–2.7.59 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1366,7 +1366,7 @@ have been resolved and archived.
       silent rejection of non-entry keys (Space bar, arrow keys, unassigned).
       Validated via Step 42 in `test_editor.py`
       (`test_bug_2_7_53_splash_screen_dimensions_and_colon_commands`).
-  - [ ] **Bug 2.7.54: Inversion of Splash Screen Geometry Hotkeys (1 vs 2)**:
+  - [x] **Bug 2.7.54: Inversion of Splash Screen Geometry Hotkeys (1 vs 2)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Symptom*: Pressing hotkey `1` on the Tier 1 Splash screen sets 120x40
       mode, and pressing hotkey `2` sets 80x24 mode.
@@ -1376,8 +1376,10 @@ have been resolved and archived.
       classic terminal mode, `DO_SET_80X24`), and `2` is defined as
       Option 2 (120x40 modern terminal mode, `DO_SET_120X40`). The hotkeys
       are inverted.
-    - *Action Required*: Swap hotkey handling in `editor.py` so `1` sets 80x24
-      and `2` sets 120x40. Add regression test in `test_editor.py`.
+    - *Resolution*: In `ports/python/se/editor.py`, corrected splash hotkeys so
+      `1` selects 80x24 (`DO_SET_80X24`) and `2` selects 120x40
+      (`DO_SET_120X40`) conforming with Section 7.2. Validated via Step 43 in
+      `test_editor.py` (`test_bug_2_7_54_splash_geometry_hotkeys_inversion`).
   - [ ] **Bug 2.7.55: Missing Option 3 (Native Mode) on Splash Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Symptom*: The user has no hotkey or option on the Splash screen to

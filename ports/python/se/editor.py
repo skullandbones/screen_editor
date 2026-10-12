@@ -816,12 +816,12 @@ class Editor:
                 self.action_help()
                 need_render = True
             elif ch == "1":
-                self.config.set("SCREEN", "120x40")
+                self.config.set("SCREEN", "80x24")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
                 need_render = True
             elif ch == "2":
-                self.config.set("SCREEN", "80x24")
+                self.config.set("SCREEN", "120x40")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
                 need_render = True

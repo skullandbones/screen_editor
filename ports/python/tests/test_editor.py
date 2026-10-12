@@ -514,8 +514,8 @@ class TestEditor(unittest.TestCase):
             )
         )
 
-        # Feed sequence: '1' (toggle 120x40), '2' (toggle 80x24), 'e' (exit)
-        keys = ["1", "2", "e"]
+        # Feed sequence: '2' (set 120x40), '1' (set 80x24), 'e' (exit)
+        keys = ["2", "1", "e"]
         key_iter = iter(keys)
         self.editor.terminal.get_key = lambda timeout=None: next(
             key_iter, "e"
@@ -2072,6 +2072,38 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 42: Splash 14x50 geometry & colon commands verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_54_splash_geometry_hotkeys_inversion(self):
+        """Step 43: Verify hotkey 1 sets 80x24 and hotkey 2 sets 120x40."""
+        print(
+            "[*] Step 43: Testing splash geometry hotkeys 1 and 2...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+
+        # Press '1' then 'e' to exit splash
+        self.editor.config.set("SCREEN", "120x40")
+        self.editor.terminal.cols = 120
+        self.editor.terminal.rows = 40
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "e"])
+        self.editor.action_splash_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "80x24")
+        self.assertEqual(self.editor.terminal.cols, 80)
+        self.assertEqual(self.editor.terminal.rows, 24)
+
+        # Press '2' then 'e' to exit splash
+        self.editor.terminal.get_key = MagicMock(side_effect=["2", "e"])
+        self.editor.action_splash_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "120x40")
+        self.assertEqual(self.editor.terminal.cols, 120)
+        self.assertEqual(self.editor.terminal.rows, 40)
+
+        print(
+            "[+] Step 43: Splash geometry hotkeys 1 and 2 verified.",
             flush=True,
         )
 
