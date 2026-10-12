@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 4 Defects Open (Bugs 2.4.37–2.4.40).
+- **Status**: Active / 3 Defects Open (Bugs 2.4.38–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -724,7 +724,7 @@ have been resolved and archived.
       screen remnants and viewport artifacts.
       Validated via `test_bug_2_4_36_geometry_switch_clear` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.37: Non-Interactive Configuration Manager Workspace**:
+  - [x] **Bug 2.4.37: Non-Interactive Configuration Manager Workspace**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 13.1, 13.2.
     - *Issue*: In `src/core/ui_render.c:572-593` (`show_config_screen`), the
       Tier 1 Configuration Manager workspace renders a static 11-line text
@@ -737,6 +737,13 @@ have been resolved and archived.
       `show_config_screen()` (`src/core/ui_render.c`) that dynamically formats
       current parameters from `g_config`, toggles values on `1`, `2`, `3`, `4`,
       saves to `SE.CFG` on `S`/`s`, and returns on `ESC`/`Enter`.
+    - *Resolution*: Implemented dynamic interactive event loop in
+      `show_config_screen()` (`src/core/ui_render.c`), formatting active
+      parameters from `g_config`, toggling options on keys `1`, `2`, `3`, `4`,
+      persisting configuration to `SE.CFG` via `config_save()` on `S`/`s`, and
+      returning to caller on `ESC`/`Enter`.
+      Validated via `test_bug_2_4_37_config_screen_interactive` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4.
     - *Issue*: Section 6.2 defines default tab stop intervals as

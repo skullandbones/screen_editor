@@ -2755,6 +2755,91 @@ def test_bug_2_4_36_geometry_switch_clear():
         print("    [+] Screen clearance on geometry switch verified [PASS]")
 
 
+def test_bug_2_4_37_config_screen_interactive():
+    """Verify interactive Configuration Manager workspace (Bug 2.4.37)."""
+    print("[*] Testing interactive config workspace (Bug 2.4.37)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_cfg_test_")
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.chdir(temp_dir)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.3)
+
+            # Open Configuration Manager via 'c'
+            os.write(master, b"c")
+            time.sleep(0.2)
+            cfg_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Configuration Manager" in cfg_out, (
+                f"Failed to enter Configuration Manager:\n{cfg_out}"
+            )
+
+            # Toggle Tab Width via '2' (8 -> 4)
+            os.write(master, b"2")
+            time.sleep(0.2)
+            tab_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "2. Tab Width        : 4" in tab_out, (
+                f"Tab width toggle failed:\n{tab_out}"
+            )
+
+            # Toggle Max Line Capacity via '3' (16K -> 32K)
+            os.write(master, b"3")
+            time.sleep(0.2)
+            lines_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "3. Max Line Capacity: 32K" in lines_out, (
+                f"Lines mode toggle failed:\n{lines_out}"
+            )
+
+            # Save configuration via 's'
+            os.write(master, b"s")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Exit config workspace via ESC
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            splash_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SE — Screen Editor" in splash_out, (
+                f"Failed to return to splash screen:\n{splash_out}"
+            )
+
+            # Exit cleanly via 'q'
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            # Verify SE.CFG contents persisted on disk
+            cfg_path = os.path.join(temp_dir, "SE.CFG")
+            assert os.path.exists(cfg_path), "SE.CFG was not created"
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            assert "TAB=4" in content, f"Expected TAB=4 in SE.CFG:\n{content}"
+            assert "LINES=32K" in content, (
+                f"Expected LINES=32K in SE.CFG:\n{content}"
+            )
+            print("    [+] Interactive config workspace verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2796,6 +2881,7 @@ def main():
     test_bug_2_4_34_splash_language_indication()
     test_bug_2_4_35_splash_hotkeys_and_native_mode()
     test_bug_2_4_36_geometry_switch_clear()
+    test_bug_2_4_37_config_screen_interactive()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

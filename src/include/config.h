@@ -154,6 +154,7 @@ extern editor_config_t g_config;
 void config_init_defaults(void);
 int  config_load_file(const char *filename);
 int  config_save_file(const char *filename);
+int  config_save(void);
 
 #ifdef __cplusplus
 }

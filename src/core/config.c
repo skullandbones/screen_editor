@@ -213,3 +213,8 @@ int config_save_file(const char *filename)
     fclose(fp);
     return 0;
 }
+
+int config_save(void)
+{
+    return config_save_file("SE.CFG");
+}
