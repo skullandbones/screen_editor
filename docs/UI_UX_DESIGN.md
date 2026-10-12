@@ -803,70 +803,103 @@ content blocks rather than top-aligned text.
    - Confirmation and Cancellation: `<Enter>` confirms the filename; `<ESC>`
      cancels the directory workspace and returns to the previous screen.
 
-10. Document Close Lifecycle (`Ctrl+W` / `:w` from Splash):
-   - Closing an active document returns the user directly to the Tier 1
-     Splash Screen workspace.
-   - Clean Document (`DOC_MODIFIED == 0`):
-     Immediately closes the active file, frees working buffers, and displays
-     the Splash Screen workspace without prompting.
-   - Modified Document (`DOC_MODIFIED == 1`):
-     Intercepts close and presents a Tier 2 Centered Boxed Modal Pop-up
-     querying whether to save unsaved modifications:
-     ```text
-     +--------------------------------------------------+
-     |              Unsaved Modifications               |
-     +--------------------------------------------------+
-     |   Any unsaved edits will be lost if discarded.   |
-     |                  Save changes?                   |
-     |                                                  |
-     |        [Y]es      [N]o      [ESC]=Cancel         |
-     +--------------------------------------------------+
-     ```
-     - Response `[Y]es`: Transitions to Save File workspace to write changes,
-       then closes document to Splash Screen.
-     - Response `[N]o`: Discards unsaved modifications and closes document to
-       Splash Screen.
-     - Response `[ESC]=Cancel`: Cancels close request and returns directly to
-       the active editor workspace with document state intact.
+10. Workspace Prompt Input & Keystroke Rendering Discipline (SE.COM Parity):
+    When entering filenames, paths, or drive specs in Tier 1 directory browsers
+    (File Open, Insert, Save, Save Block):
+    - In-Place Character Echo (Reference Architecture):
+      - As ASCII keystrokes (`0x20..0x7E`) are received, they are appended or
+        inserted into `INPUT_FILENAME_BUF` and echoed directly to the console
+        at the current hardware cursor position (`PUTC`), advancing
+        `cursor_pos`.
+      - Inline deletions (`Backspace` deleting left of cursor, `Delete`
+        deleting character under cursor) and in-place insertions redraw only
+        the bracketed input field on the prompt row and reposition the cursor
+        via `\x1b[{row};{col}H`.
+      - Directional navigation (`Left`, `Right`, `Home`, `End`) repositions the
+        hardware cursor within the bracket boundaries without emitting text.
+    - Prohibition of Full-Screen Redraw During Typing:
+      - Implementations MUST NOT re-render the 24-row (or 40-row) screen,
+        file grid, borders, or Row 24 status bar upon receiving individual
+        text input keystrokes.
+      - Re-emitting the status bar or repainting the file grid on every
+        keystroke creates severe display flicker and serial latency on
+        4–10 MHz Z80 CP/M systems, overflows input FIFO buffers during rapid
+        typing, and emits premature status bar updates (e.g. `Line    1/1`)
+        that break automated test harness synchronization.
+    - Discrete Full-Screen Redraw Triggers:
+      - Full-screen re-renders (`RENDER_SAVE_PAGE`, `RENDER_OPEN_PAGE`) are
+        strictly reserved for macroscopic state changes:
+        1. Initial entry into the workspace.
+        2. Page changes via `<PgUp>` or `<PgDn>`.
+        3. Drive, user, or wildcard filter pattern changes applied upon
+           pressing `Enter` (e.g. `B:`, `1C:`, `*.TXT`).
+        4. Line ending format toggling via `Ctrl+F` in the Save workspace.
+        5. Dismissal of child modal dialogs (e.g. Overwrite Confirmation).
 
-11. About Screen Layout (`[A]` from Splash):
-   - Content Height: 9 lines, Content Width: 54 columns.
-   - All rows above `TopRow` and below `TopRow + 9` (up to Row 23) display `~`.
-   - Visual Structure:
-     ```text
-     ~
-     ~                 SE - Screen Editor
-     ~       version 1.1.0 (2026-10-09) (Z80 Assembly)
-     ~                  by Dean Jenkins
-     ~
-     ~ Google Antigravity 2.19.1 & Gemini FLASH 3.8 high
-     ~     Open source software under the MIT License
-     ~
-     ~             Press any key to continue
-     ~
-     [STATUS BAR AT ROW 24]
-     ```
-   - Predominant Programming Language Display Mandate:
-     Row 2 of the About screen displays the release version number, build date,
-     and the predominant programming language used to create that specific SE
-     port or binary, formatted as `version <version> (<date>) (<Language>)`:
-     - 8-bit CP/M (`SE.COM`):
-       `version 1.1.0 (2026-10-09) (Z80 Assembly)`
-     - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
-       `version 1.1.0 (2026-10-09) (Z80 Assembly)`
-     - Linux Native C port (`se-linux` / `SEC.COM`):
-       `version 1.1.0 (2026-10-09) (C)`
-     - Linux Native Python port (`se-py`):
-       `version 1.1.0 (2026-10-09) (Python)`
-     - Future Rust port (`se-rs`):
-       `version 1.1.0 (2026-10-09) (Rust)`
-     Generic host OS labels (such as `(Linux)`) must not be used; each
-     binary shall clearly state its predominant programming language on the
-     About screen.
-   - Version Harmonization: All SE variants share the exact same release
-     version number as canonical `SE.COM` (e.g. `v1.1.0`).
-   - Dismissal: Any key press dismisses the About screen and returns to the
-     Splash Screen.
+11. Document Close Lifecycle (`Ctrl+W` / `:w` from Splash):
+    - Closing an active document returns the user directly to the Tier 1
+      Splash Screen workspace.
+    - Clean Document (`DOC_MODIFIED == 0`):
+      Immediately closes the active file, frees working buffers, and displays
+      the Splash Screen workspace without prompting.
+    - Modified Document (`DOC_MODIFIED == 1`):
+      Intercepts close and presents a Tier 2 Centered Boxed Modal Pop-up
+      querying whether to save unsaved modifications:
+      ```text
+      +--------------------------------------------------+
+      |              Unsaved Modifications               |
+      +--------------------------------------------------+
+      |   Any unsaved edits will be lost if discarded.   |
+      |                  Save changes?                   |
+      |                                                  |
+      |        [Y]es      [N]o      [ESC]=Cancel         |
+      +--------------------------------------------------+
+      ```
+      - Response `[Y]es`: Transitions to Save File workspace to write changes,
+        then closes document to Splash Screen.
+      - Response `[N]o`: Discards unsaved modifications and closes document to
+        Splash Screen.
+      - Response `[ESC]=Cancel`: Cancels close request and returns directly to
+        the active editor workspace with document state intact.
+
+12. About Screen Layout (`[A]` from Splash):
+    - Content Height: 9 lines, Content Width: 54 columns.
+    - All rows above `TopRow` and below `TopRow + 9` (up to Row 23) display `~`.
+    - Visual Structure:
+      ```text
+      ~
+      ~                 SE - Screen Editor
+      ~       version 1.1.0 (2026-10-09) (Z80 Assembly)
+      ~                  by Dean Jenkins
+      ~
+      ~ Google Antigravity 2.19.1 & Gemini FLASH 3.8 high
+      ~     Open source software under the MIT License
+      ~
+      ~             Press any key to continue
+      ~
+      [STATUS BAR AT ROW 24]
+      ```
+    - Predominant Programming Language Display Mandate:
+      Row 2 of the About screen displays the release version number, build date,
+      and the predominant programming language used to create that specific SE
+      port or binary, formatted as `version <version> (<date>) (<Language>)`:
+      - 8-bit CP/M (`SE.COM`):
+        `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+      - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
+        `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+      - Linux Native C port (`se-linux` / `SEC.COM`):
+        `version 1.1.0 (2026-10-09) (C)`
+      - Linux Native Python port (`se-py`):
+        `version 1.1.0 (2026-10-09) (Python)`
+      - Future Rust port (`se-rs`):
+        `version 1.1.0 (2026-10-09) (Rust)`
+      Generic host OS labels (such as `(Linux)`) must not be used; each
+      binary shall clearly state its predominant programming language on the
+      About screen.
+    - Version Harmonization: All SE variants share the exact same release
+      version number as canonical `SE.COM` (e.g. `v1.1.0`).
+    - Dismissal: Any key press dismisses the About screen and returns to the
+      Splash Screen.
 
 8. Tier 2 Centered Boxed Modal Pop-ups
 --------------------------------------------------------------------------------
@@ -1008,6 +1041,13 @@ or display notifications.
      |          [Enter]=Confirm      [ESC]=Cancel       |
      +--------------------------------------------------+
      ```
+     - Keystroke Rendering Discipline (In-Place Echo):
+       Single-line modal text input fields adhere strictly to the in-place
+       echo discipline defined in Section 7.10: character entry, inline
+       deletion, and cursor navigation update only the contents within the
+       bracketed input field `[  text  ]` and the hardware cursor position.
+       Modal frame borders, background rows, and underlying screen surfaces
+       MUST NOT be redrawn on individual text-entry keystrokes.
 
    Archetype D: Selection Menu (`show_menu` / Plugin Palette)
      Used for choosing from dynamic list (Plugin Palette, Directory list).
@@ -1507,7 +1547,7 @@ specific architectural adaptations.
    All cross-platform ports and binaries of SE must display the programming
    language predominantly used to create that specific port appended to the
    version number and build date line on the Tier 1 About screen
-   (Section 7.11). For example:
+   (Section 7.12). For example:
    - `SE.COM` / `SE_NEXT.COM`:
      `version 1.1.0 (2026-10-09) (Z80 Assembly)`
    - `se-linux` / `SEC.COM`:

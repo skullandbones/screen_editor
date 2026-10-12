@@ -190,10 +190,10 @@ have been resolved and archived.
       timeout, preventing trailing escape sequence bytes from leaking into the
       editor document buffer.
   - [ ] **Bug 2.1.14: Predominant Language Indication on About Screen**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11, 14.6.
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
-      language. Per `docs/UI_UX_DESIGN.md` Section 7.11 and 14.6, all SE
+      language. Per `docs/UI_UX_DESIGN.md` Section 7.12 and 14.6, all SE
       variants must display the predominant programming language appended to
       the version number and build date on the About screen (`[A]` from
       splash): `version 1.1.0 (2026-10-09) (Z80 Assembly)`. (The splash screen
@@ -898,7 +898,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.53
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
   Resolved; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
@@ -1616,6 +1616,138 @@ have been resolved and archived.
       silent rejection of non-entry keys (Space bar, arrow keys, unassigned).
       Validated via Step 42 in `test_editor.py`
       (`test_bug_2_7_53_splash_screen_dimensions_and_colon_commands`).
+  - [x] **Bug 2.7.54: Inversion of Splash Screen Geometry Hotkeys (1 vs 2)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: Pressing hotkey `1` on the Tier 1 Splash screen sets 120x40
+      mode, and pressing hotkey `2` sets 80x24 mode.
+    - *Root Cause*: In `ports/python/se/editor.py:818-827`, hotkey `1` assigns
+      `SCREEN=120x40` and hotkey `2` assigns `SCREEN=80x24`. In
+      `docs/UI_UX_DESIGN.md` Section 7.2, `1` is defined as Option 1 (80x24
+      classic terminal mode, `DO_SET_80X24`), and `2` is defined as
+      Option 2 (120x40 modern terminal mode, `DO_SET_120X40`). The hotkeys
+      are inverted.
+    - *Resolution*: In `ports/python/se/editor.py`, corrected splash hotkeys so
+      `1` selects 80x24 (`DO_SET_80X24`) and `2` selects 120x40
+      (`DO_SET_120X40`) conforming with Section 7.2. Validated via Step 43 in
+      `test_editor.py` (`test_bug_2_7_54_splash_geometry_hotkeys_inversion`).
+  - [x] **Bug 2.7.55: Missing Option 3 (Native Mode) on Splash Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: The user has no hotkey or option on the Splash screen to
+      select or revert to Native dynamic host terminal dimensions.
+    - *Root Cause*: `ports/python/se/editor.py:818-834` only intercepts keys
+      `1` and `2`, silently rejecting key `3` under non-entry key filtering.
+      Section 7.2 explicitly mandates Option 3 (`DO_SET_NATIVE`, hotkey `3`)
+      when native screen size is supported (e.g. Linux native Python port) to
+      revert geometry to auto-detected host terminal size.
+    - *Resolution*: In `ports/python/se/editor.py`, bound hotkey `3` in
+      `action_splash_screen` to `DO_SET_NATIVE`, setting `SCREEN=NATIVE`,
+      querying dynamic host terminal size via `update_geometry()`, and
+      re-rendering. Validated via Step 44 in `test_editor.py`
+      (`test_bug_2_7_55_splash_option3_native_mode`).
+  - [x] **Bug 2.7.56: Missing Screen Clearance Prior to Geometry Switching**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: Switching screen geometry leaves stale column tildes, clipped
+      characters, margin remnants, and ghost status bar lines on the screen.
+    - *Root Cause*: In `ports/python/se/editor.py:818-827` (splash screen) and
+      `editor.py:896-902` (config screen), terminal dimensions are updated
+      without clearing the terminal screen. Section 2.1, 7.2, and 14.1 mandate
+      that the screen must be explicitly cleared (emitting `\x1b[2J\x1b[H` /
+      `TERM_INIT`) prior to switching dimensions.
+    - *Resolution*: In `ports/python/se/editor.py`, invoked
+      `self.terminal.term_init()` prior to switching dimensions in both
+      `action_splash_screen` (hotkeys 1, 2, 3) and `action_config_screen`
+      (option 1), clearing the screen to prevent visual debris. Validated via
+      Step 45 in `test_editor.py`
+      (`test_bug_2_7_56_screen_clear_on_geometry_switch`).
+  - [x] **Bug 2.7.57: Config Subsystem Lacks NATIVE Screen Geometry Support**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
+    - *Symptom*: Setting `SCREEN=NATIVE` in `SE.CFG` or via `config.set()`
+      evaluates to fixed `(120, 40)` instead of native host terminal size.
+    - *Root Cause*: In `ports/python/se/config.py:35-50`, `screen_geometry`
+      only checks if `SCREEN == "80X24"` and falls back to `(120, 40)` for all
+      other values, lacking support for Option 3 (`NATIVE`).
+    - *Resolution*: In `ports/python/se/config.py`, added `NATIVE` screen
+      geometry handling to `Config.screen_geometry`, querying dynamic
+      terminal dimensions via `os.get_terminal_size()` with safe fallback, and
+      added `is_native_screen` property. Validated via Step 5 in
+      `test_config.py` (`test_native_screen_geometry`).
+  - [x] **Bug 2.7.58: Configuration Manager Lacks Native Screen Mode Toggle**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
+    - *Symptom*: Configuration Manager option 1 only toggles between 80x24 and
+      120x40, preventing selection of Native dynamic terminal mode.
+    - *Root Cause*: In `ports/python/se/editor.py:896-902`, option 1 performs
+      a binary toggle between `80x24` and `120x40`, omitting Native mode.
+    - *Resolution*: In `ports/python/se/editor.py`, updated
+      `action_config_screen` option 1 to cycle through `80x24`, `120x40`, and
+      `Native` modes (with clearance via `term_init()`). Displays `(Native)`
+      indicator on geometry line when native mode is active. Validated via
+      Step 46 in `test_editor.py`
+      (`test_bug_2_7_58_config_screen_native_mode_toggle`).
+  - [x] **Bug 2.7.59: Startup Raw Mode Overrides Configured Geometry**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.1.
+    - *Symptom*: Setting `SCREEN=80x24` or `SCREEN=120x40` in `SE.CFG` is
+      overridden on startup, forcing editor dimensions to the host window
+      size.
+    - *Root Cause*: In `ports/python/se/terminal.py:124`, `enter_raw_mode()`
+      unconditionally calls `self.update_geometry()`, which queries
+      `os.get_terminal_size()` and clobbers `self.cols` and `self.rows`,
+      ignoring the fixed geometry configured in `SE.CFG`.
+    - *Resolution*: In `ports/python/se/terminal.py` and `editor.py`, added
+      `fixed_geometry` support to `Terminal`, initialized from
+      `Config.is_native_screen` on startup, and updated upon splash/config
+      geometry changes. `update_geometry()` and `enter_raw_mode()` preserve
+      configured fixed dimensions (`80x24` or `120x40`) when `fixed_geometry`
+      is active. Validated via Step 47 in `test_editor.py`
+      (`test_bug_2_7_59_startup_geometry_emulation_preserved`).
+
+### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
+- **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
+  standard 64KB TPA).
+- **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
+  Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
+- **Build Target**: `make sec-cpm` (or `make SEC.COM`).
+- **Status**: Active / 1 Defect Open.
+- **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
+  - [ ] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
+      `TODO.md` Section 7.1.
+    - *Symptom*: When running `tests/test_editor_headless.py --sec`, Step 17
+      enters `OUTPUT.TXT\r` in the Save Screen. Step 18 immediately fails on
+      `Ctrl+Q` clean exit back to CP/M with `Buffer captured: b''` because
+      `SEC.COM` fails to return to the `C>` prompt.
+    - *Root Cause Analysis*:
+      1. In `src/core/ui_browser.c:325-448` (`ui_browser_workspace`), every
+         character received during filename input (such as typing
+         `"OUTPUT.TXT\r"`) loops back to the top of `while (1)` and executes
+         a full-screen re-render of all 24 rows, including repainting the
+         file grid, borders, and Row 24 status bar via `render_status_bar()`.
+      2. Repainting 24 rows 11 times across a 4–10 MHz Z80 CP/M serial console
+         causes extreme display latency and floods the terminal stream with
+         redundant status bars containing `Line    1/1`.
+      3. The headless test runner in Step 17 looks for `Line    1/1` to detect
+         save completion. Because the browser emits `Line    1/1` on the very
+         first character typed (`'O'`), the test runner prematurely declares
+         save completion, drains the PTY, and sends `\x11` (`Ctrl+Q`) for
+         Step 18 while `SEC.COM` is still processing queued redraws for the
+         remaining characters of `"UTPUT.TXT\r"`.
+      4. `ui_browser_workspace()` does not handle `Ctrl+Q` as an input key, so
+         `\x11` is dropped, the save is never committed to disk, and `SEC.COM`
+         remains stuck in the browser rather than exiting cleanly to CP/M.
+    - *Required Fix (SE.COM Parity)*:
+      1. Align `ui_browser_workspace()` in `src/core/ui_browser.c` with the
+         reference `SE.COM` implementation (`READ_FILENAME_INPUT_PREFILLED` in
+         `src/core/ui_browser.asm`).
+      2. When receiving text input characters (`0x20..0x7E`), inline deletions
+         (`Backspace`, `Delete`), or navigation keys (`Left`, `Right`, `Home`,
+         `End`), update only the bracketed input prompt line and reposition the
+         hardware cursor without repainting the directory grid, banners, or
+         Row 24 status bar.
+      3. Restrict full-screen re-renders strictly to discrete macro-events:
+         initial display, page changes (`PgUp`/`PgDn`), drive/user/filter
+         updates (`Enter` on `B:` or `*.TXT`), format toggle (`Ctrl+F`), and
+         modal pop-up dismissals.
+      4. Ensure `file_save()` properly commits the file, clears `g_doc_modified`
+         to 0, and restores editor mode before accepting subsequent commands.
 
 ---
 
