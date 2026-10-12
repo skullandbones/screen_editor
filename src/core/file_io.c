@@ -237,7 +237,7 @@ int file_save_block(const char *filename, uint16_t start_row,
     int res = file_write_op(filename, start_row, end_row, format);
 #ifndef __CPM__
     if (res == 0) {
-        modal_show_notification("Export Complete", filename);
+        modal_show_notification("Save Complete", filename);
     }
 #endif
     return res;

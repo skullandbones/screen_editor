@@ -555,6 +555,21 @@ int editor_handle_key(int key)
     case KEY_CTRL_F: do_ctrl_f_find(); break;
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
     case KEY_CTRL_S:
+        if (g_block_mode != BLOCK_MODE_OFF) {
+            if (g_block_mode == BLOCK_MODE_SELECTING) {
+                solidify_block();
+            }
+            normalize_block_bounds();
+            s_editor_fname[0] = '\0';
+            if (ui_browser_save_block_dialog(s_editor_fname,
+                                             sizeof(s_editor_fname)) ==
+                MODAL_RES_OK && s_editor_fname[0]) {
+                file_save_block(s_editor_fname, g_norm_start_row,
+                                g_norm_end_row, g_config.save_format);
+            }
+            g_need_screen_render = 1;
+            break;
+        }
         if (g_current_filename[0] == '\0') {
             s_editor_fname[0] = '\0';
             if (ui_browser_save_dialog(s_editor_fname,
@@ -578,6 +593,20 @@ int editor_handle_key(int key)
         break;
     }
     case KEY_CTRL_O: {
+        if (g_block_mode != BLOCK_MODE_OFF) {
+            if (g_block_mode == BLOCK_MODE_SELECTING) {
+                solidify_block();
+            }
+            s_editor_fname[0] = '\0';
+            if (ui_browser_insert_dialog(s_editor_fname,
+                                         sizeof(s_editor_fname)) ==
+                MODAL_RES_OK && s_editor_fname[0]) {
+                file_insert(s_editor_fname);
+                cancel_block();
+                g_need_screen_render = 1;
+            }
+            break;
+        }
         s_editor_fname[0] = '\0';
         if (ui_browser_open_dialog(s_editor_fname,
                                    sizeof(s_editor_fname)) == MODAL_RES_OK &&

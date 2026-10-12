@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 12 Defects Open (Bugs 2.4.29–2.4.40).
+- **Status**: Active / 11 Defects Open (Bugs 2.4.30–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -558,8 +558,8 @@ have been resolved and archived.
       `BROWSER_MODE_SAVE_BLOCK`, proceeding only on `Y`/`y` or Enter on Yes, and
       returning to browser with input intact on `N`/`n` or ESC. Validated via
       `test_bug_2_4_28_overwrite_confirmation` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.29: Missing Block-Active File Insert and Block Save Modes**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, 10.
+  - [x] **Bug 2.4.29: Missing Block-Active File Insert and Block Save Modes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, 9.1, 10.
     - *Issue*: In `src/core/editor.c:535-565`, pressing `Ctrl+O` while a block
       is active replaces the entire document buffer via `file_load()`, rather
       than opening the Insert File workspace and streaming file contents into
@@ -567,13 +567,19 @@ have been resolved and archived.
       while a block is active saves the full document buffer via `file_save()`,
       rather than opening the Save Block workspace and writing only the
       highlighted block range (`file_save_block()`).
-    - *Required Fix*: In `editor.c`, inspect `g_block_mode != BLOCK_MODE_OFF` on
-      `KEY_CTRL_O` and `KEY_CTRL_S`. When a block is active:
-      - Route `KEY_CTRL_O` to `ui_browser_insert_dialog()` and stream inserted
-        lines into active document at cursor via `file_insert()`.
-      - Route `KEY_CTRL_S` to `ui_browser_save_block_dialog()` and write only
-        normalized block lines (`g_norm_start_row`..`g_norm_end_row`) via
-        `file_save_block()`.
+    - *Resolution*: Updated `KEY_CTRL_O` and `KEY_CTRL_S` handlers in
+      `src/core/editor.c` to inspect `g_block_mode != BLOCK_MODE_OFF`. When a
+      block is active:
+      - Solidifies dynamic selection if selecting.
+      - On `Ctrl+S`, routes to `ui_browser_save_block_dialog()` and saves only
+        normalized block range (`g_norm_start_row`..`g_norm_end_row`) via
+        `file_save_block()`, preserving selection state.
+      - On `Ctrl+O`, routes to `ui_browser_insert_dialog()` and streams lines
+        into document at cursor via `file_insert()`, clearing selection.
+      - Updated `do_paste_block()` in `src/core/block.c` to clear active block
+        selection upon pasting per Section 9.1.
+      Validated via `test_bug_2_4_29_block_save_and_insert` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.30: Missing Tier 2 Block Operations Pop-up Menu on Ctrl+K**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 7.6, 7.8, 8.3, 10.
     - *Issue*: In `src/core/editor.c:576`, pressing `KEY_CTRL_K` unconditionally

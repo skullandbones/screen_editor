@@ -347,6 +347,7 @@ int do_paste_block(void)
     if (s_clipboard_len == 0) {
         return 0;
     }
+    cancel_block();
     for (i = 0; i < s_clipboard_len; i++) {
         if (s_clipboard_buf[i] == '\n') {
             do_enter();

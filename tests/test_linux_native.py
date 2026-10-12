@@ -2102,6 +2102,126 @@ def test_bug_2_4_28_overwrite_confirmation():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_29_block_save_and_insert():
+    """Verify block-active Ctrl+S (Save Block) and Ctrl+O (Insert File)."""
+    print("[*] Testing block-active Ctrl+S and Ctrl+O (Bug 2.4.29)...")
+    temp_dir = tempfile.mkdtemp()
+    doc_path = os.path.join(temp_dir, "DOC.TXT")
+    insert_path = os.path.join(temp_dir, "INSERT.TXT")
+    block_path = os.path.join(temp_dir, "BLOCK.TXT")
+
+    with open(doc_path, "w") as f:
+        f.write("Line 1: Alpha\nLine 2: Bravo\n"
+                "Line 3: Charlie\nLine 4: Delta\n")
+    with open(insert_path, "w") as f:
+        f.write("Inserted row 1\nInserted row 2\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", doc_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move down to Line 2 via Down arrow (\x1b[B)
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+
+            # Start block selection via Ctrl+B (\x02)
+            os.write(master, b"\x02")
+            time.sleep(0.1)
+
+            # Move down to Line 3 to highlight Line 2 and Line 3
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+            read_all_available(master, 0.2)
+
+            # Press Ctrl+S (\x13) -> must open SAVE BLOCK workspace
+            os.write(master, b"\x13")
+            time.sleep(0.3)
+            save_blk_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SAVE BLOCK (DIRECTORY)" in save_blk_out, (
+                f"Expected 'SAVE BLOCK (DIRECTORY)':\n{save_blk_out}"
+            )
+
+            # Type BLOCK.TXT and press Enter
+            os.write(master, b"BLOCK.TXT\r")
+            time.sleep(0.3)
+            notify_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Save Complete" in notify_out, (
+                f"Expected 'Save Complete':\n{notify_out}"
+            )
+
+            # Dismiss notification with Space
+            os.write(master, b" ")
+            time.sleep(0.2)
+            ed_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            # Selection state is retained per §7.8
+            assert "[BLK LOCK]" in ed_out or "[SEL]" in ed_out, (
+                f"Block selection was not retained:\n{ed_out}"
+            )
+
+            # Verify saved block file contains only highlighted rows
+            with open(block_path, "r") as f:
+                block_content = f.read()
+            assert "Line 2: Bravo" in block_content, (
+                f"Missing Line 2 in saved block:\n{block_content}"
+            )
+            assert "Line 3: Charlie" in block_content, (
+                f"Missing Line 3 in saved block:\n{block_content}"
+            )
+            assert "Line 1: Alpha" not in block_content, (
+                f"Line 1 should not be in saved block:\n{block_content}"
+            )
+
+            # Press Ctrl+O (\x0f) -> must open INSERT FILE workspace
+            os.write(master, b"\x0f")
+            time.sleep(0.3)
+            ins_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "INSERT FILE (DIRECTORY)" in ins_out, (
+                f"Expected 'INSERT FILE (DIRECTORY)':\n{ins_out}"
+            )
+
+            # Type INSERT.TXT and press Enter
+            os.write(master, b"INSERT.TXT\r")
+            time.sleep(0.3)
+            ins_res = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert ("Inserted row 1" in ins_res or
+                    "Inserted row 2" in ins_res), (
+                f"Expected inserted rows in editor:\n{ins_res}"
+            )
+
+            # Exit cleanly via Ctrl+Q and discard edits ('n')
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Block save and file insert verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2135,6 +2255,7 @@ def main():
     test_bug_2_4_25_modal_prompt_text_editing()
     test_bug_2_4_27_file_not_found_alert()
     test_bug_2_4_28_overwrite_confirmation()
+    test_bug_2_4_29_block_save_and_insert()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
