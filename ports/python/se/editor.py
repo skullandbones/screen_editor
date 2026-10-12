@@ -63,7 +63,10 @@ class Editor:
         self.config = Config()
         self.loaded_config_path = self.config.discover_and_load(config_path)
         cols, rows = self.config.screen_geometry
-        self.terminal = Terminal(default_cols=cols, default_rows=rows)
+        is_fixed = not self.config.is_native_screen
+        self.terminal = Terminal(
+            default_cols=cols, default_rows=rows, fixed_geometry=is_fixed
+        )
         self.renderer = UIRenderer(self.terminal)
         self.modal = ModalDialog(self.terminal)
         self.buffer = DocumentBuffer(
@@ -816,14 +819,28 @@ class Editor:
                 self.action_help()
                 need_render = True
             elif ch == "1":
-                self.config.set("SCREEN", "120x40")
-                self.terminal.cols = self.config.screen_cols
-                self.terminal.rows = self.config.screen_rows
+                self.terminal.term_init()
+                self.config.set("SCREEN", "80x24")
+                self.terminal.fixed_geometry = True
+                self.terminal.default_cols = 80
+                self.terminal.default_rows = 24
+                self.terminal.cols = 80
+                self.terminal.rows = 24
                 need_render = True
             elif ch == "2":
-                self.config.set("SCREEN", "80x24")
-                self.terminal.cols = self.config.screen_cols
-                self.terminal.rows = self.config.screen_rows
+                self.terminal.term_init()
+                self.config.set("SCREEN", "120x40")
+                self.terminal.fixed_geometry = True
+                self.terminal.default_cols = 120
+                self.terminal.default_rows = 40
+                self.terminal.cols = 120
+                self.terminal.rows = 40
+                need_render = True
+            elif ch == "3":
+                self.terminal.term_init()
+                self.config.set("SCREEN", "NATIVE")
+                self.terminal.fixed_geometry = False
+                self.terminal.update_geometry()
                 need_render = True
             elif ch == "q" or k == KEY_CTRL_Q:
                 self.action_quit()
@@ -867,13 +884,18 @@ class Editor:
     def action_config_screen(self):
         """Display centered Configuration Screen workspace."""
         while True:
-            cols = self.config.screen_cols
-            rows = self.config.screen_rows
+            cols = self.terminal.cols
+            rows = self.terminal.rows
             ram = "Enabled" if self.config.ramdrive_enabled else "Disabled"
+            geom_lbl = (
+                f"{cols}x{rows} (Native)"
+                if self.config.is_native_screen
+                else f"{cols}x{rows}"
+            )
             lines = [
                 "SE — Configuration Manager",
                 "",
-                f"1. Screen Geometry  : {cols}x{rows}",
+                f"1. Screen Geometry  : {geom_lbl}",
                 f"2. Tab Width        : {self.config.tab_width}",
                 f"3. Max Line Capacity: {self.config.max_lines}",
                 f"4. RAM Drive Mode   : {ram}",
@@ -894,12 +916,26 @@ class Editor:
             if ch in ("\r", "\x1b", "q"):
                 return
             elif ch == "1":
-                if self.config.screen_cols == 80:
+                self.terminal.term_init()
+                cur_screen = self.config.get("SCREEN", "120X40").upper()
+                if cur_screen == "80X24":
                     self.config.set("SCREEN", "120x40")
+                    self.terminal.fixed_geometry = True
+                    self.terminal.default_cols = 120
+                    self.terminal.default_rows = 40
+                    self.terminal.cols = 120
+                    self.terminal.rows = 40
+                elif cur_screen == "120X40":
+                    self.config.set("SCREEN", "NATIVE")
+                    self.terminal.fixed_geometry = False
+                    self.terminal.update_geometry()
                 else:
                     self.config.set("SCREEN", "80x24")
-                self.terminal.cols = self.config.screen_cols
-                self.terminal.rows = self.config.screen_rows
+                    self.terminal.fixed_geometry = True
+                    self.terminal.default_cols = 80
+                    self.terminal.default_rows = 24
+                    self.terminal.cols = 80
+                    self.terminal.rows = 24
             elif ch == "2":
                 new_tab = "4" if self.config.tab_width == 8 else "8"
                 self.config.set("TAB", new_tab)

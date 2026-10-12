@@ -514,8 +514,8 @@ class TestEditor(unittest.TestCase):
             )
         )
 
-        # Feed sequence: '1' (toggle 120x40), '2' (toggle 80x24), 'e' (exit)
-        keys = ["1", "2", "e"]
+        # Feed sequence: '2' (set 120x40), '1' (set 80x24), 'e' (exit)
+        keys = ["2", "1", "e"]
         key_iter = iter(keys)
         self.editor.terminal.get_key = lambda timeout=None: next(
             key_iter, "e"
@@ -2072,6 +2072,200 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 42: Splash 14x50 geometry & colon commands verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_54_splash_geometry_hotkeys_inversion(self):
+        """Step 43: Verify hotkey 1 sets 80x24 and hotkey 2 sets 120x40."""
+        print(
+            "[*] Step 43: Testing splash geometry hotkeys 1 and 2...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+
+        # Press '1' then 'e' to exit splash
+        self.editor.config.set("SCREEN", "120x40")
+        self.editor.terminal.cols = 120
+        self.editor.terminal.rows = 40
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "e"])
+        self.editor.action_splash_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "80x24")
+        self.assertEqual(self.editor.terminal.cols, 80)
+        self.assertEqual(self.editor.terminal.rows, 24)
+
+        # Press '2' then 'e' to exit splash
+        self.editor.terminal.get_key = MagicMock(side_effect=["2", "e"])
+        self.editor.action_splash_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "120x40")
+        self.assertEqual(self.editor.terminal.cols, 120)
+        self.assertEqual(self.editor.terminal.rows, 40)
+
+        print(
+            "[+] Step 43: Splash geometry hotkeys 1 and 2 verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_55_splash_option3_native_mode(self):
+        """Step 44: Verify hotkey 3 sets NATIVE mode on splash screen."""
+        print(
+            "[*] Step 44: Testing splash hotkey 3 sets Native mode...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+        self.editor.config.set("SCREEN", "80x24")
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+
+        def mock_update_geometry():
+            self.editor.terminal.cols = 132
+            self.editor.terminal.rows = 43
+            return 132, 43
+
+        self.editor.terminal.update_geometry = mock_update_geometry
+        self.editor.terminal.get_key = MagicMock(side_effect=["3", "e"])
+        self.editor.action_splash_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "NATIVE")
+        self.assertEqual(self.editor.terminal.cols, 132)
+        self.assertEqual(self.editor.terminal.rows, 43)
+
+        print(
+            "[+] Step 44: Splash hotkey 3 sets Native mode verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_56_screen_clear_on_geometry_switch(self):
+        """Step 45: Verify term_init clears screen on geometry switch."""
+        print(
+            "[*] Step 45: Testing term_init on geometry switches...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+        self.editor.terminal.term_init = MagicMock()
+
+        # 1. Splash screen hotkey 1
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "e"])
+        self.editor.action_splash_screen()
+        self.editor.terminal.term_init.assert_called_once()
+        self.editor.terminal.term_init.reset_mock()
+
+        # 2. Splash screen hotkey 2
+        self.editor.terminal.get_key = MagicMock(side_effect=["2", "e"])
+        self.editor.action_splash_screen()
+        self.editor.terminal.term_init.assert_called_once()
+        self.editor.terminal.term_init.reset_mock()
+
+        # 3. Splash screen hotkey 3
+        self.editor.terminal.update_geometry = MagicMock(return_value=(80, 24))
+        self.editor.terminal.get_key = MagicMock(side_effect=["3", "e"])
+        self.editor.action_splash_screen()
+        self.editor.terminal.term_init.assert_called_once()
+        self.editor.terminal.term_init.reset_mock()
+
+        # 4. Configuration screen option 1
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "q"])
+        self.editor.action_config_screen()
+        self.editor.terminal.term_init.assert_called_once()
+
+        print(
+            "[+] Step 45: term_init on geometry switches verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_58_config_screen_native_mode_toggle(self):
+        """Step 46: Verify config screen option 1 cycles 80x24/120x40/Native."""
+        print(
+            "[*] Step 46: Testing config screen option 1 geometry cycling...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+        self.editor.terminal.term_init = MagicMock()
+
+        # Start from 80x24: 1 -> 120x40
+        self.editor.config.set("SCREEN", "80x24")
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "q"])
+        self.editor.action_config_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "120x40")
+        self.assertEqual(self.editor.terminal.cols, 120)
+        self.assertEqual(self.editor.terminal.rows, 40)
+
+        # From 120x40: 1 -> NATIVE
+        def mock_update():
+            self.editor.terminal.cols = 150
+            self.editor.terminal.rows = 50
+            return 150, 50
+
+        self.editor.terminal.update_geometry = mock_update
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "q"])
+        self.editor.action_config_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "NATIVE")
+        self.assertEqual(self.editor.terminal.cols, 150)
+        self.assertEqual(self.editor.terminal.rows, 50)
+
+        # From NATIVE: 1 -> 80x24
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "q"])
+        self.editor.action_config_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "80x24")
+        self.assertEqual(self.editor.terminal.cols, 80)
+        self.assertEqual(self.editor.terminal.rows, 24)
+
+        print(
+            "[+] Step 46: Config screen option 1 geometry cycling verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_59_startup_geometry_emulation_preserved(self):
+        """Step 47: Verify configured fixed geometry preserved on startup."""
+        print(
+            "[*] Step 47: Testing startup fixed geometry emulation...",
+            flush=True,
+        )
+        from se.editor import Editor
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            "w+", suffix=".cfg", delete=False
+        ) as f:
+            f.write("SCREEN=80x24\r\n")
+            cfg_path = f.name
+
+        try:
+            ed = Editor(config_path=cfg_path)
+            self.assertTrue(ed.terminal.fixed_geometry)
+            self.assertEqual(ed.terminal.cols, 80)
+            self.assertEqual(ed.terminal.rows, 24)
+
+            cols, rows = ed.terminal.update_geometry()
+            self.assertEqual(cols, 80)
+            self.assertEqual(rows, 24)
+            self.assertEqual(ed.terminal.cols, 80)
+            self.assertEqual(ed.terminal.rows, 24)
+        finally:
+            if os.path.exists(cfg_path):
+                os.unlink(cfg_path)
+
+        with tempfile.NamedTemporaryFile(
+            "w+", suffix=".cfg", delete=False
+        ) as f:
+            f.write("SCREEN=NATIVE\r\n")
+            cfg_path = f.name
+
+        try:
+            ed_native = Editor(config_path=cfg_path)
+            self.assertFalse(ed_native.terminal.fixed_geometry)
+        finally:
+            if os.path.exists(cfg_path):
+                os.unlink(cfg_path)
+
+        print(
+            "[+] Step 47: Startup fixed geometry emulation verified.",
             flush=True,
         )
 
