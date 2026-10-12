@@ -37,7 +37,20 @@ class Config:
         val = self.get("SCREEN", self.DEFAULT_SCREEN).upper()
         if val == "80X24":
             return (80, 24)
+        elif val == "NATIVE":
+            try:
+                sz = os.get_terminal_size()
+                if sz.columns > 0 and sz.lines > 0:
+                    return (sz.columns, sz.lines)
+            except (AttributeError, OSError):
+                pass
+            return (80, 24)
         return (120, 40)
+
+    @property
+    def is_native_screen(self) -> bool:
+        """Return True if SCREEN setting is configured as NATIVE."""
+        return self.get("SCREEN", self.DEFAULT_SCREEN).upper() == "NATIVE"
 
     @property
     def screen_cols(self) -> int:

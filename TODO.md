@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 13 Defects Open (Bugs 2.4.20–2.4.25, 2.4.27–2.4.33).
+- **Status**: Active / 20 Defects Open (Bugs 2.4.20–2.4.25, 2.4.27–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -619,6 +619,93 @@ have been resolved and archived.
       `cancel_block()`, update status render, and return without inserting
       characters. If `g_block_mode == BLOCK_MODE_SOLIDIFIED`, cancel block and
       proceed with normal character insertion.
+  - [ ] **Bug 2.4.34: Missing Predominant Language Indication on Splash**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.6.
+    - *Issue*: Section 7.2 and Section 14.6 mandate that row 2 of the 14-line
+      splash content block display `Version <version> (<Language>)`, explicitly
+      specifying `(C)` for Linux native C builds (`Version v1.1.0 (C)`). Row 1
+      must display `SE — Screen Editor`. In `src/core/ui_render.c:409-411`,
+      row 1 displays `SE.COM — Screen Editor` and row 2 displays
+      `"                    Version v1.1.0                    "`, omitting the
+      mandatory language indicator.
+    - *Required Fix*: Update `s_splash_lines` in `src/core/ui_render.c` to
+      render `SE — Screen Editor` on row 1 and `Version v1.1.0 (C)` on row 2.
+  - [ ] **Bug 2.4.35: Splash Screen Hotkey Inversion & Missing Native Mode**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Issue*: Section 2.1 and Section 7.2 designate Option 1 (`80x24`) as
+      standard classic terminal mode triggered by hotkey `1`, Option 2
+      (`120x40`) as wide console mode triggered by hotkey `2`, and Option 3
+      (`Native host terminal`) triggered by hotkey `3` on platforms supporting
+      dynamic dimension querying. In `src/core/ui_render.c:424-425, 507-517`:
+      - Splash menu lines display `type [1] set 120x40` and
+        `type [2] set 80x24`.
+      - Key handler maps `1` to `MODE_120X40` and `2` to `MODE_80X24`
+        (inverted).
+      - Option 3 (`Native` dynamic host dimensions via `ioctl(TIOCGWINSZ)`) is
+        completely missing from menu and key handler.
+    - *Required Fix*: In `s_splash_lines` and splash event loop in
+      `ui_render.c`, map `1` to Option 1 (`80x24`), `2` to Option 2 (`120x40`),
+      and add `3` for Option 3 (`Native host terminal`). Support dynamic host
+      terminal dimensions when native mode is active in `hal_linux_console.c`.
+  - [ ] **Bug 2.4.36: Missing Screen Clearance on Screen Geometry Switching**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Issue*: Sections 2.1, 7.2, and 14.1 mandate that prior to switching
+      screen geometries, the editor must explicitly clear the entire terminal
+      screen (emitting ANSI clear sequence `\x1b[2J\x1b[H` / `TERM_INIT`)
+      before applying new dimensions and re-rendering. In
+      `src/core/ui_render.c:507-517`, switching modes updates
+      `g_config.screen_mode`, `g_active_cols`, and `g_active_rows` and sets
+      `need_render = 1` without clearing the screen. Switching from 120x40 or
+      Native to 80x24 leaves stale character debris, tildes, and ghost status
+      bar remnants on rows 25..40 and columns 81..120.
+    - *Required Fix*: In `show_splash_screen()`, invoke `clear_screen()` /
+      `hal_console_clear()` before updating dimensions and re-rendering on
+      geometry switch keys.
+  - [ ] **Bug 2.4.37: Non-Interactive Configuration Manager Workspace**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 13.1, 13.2.
+    - *Issue*: In `src/core/ui_render.c:572-593` (`show_config_screen`), the
+      Tier 1 Configuration Manager workspace renders a static 11-line text
+      block with hardcoded values (`80x24`, Tab 8, 32K, RAM Drive Disabled) and
+      unconditionally exits on the first keystroke received. It lacks an
+      interactive event loop to toggle settings (`1` Geometry, `2` Tab Width,
+      `3` Max Lines, `4` RAM Drive) or persist settings to `SE.CFG` on `S`/`s`
+      via `config_save()`.
+    - *Required Fix*: Implement an interactive event loop in
+      `show_config_screen()` (`src/core/ui_render.c`) that dynamically formats
+      current parameters from `g_config`, toggles values on `1`, `2`, `3`, `4`,
+      saves to `SE.CFG` on `S`/`s`, and returns on `ESC`/`Enter`.
+  - [ ] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4.
+    - *Issue*: Section 6.2 defines default tab stop intervals as
+      `CFG_TAB_WIDTH = 4` columns (configurable to 8). In `src/core/config.c:41`
+      (`config_init_defaults`) and `src/core/editor.c:54`, default tab width is
+      hardcoded to `8` columns instead of `4`.
+    - *Required Fix*: Change `g_config.tab_width` default in
+      `src/core/config.c:41` to `4`, and update fallback in
+      `src/core/editor.c:54` to `4`.
+  - [ ] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.3, 6.4, 7.3.
+    - *Issue*: In `src/core/ui_render.c:528`, the Help workspace displays
+      `Arrows / WordStar (^S,^D,^E,^X)`. Sections 6.3, 6.4, and 7.3 explicitly
+      mandate that legacy WordStar diamond navigation keys (`Ctrl+S`, `Ctrl+D`,
+      `Ctrl+E`, `Ctrl+X`) are unsupported for directional movement to avoid
+      collisions with Save File, Delete, End of Line, and Cut Block. The
+      canonical Help Screen layout in Section 7.3 explicitly specifies
+      `Arrows / ANSI VT100`.
+    - *Required Fix*: Update `s_help_lines` in `src/core/ui_render.c` to
+      display `Arrows / ANSI VT100` and remove misleading WordStar references.
+  - [ ] **Bug 2.4.40: Missing Archetype D Selection Modal on Ctrl+P**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 8.3 (Archetype D), 10.
+    - *Issue*: In `src/core/editor.c:568` and `src/core/ui_render.c:501`,
+      pressing `Ctrl+P` directly opens the slot table of `plugin_manager_ui()`.
+      Per Section 7.2, Section 8.3, and Section 10, `Ctrl+P` is bound to the
+      context-aware Plugin Palette (`DO_CONTEXT_PLUGIN_POPUP`), which must
+      present the canonical 50x8 Archetype D modal (`Select a plugin to
+      execute:`, numbered entries, `> ` active pointer, Up/Down navigation,
+      Enter to run, ESC to cancel).
+    - *Required Fix*: Implement `show_plugin_palette()` adhering to Archetype D
+      in `src/core/plugin_mgr.c`, and route `KEY_CTRL_P` in `editor.c` and
+      `ui_render.c` to this modal.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
@@ -648,7 +735,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.53
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
   Resolved; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
@@ -1366,6 +1453,89 @@ have been resolved and archived.
       silent rejection of non-entry keys (Space bar, arrow keys, unassigned).
       Validated via Step 42 in `test_editor.py`
       (`test_bug_2_7_53_splash_screen_dimensions_and_colon_commands`).
+  - [x] **Bug 2.7.54: Inversion of Splash Screen Geometry Hotkeys (1 vs 2)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: Pressing hotkey `1` on the Tier 1 Splash screen sets 120x40
+      mode, and pressing hotkey `2` sets 80x24 mode.
+    - *Root Cause*: In `ports/python/se/editor.py:818-827`, hotkey `1` assigns
+      `SCREEN=120x40` and hotkey `2` assigns `SCREEN=80x24`. In
+      `docs/UI_UX_DESIGN.md` Section 7.2, `1` is defined as Option 1 (80x24
+      classic terminal mode, `DO_SET_80X24`), and `2` is defined as
+      Option 2 (120x40 modern terminal mode, `DO_SET_120X40`). The hotkeys
+      are inverted.
+    - *Resolution*: In `ports/python/se/editor.py`, corrected splash hotkeys so
+      `1` selects 80x24 (`DO_SET_80X24`) and `2` selects 120x40
+      (`DO_SET_120X40`) conforming with Section 7.2. Validated via Step 43 in
+      `test_editor.py` (`test_bug_2_7_54_splash_geometry_hotkeys_inversion`).
+  - [x] **Bug 2.7.55: Missing Option 3 (Native Mode) on Splash Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: The user has no hotkey or option on the Splash screen to
+      select or revert to Native dynamic host terminal dimensions.
+    - *Root Cause*: `ports/python/se/editor.py:818-834` only intercepts keys
+      `1` and `2`, silently rejecting key `3` under non-entry key filtering.
+      Section 7.2 explicitly mandates Option 3 (`DO_SET_NATIVE`, hotkey `3`)
+      when native screen size is supported (e.g. Linux native Python port) to
+      revert geometry to auto-detected host terminal size.
+    - *Resolution*: In `ports/python/se/editor.py`, bound hotkey `3` in
+      `action_splash_screen` to `DO_SET_NATIVE`, setting `SCREEN=NATIVE`,
+      querying dynamic host terminal size via `update_geometry()`, and
+      re-rendering. Validated via Step 44 in `test_editor.py`
+      (`test_bug_2_7_55_splash_option3_native_mode`).
+  - [x] **Bug 2.7.56: Missing Screen Clearance Prior to Geometry Switching**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: Switching screen geometry leaves stale column tildes, clipped
+      characters, margin remnants, and ghost status bar lines on the screen.
+    - *Root Cause*: In `ports/python/se/editor.py:818-827` (splash screen) and
+      `editor.py:896-902` (config screen), terminal dimensions are updated
+      without clearing the terminal screen. Section 2.1, 7.2, and 14.1 mandate
+      that the screen must be explicitly cleared (emitting `\x1b[2J\x1b[H` /
+      `TERM_INIT`) prior to switching dimensions.
+    - *Resolution*: In `ports/python/se/editor.py`, invoked
+      `self.terminal.term_init()` prior to switching dimensions in both
+      `action_splash_screen` (hotkeys 1, 2, 3) and `action_config_screen`
+      (option 1), clearing the screen to prevent visual debris. Validated via
+      Step 45 in `test_editor.py`
+      (`test_bug_2_7_56_screen_clear_on_geometry_switch`).
+  - [x] **Bug 2.7.57: Config Subsystem Lacks NATIVE Screen Geometry Support**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
+    - *Symptom*: Setting `SCREEN=NATIVE` in `SE.CFG` or via `config.set()`
+      evaluates to fixed `(120, 40)` instead of native host terminal size.
+    - *Root Cause*: In `ports/python/se/config.py:35-50`, `screen_geometry`
+      only checks if `SCREEN == "80X24"` and falls back to `(120, 40)` for all
+      other values, lacking support for Option 3 (`NATIVE`).
+    - *Resolution*: In `ports/python/se/config.py`, added `NATIVE` screen
+      geometry handling to `Config.screen_geometry`, querying dynamic
+      terminal dimensions via `os.get_terminal_size()` with safe fallback, and
+      added `is_native_screen` property. Validated via Step 5 in
+      `test_config.py` (`test_native_screen_geometry`).
+  - [x] **Bug 2.7.58: Configuration Manager Lacks Native Screen Mode Toggle**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
+    - *Symptom*: Configuration Manager option 1 only toggles between 80x24 and
+      120x40, preventing selection of Native dynamic terminal mode.
+    - *Root Cause*: In `ports/python/se/editor.py:896-902`, option 1 performs
+      a binary toggle between `80x24` and `120x40`, omitting Native mode.
+    - *Resolution*: In `ports/python/se/editor.py`, updated
+      `action_config_screen` option 1 to cycle through `80x24`, `120x40`, and
+      `Native` modes (with clearance via `term_init()`). Displays `(Native)`
+      indicator on geometry line when native mode is active. Validated via
+      Step 46 in `test_editor.py`
+      (`test_bug_2_7_58_config_screen_native_mode_toggle`).
+  - [x] **Bug 2.7.59: Startup Raw Mode Overrides Configured Geometry**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.1.
+    - *Symptom*: Setting `SCREEN=80x24` or `SCREEN=120x40` in `SE.CFG` is
+      overridden on startup, forcing editor dimensions to the host window
+      size.
+    - *Root Cause*: In `ports/python/se/terminal.py:124`, `enter_raw_mode()`
+      unconditionally calls `self.update_geometry()`, which queries
+      `os.get_terminal_size()` and clobbers `self.cols` and `self.rows`,
+      ignoring the fixed geometry configured in `SE.CFG`.
+    - *Resolution*: In `ports/python/se/terminal.py` and `editor.py`, added
+      `fixed_geometry` support to `Terminal`, initialized from
+      `Config.is_native_screen` on startup, and updated upon splash/config
+      geometry changes. `update_geometry()` and `enter_raw_mode()` preserve
+      configured fixed dimensions (`80x24` or `120x40`) when `fixed_geometry`
+      is active. Validated via Step 47 in `test_editor.py`
+      (`test_bug_2_7_59_startup_geometry_emulation_preserved`).
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
