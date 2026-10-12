@@ -38,18 +38,6 @@ KEY_ESCAPE		EQU	01BH	; ESC (ASCII 27)
 HAL_KEYBOARD_INIT:
 	XOR A
 	LD (SYSVAR_LAST_K),A
-	IFDEF TEST_UART_BRIDGE
-	; Drain pending bytes from UART RX FIFO
-HKI_DRAIN_UART:
-	LD BC,0133BH
-	IN A,(C)
-	BIT 0,A				; Bit 0: RX byte available
-	JR Z,HKI_UART_DRAINED
-	LD BC,0143BH
-	IN A,(C)
-	JR HKI_DRAIN_UART
-HKI_UART_DRAINED:
-	ENDIF
 HKI_WAIT_RELEASE:
 	CALL HAL_KEYBOARD_POLL
 	JR NZ,HKI_WAIT_RELEASE
@@ -70,17 +58,6 @@ HKI_WAIT_RELEASE:
 ;   Preserves BC, DE, HL; modifies AF.
 ;------------------------------------------------------------------------------
 HAL_KEYBOARD_POLL:
-	IFDEF TEST_UART_BRIDGE
-	; Check if byte available in UART RX FIFO (Port $133B Bit 0)
-	LD BC,0133BH
-	IN A,(C)
-	BIT 0,A				; Bit 0: 1 = RX byte ready
-	JR Z,HKP_CHECK_MATRIX
-	LD A,0FFH
-	OR A				; A = 0xFF, NZ flag set (key ready)
-	RET
-HKP_CHECK_MATRIX:
-	ENDIF
 	XOR A
 	IN A,(KEY_PORT_ULA)		; Select all 8 rows simultaneously
 	CPL
@@ -171,21 +148,6 @@ HAL_KEYBOARD_GETKEY:
 HKG_WAIT_LOOP:
 	CALL HAL_KEYBOARD_POLL
 	JR Z,HKG_WAIT_LOOP
-
-	IFDEF TEST_UART_BRIDGE
-	; If key arrived over UART, read and return directly
-	LD BC,0133BH
-	IN A,(C)
-	BIT 0,A				; Bit 0: RX byte available?
-	JR Z,HKG_SCAN_MATRIX
-	LD BC,0143BH
-	IN A,(C)			; Read received ASCII byte
-	POP HL
-	POP DE
-	POP BC
-	RET
-HKG_SCAN_MATRIX:
-	ENDIF
 
 	; Check Caps Shift (Row 0, bit 0 == 0)
 	LD BC,0FEFEH

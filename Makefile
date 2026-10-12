@@ -72,8 +72,8 @@ CC ?= gcc
 CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
 
 .PHONY: all sec-cpm se-py test-py test-linux se-next-cpm se-next-native \
-	test-next demo-next plugins image init-image clean-image check-tpa \
-	check-plugins check-lines test test-sec \
+	test-next demo-next plugins image next-image init-image clean-image \
+	check-tpa check-plugins check-lines test test-sec \
 	test-sanity test-conformity test-paging test-config test-32k \
 	test-cpm3 test-plugins test-beautifier test-popup test-slots \
 	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
@@ -218,6 +218,10 @@ image: $(IMAGE) $(TARGET) $(TARGET_SEC) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HELP.OVL 0:HELP.OVL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:2.TXT 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) 2.TXT 0:2.TXT
+
+next-image: se-next-cpm se-next-native
+	@echo "==> Populating ZX Spectrum Next MMC image (tbblue.mmc)..."
+	python3 tools/populate_next_disk.py
 
 test: test-sanity
 
