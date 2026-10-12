@@ -14,10 +14,12 @@
 	IFNDEF BDOS_ENTRY
 BDOS_ENTRY		EQU	$0005	; BDOS call entry vector
 	ENDIF
+	IFNDEF DEFAULT_DMA
 DEFAULT_FCB		EQU	$005C	; Default FCB 1 in CP/M base page
 DEFAULT_DMA		EQU	$0080	; Default DMA buffer in base page
 CMD_LEN			EQU	$0080	; Command tail length byte
 CMD_TAIL		EQU	$0081	; Command tail ASCII string
+	ENDIF
 
 ;------------------------------------------------------------------------------
 ; Buffer & Document Capacity Limits
