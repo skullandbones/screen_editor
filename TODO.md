@@ -648,8 +648,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.57
-  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.58–2.7.59 Open).
+- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.58
+  Resolved; Bug 2.7.45 Rejected; Bug 2.7.59 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1421,15 +1421,18 @@ have been resolved and archived.
       terminal dimensions via `os.get_terminal_size()` with safe fallback, and
       added `is_native_screen` property. Validated via Step 5 in
       `test_config.py` (`test_native_screen_geometry`).
-  - [ ] **Bug 2.7.58: Configuration Manager Lacks Native Screen Mode Toggle**:
+  - [x] **Bug 2.7.58: Configuration Manager Lacks Native Screen Mode Toggle**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
     - *Symptom*: Configuration Manager option 1 only toggles between 80x24 and
       120x40, preventing selection of Native dynamic terminal mode.
     - *Root Cause*: In `ports/python/se/editor.py:896-902`, option 1 performs
       a binary toggle between `80x24` and `120x40`, omitting Native mode.
-    - *Action Required*: Update `action_config_screen` option 1 to cycle
-      through `80x24`, `120x40`, and `Native` modes, clearing the screen
-      before applying each mode. Add regression test in `test_editor.py`.
+    - *Resolution*: In `ports/python/se/editor.py`, updated
+      `action_config_screen` option 1 to cycle through `80x24`, `120x40`, and
+      `Native` modes (with clearance via `term_init()`). Displays `(Native)`
+      indicator on geometry line when native mode is active. Validated via
+      Step 46 in `test_editor.py`
+      (`test_bug_2_7_58_config_screen_native_mode_toggle`).
   - [ ] **Bug 2.7.59: Startup Raw Mode Overrides Configured Geometry**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.1.
     - *Symptom*: Setting `SCREEN=80x24` or `SCREEN=120x40` in `SE.CFG` is

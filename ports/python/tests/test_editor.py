@@ -2174,6 +2174,53 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_58_config_screen_native_mode_toggle(self):
+        """Step 46: Verify config screen option 1 cycles 80x24/120x40/Native."""
+        print(
+            "[*] Step 46: Testing config screen option 1 geometry cycling...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+        self.editor.terminal.term_init = MagicMock()
+
+        # Start from 80x24: 1 -> 120x40
+        self.editor.config.set("SCREEN", "80x24")
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "q"])
+        self.editor.action_config_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "120x40")
+        self.assertEqual(self.editor.terminal.cols, 120)
+        self.assertEqual(self.editor.terminal.rows, 40)
+
+        # From 120x40: 1 -> NATIVE
+        def mock_update():
+            self.editor.terminal.cols = 150
+            self.editor.terminal.rows = 50
+            return 150, 50
+
+        self.editor.terminal.update_geometry = mock_update
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "q"])
+        self.editor.action_config_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "NATIVE")
+        self.assertEqual(self.editor.terminal.cols, 150)
+        self.assertEqual(self.editor.terminal.rows, 50)
+
+        # From NATIVE: 1 -> 80x24
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "q"])
+        self.editor.action_config_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "80x24")
+        self.assertEqual(self.editor.terminal.cols, 80)
+        self.assertEqual(self.editor.terminal.rows, 24)
+
+        print(
+            "[+] Step 46: Config screen option 1 geometry cycling verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
