@@ -57,7 +57,9 @@ typedef struct {
     uint16_t entry_point;       /* Execution entry point */
     uint16_t capabilities;      /* Capability bitmask (CAP_*) */
     uint8_t  active;            /* Non-zero if slot is occupied */
+#ifndef __CPM__
     uint8_t  reserved[12];      /* Future expansion padding */
+#endif
 } plugin_entry_t;
 
 /* Plugin Subsystem Function Entry Points */
