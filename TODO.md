@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 16 Defects Open (Bugs 2.4.24–2.4.25, 2.4.27–2.4.40).
+- **Status**: Active / 15 Defects Open (Bugs 2.4.25, 2.4.27–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -476,7 +476,7 @@ have been resolved and archived.
       `cancel_block()`, triggers status bar re-rendering, and returns
       immediately without mutating text or moving cursor. Validated via
       `test_bug_2_4_23_backspace_cancels_block` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.24: Enter Key in Dynamic Block Mode Splits Active Line**:
+  - [x] **Bug 2.4.24: Enter Key in Dynamic Block Mode Splits Active Line**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 9.1, 10.
     - *Issue*: In `src/core/editor.c:276-307` (`do_enter`), pressing Enter
       unconditionally splits the active line at `g_cur_col` and creates a new
@@ -484,9 +484,11 @@ have been resolved and archived.
       BLOCK_MODE_SELECTING`), pressing Enter must solidify the selection
       (`solidify_block()`, locking `g_block_mode = BLOCK_MODE_SOLIDIFIED`)
       without splitting the line or mutating document text.
-    - *Required Fix*: In `do_enter()`, check if `g_block_mode ==
-      BLOCK_MODE_SELECTING`. If so, invoke `solidify_block()`, set
-      `g_need_status_render = 1`, and return without splitting the line.
+    - *Resolution*: Updated `do_enter()` in `src/core/editor.c` to inspect
+      `g_block_mode`. When `BLOCK_MODE_SELECTING`, it solidifies the selection
+      via `solidify_block()`, triggers status bar re-rendering, and returns
+      without splitting the line. Validated via
+      `test_bug_2_4_24_enter_solidifies_block` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.25: Missing In-Field Editing Keys in Archetype C Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
     - *Issue*: In `src/core/ui_modal.c:258-318` (`modal_prompt_text`), the

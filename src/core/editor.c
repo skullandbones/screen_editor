@@ -290,6 +290,12 @@ void do_enter(void)
     char tail_buf[MAX_ACTIVE_LINE_STRIDE];
     uint16_t tail_len = 0;
 
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        solidify_block();
+        g_need_status_render = 1;
+        return;
+    }
+
     checkout_active_line(g_cur_doc_row);
 
     if (g_cur_col < g_active_line_len) {
