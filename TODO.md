@@ -648,8 +648,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.53
-  Resolved; Bug 2.7.45 Rejected).
+- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.53
+  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.54–2.7.59 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1366,6 +1366,72 @@ have been resolved and archived.
       silent rejection of non-entry keys (Space bar, arrow keys, unassigned).
       Validated via Step 42 in `test_editor.py`
       (`test_bug_2_7_53_splash_screen_dimensions_and_colon_commands`).
+  - [ ] **Bug 2.7.54: Inversion of Splash Screen Geometry Hotkeys (1 vs 2)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: Pressing hotkey `1` on the Tier 1 Splash screen sets 120x40
+      mode, and pressing hotkey `2` sets 80x24 mode.
+    - *Root Cause*: In `ports/python/se/editor.py:818-827`, hotkey `1` assigns
+      `SCREEN=120x40` and hotkey `2` assigns `SCREEN=80x24`. In
+      `docs/UI_UX_DESIGN.md` Section 7.2, `1` is defined as Option 1 (80x24
+      classic terminal mode, `DO_SET_80X24`), and `2` is defined as
+      Option 2 (120x40 modern terminal mode, `DO_SET_120X40`). The hotkeys
+      are inverted.
+    - *Action Required*: Swap hotkey handling in `editor.py` so `1` sets 80x24
+      and `2` sets 120x40. Add regression test in `test_editor.py`.
+  - [ ] **Bug 2.7.55: Missing Option 3 (Native Mode) on Splash Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: The user has no hotkey or option on the Splash screen to
+      select or revert to Native dynamic host terminal dimensions.
+    - *Root Cause*: `ports/python/se/editor.py:818-834` only intercepts keys
+      `1` and `2`, silently rejecting key `3` under non-entry key filtering.
+      Section 7.2 explicitly mandates Option 3 (`DO_SET_NATIVE`, hotkey `3`)
+      when native screen size is supported (e.g. Linux native Python port) to
+      revert geometry to auto-detected host terminal size.
+    - *Action Required*: Implement hotkey `3` in `action_splash_screen` to
+      restore Native host terminal geometry (`DO_SET_NATIVE`). Add regression
+      test in `test_editor.py`.
+  - [ ] **Bug 2.7.56: Missing Screen Clearance Prior to Geometry Switching**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Symptom*: Switching screen geometry leaves stale column tildes, clipped
+      characters, margin remnants, and ghost status bar lines on the screen.
+    - *Root Cause*: In `ports/python/se/editor.py:818-827` (splash screen) and
+      `editor.py:896-902` (config screen), terminal dimensions are updated
+      without clearing the terminal screen. Section 2.1, 7.2, and 14.1 mandate
+      that the screen must be explicitly cleared (emitting `\x1b[2J\x1b[H` /
+      `TERM_INIT`) prior to switching dimensions.
+    - *Action Required*: Call `self.terminal.term_init()` or
+      `self.terminal.clear_screen()` prior to reassigning dimensions in splash
+      and config screen geometry switches. Add regression test.
+  - [ ] **Bug 2.7.57: Config Subsystem Lacks NATIVE Screen Geometry Support**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
+    - *Symptom*: Setting `SCREEN=NATIVE` in `SE.CFG` or via `config.set()`
+      evaluates to fixed `(120, 40)` instead of native host terminal size.
+    - *Root Cause*: In `ports/python/se/config.py:35-50`, `screen_geometry`
+      only checks if `SCREEN == "80X24"` and falls back to `(120, 40)` for all
+      other values, lacking support for Option 3 (`NATIVE`).
+    - *Action Required*: Support `"NATIVE"` in `Config.screen_geometry` to
+      query dynamic terminal dimensions. Add unit test in `test_config.py`.
+  - [ ] **Bug 2.7.58: Configuration Manager Lacks Native Screen Mode Toggle**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
+    - *Symptom*: Configuration Manager option 1 only toggles between 80x24 and
+      120x40, preventing selection of Native dynamic terminal mode.
+    - *Root Cause*: In `ports/python/se/editor.py:896-902`, option 1 performs
+      a binary toggle between `80x24` and `120x40`, omitting Native mode.
+    - *Action Required*: Update `action_config_screen` option 1 to cycle
+      through `80x24`, `120x40`, and `Native` modes, clearing the screen
+      before applying each mode. Add regression test in `test_editor.py`.
+  - [ ] **Bug 2.7.59: Startup Raw Mode Overrides Configured Geometry**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.1.
+    - *Symptom*: Setting `SCREEN=80x24` or `SCREEN=120x40` in `SE.CFG` is
+      overridden on startup, forcing editor dimensions to the host window
+      size.
+    - *Root Cause*: In `ports/python/se/terminal.py:124`, `enter_raw_mode()`
+      unconditionally calls `self.update_geometry()`, which queries
+      `os.get_terminal_size()` and clobbers `self.cols` and `self.rows`,
+      ignoring the fixed geometry configured in `SE.CFG`.
+    - *Action Required*: Preserve configured fixed geometry in
+      `enter_raw_mode()` when explicit fixed geometry emulation is
+      configured. Add test in `test_editor.py`.
 
 ---
 
