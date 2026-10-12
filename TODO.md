@@ -527,7 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 7 Defects Open (Bugs 2.7.47–2.7.53; Bug 2.7.45 Rejected).
+- **Status**: Active / 6 Defects Open (Bugs 2.7.48–2.7.53; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1155,17 +1155,18 @@ have been resolved and archived.
       restricting directional navigation to `KEY_LEFT` and standard editing
       keys. Validated via Step 36 in `test_editor.py`
       (`test_bug_2_7_46_wordstar_diamond_modal_exclusion`).
-  - [ ] **Bug 2.7.47: Line Capacity Limit Clamped to 120 Chars (vs 1,000)**:
+  - [x] **Bug 2.7.47: Line Capacity Limit Clamped to 120 Chars (vs 1,000)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
     - *Issue*: In `ports/python/se/buffer.py:9`, `MAX_LINE_LENGTH` is hardcoded
       to 120. `insert_char` rejects character insertion beyond 120 characters,
       `calc_visual_col` clamps visual columns to 120, and `update_pan` disables
       horizontal panning when `view_cols >= MAX_LINE_LENGTH` (e.g. 120x40),
       preventing lines from extending up to the canonical 1,000-char limit.
-    - *Required Fix*: Update maximum line capacity constants in `buffer.py`
-      to 1,000 characters (`MAX_INPUT_LINE_CHARS = 1000`, `MAX_LINE_CHARS =`
-      `1000`). Allow lines to extend up to 1,000 characters with horizontal
-      panning while maintaining line joining limits.
+    - *Resolution*: Updated maximum line capacity constants to 1,000 characters
+      (`MAX_LINE_CHARS = 1000`, `MAX_INPUT_LINE_CHARS = 1000`) and preserved
+      `LINE_JOIN_LIMIT = 120` in `buffer.py`. Enabled horizontal panning
+      in 120-column geometries. Validated via Step 2 and Step 14 in
+      `test_buffer.py` (`test_bug_2_7_47_line_capacity_limit_and_panning`).
   - [ ] **Bug 2.7.48: Missing File Not Found Modal Alert in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype A).
     - *Issue*: In `ports/python/se/editor.py:485`, attempting to open or insert

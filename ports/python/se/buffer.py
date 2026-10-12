@@ -6,7 +6,10 @@ Enforces 120-column line limits, block selection, and file streaming.
 import os
 from typing import List, Optional, Tuple
 
-MAX_LINE_LENGTH = 120
+MAX_LINE_CHARS = 1000
+MAX_INPUT_LINE_CHARS = 1000
+MAX_LINE_LENGTH = MAX_LINE_CHARS
+LINE_JOIN_LIMIT = 120
 
 
 def calc_visual_col(line: str, cur_col: int, tab_width: int = 4) -> int:
@@ -24,7 +27,7 @@ def calc_visual_col(line: str, cur_col: int, tab_width: int = 4) -> int:
             vis_col += 1
     if cur_col > line_len:
         vis_col += cur_col - line_len
-    return min(vis_col, MAX_LINE_LENGTH)
+    return min(vis_col, MAX_LINE_CHARS)
 
 
 def expand_tabs_visual(line: str, tab_width: int = 4) -> str:
@@ -166,10 +169,10 @@ class DocumentBuffer:
     def insert_char(self, ch: str) -> bool:
         """
         Insert a printable character at cursor position.
-        Enforces 120-character maximum line capacity limit.
+        Enforces 1,000-character maximum line capacity limit.
         """
         line = self.current_line
-        if len(line) >= MAX_LINE_LENGTH:
+        if len(line) >= MAX_LINE_CHARS:
             return False
 
         col = min(len(line), self.cursor_col)
@@ -214,7 +217,7 @@ class DocumentBuffer:
         # At end of line: join with next line
         if self.cursor_row < len(self.lines) - 1:
             next_line = self.lines[self.cursor_row + 1]
-            if len(line) + len(next_line) <= MAX_LINE_LENGTH:
+            if len(line) + len(next_line) <= LINE_JOIN_LIMIT:
                 self.cursor_col = len(line)
                 self.lines[self.cursor_row] = line + next_line
                 self.lines.pop(self.cursor_row + 1)
@@ -241,7 +244,7 @@ class DocumentBuffer:
         if self.cursor_row > 0:
             prev_line = self.lines[self.cursor_row - 1]
             cur_line = self.current_line
-            if len(prev_line) + len(cur_line) <= MAX_LINE_LENGTH:
+            if len(prev_line) + len(cur_line) <= LINE_JOIN_LIMIT:
                 join_col = len(prev_line)
                 self.lines[self.cursor_row - 1] = prev_line + cur_line
                 self.lines.pop(self.cursor_row)
