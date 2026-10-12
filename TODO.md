@@ -1543,9 +1543,9 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 1 Defect Open.
+- **Status**: Complete / 0 Defects Open.
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
-  - [ ] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
+  - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
       `TODO.md` Section 7.1.
     - *Symptom*: When running `tests/test_editor_headless.py --sec`, Step 17
@@ -1570,21 +1570,21 @@ have been resolved and archived.
       4. `ui_browser_workspace()` does not handle `Ctrl+Q` as an input key, so
          `\x11` is dropped, the save is never committed to disk, and `SEC.COM`
          remains stuck in the browser rather than exiting cleanly to CP/M.
-    - *Required Fix (SE.COM Parity)*:
-      1. Align `ui_browser_workspace()` in `src/core/ui_browser.c` with the
-         reference `SE.COM` implementation (`READ_FILENAME_INPUT_PREFILLED` in
-         `src/core/ui_browser.asm`).
-      2. When receiving text input characters (`0x20..0x7E`), inline deletions
-         (`Backspace`, `Delete`), or navigation keys (`Left`, `Right`, `Home`,
-         `End`), update only the bracketed input prompt line and reposition the
-         hardware cursor without repainting the directory grid, banners, or
-         Row 24 status bar.
-      3. Restrict full-screen re-renders strictly to discrete macro-events:
-         initial display, page changes (`PgUp`/`PgDn`), drive/user/filter
-         updates (`Enter` on `B:` or `*.TXT`), format toggle (`Ctrl+F`), and
-         modal pop-up dismissals.
-      4. Ensure `file_save()` properly commits the file, clears `g_doc_modified`
-         to 0, and restores editor mode before accepting subsequent commands.
+      5. Automatic local stack buffers in `ui_browser_workspace()` exceeded TPA
+         stack headroom (+451 B), causing stack collision into `_g_config`.
+    - *Resolution*:
+      1. Introduced `render_browser_prompt()` in `src/core/ui_browser.c` to
+         perform localized in-place prompt updates on text input, deletions,
+         and navigation without repainting the directory grid or status bar.
+      2. Gated full-screen re-renders behind `need_full_render` for macro
+         events (initial display, pagination, drive/filter changes, and format
+         toggles).
+      3. Relocated CP/M browser buffers to static BSS and right-sized
+         `MAX_BROWSER_FILES` to 64 entries, expanding TPA stack headroom from
+         +451 B to +1,519 B below BDOS (`0xD800`).
+      4. Fixed `workspace_root` resolution in `test_editor_headless.py` and
+         consolidated Step 17 save prompt capture buffer.
+      5. Verified 100% pass across Steps 17–24 in headless test suite.
 
 ---
 
