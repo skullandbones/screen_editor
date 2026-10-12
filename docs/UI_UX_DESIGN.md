@@ -729,6 +729,20 @@ or display notifications.
      +--------------------------------------------------+
      ```
 
+     File Not Found Modal Alert (50 cols x 7 rows):
+     ```text
+     +--------------------------------------------------+
+     |                  File Not Found                  |
+     +--------------------------------------------------+
+     |            'FILENAME' was not found.             |
+     |        Specified file not found on disk.         |
+     |            Press any key to continue             |
+     +--------------------------------------------------+
+     ```
+     - Displays upon attempting to open or insert a non-existent file.
+     - Dismissible by any keystroke; returns user directly back to the
+       open or insert directory browser workspace with input buffer preserved.
+
    Archetype B: Confirmation Query (`show_confirm`)
      Used for binary decisions (Save modifications?, Overwrite file?).
      Options formatted with spaces only—no slashes `/` or pipes `|`.
@@ -744,6 +758,20 @@ or display notifications.
      |           [Y]es      [N]o      [ESC]=Cancel      |
      +--------------------------------------------------+
      ```
+     Overwrite File Modal Dialog (50 cols x 7 rows):
+     ```text
+     +--------------------------------------------------+
+     |                  Overwrite File                  |
+     +--------------------------------------------------+
+     |       Existing file contents will be lost        |
+     |         File already exists. Overwrite?          |
+     |          [Y]es      [N]o      [ESC]=Cancel       |
+     +--------------------------------------------------+
+     ```
+     - Displays upon attempting to save to an existing destination file.
+     - Terminal cursor positioned directly on prompt line after `Overwrite? `
+       (Col 40).
+     - Confirmed via `Y`/`y`, cancelled via `N`/`n` or `ESC`.
 
    Archetype C: Single-Line Text Input (`show_input`)
      Used for text parameters (Find string, Replace string, Goto Line).
