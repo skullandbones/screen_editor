@@ -31,15 +31,41 @@ diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly not
 supported across any surface or modal dialog to eliminate command collision
 with Save, Delete, End, and Cut.
 
+Build Profile Divergence & Conditional Directives Mandate:
+Across shared source modules (such as portable C core files in `src/core/` and
+shared Z80 assembly components in `src/`), source code conditional compilation
+directives (`#ifdef __CPM__`, `#ifndef __CPM__`) and conditional assembly
+directives (`IFDEF`, `IFNDEF`, `ELSE`, `ENDIF`) shall strictly be used to
+accommodate platform-specific divergence between build profiles and targets
+(Section 14.5). Developers and automated agents must never globally modify
+shared code to satisfy constraints of one build profile if doing so impairs or
+breaks another.
+
 2. Terminal Architecture, Geometries & Character Budget
 --------------------------------------------------------------------------------
 1. Standard Screen Geometries:
-   - Standard Terminal: 80 columns x 24 rows (`80x24`).
+   - Option 1 — Standard Terminal: 80 columns x 24 rows (`80x24`).
      - Rows 1 to 23: Workspace / Document text viewport.
      - Row 24: Universal Status Bar (fixed bottom anchor).
-   - Wide Console: 120 columns x 40 rows (`120x40`).
+     - Universal baseline standard supported across all hardware targets.
+   - Option 2 — Wide Console: 120 columns x 40 rows (`120x40`).
      - Rows 1 to 39: Workspace / Document text viewport.
      - Row 40: Universal Status Bar (fixed bottom anchor).
+     - Note: If 120x40 screen size is not supported on a target platform,
+       option 2 on the splash screen will not be shown and 120x40 screen size
+       will not be supported on that target.
+   - Option 3 — Native Host Terminal:
+     - Dynamic host terminal dimensions (`HOST_COLS x HOST_ROWS`).
+     - Supported on native platforms (Linux, POSIX, macOS) capable of querying
+       actual terminal emulator dimensions (via `ioctl(TIOCGWINSZ)` or
+       `os.get_terminal_size()`).
+     - Option 3 is added to the splash screen when a native screen size is also
+       supported.
+   - Screen Switching Debris Prevention Mandate:
+     Prior to switching screen sizes (between 80x24, 120x40, or Native), the
+     terminal screen must be explicitly cleared (emitting ANSI clear sequence
+     `\x1b[2J\x1b[H` / `TERM_INIT`) so that no character artifacts, margin
+     remnants, or status bar ghosts are left as debris on the screen.
 
 2. Coordinate System:
    - All screen positioning uses 1-based ANSI terminal coordinates:
@@ -479,6 +505,15 @@ content blocks rather than top-aligned text.
 2. Splash Screen Layout (Tier 1):
    - Content Height: 14 lines, Content Width: 50 columns.
    - All rows above `TopRow` and below `TopRow + 14` (up to Row 23) display `~`.
+   - Screen Geometry Option Presentation:
+     On splash screens where screen geometry options are presented:
+     - `Option 1`: Standard `80x24` classic terminal mode (universal).
+     - `Option 2`: Wide `120x40` modern console mode. Note: If 120x40 screen
+       size is not supported on the target platform, option 2 on the splash
+       screen will not be shown and 120x40 screen size will not be supported.
+     - `Option 3`: Native host terminal mode. Added to the splash screen when
+       a native screen size is also supported (e.g. on native Linux ports
+       running in modern terminal emulators).
    - Visual Structure:
      ```text
      ~
@@ -513,8 +548,15 @@ content blocks rather than top-aligned text.
        - `P` / `p`: Show Plugin Manager screen (`DO_SPLASH_PLUGIN_SCREEN`).
        - `Ctrl+P`: Context-Aware Plugin Palette (`DO_CONTEXT_PLUGIN_POPUP`).
        - `C` / `c`: Open Configuration Manager (`DO_CONFIG_SCREEN`).
-       - `1`: Toggle 120x40 modern terminal mode (`DO_SET_120X40`).
-       - `2`: Toggle 80x24 classic terminal mode (`DO_SET_80X24`).
+       - `1`: Set 80x24 classic terminal mode (`DO_SET_80X24`). Universal
+         baseline standard.
+       - `2`: Set 120x40 modern terminal mode (`DO_SET_120X40`). Note: If
+         120x40 screen size is not supported on the target platform, option 2
+         on the splash screen will not be shown and 120x40 screen size will not
+         be supported.
+       - `3`: Set Native dynamic terminal mode (`DO_SET_NATIVE`). Added to the
+         splash screen when a native screen size is also supported (e.g. Linux
+         native ports). Reverts geometry to auto-detected host terminal size.
        - `Q` / `q` / `Ctrl+Q`: Safe quit / exit back to OS.
      - Non-Entry Key Exclusion & Silent Rejection Mandate:
        - The Space bar (`0x20`), ANSI cursor arrow keys (`Up`, `Down`, `Left`,
@@ -522,6 +564,13 @@ content blocks rather than top-aligned text.
          They must be silently ignored without altering document or buffer
          state and without re-rendering the splash workspace or emitting
          terminal escape sequences.
+     - Screen Switching Debris Prevention & Clearance Discipline:
+       Prior to switching screen sizes (upon receiving hotkey `1`, `2`, or `3`),
+       the editor must explicitly clear the entire terminal screen (emitting
+       ANSI clear sequence `\x1b[2J\x1b[H` / `TERM_INIT`) before applying new
+       dimensions and re-rendering the workspace. This guarantees that no
+       visual artifacts, stale column tildes, clipped text lines, or previous
+       status bar remnants are left as debris on the screen.
 
 
 3. Help Screen Layout (`Ctrl+K`):
@@ -1138,7 +1187,23 @@ specific architectural adaptations.
      - Horizontal viewport panning adapts its right edge threshold to
        `view_cols = HOST_COLS`.
      - Explicit fixed geometry emulation (`80x24` or `120x40`) can still be
-       selected via `SE.CFG` (`SCREEN=80x24`) to reproduce retro CRT fidelity.
+       selected via `SE.CFG` (`SCREEN=80x24`) to reproduce retro CRT
+       fidelity.
+     - Screen Geometry Options & Platform Support:
+       - Option 1 (`80x24`): Standard baseline geometry supported across
+         all platforms.
+       - Option 2 (`120x40`): Wide console mode. Note: If 120x40 screen size
+         is not supported on a target platform, option 2 on the splash screen
+         will not be shown and 120x40 screen size will not be supported.
+       - Option 3 (`Native`): Added to the splash screen when a native screen
+         size is also supported (e.g. Linux native ports querying terminal
+         dimensions dynamically). Allows users who switched to retro fixed
+         modes (80x24 or 120x40) to revert directly back to their native
+         terminal window dimensions.
+     - Screen Clear on Geometry Switch:
+       Prior to switching screen sizes (Option 1, 2, or 3), the screen must
+       be explicitly cleared (emitting `\x1b[2J\x1b[H` / `TERM_INIT`) so that
+       no artifacts or stale debris remain on the screen.
 
 2. Native Filesystem Differences vs. CP/M:
    - CP/M Flat Drive/User Namespace:
@@ -1187,3 +1252,54 @@ specific architectural adaptations.
      (`CRT_TRIM_BSS=1`) and total combined runtime memory (Code + Data + BSS)
      must fit strictly below BDOS (`0xD800`), guaranteeing positive TPA
      headroom.
+
+5. Source Code Conditional Compilation & Assembly Directives:
+   - Architectural Principle & Divergence Accommodation:
+     The SE architecture spans multiple distinct build profiles and execution
+     targets across disparate hardware generations—ranging from 8-bit Z80
+     CP/M 2.2 / 3.0 (`SE.COM`, `SEC.COM`) and ZX Spectrum Next (`SE_NEXT.COM`,
+     `SE.NEX`, `.se`) to modern 64-bit Linux native workstations (`se-linux`)
+     and Python (`se-py`).
+     Because multiple build profiles share common core implementation files
+     (such as the C core modules in `src/core/*.c` shared between `SEC.COM` and
+     `se-linux`, or assembly modules in `src/` shared across CP/M and Next
+     targets), source code conditional compilation directives (in C: `#ifdef`,
+     `#ifndef`, `#if`, `#else`, `#endif`) and conditional assembly directives
+     (in Z80 assembly: `IFDEF`, `IFNDEF`, `IF`, `ELSE`, `ENDIF`) SHALL be used
+     to accommodate all divergence between SE build profiles and targets.
+   - Isolation of Target-Specific Constraints:
+     Developers and automated agents must never globally modify shared source
+     files to satisfy the constraints, compiler peculiarities, or test harness
+     requirements of a single build profile if doing so degrades, violates
+     invariants of, or breaks compilation on another profile.
+     All platform-specific adaptations must be encapsulated within conditional
+     directives:
+     - CP/M C Profile (`SEC.COM`):
+       Compiled with `z88dk` (`zcc +cpm -O3`), which automatically predefines
+       `__CPM__`. Constrained to a ~48 KB TPA and minimal call stack space.
+       Conditional compilation directives (`#ifdef __CPM__`) must gate:
+       - Compact stack array allocations (e.g. `raw_name[32]`, `core[128]`).
+       - Symmetrical 78-column status bar core formatting for 80x24 terminals.
+       - TPA-fitted line capacity, stride, and slot sizes (in `config.h`).
+       - Headless test harness flow requirements (e.g. silent save returns
+         without interactive blocking modal notifications).
+     - Linux Native Profile (`se-linux`):
+       Compiled with GCC using strict flags (`-Wall -Wextra -Werror -O2`).
+       Must NOT be subjected to CP/M stack buffer reductions that trigger
+       GCC `-Werror=format-truncation` warnings.
+       Conditional compilation directives (`#ifndef __CPM__` or `#ifdef
+       __linux__`) must gate:
+       - Full-sized stack buffers (`raw_name[80]`, `core[256]`, `full_bar[256]`)
+         preventing string format truncation.
+       - Persistent Field 4 help anchor (`^K: Editor keys |`) and Field 5
+         mode indicators (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`) per Section 4.3.
+       - Tier 2 centered modal save notifications (`Save Complete`, `Export
+         Complete`) per Section 4.4 and Section 11.1.
+       - POSIX directory scanning and dynamic terminal size querying.
+     - ZX Spectrum Next Profiles (`SE.NEX`, `.se`, `SE_NEXT.COM`):
+       Conditional assembly directives (`IFDEF NEXT_DOT_COMMAND`, `IFNDEF
+       NEXT_DOT_COMMAND`, etc.) must gate:
+       - Execution entry origins (`0x2000` for NextOS dot commands vs
+         `0x0100` for CP/M TPA vs `0x6000` / `0x8000` for Next native `.nex`).
+       - Hardware MMU memory banking and copper/layer 2 configurations vs
+         standard CP/M BDOS memory and console calls.
