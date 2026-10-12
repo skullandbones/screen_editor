@@ -120,6 +120,20 @@ breaks another.
      Under no circumstances may an SE port terminate leaving dirty viewport
      contents, hidden cursors, or unreset video attributes in the terminal.
 
+6. VT100 & ASCII Terminal Encoding Mandate (UTF-8 Prohibition):
+   If the terminal is VT100, VT102, or a similar CRT/serial terminal (standard
+   across 8-bit CP/M and retro hardware), the use of UTF-8 (such as Unicode
+   em-dashes `—`, curly quotes, or multi-byte glyphs) is strictly not allowed
+   to be used by the editor. All text and control output must strictly adhere
+   to standard 7-bit ASCII (`0x20`–`0x7E`). Application titles must use the
+   ASCII hyphen-minus `-` (`0x2D`), e.g. `SE - Screen Editor`.
+
+7. Version Number Harmonization Mandate:
+   All SE variants across all target platforms (CP/M, ZX Spectrum Next, Linux,
+   Python, etc.) must use the exact same release version number as canonical
+   SE.COM (e.g. `v1.1.0`). Independent or divergent versioning across ports is
+   strictly prohibited.
+
 3. Screen Surface Taxonomy (The Three Tiers)
 --------------------------------------------------------------------------------
 Every visual surface in SE belongs strictly to one of three tiers. Ports must
@@ -170,6 +184,10 @@ The status bar is the sole fixed screen anchor in SE.
    | | FILENAME.EXT* | 80x24 | Linux | ^K: Editor keys | Line   1 Col  0 |   |
    +-------------------------------------------------------------------------+
 
+   - Editor Name & Version Exclusion Mandate:
+     The status bar does NOT show 'SE.COM' or the version number. Field 1
+     strictly displays the active document filename `{name}{mod}`. Port
+     implementations must never replace Field 1 with application banners.
    - Field 1 (Filename, 16 chars): `| {name}{mod} |`
      - `{name}`: Active filename (e.g. `README.TXT`, `C:MAIN.C`, `(Untitled)`).
      - `{mod}`: `*` if document has unsaved modifications; space otherwise.
@@ -514,8 +532,10 @@ content blocks rather than top-aligned text.
    - `LeftCol = max(2, ((HOST_COLS - ContentWidth) // 2) + 1)`
 
 2. Splash Screen Layout (Tier 1):
-   - Content Height: 14 lines, Content Width: 50 columns.
-   - All rows above `TopRow` and below `TopRow + 14` (up to Row 23) display `~`.
+   - Canonical Template: Canonical `SE.COM` serves as the authoritative splash
+     screen template for all SE variants across all target platforms.
+   - Content Height: 21 lines, Content Width: 50 columns.
+   - All rows above `TopRow` and below `TopRow + 21` (up to Row 23) display `~`.
    - Screen Geometry Option Presentation:
      80x24 is the default screen size because it is supported on all systems.
      Going forward, splash screen geometry options are standardized to:
@@ -528,42 +548,46 @@ content blocks rather than top-aligned text.
      - `Option 3`: Native host terminal mode (if supported). Hotkey `3`
        (`DO_SET_NATIVE`). Added to the splash screen only when dynamic host
        terminal sizing is supported (e.g. on native Linux/POSIX ports).
-   - Predominant Programming Language Display Mandate:
-     The splash screen shall show which programming language was predominantly
-     used to create SE. Specifically, row 2 of the 14-line splash screen
-     content block (directly beneath the title `SE — Screen Editor`) shall
-     display the release version along with the programming language
-     predominantly used to create that specific SE port or binary, formatted
-     as `Version <version> (<Language>)`:
-     - 8-bit CP/M (`SE.COM`): `Version v1.1.0 (Z80 Assembly)`
-     - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
-       `Version v1.1.0 (Z80 Assembly)`
-     - Linux Native C port (`se-linux` / `SEC.COM`): `Version v1.1.0 (C)`
-     - Linux Native Python port (`se-py`): `Version 1.0.0 (Python)`
-     - Future Rust port (`se-rs`): `Version 1.0.0 (Rust)`
-     The splash banner must not display generic host operating system labels
-     (such as `(Linux)`), but must explicitly state the predominant
-     programming language used to create the editor binary.
-   - Visual Structure:
+   - Visual Structure (Canonical SE.COM Template):
      ```text
      ~
-     ~                SE — Screen Editor
-     ~              Version v1.1.0 (Language)
+     ~                 SE - Screen Editor
      ~
-     ~       Free Memory: [Dynamic Heap]   Lines: [32K Max]
+     ~         type   [E]  or  [Enter] to edit
+     ~         type   [N]              to new file
+     ~         type   [O]              to open file
+     ~         type   [S]              to save file
+     ~         type   [W]  or  [^W]    to close file
+     ~         type   [L]  or  [^L]    to goto line
+     ~         type   [A]              for about
+     ~         type   [M]              for memory info
+     ~         type   [P]              for plugins
+     ~         type   [^P]             for context plugin menu
+     ~         type   [C]              to configure
+     ~         type   [1]              set 80x24
+     ~         type   [2]              set 120x40
+     ~         type   [Q]  or  [^Q]    to exit
      ~
-     ~                     :e to edit
-     ~                     :o to open file
-     ~                     :s to save file
-     ~                     :c for config
-     ~                     :p for plugins
-     ~                     :? for help
-     ~                     :q to quit
-     ~
-     ~                   Enter choice: _
+     ~         Active Screen : [80x24 (Classic Terminal)]
+     ~         RAM Drive (A:): [Preserved (Active)]
+     ~         Plugin System : [Operational]
+     ~         Max Lines     : [32,768 lines]
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Instant Single-Keystroke Protocol & "Enter Option" Exclusion:
+     - The splash screen dispatches commands immediately on a single keystroke.
+     - The hardware terminal cursor must remain hidden (`\x1b[?25l`).
+     - Under NO circumstances may an interactive prompt (such as
+       `Enter option: _` or `Enter choice: _`) be displayed on the splash
+       screen. Any such query which has appeared in some SE variants is
+       strictly prohibited and removed.
+   - Clean Header Mandate (No Version or Language on Splash):
+     - Row 1 displays `SE - Screen Editor` using ASCII hyphen `-` (never UTF-8
+       `—`).
+     - The splash screen does not display the release version number or the
+       predominant programming language. Those details are consolidated
+       exclusively onto the About screen (`[A]`).
    - Keyboard Dispatch & Keystroke Protocol:
      - Document Entry Keys: Only `E` / `e` or `Enter` (`KEY_ENTER`) may
        enter or resume the editor workspace.
@@ -786,6 +810,45 @@ content blocks rather than top-aligned text.
        Splash Screen.
      - Response `[ESC]=Cancel`: Cancels close request and returns directly to
        the active editor workspace with document state intact.
+
+11. About Screen Layout (`[A]` from Splash):
+   - Content Height: 9 lines, Content Width: 54 columns.
+   - All rows above `TopRow` and below `TopRow + 9` (up to Row 23) display `~`.
+   - Visual Structure:
+     ```text
+     ~
+     ~                 SE - Screen Editor
+     ~       version 1.1.0 (2026-10-09) (Z80 Assembly)
+     ~                  by Dean Jenkins
+     ~
+     ~ Google Antigravity 2.19.1 & Gemini FLASH 3.8 high
+     ~     Open source software under the MIT License
+     ~
+     ~             Press any key to continue
+     ~
+     [STATUS BAR AT ROW 24]
+     ```
+   - Predominant Programming Language Display Mandate:
+     Row 2 of the About screen displays the release version number, build date,
+     and the predominant programming language used to create that specific SE
+     port or binary, formatted as `version <version> (<date>) (<Language>)`:
+     - 8-bit CP/M (`SE.COM`):
+       `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+     - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
+       `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+     - Linux Native C port (`se-linux` / `SEC.COM`):
+       `version 1.1.0 (2026-10-09) (C)`
+     - Linux Native Python port (`se-py`):
+       `version 1.1.0 (2026-10-09) (Python)`
+     - Future Rust port (`se-rs`):
+       `version 1.1.0 (2026-10-09) (Rust)`
+     Generic host OS labels (such as `(Linux)`) must not be used; each
+     binary shall clearly state its predominant programming language on the
+     About screen.
+   - Version Harmonization: All SE variants share the exact same release
+     version number as canonical `SE.COM` (e.g. `v1.1.0`).
+   - Dismissal: Any key press dismisses the About screen and returns to the
+     Splash Screen.
 
 8. Tier 2 Centered Boxed Modal Pop-ups
 --------------------------------------------------------------------------------
@@ -1420,14 +1483,20 @@ specific architectural adaptations.
        - Hardware MMU memory banking and copper/layer 2 configurations vs
          standard CP/M BDOS memory and console calls.
 
-6. Splash Screen Implementation Language Identification:
+6. About Screen Implementation Language Identification:
    All cross-platform ports and binaries of SE must display the programming
-   language predominantly used to create that specific port on row 2 of the
-   Tier 1 Splash screen (Section 7.2). For example:
-   - `SE.COM` / `SE_NEXT.COM`: `(Z80 Assembly)`
-   - `se-linux` / `SEC.COM`: `(C)`
-   - `se-py`: `(Python)`
-   - `se-rs`: `(Rust)`
-   Generic host operating system names (such as `(Linux)`) must not be used on
-   the splash version line; each binary shall clearly show its predominant
-   programming language.
+   language predominantly used to create that specific port appended to the
+   version number and build date line on the Tier 1 About screen
+   (Section 7.11). For example:
+   - `SE.COM` / `SE_NEXT.COM`:
+     `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+   - `se-linux` / `SEC.COM`:
+     `version 1.1.0 (2026-10-09) (C)`
+   - `se-py`:
+     `version 1.1.0 (2026-10-09) (Python)`
+   - `se-rs`:
+     `version 1.1.0 (2026-10-09) (Rust)`
+   All SE variants shall share the identical version number as canonical
+   `SE.COM` (e.g. `v1.1.0`). Generic host OS labels (such as `(Linux)`) must
+   not be used; each binary shall clearly state its predominant programming
+   language on the About screen.
