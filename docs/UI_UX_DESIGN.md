@@ -722,7 +722,27 @@ content blocks rather than top-aligned text.
      [STATUS BAR AT ROW 24]
      ```
 
-9. Document Close Lifecycle (`Ctrl+W` / `:w` from Splash):
+9. Directory Screen Filename Input Line Editing:
+   The filename input fields across all directory workspaces (Open File,
+   File Insert, Save File, and Block Save) support full in-field cursor
+   navigation and editing identically across all SE variants:
+   - Left and Right cursor keys: `<Left>` and `<Right>` arrow keys (or
+     `<Ctrl+S>` and `<Ctrl+D>`) move the insertion cursor horizontally within
+     the input box without erasing characters.
+   - Delete key: `<Del>` (or `<Ctrl+G>`) deletes the character directly under
+     the cursor, shifting following characters leftward.
+   - Backspace key: `<BS>` (`0x08`, `0x7F`) deletes the character immediately
+     to the left of the cursor, shifting following characters leftward.
+   - Home and End keys: `<Home>` (or `<Ctrl+A>`) repositions the cursor at the
+     start of the input box; `<End>` (or `<Ctrl+E>`) positions the cursor
+     directly after the last character in the buffer.
+   - In-Place Character Insertion: Typing printable characters when the cursor
+     is positioned within existing text shifts trailing characters rightward,
+     inserting without overwriting existing input.
+   - Confirmation and Cancellation: `<Enter>` confirms the filename; `<ESC>`
+     cancels the directory workspace and returns to the previous screen.
+
+10. Document Close Lifecycle (`Ctrl+W` / `:w` from Splash):
    - Closing an active document returns the user directly to the Tier 1
      Splash Screen workspace.
    - Clean Document (`DOC_MODIFIED == 0`):
@@ -846,9 +866,21 @@ or display notifications.
      Used for text parameters (Find string, Replace string, Goto Line).
      Target input field enclosed in bracket pair `[  text  ]`.
      Terminal cursor placed directly inside bracket field.
-     Supports standard editing keys: character entry, Backspace (deletes left),
-     Delete / Ctrl+D (deletes under cursor), Left/Right arrows, and Home/End.
-     WordStar diamond key mappings (e.g. `Ctrl+S` for left) are not supported.
+     In-field cursor movement behaviors are identical across all SE variants.
+     Unlike Tier 1 directory filename fields (Section 7.9) which provide full
+     in-field cursor navigation, Archetype C modals operate strictly as
+     lightweight, append/backspace linear input fields across all variants:
+     - Character entry: Printable characters append to the end of the buffer.
+     - Backspace / Delete: Erases character directly preceding the cursor.
+     - Confirmation: `<Enter>` confirms and submits the input buffer.
+     - Cancellation: Standalone `<ESC>` cancels and dismisses the dialog.
+     - Unexpected Keystroke Protection Mandate:
+       Modals MUST NOT be cancelled or dismissed by unexpected keys or escape
+       sequences (such as cursor arrow keys, `PgUp`/`PgDn`, function keys, or
+       stray control keys). Any unexpected sequences received while an input
+       modal is active must be discarded without altering the modal's input
+       buffer, without moving the underlying document cursor, and without
+       cancelling the dialog.
      Find Text Modal Dialog (50 cols x 7 rows):
      ```text
      +------------------------------------------------+
