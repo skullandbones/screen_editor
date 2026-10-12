@@ -656,10 +656,21 @@ int editor_handle_key(int key)
         }
         break;
     default:
-        if (key >= 32 && key <= 126) {
-            do_char_insert((char)key);
-        } else if (key == '\t') {
-            do_char_insert('\t');
+        if ((key >= 32 && key <= 126) || key == '\t' || key == KEY_TAB) {
+            if (g_block_mode == BLOCK_MODE_SELECTING) {
+                cancel_block();
+                g_need_status_render = 1;
+                return 0;
+            }
+            if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
+                cancel_block();
+                g_need_status_render = 1;
+            }
+            if (key == '\t' || key == KEY_TAB) {
+                do_char_insert('\t');
+            } else {
+                do_char_insert((char)key);
+            }
         }
         break;
     }

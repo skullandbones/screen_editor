@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 8 Defects Open (Bugs 2.4.33–2.4.40).
+- **Status**: Active / 7 Defects Open (Bugs 2.4.34–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -642,7 +642,7 @@ have been resolved and archived.
       trailing bytes or triggering spurious hotkeys.
       Validated via `test_bug_2_4_32_escape_sequence_leakage` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.33: Typing Characters and Tab Fail to Clear Active Block**:
+  - [x] **Bug 2.4.33: Typing Characters and Tab Fail to Clear Active Block**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2, 10.1;
       `src/se.asm:1361-1399`.
     - *Issue*: In `src/core/editor.c:591-600`, typing printable characters or
@@ -657,6 +657,12 @@ have been resolved and archived.
       `cancel_block()`, update status render, and return without inserting
       characters. If `g_block_mode == BLOCK_MODE_SOLIDIFIED`, cancel block and
       proceed with normal character insertion.
+    - *Resolution*: Updated printable character and tab handling in
+      `editor_handle_key()` (`src/core/editor.c`) to cancel dynamic block
+      selection without inserting characters, and clear solidified block
+      selection before proceeding with normal character insertion.
+      Validated via `test_bug_2_4_33_block_typing_cancellation` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.34: Missing Predominant Language Indication on Splash**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.6.
     - *Issue*: Section 7.2 and Section 14.6 mandate that row 2 of the 14-line

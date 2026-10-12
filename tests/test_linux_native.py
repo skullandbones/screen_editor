@@ -2523,6 +2523,88 @@ def test_bug_2_4_32_escape_sequence_leakage():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_33_block_typing_cancellation():
+    """Verify typing printable chars and tab clears active block (2.4.33)."""
+    print("[*] Testing block cancellation on typing & tab (Bug 2.4.33)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_blk_type_")
+    try:
+        sample_path = os.path.join(temp_dir, "BLOCK_TYPE.TXT")
+        with open(sample_path, "w") as f:
+            f.write("Line 1: Hello World\n")
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", "BLOCK_TYPE.TXT")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.4)
+
+            # 1. Start dynamic block selection (Ctrl+B) and move right 3 cols
+            os.write(master, b"\x02\x1b[C\x1b[C\x1b[C")
+            time.sleep(0.2)
+            sel_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[SEL]" in sel_out, (
+                f"Expected [SEL] in status bar:\n{sel_out}"
+            )
+
+            # 2. Type 'Z' in dynamic mode -> cancels block, does NOT insert 'Z'
+            os.write(master, b"Z")
+            time.sleep(0.2)
+            after_z = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[SEL]" not in after_z, (
+                f"[SEL] not cleared on char typing:\n{after_z}"
+            )
+            assert "ZHello" not in after_z and "Line 1: Z" not in after_z, (
+                f"'Z' should NOT be inserted in dynamic selection:\n{after_z}"
+            )
+
+            # 3. Start dynamic selection again and solidify via Enter
+            os.write(master, b"\x02\x1b[C\x1b[C\r")
+            time.sleep(0.2)
+            solid_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[BLK LOCK]" in solid_out, (
+                f"Expected [BLK LOCK]:\n{solid_out}"
+            )
+
+            # 4. Type 'Q' in solidified mode -> clears block AND inserts 'Q'
+            os.write(master, b"Q")
+            time.sleep(0.2)
+            after_q = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[BLK LOCK]" not in after_q, (
+                f"[BLK LOCK] not cleared:\n{after_q}"
+            )
+            assert "Q" in after_q, (
+                f"Expected 'Q' inserted in solidified mode:\n{after_q}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Block cancellation on typing verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2560,6 +2642,7 @@ def main():
     test_bug_2_4_30_block_menu_popup()
     test_bug_2_4_31_find_modal_cursor_navigation()
     test_bug_2_4_32_escape_sequence_leakage()
+    test_bug_2_4_33_block_typing_cancellation()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
