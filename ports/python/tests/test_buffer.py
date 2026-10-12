@@ -12,6 +12,9 @@ import unittest
 
 from se.buffer import (
     DocumentBuffer,
+    LINE_JOIN_LIMIT,
+    MAX_INPUT_LINE_CHARS,
+    MAX_LINE_CHARS,
     MAX_LINE_LENGTH,
     adjust_col_to_target,
     calc_visual_col,
@@ -36,10 +39,10 @@ class TestBuffer(unittest.TestCase):
         self.assertEqual(self.buf.filename, "(Untitled)")
         print("[+] Step 1: Initial buffer state verified.", flush=True)
 
-    def test_insertion_and_120_col_limit(self):
-        """Step 2: Verify typing insertion and 120-char line limit."""
+    def test_insertion_and_1000_char_limit(self):
+        """Step 2: Verify typing insertion and 1,000-char line limit."""
         print(
-            "[*] Step 2: Testing character insertion & 120 limit...",
+            "[*] Step 2: Testing character insertion & 1,000 limit...",
             flush=True,
         )
         for ch in "HELLO WORLD":
@@ -49,18 +52,18 @@ class TestBuffer(unittest.TestCase):
         self.assertEqual(self.buf.cursor_col, 11)
         self.assertTrue(self.buf.modified)
 
-        # Extend line to 120 chars
-        remaining = MAX_LINE_LENGTH - len("HELLO WORLD")
+        # Extend line to 1,000 chars
+        remaining = MAX_LINE_CHARS - len("HELLO WORLD")
         for _ in range(remaining):
             self.buf.insert_char("X")
-        self.assertEqual(len(self.buf.current_line), 120)
+        self.assertEqual(len(self.buf.current_line), 1000)
 
-        # 121st character must be blocked
+        # 1001st character must be blocked
         blocked = self.buf.insert_char("Z")
         self.assertFalse(blocked)
-        self.assertEqual(len(self.buf.current_line), 120)
+        self.assertEqual(len(self.buf.current_line), 1000)
         print(
-            "[+] Step 2: Insertion and 120-column limit verified.",
+            "[+] Step 2: Insertion and 1,000-column limit verified.",
             flush=True,
         )
 
@@ -509,6 +512,61 @@ class TestBuffer(unittest.TestCase):
 
         print(
             "[+] Step 13: delete_char EOL junction cursor anchoring verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_47_line_capacity_limit_and_panning(self):
+        """Step 14: Verify 1,000-char line capacity and pan (Bug 2.7.47)."""
+        print(
+            "[*] Step 14: Testing 1,000-char capacity and 120x40 pan...",
+            flush=True,
+        )
+        self.assertEqual(MAX_LINE_CHARS, 1000)
+        self.assertEqual(MAX_INPUT_LINE_CHARS, 1000)
+        self.assertEqual(LINE_JOIN_LIMIT, 120)
+
+        # 1. calc_visual_col clamps at 1,000 chars
+        line_1000 = "A" * 1000
+        self.assertEqual(calc_visual_col(line_1000, 500), 500)
+        self.assertEqual(calc_visual_col(line_1000, 1000), 1000)
+        self.assertEqual(calc_visual_col(line_1000, 1050), 1000)
+
+        # 2. update_pan in 120-column mode (120x40 geometry)
+        buf = DocumentBuffer()
+        buf.lines = ["A" * 300]
+        buf.cursor_col = 100
+        buf.update_pan(view_cols=120)
+        self.assertEqual(buf.pan_col, 0)
+
+        # Cursor at 130 in 120-col view triggers Pan +40
+        buf.cursor_col = 130
+        buf.update_pan(view_cols=120)
+        self.assertEqual(buf.pan_col, 40)
+
+        # Cursor at 170 in 120-col view triggers Pan +80
+        buf.cursor_col = 170
+        buf.update_pan(view_cols=120)
+        self.assertEqual(buf.pan_col, 80)
+
+        # 3. Line joining is preserved at LINE_JOIN_LIMIT (120 chars)
+        join_buf = DocumentBuffer()
+        join_buf.lines = ["A" * 70, "B" * 60]  # 70 + 60 = 130 > 120
+        join_buf.cursor_row = 0
+        join_buf.cursor_col = 70
+        self.assertFalse(join_buf.delete_char())
+        join_buf.cursor_row = 1
+        join_buf.cursor_col = 0
+        self.assertFalse(join_buf.backspace())
+
+        # Join when sum <= 120
+        join_buf.lines = ["A" * 60, "B" * 60]  # 60 + 60 = 120
+        join_buf.cursor_row = 0
+        join_buf.cursor_col = 60
+        self.assertTrue(join_buf.delete_char())
+        self.assertEqual(len(join_buf.lines[0]), 120)
+
+        print(
+            "[+] Step 14: 1,000-char capacity and 120x40 pan verified.",
             flush=True,
         )
 
