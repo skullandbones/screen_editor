@@ -31,6 +31,16 @@ diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly not
 supported across any surface or modal dialog to eliminate command collision
 with Save, Delete, End, and Cut.
 
+Build Profile Divergence & Conditional Directives Mandate:
+Across shared source modules (such as portable C core files in `src/core/` and
+shared Z80 assembly components in `src/`), source code conditional compilation
+directives (`#ifdef __CPM__`, `#ifndef __CPM__`) and conditional assembly
+directives (`IFDEF`, `IFNDEF`, `ELSE`, `ENDIF`) shall strictly be used to
+accommodate platform-specific divergence between build profiles and targets
+(Section 14.5). Developers and automated agents must never globally modify
+shared code to satisfy constraints of one build profile if doing so impairs or
+breaks another.
+
 2. Terminal Architecture, Geometries & Character Budget
 --------------------------------------------------------------------------------
 1. Standard Screen Geometries:
@@ -1242,3 +1252,54 @@ specific architectural adaptations.
      (`CRT_TRIM_BSS=1`) and total combined runtime memory (Code + Data + BSS)
      must fit strictly below BDOS (`0xD800`), guaranteeing positive TPA
      headroom.
+
+5. Source Code Conditional Compilation & Assembly Directives:
+   - Architectural Principle & Divergence Accommodation:
+     The SE architecture spans multiple distinct build profiles and execution
+     targets across disparate hardware generations—ranging from 8-bit Z80
+     CP/M 2.2 / 3.0 (`SE.COM`, `SEC.COM`) and ZX Spectrum Next (`SE_NEXT.COM`,
+     `SE.NEX`, `.se`) to modern 64-bit Linux native workstations (`se-linux`)
+     and Python (`se-py`).
+     Because multiple build profiles share common core implementation files
+     (such as the C core modules in `src/core/*.c` shared between `SEC.COM` and
+     `se-linux`, or assembly modules in `src/` shared across CP/M and Next
+     targets), source code conditional compilation directives (in C: `#ifdef`,
+     `#ifndef`, `#if`, `#else`, `#endif`) and conditional assembly directives
+     (in Z80 assembly: `IFDEF`, `IFNDEF`, `IF`, `ELSE`, `ENDIF`) SHALL be used
+     to accommodate all divergence between SE build profiles and targets.
+   - Isolation of Target-Specific Constraints:
+     Developers and automated agents must never globally modify shared source
+     files to satisfy the constraints, compiler peculiarities, or test harness
+     requirements of a single build profile if doing so degrades, violates
+     invariants of, or breaks compilation on another profile.
+     All platform-specific adaptations must be encapsulated within conditional
+     directives:
+     - CP/M C Profile (`SEC.COM`):
+       Compiled with `z88dk` (`zcc +cpm -O3`), which automatically predefines
+       `__CPM__`. Constrained to a ~48 KB TPA and minimal call stack space.
+       Conditional compilation directives (`#ifdef __CPM__`) must gate:
+       - Compact stack array allocations (e.g. `raw_name[32]`, `core[128]`).
+       - Symmetrical 78-column status bar core formatting for 80x24 terminals.
+       - TPA-fitted line capacity, stride, and slot sizes (in `config.h`).
+       - Headless test harness flow requirements (e.g. silent save returns
+         without interactive blocking modal notifications).
+     - Linux Native Profile (`se-linux`):
+       Compiled with GCC using strict flags (`-Wall -Wextra -Werror -O2`).
+       Must NOT be subjected to CP/M stack buffer reductions that trigger
+       GCC `-Werror=format-truncation` warnings.
+       Conditional compilation directives (`#ifndef __CPM__` or `#ifdef
+       __linux__`) must gate:
+       - Full-sized stack buffers (`raw_name[80]`, `core[256]`, `full_bar[256]`)
+         preventing string format truncation.
+       - Persistent Field 4 help anchor (`^K: Editor keys |`) and Field 5
+         mode indicators (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`) per Section 4.3.
+       - Tier 2 centered modal save notifications (`Save Complete`, `Export
+         Complete`) per Section 4.4 and Section 11.1.
+       - POSIX directory scanning and dynamic terminal size querying.
+     - ZX Spectrum Next Profiles (`SE.NEX`, `.se`, `SE_NEXT.COM`):
+       Conditional assembly directives (`IFDEF NEXT_DOT_COMMAND`, `IFNDEF
+       NEXT_DOT_COMMAND`, etc.) must gate:
+       - Execution entry origins (`0x2000` for NextOS dot commands vs
+         `0x0100` for CP/M TPA vs `0x6000` / `0x8000` for Next native `.nex`).
+       - Hardware MMU memory banking and copper/layer 2 configurations vs
+         standard CP/M BDOS memory and console calls.
