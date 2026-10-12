@@ -24,6 +24,7 @@ se-linux
 # Emulator transient files and local configurations
 *.idx
 *.CFG
+*.bmp
 
 
 # Python virtual environment and bytecode cache

@@ -58,6 +58,16 @@ TERM_INIT:
 	; Initialize console vectors
 	CALL INIT_BIOS_JUMPS
 
+	; Reset ANSI decoder state
+	XOR A
+	LD (ANSI_STATE),A
+	LD (ANSI_PARAM1),A
+	LD (ANSI_PARAM2),A
+	LD (ANSI_PARAM_IDX),A
+	LD (ANSI_IS_PRIV),A
+	LD A,038H
+	LD (CURRENT_ATTR),A
+
 	; Reset terminal state
 	CALL TERM_INVERSE_OFF
 	CALL TERM_SHOW_CURSOR
@@ -139,7 +149,19 @@ INIT_BIOS_JUMPS:
 	RET
 
 ;------------------------------------------------------------------------------
-; NATIVE_CONOUT: Emit character to native Next screen stream
+; ANSI Terminal Sequence Parser State Definitions & Variables
+;------------------------------------------------------------------------------
+ANSI_STATE_NORMAL	EQU	0
+ANSI_STATE_ESC		EQU	1
+ANSI_STATE_CSI		EQU	2
+
+;------------------------------------------------------------------------------
+; NATIVE_CONOUT: Emit character to native Next screen stream with ANSI decoding
+;
+; Purpose:
+;   Parses ANSI escape sequences emitted by the editor core (clear screen,
+;   cursor positioning, reverse video, clear to EOL) and translates them into
+;   direct hardware operations and Sinclair screen driver control codes.
 ;
 ; Inputs:
 ;   C = Character to emit.
@@ -151,9 +173,297 @@ INIT_BIOS_JUMPS:
 ;   Preserves BC, DE, HL; modifies AF.
 ;------------------------------------------------------------------------------
 NATIVE_CONOUT:
+	PUSH BC
+	PUSH DE
+	PUSH HL
+
+	; Keep Sinclair ROM scroll counter at 255 to prevent "scroll?" prompt
+	LD A,0FFH
+	LD (05C8CH),A
+
+	LD A,(ANSI_STATE)
+	CP ANSI_STATE_ESC
+	JR Z,ACO_STATE_ESC
+	CP ANSI_STATE_CSI
+	JP Z,ACO_STATE_CSI
+
+	;----------------------------------------------------------------------
+	; ANSI_STATE_NORMAL
+	;----------------------------------------------------------------------
+	LD A,C
+	CP 27				; ESC byte?
+	JR NZ,ACO_NORMAL_CHAR
+
+	LD A,ANSI_STATE_ESC
+	LD (ANSI_STATE),A
+	JP ACO_DONE
+
+ACO_NORMAL_CHAR:
+	; Prevent Sinclair ROM scroll overflow at bottom-right of display.
+	; In Sinclair sysvars (05C88H): High = 24 - row, Low = 33 - col
+	LD A,(05C89H)			; High byte (24 - row)
+	DEC A				; If row == 23 (bottom row), DEC A -> 0
+	JR NZ,ACO_DO_PRINT
+
+	LD A,(05C88H)			; Low byte (33 - col)
+	CP 3				; If col >= 31 (low <= 2), drop char
+	JP C,ACO_DONE
+
+ACO_DO_PRINT:
 	LD A,C
 	RST ZX_RST_PRINT_CHAR
+	JP ACO_DONE
+
+	;----------------------------------------------------------------------
+	; ANSI_STATE_ESC: Expecting '['
+	;----------------------------------------------------------------------
+ACO_STATE_ESC:
+	LD A,C
+	CP '['				; CSI intro?
+	JR NZ,ACO_RESET_STATE
+
+	LD A,ANSI_STATE_CSI
+	LD (ANSI_STATE),A
+	XOR A
+	LD (ANSI_PARAM1),A
+	LD (ANSI_PARAM2),A
+	LD (ANSI_PARAM_IDX),A
+	LD (ANSI_IS_PRIV),A
+	JP ACO_DONE
+
+	;----------------------------------------------------------------------
+	; ANSI_STATE_CSI: Parameter parsing & command dispatch
+	;----------------------------------------------------------------------
+ACO_STATE_CSI:
+	LD A,C
+	CP '?'				; Private mode prefix (e.g. ?25h)
+	JR NZ,ACO_CSI_NOT_PRIV
+	LD A,1
+	LD (ANSI_IS_PRIV),A
+	JP ACO_DONE
+
+ACO_CSI_NOT_PRIV:
+	CP ';'				; Parameter separator
+	JR NZ,ACO_CSI_NOT_SEMI
+	LD A,1
+	LD (ANSI_PARAM_IDX),A
+	JP ACO_DONE
+
+ACO_CSI_NOT_SEMI:
+	CP '0'
+	JR C,ACO_CSI_CMD
+	CP '9'+1
+	JR NC,ACO_CSI_CMD
+
+	; Numeric digit: param = param * 10 + digit
+	SUB '0'
+	LD D,A
+	LD A,(ANSI_PARAM_IDX)
+	OR A
+	JR NZ,ACO_ACCUM_P2
+
+	LD A,(ANSI_PARAM1)
+	LD E,A
+	ADD A,A				; * 2
+	ADD A,A				; * 4
+	ADD A,E				; * 5
+	ADD A,A				; * 10
+	ADD A,D
+	LD (ANSI_PARAM1),A
+	JP ACO_DONE
+
+ACO_ACCUM_P2:
+	LD A,(ANSI_PARAM2)
+	LD E,A
+	ADD A,A				; * 2
+	ADD A,A				; * 4
+	ADD A,E				; * 5
+	ADD A,A				; * 10
+	ADD A,D
+	LD (ANSI_PARAM2),A
+	JP ACO_DONE
+
+ACO_CSI_CMD:
+	CP 'H'				; Cursor position: ESC [ r ; c H
+	JP Z,ACO_CMD_LOCATE
+	CP 'f'
+	JP Z,ACO_CMD_LOCATE
+	CP 'J'				; Erase display: ESC [ 2 J
+	JP Z,ACO_CMD_CLEAR
+	CP 'K'				; Clear line to EOL: ESC [ K
+	JP Z,ACO_CMD_CLEAR_EOL
+	CP 'm'				; Graphic rendition: ESC [ 7 m / 0 m
+	JP Z,ACO_CMD_SGR
+	CP 'l'				; Reset mode
+	JR Z,ACO_RESET_STATE
+	CP 'h'				; Set mode
+	JR Z,ACO_RESET_STATE
+
+ACO_RESET_STATE:
+	XOR A
+	LD (ANSI_STATE),A
+	JP ACO_DONE
+
+;------------------------------------------------------------------------------
+; ACO_CMD_LOCATE: Position cursor via Sinclair AT code (22, row, col)
+;------------------------------------------------------------------------------
+ACO_CMD_LOCATE:
+	XOR A
+	LD (ANSI_STATE),A
+
+	; Row (1-based, default 1) -> Sinclair 0-based row (0..23)
+	LD A,(ANSI_PARAM1)
+	OR A
+	JR NZ,ACL_R_NZ
+	INC A
+ACL_R_NZ:
+	DEC A
+	CP 24
+	JR C,ACL_R_OK
+	LD A,23
+ACL_R_OK:
+	LD D,A				; D = Sinclair Row
+
+	; Col (1-based, default 1) -> Sinclair 0-based col (0..31)
+	LD A,(ANSI_PARAM2)
+	OR A
+	JR NZ,ACL_C_NZ
+	INC A
+ACL_C_NZ:
+	DEC A
+	CP 32
+	JR C,ACL_C_OK
+	LD A,31
+ACL_C_OK:
+	LD E,A				; E = Sinclair Col
+
+	LD A,22
+	RST ZX_RST_PRINT_CHAR
+	LD A,D
+	RST ZX_RST_PRINT_CHAR
+	LD A,E
+	RST ZX_RST_PRINT_CHAR
+	JP ACO_DONE
+
+;------------------------------------------------------------------------------
+; ACO_CMD_CLEAR: Clear entire screen display and home cursor
+;------------------------------------------------------------------------------
+ACO_CMD_CLEAR:
+	XOR A
+	LD (ANSI_STATE),A
+
+	; Clear 6144-byte ULA pixel bitmap
+	LD HL,04000H
+	LD (HL),0
+	LD DE,04001H
+	LD BC,017FFH
+	LDIR
+
+	; Set 768-byte ULA attribute cells
+	LD A,(CURRENT_ATTR)
+	LD (HL),A
+	LD BC,002FFH
+	LDIR
+
+	; Reset Sinclair ROM scroll counter and home cursor
+	LD A,0FFH
+	LD (05C8CH),A
+	LD HL,01821H			; Line 24, Col 33 -> Sinclair (0, 0)
+	LD (05C88H),HL
+	LD HL,04000H
+	LD (05C84H),HL
+	JP ACO_DONE
+
+;------------------------------------------------------------------------------
+; ACO_CMD_CLEAR_EOL: Clear to end of line from current column
+;------------------------------------------------------------------------------
+ACO_CMD_CLEAR_EOL:
+	XOR A
+	LD (ANSI_STATE),A
+
+	; S_POSN: L = 33 - col, H = 24 - row
+	LD HL,(05C88H)
+	LD A,L
+	DEC A
+	JP Z,ACO_DONE
+	JP C,ACO_DONE
+
+	PUSH HL
+	LD B,A
+ACE_SP_LOOP:
+	PUSH BC
+	LD A,' '
+	RST ZX_RST_PRINT_CHAR
+	POP BC
+	DJNZ ACE_SP_LOOP
+
+	; Restore original cursor row & col
+	POP HL
+	LD A,24
+	SUB H
+	LD D,A
+	LD A,33
+	SUB L
+	LD E,A
+	LD A,22
+	RST ZX_RST_PRINT_CHAR
+	LD A,D
+	RST ZX_RST_PRINT_CHAR
+	LD A,E
+	RST ZX_RST_PRINT_CHAR
+	JP ACO_DONE
+
+;------------------------------------------------------------------------------
+; ACO_CMD_SGR: Select Graphic Rendition (Inverse / Normal)
+;------------------------------------------------------------------------------
+ACO_CMD_SGR:
+	XOR A
+	LD (ANSI_STATE),A
+
+	LD A,(ANSI_PARAM1)
+	CP 7				; Inverse ON
+	JR Z,ACS_INVERSE_ON
+	CP 1				; Bold / Bright ON
+	JR Z,ACS_BRIGHT_ON
+
+	; Normal video (Inverse OFF)
+	LD A,20
+	RST ZX_RST_PRINT_CHAR
+	XOR A
+	RST ZX_RST_PRINT_CHAR
+	LD A,038H			; White paper (7), black ink (0)
+	LD (CURRENT_ATTR),A
+	JP ACO_DONE
+
+ACS_INVERSE_ON:
+	LD A,20
+	RST ZX_RST_PRINT_CHAR
+	LD A,1
+	RST ZX_RST_PRINT_CHAR
+	LD A,007H			; Black paper (0), white ink (7)
+	LD (CURRENT_ATTR),A
+	JP ACO_DONE
+
+ACS_BRIGHT_ON:
+	LD A,19
+	RST ZX_RST_PRINT_CHAR
+	LD A,1
+	RST ZX_RST_PRINT_CHAR
+	JP ACO_DONE
+
+ACO_DONE:
+	POP HL
+	POP DE
+	POP BC
 	RET
+
+; Working storage for ANSI parser
+ANSI_STATE:		DB	0
+ANSI_PARAM1:		DB	0
+ANSI_PARAM2:		DB	0
+ANSI_PARAM_IDX:		DB	0
+ANSI_IS_PRIV:		DB	0
+CURRENT_ATTR:		DB	038H
 
 ;------------------------------------------------------------------------------
 ; NATIVE_CONST: Poll native console keyboard status
