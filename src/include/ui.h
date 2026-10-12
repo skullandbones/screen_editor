@@ -46,7 +46,11 @@ extern uint8_t  g_is_splash_screen;
 extern uint8_t  g_need_screen_render;
 extern uint8_t  g_need_line_render;
 extern uint8_t  g_need_status_render;
+#ifdef __CPM__
+extern char     g_status_msg[32];
+#else
 extern char     g_status_msg[80];
+#endif
 
 /* UI Subsystem Function Entry Points */
 void ui_init(void);
