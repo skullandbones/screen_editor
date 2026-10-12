@@ -1823,6 +1823,44 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_49_overwrite_modal_geometry_and_phrasing(self):
+        """Step 38: Verify 50x7 Overwrite File modal dialog (Bug 2.7.49)."""
+        print(
+            "[*] Step 38: Testing 50x7 Overwrite File modal dialog...",
+            flush=True,
+        )
+        # 1. Verify show_overwrite_dialog framing and canonical 50x7 lines
+        captured_boxes = []
+
+        def mock_draw(top, left, width, lines):
+            captured_boxes.append((top, left, width, lines))
+
+        self.editor.modal.draw_box = mock_draw
+        self.editor.terminal.get_key = MagicMock(return_value="y")
+
+        res = self.editor.modal.show_overwrite_dialog()
+        self.assertEqual(res, "y")
+        self.assertEqual(len(captured_boxes), 1)
+        _, _, width, lines = captured_boxes[0]
+        self.assertEqual(width, 50)
+        self.assertEqual(len(lines), 5)  # 5 lines + 2 borders = 7 rows
+        self.assertEqual(lines[0], "Overwrite File")
+        self.assertEqual(lines[1], "---")
+        self.assertEqual(lines[2], "Existing file contents will be lost")
+        self.assertEqual(lines[3], "File already exists. Overwrite?")
+        self.assertEqual(lines[4], "[Y]es      [N]o      [ESC]=Cancel")
+
+        # 2. Key choices: ESC returns None, 'n' returns 'n'
+        self.editor.terminal.get_key = MagicMock(return_value=KEY_ESC)
+        self.assertIsNone(self.editor.modal.show_overwrite_dialog())
+        self.editor.terminal.get_key = MagicMock(return_value="n")
+        self.assertEqual(self.editor.modal.show_overwrite_dialog(), "n")
+
+        print(
+            "[+] Step 38: 50x7 Overwrite File modal dialog verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

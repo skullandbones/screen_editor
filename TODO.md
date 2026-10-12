@@ -527,7 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 5 Defects Open (Bugs 2.7.49–2.7.53; Bug 2.7.45 Rejected).
+- **Status**: Active / 4 Defects Open (Bugs 2.7.50–2.7.53; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1180,17 +1180,19 @@ have been resolved and archived.
       returning directly to the directory browser with input text and cursor
       preserved. Validated via Step 37 in `test_editor.py`
       (`test_bug_2_7_48_file_not_found_modal_alert`).
-  - [ ] **Bug 2.7.49: Overwrite File Modal Phrasing & Geometry Non-Conformity**:
+  - [x] **Bug 2.7.49: Overwrite File Modal Phrasing & Geometry Non-Conformity**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B).
     - *Issue*: In `ports/python/se/editor.py:572-576` (`action_save_file`) and
       `editor.py:609-613` (`action_block_save`), destination overwrite prompts
       use title `"Overwrite Warning"`, desc `"File already exists on disk."`,
       query `"Overwrite <filename>?"`, and 52x8 modal dimensions with an extra
       blank line.
-    - *Required Fix*: Format canonical 50x7 Overwrite File modal dialog with
-      title `"Overwrite File"`, desc `"Existing file contents will be lost"`,
-      query `"File already exists. Overwrite?"`, and options
-      `"[Y]es      [N]o      [ESC]=Cancel"`.
+    - *Resolution*: Implemented canonical 50x7 `show_overwrite_dialog` in
+      `ports/python/se/modal.py` (title `"Overwrite File"`, desc `"Existing`
+      `file contents will be lost"`, query `"File already exists. Overwrite?"`)
+      and integrated into `action_save_file` and `action_block_save` in
+      `editor.py`. Validated via Step 38 in `test_editor.py`
+      (`test_bug_2_7_49_overwrite_modal_geometry_and_phrasing`).
   - [ ] **Bug 2.7.50: Active Block Text Not Pre-filled in Find (Ctrl+F)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
     - *Issue*: In `ports/python/se/editor.py:268-271`, `action_find()`

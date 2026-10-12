@@ -155,6 +155,41 @@ class ModalDialog:
             if k and k.lower() in ("y", "n"):
                 return k.lower()
 
+    def show_overwrite_dialog(self) -> Optional[str]:
+        """
+        Display canonical Archetype B Overwrite File modal dialog (50x7).
+        Returns 'y'/'Y', 'n'/'N', or None on ESC.
+        """
+        width = 50
+        height = 7
+        top, left = self.compute_popup_pos(width, height)
+
+        query = "File already exists. Overwrite?"
+        lines = [
+            "Overwrite File",
+            "---",
+            "Existing file contents will be lost",
+            query,
+            "[Y]es      [N]o      [ESC]=Cancel",
+        ]
+        self.draw_box(top, left, width, lines)
+
+        # Reposition blinking cursor adjacent to query prompt
+        query_row = top + 4
+        interior_w = width - 2
+        query_lead_spaces = (interior_w - len(query)) // 2
+        cursor_c = left + 1 + query_lead_spaces + len(query) + 1
+        self.term.locate(query_row, cursor_c)
+        self.term.show_cursor()
+        self.term.flush()
+
+        while True:
+            k = self.term.get_key()
+            if k == KEY_ESC:
+                return None
+            if k and k.lower() in ("y", "n"):
+                return k.lower()
+
     def show_input(
         self,
         title: str,

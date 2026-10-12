@@ -565,11 +565,7 @@ class Editor:
             return False
         target_name, fmt_cpm = target
         if os.path.exists(target_name) and target_name != self.buffer.filename:
-            ans = self.modal.show_confirm(
-                title="Overwrite Warning",
-                desc="File already exists on disk.",
-                query=f"Overwrite {os.path.basename(target_name)}?",
-            )
+            ans = self.modal.show_overwrite_dialog()
             if ans != "y":
                 return False
 
@@ -602,11 +598,7 @@ class Editor:
             return False
         target_name, fmt_cpm = target
         if os.path.exists(target_name) and target_name != self.buffer.filename:
-            ans = self.modal.show_confirm(
-                title="Overwrite Warning",
-                desc="File already exists on disk.",
-                query=f"Overwrite {os.path.basename(target_name)}?",
-            )
+            ans = self.modal.show_overwrite_dialog()
             if ans != "y":
                 return False
 
