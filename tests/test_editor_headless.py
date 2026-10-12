@@ -14,6 +14,15 @@ import select
 import subprocess
 import re
 
+from test_editor_common import (
+    EditorTransport,
+    PtyTransport,
+    SocketUartTransport,
+    VirtualTerminal,
+    drain_all,
+    read_until,
+)
+
 def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
@@ -52,42 +61,6 @@ SPLASH_FREE_TARGETS = [
 
 def has_free_mem(buf):
     return any(t in buf for t in SPLASH_FREE_TARGETS)
-
-def read_until(master_fd, match_bytes, timeout=8.0):
-    buf = b""
-    t0 = time.time()
-    targets = (match_bytes if isinstance(match_bytes, (list, tuple))
-               else [match_bytes])
-    while time.time() - t0 < timeout:
-        r, _, _ = select.select([master_fd], [], [], 0.05)
-        if r:
-            try:
-                data = os.read(master_fd, 1024)
-                if not data:
-                    break
-                buf += data
-                for target in targets:
-                    if target in buf:
-                        return buf
-            except (BlockingIOError, OSError):
-                pass
-    return buf
-
-def drain_all(master_fd, quiet_time=0.2):
-    time.sleep(0.05)
-    buf = b""
-    while True:
-        r, _, _ = select.select([master_fd], [], [], quiet_time)
-        if not r:
-            break
-        try:
-            data = os.read(master_fd, 4096)
-            if not data:
-                break
-            buf += data
-        except (BlockingIOError, OSError):
-            break
-    return buf
 
 def test_se_execution(use_sec=False):
     emu_bin, rom_file, img_file, se_bin = find_paths(use_sec=use_sec)
@@ -238,13 +211,10 @@ def test_se_execution(use_sec=False):
             )
 
     print("[*] Launching RomWBW on RC2014 emulator...", flush=True)
-    master, slave = os.openpty()
-    tty.setraw(slave)
-    os.set_blocking(master, False)
-
     cmd = [emu_bin, "-b", "-r", rom_file, "-1", "-S", img_file]
-    proc = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True)
-    os.close(slave)
+    pty_t = PtyTransport(cmd)
+    master = pty_t.fileno()
+    proc = pty_t.proc
 
     try:
         # 1. Wait for RomWBW boot loader prompt
@@ -6147,15 +6117,7 @@ def test_se_execution(use_sec=False):
                 [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:CPM2.TXT"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
-        try:
-            proc.kill()
-            proc.wait(timeout=1.0)
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-        try:
-            os.close(master)
-        except OSError:
-            pass
+        pty_t.close()
 
 if __name__ == "__main__":
     use_sec_arg = "--sec" in sys.argv
