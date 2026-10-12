@@ -527,8 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44 Resolved;
-  Bug 2.7.45 Rejected).
+- **Status**: Active / 8 Defects Open (Bugs 2.7.46–2.7.53; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1143,6 +1142,92 @@ have been resolved and archived.
       explicitly not supported across all editor workspaces, dialogs, and modal
       surfaces. Modal text input prompts adhere strictly to standard VT100/ANSI
       editing primitives, eliminating WordStar navigation by design.
+  - [ ] **Bug 2.7.46: WordStar Diamond Key Aliasing in Modal Inputs (Ctrl+S)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 8.3, 10, 11.8.
+    - *Issue*: In `ports/python/se/modal.py:194` (`show_input`) and
+      `modal.py:270` (`show_find_dialog`), `KEY_CTRL_S` is aliased alongside
+      `KEY_LEFT` to cursor retreat (`elif k in (KEY_LEFT, KEY_CTRL_S):`).
+      This violates the architectural prohibition against WordStar diamond
+      aliasing in modal input loops (Anti-Pattern #8), where navigation must
+      strictly be standard ANSI arrow keys.
+    - *Required Fix*: Remove `KEY_CTRL_S` from cursor navigation branches in
+      `show_input` and `show_find_dialog` in `ports/python/se/modal.py`,
+      relying strictly on `KEY_LEFT` and standard editing primitives.
+  - [ ] **Bug 2.7.47: Line Capacity Limit Clamped to 120 Chars (vs 1,000)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
+    - *Issue*: In `ports/python/se/buffer.py:9`, `MAX_LINE_LENGTH` is hardcoded
+      to 120. `insert_char` rejects character insertion beyond 120 characters,
+      `calc_visual_col` clamps visual columns to 120, and `update_pan` disables
+      horizontal panning when `view_cols >= MAX_LINE_LENGTH` (e.g. 120x40),
+      preventing lines from extending up to the canonical 1,000-char limit.
+    - *Required Fix*: Update maximum line capacity constants in `buffer.py`
+      to 1,000 characters (`MAX_INPUT_LINE_CHARS = 1000`, `MAX_LINE_CHARS =`
+      `1000`). Allow lines to extend up to 1,000 characters with horizontal
+      panning while maintaining line joining limits.
+  - [ ] **Bug 2.7.48: Missing File Not Found Modal Alert in Directory Browser**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype A).
+    - *Issue*: In `ports/python/se/editor.py:485`, attempting to open or insert
+      a non-existent file causes `action_directory_browser` to return target
+      and exit back to editor, where `action_open_file` and
+      `action_insert_file` display a generic notification alert over the
+      editor, discarding directory browser state and user input buffer.
+    - *Required Fix*: Implement canonical 50x7 `File Not Found` modal alert
+      in `action_directory_browser` when an entered target file does not exist,
+      returning directly back to the directory browser with input buffer and
+      cursor position preserved upon any keypress.
+  - [ ] **Bug 2.7.49: Overwrite File Modal Phrasing & Geometry Non-Conformity**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B).
+    - *Issue*: In `ports/python/se/editor.py:572-576` (`action_save_file`) and
+      `editor.py:609-613` (`action_block_save`), destination overwrite prompts
+      use title `"Overwrite Warning"`, desc `"File already exists on disk."`,
+      query `"Overwrite <filename>?"`, and 52x8 modal dimensions with an extra
+      blank line.
+    - *Required Fix*: Format canonical 50x7 Overwrite File modal dialog with
+      title `"Overwrite File"`, desc `"Existing file contents will be lost"`,
+      query `"File already exists. Overwrite?"`, and options
+      `"[Y]es      [N]o      [ESC]=Cancel"`.
+  - [ ] **Bug 2.7.50: Active Block Text Not Pre-filled in Find (Ctrl+F)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
+    - *Issue*: In `ports/python/se/editor.py:268-271`, `action_find()`
+      unconditionally passes `initial_text=self.search_query` to
+      `show_find_dialog`. If a block selection is active (`block_active > 0`),
+      the highlighted text selection is not extracted or pre-filled into the
+      Find input buffer.
+    - *Required Fix*: When `block_active > 0`, extract active selection text
+      (or current row block segment) and pre-fill it into `show_find_dialog`
+      as specified in Section 8.3 Archetype C.
+  - [ ] **Bug 2.7.51: Find Text Modal Dialog Geometry & Layout Discrepancies**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
+    - *Issue*: In `ports/python/se/modal.py:219-245`, `show_find_dialog` builds
+      an 8-row x 52-column modal box with an extraneous empty row between the
+      input line and action options, rather than the canonical 50-col x 7-row
+      layout.
+    - *Required Fix*: Conform `show_find_dialog` in `modal.py` to canonical
+      50x7 geometry (Row 1 border, Row 2 title, Row 3 separator, Row 4 search
+      pattern with `[Case Sensitive  ]`, Row 5 input query `Find: [ ... ]`,
+      Row 6 options, Row 7 border) without empty row padding.
+  - [ ] **Bug 2.7.52: Uncanonical Prompt Syntax in action_new_file()**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B), 11.8.
+    - *Issue*: In `ports/python/se/editor.py:658-662`, `action_new_file()`
+      prompts with `desc="Discard current modifications for new document?"`
+      and `query="Discard edits? [y/n]:"`, violating the prohibition against
+      legacy slash delimiters and non-standard query phrasing
+      (Anti-Pattern #8).
+    - *Required Fix*: Update `action_new_file()` to use canonical Archetype B
+      confirmation modal: title `"Unsaved Modifications"`, desc `"Any unsaved`
+      `edits will be lost if discarded."`, query `"Save changes?"`, and options
+      `"[Y]es      [N]o      [ESC]=Cancel"`.
+  - [ ] **Bug 2.7.53: Splash Screen Over-Capacity Height & Colon Commands**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.2.
+    - *Issue*: In `ports/python/se/editor.py:766-790`, `action_splash_screen`
+      defines 23 content lines. On standard 80x24 displays (`AvailRows = 23`),
+      `compute_centering` yields `TopRow = 1`, filling all 23 available screen
+      rows with text and completely eliminating column 0 tilde margin rows.
+      Additionally, splash screen dispatch lacks colon-prefixed command syntax
+      (`:e`, `:o`, `:s`, `:c`, `:p`, `:?`, `:q`) defined in Section 7.2.
+    - *Required Fix*: Restructure splash screen content to canonical 14 lines x
+      50 columns, restoring column 0 tildes on rows 1..4 and 19..23 on 80x24
+      displays. Support both bare hotkeys and colon-prefixed command syntax.
 
 ---
 
