@@ -57,36 +57,43 @@ class UIRenderer:
         fmt_str = "CP/M " if buf.format_cpm else "Linux"
         fmt_field = f" {fmt_str} |"
 
-        # Field 4 (Help Hint / Context / Block Selection, 18 chars)
-        if buf.block_active > 0:
-            r1, c1, r2, c2 = buf.get_normalized_block()
-            prefix = "Sel: " if buf.block_active == 1 else "Block: "
-            if r1 == r2:
-                count = max(0, c2 - c1)
-                unit = "char" if count == 1 else "chars"
-            else:
-                count = (r2 - r1) + 1
-                unit = "line" if count == 1 else "lines"
-            metric = f"{prefix}{count} {unit}"
-            help_field = f" {metric[:14]:<15} |"
-        else:
-            help_field = " ^K: Editor keys |"
+        # Field 4 (Help Hint / Context, 18 chars)
+        help_field = " ^K: Editor keys |"
 
-        # Cursor and pan position field
+        # Cursor, pan position, and block mode field (Field 5)
         cur_line = buf.cursor_row + 1
         tot_lines = buf.total_lines
         cur_col = buf.get_visual_col()
         pan_str = f" [Pan +{buf.pan_col}]" if buf.pan_col > 0 else ""
+        if buf.block_active == 1:
+            blk_str = " [SEL]"
+        elif buf.block_active == 2:
+            blk_str = " [BLK LOCK]"
+        else:
+            blk_str = ""
 
         pos_field = (
             f" Line {cur_line:>4}/{tot_lines:<4} "
-            f"Col {cur_col:<3}{pan_str} |"
+            f"Col {cur_col:<3}{pan_str}{blk_str} |"
         )
 
         # Assemble full status bar content
         core = (
             f"{name_field}{geom_field}{fmt_field}{help_field}{pos_field}"
         )
+
+        # In 80-col mode with mode flags, compact column spacing if needed
+        if len(core) > cols and (pan_str or blk_str):
+            compact_pos = (
+                f" Line {cur_line}/{tot_lines} "
+                f"Col {cur_col}{pan_str}{blk_str} |"
+            )
+            compact_geom = f" {geometry_str} |"
+            compact_core = (
+                f"{name_field}{compact_geom}{fmt_field}"
+                f"{help_field}{compact_pos}"
+            )
+            core = compact_core
 
         # Pad or center across terminal width
         if len(core) < cols:

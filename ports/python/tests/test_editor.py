@@ -15,6 +15,7 @@ from se.editor import Editor
 from se.modal import ModalDialog
 from se.terminal import (
     KEY_CTRL_B,
+    KEY_CTRL_C,
     KEY_CTRL_D,
     KEY_CTRL_F,
     KEY_CTRL_K,
@@ -22,6 +23,9 @@ from se.terminal import (
     KEY_CTRL_S,
     KEY_CTRL_V,
     KEY_CTRL_W,
+    KEY_CTRL_X,
+    KEY_UP,
+    KEY_DOWN,
     KEY_LEFT,
     KEY_RIGHT,
     KEY_HOME,
@@ -385,8 +389,8 @@ class TestEditor(unittest.TestCase):
 
         status_texts = [w for w in written if not w.startswith("\x1b")]
         self.assertEqual(len(status_texts[0]), 80)
-        self.assertIn("Sel: 5 chars", status_texts[0])
-        self.assertNotIn("[SEL]", status_texts[0])
+        self.assertIn("^K: Editor keys |", status_texts[0])
+        self.assertIn("[SEL]", status_texts[0])
 
         # Multi-line selection (dynamic follows cursor)
         written.clear()
@@ -397,7 +401,8 @@ class TestEditor(unittest.TestCase):
 
         status_texts_multi = [w for w in written if not w.startswith("\x1b")]
         self.assertEqual(len(status_texts_multi[0]), 80)
-        self.assertIn("Sel: 3 lines", status_texts_multi[0])
+        self.assertIn("^K: Editor keys |", status_texts_multi[0])
+        self.assertIn("[SEL]", status_texts_multi[0])
 
         # Solidified block (uses block_end_row / block_end_col)
         written.clear()
@@ -408,10 +413,11 @@ class TestEditor(unittest.TestCase):
 
         status_texts_solid = [w for w in written if not w.startswith("\x1b")]
         self.assertEqual(len(status_texts_solid[0]), 80)
-        self.assertIn("Block: 3 lines", status_texts_solid[0])
+        self.assertIn("^K: Editor keys |", status_texts_solid[0])
+        self.assertIn("[BLK LOCK]", status_texts_solid[0])
 
         print(
-            "[+] Step 11: Status bar block metrics verified without spill.",
+            "[+] Step 11: Status bar block indicators verified without spill.",
             flush=True,
         )
 
@@ -496,7 +502,7 @@ class TestEditor(unittest.TestCase):
         )
 
     def test_splash_command_matrix_and_status_blocks(self):
-        """Step 14: Verify 14 splash commands & 4 status blocks (Bug 2.7.18)."""
+        """Step 14: Verify canonical splash commands & status (Bug 2.7.18)."""
         print(
             "[*] Step 14: Testing splash command matrix & status blocks...",
             flush=True,
@@ -520,31 +526,22 @@ class TestEditor(unittest.TestCase):
         self.assertTrue(len(rendered_lines_list) >= 3)
         splash_text = "\n".join(rendered_lines_list[0])
 
-        # Verify 14 canonical commands
+        # Verify canonical commands
         expected_commands = [
-            "[E]  or  [Enter] to edit",
-            "[N]              to new file",
-            "[O]              to open file",
-            "[S]              to save file",
-            "[W]  or  [^W]    to close file",
-            "[L]  or  [^L]    to goto line",
-            "[A]              for about",
-            "[M]              for memory info",
-            "[P]              for plugins",
-            "[^P]             for context plugin menu",
-            "[C]              to configure",
-            "[1]              set 120x40",
-            "[2]              set 80x24",
-            "[Q]  or  [^Q]    to exit",
+            ":e to edit",
+            ":o to open file",
+            ":s to save file",
+            ":c for config",
+            ":p for plugins",
+            ":? for help",
+            ":q to quit",
         ]
         for cmd in expected_commands:
             self.assertIn(cmd, splash_text)
 
-        # Verify 4 status blocks
-        self.assertIn("Active Screen : [", splash_text)
-        self.assertIn("RAM Drive     : [", splash_text)
-        self.assertIn("Plugin System : [", splash_text)
-        self.assertIn("Max Lines     : [", splash_text)
+        # Verify status info
+        self.assertIn("Free Memory: [Dynamic Heap]", splash_text)
+        self.assertIn("Lines: [", splash_text)
 
         # Verify geometry switching: initial 80x24 -> 120x40 -> 80x24
         self.assertEqual(self.editor.terminal.cols, 80)
@@ -690,9 +687,9 @@ class TestEditor(unittest.TestCase):
         )
         self.assertEqual(captured[-1][2], 52)
 
-        # 3. Find dialog (Archetype C with toggle)
+        # 3. Find dialog (Archetype C with toggle, canonical 50-col)
         self.editor.modal.show_find_dialog(initial_text="test")
-        self.assertEqual(captured[-1][2], 52)
+        self.assertEqual(captured[-1][2], 50)
 
         # 4. Notification dialog (Archetype A)
         self.editor.modal.show_notification("Info", "Operation complete")
@@ -955,6 +952,7 @@ class TestEditor(unittest.TestCase):
 
         # 3. Ctrl+K R invokes action_insert_file via WordStar prefix
         self.editor.action_insert_file.reset_mock()
+        self.editor.buffer.block_active = 0
         self.editor.terminal.is_key_ready = MagicMock(return_value=True)
         self.editor.terminal.get_key = MagicMock(return_value="r")
         self.editor.dispatch_key(KEY_CTRL_K)
@@ -1376,7 +1374,710 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_42_status_bar_field4_invariance_and_block_indicators(self):
+        """Step 33: Verify status bar Field 4 and mode flags (Bug 2.7.42)."""
+        print(
+            "[*] Step 33: Testing status bar Field 4 invariance & flags...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+
+        # 1. No block active (block_active == 0)
+        self.editor.buffer.block_active = 0
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+        t0 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t0), 80)
+        self.assertIn("^K: Editor keys |", t0)
+        self.assertNotIn("[SEL]", t0)
+        self.assertNotIn("[BLK LOCK]", t0)
+
+        # 2. Dynamic block active (block_active == 1)
+        written.clear()
+        self.editor.buffer.block_active = 1
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 2
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 8
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+        t1 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t1), 80)
+        self.assertIn("^K: Editor keys |", t1)
+        self.assertIn("[SEL]", t1)
+        self.assertNotIn("[BLK LOCK]", t1)
+        self.assertNotIn("Sel:", t1)
+
+        # 3. Solidified block active (block_active == 2)
+        written.clear()
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 8
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+        t2 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t2), 80)
+        self.assertIn("^K: Editor keys |", t2)
+        self.assertIn("[BLK LOCK]", t2)
+        self.assertNotIn("[SEL]", t2)
+        self.assertNotIn("Block:", t2)
+
+        # 4. Horizontal pan indicator (pan_col > 0) on 80x24
+        written.clear()
+        self.editor.buffer.block_active = 0
+        self.editor.buffer.pan_col = 40
+        self.editor.renderer.render_status_bar(self.editor.buffer)
+        t3 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t3), 80)
+        self.assertIn("^K: Editor keys |", t3)
+        self.assertIn("[Pan +40]", t3)
+
+        # 5. Pan and block mode flag simultaneously on 120x40
+        written.clear()
+        self.editor.terminal.cols = 120
+        self.editor.terminal.rows = 40
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 8
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="120x40"
+        )
+        t4 = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(t4), 120)
+        self.assertIn("^K: Editor keys |", t4)
+        self.assertIn("[Pan +40]", t4)
+        self.assertIn("[BLK LOCK]", t4)
+
+        print(
+            "[+] Step 33: Field 4 invariance & Field 5 flags verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_43_block_operations_modal_dialog(self):
+        """
+        Step 34: Verify Bug 2.7.43 resolution:
+        Tier 2 Block Operations modal dialog on Ctrl+K when block_active > 0.
+        Verifies 50x7 dialog formatting, metrics (Selection vs Marked Block),
+        action key dispatching (Enter, Clear, Copy, Move, Del, Save, ESC),
+        and Ctrl+K routing.
+        """
+        # 1. Dialog formatting & metrics for dynamic block (block_active == 1)
+        self.editor.buffer.lines = [
+            "Alpha Line Text",
+            "Beta Line Content",
+            "Gamma Line Final",
+        ]
+        self.editor.buffer.block_active = 1
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 2
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 7
+
+        written = []
+        orig_write = self.editor.terminal.write
+        self.editor.terminal.write = lambda s: written.append(s)
+
+        # Mock get_key to return ESC to dismiss dialog
+        self.editor.terminal.get_key = MagicMock(return_value=KEY_ESC)
+        action = self.editor.modal.show_block_operations_dialog(
+            self.editor.buffer
+        )
+        self.assertIsNone(action)
+
+        # Filter out ANSI escape codes to examine rendered box lines
+        box_lines = [w for w in written if not w.startswith("\x1b")]
+        self.assertEqual(len(box_lines), 7)
+        self.assertEqual(len(box_lines[0]), 50)
+
+        exp_sep = "+" + ("-" * 48) + "+"
+        exp_title = "|                Block Operations                |"
+        exp_sel5 = "|               Selection: 5 chars               |"
+        exp_keys1 = "|  [Enter]=Lock/Set    [^C]=Copy    [^X]=Move    |"
+        exp_cmds = "|  [^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close  |"
+
+        self.assertEqual(box_lines[0], exp_sep)
+        self.assertEqual(box_lines[1], exp_title)
+        self.assertEqual(box_lines[2], exp_sep)
+        self.assertEqual(box_lines[3], exp_sel5)
+        self.assertEqual(box_lines[4], exp_keys1)
+        self.assertEqual(box_lines[5], exp_cmds)
+        self.assertEqual(box_lines[6], exp_sep)
+
+        # 2. Single-line 1 char & multi-line metrics formatting
+        written.clear()
+        self.editor.buffer.cursor_col = 3  # 1 char: cols 2..3
+        self.editor.modal.show_block_operations_dialog(self.editor.buffer)
+        b1 = [w for w in written if not w.startswith("\x1b")]
+        exp_sel1 = "|               Selection: 1 char                |"
+        self.assertEqual(b1[3], exp_sel1)
+
+        written.clear()
+        self.editor.buffer.cursor_row = 2
+        self.editor.buffer.cursor_col = 5  # 3 lines spanned
+        self.editor.modal.show_block_operations_dialog(self.editor.buffer)
+        b2 = [w for w in written if not w.startswith("\x1b")]
+        exp_sel3l = "|               Selection: 3 lines               |"
+        self.assertEqual(b2[3], exp_sel3l)
+
+        # 3. Solidified block (block_active == 2) formatting and line 5
+        written.clear()
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 12
+        self.editor.modal.show_block_operations_dialog(self.editor.buffer)
+        b3 = [w for w in written if not w.startswith("\x1b")]
+        exp_blk12 = "|             Marked Block: 12 chars             |"
+        exp_keys2 = "|      [^C]=Copy Block      [^X]=Move Block      |"
+        self.assertEqual(b3[3], exp_blk12)
+        self.assertEqual(b3[4], exp_keys2)
+
+        # Restore terminal write
+        self.editor.terminal.write = orig_write
+
+        # 4. Action key responses in show_block_operations_dialog
+        self.editor.terminal.get_key = MagicMock(return_value=KEY_ENTER)
+        self.assertEqual(
+            self.editor.modal.show_block_operations_dialog(self.editor.buffer),
+            "enter",
+        )
+
+        for clear_key in (KEY_CTRL_B, "b", "B"):
+            self.editor.terminal.get_key = MagicMock(return_value=clear_key)
+            self.assertEqual(
+                self.editor.modal.show_block_operations_dialog(
+                    self.editor.buffer
+                ),
+                "clear",
+            )
+
+        for copy_key in (KEY_CTRL_C, "c", "C"):
+            self.editor.terminal.get_key = MagicMock(return_value=copy_key)
+            self.assertEqual(
+                self.editor.modal.show_block_operations_dialog(
+                    self.editor.buffer
+                ),
+                "copy",
+            )
+
+        for cut_key in (KEY_CTRL_X, "x", "X"):
+            self.editor.terminal.get_key = MagicMock(return_value=cut_key)
+            self.assertEqual(
+                self.editor.modal.show_block_operations_dialog(
+                    self.editor.buffer
+                ),
+                "cut",
+            )
+
+        for del_key in (KEY_CTRL_D, "d", "D", KEY_DELETE):
+            self.editor.terminal.get_key = MagicMock(return_value=del_key)
+            self.assertEqual(
+                self.editor.modal.show_block_operations_dialog(
+                    self.editor.buffer
+                ),
+                "delete",
+            )
+
+        for save_key in (KEY_CTRL_S, "s", "S"):
+            self.editor.terminal.get_key = MagicMock(return_value=save_key)
+            self.assertEqual(
+                self.editor.modal.show_block_operations_dialog(
+                    self.editor.buffer
+                ),
+                "save",
+            )
+
+        # 5. Full editor action_block_popup execution
+        # a. Enter solidifies dynamic block
+        self.editor.buffer.block_active = 1
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 5
+        self.editor.terminal.get_key = MagicMock(return_value=KEY_ENTER)
+        self.editor.action_block_popup()
+        self.assertEqual(self.editor.buffer.block_active, 2)
+        self.assertEqual(self.editor.buffer.block_end_row, 0)
+        self.assertEqual(self.editor.buffer.block_end_col, 5)
+
+        # b. Clear cancels block
+        self.editor.terminal.get_key = MagicMock(return_value="b")
+        self.editor.action_block_popup()
+        self.assertEqual(self.editor.buffer.block_active, 0)
+
+        # c. Copy copies text and keeps solidified
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 5
+        self.editor.buffer.clipboard = ""
+        self.editor.terminal.get_key = MagicMock(return_value="c")
+        self.editor.action_block_popup()
+        self.assertEqual(self.editor.buffer.clipboard, "Alpha")
+        self.assertEqual(self.editor.buffer.block_active, 2)
+
+        # d. Cut cuts text, clears block, modifies document
+        self.editor.terminal.get_key = MagicMock(return_value="x")
+        self.editor.action_block_popup()
+        self.assertEqual(self.editor.buffer.clipboard, "Alpha")
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], " Line Text")
+
+        # e. Delete deletes text without modifying clipboard
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 5
+        self.editor.buffer.clipboard = "KEPT_CLIPBOARD"
+        self.editor.terminal.get_key = MagicMock(return_value="d")
+        self.editor.action_block_popup()
+        self.assertEqual(self.editor.buffer.clipboard, "KEPT_CLIPBOARD")
+        self.assertEqual(self.editor.buffer.block_active, 0)
+        self.assertEqual(self.editor.buffer.lines[0], " Text")
+
+        # f. Save calls action_block_save
+        self.editor.buffer.block_active = 2
+        self.editor.action_block_save = MagicMock()
+        self.editor.terminal.get_key = MagicMock(return_value="s")
+        self.editor.action_block_popup()
+        self.editor.action_block_save.assert_called_once()
+
+        # 6. Ctrl+K dispatch routing
+        self.editor.action_block_popup = MagicMock()
+        self.editor.action_help = MagicMock()
+
+        # With block active -> action_block_popup invoked
+        self.editor.buffer.block_active = 1
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_block_popup.assert_called_once()
+        self.editor.action_help.assert_not_called()
+
+        # With block inactive -> action_block_popup not invoked
+        self.editor.action_block_popup.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=False)
+        self.editor.buffer.block_active = 0
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_block_popup.assert_not_called()
+        self.editor.action_help.assert_called_once()
+
+        print(
+            "[+] Step 34: Block operations modal dialog verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_44_ctrl_k_prefix_command_interactive_chords(self):
+        """
+        Step 35: Verify Bug 2.7.44 resolution:
+        Ctrl+K prefix command polling provides an interactive window
+        (timeout=1.0) allowing human key chords (R, S, Q, X, ESC) when
+        block_active == 0 before falling through to action_help().
+        """
+        self.editor.buffer.block_active = 0
+        self.editor.action_insert_file = MagicMock()
+        self.editor.action_block_save = MagicMock()
+        self.editor.action_quit = MagicMock()
+        self.editor.action_help = MagicMock()
+
+        # 1. Verify timeout=1.0 is passed to is_key_ready
+        self.editor.terminal.is_key_ready = MagicMock(return_value=False)
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.terminal.is_key_ready.assert_called_once_with(timeout=1.0)
+        self.editor.action_help.assert_called_once()
+
+        # 2. Interactive chords with timeout=1.0
+        # a. Ctrl+K R / r -> action_insert_file
+        for r_key in ("r", "R"):
+            self.editor.action_insert_file.reset_mock()
+            self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+            self.editor.terminal.get_key = MagicMock(return_value=r_key)
+            self.editor.dispatch_key(KEY_CTRL_K)
+            self.editor.action_insert_file.assert_called_once()
+
+        # b. Ctrl+K S / s -> action_block_save
+        for s_key in ("s", "S"):
+            self.editor.action_block_save.reset_mock()
+            self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+            self.editor.terminal.get_key = MagicMock(return_value=s_key)
+            self.editor.dispatch_key(KEY_CTRL_K)
+            self.editor.action_block_save.assert_called_once()
+
+        # c. Ctrl+K Q / q / X / x -> action_quit
+        for q_key in ("q", "Q", "x", "X"):
+            self.editor.action_quit.reset_mock()
+            self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+            self.editor.terminal.get_key = MagicMock(return_value=q_key)
+            self.editor.dispatch_key(KEY_CTRL_K)
+            self.editor.action_quit.assert_called_once()
+
+        # d. Ctrl+K ESC -> cancels chord, no help
+        self.editor.action_help.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(return_value=KEY_ESC)
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_help.assert_not_called()
+
+        # e. Ctrl+K with unknown key (e.g. 'h') -> falls through to action_help
+        self.editor.action_help.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(return_value="h")
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_help.assert_called_once()
+
+        # 3. Timeout expiration (is_key_ready returns False) -> action_help
+        self.editor.action_help.reset_mock()
+        self.editor.terminal.is_key_ready = MagicMock(return_value=False)
+        self.editor.dispatch_key(KEY_CTRL_K)
+        self.editor.action_help.assert_called_once()
+
+        print(
+            "[+] Step 35: Interactive Ctrl+K chords & timeout verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_46_wordstar_diamond_modal_exclusion(self):
+        """Step 36: Verify Ctrl+S is not aliased to Left arrow (Bug 2.7.46)."""
+        print(
+            "[*] Step 36: Testing WordStar Ctrl+S exclusion in modals...",
+            flush=True,
+        )
+        self.editor.modal.draw_box = MagicMock()
+
+        # 1. show_input: KEY_CTRL_S must not move cursor left
+        keys_input = [KEY_CTRL_S, "C", KEY_ENTER]
+        iter_input = iter(keys_input)
+        self.editor.terminal.get_key = lambda: next(iter_input)
+        res_input = self.editor.modal.show_input(
+            title="Input",
+            desc="Prompt",
+            label="Name:",
+            initial_text="AB",
+        )
+        # If Ctrl+S moved left, 'C' would be inserted before 'B' -> "ACB".
+        # Because Ctrl+S is ignored, cursor stays at end -> "ABC".
+        self.assertEqual(res_input, "ABC")
+
+        # 2. show_find_dialog: KEY_CTRL_S must not move cursor left
+        keys_find = [KEY_CTRL_S, "D", KEY_ENTER]
+        iter_find = iter(keys_find)
+        self.editor.terminal.get_key = lambda: next(iter_find)
+        res_find, _ = self.editor.modal.show_find_dialog(
+            initial_text="AB",
+        )
+        self.assertEqual(res_find, "ABD")
+
+        print(
+            "[+] Step 36: WordStar Ctrl+S exclusion in modals verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_48_file_not_found_modal_alert(self):
+        """Step 37: Verify 50x7 File Not Found alert in browser (Bug 2.7.48)."""
+        print(
+            "[*] Step 37: Testing File Not Found modal alert in browser...",
+            flush=True,
+        )
+        # 1. Verify show_file_not_found framing and canonical 50x7 lines
+        captured_boxes = []
+
+        def mock_draw(top, left, width, lines):
+            captured_boxes.append((top, left, width, lines))
+
+        self.editor.modal.draw_box = mock_draw
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+
+        self.editor.modal.show_file_not_found("TESTFILE.DAT")
+        self.assertEqual(len(captured_boxes), 1)
+        _, _, width, lines = captured_boxes[0]
+        self.assertEqual(width, 50)
+        self.assertEqual(len(lines), 5)  # 5 interior lines + 2 borders = 7
+        self.assertEqual(lines[0], "File Not Found")
+        self.assertEqual(lines[1], "---")
+        self.assertEqual(lines[2], "'TESTFILE.DAT' was not found.")
+        self.assertEqual(lines[3], "Specified file not found on disk.")
+        self.assertEqual(lines[4], "Press any key to continue")
+
+        # 2. action_directory_browser shows alert and preserves browser state
+        self.editor.modal.show_file_not_found = MagicMock()
+        keys = list("no_such_file.txt") + [KEY_ENTER, KEY_ESC]
+        key_iter = iter(keys)
+        self.editor.terminal.get_key = lambda: next(key_iter)
+
+        res = self.editor.action_directory_browser(mode="open")
+        self.assertIsNone(res)
+        self.editor.modal.show_file_not_found.assert_called_once_with(
+            "no_such_file.txt"
+        )
+
+        print(
+            "[+] Step 37: File Not Found modal alert in browser verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_49_overwrite_modal_geometry_and_phrasing(self):
+        """Step 38: Verify 50x7 Overwrite File modal dialog (Bug 2.7.49)."""
+        print(
+            "[*] Step 38: Testing 50x7 Overwrite File modal dialog...",
+            flush=True,
+        )
+        # 1. Verify show_overwrite_dialog framing and canonical 50x7 lines
+        captured_boxes = []
+
+        def mock_draw(top, left, width, lines):
+            captured_boxes.append((top, left, width, lines))
+
+        self.editor.modal.draw_box = mock_draw
+        self.editor.terminal.get_key = MagicMock(return_value="y")
+
+        res = self.editor.modal.show_overwrite_dialog()
+        self.assertEqual(res, "y")
+        self.assertEqual(len(captured_boxes), 1)
+        _, _, width, lines = captured_boxes[0]
+        self.assertEqual(width, 50)
+        self.assertEqual(len(lines), 5)  # 5 lines + 2 borders = 7 rows
+        self.assertEqual(lines[0], "Overwrite File")
+        self.assertEqual(lines[1], "---")
+        self.assertEqual(lines[2], "Existing file contents will be lost")
+        self.assertEqual(lines[3], "File already exists. Overwrite?")
+        self.assertEqual(lines[4], "[Y]es      [N]o      [ESC]=Cancel")
+
+        # 2. Key choices: ESC returns None, 'n' returns 'n'
+        self.editor.terminal.get_key = MagicMock(return_value=KEY_ESC)
+        self.assertIsNone(self.editor.modal.show_overwrite_dialog())
+        self.editor.terminal.get_key = MagicMock(return_value="n")
+        self.assertEqual(self.editor.modal.show_overwrite_dialog(), "n")
+
+        print(
+            "[+] Step 38: 50x7 Overwrite File modal dialog verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_50_active_block_prefills_find_dialog(self):
+        """Step 39: Verify active block pre-fills Find dialog (Bug 2.7.50)."""
+        print(
+            "[*] Step 39: Testing active block text pre-fill in Find...",
+            flush=True,
+        )
+        self.editor.modal.show_find_dialog = MagicMock(
+            return_value=("needle", True)
+        )
+        self.editor.action_find_next = MagicMock()
+
+        # 1. No active block -> uses self.search_query
+        self.editor.buffer.block_active = 0
+        self.editor.search_query = "previous_search"
+        self.editor.action_find()
+        self.editor.modal.show_find_dialog.assert_called_with(
+            initial_text="previous_search",
+            initial_case_sensitive=True,
+        )
+
+        # 2. Dynamic block active -> extracts selected block text
+        self.editor.buffer.lines = ["The quick brown fox"]
+        self.editor.buffer.block_active = 1
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 4
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 9  # "quick"
+        self.editor.action_find()
+        self.editor.modal.show_find_dialog.assert_called_with(
+            initial_text="quick",
+            initial_case_sensitive=True,
+        )
+
+        print(
+            "[+] Step 39: Active block text pre-fill in Find verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_51_find_dialog_canonical_50x7_geometry(self):
+        """Step 40: Verify Find dialog 50x7 compact geometry (Bug 2.7.51)."""
+        print(
+            "[*] Step 40: Testing Find dialog canonical 50x7 geometry...",
+            flush=True,
+        )
+        captured_boxes = []
+
+        def mock_draw(top, left, width, lines):
+            captured_boxes.append((top, left, width, lines))
+
+        self.editor.modal.draw_box = mock_draw
+        self.editor.terminal.get_key = MagicMock(return_value="\r")
+
+        res, _ = self.editor.modal.show_find_dialog(initial_text="target")
+        self.assertEqual(res, "target")
+        self.assertEqual(len(captured_boxes), 1)
+        _, _, width, lines = captured_boxes[0]
+        self.assertEqual(width, 50)
+        self.assertEqual(len(lines), 5)  # 5 lines + 2 borders = 7 rows
+        self.assertEqual(lines[0], "Find Text")
+        self.assertEqual(lines[1], "---")
+        self.assertIn("Search Pattern:", lines[2])
+        self.assertIn("Find: [", lines[3])
+        self.assertEqual(
+            lines[4], "[Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel"
+        )
+
+        print(
+            "[+] Step 40: Find dialog canonical 50x7 geometry verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_52_canonical_new_file_prompt(self):
+        """Step 41: Verify canonical new file prompt syntax (Bug 2.7.52)."""
+        print(
+            "[*] Step 41: Testing action_new_file prompt syntax...",
+            flush=True,
+        )
+        self.editor.modal.show_confirm = MagicMock()
+        self.editor.action_save_file = MagicMock(return_value=True)
+
+        # 1. Unmodified buffer -> no confirmation prompt
+        self.editor.buffer.modified = False
+        self.editor.action_new_file()
+        self.editor.modal.show_confirm.assert_not_called()
+
+        # 2. Modified buffer -> prompt with canonical Archetype B parameters
+        self.editor.buffer.modified = True
+        self.editor.modal.show_confirm.return_value = None  # ESC
+        self.editor.action_new_file()
+        self.editor.modal.show_confirm.assert_called_with(
+            title="Unsaved Modifications",
+            desc="Any unsaved edits will be lost if discarded.",
+            query="Save changes?",
+            options_text="[Y]es      [N]o      [ESC]=Cancel",
+        )
+        # ESC aborted new file creation; buffer remains modified
+        self.assertTrue(self.editor.buffer.modified)
+
+        # 3. Discard ('n') resets buffer without saving
+        self.editor.modal.show_confirm.return_value = "n"
+        self.editor.action_new_file()
+        self.assertFalse(self.editor.buffer.modified)
+        self.editor.action_save_file.assert_not_called()
+
+        # 4. Save ('y') triggers save_file and resets buffer
+        self.editor.buffer.modified = True
+        self.editor.modal.show_confirm.return_value = "y"
+        self.editor.action_new_file()
+        self.editor.action_save_file.assert_called_once()
+        self.assertFalse(self.editor.buffer.modified)
+
+        print(
+            "[+] Step 41: Canonical new file prompt syntax verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_53_splash_screen_dimensions_and_colon_commands(self):
+        """Step 42: Verify splash 14x50 geometry & colon cmds (Bug 2.7.53)."""
+        print(
+            "[*] Step 42: Testing splash 14x50 geometry & colon commands...",
+            flush=True,
+        )
+        rendered_lines_list = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines_list.append(
+                list(lines)
+            )
+        )
+
+        # 1. Verify 14 lines and <= 50 column width
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        self.assertEqual(len(rendered_lines_list), 1)
+        lines = rendered_lines_list[0]
+        self.assertEqual(len(lines), 14)
+        for idx, line in enumerate(lines):
+            self.assertLessEqual(
+                len(line),
+                50,
+                f"Line {idx} exceeds 50 columns: {line}",
+            )
+
+        # Verify mathematical centering yields top_row == 5 on 80x24
+        from se.ui import compute_centering
+        content_w = max(len(ln) for ln in lines)
+        top_row, left_col = compute_centering(80, 24, content_w, 14)
+        self.assertEqual(top_row, 5)
+        self.assertTrue(18 <= left_col <= 20)
+
+        # 2. Verify colon commands dispatch
+        # :e returns to editor
+        self.editor.terminal.get_key = MagicMock(side_effect=[":", "e"])
+        self.editor.action_splash_screen()
+
+        # :o calls action_open_file
+        self.editor.action_open_file = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(side_effect=[":", "o"])
+        self.editor.action_splash_screen()
+        self.editor.action_open_file.assert_called_once()
+
+        # :s calls action_save_file
+        self.editor.action_save_file = MagicMock(return_value=True)
+        self.editor.terminal.get_key = MagicMock(
+            side_effect=[":", "s", ":", "e"]
+        )
+        self.editor.action_splash_screen()
+        self.editor.action_save_file.assert_called_once()
+
+        # :c calls action_config_screen
+        self.editor.action_config_screen = MagicMock()
+        self.editor.terminal.get_key = MagicMock(
+            side_effect=[":", "c", ":", "e"]
+        )
+        self.editor.action_splash_screen()
+        self.editor.action_config_screen.assert_called_once()
+
+        # :p calls action_plugin_palette
+        self.editor.action_plugin_palette = MagicMock()
+        self.editor.terminal.get_key = MagicMock(
+            side_effect=[":", "p", ":", "e"]
+        )
+        self.editor.action_splash_screen()
+        self.editor.action_plugin_palette.assert_called_once()
+
+        # :? calls action_help
+        self.editor.action_help = MagicMock()
+        self.editor.terminal.get_key = MagicMock(
+            side_effect=[":", "?", ":", "e"]
+        )
+        self.editor.action_splash_screen()
+        self.editor.action_help.assert_called_once()
+
+        # :q calls action_quit
+        self.editor.action_quit = MagicMock()
+        self.editor.terminal.get_key = MagicMock(side_effect=[":", "q"])
+        self.editor.action_splash_screen()
+        self.editor.action_quit.assert_called_once()
+
+        # 3. Verify silent rejection: space bar, arrow keys, unassigned
+        render_mock = MagicMock()
+        self.editor.renderer.render_centered_workspace = render_mock
+        non_entry_keys = [
+            " ",
+            KEY_UP,
+            KEY_DOWN,
+            KEY_LEFT,
+            KEY_RIGHT,
+            "z",
+            ":",
+            "e",
+        ]
+        self.editor.terminal.get_key = MagicMock(side_effect=non_entry_keys)
+        self.editor.action_splash_screen()
+        # Initial render only; non-entry keys do NOT cause re-render
+        self.assertEqual(render_mock.call_count, 1)
+
+        print(
+            "[+] Step 42: Splash 14x50 geometry & colon commands verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
 

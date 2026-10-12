@@ -647,7 +647,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 3 Defects Open (Bugs 2.7.42–2.7.44; Bug 2.7.45 Rejected).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.53
+  Resolved; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1195,7 +1196,7 @@ have been resolved and archived.
       without inserting characters or tab bytes, while clearing active blocks
       prior to insertion when solidified (`block_active == 2`). Validated via
       `test_typing_and_tab_block_cancel` in `test_editor.py`.
-  - [ ] **Bug 2.7.42: Status Bar Field Squatting & Missing Block Indicators**:
+  - [x] **Bug 2.7.42: Status Bar Field Squatting & Missing Block Indicators**:
     - *Symptom*: When text block selection is active (`block_active > 0`),
       Field 4 on the universal status bar displays selection metrics (`Sel:
       X chars |` or `Block: Y lines |`), clobbering the mandatory universal
@@ -1210,11 +1211,13 @@ have been resolved and archived.
       in Section 4.3 and 9.2.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 9.2, and 11.1
       (Anti-Pattern #1: Status Bar Squatting); Linux Native Bug 2.4.16.
-    - *Resolution Plan*: Keep Field 4 persistently formatted as `" ^K: Editor
-      keys |"`. In Field 5, append ` [SEL]` when `buf.block_active == 1` and
-      ` [BLK LOCK]` when `buf.block_active == 2` alongside horizontal pan
-      indicator `[Pan +X]`.
-  - [ ] **Bug 2.7.43: Missing Tier 2 Block Operations Modal Dialog on Ctrl+K**:
+    - *Resolution*: Preserved `^K: Editor keys |` unconditionally in Field 4
+      and routed `[SEL]` (`block_active == 1`) and `[BLK LOCK]`
+      (`block_active == 2`) indicators into Field 5 alongside horizontal pan
+      flags with dynamic compact spacing in `render_status_bar` (`ui.py`).
+      Validated via Step 33 in `test_editor.py`
+      (`test_bug_2_7_42_status_bar_field4_invariance_and_block_indicators`).
+  - [x] **Bug 2.7.43: Missing Tier 2 Block Operations Modal Dialog on Ctrl+K**:
     - *Symptom*: When a block selection is active (`block_active > 0`),
       pressing `Ctrl+K` falls through to `action_help()` or prefix key
       detection rather than presenting the canonical Tier 2 Block Operations
@@ -1229,12 +1232,15 @@ have been resolved and archived.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 10;
       `src/se.asm:1091-1099` (`CHECK_CTRL_K`); `src/core/block.asm:114-268`
       (`DO_BLOCK_MENU_POPUP`).
-    - *Resolution Plan*: Implement `action_block_popup()` in `editor.py` /
-      `modal.py` rendering the canonical 50x7 (or 52-col) Tier 2 Block
-      Operations modal dialog when `self.buffer.block_active > 0` upon
-      receiving `KEY_CTRL_K`, supporting Lock, Copy, Cut/Move, Delete, Save
-      Block, Clear, and Dismiss actions.
-  - [ ] **Bug 2.7.44: Ctrl+K Prefix Command Polling Blocks Interactive Chords**:
+    - *Resolution*: Implemented `show_block_operations_dialog()` in `modal.py`
+      rendering the canonical 50x7 Tier 2 Block Operations modal dialog with
+      live metrics (`Selection:` vs `Marked Block:`, char/line counts) and
+      command options. Added `action_block_popup()` in `editor.py` and routed
+      `KEY_CTRL_K` when `block_active > 0` directly to the modal dialog,
+      supporting Lock, Clear, Copy, Move, Del, Save, and Dismiss actions.
+      Validated via Step 34 in `test_editor.py`
+      (`test_bug_2_7_43_block_operations_modal_dialog`).
+  - [x] **Bug 2.7.44: Ctrl+K Prefix Command Polling Blocks Interactive Chords**:
     - *Symptom*: Pressing `Ctrl+K` followed by a secondary command key (`R` for
       File Insert, `S` for Block Save, `Q`/`X` for Exit) fails to execute the
       command and immediately falls back to displaying the Help workspace.
@@ -1244,10 +1250,12 @@ have been resolved and archived.
       arrive within 0.0 seconds of `Ctrl+K`, causing `is_key_ready()` to return
       `False` immediately and dispatching `self.action_help()`.
     - *Spec Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, and 10.
-    - *Resolution Plan*: Provide a reasonable interactive window (e.g.
-      `timeout=1.0` or interactive prompt) when polling for two-key chord
-      sequences after `Ctrl+K`, allowing human entry of `R`, `S`, `Q`, `X`
-      before falling through to `action_help()`.
+    - *Resolution*: Updated `KEY_CTRL_K` prefix chord polling in `editor.py` to
+      query `self.terminal.is_key_ready(timeout=1.0)`, providing a 1.0-second
+      interactive window for secondary key arrival (`R`, `S`, `Q`, `X`) and
+      allowing `KEY_ESC` to cancel the chord gracefully without triggering Help.
+      Validated via Step 35 in `test_editor.py`
+      (`test_bug_2_7_44_ctrl_k_prefix_command_interactive_chords`).
   - [x] **Bug 2.7.45: WordStar Diamond Key Mapping [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10, 11.8.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -1255,6 +1263,108 @@ have been resolved and archived.
       explicitly not supported across all editor workspaces, dialogs, and modal
       surfaces. Modal text input prompts adhere strictly to standard VT100/ANSI
       editing primitives, eliminating WordStar navigation by design.
+  - [x] **Bug 2.7.46: WordStar Diamond Key Aliasing in Modal Inputs (Ctrl+S)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 8.3, 10, 11.8.
+    - *Issue*: In `ports/python/se/modal.py:194` (`show_input`) and
+      `modal.py:270` (`show_find_dialog`), `KEY_CTRL_S` is aliased alongside
+      `KEY_LEFT` to cursor retreat (`elif k in (KEY_LEFT, KEY_CTRL_S):`).
+      This violates the architectural prohibition against WordStar diamond
+      aliasing in modal input loops (Anti-Pattern #8), where navigation must
+      strictly be standard ANSI arrow keys.
+    - *Resolution*: Removed `KEY_CTRL_S` from cursor navigation branches in
+      `show_input` and `show_find_dialog` in `ports/python/se/modal.py`,
+      restricting directional navigation to `KEY_LEFT` and standard editing
+      keys. Validated via Step 36 in `test_editor.py`
+      (`test_bug_2_7_46_wordstar_diamond_modal_exclusion`).
+  - [x] **Bug 2.7.47: Line Capacity Limit Clamped to 120 Chars (vs 1,000)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
+    - *Issue*: In `ports/python/se/buffer.py:9`, `MAX_LINE_LENGTH` is hardcoded
+      to 120. `insert_char` rejects character insertion beyond 120 characters,
+      `calc_visual_col` clamps visual columns to 120, and `update_pan` disables
+      horizontal panning when `view_cols >= MAX_LINE_LENGTH` (e.g. 120x40),
+      preventing lines from extending up to the canonical 1,000-char limit.
+    - *Resolution*: Updated maximum line capacity constants to 1,000 characters
+      (`MAX_LINE_CHARS = 1000`, `MAX_INPUT_LINE_CHARS = 1000`) and preserved
+      `LINE_JOIN_LIMIT = 120` in `buffer.py`. Enabled horizontal panning
+      in 120-column geometries. Validated via Step 2 and Step 14 in
+      `test_buffer.py` (`test_bug_2_7_47_line_capacity_limit_and_panning`).
+  - [x] **Bug 2.7.48: Missing File Not Found Modal Alert in Directory Browser**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype A).
+    - *Issue*: In `ports/python/se/editor.py:485`, attempting to open or insert
+      a non-existent file causes `action_directory_browser` to return target
+      and exit back to editor, where `action_open_file` and
+      `action_insert_file` display a generic notification alert over the
+      editor, discarding directory browser state and user input buffer.
+    - *Resolution*: Added canonical 50x7 `show_file_not_found` modal alert
+      in `ports/python/se/modal.py` and invoked it inside
+      `action_directory_browser` on non-existent targets in open/insert modes,
+      returning directly to the directory browser with input text and cursor
+      preserved. Validated via Step 37 in `test_editor.py`
+      (`test_bug_2_7_48_file_not_found_modal_alert`).
+  - [x] **Bug 2.7.49: Overwrite File Modal Phrasing & Geometry Non-Conformity**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B).
+    - *Issue*: In `ports/python/se/editor.py:572-576` (`action_save_file`) and
+      `editor.py:609-613` (`action_block_save`), destination overwrite prompts
+      use title `"Overwrite Warning"`, desc `"File already exists on disk."`,
+      query `"Overwrite <filename>?"`, and 52x8 modal dimensions with an extra
+      blank line.
+    - *Resolution*: Implemented canonical 50x7 `show_overwrite_dialog` in
+      `ports/python/se/modal.py` (title `"Overwrite File"`, desc `"Existing`
+      `file contents will be lost"`, query `"File already exists. Overwrite?"`)
+      and integrated into `action_save_file` and `action_block_save` in
+      `editor.py`. Validated via Step 38 in `test_editor.py`
+      (`test_bug_2_7_49_overwrite_modal_geometry_and_phrasing`).
+  - [x] **Bug 2.7.50: Active Block Text Not Pre-filled in Find (Ctrl+F)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
+    - *Issue*: In `ports/python/se/editor.py:268-271`, `action_find()`
+      unconditionally passes `initial_text=self.search_query` to
+      `show_find_dialog`. If a block selection is active (`block_active > 0`),
+      the highlighted text selection is not extracted or pre-filled into the
+      Find input buffer.
+    - *Resolution*: Implemented `get_selected_text()` on `DocumentBuffer` and
+      updated `action_find()` in `ports/python/se/editor.py` to extract active
+      selection text when `block_active > 0` and pre-fill it into
+      `show_find_dialog`. Validated via Step 39 in `test_editor.py`
+      (`test_bug_2_7_50_active_block_prefills_find_dialog`).
+  - [x] **Bug 2.7.51: Find Text Modal Dialog Geometry & Layout Discrepancies**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
+    - *Issue*: In `ports/python/se/modal.py:219-245`, `show_find_dialog` builds
+      an 8-row x 52-column modal box with an extraneous empty row between the
+      input line and action options, rather than the canonical 50-col x 7-row
+      layout.
+    - *Resolution*: Updated `show_find_dialog` in `ports/python/se/modal.py`
+      to canonical 50-col x 7-row compact geometry without empty row padding.
+      Validated via Step 18 and Step 40 in `test_editor.py`
+      (`test_bug_2_7_51_find_dialog_canonical_50x7_geometry`).
+  - [x] **Bug 2.7.52: Uncanonical Prompt Syntax in action_new_file()**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B), 11.8.
+    - *Issue*: In `ports/python/se/editor.py:658-662`, `action_new_file()`
+      prompts with `desc="Discard current modifications for new document?"`
+      and `query="Discard edits? [y/n]:"`, violating the prohibition against
+      legacy slash delimiters and non-standard query phrasing
+      (Anti-Pattern #8).
+    - *Resolution*: Updated `action_new_file()` in `ports/python/se/editor.py`
+      to use canonical Archetype B confirmation modal dialog: title `"Unsaved`
+      `Modifications"`, desc `"Any unsaved edits will be lost if discarded."`,
+      query `"Save changes?"`, and options
+      `"[Y]es      [N]o      [ESC]=Cancel"`.
+      Validated via Step 41 in `test_editor.py`
+      (`test_bug_2_7_52_canonical_new_file_prompt`).
+  - [x] **Bug 2.7.53: Splash Screen Over-Capacity Height & Colon Commands**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.2.
+    - *Issue*: In `ports/python/se/editor.py:766-790`, `action_splash_screen`
+      defines 23 content lines. On standard 80x24 displays (`AvailRows = 23`),
+      `compute_centering` yields `TopRow = 1`, filling all 23 available screen
+      rows with text and completely eliminating column 0 tilde margin rows.
+      Additionally, splash screen dispatch lacks colon-prefixed command syntax
+      (`:e`, `:o`, `:s`, `:c`, `:p`, `:?`, `:q`) defined in Section 7.2.
+    - *Resolution*: Restructured splash screen content to canonical 14 lines x
+      50 columns in `ports/python/se/editor.py`, restoring column 0 tildes on
+      rows 1..4 and 19..23 on 80x24 displays (`top_row = 5`). Implemented colon
+      prefix command intercept (`:e`, `:o`, `:s`, `:c`, `:p`, `:?`, `:q`) and
+      silent rejection of non-entry keys (Space bar, arrow keys, unassigned).
+      Validated via Step 42 in `test_editor.py`
+      (`test_bug_2_7_53_splash_screen_dimensions_and_colon_commands`).
 
 ---
 

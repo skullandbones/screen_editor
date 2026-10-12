@@ -180,7 +180,9 @@ class Editor:
         elif key == KEY_CTRL_L:
             self.action_goto_line()
         elif key == KEY_CTRL_K:
-            if self.terminal.is_key_ready():
+            if self.buffer.block_active > 0:
+                self.action_block_popup()
+            elif self.terminal.is_key_ready(timeout=1.0):
                 next_k = self.terminal.get_key()
                 if next_k in ("r", "R"):
                     self.action_insert_file()
@@ -188,6 +190,8 @@ class Editor:
                     self.action_block_save()
                 elif next_k in ("q", "Q", "x", "X"):
                     self.action_quit()
+                elif next_k == KEY_ESC:
+                    pass
                 else:
                     self.action_help()
             else:
@@ -261,8 +265,14 @@ class Editor:
 
     def action_find(self):
         """Prompt for search text with Tab case toggle and search forward."""
+        initial = self.search_query
+        if self.buffer.block_active > 0:
+            selected = self.buffer.get_selected_text()
+            if selected:
+                initial = selected.split("\n")[0]
+
         query, case_sens = self.modal.show_find_dialog(
-            initial_text=self.search_query,
+            initial_text=initial,
             initial_case_sensitive=self.case_sensitive,
         )
         self.case_sensitive = case_sens
@@ -478,6 +488,9 @@ class Editor:
                     cursor_pos = 0
                     page_idx = 0
                     continue
+                if mode in ("open", "insert") and not os.path.isfile(target):
+                    self.modal.show_file_not_found(cleaned)
+                    continue
                 return (target, fmt_cpm)
             elif key == KEY_PGUP or key == KEY_CTRL_U:
                 page_idx = max(0, page_idx - 1)
@@ -521,10 +534,6 @@ class Editor:
         filename, _fmt = target
         if os.path.isfile(filename):
             self.buffer.load_file(filename)
-        else:
-            self.modal.show_notification(
-                title="Open Error", message="File not found"
-            )
 
     def action_insert_file(self):
         """Insert disk file contents into document buffer at cursor."""
@@ -536,9 +545,6 @@ class Editor:
             return
         filename, _fmt = target
         if not os.path.isfile(filename):
-            self.modal.show_notification(
-                title="Insert Error", message="File not found"
-            )
             return
 
         ok = self.buffer.insert_file(filename)
@@ -565,11 +571,7 @@ class Editor:
             return False
         target_name, fmt_cpm = target
         if os.path.exists(target_name) and target_name != self.buffer.filename:
-            ans = self.modal.show_confirm(
-                title="Overwrite Warning",
-                desc="File already exists on disk.",
-                query=f"Overwrite {os.path.basename(target_name)}?",
-            )
+            ans = self.modal.show_overwrite_dialog()
             if ans != "y":
                 return False
 
@@ -602,11 +604,7 @@ class Editor:
             return False
         target_name, fmt_cpm = target
         if os.path.exists(target_name) and target_name != self.buffer.filename:
-            ans = self.modal.show_confirm(
-                title="Overwrite Warning",
-                desc="File already exists on disk.",
-                query=f"Overwrite {os.path.basename(target_name)}?",
-            )
+            ans = self.modal.show_overwrite_dialog()
             if ans != "y":
                 return False
 
@@ -623,17 +621,48 @@ class Editor:
             )
             return False
 
+    def action_block_popup(self):
+        """
+        Display canonical Tier 2 Block Operations modal dialog (Ctrl+K
+        when block_active > 0) and dispatch the selected action.
+        """
+        if self.buffer.block_active == 0:
+            return
+
+        action = self.modal.show_block_operations_dialog(self.buffer)
+        if action == "enter":
+            self.buffer.solidify_block()
+        elif action == "clear":
+            self.buffer.cancel_block()
+        elif action == "copy":
+            self.buffer.copy_block()
+        elif action == "cut":
+            self.buffer.cut_block()
+        elif action == "delete":
+            self.buffer.delete_block()
+        elif action == "save":
+            self.buffer.solidify_block()
+            self.action_block_save()
+
+        self.terminal.show_cursor()
+
     def action_new_file(self):
         """Create new empty document (prompting if unsaved edits)."""
         if self.buffer.modified:
             ans = self.modal.show_confirm(
                 title="Unsaved Modifications",
-                desc="Discard current modifications for new document?",
-                query="Discard edits? [y/n]:",
+                desc="Any unsaved edits will be lost if discarded.",
+                query="Save changes?",
+                options_text="[Y]es      [N]o      [ESC]=Cancel",
             )
-            if ans != "y":
+            if ans is None:
                 return
-        self.buffer = DocumentBuffer(filename="(Untitled)")
+            if ans == "y":
+                if not self.action_save_file():
+                    return
+        self.buffer = DocumentBuffer(
+            filename="(Untitled)", tab_width=self.config.tab_width
+        )
         self.buffer.has_file = False
 
     def action_close_file(self, to_splash: bool = True) -> bool:
@@ -711,64 +740,50 @@ class Editor:
         self.terminal.get_key()
 
     def action_splash_screen(self):
-        """Display full-screen Splash screen workspace."""
+        """
+        Display canonical Tier 1 Splash screen workspace (14 lines x 50 cols).
+        Supports bare hotkeys and colon-prefixed command syntax (:e, :o, etc.).
+        """
+        need_render = True
         while True:
-            screen_lbl = (
-                "120x40 (Modern Default)"
-                if self.terminal.cols == 120
-                else "80x24 (Classic Terminal)"
-            )
-            ram_lbl = (
-                "Preserved (Active)"
-                if self.config.ramdrive_enabled
-                else "None Detected"
-            )
-            plugin_lbl = (
-                "Operational"
-                if self.plugin_mgr.list_plugins()
-                else "Disabled"
-            )
-            max_lines_str = (
-                "32,768 lines"
-                if self.config.max_lines == "32K"
-                else "16,384 lines"
-            )
-
-            lines = [
-                "SE - Screen Editor",
-                "",
-                "  type   [E]  or  [Enter] to edit",
-                "  type   [N]              to new file",
-                "  type   [O]              to open file",
-                "  type   [S]              to save file",
-                "  type   [W]  or  [^W]    to close file",
-                "  type   [L]  or  [^L]    to goto line",
-                "  type   [A]              for about",
-                "  type   [M]              for memory info",
-                "  type   [P]              for plugins",
-                "  type   [^P]             for context plugin menu",
-                "  type   [C]              to configure",
-                "  type   [1]              set 120x40",
-                "  type   [2]              set 80x24",
-                "  type   [Q]  or  [^Q]    to exit",
-                "",
-                f"Active Screen : [{screen_lbl}]",
-                f"RAM Drive     : [{ram_lbl}]",
-                f"Plugin System : [{plugin_lbl}]",
-                f"Max Lines     : [{max_lines_str}]",
-                "",
-                "Enter choice: ",
-            ]
-            geom = f"{self.terminal.cols}x{self.terminal.rows}"
-            self.renderer.render_centered_workspace(
-                lines, self.buffer, geometry_str=geom
-            )
+            if need_render:
+                max_lines_lbl = f"{self.config.max_lines} Max"
+                mem_lines_str = (
+                    f"Free Memory: [Dynamic Heap]   Lines: [{max_lines_lbl}]"
+                )
+                lines = [
+                    "SE - Screen Editor",
+                    "Version 1.0.0 (Python)",
+                    "",
+                    mem_lines_str,
+                    "",
+                    ":e to edit",
+                    ":o to open file",
+                    ":s to save file",
+                    ":c for config",
+                    ":p for plugins",
+                    ":? for help",
+                    ":q to quit",
+                    "",
+                    "Enter choice: ",
+                ]
+                geom = f"{self.terminal.cols}x{self.terminal.rows}"
+                self.renderer.render_centered_workspace(
+                    lines, self.buffer, geometry_str=geom
+                )
+                need_render = False
 
             k = self.terminal.get_key()
             if not k:
                 continue
-            ch = k.lower()
-            if ch in ("e", "\r") or k == KEY_ESC:
+            if k == ":":
+                next_k = self.terminal.get_key()
+                if not next_k:
+                    continue
+                k = next_k
+
+            ch = k.lower() if isinstance(k, str) else ""
+            if ch in ("e", "\r") or k in (KEY_ENTER, KEY_ESC):
                 return  # Return to editor
             elif ch == "n":
                 self.action_new_file()
@@ -776,35 +791,46 @@ class Editor:
             elif ch == "o" or k == KEY_CTRL_O:
                 self.action_open_file()
                 return
-            elif ch == "s":
+            elif ch == "s" or k == KEY_CTRL_S:
                 self.action_save_file()
-                return
+                need_render = True
             elif ch == "w" or k == KEY_CTRL_W:
                 self.action_close_file(to_splash=False)
+                need_render = True
             elif ch == "l" or k == KEY_CTRL_L:
                 self.action_goto_line()
                 return
             elif ch == "a":
                 self.action_about()
+                need_render = True
             elif ch == "m":
                 self.action_mem_info()
+                need_render = True
             elif ch == "p" or k == KEY_CTRL_P:
                 self.action_plugin_palette()
+                need_render = True
             elif ch == "c":
                 self.action_config_screen()
-            elif ch == "?":
+                need_render = True
+            elif ch in ("?", "h") or k == KEY_CTRL_K:
                 self.action_help()
+                need_render = True
             elif ch == "1":
                 self.config.set("SCREEN", "120x40")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
+                need_render = True
             elif ch == "2":
                 self.config.set("SCREEN", "80x24")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
+                need_render = True
             elif ch == "q" or k == KEY_CTRL_Q:
                 self.action_quit()
                 return
+            else:
+                # Non-entry key exclusion: silently ignore Space, arrows, etc.
+                continue
 
     def action_plugin_palette(self):
         """Display context-aware plugin palette modal and execute choice."""
