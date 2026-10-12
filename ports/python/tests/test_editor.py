@@ -1932,6 +1932,51 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_52_canonical_new_file_prompt(self):
+        """Step 41: Verify canonical new file prompt syntax (Bug 2.7.52)."""
+        print(
+            "[*] Step 41: Testing action_new_file prompt syntax...",
+            flush=True,
+        )
+        self.editor.modal.show_confirm = MagicMock()
+        self.editor.action_save_file = MagicMock(return_value=True)
+
+        # 1. Unmodified buffer -> no confirmation prompt
+        self.editor.buffer.modified = False
+        self.editor.action_new_file()
+        self.editor.modal.show_confirm.assert_not_called()
+
+        # 2. Modified buffer -> prompt with canonical Archetype B parameters
+        self.editor.buffer.modified = True
+        self.editor.modal.show_confirm.return_value = None  # ESC
+        self.editor.action_new_file()
+        self.editor.modal.show_confirm.assert_called_with(
+            title="Unsaved Modifications",
+            desc="Any unsaved edits will be lost if discarded.",
+            query="Save changes?",
+            options_text="[Y]es      [N]o      [ESC]=Cancel",
+        )
+        # ESC aborted new file creation; buffer remains modified
+        self.assertTrue(self.editor.buffer.modified)
+
+        # 3. Discard ('n') resets buffer without saving
+        self.editor.modal.show_confirm.return_value = "n"
+        self.editor.action_new_file()
+        self.assertFalse(self.editor.buffer.modified)
+        self.editor.action_save_file.assert_not_called()
+
+        # 4. Save ('y') triggers save_file and resets buffer
+        self.editor.buffer.modified = True
+        self.editor.modal.show_confirm.return_value = "y"
+        self.editor.action_new_file()
+        self.editor.action_save_file.assert_called_once()
+        self.assertFalse(self.editor.buffer.modified)
+
+        print(
+            "[+] Step 41: Canonical new file prompt syntax verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

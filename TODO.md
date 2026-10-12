@@ -527,7 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 2 Defects Open (Bugs 2.7.52–2.7.53; Bug 2.7.45 Rejected).
+- **Status**: Active / 1 Defect Open (Bug 2.7.53; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1215,17 +1215,20 @@ have been resolved and archived.
       to canonical 50-col x 7-row compact geometry without empty row padding.
       Validated via Step 18 and Step 40 in `test_editor.py`
       (`test_bug_2_7_51_find_dialog_canonical_50x7_geometry`).
-  - [ ] **Bug 2.7.52: Uncanonical Prompt Syntax in action_new_file()**:
+  - [x] **Bug 2.7.52: Uncanonical Prompt Syntax in action_new_file()**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B), 11.8.
     - *Issue*: In `ports/python/se/editor.py:658-662`, `action_new_file()`
       prompts with `desc="Discard current modifications for new document?"`
       and `query="Discard edits? [y/n]:"`, violating the prohibition against
       legacy slash delimiters and non-standard query phrasing
       (Anti-Pattern #8).
-    - *Required Fix*: Update `action_new_file()` to use canonical Archetype B
-      confirmation modal: title `"Unsaved Modifications"`, desc `"Any unsaved`
-      `edits will be lost if discarded."`, query `"Save changes?"`, and options
+    - *Resolution*: Updated `action_new_file()` in `ports/python/se/editor.py`
+      to use canonical Archetype B confirmation modal dialog: title `"Unsaved`
+      `Modifications"`, desc `"Any unsaved edits will be lost if discarded."`,
+      query `"Save changes?"`, and options
       `"[Y]es      [N]o      [ESC]=Cancel"`.
+      Validated via Step 41 in `test_editor.py`
+      (`test_bug_2_7_52_canonical_new_file_prompt`).
   - [ ] **Bug 2.7.53: Splash Screen Over-Capacity Height & Colon Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.2.
     - *Issue*: In `ports/python/se/editor.py:766-790`, `action_splash_screen`

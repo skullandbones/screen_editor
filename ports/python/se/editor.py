@@ -651,12 +651,18 @@ class Editor:
         if self.buffer.modified:
             ans = self.modal.show_confirm(
                 title="Unsaved Modifications",
-                desc="Discard current modifications for new document?",
-                query="Discard edits? [y/n]:",
+                desc="Any unsaved edits will be lost if discarded.",
+                query="Save changes?",
+                options_text="[Y]es      [N]o      [ESC]=Cancel",
             )
-            if ans != "y":
+            if ans is None:
                 return
-        self.buffer = DocumentBuffer(filename="(Untitled)")
+            if ans == "y":
+                if not self.action_save_file():
+                    return
+        self.buffer = DocumentBuffer(
+            filename="(Untitled)", tab_width=self.config.tab_width
+        )
         self.buffer.has_file = False
 
     def action_close_file(self, to_splash: bool = True) -> bool:
