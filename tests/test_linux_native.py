@@ -280,8 +280,8 @@ def test_status_event_notification_modal():
 
 
 def test_arrow_and_wordstar_navigation():
-    """Verify ANSI arrow keys and WordStar diamond cursor movement (§10)."""
-    print("[*] Testing ANSI arrow & WordStar cursor navigation (§10)...")
+    """Verify ANSI arrow keys and navigation shortcuts (§10)."""
+    print("[*] Testing ANSI arrow & navigation shortcuts (§10)...")
     with tempfile.NamedTemporaryFile("w+", prefix="testdoc_nav_",
                                      suffix=".txt", delete=False) as tf:
         tf.write("Line 1: Alpha\nLine 2: Bravo\nLine 3: Charlie\n")
@@ -324,8 +324,8 @@ def test_arrow_and_wordstar_navigation():
                 f"Arrow navigation failed to update status bar:\n{out_str}"
             )
 
-            # Send WordStar diamond: Ctrl+E (Up)
-            os.write(master, b"\x05")
+            # Send ANSI Up Arrow: ESC [ A
+            os.write(master, b"\x1b[A")
             time.sleep(0.15)
             output2 = b""
             try:
@@ -334,7 +334,20 @@ def test_arrow_and_wordstar_navigation():
                 pass
             out_str2 = output2.decode("utf-8", errors="replace")
             assert "Line    1/3" in out_str2, (
-                f"WordStar Ctrl+E (Up) failed to move up:\n{out_str2}"
+                f"ANSI Arrow Up failed to move up:\n{out_str2}"
+            )
+
+            # Send Ctrl+E (End of Line)
+            os.write(master, b"\x05")
+            time.sleep(0.15)
+            output3 = b""
+            try:
+                output3 += os.read(master, 8192)
+            except Exception:
+                pass
+            out_str3 = output3.decode("utf-8", errors="replace")
+            assert "Col 13" in out_str3 or "Col 14" in out_str3, (
+                f"Ctrl+E (End) failed to move to end of line:\n{out_str3}"
             )
 
             # Send Ctrl+Q to exit
@@ -343,7 +356,7 @@ def test_arrow_and_wordstar_navigation():
             os.close(master)
 
             assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
-            print("    [+] ANSI arrow & WordStar navigation verified [PASS]")
+            print("    [+] ANSI arrow & navigation shortcuts verified [PASS]")
     finally:
         if os.path.exists(test_file_path):
             os.remove(test_file_path)

@@ -186,8 +186,7 @@ int modal_confirm(const char *title, const char *msg,
             /* Cancelable solely by ESC (not Ctrl+C or q) */
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT ||
-                   k == KEY_CTRL_D || k == KEY_CTRL_S) {
+        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT) {
             selected = (selected == 0) ? 1 : 0;
         } else if (k == 'y' || k == 'Y') {
             g_need_screen_render = 1;
@@ -248,9 +247,9 @@ int modal_confirm_3btn(const char *title, const char *msg,
         } else if (k == KEY_ESC) {
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_TAB || k == KEY_RIGHT || k == KEY_CTRL_D) {
+        } else if (k == KEY_TAB || k == KEY_RIGHT) {
             selected = (selected + 1) % 3;
-        } else if (k == KEY_LEFT || k == KEY_CTRL_S) {
+        } else if (k == KEY_LEFT) {
             selected = (selected + 2) % 3;
         }
     }

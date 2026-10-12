@@ -570,7 +570,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                     cursor_pos = strlen(input_buf);
                 }
             }
-        } else if (k == KEY_UP || k == KEY_CTRL_E) {
+        } else if (k == KEY_UP) {
             if (s_browser_count > 0) {
                 if (selected_idx >= num_cols) {
                     selected_idx -= num_cols;
@@ -583,7 +583,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 input_buf[sizeof(input_buf) - 1] = '\0';
                 cursor_pos = strlen(input_buf);
             }
-        } else if (k == KEY_DOWN || k == KEY_CTRL_X) {
+        } else if (k == KEY_DOWN) {
             if (s_browser_count > 0) {
                 if (selected_idx + num_cols < s_browser_count) {
                     selected_idx += num_cols;

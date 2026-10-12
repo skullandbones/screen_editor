@@ -525,7 +525,7 @@ static const char *s_help_lines[17] = {
     "                       SE.COM — EDITOR MODE KEYS                      ",
     "                                                                      ",
     "  Cursor Navigation:                 Block Operations:                ",
-    "    Arrows / WordStar (^S,^D,^E,^X)     Ctrl+B: Toggle Block          ",
+    "    Arrows / ANSI VT100                 Ctrl+B: Toggle Block          ",
     "    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block            ",
     "    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block             ",
     "    Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block           ",

@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 20 Defects Open (Bugs 2.4.20–2.4.25, 2.4.27–2.4.40).
+- **Status**: Active / 19 Defects Open (Bugs 2.4.21–2.4.25, 2.4.27–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -396,7 +396,7 @@ have been resolved and archived.
       and preserving hysteresis retention. Validated via
       `test_bug_2_4_19_panning_edge_trigger_and_geometry` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.20: Deprecated WordStar Diamond Navigation & Key Aliases**:
+  - [x] **Bug 2.4.20: Deprecated WordStar Diamond Navigation & Key Aliases**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 6.3, 6.4, 7.3, 10, 11
       (Anti-Pattern #8).
     - *Issue*: Directional cursor navigation across all surfaces is mandated
@@ -419,12 +419,14 @@ have been resolved and archived.
       5. In `src/core/ui_render.c:412`, `s_help_lines` advertises
          `Arrows / WordStar (^S,^D,^E,^X)` instead of canonical
          `Arrows / ANSI VT100`.
-    - *Required Fix*: Disassociate WordStar diamond keys from cursor movement
-      across all modules. Bind `KEY_CTRL_E` to `cursor_end()`, `KEY_CTRL_D` to
-      `do_delete()`, and remove `cursor_down()` fallback on `KEY_CTRL_X` in
-      `editor.c`. Remove WordStar key aliases from `ui_browser.c` and
-      `ui_modal.c`. Update `s_help_lines` in `ui_render.c` to display
-      `Arrows / ANSI VT100`.
+    - *Resolution*: Disassociated WordStar diamond keys from cursor movement
+      across all core and UI modules. Re-bound `KEY_CTRL_D` to `do_delete()` and
+      `KEY_CTRL_E` to `cursor_end()` in `src/core/editor.c`. Removed
+      `KEY_CTRL_E` and `KEY_CTRL_X` grid aliases from `src/core/ui_browser.c`.
+      Removed `KEY_CTRL_D` and `KEY_CTRL_S` button aliases from
+      `src/core/ui_modal.c`. Updated `s_help_lines` in `src/core/ui_render.c` to
+      render `Arrows / ANSI VT100`. Validated via
+      `test_arrow_and_wordstar_navigation` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.21: Off-by-Zero Column Anchor on Backspace Line Join**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:229-231` (`do_backspace`), when joining
