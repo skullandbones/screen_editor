@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Verification Complete / 5 Defects Open (Bug 2.1.3 Rejected).
+- **Status**: Active / 10 Open (Bugs 2.1.3, 2.1.7-2.1.12, 2.1.15 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -93,6 +93,169 @@ have been resolved and archived.
       `src/core/editor.asm` and `src/core/search.asm` to strictly conform to
       Archetype C (52x8 box, `+---+` title divider,
       `[Enter]=Confirm      [ESC]=Cancel` footer, bracketed input `[  ]`).
+  - [x] **Bug 2.1.7: Clipboard Paste & Buffer Primitives [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9, 10.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Dropped support for detached intermediary clipboard buffers
+      and `Ctrl+V` clipboard paste across all SE variants. All implementations
+      strictly enforce Direct In-Place Block Manipulation (`Ctrl+B` toggle,
+      `Enter` solidify, `Ctrl+C` copy directly to cursor, `Ctrl+X` move
+      directly to cursor, `Ctrl+D` / `DEL` delete block, `Ctrl+K` block menu
+      popup, `Ctrl+S` save block, `Ctrl+O` insert file). Intermediary clipboard
+      buffers are strictly prohibited across all variants to conserve memory,
+      respect CP/M TPA headroom, and eliminate state desynchronization.
+      Directional page navigation is handled exclusively via dedicated `PgUp`
+      and `PgDn` keys; `Ctrl+U` and `Ctrl+V` are removed as paging shortcuts.
+  - [x] **Bug 2.1.8: Line Join Length Barrier [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The 120-column limit in `docs/UI_UX_DESIGN.md` was an error
+      in the design specification that conflated terminal screen width (120x40
+      console mode) with document line buffer capacity. `SE.COM` correctly
+      enforces `MAX_INPUT_LINE_CHARS` (1,000 characters) across `src/core/`
+      (`JOIN_TWO_LINES` in `editor.asm`, `do_backspace` / `do_delete` in
+      `editor.c`), fully supported by horizontal panning (`[Pan +40]`).
+      `docs/UI_UX_DESIGN.md` has been corrected to reference the canonical
+      1,000-character barrier.
+  - [x] **Bug 2.1.9: Column Clamping on Expanded Tab [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The Tab Exclusion Mandate is 100% satisfied in `SE.COM`;
+      the cursor never rests within a tab because `CUR_COL` is an integer byte
+      offset into document memory. When `TARGET_COL` falls across an expanded
+      tab (`vis_acc < TARGET_COL < vis_acc + spaces`), `SE.COM` intentionally
+      uses "snap-forward" behavior (`ADJUST_COL_TO_TARGET`), aligning with the
+      character boundary directly after the tab (e.g. column 8 rather than
+      column 0). This preserves alignment with indented text during vertical
+      navigation. `docs/UI_UX_DESIGN.md` has been updated to explicitly codify
+      snap-forward alignment.
+  - [x] **Bug 2.1.10: Modal In-Field Cursor Movement [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: In-field cursor movement behaviors are identical across all
+      SE variants. Full in-field cursor movement (Left/Right arrows, Delete
+      under cursor, Backspace, Home, and End) is supported across all variants
+      in the Tier 1 directory filename input screens (Section 7.9). In
+      contrast, Archetype C single-line modals (Find, Replace, Goto Line) are
+      intentionally designed as lightweight append/backspace linear input
+      fields across all variants to conserve memory, preserve CP/M TPA
+      headroom, and keep modal interactions robust. The requirement for
+      intra-field cursor tracking and mid-string insertion inside Archetype C
+      modals is rejected. The separate defect where unexpected keystrokes (such
+      as cursor arrow keys) cancel the modal dialog has been split out and
+      tracked as Bug 2.1.17.
+  - [x] **Bug 2.1.11: Config Manager Menu Layout [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The 4-option wireframe in `docs/UI_UX_DESIGN.md` Section 7.4
+      was an early conceptual sketch that omitted the Plugin Manager and
+      Config Status. In `SE.COM`, Option 5 (`5. Plugin Manager`) is required
+      to configure whether the Far RAM plugin subsystem is autoloaded or
+      disabled, and `Config Status` provides essential feedback on whether
+      `SE.CFG` was loaded from current or program drive. Furthermore, the
+      Configuration Manager is an instant-reaction hotkey event loop
+      (`1-5` toggle, `S` save, `ESC`/`Enter`/`Q` return); an `Enter option: _`
+      prompt line with an interactive terminal cursor is inappropriate and
+      misleading for a single-keypress dispatch loop. `docs/UI_UX_DESIGN.md`
+      has been updated to reflect the canonical 5-option hotkey layout.
+  - [x] **Bug 2.1.12: Splash Hotkeys & Screen Debris [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that switching modes leaves screen debris due to
+      omitting `\x1b[2J\x1b[H` was factually false; `RENDER_SPLASH` in
+      `src/se.asm:2595` already executes `CALL TERM_CLEAR_SCREEN` emitting
+      `\x1b[2J\x1b[H` before repainting the splash workspace and status bar.
+      Furthermore, in `SE.COM`, `[1]` = 120x40 and `[2]` = 80x24 was
+      synchronized between `STR_SPLASH_CMDS` and `SPLASH_LOOP` for RomWBW
+      hardware. The requirement to harmonize splash screen hotkeys across all
+      variants (`1` = 80x24 default, `2` = 120x40 if supported) has been
+      split out and tracked as a discrete enhancement in Bug 2.1.18.
+  - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Editor**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
+    - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
+      `HANDLE_CSI_2`, and `HANDLE_CSI_LOOP`), when an unhandled or extended
+      multi-byte escape sequence is encountered (such as function keys F5–F12:
+      `\x1b[15~`–`\x1b[24~`, bracketed paste sequences `\x1b[200~`, or mouse
+      tracking events), the sub-handlers execute `RET` upon encountering
+      unrecognized digits or non-matching characters without consuming the
+      remainder of the sequence. Trailing sequence characters (specifically the
+      terminating `'~'` or trailing parameter digits) remain pending in the
+      BIOS console input buffer and are subsequently read by `MAIN_LOOP` as
+      regular typed keystrokes, erroneously inserting literal `'~'` or digits
+      directly into the document text buffer.
+    - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
+      (`HANDLE_CSI_1`, `HANDLE_CSI_2`, `HANDLE_CSI_LOOP`) and `HANDLE_SS3` so
+      that unrecognized or unhandled multi-byte sequences drain remaining bytes
+      until a terminating character (e.g. `'~'`, `'A'..'Z'`, `'a'..'z'`) or
+      timeout, preventing trailing escape sequence bytes from leaking into the
+      editor document buffer.
+  - [ ] **Bug 2.1.14: Predominant Language Indication on About Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
+    - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
+      `version 1.1.0 (2026-10-09)`, omitting the predominant programming
+      language. Per `docs/UI_UX_DESIGN.md` Section 7.12 and 14.6, all SE
+      variants must display the predominant programming language appended to
+      the version number and build date on the About screen (`[A]` from
+      splash): `version 1.1.0 (2026-10-09) (Z80 Assembly)`. (The splash screen
+      itself serves as the clean canonical template across all variants
+      without displaying programming language or version numbers).
+    - *Required Fix*: In `src/core/plugin_mgr.asm:4384`, update
+      `STR_ABOUT_VERSION` to append ` (Z80 Assembly)`:
+      `STR_ABOUT_VERSION: DB "version 1.1.0 (2026-10-09) (Z80 Assembly)", "$"`.
+      Ensure `SHOW_ABOUT_SCREEN` in `src/se.asm`, `src/se_next.asm`, and
+      `src/se_next_cpm.asm` centers the line cleanly within the content block.
+  - [x] **Bug 2.1.15: FORMAT Parameter in SE.CFG [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Text file line ending format (`CPM` vs `Linux`) is strictly
+      a per-document property and not an installation setting in `SE.CFG`.
+      Across all SE variants, newly created documents default to the host
+      platform's native text file format (CRLF on CP/M and Next, LF on Linux),
+      opened files preserve their existing detected end-of-line markers, and
+      format can be toggled per-file in the Save File screen via `Ctrl+F`
+      before writing to disk. `SE.CFG` strictly mirrors the 5 canonical options
+      of the Configuration Manager (`SCREEN`, `RAMDRIVE`, `LINES`, `TAB`,
+      `PLUGIN`), which has no format option. `docs/UI_UX_DESIGN.md` has been
+      updated to remove `FORMAT` from `SE.CFG` and detail per-document line
+      ending handling in Section 7.7.
+  - [ ] **Bug 2.1.16: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
+    - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
+      when the current line and next line are joined on Delete at EOL,
+      `JOIN_TWO_LINES` merges the lines, but `DO_DEL_FWD_JOIN_NEXT` fails to
+      update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+    - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
+      `(TARGET_COL),HL`.
+  - [ ] **Bug 2.1.17: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
+    - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
+      `src/core/search.asm:214-233` (`DO_FIND_UI`), and
+      `src/core/search.asm:1940-1960` (`DO_REPLACE_UI`):
+      - Receiving unexpected keys or escape sequences (such as cursor arrow
+        keys, PgUp/PgDn, or function keys) routes into `GOT_ESC_SEQ` handlers.
+      - These handlers invoke `CALL GOT_ESC_BYTE`, executing cursor navigation
+        commands on the underlying document beneath the modal and abruptly
+        dismissing the dialog.
+      - Modals must only be dismissed by explicit `Enter` (confirm) or
+        standalone `ESC` (cancel); unexpected keys and multi-byte escape
+        sequences must be cleanly drained and discarded without executing
+        background actions or aborting the active dialog.
+    - *Required Fix*: In `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`,
+      drain and discard unexpected escape sequences and unassigned keys,
+      preserving the active modal dialog and retaining input buffer state.
+  - [ ] **Bug 2.1.18: Splash Screen Geometry Hotkeys (1=80x24, 2=120x40)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
+    - *Issue*: Splash screen geometry hotkeys are standardized across all SE
+      variants so that `1` selects 80x24 (universal baseline and default)
+      and `2` selects 120x40 (if supported). In `SE.COM`, `STR_SPLASH_CMDS` in
+      `src/core/plugin_mgr.asm:4290-4291` currently displays `type [1] set
+      120x40` and `type [2] set 80x24`, and `SPLASH_LOOP` in
+      `src/se.asm:578-584` dispatches `'1'` to `DO_SET_120X40` and `'2'` to
+      `DO_SET_80X24`.
+    - *Required Fix*: In `src/core/plugin_mgr.asm:4290-4291`, update
+      `STR_SPLASH_CMDS` to display `type [1] set 80x24` and `type [2] set
+      120x40`. In `src/se.asm:578-584`, update `SPLASH_LOOP` to dispatch
+      `'1'` to `DO_SET_80X24` and `'2'` to `DO_SET_120X40`.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
