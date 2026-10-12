@@ -562,6 +562,12 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 selected_filename[max_len - 1] = '\0';
                 return MODAL_RES_OK;
             } else if (selected_idx >= 0 && selected_idx < s_browser_count) {
+                if (mode == BROWSER_MODE_SAVE ||
+                    mode == BROWSER_MODE_SAVE_BLOCK) {
+                    if (modal_confirm_overwrite() != MODAL_RES_OK) {
+                        continue;
+                    }
+                }
                 strncpy(selected_filename,
                         s_browser_files[selected_idx].filename,
                         max_len - 1);

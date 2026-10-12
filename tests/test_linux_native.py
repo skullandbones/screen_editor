@@ -1992,6 +1992,116 @@ def test_bug_2_4_27_file_not_found_alert():
         print("    [+] File Not Found modal alert verified [PASS]")
 
 
+def test_bug_2_4_28_overwrite_confirmation():
+    """Verify 50x7 Overwrite File confirmation modal on save (2.4.28)."""
+    print("[*] Testing Overwrite File confirmation modal on save (2.4.28)...")
+    temp_dir = tempfile.mkdtemp()
+    target_name = "EXISTING.TXT"
+    target_path = os.path.join(temp_dir, target_name)
+    with open(target_path, "w") as f:
+        f.write("Original file contents before overwrite\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # 1. Open Save File workspace from Splash screen via 's'
+            os.write(master, b"s")
+            time.sleep(0.3)
+            save_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SAVE FILE (DIRECTORY)" in save_out, (
+                f"Expected 'SAVE FILE (DIRECTORY)' in workspace:\n{save_out}"
+            )
+
+            # 2. Type existing filename "EXISTING.TXT" and press Enter
+            os.write(master, b"EXISTING.TXT\r")
+            time.sleep(0.3)
+            alert_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Overwrite File" in alert_out, (
+                f"Expected 'Overwrite File' modal title:\n{alert_out}"
+            )
+            assert "+--------------------------------------------------+" in (
+                alert_out
+            ), f"Expected 52-column modal border:\n{alert_out}"
+            assert "Existing file contents will be lost" in alert_out, (
+                f"Expected warning text in modal:\n{alert_out}"
+            )
+            assert "File already exists. Overwrite?" in alert_out, (
+                f"Expected overwrite question in modal:\n{alert_out}"
+            )
+            assert "[Y]es" in alert_out and "[N]o" in alert_out, (
+                f"Expected [Y]es / [N]o options in modal:\n{alert_out}"
+            )
+            assert "[ESC]=Cancel" in alert_out, (
+                f"Expected [ESC]=Cancel in modal:\n{alert_out}"
+            )
+
+            # 3. Press 'n' to decline; return to browser with input intact
+            os.write(master, b"n")
+            time.sleep(0.3)
+            browser_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SAVE FILE (DIRECTORY)" in browser_out, (
+                f"Expected return to Save workspace:\n{browser_out}"
+            )
+            assert "EXISTING.TXT" in browser_out, (
+                f"Expected input buffer preserved:\n{browser_out}"
+            )
+
+            # Disk content must be untouched
+            with open(target_path, "r") as f:
+                disk_content = f.read()
+            assert "Original file contents" in disk_content, (
+                f"File was modified despite declining:\n{disk_content}"
+            )
+
+            # 4. Press Enter again and confirm with 'y'
+            os.write(master, b"\r")
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+            os.write(master, b"y")
+            time.sleep(0.3)
+            notify_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Save Complete" in notify_out, (
+                f"Expected 'Save Complete' notification:\n{notify_out}"
+            )
+
+            # Dismiss Save Complete notification with Space
+            os.write(master, b" ")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # 5. Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Overwrite File confirmation modal verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2024,6 +2134,7 @@ def main():
     test_bug_2_4_24_enter_solidifies_block()
     test_bug_2_4_25_modal_prompt_text_editing()
     test_bug_2_4_27_file_not_found_alert()
+    test_bug_2_4_28_overwrite_confirmation()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

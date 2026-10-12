@@ -385,10 +385,72 @@ int modal_confirm_save_changes(void)
 
 int modal_confirm_overwrite(void)
 {
-    return modal_confirm("Overwrite File",
-                         "Existing file contents will be lost",
-                         "File already exists. Overwrite?",
-                         NULL);
+    uint8_t width = MODAL_BOX_WIDTH;
+    uint8_t height = 7;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    uint8_t selected = 0;
+
+    hal_console_hide_cursor();
+    modal_draw_frame(top, left, width, height, "Overwrite File");
+    modal_draw_row_centered(top + 3, left, width,
+                            "Existing file contents will be lost");
+    modal_draw_row_centered(top + 4, left, width,
+                            "File already exists. Overwrite?");
+
+    while (1) {
+        /* Render Options: [Y]es      [N]o      [ESC]=Cancel */
+        hal_console_locate(top + 5, left);
+#ifdef __CPM__
+        hal_console_puts("|        ");
+#else
+        hal_console_puts("|         ");
+#endif
+        if (selected == 0) hal_console_inverse_on();
+        hal_console_puts("[Y]es");
+        if (selected == 0) hal_console_inverse_off();
+
+        hal_console_puts("      ");
+        if (selected == 1) hal_console_inverse_on();
+        hal_console_puts("[N]o");
+        if (selected == 1) hal_console_inverse_off();
+
+#ifdef __CPM__
+        hal_console_puts("      [ESC]=Cancel       |");
+#else
+        hal_console_puts("      [ESC]=Cancel        |");
+#endif
+
+        /* Position cursor after Overwrite? (Col 40 relative to popup) */
+        hal_console_locate(top + 4, (uint8_t)(left + 40));
+        hal_console_show_cursor();
+
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
+        if (k == 'y' || k == 'Y') {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return MODAL_RES_OK;
+        } else if (k == 'n' || k == 'N') {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return MODAL_RES_NO;
+        } else if (k == KEY_ESC) {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return MODAL_RES_CANCEL;
+        } else if (k == KEY_ENTER || k == ' ') {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return (selected == 0) ? MODAL_RES_OK : MODAL_RES_NO;
+        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT) {
+            selected = 1 - selected;
+        }
+    }
 }
 
 void modal_show_notification(const char *title, const char *message)

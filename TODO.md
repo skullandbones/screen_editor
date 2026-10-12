@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 13 Defects Open (Bugs 2.4.28–2.4.40).
+- **Status**: Active / 12 Defects Open (Bugs 2.4.29–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -539,7 +539,7 @@ have been resolved and archived.
       operations, returning the user directly to the active browser workspace
       with input buffer preserved upon dismissal. Validated via
       `test_bug_2_4_27_file_not_found_alert` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.28: Missing Overwrite File Confirmation Dialog on Save**:
+  - [x] **Bug 2.4.28: Missing Overwrite File Confirmation Dialog on Save**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B).
     - *Issue*: In `src/core/file_io.c:189` (`file_write_op`) and
       `src/core/ui_browser.c` (`ui_browser_workspace` in `BROWSER_MODE_SAVE`
@@ -550,11 +550,14 @@ have been resolved and archived.
       `File already exists. Overwrite?`, `[Y]es   [N]o   [ESC]=Cancel`) with the
       terminal cursor positioned on the prompt line after `Overwrite? ` at
       Column 40.
-    - *Required Fix*: Before creating or truncating a file in `file_save()` or
-      `ui_browser_save_dialog()`, verify if destination file exists on disk.
-      If so, render the canonical 50x7 Overwrite File modal dialog; proceed only
-      if confirmed via `Y`/`y`, or cancel without mutating disk on
-      `N`/`n`/`ESC`.
+    - *Resolution*: Implemented canonical Archetype B Overwrite File modal
+      dialog (`modal_confirm_overwrite`) in `src/core/ui_modal.c` with terminal
+      cursor positioned after `Overwrite? ` at Column 40 (`left + 40`). Added
+      destination file existence checks in `ui_browser_workspace` for both typed
+      and grid-selected entries in `BROWSER_MODE_SAVE` and
+      `BROWSER_MODE_SAVE_BLOCK`, proceeding only on `Y`/`y` or Enter on Yes, and
+      returning to browser with input intact on `N`/`n` or ESC. Validated via
+      `test_bug_2_4_28_overwrite_confirmation` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.29: Missing Block-Active File Insert and Block Save Modes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, 10.
     - *Issue*: In `src/core/editor.c:535-565`, pressing `Ctrl+O` while a block
