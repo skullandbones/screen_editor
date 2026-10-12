@@ -527,7 +527,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 1 Defect Open (Bug 2.7.53; Bug 2.7.45 Rejected).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.53
+  Resolved; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1229,7 +1230,7 @@ have been resolved and archived.
       `"[Y]es      [N]o      [ESC]=Cancel"`.
       Validated via Step 41 in `test_editor.py`
       (`test_bug_2_7_52_canonical_new_file_prompt`).
-  - [ ] **Bug 2.7.53: Splash Screen Over-Capacity Height & Colon Commands**:
+  - [x] **Bug 2.7.53: Splash Screen Over-Capacity Height & Colon Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.2.
     - *Issue*: In `ports/python/se/editor.py:766-790`, `action_splash_screen`
       defines 23 content lines. On standard 80x24 displays (`AvailRows = 23`),
@@ -1237,9 +1238,13 @@ have been resolved and archived.
       rows with text and completely eliminating column 0 tilde margin rows.
       Additionally, splash screen dispatch lacks colon-prefixed command syntax
       (`:e`, `:o`, `:s`, `:c`, `:p`, `:?`, `:q`) defined in Section 7.2.
-    - *Required Fix*: Restructure splash screen content to canonical 14 lines x
-      50 columns, restoring column 0 tildes on rows 1..4 and 19..23 on 80x24
-      displays. Support both bare hotkeys and colon-prefixed command syntax.
+    - *Resolution*: Restructured splash screen content to canonical 14 lines x
+      50 columns in `ports/python/se/editor.py`, restoring column 0 tildes on
+      rows 1..4 and 19..23 on 80x24 displays (`top_row = 5`). Implemented colon
+      prefix command intercept (`:e`, `:o`, `:s`, `:c`, `:p`, `:?`, `:q`) and
+      silent rejection of non-entry keys (Space bar, arrow keys, unassigned).
+      Validated via Step 42 in `test_editor.py`
+      (`test_bug_2_7_53_splash_screen_dimensions_and_colon_commands`).
 
 ---
 

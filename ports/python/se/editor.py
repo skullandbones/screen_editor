@@ -740,64 +740,50 @@ class Editor:
         self.terminal.get_key()
 
     def action_splash_screen(self):
-        """Display full-screen Splash screen workspace."""
+        """
+        Display canonical Tier 1 Splash screen workspace (14 lines x 50 cols).
+        Supports bare hotkeys and colon-prefixed command syntax (:e, :o, etc.).
+        """
+        need_render = True
         while True:
-            screen_lbl = (
-                "120x40 (Modern Default)"
-                if self.terminal.cols == 120
-                else "80x24 (Classic Terminal)"
-            )
-            ram_lbl = (
-                "Preserved (Active)"
-                if self.config.ramdrive_enabled
-                else "None Detected"
-            )
-            plugin_lbl = (
-                "Operational"
-                if self.plugin_mgr.list_plugins()
-                else "Disabled"
-            )
-            max_lines_str = (
-                "32,768 lines"
-                if self.config.max_lines == "32K"
-                else "16,384 lines"
-            )
-
-            lines = [
-                "SE - Screen Editor",
-                "",
-                "  type   [E]  or  [Enter] to edit",
-                "  type   [N]              to new file",
-                "  type   [O]              to open file",
-                "  type   [S]              to save file",
-                "  type   [W]  or  [^W]    to close file",
-                "  type   [L]  or  [^L]    to goto line",
-                "  type   [A]              for about",
-                "  type   [M]              for memory info",
-                "  type   [P]              for plugins",
-                "  type   [^P]             for context plugin menu",
-                "  type   [C]              to configure",
-                "  type   [1]              set 120x40",
-                "  type   [2]              set 80x24",
-                "  type   [Q]  or  [^Q]    to exit",
-                "",
-                f"Active Screen : [{screen_lbl}]",
-                f"RAM Drive     : [{ram_lbl}]",
-                f"Plugin System : [{plugin_lbl}]",
-                f"Max Lines     : [{max_lines_str}]",
-                "",
-                "Enter choice: ",
-            ]
-            geom = f"{self.terminal.cols}x{self.terminal.rows}"
-            self.renderer.render_centered_workspace(
-                lines, self.buffer, geometry_str=geom
-            )
+            if need_render:
+                max_lines_lbl = f"{self.config.max_lines} Max"
+                mem_lines_str = (
+                    f"Free Memory: [Dynamic Heap]   Lines: [{max_lines_lbl}]"
+                )
+                lines = [
+                    "SE - Screen Editor",
+                    "Version 1.0.0 (Python)",
+                    "",
+                    mem_lines_str,
+                    "",
+                    ":e to edit",
+                    ":o to open file",
+                    ":s to save file",
+                    ":c for config",
+                    ":p for plugins",
+                    ":? for help",
+                    ":q to quit",
+                    "",
+                    "Enter choice: ",
+                ]
+                geom = f"{self.terminal.cols}x{self.terminal.rows}"
+                self.renderer.render_centered_workspace(
+                    lines, self.buffer, geometry_str=geom
+                )
+                need_render = False
 
             k = self.terminal.get_key()
             if not k:
                 continue
-            ch = k.lower()
-            if ch in ("e", "\r") or k == KEY_ESC:
+            if k == ":":
+                next_k = self.terminal.get_key()
+                if not next_k:
+                    continue
+                k = next_k
+
+            ch = k.lower() if isinstance(k, str) else ""
+            if ch in ("e", "\r") or k in (KEY_ENTER, KEY_ESC):
                 return  # Return to editor
             elif ch == "n":
                 self.action_new_file()
@@ -805,35 +791,46 @@ class Editor:
             elif ch == "o" or k == KEY_CTRL_O:
                 self.action_open_file()
                 return
-            elif ch == "s":
+            elif ch == "s" or k == KEY_CTRL_S:
                 self.action_save_file()
-                return
+                need_render = True
             elif ch == "w" or k == KEY_CTRL_W:
                 self.action_close_file(to_splash=False)
+                need_render = True
             elif ch == "l" or k == KEY_CTRL_L:
                 self.action_goto_line()
                 return
             elif ch == "a":
                 self.action_about()
+                need_render = True
             elif ch == "m":
                 self.action_mem_info()
+                need_render = True
             elif ch == "p" or k == KEY_CTRL_P:
                 self.action_plugin_palette()
+                need_render = True
             elif ch == "c":
                 self.action_config_screen()
-            elif ch == "?":
+                need_render = True
+            elif ch in ("?", "h") or k == KEY_CTRL_K:
                 self.action_help()
+                need_render = True
             elif ch == "1":
                 self.config.set("SCREEN", "120x40")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
+                need_render = True
             elif ch == "2":
                 self.config.set("SCREEN", "80x24")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
+                need_render = True
             elif ch == "q" or k == KEY_CTRL_Q:
                 self.action_quit()
                 return
+            else:
+                # Non-entry key exclusion: silently ignore Space, arrows, etc.
+                continue
 
     def action_plugin_palette(self):
         """Display context-aware plugin palette modal and execute choice."""
