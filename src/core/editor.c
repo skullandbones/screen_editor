@@ -238,6 +238,15 @@ void do_delete(void)
 {
     uint16_t i;
 
+    if (g_block_mode != BLOCK_MODE_OFF) {
+        if (g_block_mode == BLOCK_MODE_SELECTING) {
+            solidify_block();
+        }
+        do_delete_block();
+        g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
+        return;
+    }
+
     checkout_active_line(g_cur_doc_row);
 
     if (g_cur_col < g_active_line_len) {

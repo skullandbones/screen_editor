@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 18 Defects Open (Bugs 2.4.22–2.4.25, 2.4.27–2.4.40).
+- **Status**: Active / 17 Defects Open (Bugs 2.4.23–2.4.25, 2.4.27–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -445,7 +445,7 @@ have been resolved and archived.
       join_col`), updated sticky target column, and triggered status bar
       rendering. Validated via `test_bug_2_4_21_backspace_line_join` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.22: Delete & Ctrl+D Fail to Delete Active Block Selection**:
+  - [x] **Bug 2.4.22: Delete & Ctrl+D Fail to Delete Active Block Selection**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:240-274` (`do_delete`), pressing `Delete`
       or `Ctrl+D` unconditionally performs inline character deletion under the
@@ -456,12 +456,11 @@ have been resolved and archived.
       (`do_delete_block()`), resetting `g_block_mode = BLOCK_MODE_OFF`.
       Currently, active selection is ignored and only a single character under
       the cursor is deleted.
-    - *Required Fix*: In `do_delete()` (and `editor_handle_key` on `KEY_DEL` /
-      `KEY_CTRL_D`), inspect `g_block_mode`. When `g_block_mode !=`
-      `BLOCK_MODE_OFF`, solidify selection if selecting, invoke
-      `do_delete_block()`, reset `g_block_mode = BLOCK_MODE_OFF`, mark
-      `g_doc_modified = 1`, and trigger screen re-render
-      (`g_need_screen_render = 1`).
+    - *Resolution*: Updated `do_delete()` in `src/core/editor.c` to inspect
+      `g_block_mode`. When active, it solidifies selection if dynamically
+      selecting, invokes `do_delete_block()`, and recalculates sticky visual
+      column target. Validated via `test_bug_2_4_22_delete_active_block` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.23: Backspace Fails to Cancel Dynamic Block Selection**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:192-238` (`do_backspace`), pressing
