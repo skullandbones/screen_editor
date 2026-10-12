@@ -272,8 +272,8 @@ class ModalDialog:
         Display Archetype C Find Text modal with dynamic [Tab] case toggle.
         Returns (search_query, is_case_sensitive) or (None, is_case_sensitive).
         """
-        width = 52
-        height = 8
+        width = 50
+        height = 7
         top, left = self.compute_popup_pos(width, height)
 
         buf = list(initial_text[:max_len])
@@ -294,7 +294,6 @@ class ModalDialog:
                 "---",
                 desc,
                 query_line,
-                "",
                 options_text,
             ]
             self.draw_box(top, left, width, lines)

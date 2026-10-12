@@ -527,7 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 3 Defects Open (Bugs 2.7.51–2.7.53; Bug 2.7.45 Rejected).
+- **Status**: Active / 2 Defects Open (Bugs 2.7.52–2.7.53; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1205,16 +1205,16 @@ have been resolved and archived.
       selection text when `block_active > 0` and pre-fill it into
       `show_find_dialog`. Validated via Step 39 in `test_editor.py`
       (`test_bug_2_7_50_active_block_prefills_find_dialog`).
-  - [ ] **Bug 2.7.51: Find Text Modal Dialog Geometry & Layout Discrepancies**:
+  - [x] **Bug 2.7.51: Find Text Modal Dialog Geometry & Layout Discrepancies**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
     - *Issue*: In `ports/python/se/modal.py:219-245`, `show_find_dialog` builds
       an 8-row x 52-column modal box with an extraneous empty row between the
       input line and action options, rather than the canonical 50-col x 7-row
       layout.
-    - *Required Fix*: Conform `show_find_dialog` in `modal.py` to canonical
-      50x7 geometry (Row 1 border, Row 2 title, Row 3 separator, Row 4 search
-      pattern with `[Case Sensitive  ]`, Row 5 input query `Find: [ ... ]`,
-      Row 6 options, Row 7 border) without empty row padding.
+    - *Resolution*: Updated `show_find_dialog` in `ports/python/se/modal.py`
+      to canonical 50-col x 7-row compact geometry without empty row padding.
+      Validated via Step 18 and Step 40 in `test_editor.py`
+      (`test_bug_2_7_51_find_dialog_canonical_50x7_geometry`).
   - [ ] **Bug 2.7.52: Uncanonical Prompt Syntax in action_new_file()**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B), 11.8.
     - *Issue*: In `ports/python/se/editor.py:658-662`, `action_new_file()`

@@ -694,9 +694,9 @@ class TestEditor(unittest.TestCase):
         )
         self.assertEqual(captured[-1][2], 52)
 
-        # 3. Find dialog (Archetype C with toggle)
+        # 3. Find dialog (Archetype C with toggle, canonical 50-col)
         self.editor.modal.show_find_dialog(initial_text="test")
-        self.assertEqual(captured[-1][2], 52)
+        self.assertEqual(captured[-1][2], 50)
 
         # 4. Notification dialog (Archetype A)
         self.editor.modal.show_notification("Info", "Operation complete")
@@ -1896,6 +1896,39 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 39: Active block text pre-fill in Find verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_51_find_dialog_canonical_50x7_geometry(self):
+        """Step 40: Verify Find dialog 50x7 compact geometry (Bug 2.7.51)."""
+        print(
+            "[*] Step 40: Testing Find dialog canonical 50x7 geometry...",
+            flush=True,
+        )
+        captured_boxes = []
+
+        def mock_draw(top, left, width, lines):
+            captured_boxes.append((top, left, width, lines))
+
+        self.editor.modal.draw_box = mock_draw
+        self.editor.terminal.get_key = MagicMock(return_value="\r")
+
+        res, _ = self.editor.modal.show_find_dialog(initial_text="target")
+        self.assertEqual(res, "target")
+        self.assertEqual(len(captured_boxes), 1)
+        _, _, width, lines = captured_boxes[0]
+        self.assertEqual(width, 50)
+        self.assertEqual(len(lines), 5)  # 5 lines + 2 borders = 7 rows
+        self.assertEqual(lines[0], "Find Text")
+        self.assertEqual(lines[1], "---")
+        self.assertIn("Search Pattern:", lines[2])
+        self.assertIn("Find: [", lines[3])
+        self.assertEqual(
+            lines[4], "[Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel"
+        )
+
+        print(
+            "[+] Step 40: Find dialog canonical 50x7 geometry verified.",
             flush=True,
         )
 
