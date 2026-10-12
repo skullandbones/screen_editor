@@ -66,70 +66,126 @@ int hal_console_check_key(void)
     return (bios_const() != 0);
 }
 
+static int cpm_read_byte_timeout(uint16_t max_loops)
+{
+    uint16_t i;
+    for (i = 0; i < max_loops; i++) {
+        if (bios_const()) {
+            return (int)(unsigned char)bios_conin();
+        }
+    }
+    return -1;
+}
+
 int hal_console_getkey(void)
 {
     unsigned char c = (unsigned char)bios_conin();
 
     /* Handle ESC and ANSI Escape Sequences */
     if (c == 27) {
-        unsigned char seq[8];
-        int seq_len = 0;
-        uint16_t timeout_loops;
-
-        while (seq_len < 6) {
-            int found = 0;
-            for (timeout_loops = 0; timeout_loops < 3000; timeout_loops++) {
-                if (bios_const()) {
-                    seq[seq_len++] = (unsigned char)bios_conin();
-                    found = 1;
-                    break;
-                }
-            }
-            if (!found) {
-                break;
-            }
-        }
-
-        if (seq_len == 0) {
+        int b1 = cpm_read_byte_timeout(10000);
+        if (b1 < 0) {
             return KEY_ESC;
         }
 
         /* CSI sequence: \033[... */
-        if (seq[0] == '[') {
-            if (seq_len == 2) {
-                switch (seq[1]) {
-                case 'A': return KEY_UP;
-                case 'B': return KEY_DOWN;
-                case 'C': return KEY_RIGHT;
-                case 'D': return KEY_LEFT;
-                case 'H': return KEY_HOME;
-                case 'F': return KEY_END;
-                default: break;
-                }
-            } else if (seq_len >= 3 && seq[2] == '~') {
-                switch (seq[1]) {
-                case '1': return KEY_HOME;
-                case '2': return KEY_INS;
-                case '3': return KEY_DEL;
-                case '4': return KEY_END;
-                case '5': return KEY_PGUP;
-                case '6': return KEY_PGDN;
-                default: break;
-                }
+        if (b1 == '[') {
+            int b = cpm_read_byte_timeout(20000);
+            int prefix = 0;
+            int modifier = 0;
+            int in_modifier = 0;
+
+            if (b < 0) {
+                return 0; /* Incomplete sequence: discard cleanly */
             }
-        } else if (seq[0] == 'O') {
+
+            /* Parse parameter bytes: 0-9 and ; */
+            while (b >= 0 && (b == ';' || (b >= '0' && b <= '9'))) {
+                if (b == ';') {
+                    in_modifier = 1;
+                } else if (!in_modifier) {
+                    prefix = prefix * 10 + (b - '0');
+                } else {
+                    modifier = modifier * 10 + (b - '0');
+                }
+                b = cpm_read_byte_timeout(20000);
+            }
+
+            if (b < 0) {
+                return 0;
+            }
+
+            /* Terminal character dispatch */
+            if (b == 'A') {
+                return (modifier == 2) ? KEY_SHIFT_UP : KEY_UP;
+            }
+            if (b == 'B') {
+                return (modifier == 2) ? KEY_SHIFT_DOWN : KEY_DOWN;
+            }
+            if (b == 'C') {
+                return (modifier == 2) ? KEY_SHIFT_RIGHT : KEY_RIGHT;
+            }
+            if (b == 'D') {
+                return (modifier == 2) ? KEY_SHIFT_LEFT : KEY_LEFT;
+            }
+            if (b == 'H') {
+                return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
+            }
+            if (b == 'F') {
+                return (modifier == 5) ? KEY_CTRL_G : KEY_END;
+            }
+            if (b == 'a') return KEY_SHIFT_UP;
+            if (b == 'b') return KEY_SHIFT_DOWN;
+            if (b == 'c') return KEY_SHIFT_RIGHT;
+            if (b == 'd') return KEY_SHIFT_LEFT;
+            if (b == 'I') return KEY_PGUP;
+            if (b == 'G') return KEY_PGDN;
+            if (b == 'L' || b == '@') return KEY_INS;
+
+            if (b == '~') {
+                if (prefix == 1) {
+                    return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
+                }
+                if (prefix == 4) {
+                    return (modifier == 5) ? KEY_CTRL_G : KEY_END;
+                }
+                if (prefix == 2) return KEY_INS;
+                if (prefix == 3) return KEY_DEL;
+                if (prefix == 5) return KEY_PGUP;
+                if (prefix == 6) return KEY_PGDN;
+                if (prefix == 7) return KEY_HOME;
+                if (prefix == 8) return KEY_END;
+                return 0;
+            }
+
+            if (b == '^') {
+                if (prefix == 7) return KEY_CTRL_T;
+                if (prefix == 8) return KEY_CTRL_G;
+                return 0;
+            }
+
+            /* Discard any trailing CSI bytes */
+            while (cpm_read_byte_timeout(1000) >= 0);
+            return 0;
+        } else if (b1 == 'O') {
             /* SS3 sequence: \033O... */
-            switch (seq[1]) {
-            case 'A': return KEY_UP;
-            case 'B': return KEY_DOWN;
-            case 'C': return KEY_RIGHT;
-            case 'D': return KEY_LEFT;
-            case 'H': return KEY_HOME;
-            case 'F': return KEY_END;
-            default: break;
-            }
+            int b2 = cpm_read_byte_timeout(20000);
+            if (b2 == 'A') return KEY_UP;
+            if (b2 == 'B') return KEY_DOWN;
+            if (b2 == 'C') return KEY_RIGHT;
+            if (b2 == 'D') return KEY_LEFT;
+            if (b2 == 'H') return KEY_HOME;
+            if (b2 == 'F') return KEY_END;
+            return 0;
+        } else if (b1 == '<' || b1 == 't' || b1 == 'T') {
+            return KEY_CTRL_T;
+        } else if (b1 == '>' || b1 == 'b' || b1 == 'B') {
+            return KEY_CTRL_G;
         }
-        return KEY_ESC;
+
+        /* Discard any trailing escape bytes */
+        while (cpm_read_byte_timeout(1000) >= 0);
+        return 0;
     }
 
     /* Translate Enter */

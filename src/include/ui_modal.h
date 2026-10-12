@@ -32,6 +32,10 @@ extern "C" {
 void modal_draw_frame(uint8_t top, uint8_t left,
                       uint8_t width, uint8_t height,
                       const char *title);
+void modal_draw_row_centered(uint8_t row, uint8_t left,
+                            uint8_t width, const char *str);
+void modal_puts_centered(uint8_t row, uint8_t left,
+                        uint8_t width, const char *str);
 int  modal_alert(const char *title, const char *msg1, const char *msg2);
 int  modal_confirm(const char *title, const char *msg,
                    const char *btn1, const char *btn2);

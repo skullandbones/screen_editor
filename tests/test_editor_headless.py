@@ -589,7 +589,7 @@ def test_se_execution(use_sec=False):
               "navigation...", flush=True)
         # Move cursor to (1,0)
         os.write(master, b"\x01")  # Ctrl+A -> Home
-        read_until(master, b"Line    1/2    Col 0", timeout=3.0)
+        out_home = read_until(master, b"Line    1/2    Col 0", timeout=3.0)
         drain_all(master)
         # Press Tab at (1,0) -> advances visual cursor to (1,8) -> displayed as Col 8 (0-indexed)
         os.write(master, b"\t")

@@ -336,6 +336,12 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - If `CUR_DOC_ROW >= TOP_DOC_ROW + step`:
        `TOP_DOC_ROW = min(max_row, TOP_DOC_ROW + step)`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
+   - Boundary Clamping Status Bar Refresh:
+     - Cursor navigation movements (Arrow Up, Down, Left, Right, Home, End,
+       Page Up, Page Down) unconditionally set `NEED_STATUS_RENDER = 1`.
+     - Even when movement is clamped at document boundaries (e.g. Line 0,
+       EOF, Col 0, EOL at EOF), the status bar is refreshed upon console
+       idle to synchronize terminal state with the active position.
 
 5. Viewport Window Scrolling & Boundary Constraints:
    - Document Viewport Boundaries:
@@ -349,10 +355,12 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - If `CUR_DOC_ROW < TOP_DOC_ROW`: `CUR_DOC_ROW = TOP_DOC_ROW`.
      - Realign `CUR_COL` via `ADJUST_COL_TO_TARGET()`.
 
-6. Horizontal Panning Engine (`[Pan +40]`) & 120-Column Line Barrier:
-   - Physical Line Length Barrier:
-     - Maximum physical line length is strictly 120 characters
-       (`MAX_LINE = 120`). Character insertion beyond 120 is blocked.
+6. Horizontal Panning Engine (`[Pan +40]`) & Line Capacity Limit:
+   - Line Capacity Limit:
+     - Maximum visual/input line length is 1,000 characters
+       (`MAX_INPUT_LINE_CHARS = 1000`, `MAX_LINE_CHARS = 1000`).
+     - Backed by dynamic multi-stride Far RAM allocation and 1,024-byte
+       active line buffers. Character insertion beyond 1,000 is blocked.
    - Horizontal Pan Quantum (+40 Columns):
      - On standard 80-column screens, columns beyond column 79 are accessed via
        horizontal viewport panning in increments of 40 columns.
@@ -491,6 +499,30 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Keyboard Dispatch & Keystroke Protocol:
+     - Document Entry Keys: Only `E` / `e` or `Enter` (`KEY_ENTER`) may
+       enter or resume the editor workspace.
+     - Direct Action Hotkeys:
+       - `N` / `n`: Create new empty document (`HANDLE_SPLASH_NEW`).
+       - `O` / `o` / `Ctrl+O`: Open File browser (`HANDLE_SPLASH_OPEN`).
+       - `S` / `s` / `Ctrl+S`: Save File workspace (`DO_SPLASH_SAVE`).
+       - `W` / `w` / `Ctrl+W`: Close active file (`HANDLE_SPLASH_CLOSE`).
+       - `L` / `l` / `Ctrl+L`: Goto Line prompt (`DO_SPLASH_GOTO_LINE`).
+       - `A` / `a`: Show About dialog (`DO_ABOUT_SCREEN`).
+       - `M` / `m`: Show Memory Map screen (`DO_MEM_INFO_SCREEN`).
+       - `P` / `p`: Show Plugin Manager screen (`DO_SPLASH_PLUGIN_SCREEN`).
+       - `Ctrl+P`: Context-Aware Plugin Palette (`DO_CONTEXT_PLUGIN_POPUP`).
+       - `C` / `c`: Open Configuration Manager (`DO_CONFIG_SCREEN`).
+       - `1`: Toggle 120x40 modern terminal mode (`DO_SET_120X40`).
+       - `2`: Toggle 80x24 classic terminal mode (`DO_SET_80X24`).
+       - `Q` / `q` / `Ctrl+Q`: Safe quit / exit back to OS.
+     - Non-Entry Key Exclusion & Silent Rejection Mandate:
+       - The Space bar (`0x20`), ANSI cursor arrow keys (`Up`, `Down`, `Left`,
+         `Right`), and all unassigned keystrokes MUST NOT enter editor mode.
+         They must be silently ignored without altering document or buffer
+         state and without re-rendering the splash workspace or emitting
+         terminal escape sequences.
+
 
 3. Help Screen Layout (`Ctrl+K`):
    - Content Width: 70 columns, Content Height: 17 lines.
@@ -697,6 +729,20 @@ or display notifications.
      +--------------------------------------------------+
      ```
 
+     File Not Found Modal Alert (50 cols x 7 rows):
+     ```text
+     +--------------------------------------------------+
+     |                  File Not Found                  |
+     +--------------------------------------------------+
+     |            'FILENAME' was not found.             |
+     |        Specified file not found on disk.         |
+     |            Press any key to continue             |
+     +--------------------------------------------------+
+     ```
+     - Displays upon attempting to open or insert a non-existent file.
+     - Dismissible by any keystroke; returns user directly back to the
+       open or insert directory browser workspace with input buffer preserved.
+
    Archetype B: Confirmation Query (`show_confirm`)
      Used for binary decisions (Save modifications?, Overwrite file?).
      Options formatted with spaces only—no slashes `/` or pipes `|`.
@@ -712,6 +758,20 @@ or display notifications.
      |           [Y]es      [N]o      [ESC]=Cancel      |
      +--------------------------------------------------+
      ```
+     Overwrite File Modal Dialog (50 cols x 7 rows):
+     ```text
+     +--------------------------------------------------+
+     |                  Overwrite File                  |
+     +--------------------------------------------------+
+     |       Existing file contents will be lost        |
+     |         File already exists. Overwrite?          |
+     |          [Y]es      [N]o      [ESC]=Cancel       |
+     +--------------------------------------------------+
+     ```
+     - Displays upon attempting to save to an existing destination file.
+     - Terminal cursor positioned directly on prompt line after `Overwrite? `
+       (Col 40).
+     - Confirmed via `Y`/`y`, cancelled via `N`/`n` or `ESC`.
 
    Archetype C: Single-Line Text Input (`show_input`)
      Used for text parameters (Find string, Replace string, Goto Line).
@@ -720,6 +780,23 @@ or display notifications.
      Supports standard editing keys: character entry, Backspace (deletes left),
      Delete / Ctrl+D (deletes under cursor), Left/Right arrows, and Home/End.
      WordStar diamond key mappings (e.g. `Ctrl+S` for left) are not supported.
+     Find Text Modal Dialog (50 cols x 7 rows):
+     ```text
+     +------------------------------------------------+
+     |                   Find Text                    |
+     +------------------------------------------------+
+     |       Search Pattern: [Case Sensitive  ]       |
+     |      Find: [                            ]      |
+     | [Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel |
+     +------------------------------------------------+
+     ```
+     - Toggle case mode with Tab / Ctrl+I (switches between `[Case Sensitive  ]`
+       and `[Case Insensitive]`).
+     - Terminal cursor positioned directly inside `Find: [ ... ]` at insertion
+       offset.
+     - When opened with an active block, the selection text is pre-filled.
+
+     Goto Line Modal Dialog (50 cols x 7 rows):
      ```text
      +--------------------------------------------------+
      |                     Goto Line                    |
@@ -870,6 +947,21 @@ or display notifications.
    - WordStar Prohibition: WordStar diamond navigation keys (`Ctrl+S`,
      `Ctrl+D`, `Ctrl+E`, `Ctrl+X`) are strictly not supported for navigation
      in any editor workspace or modal input dialog.
+
+3. Escape Sequence Tokenization & Leakage Prevention:
+   - Atomic Escape Sequence Parsing:
+     All terminal implementations (CP/M BIOS, Linux POSIX stdin, Next)
+     must discretely tokenize multi-byte escape sequences (e.g. `\x1b[A`,
+     `\x1b[B`, `\x1b[C`, `\x1b[D`, `\x1b[1~`..`\x1b[6~`, `\x1bOA`..`\x1bOF`).
+   - Anti-Leakage Invariant:
+     When an escape sequence begins with `ESC` followed by `[` or `O`, the HAL
+     input decoder must wait with sufficient timeout to assemble the
+     entire sequence. If an incomplete or unrecognized escape sequence is
+     received, the HAL must drain and discard all sequence bytes
+     atomically. Under NO circumstances may trailing sequence characters
+     (such as `'C'` from `\x1b[C`) be leaked back into the console stream as
+     regular typed keystrokes, as doing so erroneously triggers hotkeys
+     (e.g. Configuration Manager on `'C'`) or corrupts text buffers.
 
 11. The Ten UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
@@ -1076,3 +1168,22 @@ specific architectural adaptations.
        On modern platforms (Linux, macOS), plugins can mount virtual CP/M disk
        images (`.DSK`, `.IMG`), retro archives (`.LBR`, `.ARK`), or remote
        VFS streams, rendering them through SE's canonical directory browser.
+
+4. CP/M Binary Footprint, TPA Headroom & BSS Trimming:
+   - Load Origin & BDOS Boundary:
+     On CP/M systems, `.COM` executables load at `0x0100` in the Transient
+     Program Area (TPA). The execution space is bounded by the BDOS entry
+     vector at `0x0006`, pointing to the base of BDOS (e.g. `0xD800` on
+     RomWBW RC2014 CP/M 2.2, giving a maximum capacity of 55,040 bytes /
+     53.75 KB).
+   - CCP Command Loading Safeguards:
+     When executing a command, the CP/M Console Command Processor (CCP) loads
+     the binary sequentially into the TPA. If the disk binary size extends to
+     or past the CCP/BDOS boundary, CCP rejects the command with `BAD LOAD`.
+   - BSS Separation & Memory Discipline:
+     All CP/M ports (`SE.COM`, `SEC.COM`) must ensure uninitialized buffers
+     (BSS) are not emitted as zero-fill bytes into the disk executable.
+     For C-based builds (`SEC.COM`), BSS trimming must be enabled
+     (`CRT_TRIM_BSS=1`) and total combined runtime memory (Code + Data + BSS)
+     must fit strictly below BDOS (`0xD800`), guaranteeing positive TPA
+     headroom.

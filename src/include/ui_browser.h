@@ -22,7 +22,7 @@ extern "C" {
 
 /* Maximum Browser Entries & Layout */
 #ifdef __CPM__
-#define MAX_BROWSER_FILES       32
+#define MAX_BROWSER_FILES       16
 #else
 #define MAX_BROWSER_FILES       256
 #endif
@@ -35,8 +35,9 @@ extern "C" {
 #define BROWSER_MODE_SAVE_BLOCK 3
 
 /* Directory File Entry */
+#define BROWSER_FILENAME_LEN    32
 typedef struct {
-    char     filename[32];      /* Entry name */
+    char     filename[BROWSER_FILENAME_LEN]; /* Entry name */
     uint32_t size_bytes;        /* File size in bytes */
     uint8_t  is_dir;            /* 1 if directory / folder */
     uint8_t  drive;             /* Drive number (0=A, 1=B, etc.) */

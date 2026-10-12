@@ -37,6 +37,7 @@ typedef struct {
 
 /* Global Document Buffer State Variables */
 extern char     g_active_line_buf[MAX_ACTIVE_LINE_STRIDE];
+extern char     g_scratch_line_buf[MAX_ACTIVE_LINE_STRIDE];
 extern uint16_t g_active_line_len;
 extern uint16_t g_active_line_row;
 extern uint8_t  g_active_line_valid;
