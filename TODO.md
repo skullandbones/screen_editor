@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 6 Defects Open (Bugs 2.4.20–2.4.25).
+- **Status**: Active / 14 Defects Open (Bugs 2.4.20–2.4.33).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -498,6 +498,126 @@ have been resolved and archived.
       deleting character under cursor (`cursor_pos`), Left/Right arrow keys
       shifting cursor index, and Home (`Ctrl+A`) / End (`Ctrl+E`) moving to
       boundaries.
+  - [ ] **Bug 2.4.26: Status Bar Layout Regression & Format Truncation Error**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1
+      (Anti-Pattern #1).
+    - *Issue*: In `src/core/ui_render.c:170-245` (`render_status_bar`), buffer
+      capacities were reduced (`raw_name[32]`, `sbuf[16]`, `core[128]`), causing
+      GCC compilation to fail with `-Werror=format-truncation` during `make
+      se-linux`. Furthermore, Field 4 is squatted by `Sel: ...`, `Block: ...`,
+      `[Pan +40]`, and `[Overwrite]`, clobbering persistent `^K: Editor keys |`
+      and violating the canonical status bar invariant that mode flags and
+      indicators belong exclusively in Field 5.
+    - *Required Fix*: Expand buffer capacities to prevent compiler truncation
+      warnings under `-Wall -Wextra -Werror -O2`. Restore persistent `^K: Editor
+      keys | ` in Field 4 across all editing states, and route selection
+      indicators (`[SEL]`, `[BLK LOCK]`), pan indicator (`[Pan +40]`), and
+      overwrite flag into Field 5.
+  - [ ] **Bug 2.4.27: Missing File Not Found Modal Alert on Open and Insert**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype A).
+    - *Issue*: In `src/core/editor.c:560`, `src/core/ui_render.c:355`, and
+      `src/core/file_io.c:93`, attempting to open or insert a non-existent file
+      silently returns `-1`. The editor fails to render the canonical 50x7
+      File Not Found modal alert
+      (`+------------------------------------------------+`,
+      `'FILENAME' was not found.`, `Specified file not found on disk.`,
+      `Press any key to continue`), and either initializes an empty buffer or
+      silently drops the action without notifying the user.
+    - *Required Fix*: Implement `modal_alert_file_not_found(const char *fname)`
+      using the canonical 50x7 Archetype A layout. When `file_load()` or
+      `file_insert()` encounters a non-existent file, trigger this alert and
+      return the user to the active directory browser workspace with the input
+      buffer preserved.
+  - [ ] **Bug 2.4.28: Missing Overwrite File Confirmation Dialog on Save**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B).
+    - *Issue*: In `src/core/file_io.c:189` (`file_write_op`) and
+      `src/core/ui_browser.c` (`ui_browser_workspace` in `BROWSER_MODE_SAVE`
+      and `BROWSER_MODE_SAVE_BLOCK`), saving to an existing destination file
+      executes `fopen(filename, "wb")` unconditionally. Section 8.3 mandates
+      that saving to an existing file must present the canonical 50x7
+      Overwrite File Confirmation Dialog (`Existing file contents will be lost`,
+      `File already exists. Overwrite?`, `[Y]es   [N]o   [ESC]=Cancel`) with the
+      terminal cursor positioned on the prompt line after `Overwrite? ` at
+      Column 40.
+    - *Required Fix*: Before creating or truncating a file in `file_save()` or
+      `ui_browser_save_dialog()`, verify if destination file exists on disk.
+      If so, render the canonical 50x7 Overwrite File modal dialog; proceed only
+      if confirmed via `Y`/`y`, or cancel without mutating disk on
+      `N`/`n`/`ESC`.
+  - [ ] **Bug 2.4.29: Missing Block-Active File Insert and Block Save Modes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, 10.
+    - *Issue*: In `src/core/editor.c:535-565`, pressing `Ctrl+O` while a block
+      is active replaces the entire document buffer via `file_load()`, rather
+      than opening the Insert File workspace and streaming file contents into
+      the buffer at the cursor (`file_insert()`). Likewise, pressing `Ctrl+S`
+      while a block is active saves the full document buffer via `file_save()`,
+      rather than opening the Save Block workspace and writing only the
+      highlighted block range (`file_save_block()`).
+    - *Required Fix*: In `editor.c`, inspect `g_block_mode != BLOCK_MODE_OFF` on
+      `KEY_CTRL_O` and `KEY_CTRL_S`. When a block is active:
+      - Route `KEY_CTRL_O` to `ui_browser_insert_dialog()` and stream inserted
+        lines into active document at cursor via `file_insert()`.
+      - Route `KEY_CTRL_S` to `ui_browser_save_block_dialog()` and write only
+        normalized block lines (`g_norm_start_row`..`g_norm_end_row`) via
+        `file_save_block()`.
+  - [ ] **Bug 2.4.30: Missing Tier 2 Block Operations Pop-up Menu on Ctrl+K**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 7.6, 7.8, 8.3, 10.
+    - *Issue*: In `src/core/editor.c:576`, pressing `KEY_CTRL_K` unconditionally
+      displays the full-screen Help workspace (`show_help_screen()`). When a
+      block selection is active (`g_block_mode != BLOCK_MODE_OFF`), Section 10
+      and canonical CP/M rules mandate that `Ctrl+K` display the centered
+      Tier 2 Block Operations pop-up modal (`do_block_menu_popup()`), providing
+      quick block actions: `[C]opy`, `[M]ove`, `[D]elete`, `[S]ave Block`,
+      `[R]ead/Insert File`, `[ESC] Cancel`. Although `do_block_menu_popup()` is
+      declared in `include/block.h`, it is uncalled and unimplemented.
+    - *Required Fix*: Implement `do_block_menu_popup()` in `src/core/block.c`
+      displaying the canonical 50x7 dialog with hotkeys for Copy, Move, Delete,
+      Save Block, Insert File, and ESC Cancel. Update `KEY_CTRL_K` dispatch in
+      `src/core/editor.c` to invoke `do_block_menu_popup()` when
+      `g_block_mode != BLOCK_MODE_OFF`.
+  - [ ] **Bug 2.4.31: Missing In-Field Cursor Navigation in Find Text Modal**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 10.1, 10.2.
+    - *Issue*: In `src/core/search.c:215-289` (`do_ctrl_f_find`), the 50x7 Find
+      Text modal dialog lacks cursor navigation. The cursor is pinned to
+      `left + 14 + cur_len`. It does not support Left/Right arrow keys
+      (`KEY_LEFT`, `KEY_RIGHT`), Home/End (`KEY_HOME`, `KEY_END`, `KEY_CTRL_A`,
+      `KEY_CTRL_E`), or forward character deletion under the cursor
+      (`KEY_CTRL_D`), and maps `KEY_DEL` to Backspace (deleting the last
+      character in the buffer).
+    - *Required Fix*: Track internal cursor position (`cursor_pos`) in
+      `do_ctrl_f_find()`. Support Left/Right arrow cursor movement, Home
+      (`Ctrl+A`) / End (`Ctrl+E`), character insertion at `cursor_pos`,
+      Backspace deleting left of cursor (`cursor_pos - 1`), and Delete /
+      `Ctrl+D` forward-deleting character at `cursor_pos`.
+  - [ ] **Bug 2.4.32: Multi-Byte Escape Sequence Trailing Byte Leakage**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
+    - *Issue*: In `src/hal/linux/hal_linux_keyboard.c:142-145`, when an
+      unrecognized escape prefix is encountered, the HAL calls
+      `unget_raw_byte(b1)` and returns `KEY_ESC`. For multi-byte sequences that
+      fail parsing midway (such as incomplete CSI or SS3 sequences), subsequent
+      bytes in the sequence remain in `s_raw_buf` and are returned as regular
+      typed ASCII characters. Section 10.3 strictly mandates that any sequence
+      beginning with `ESC` followed by `[` or `O` must drain and discard all
+      sequence bytes atomically without leaking characters back into console
+      input.
+    - *Required Fix*: In `hal_linux_keyboard.c`, implement atomic escape
+      sequence draining on unrecognized or malformed sequences following
+      `ESC [` or `ESC O`, ensuring zero trailing bytes leak into standard input.
+  - [ ] **Bug 2.4.33: Typing Characters and Tab Fail to Clear Active Block**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2, 10.1;
+      `src/se.asm:1361-1399`.
+    - *Issue*: In `src/core/editor.c:591-600`, typing printable characters or
+      pressing Tab while dynamic block selection is active (`g_block_mode ==
+      BLOCK_MODE_SELECTING`) inserts characters into the line and extends
+      selection bounds. Per Section 9.1 and 10.1, typing in dynamic mode must
+      cancel selection (`cancel_block()`) to protect against accidental edits
+      without inserting text; in solidified mode (`g_block_mode ==
+      BLOCK_MODE_SOLIDIFIED`), clear selection before inserting characters.
+    - *Required Fix*: In `editor_handle_key()`, on printable characters and
+      `KEY_TAB`, if `g_block_mode == BLOCK_MODE_SELECTING`, invoke
+      `cancel_block()`, update status render, and return without inserting
+      characters. If `g_block_mode == BLOCK_MODE_SOLIDIFIED`, cancel block and
+      proceed with normal character insertion.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
