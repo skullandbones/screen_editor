@@ -349,13 +349,13 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - Viewport scroll: If `CUR_DOC_ROW - TOP_DOC_ROW > ACTIVE_ROWS - 2`:
        `TOP_DOC_ROW += 1`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
-   - Page Up (`PAGE_UP` / `Ctrl+U`):
+   - Page Up (`PAGE_UP` / dedicated `PgUp` key):
      - `step = ACTIVE_ROWS - 2` (22 on 80x24; 38 on 120x40).
      - `CUR_DOC_ROW = max(0, CUR_DOC_ROW - step)`.
      - `TOP_DOC_ROW = max(0, TOP_DOC_ROW - step)`.
      - Clamp: Ensure `TOP_DOC_ROW <= CUR_DOC_ROW`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
-   - Page Down (`PAGE_DOWN` / `Ctrl+V` without block):
+   - Page Down (`PAGE_DOWN` / dedicated `PgDn` key):
      - `step = ACTIVE_ROWS - 2`.
      - `max_row = max(0, DOC_TOTAL_LINES - 1)`.
      - `CUR_DOC_ROW = min(max_row, CUR_DOC_ROW + step)`.
@@ -598,9 +598,9 @@ content blocks rather than top-aligned text.
      ~
      ~  Cursor Navigation:                 Block Operations:
      ~    Arrows / ANSI VT100                 Ctrl+B: Toggle Block
-     ~    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block
-     ~    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block
-     ~    Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block
+     ~    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block to Cursor
+     ~    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Move Block to Cursor
+     ~    PgUp / PgDn    : Page Up / Down     Ctrl+D: Delete Block
      ~
      ~  Search & Replace:                  File & System:
      ~    Ctrl+F: Find Text                   Ctrl+S: Save File
@@ -911,10 +911,48 @@ or display notifications.
    - Status Bar shows `[SEL]` while selection is in progress.
    - Status Bar shows `[BLK LOCK]` when a search match is pinned.
 
-3. Clipboard Primitives:
-   - `Ctrl+C`: Copy active block to internal clipboard buffer.
-   - `Ctrl+X`: Cut active block to internal clipboard buffer and delete text.
-   - `Ctrl+V`: Paste clipboard buffer at active cursor position.
+3. Direct In-Place Block Manipulation Mandate:
+   All SE implementations across all target platforms (CP/M Z80 `SE.COM`,
+   NextCPM `SE_NEXT.COM`, Native Next `SE.NEX`, Linux C `se-linux`, Python
+   `se-py`, and future ports) must strictly implement Direct In-Place Block
+   Manipulation.
+
+   - Prohibition of Intermediary Clipboards:
+     The use of an intermediary clipboard buffer (copying text to a detached
+     clipboard storage followed by an asynchronous paste step) is strictly
+     PROHIBITED across all SE implementations. All block manipulations operate
+     directly between the active marked block and the current cursor position
+     in document memory. Intermediary clipboard buffers waste memory, break
+     CP/M TPA budget constraints, and introduce state desynchronization.
+
+   - Canonical Block Operation Key Combinations (from `SE.COM`):
+     - `Ctrl+B`: Toggle block selection mode. If inactive (0), anchors
+       selection at current cursor (`[SEL]`). If active (1 or 2), cancels block
+       selection (`CANCEL_BLOCK`).
+     - `Enter`: Solidify/lock dynamic block selection (`SOLIDIFY_BLOCK`).
+       Freezes normalized `START` and `END` boundaries (`[BLK LOCK]`),
+       allowing free cursor navigation without moving boundaries.
+     - `Ctrl+C`: Copy marked block directly to cursor (`DO_COPY_BLOCK`). If
+       dynamic selection is active (1), implies solidify first. Injects block
+       text into the document at the active cursor position without modifying
+       or clearing the source block.
+     - `Ctrl+X`: Move marked block directly to cursor (`DO_MOVE_BLOCK`). If
+       dynamic selection is active (1), implies solidify first. Relocates block
+       text to destination cursor location and deletes the original block,
+       re-establishing block bounds around the moved text at destination.
+     - `Ctrl+D` / `Delete`: Delete marked block range (`DO_DELETE_BLOCK`).
+       Deletes all characters and lines within the highlighted block, closes
+       the gap, returns cursor to block start, and clears block selection.
+     - `Ctrl+K`: Open Block Operations Modal Dialog (`DO_BLOCK_MENU_POPUP`).
+       Centered 50x7 modal pop-up displaying block metrics and action hotkeys:
+       `[Enter]=Lock  [C]opy  [X]Move  [D]el  [S]ave  [B]Clear  [ESC]=Exit`.
+     - `Ctrl+S`: Save marked block to disk (`DO_BLOCK_SAVE_FILE`). Solidifies
+       block and opens save dialog in block mode, saving only highlighted text.
+     - `Ctrl+O`: Insert file at cursor into block (`DO_BLOCK_INSERT_FILE`).
+       Solidifies block and streams selected file content at cursor position.
+     - `Ctrl+Y`: Beautify marked block (`DO_CTRL_Y_BEAUTIFY`). Runs source code
+       formatter restricted to the highlighted line range.
+     - `ESC`: Clear/cancel active block selection and restore normal editing.
 
 10. Canonical Keybinding Matrix & Behavior
 --------------------------------------------------------------------------------
@@ -922,7 +960,7 @@ or display notifications.
 | :---         | :---  | :---          | :---                                |
 | `Ctrl+A`     | `0x01`| `KEY_CTRL_A`  | Jump to beginning of line (Home)    |
 | `Ctrl+B`     | `0x02`| `KEY_CTRL_B`  | Toggle block selection mode         |
-| `Ctrl+C`     | `0x03`| `KEY_CTRL_C`  | Copy block to clipboard             |
+| `Ctrl+C`     | `0x03`| `KEY_CTRL_C`  | Copy block directly to cursor       |
 | `Ctrl+D`     | `0x04`| `KEY_CTRL_D`  | Delete character forward (DEL)      |
 | `Ctrl+E`     | `0x05`| `KEY_CTRL_E`  | Jump to end of line (End)           |
 | `Ctrl+F`     | `0x06`| `KEY_CTRL_F`  | Open Find Text modal dialog         |
@@ -936,9 +974,7 @@ or display notifications.
 | `Ctrl+R`     | `0x12`| `KEY_CTRL_R`  | Open Search & Replace modal dialog  |
 | `Ctrl+S`     | `0x13`| `KEY_CTRL_S`  | Save File to disk                   |
 | `Ctrl+T`     | `0x14`| `KEY_CTRL_T`  | Jump to Top of document (Row 0)     |
-| `Ctrl+U`     | `0x15`| `KEY_CTRL_U`  | Page Up (viewport rows - 2)         |
-| `Ctrl+V`     | `0x16`| `KEY_CTRL_V`  | Page Down / Paste block             |
-| `Ctrl+X`     | `0x18`| `KEY_CTRL_X`  | Cut block to clipboard / Move block |
+| `Ctrl+X`     | `0x18`| `KEY_CTRL_X`  | Move block directly to cursor       |
 | `Ctrl+Y`     | `0x19`| `KEY_CTRL_Y`  | Run BEAUTIFY code formatter plugin  |
 | `ESC`        | `0x1B`| `KEY_ESC`     | Return to Splash / Cancel modal     |
 | `Enter`      | `0x0D`| `KEY_ENTER`   | Split line at cursor / Confirm modal|
@@ -949,15 +985,19 @@ or display notifications.
 | `Down Arrow` | ANSI  | `KEY_DOWN`    | Move cursor Down one line           |
 | `Left Arrow` | ANSI  | `KEY_LEFT`    | Move cursor Left one character      |
 | `Right Arrow`| ANSI  | `KEY_RIGHT`   | Move cursor Right one character     |
+| `PgUp`       | ANSI  | `KEY_PGUP`    | Page Up (viewport rows - 2)         |
+| `PgDn`       | ANSI  | `KEY_PGDN`    | Page Down (viewport rows - 2)       |
 
 > [!IMPORTANT]
 > Architectural Policy on Navigation Keys & WordStar Diamond Deprecation:
 > Canonical SE mappings designate `Ctrl+S` for Save File, `Ctrl+D` for Delete
-> Forward, `Ctrl+E` for End of Line, and `Ctrl+X` for Cut/Move Block.
+> Forward, `Ctrl+E` for End of Line, and `Ctrl+X` for Move Block.
 > Directional cursor navigation across all variants and surfaces is provided
 > exclusively via standard ANSI VT100 arrow keys (`Up`, `Down`, `Left`,
-> `Right`) and standard motion shortcuts (`Ctrl+A` Home, `Ctrl+E` End,
-> `Ctrl+T` Top, `Ctrl+G` Bottom, `Ctrl+U` PgUp, `Ctrl+V` PgDn).
+> `Right`), dedicated paging keys (`PgUp`, `PgDn`), and standard motion
+> shortcuts (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G` Bottom).
+> Legacy `Ctrl+U` and `Ctrl+V` motion aliases are removed as all target
+> keyboards provide dedicated Page Up and Page Down keys.
 >
 > WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly
 > NOT supported anywhere in SE (including the Document Editor, Centered
@@ -1006,9 +1046,12 @@ or display notifications.
      line at column 0. In modal input fields, shifts cursor index left.
    - `Right Arrow` (`KEY_RIGHT`): Moves cursor right one column; wraps to next
      line at end of line. In modal input fields, shifts cursor index right.
+   - Dedicated Paging Keys: `PgUp` (`KEY_PGUP`, ANSI `\x1b[5~` / Page Up),
+     `PgDn` (`KEY_PGDN`, ANSI `\x1b[6~` / Page Down).
    - Motion Shortcuts: `Ctrl+A` (Home / Start of input), `Ctrl+E` (End of line
      / End of input), `Ctrl+T` (Top of document), `Ctrl+G` (Bottom of
-     document), `Ctrl+U` (Page Up), `Ctrl+V` (Page Down without active block).
+     document). Legacy `Ctrl+U` and `Ctrl+V` paging aliases are removed as all
+     target keyboards provide dedicated `PgUp` and `PgDn` keys.
    - WordStar Prohibition: WordStar diamond navigation keys (`Ctrl+S`,
      `Ctrl+D`, `Ctrl+E`, `Ctrl+X`) are strictly not supported for navigation
      in any editor workspace or modal input dialog.
