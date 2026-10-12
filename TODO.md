@@ -189,18 +189,21 @@ have been resolved and archived.
       until a terminating character (e.g. `'~'`, `'A'..'Z'`, `'a'..'z'`) or
       timeout, preventing trailing escape sequence bytes from leaking into the
       editor document buffer.
-  - [ ] **Bug 2.1.14: Missing Predominant Language Indication on Splash**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.6.
-    - *Issue*: Section 7.2 and Section 14.6 mandate that row 2 of the 14-line
-      splash content block display `Version <version> (<Language>)`, explicitly
-      specifying `(Z80 Assembly)` for 8-bit CP/M `SE.COM` builds:
-      `Version v1.1.0 (Z80 Assembly)`. In `src/core/plugin_mgr.asm:4276`
-      (`STR_SPLASH_TITLE`) and `src/se.asm:2618-2627`, row 1 displays
-      `SE - Screen Editor` and row 2 is a blank tilde row, omitting the
-      mandatory version and implementation language indicator.
-    - *Required Fix*: Update splash screen header in `src/se.asm` and
-      `src/core/plugin_mgr.asm` to render `SE — Screen Editor` on row 1 and
-      `Version v1.1.0 (Z80 Assembly)` on row 2.
+  - [ ] **Bug 2.1.14: Predominant Language Indication on About Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11, 14.6.
+    - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
+      `version 1.1.0 (2026-10-09)`, omitting the predominant programming
+      language. Per `docs/UI_UX_DESIGN.md` Section 7.11 and 14.6, all SE
+      variants must display the predominant programming language appended to
+      the version number and build date on the About screen (`[A]` from
+      splash): `version 1.1.0 (2026-10-09) (Z80 Assembly)`. (The splash screen
+      itself serves as the clean canonical template across all variants
+      without displaying programming language or version numbers).
+    - *Required Fix*: In `src/core/plugin_mgr.asm:4384`, update
+      `STR_ABOUT_VERSION` to append ` (Z80 Assembly)`:
+      `STR_ABOUT_VERSION: DB "version 1.1.0 (2026-10-09) (Z80 Assembly)", "$"`.
+      Ensure `SHOW_ABOUT_SCREEN` in `src/se.asm`, `src/se_next.asm`, and
+      `src/se_next_cpm.asm` centers the line cleanly within the content block.
   - [ ] **Bug 2.1.15: Missing FORMAT Parameter Support in SE.CFG**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 13.2.
     - *Issue*: In `src/core/config.asm`, `PARSE_CONFIG_BUFFER` and `SAVE_CONFIG`
