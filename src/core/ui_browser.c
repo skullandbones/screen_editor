@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #ifndef __CPM__
 #include <strings.h>
+#include <unistd.h>
 #include <fnmatch.h>
 #ifndef FNM_CASEFOLD
 #define FNM_CASEFOLD 0
@@ -438,7 +439,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 hal_console_puts((g_config.save_format == FMT_CPM)
                                  ? "CP/M" : "Linux");
                 hal_console_puts("]   [^F]=Toggle Format");
-            } else if (total_pages >= 2) {
+            } else {
                 char pbuf[48];
                 snprintf(pbuf, sizeof(pbuf),
                          "  [Page %d/%d]  <PgUp>/<PgDn>=Page",
@@ -484,7 +485,11 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             need_full_render = 0;
         }
 
-        k = hal_console_getkey();
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
         if (k == KEY_ESC) {
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
@@ -551,6 +556,31 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                     continue;
                 }
 #endif
+                if (mode == BROWSER_MODE_OPEN ||
+                    mode == BROWSER_MODE_INSERT) {
+                    char check_path[64];
+                    if (input_buf[1] == ':') {
+                        snprintf(check_path, sizeof(check_path), "%s",
+                                 input_buf);
+                    } else {
+#ifdef __CPM__
+                        snprintf(check_path, sizeof(check_path), "%c:%s",
+                                 s_browser_drive, input_buf);
+#else
+                        snprintf(check_path, sizeof(check_path), "%s",
+                                 input_buf);
+#endif
+                    }
+                    {
+                        FILE *fp_check = fopen(check_path, "rb");
+                        if (!fp_check) {
+                            modal_alert_file_not_found(input_buf);
+                            need_full_render = 1;
+                            continue;
+                        }
+                        fclose(fp_check);
+                    }
+                }
                 if (mode == BROWSER_MODE_SAVE ||
                     mode == BROWSER_MODE_SAVE_BLOCK) {
 #ifdef __CPM__
@@ -599,6 +629,13 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 selected_filename[max_len - 1] = '\0';
                 return MODAL_RES_OK;
             } else if (selected_idx >= 0 && selected_idx < s_browser_count) {
+                if (mode == BROWSER_MODE_SAVE ||
+                    mode == BROWSER_MODE_SAVE_BLOCK) {
+                    if (modal_confirm_overwrite() != MODAL_RES_OK) {
+                        need_full_render = 1;
+                        continue;
+                    }
+                }
                 strncpy(selected_filename,
                         s_browser_files[selected_idx].filename,
                         max_len - 1);

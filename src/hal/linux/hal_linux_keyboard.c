@@ -69,6 +69,14 @@ int hal_console_check_key(void)
     return poll(&pfd, 1, 0) > 0;
 }
 
+static void drain_csi_sequence(int last_b)
+{
+    int b = last_b;
+    while (b >= 0 && (b < 0x40 || b > 0x7E)) {
+        b = get_raw_byte(30);
+    }
+}
+
 int hal_console_getkey(void)
 {
     int c = get_raw_byte(0);
@@ -99,26 +107,44 @@ int hal_console_getkey(void)
             default: break;
             }
 
-            if (b2 >= '0' && b2 <= '9') {
-                int code = b2 - '0';
-                int b3 = get_raw_byte(30);
-                while (b3 >= '0' && b3 <= '9') {
-                    code = code * 10 + (b3 - '0');
-                    b3 = get_raw_byte(30);
+            int prefix = 0;
+            int modifier = 0;
+            int in_modifier = 0;
+            int b = b2;
+
+            /* Parse parameter bytes: 0-9 and ; */
+            while (b >= 0 && (b == ';' || (b >= '0' && b <= '9'))) {
+                if (b == ';') {
+                    in_modifier = 1;
+                } else if (!in_modifier) {
+                    prefix = prefix * 10 + (b - '0');
+                } else {
+                    modifier = modifier * 10 + (b - '0');
                 }
-                if (b3 == '~') {
-                    switch (code) {
-                    case 1: return KEY_HOME;  /* Home */
-                    case 2: return KEY_INS;   /* Insert */
-                    case 3: return KEY_DEL;   /* Delete */
-                    case 4: return KEY_END;   /* End */
-                    case 5: return KEY_PGUP;  /* Page Up */
-                    case 6: return KEY_PGDN;  /* Page Down */
-                    default: break;
-                    }
-                }
+                b = get_raw_byte(30);
             }
-            return KEY_ESC;
+
+            if (b == 'A') return (modifier == 2) ? KEY_SHIFT_UP : KEY_UP;
+            if (b == 'B') return (modifier == 2) ? KEY_SHIFT_DOWN : KEY_DOWN;
+            if (b == 'C') return (modifier == 2) ? KEY_SHIFT_RIGHT : KEY_RIGHT;
+            if (b == 'D') return (modifier == 2) ? KEY_SHIFT_LEFT : KEY_LEFT;
+            if (b == 'H') return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
+            if (b == 'F') return (modifier == 5) ? KEY_CTRL_G : KEY_END;
+
+            if (b == '~') {
+                if (prefix == 1) return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
+                if (prefix == 2) return KEY_INS;
+                if (prefix == 3) return KEY_DEL;
+                if (prefix == 4) return (modifier == 5) ? KEY_CTRL_G : KEY_END;
+                if (prefix == 5) return KEY_PGUP;
+                if (prefix == 6) return KEY_PGDN;
+                if (prefix == 7) return KEY_HOME;
+                if (prefix == 8) return KEY_END;
+            }
+
+            /* Drain remaining bytes of unrecognized or malformed sequence */
+            drain_csi_sequence(b);
+            return 0;
         }
 
         /* SS3 Sequences: ESC O ... */
@@ -136,7 +162,7 @@ int hal_console_getkey(void)
             case 'F': return KEY_END;   /* End */
             default: break;
             }
-            return KEY_ESC;
+            return 0;
         }
 
         /* Not a recognized escape sequence prefix: unget and return ESC */

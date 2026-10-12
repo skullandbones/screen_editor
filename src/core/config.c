@@ -95,6 +95,9 @@ int config_load_file(const char *filename)
             } else if (strcasecmp(val, "120X40") == 0 ||
                        strcasecmp(val, "0") == 0) {
                 g_config.screen_mode = MODE_120X40;
+            } else if (strcasecmp(val, "NATIVE") == 0 ||
+                       strcasecmp(val, "2") == 0) {
+                g_config.screen_mode = MODE_NATIVE;
             }
         } else if (strcasecmp(key, "TAB") == 0 ||
                    strcasecmp(key, "TABS") == 0 ||
@@ -196,7 +199,8 @@ int config_save_file(const char *filename)
 
     fprintf(fp, "# SE.COM Configuration File\r\n");
     fprintf(fp, "SCREEN=%s\r\n",
-            (g_config.screen_mode == MODE_120X40) ? "120X40" : "80X24");
+            (g_config.screen_mode == MODE_NATIVE) ? "NATIVE" :
+            ((g_config.screen_mode == MODE_120X40) ? "120X40" : "80X24"));
     fprintf(fp, "TAB=%u\r\n", (unsigned)g_config.tab_width);
     fprintf(fp, "FORMAT=%s\r\n",
             (g_config.save_format == FMT_LINUX) ? "LINUX" : "CPM");
@@ -208,4 +212,9 @@ int config_save_file(const char *filename)
 
     fclose(fp);
     return 0;
+}
+
+int config_save(void)
+{
+    return config_save_file("SE.CFG");
 }
