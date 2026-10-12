@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 11 Open (Bugs 2.1.3, 2.1.7-2.1.12 Rejected).
+- **Status**: Active / 10 Open (Bugs 2.1.3, 2.1.7-2.1.12, 2.1.15 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -204,16 +204,20 @@ have been resolved and archived.
       `STR_ABOUT_VERSION: DB "version 1.1.0 (2026-10-09) (Z80 Assembly)", "$"`.
       Ensure `SHOW_ABOUT_SCREEN` in `src/se.asm`, `src/se_next.asm`, and
       `src/se_next_cpm.asm` centers the line cleanly within the content block.
-  - [ ] **Bug 2.1.15: Missing FORMAT Parameter Support in SE.CFG**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 13.2.
-    - *Issue*: In `src/core/config.asm`, `PARSE_CONFIG_BUFFER` and `SAVE_CONFIG`
-      parse and serialize `SCREEN`, `RAMDRIVE`, `TAB`, `LINES`, and `PLUGIN`,
-      but completely omit support for `FORMAT` (`FORMAT=CPM` / `FORMAT=LINUX`).
-      New documents always default to hardcoded format without honoring
-      configuration settings in `SE.CFG`.
-    - *Required Fix*: Add `MATCH_KEY_FORMAT` in `src/core/config.asm` to parse
-      `FORMAT=CPM` and `FORMAT=LINUX`, update `SAVE_FORMAT`, and serialize
-      `FORMAT=` in `SAVE_CONFIG`.
+  - [x] **Bug 2.1.15: FORMAT Parameter in SE.CFG [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Text file line ending format (`CPM` vs `Linux`) is strictly
+      a per-document property and not an installation setting in `SE.CFG`.
+      Across all SE variants, newly created documents default to the host
+      platform's native text file format (CRLF on CP/M and Next, LF on Linux),
+      opened files preserve their existing detected end-of-line markers, and
+      format can be toggled per-file in the Save File screen via `Ctrl+F`
+      before writing to disk. `SE.CFG` strictly mirrors the 5 canonical options
+      of the Configuration Manager (`SCREEN`, `RAMDRIVE`, `LINES`, `TAB`,
+      `PLUGIN`), which has no format option. `docs/UI_UX_DESIGN.md` has been
+      updated to remove `FORMAT` from `SE.CFG` and detail per-document line
+      ending handling in Section 7.7.
   - [ ] **Bug 2.1.16: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
