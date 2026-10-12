@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 11 Defects Open (Bugs 2.4.30–2.4.40).
+- **Status**: Active / 10 Defects Open (Bugs 2.4.31–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -580,7 +580,7 @@ have been resolved and archived.
         selection upon pasting per Section 9.1.
       Validated via `test_bug_2_4_29_block_save_and_insert` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.30: Missing Tier 2 Block Operations Pop-up Menu on Ctrl+K**:
+  - [x] **Bug 2.4.30: Missing Tier 2 Block Operations Pop-up Menu on Ctrl+K**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 7.6, 7.8, 8.3, 10.
     - *Issue*: In `src/core/editor.c:576`, pressing `KEY_CTRL_K` unconditionally
       displays the full-screen Help workspace (`show_help_screen()`). When a
@@ -595,6 +595,12 @@ have been resolved and archived.
       Save Block, Insert File, and ESC Cancel. Update `KEY_CTRL_K` dispatch in
       `src/core/editor.c` to invoke `do_block_menu_popup()` when
       `g_block_mode != BLOCK_MODE_OFF`.
+    - *Resolution*: Implemented canonical 50x7 Tier 2 Block Operations modal
+      in `src/core/block.c` with metric calculation, dynamic vs solidified
+      shortcuts, hotkey dispatch (Enter, Copy, Move, Delete, Save, Insert,
+      Clear, ESC), and verified screen restoration.
+      Validated via `test_bug_2_4_30_block_menu_popup` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.31: Missing In-Field Cursor Navigation in Find Text Modal**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 10.1, 10.2.
     - *Issue*: In `src/core/search.c:215-289` (`do_ctrl_f_find`), the 50x7 Find

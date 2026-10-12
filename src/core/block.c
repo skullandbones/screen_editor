@@ -17,6 +17,9 @@
 #include "../include/block.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/ui_browser.h"
+#include "../include/file_io.h"
+#include "../include/hal.h"
 
 /* Global Block State Variables */
 uint8_t  g_block_mode = BLOCK_MODE_OFF;
@@ -462,16 +465,147 @@ int do_move_block(void)
 
 int do_block_menu_popup(void)
 {
-    const char *title = "Block Menu";
-    const char *msg = "Choose block operation:";
-    int res = modal_confirm_3btn(title, msg, "Copy", "Move", "Delete");
+    uint8_t width = 50;
+    uint8_t height = 7;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    char line4[52];
+    char metrics[32];
+    const char *pre;
+    size_t mlen;
+    int pad;
+    int key;
+    uint8_t c;
 
-    if (res == MODAL_RES_OK) {
-        do_copy_block();
-    } else if (res == MODAL_RES_NO) {
-        do_move_block();
-    } else if (res == MODAL_RES_DISCARD) {
-        do_delete_block();
+    normalize_block_bounds();
+
+    hal_console_hide_cursor();
+
+    /* Line 1: Top border */
+    hal_console_locate(top, left);
+    hal_console_putc('+');
+    for (c = 1; c < width - 1; c++) {
+        hal_console_putc('-');
     }
+    hal_console_putc('+');
+
+    /* Line 2: Title */
+    hal_console_locate(top + 1, left);
+    hal_console_puts("|                Block Operations                |");
+
+    /* Line 3: Separator border */
+    hal_console_locate(top + 2, left);
+    hal_console_putc('+');
+    for (c = 1; c < width - 1; c++) {
+        hal_console_putc('-');
+    }
+    hal_console_putc('+');
+
+    /* Line 4: Dynamic Selection / Block count */
+    pre = (g_block_mode == BLOCK_MODE_SOLIDIFIED) ?
+          "Marked Block: " : "Selection: ";
+    if (g_norm_start_row == g_norm_end_row) {
+        uint16_t chars = (g_norm_end_col >= g_norm_start_col) ?
+                         (g_norm_end_col - g_norm_start_col) : 0;
+        snprintf(metrics, sizeof(metrics), "%s%u %s",
+                 pre, (unsigned)chars, (chars == 1) ? "char" : "chars");
+    } else {
+        uint16_t lines = g_norm_end_row - g_norm_start_row + 1;
+        snprintf(metrics, sizeof(metrics), "%s%u %s",
+                 pre, (unsigned)lines, (lines == 1) ? "line" : "lines");
+    }
+    mlen = strlen(metrics);
+    pad = (48 - (int)mlen) / 2;
+    if (pad < 0) {
+        pad = 0;
+    }
+    line4[0] = '|';
+    memset(line4 + 1, ' ', 48);
+    memcpy(line4 + 1 + pad, metrics, mlen);
+    line4[49] = '|';
+    line4[50] = '\0';
+    hal_console_locate(top + 3, left);
+    hal_console_puts(line4);
+
+    /* Line 5: Primary Actions (Dynamic vs Solidified) */
+    hal_console_locate(top + 4, left);
+    if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
+        hal_console_puts(
+            "|      [^C]=Copy Block      [^X]=Move Block      |"
+        );
+    } else {
+        hal_console_puts(
+            "|  [Enter]=Lock/Set    [^C]=Copy    [^X]=Move    |"
+        );
+    }
+
+    /* Line 6: Commands */
+    hal_console_locate(top + 5, left);
+    hal_console_puts(
+        "|  [^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close  |"
+    );
+
+    /* Line 7: Bottom border */
+    hal_console_locate(top + 6, left);
+    hal_console_putc('+');
+    for (c = 1; c < width - 1; c++) {
+        hal_console_putc('-');
+    }
+    hal_console_putc('+');
+
+    while (1) {
+        key = hal_console_getkey();
+        if (key == KEY_ESC) {
+            break;
+        } else if (key == KEY_ENTER) {
+            solidify_block();
+            break;
+        } else if (key == KEY_CTRL_B || key == 'b' || key == 'B') {
+            cancel_block();
+            break;
+        } else if (key == KEY_CTRL_C || key == 'c' || key == 'C') {
+            solidify_block();
+            do_copy_block();
+            break;
+        } else if (key == KEY_CTRL_X || key == 'x' || key == 'X' ||
+                   key == 'm' || key == 'M') {
+            solidify_block();
+            do_move_block();
+            break;
+        } else if (key == KEY_CTRL_D || key == 'd' || key == 'D' ||
+                   key == KEY_DEL) {
+            solidify_block();
+            do_delete_block();
+            break;
+        } else if (key == KEY_CTRL_S || key == 's' || key == 'S') {
+            char fname[128];
+            solidify_block();
+            normalize_block_bounds();
+            fname[0] = '\0';
+            if (ui_browser_save_block_dialog(fname, sizeof(fname)) ==
+                MODAL_RES_OK && fname[0]) {
+                file_save_block(fname, g_norm_start_row,
+                                g_norm_end_row, g_config.save_format);
+            }
+            break;
+        } else if (key == KEY_CTRL_O || key == 'r' || key == 'R') {
+            char fname[128];
+            solidify_block();
+            fname[0] = '\0';
+            if (ui_browser_insert_dialog(fname, sizeof(fname)) ==
+                MODAL_RES_OK && fname[0]) {
+                file_insert(fname);
+                cancel_block();
+            }
+            break;
+        }
+    }
+
+    g_need_screen_render = 1;
+    g_need_status_render = 1;
+    render_screen();
+    render_status_bar();
+    hal_console_show_cursor();
+    locate_cursor();
     return 0;
 }

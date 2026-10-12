@@ -2222,6 +2222,124 @@ def test_bug_2_4_29_block_save_and_insert():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_30_block_menu_popup():
+    print("[*] Testing Tier 2 block popup menu on Ctrl+K (Bug 2.4.30)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_blk_popup_")
+    try:
+        sample_path = os.path.join(temp_dir, "SAMPLE.TXT")
+        with open(sample_path, "w") as f:
+            f.write("Line 1: Alpha\nLine 2: Bravo\nLine 3: Charlie\n")
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", "SAMPLE.TXT")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.4)
+
+            # 1. Without block active, Ctrl+K opens Help Screen
+            os.write(master, b"\x0b")  # Ctrl+K
+            time.sleep(0.3)
+            help_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "EDITOR MODE KEYS" in help_out, (
+                f"Expected Help screen on Ctrl+K with no block:\n{help_out}"
+            )
+            # Dismiss help screen with ESC
+            os.write(master, b"\x1b")
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # 2. Start dynamic block selection (Ctrl+B) and move down
+            os.write(master, b"\x02")  # Ctrl+B
+            time.sleep(0.1)
+            os.write(master, b"\x1b[B")  # Down arrow
+            time.sleep(0.1)
+            read_all_available(master, 0.2)
+
+            # 3. Press Ctrl+K -> must open Block Operations modal
+            os.write(master, b"\x0b")  # Ctrl+K
+            time.sleep(0.3)
+            popup_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Block Operations" in popup_out, (
+                f"Expected 'Block Operations' modal on Ctrl+K:\n{popup_out}"
+            )
+            assert "Selection:" in popup_out, (
+                f"Expected 'Selection:' in modal Line 4:\n{popup_out}"
+            )
+            assert "[Enter]=Lock/Set" in popup_out, (
+                f"Expected '[Enter]=Lock/Set' in modal Line 5:\n{popup_out}"
+            )
+
+            # 4. Press ESC to close modal non-destructively; selection kept
+            os.write(master, b"\x1b")
+            time.sleep(0.3)
+            ed_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[SEL]" in ed_out, (
+                f"Expected [SEL] retained after ESC close:\n{ed_out}"
+            )
+
+            # 5. Open popup again and press Enter to Lock/Set (solidify)
+            os.write(master, b"\x0b")  # Ctrl+K
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+            os.write(master, b"\r")  # Enter
+            time.sleep(0.3)
+            ed_out2 = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[BLK LOCK]" in ed_out2, (
+                f"Expected [BLK LOCK] after Enter in popup:\n{ed_out2}"
+            )
+
+            # 6. Open popup while solidified -> check Marked Block & Copy
+            os.write(master, b"\x0b")  # Ctrl+K
+            time.sleep(0.3)
+            popup_out2 = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Marked Block:" in popup_out2, (
+                f"Expected 'Marked Block:' in modal Line 4:\n{popup_out2}"
+            )
+            assert "[^C]=Copy Block" in popup_out2, (
+                f"Expected '[^C]=Copy Block' in modal Line 5:\n{popup_out2}"
+            )
+
+            # 7. Press 'b' to clear selection
+            os.write(master, b"b")
+            time.sleep(0.3)
+            ed_out3 = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "[BLK LOCK]" not in ed_out3 and "[SEL]" not in ed_out3, (
+                f"Expected block cleared after 'b':\n{ed_out3}"
+            )
+
+            # Exit cleanly
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Block Operations modal popup verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2256,6 +2374,7 @@ def main():
     test_bug_2_4_27_file_not_found_alert()
     test_bug_2_4_28_overwrite_confirmation()
     test_bug_2_4_29_block_save_and_insert()
+    test_bug_2_4_30_block_menu_popup()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
