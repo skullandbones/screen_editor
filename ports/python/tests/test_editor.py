@@ -2136,6 +2136,44 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_56_screen_clear_on_geometry_switch(self):
+        """Step 45: Verify term_init clears screen on geometry switch."""
+        print(
+            "[*] Step 45: Testing term_init on geometry switches...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+        self.editor.terminal.term_init = MagicMock()
+
+        # 1. Splash screen hotkey 1
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "e"])
+        self.editor.action_splash_screen()
+        self.editor.terminal.term_init.assert_called_once()
+        self.editor.terminal.term_init.reset_mock()
+
+        # 2. Splash screen hotkey 2
+        self.editor.terminal.get_key = MagicMock(side_effect=["2", "e"])
+        self.editor.action_splash_screen()
+        self.editor.terminal.term_init.assert_called_once()
+        self.editor.terminal.term_init.reset_mock()
+
+        # 3. Splash screen hotkey 3
+        self.editor.terminal.update_geometry = MagicMock(return_value=(80, 24))
+        self.editor.terminal.get_key = MagicMock(side_effect=["3", "e"])
+        self.editor.action_splash_screen()
+        self.editor.terminal.term_init.assert_called_once()
+        self.editor.terminal.term_init.reset_mock()
+
+        # 4. Configuration screen option 1
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "q"])
+        self.editor.action_config_screen()
+        self.editor.terminal.term_init.assert_called_once()
+
+        print(
+            "[+] Step 45: term_init on geometry switches verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

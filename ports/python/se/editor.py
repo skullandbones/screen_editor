@@ -816,16 +816,19 @@ class Editor:
                 self.action_help()
                 need_render = True
             elif ch == "1":
+                self.terminal.term_init()
                 self.config.set("SCREEN", "80x24")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
                 need_render = True
             elif ch == "2":
+                self.terminal.term_init()
                 self.config.set("SCREEN", "120x40")
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
                 need_render = True
             elif ch == "3":
+                self.terminal.term_init()
                 self.config.set("SCREEN", "NATIVE")
                 self.terminal.update_geometry()
                 need_render = True
@@ -898,6 +901,7 @@ class Editor:
             if ch in ("\r", "\x1b", "q"):
                 return
             elif ch == "1":
+                self.terminal.term_init()
                 if self.config.screen_cols == 80:
                     self.config.set("SCREEN", "120x40")
                 else:

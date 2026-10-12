@@ -648,8 +648,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.55
-  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.56–2.7.59 Open).
+- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.56
+  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.57–2.7.59 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1394,7 +1394,7 @@ have been resolved and archived.
       querying dynamic host terminal size via `update_geometry()`, and
       re-rendering. Validated via Step 44 in `test_editor.py`
       (`test_bug_2_7_55_splash_option3_native_mode`).
-  - [ ] **Bug 2.7.56: Missing Screen Clearance Prior to Geometry Switching**:
+  - [x] **Bug 2.7.56: Missing Screen Clearance Prior to Geometry Switching**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Symptom*: Switching screen geometry leaves stale column tildes, clipped
       characters, margin remnants, and ghost status bar lines on the screen.
@@ -1403,9 +1403,12 @@ have been resolved and archived.
       without clearing the terminal screen. Section 2.1, 7.2, and 14.1 mandate
       that the screen must be explicitly cleared (emitting `\x1b[2J\x1b[H` /
       `TERM_INIT`) prior to switching dimensions.
-    - *Action Required*: Call `self.terminal.term_init()` or
-      `self.terminal.clear_screen()` prior to reassigning dimensions in splash
-      and config screen geometry switches. Add regression test.
+    - *Resolution*: In `ports/python/se/editor.py`, invoked
+      `self.terminal.term_init()` prior to switching dimensions in both
+      `action_splash_screen` (hotkeys 1, 2, 3) and `action_config_screen`
+      (option 1), clearing the screen to prevent visual debris. Validated via
+      Step 45 in `test_editor.py`
+      (`test_bug_2_7_56_screen_clear_on_geometry_switch`).
   - [ ] **Bug 2.7.57: Config Subsystem Lacks NATIVE Screen Geometry Support**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.4, 14.1.
     - *Symptom*: Setting `SCREEN=NATIVE` in `SE.CFG` or via `config.set()`
