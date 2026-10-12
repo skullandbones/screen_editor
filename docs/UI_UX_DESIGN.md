@@ -1117,14 +1117,16 @@ or display notifications.
      must discretely tokenize multi-byte escape sequences (e.g. `\x1b[A`,
      `\x1b[B`, `\x1b[C`, `\x1b[D`, `\x1b[1~`..`\x1b[6~`, `\x1bOA`..`\x1bOF`).
    - Anti-Leakage Invariant:
-     When an escape sequence begins with `ESC` followed by `[` or `O`, the HAL
-     input decoder must wait with sufficient timeout to assemble the
-     entire sequence. If an incomplete or unrecognized escape sequence is
-     received, the HAL must drain and discard all sequence bytes
-     atomically. Under NO circumstances may trailing sequence characters
-     (such as `'C'` from `\x1b[C`) be leaked back into the console stream as
-     regular typed keystrokes, as doing so erroneously triggers hotkeys
-     (e.g. Configuration Manager on `'C'`) or corrupts text buffers.
+     When an escape sequence begins with `ESC` followed by `[` or `O`, the
+     input decoder must wait with sufficient timeout to assemble the entire
+     sequence. If an incomplete or unrecognized escape sequence is received
+     (such as unhandled function keys F5–F12 emitting `\x1b[15~`..`\x1b[24~`,
+     mouse tracking events, or bracketed paste markers), the input decoder
+     must drain and discard all sequence bytes atomically until the sequence
+     terminator (e.g. `~`, `A`–`Z`, `a`–`z`, or timeout). Under NO
+     circumstances may trailing sequence characters (such as `~` or trailing
+     parameters) be leaked back into the console stream as regular typed
+     keystrokes, as doing so corrupts document text buffers.
 
 11. The Ten UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
