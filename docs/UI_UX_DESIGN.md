@@ -514,11 +514,27 @@ content blocks rather than top-aligned text.
      - `Option 3`: Native host terminal mode. Added to the splash screen when
        a native screen size is also supported (e.g. on native Linux ports
        running in modern terminal emulators).
+   - Predominant Programming Language Display Mandate:
+     The splash screen shall show which programming language was predominantly
+     used to create SE. Specifically, row 2 of the 14-line splash screen
+     content block (directly beneath the title `SE — Screen Editor`) shall
+     display the release version along with the programming language
+     predominantly used to create that specific SE port or binary, formatted
+     as `Version <version> (<Language>)`:
+     - 8-bit CP/M (`SE.COM`): `Version v1.1.0 (Z80 Assembly)`
+     - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
+       `Version v1.1.0 (Z80 Assembly)`
+     - Linux Native C port (`se-linux` / `SEC.COM`): `Version v1.1.0 (C)`
+     - Linux Native Python port (`se-py`): `Version 1.0.0 (Python)`
+     - Future Rust port (`se-rs`): `Version 1.0.0 (Rust)`
+     The splash banner must not display generic host operating system labels
+     (such as `(Linux)`), but must explicitly state the predominant
+     programming language used to create the editor binary.
    - Visual Structure:
      ```text
      ~
      ~                SE — Screen Editor
-     ~              Version v1.1.0 (Linux)
+     ~              Version v1.1.0 (Language)
      ~
      ~       Free Memory: [Dynamic Heap]   Lines: [32K Max]
      ~
@@ -1303,3 +1319,15 @@ specific architectural adaptations.
          `0x0100` for CP/M TPA vs `0x6000` / `0x8000` for Next native `.nex`).
        - Hardware MMU memory banking and copper/layer 2 configurations vs
          standard CP/M BDOS memory and console calls.
+
+6. Splash Screen Implementation Language Identification:
+   All cross-platform ports and binaries of SE must display the programming
+   language predominantly used to create that specific port on row 2 of the
+   Tier 1 Splash screen (Section 7.2). For example:
+   - `SE.COM` / `SE_NEXT.COM`: `(Z80 Assembly)`
+   - `se-linux` / `SEC.COM`: `(C)`
+   - `se-py`: `(Python)`
+   - `se-rs`: `(Rust)`
+   Generic host operating system names (such as `(Linux)`) must not be used on
+   the splash version line; each binary shall clearly show its predominant
+   programming language.
