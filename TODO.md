@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Verification Complete / 5 Defects Open (Bug 2.1.3 Rejected).
+- **Status**: Active / 15 Defects Open (Bug 2.1.3 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -93,6 +93,138 @@ have been resolved and archived.
       `src/core/editor.asm` and `src/core/search.asm` to strictly conform to
       Archetype C (52x8 box, `+---+` title divider,
       `[Enter]=Confirm      [ESC]=Cancel` footer, bracketed input `[  ]`).
+  - [ ] **Bug 2.1.7: Unbound & Unimplemented Clipboard Paste (Ctrl+V)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.
+    - *Issue*: In `src/se.asm:1257-1260`, pressing `Ctrl+V` (`0x16`,
+      `KEY_CTRL_V`) is bound unconditionally to `DO_PAGE_DOWN`. Text copied to
+      the internal clipboard via `Ctrl+C` (`DO_COPY_BLOCK`) can never be
+      pasted into the document. The Z80 assembly core completely lacks a
+      clipboard paste primitive (`DO_PASTE_BLOCK`).
+    - *Required Fix*: Implement `DO_PASTE_BLOCK` in `src/core/block.asm` to
+      stream clipboard buffer contents into the active document at the cursor.
+      In `src/se.asm`, check whether the clipboard buffer contains text on
+      `KEY_CTRL_V`; if non-empty, paste the clipboard contents, update cursor
+      position, mark document modified, and re-render; if empty, fall back
+      to `DO_PAGE_DOWN`.
+  - [ ] **Bug 2.1.8: Combined Length Barrier Non-Conformity on Line Joining**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
+    - *Issue*: In `src/core/editor.asm:2078-2088` (`JOIN_TWO_LINES`), when
+      lines are joined via Backspace at column 0 (`DO_BS_JOIN_PREV`) or Delete
+      at EOL (`DO_DEL_FWD_JOIN_NEXT`), the combined length check tests
+      `len_1 + len_2 <= MAX_INPUT_LINE_CHARS` (1,000 characters). Section 6.8
+      strictly mandates that line joining must enforce the 120-column physical
+      line barrier (`prev_len + cur_len <= 120` or `cur_len + next_len <= 120`);
+      joining must be inhibited (no-op) if the merged length exceeds 120.
+    - *Required Fix*: In `src/core/editor.asm:2081`, compare `len_1 + len_2`
+      against 120 (`MAX_LINE_CHARS` / 120) instead of `MAX_INPUT_LINE_CHARS`.
+      Inhibit line joining (set Carry = 1 and return) if the combined length
+      exceeds 120 characters.
+  - [ ] **Bug 2.1.9: Sticky Target Column Clamping within Expanded Tab**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
+    - *Issue*: In `src/core/editor.asm:581-618` (`ADJUST_COL_TO_TARGET`), during
+      vertical cursor movement (`CURSOR_UP`, `CURSOR_DOWN`, `PAGE_UP`,
+      `PAGE_DOWN`), the routine accumulates visual columns to match sticky
+      `TARGET_COL`. When encountering `KEY_TAB`, if `ACT_VIS_ACC < TARGET_COL <
+      ACT_VIS_ACC + tab_spaces`, the code increments `BC` past the tab and adds
+      `tab_spaces` to `ACT_VIS_ACC`. On the next iteration, `ACT_VIS_ACC >=
+      TARGET_COL`, setting `CUR_COL` to `BC` (after the tab). This violates the
+      Tab Exclusion Mandate, which requires clamping `CUR_COL` to the start of
+      the tab (`vis_acc < TARGET_COL < vis_acc + spaces`).
+    - *Required Fix*: In `ADJUST_COL_TO_TARGET`, check if `ACT_VIS_ACC +
+      tab_spaces > TARGET_COL`. If so, break immediately before incrementing
+      `BC`, clamping `CUR_COL` to the start of the tab.
+  - [ ] **Bug 2.1.10: Missing In-Field Cursor Movement in Archetype C Modals**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
+    - *Issue*: In `src/core/editor.asm` (`DO_GOTO_LINE_UI:1333-1420`) and
+      `src/core/search.asm` (`DO_FIND_UI:50-125` and `DO_REPLACE_UI:1876-1960`):
+      - Input loops pin the cursor to the end of the text buffer and do not
+        maintain an internal cursor insertion index.
+      - Pressing Left or Right arrow keys transmits escape sequences that
+        trigger `GOTO_UI_CHECK_ESC`, `FIND_GOT_ESC_SEQ`, or `REP_GOT_ESC_SEQ`,
+        erroneously cancelling the modal dialog.
+      - Home (`Ctrl+A`) and End (`Ctrl+E`) are unhandled.
+      - `KEY_DEL` (`0x7F`) is aliased to Backspace (deleting the last character
+        in the buffer rather than the character under the cursor).
+      - Forward deletion via `Ctrl+D` (`0x04`) is completely unhandled.
+    - *Required Fix*: Implement in-field cursor position tracking and discrete
+      editing handlers in `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`:
+      Left/Right arrows shifting the insertion cursor inside input brackets,
+      Home/End jumping to boundaries, Backspace deleting left of cursor, and
+      Delete / `Ctrl+D` deleting under the cursor.
+  - [ ] **Bug 2.1.11: Config Manager Tier 1 Layout & Menu Inconsistency**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
+    - *Issue*: In `src/se.asm:3086-3300`, `SHOW_CONFIG_SCREEN` renders a 5-item
+      menu preceded by an unnumbered status row (`Config Status`, `1. Screen
+      Geometry`, `2. RAM Drive`, `3. Max Doc Lines`, `4. Tab Width`, `5. Plugin
+      Manager`) with footer `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`.
+      It lacks the canonical `Enter option: _` prompt line with interactive
+      cursor placement adjacent to the prompt (instead homing and hiding cursor
+      at row 1).
+    - *Required Fix*: Conform `SHOW_CONFIG_SCREEN` in `src/se.asm` to the
+      canonical 4-option layout defined in Section 7.4:
+      1. Screen Geometry  : 80x24
+      2. Tab Width        : 4
+      3. Max Line Capacity: 32K
+      4. RAM Drive Mode   : Disabled
+      Footer: `[S] Save to SE.CFG    [ESC]/[Enter] Return`
+      Prompt: `Enter option: _` with terminal cursor placed at the prompt.
+  - [ ] **Bug 2.1.12: Splash Screen Hotkey Inversion & Screen Debris**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Issue*: In `src/se.asm:578-605` and `src/core/plugin_mgr.asm:4290-4291`:
+      - Key `'1'` is mapped to `DO_SET_120X40` and `'2'` is mapped to
+        `DO_SET_80X24`, inverting the canonical assignment where `'1'` is
+        80x24 (universal baseline) and `'2'` is 120x40 (modern console mode).
+      - Furthermore, `DO_SET_120X40` and `DO_SET_80X24` invoke `SET_MODE_...`
+        without explicitly clearing the screen (`TERM_INIT` / `\x1b[2J\x1b[H`)
+        prior to applying new dimensions, leaving ghost text, old status bar
+        remnants, and margin debris on the display when switching from 120x40
+        to 80x24.
+    - *Required Fix*: In `SPLASH_LOOP` and `STR_SPLASH_CMDS`, map `'1'` to
+      `DO_SET_80X24` and `'2'` to `DO_SET_120X40`. In `DO_SET_...`, emit
+      `TERM_INIT` (`\x1b[2J\x1b[H`) to completely clear the screen before
+      re-rendering the splash workspace.
+  - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Console**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3, 11 (Anti-Pattern #5).
+    - *Issue*: In `src/core/editor.asm:274-325` (`HANDLE_CSI` and `HANDLE_SS3`),
+      when an unrecognized or malformed multi-byte escape sequence is
+      encountered, the decoder executes `RET` without draining trailing
+      sequence bytes. Remaining bytes (e.g. `'C'`, `'~'`, `;`, digits) remain
+      pending in the BIOS console stream and are read as regular typed
+      keystrokes by `MAIN_LOOP`, triggering spurious hotkeys or corrupting text
+      buffers.
+    - *Required Fix*: Implement atomic escape sequence draining on incomplete
+      or unrecognized escape sequences following `ESC [` or `ESC O`, ensuring
+      all trailing sequence bytes are consumed and discarded.
+  - [ ] **Bug 2.1.14: Missing Predominant Language Indication on Splash**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.6.
+    - *Issue*: Section 7.2 and Section 14.6 mandate that row 2 of the 14-line
+      splash content block display `Version <version> (<Language>)`, explicitly
+      specifying `(Z80 Assembly)` for 8-bit CP/M `SE.COM` builds:
+      `Version v1.1.0 (Z80 Assembly)`. In `src/core/plugin_mgr.asm:4276`
+      (`STR_SPLASH_TITLE`) and `src/se.asm:2618-2627`, row 1 displays
+      `SE - Screen Editor` and row 2 is a blank tilde row, omitting the
+      mandatory version and implementation language indicator.
+    - *Required Fix*: Update splash screen header in `src/se.asm` and
+      `src/core/plugin_mgr.asm` to render `SE — Screen Editor` on row 1 and
+      `Version v1.1.0 (Z80 Assembly)` on row 2.
+  - [ ] **Bug 2.1.15: Missing FORMAT Parameter Support in SE.CFG**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 13.2.
+    - *Issue*: In `src/core/config.asm`, `PARSE_CONFIG_BUFFER` and `SAVE_CONFIG`
+      parse and serialize `SCREEN`, `RAMDRIVE`, `TAB`, `LINES`, and `PLUGIN`,
+      but completely omit support for `FORMAT` (`FORMAT=CPM` / `FORMAT=LINUX`).
+      New documents always default to hardcoded format without honoring
+      configuration settings in `SE.CFG`.
+    - *Required Fix*: Add `MATCH_KEY_FORMAT` in `src/core/config.asm` to parse
+      `FORMAT=CPM` and `FORMAT=LINUX`, update `SAVE_FORMAT`, and serialize
+      `FORMAT=` in `SAVE_CONFIG`.
+  - [ ] **Bug 2.1.16: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
+    - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
+      when the current line and next line are joined on Delete at EOL,
+      `JOIN_TWO_LINES` merges the lines, but `DO_DEL_FWD_JOIN_NEXT` fails to
+      update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+    - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
+      `(TARGET_COL),HL`.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
