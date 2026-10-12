@@ -2107,6 +2107,35 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_55_splash_option3_native_mode(self):
+        """Step 44: Verify hotkey 3 sets NATIVE mode on splash screen."""
+        print(
+            "[*] Step 44: Testing splash hotkey 3 sets Native mode...",
+            flush=True,
+        )
+        self.editor.renderer.render_centered_workspace = MagicMock()
+        self.editor.config.set("SCREEN", "80x24")
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+
+        def mock_update_geometry():
+            self.editor.terminal.cols = 132
+            self.editor.terminal.rows = 43
+            return 132, 43
+
+        self.editor.terminal.update_geometry = mock_update_geometry
+        self.editor.terminal.get_key = MagicMock(side_effect=["3", "e"])
+        self.editor.action_splash_screen()
+
+        self.assertEqual(self.editor.config.get("SCREEN"), "NATIVE")
+        self.assertEqual(self.editor.terminal.cols, 132)
+        self.assertEqual(self.editor.terminal.rows, 43)
+
+        print(
+            "[+] Step 44: Splash hotkey 3 sets Native mode verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

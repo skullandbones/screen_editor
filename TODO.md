@@ -648,8 +648,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.54
-  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.55–2.7.59 Open).
+- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.55
+  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.56–2.7.59 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1380,7 +1380,7 @@ have been resolved and archived.
       `1` selects 80x24 (`DO_SET_80X24`) and `2` selects 120x40
       (`DO_SET_120X40`) conforming with Section 7.2. Validated via Step 43 in
       `test_editor.py` (`test_bug_2_7_54_splash_geometry_hotkeys_inversion`).
-  - [ ] **Bug 2.7.55: Missing Option 3 (Native Mode) on Splash Screen**:
+  - [x] **Bug 2.7.55: Missing Option 3 (Native Mode) on Splash Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Symptom*: The user has no hotkey or option on the Splash screen to
       select or revert to Native dynamic host terminal dimensions.
@@ -1389,9 +1389,11 @@ have been resolved and archived.
       Section 7.2 explicitly mandates Option 3 (`DO_SET_NATIVE`, hotkey `3`)
       when native screen size is supported (e.g. Linux native Python port) to
       revert geometry to auto-detected host terminal size.
-    - *Action Required*: Implement hotkey `3` in `action_splash_screen` to
-      restore Native host terminal geometry (`DO_SET_NATIVE`). Add regression
-      test in `test_editor.py`.
+    - *Resolution*: In `ports/python/se/editor.py`, bound hotkey `3` in
+      `action_splash_screen` to `DO_SET_NATIVE`, setting `SCREEN=NATIVE`,
+      querying dynamic host terminal size via `update_geometry()`, and
+      re-rendering. Validated via Step 44 in `test_editor.py`
+      (`test_bug_2_7_55_splash_option3_native_mode`).
   - [ ] **Bug 2.7.56: Missing Screen Clearance Prior to Geometry Switching**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Symptom*: Switching screen geometry leaves stale column tildes, clipped

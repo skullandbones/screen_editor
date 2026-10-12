@@ -825,6 +825,10 @@ class Editor:
                 self.terminal.cols = self.config.screen_cols
                 self.terminal.rows = self.config.screen_rows
                 need_render = True
+            elif ch == "3":
+                self.config.set("SCREEN", "NATIVE")
+                self.terminal.update_geometry()
+                need_render = True
             elif ch == "q" or k == KEY_CTRL_Q:
                 self.action_quit()
                 return
