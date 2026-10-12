@@ -170,18 +170,25 @@ have been resolved and archived.
       hardware. The requirement to harmonize splash screen hotkeys across all
       variants (`1` = 80x24 default, `2` = 120x40 if supported) has been
       split out and tracked as a discrete enhancement in Bug 2.1.18.
-  - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Console**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3, 11 (Anti-Pattern #5).
-    - *Issue*: In `src/core/editor.asm:274-325` (`HANDLE_CSI` and `HANDLE_SS3`),
-      when an unrecognized or malformed multi-byte escape sequence is
-      encountered, the decoder executes `RET` without draining trailing
-      sequence bytes. Remaining bytes (e.g. `'C'`, `'~'`, `;`, digits) remain
-      pending in the BIOS console stream and are read as regular typed
-      keystrokes by `MAIN_LOOP`, triggering spurious hotkeys or corrupting text
-      buffers.
-    - *Required Fix*: Implement atomic escape sequence draining on incomplete
-      or unrecognized escape sequences following `ESC [` or `ESC O`, ensuring
-      all trailing sequence bytes are consumed and discarded.
+  - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Editor**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
+    - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
+      `HANDLE_CSI_2`, and `HANDLE_CSI_LOOP`), when an unhandled or extended
+      multi-byte escape sequence is encountered (such as function keys F5–F12:
+      `\x1b[15~`–`\x1b[24~`, bracketed paste sequences `\x1b[200~`, or mouse
+      tracking events), the sub-handlers execute `RET` upon encountering
+      unrecognized digits or non-matching characters without consuming the
+      remainder of the sequence. Trailing sequence characters (specifically the
+      terminating `'~'` or trailing parameter digits) remain pending in the
+      BIOS console input buffer and are subsequently read by `MAIN_LOOP` as
+      regular typed keystrokes, erroneously inserting literal `'~'` or digits
+      directly into the document text buffer.
+    - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
+      (`HANDLE_CSI_1`, `HANDLE_CSI_2`, `HANDLE_CSI_LOOP`) and `HANDLE_SS3` so
+      that unrecognized or unhandled multi-byte sequences drain remaining bytes
+      until a terminating character (e.g. `'~'`, `'A'..'Z'`, `'a'..'z'`) or
+      timeout, preventing trailing escape sequence bytes from leaking into the
+      editor document buffer.
   - [ ] **Bug 2.1.14: Missing Predominant Language Indication on Splash**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.6.
     - *Issue*: Section 7.2 and Section 14.6 mandate that row 2 of the 14-line
