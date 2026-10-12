@@ -531,16 +531,26 @@ int editor_handle_key(int key)
     case KEY_CTRL_F: do_ctrl_f_find(); break;
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
     case KEY_CTRL_S:
-        if (g_current_filename[0] == '\0') {
+        if (g_block_mode != BLOCK_MODE_OFF) {
             s_editor_fname[0] = '\0';
+            if (ui_browser_save_block_dialog(s_editor_fname,
+                                             sizeof(s_editor_fname)) ==
+                MODAL_RES_OK && s_editor_fname[0]) {
+                file_save_block(s_editor_fname, g_norm_start_row,
+                                g_norm_end_row, g_config.save_format);
+            }
+        } else {
+            strncpy(s_editor_fname, g_current_filename,
+                    sizeof(s_editor_fname) - 1);
+            s_editor_fname[sizeof(s_editor_fname) - 1] = '\0';
             if (ui_browser_save_dialog(s_editor_fname,
                                        sizeof(s_editor_fname)) ==
                 MODAL_RES_OK && s_editor_fname[0]) {
                 file_save(s_editor_fname, g_config.save_format);
             }
-        } else {
-            file_save(NULL, g_config.save_format);
         }
+        g_need_screen_render = 1;
+        g_need_status_render = 1;
         break;
     case KEY_CTRL_L: {
         char buf[16] = {0};
@@ -555,12 +565,21 @@ int editor_handle_key(int key)
     }
     case KEY_CTRL_O: {
         s_editor_fname[0] = '\0';
-        if (ui_browser_open_dialog(s_editor_fname,
-                                   sizeof(s_editor_fname)) == MODAL_RES_OK &&
-            s_editor_fname[0]) {
-            if (modal_confirm_save_changes() == MODAL_RES_OK) {
-                file_load(s_editor_fname);
+        if (g_block_mode != BLOCK_MODE_OFF) {
+            if (ui_browser_insert_dialog(s_editor_fname,
+                                         sizeof(s_editor_fname)) ==
+                MODAL_RES_OK && s_editor_fname[0]) {
+                file_insert(s_editor_fname);
                 g_need_screen_render = 1;
+            }
+        } else {
+            if (modal_confirm_save_changes() == MODAL_RES_OK) {
+                if (ui_browser_open_dialog(s_editor_fname,
+                                           sizeof(s_editor_fname)) ==
+                    MODAL_RES_OK && s_editor_fname[0]) {
+                    file_load(s_editor_fname);
+                    g_need_screen_render = 1;
+                }
             }
         }
         break;
