@@ -1367,6 +1367,55 @@ have been resolved and archived.
       Validated via Step 42 in `test_editor.py`
       (`test_bug_2_7_53_splash_screen_dimensions_and_colon_commands`).
 
+### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
+- **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
+  standard 64KB TPA).
+- **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
+  Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
+- **Build Target**: `make sec-cpm` (or `make SEC.COM`).
+- **Status**: Active / 1 Defect Open.
+- **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
+  - [ ] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
+      `TODO.md` Section 7.1.
+    - *Symptom*: When running `tests/test_editor_headless.py --sec`, Step 17
+      enters `OUTPUT.TXT\r` in the Save Screen. Step 18 immediately fails on
+      `Ctrl+Q` clean exit back to CP/M with `Buffer captured: b''` because
+      `SEC.COM` fails to return to the `C>` prompt.
+    - *Root Cause Analysis*:
+      1. In `src/core/ui_browser.c:325-448` (`ui_browser_workspace`), every
+         character received during filename input (such as typing
+         `"OUTPUT.TXT\r"`) loops back to the top of `while (1)` and executes
+         a full-screen re-render of all 24 rows, including repainting the
+         file grid, borders, and Row 24 status bar via `render_status_bar()`.
+      2. Repainting 24 rows 11 times across a 4–10 MHz Z80 CP/M serial console
+         causes extreme display latency and floods the terminal stream with
+         redundant status bars containing `Line    1/1`.
+      3. The headless test runner in Step 17 looks for `Line    1/1` to detect
+         save completion. Because the browser emits `Line    1/1` on the very
+         first character typed (`'O'`), the test runner prematurely declares
+         save completion, drains the PTY, and sends `\x11` (`Ctrl+Q`) for
+         Step 18 while `SEC.COM` is still processing queued redraws for the
+         remaining characters of `"UTPUT.TXT\r"`.
+      4. `ui_browser_workspace()` does not handle `Ctrl+Q` as an input key, so
+         `\x11` is dropped, the save is never committed to disk, and `SEC.COM`
+         remains stuck in the browser rather than exiting cleanly to CP/M.
+    - *Required Fix (SE.COM Parity)*:
+      1. Align `ui_browser_workspace()` in `src/core/ui_browser.c` with the
+         reference `SE.COM` implementation (`READ_FILENAME_INPUT_PREFILLED` in
+         `src/core/ui_browser.asm`).
+      2. When receiving text input characters (`0x20..0x7E`), inline deletions
+         (`Backspace`, `Delete`), or navigation keys (`Left`, `Right`, `Home`,
+         `End`), update only the bracketed input prompt line and reposition the
+         hardware cursor without repainting the directory grid, banners, or
+         Row 24 status bar.
+      3. Restrict full-screen re-renders strictly to discrete macro-events:
+         initial display, page changes (`PgUp`/`PgDn`), drive/user/filter
+         updates (`Enter` on `B:` or `*.TXT`), format toggle (`Ctrl+F`), and
+         modal pop-up dismissals.
+      4. Ensure `file_save()` properly commits the file, clears `g_doc_modified`
+         to 0, and restores editor mode before accepting subsequent commands.
+
 ---
 
 ## 3. RAM Headroom & Memory Optimization
