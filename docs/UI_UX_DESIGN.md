@@ -725,8 +725,26 @@ content blocks rather than top-aligned text.
 7. Save File Workspace (`Ctrl+S` / `:s` from Splash):
    - Full-screen Tier 1 save workspace displaying directory contents, target
      filename input box, and line ending format indicator.
-   - Line ending format toggle: Pressing `Ctrl+F` toggles between CP/M (`CRLF`)
-     and Linux (`LF`) formats.
+   - Document End-of-Line Handling Specification (All Variants):
+     Text file line ending format is strictly managed per-document across all
+     SE variants (CP/M, ZX Spectrum Next, Linux, Python, Rust):
+     - Native Default for New Files: When saving a newly created document
+       (`(Untitled)`), the editor defaults to the host platform's native text
+       file format:
+       - CP/M & Next targets (`SE.COM`, `SE_NEXT.COM`): Defaults to native
+         CP/M format (`CRLF`, `0x0D, 0x0A`).
+       - Linux & POSIX targets (`se-linux`, `se-py`, `se-rs`): Defaults to
+         native Linux format (`LF`, `0x0A`).
+     - Line Ending Preservation for Existing Files: When opening an existing
+       file from storage, the editor automatically inspects line terminators
+       and preserves the file's current end-of-line markers (CRLF or LF)
+       throughout all editing operations. An open file continues to use its
+       detected line ending format upon save unless explicitly overridden.
+     - Save Screen Format Override (`Ctrl+F`): The Save File screen explicitly
+       displays the active save format on row 9 (`Format: [CP/M]` or
+       `Format: [Linux]`). The user can press `Ctrl+F` (`[^F]=Toggle Format`)
+       to toggle and override the line ending format for that specific save.
+       Status bar Field 3 immediately updates to reflect the active format.
    - Pre-fills active filename if document already has an associated file.
    - Visual Structure (80x24 Mode):
      ```text
@@ -1293,22 +1311,24 @@ allocations, screen mode, tab stops, and subsystem behaviors.
 2. Canonical CP/M Defaults in SE.COM:
    | Parameter | Default | Values | Description |
    | :--- | :--- | :--- | :--- |
-   | `SCREEN` | `120X40` | `80X24`, `120X40` | Screen geometry mode |
+   | `SCREEN` | `80X24` | `80X24`, `120X40` | Screen geometry mode |
    | `TAB` | `8` | `4`, `8` | Tab stop spacing |
-   | `FORMAT` | `CPM` | `CPM`, `LINUX` | File line ending mode |
    | `LINES` | `16K` | `16K`, `32K` | Document line ceiling |
    | `RAMDRIVE` | `PRESERVE` | `PRESERVE`, `ON`, `HIB` | Far RAM bank usage |
    | `PLUGIN` | `AUTOLOAD` | `AUTO`, `DEMAND`, `OFF` | Plugin loading mode |
 
-   - `SCREEN` (Default: `120X40`):
-     Geometry mode in `config.inc` (`MODE_120X40` = 0). On classic 80-column
-     CRT/terminals, `80X24` (`MODE_80X24` = 1) is selected.
+   - `SCREEN` (Default: `80X24`):
+     Geometry mode in `config.inc`. Standard classic 80-column terminal mode
+     is selected by default (`MODE_80X24` = 1).
    - `TAB` / `TABS` (Default: `8`):
      Tab stop column interval (`4` or `8`). In `se.asm`, default is 8
      (`CFG_TAB_WIDTH = 8`, mask = 7).
-   - `FORMAT` (Default: `CPM`):
-     Default line ending format for new documents (`CPM` = CRLF `0x0D, 0x0A`,
-     `LINUX` = LF `0x0A`).
+   - Document Line Ending Format Exclusion:
+     Text file line ending format (`CPM` CRLF vs `Linux` LF) is NOT an `SE.CFG`
+     configuration setting. As specified in Section 7.7, line endings are
+     governed per-document: new files default to host native format, opened
+     files preserve their existing end-of-line markers, and format can be
+     toggled per-file in the Save File screen via `Ctrl+F`.
    - `LINES` / `MAXLINES` (Default: `16K`):
      Maximum document line pointer table capacity (`16K` = 16,384 lines,
      `32K` = 32,768 lines).
