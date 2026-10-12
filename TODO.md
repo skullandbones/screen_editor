@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 11 Open (Bugs 2.1.3, 2.1.7-2.1.11 Rejected).
+- **Status**: Active / 11 Open (Bugs 2.1.3, 2.1.7-2.1.12 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -158,21 +158,18 @@ have been resolved and archived.
       prompt line with an interactive terminal cursor is inappropriate and
       misleading for a single-keypress dispatch loop. `docs/UI_UX_DESIGN.md`
       has been updated to reflect the canonical 5-option hotkey layout.
-  - [ ] **Bug 2.1.12: Splash Screen Hotkey Inversion & Screen Debris**:
+  - [x] **Bug 2.1.12: Splash Hotkeys & Screen Debris [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
-    - *Issue*: In `src/se.asm:578-605` and `src/core/plugin_mgr.asm:4290-4291`:
-      - Key `'1'` is mapped to `DO_SET_120X40` and `'2'` is mapped to
-        `DO_SET_80X24`, inverting the canonical assignment where `'1'` is
-        80x24 (universal baseline) and `'2'` is 120x40 (modern console mode).
-      - Furthermore, `DO_SET_120X40` and `DO_SET_80X24` invoke `SET_MODE_...`
-        without explicitly clearing the screen (`TERM_INIT` / `\x1b[2J\x1b[H`)
-        prior to applying new dimensions, leaving ghost text, old status bar
-        remnants, and margin debris on the display when switching from 120x40
-        to 80x24.
-    - *Required Fix*: In `SPLASH_LOOP` and `STR_SPLASH_CMDS`, map `'1'` to
-      `DO_SET_80X24` and `'2'` to `DO_SET_120X40`. In `DO_SET_...`, emit
-      `TERM_INIT` (`\x1b[2J\x1b[H`) to completely clear the screen before
-      re-rendering the splash workspace.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that switching modes leaves screen debris due to
+      omitting `\x1b[2J\x1b[H` was factually false; `RENDER_SPLASH` in
+      `src/se.asm:2595` already executes `CALL TERM_CLEAR_SCREEN` emitting
+      `\x1b[2J\x1b[H` before repainting the splash workspace and status bar.
+      Furthermore, in `SE.COM`, `[1]` = 120x40 and `[2]` = 80x24 was
+      synchronized between `STR_SPLASH_CMDS` and `SPLASH_LOOP` for RomWBW
+      hardware. The requirement to harmonize splash screen hotkeys across all
+      variants (`1` = 80x24 default, `2` = 120x40 if supported) has been
+      split out and tracked as a discrete enhancement in Bug 2.1.18.
   - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Console**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3, 11 (Anti-Pattern #5).
     - *Issue*: In `src/core/editor.asm:274-325` (`HANDLE_CSI` and `HANDLE_SS3`),
@@ -232,6 +229,19 @@ have been resolved and archived.
     - *Required Fix*: In `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`,
       drain and discard unexpected escape sequences and unassigned keys,
       preserving the active modal dialog and retaining input buffer state.
+  - [ ] **Bug 2.1.18: Splash Screen Geometry Hotkeys (1=80x24, 2=120x40)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
+    - *Issue*: Splash screen geometry hotkeys are standardized across all SE
+      variants so that `1` selects 80x24 (universal baseline and default)
+      and `2` selects 120x40 (if supported). In `SE.COM`, `STR_SPLASH_CMDS` in
+      `src/core/plugin_mgr.asm:4290-4291` currently displays `type [1] set
+      120x40` and `type [2] set 80x24`, and `SPLASH_LOOP` in
+      `src/se.asm:578-584` dispatches `'1'` to `DO_SET_120X40` and `'2'` to
+      `DO_SET_80X24`.
+    - *Required Fix*: In `src/core/plugin_mgr.asm:4290-4291`, update
+      `STR_SPLASH_CMDS` to display `type [1] set 80x24` and `type [2] set
+      120x40`. In `src/se.asm:578-584`, update `SPLASH_LOOP` to dispatch
+      `'1'` to `DO_SET_80X24` and `'2'` to `DO_SET_120X40`.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
