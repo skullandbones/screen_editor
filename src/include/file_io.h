@@ -38,11 +38,12 @@ typedef struct {
 } cpm_fcb_t;
 
 /* Global Document Filename State */
-extern char     g_current_filename[64];
+extern char     g_current_filename[32];
 extern uint8_t  g_file_format;
 
 /* File I/O Subsystem Function Entry Points */
 int  file_load(const char *filename);
+int  file_insert(const char *filename);
 int  file_save(const char *filename, uint8_t format);
 int  file_save_block(const char *filename,
                      uint16_t start_row, uint16_t end_row,
