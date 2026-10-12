@@ -438,7 +438,7 @@ viewport panning algorithms defined in `src/core/editor.asm` and
          - Let `prev_len = len(line[CUR_DOC_ROW - 1])` and
            `cur_len = len(line[CUR_DOC_ROW])`.
          - Combined Length Barrier Check:
-           If `prev_len + cur_len <= 120` (canonical `MAX_LINE` limit):
+           If `prev_len + cur_len <= MAX_INPUT_LINE_CHARS` (1,000 chars):
            - Appends current line contents to previous line:
              `line[CUR_DOC_ROW - 1] += line[CUR_DOC_ROW]`.
            - Deletes row `CUR_DOC_ROW` from document line pointer table.
@@ -450,9 +450,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
            - Triggers full viewport re-render (`NEED_SCREEN_RENDER = 1`).
            - Viewport Scroll: If `CUR_DOC_ROW < TOP_DOC_ROW`, scrolls up:
              `TOP_DOC_ROW = CUR_DOC_ROW`.
-           If `prev_len + cur_len > 120`:
-           - Join is inhibited (no-op) to enforce the 120-column line limit
-             and prevent buffer overflow or unplanned line truncation.
+           If `prev_len + cur_len > MAX_INPUT_LINE_CHARS`:
+           - Join is inhibited (no-op) to enforce the 1,000-character line
+             limit and prevent buffer overflow.
        - If `CUR_DOC_ROW == 0` (top of document):
          - Blocked (no-op; beginning of file reached).
      - Block Mode Interaction:
@@ -472,7 +472,7 @@ viewport panning algorithms defined in `src/core/editor.asm` and
          - Let `cur_len = len(line[CUR_DOC_ROW])` and
            `next_len = len(line[CUR_DOC_ROW + 1])`.
          - Combined Length Barrier Check:
-           If `cur_len + next_len <= 120` (canonical `MAX_LINE` limit):
+           If `cur_len + next_len <= MAX_INPUT_LINE_CHARS` (1,000 chars):
            - Appends next line contents to current line:
              `line[CUR_DOC_ROW] += line[CUR_DOC_ROW + 1]`.
            - Deletes row `CUR_DOC_ROW + 1` from document pointer table.
@@ -481,8 +481,8 @@ viewport panning algorithms defined in `src/core/editor.asm` and
            - Updates sticky target: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
            - Marks document modified: `MODIFIED = 1`.
            - Triggers full viewport re-render (`NEED_SCREEN_RENDER = 1`).
-           If `cur_len + next_len > 120`:
-           - Pull-up is inhibited (no-op) to preserve 120-column line limit.
+           If `cur_len + next_len > MAX_INPUT_LINE_CHARS`:
+           - Pull-up is inhibited (no-op) to preserve 1,000-character limit.
        - If `CUR_DOC_ROW + 1 >= DOC_TOTAL_LINES` (end of document):
          - Blocked (no-op; end of file reached).
      - Block Mode Interaction:
@@ -1015,7 +1015,7 @@ or display notifications.
        (`CUR_COL - 1`) and moves cursor left. When pressed at column 0
        (`CUR_COL == 0`), joins the current line to the previous line (landing
        the cursor at the junction column) provided the combined line length
-       does not exceed 120 columns; blocked at Row 0 Column 0.
+       does not exceed MAX_INPUT_LINE_CHARS (1,000 chars); blocked at Row 0.
      - Block-Active Context: Cancels dynamic block (`BLOCK_ACTIVE = 0`)
        to safeguard highlighted text against accidental deletion.
      - Modal Input Dialogs (Archetype C): Deletes character preceding the
@@ -1026,8 +1026,8 @@ or display notifications.
      - Editor Workspace: Deletes the character directly under the cursor
        without altering cursor column. When pressed at the end of a line
        (`CUR_COL >= len(line)`), pulls up and joins the next line to the
-       current line provided the combined length does not exceed 120 columns;
-       blocked at the end of the last line.
+       current line provided the combined length does not exceed
+       MAX_INPUT_LINE_CHARS (1,000 chars); blocked at the end of the file.
      - Block-Active Context: Solidifies selection and deletes the entire
        highlighted block range (`DO_DELETE_BLOCK`), resetting block mode and
        moving following text up to the block start.
