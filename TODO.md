@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 15 Defects Open (Bug 2.1.3 Rejected).
+- **Status**: Active / 14 Defects Open (Bugs 2.1.3, 2.1.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -93,19 +93,19 @@ have been resolved and archived.
       `src/core/editor.asm` and `src/core/search.asm` to strictly conform to
       Archetype C (52x8 box, `+---+` title divider,
       `[Enter]=Confirm      [ESC]=Cancel` footer, bracketed input `[  ]`).
-  - [ ] **Bug 2.1.7: Unbound & Unimplemented Clipboard Paste (Ctrl+V)**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.
-    - *Issue*: In `src/se.asm:1257-1260`, pressing `Ctrl+V` (`0x16`,
-      `KEY_CTRL_V`) is bound unconditionally to `DO_PAGE_DOWN`. Text copied to
-      the internal clipboard via `Ctrl+C` (`DO_COPY_BLOCK`) can never be
-      pasted into the document. The Z80 assembly core completely lacks a
-      clipboard paste primitive (`DO_PASTE_BLOCK`).
-    - *Required Fix*: Implement `DO_PASTE_BLOCK` in `src/core/block.asm` to
-      stream clipboard buffer contents into the active document at the cursor.
-      In `src/se.asm`, check whether the clipboard buffer contains text on
-      `KEY_CTRL_V`; if non-empty, paste the clipboard contents, update cursor
-      position, mark document modified, and re-render; if empty, fall back
-      to `DO_PAGE_DOWN`.
+  - [x] **Bug 2.1.7: Clipboard Paste & Buffer Primitives [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9, 10.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Dropped support for detached intermediary clipboard buffers
+      and `Ctrl+V` clipboard paste across all SE variants. All implementations
+      strictly enforce Direct In-Place Block Manipulation (`Ctrl+B` toggle,
+      `Enter` solidify, `Ctrl+C` copy directly to cursor, `Ctrl+X` move
+      directly to cursor, `Ctrl+D` / `DEL` delete block, `Ctrl+K` block menu
+      popup, `Ctrl+S` save block, `Ctrl+O` insert file). Intermediary clipboard
+      buffers are strictly prohibited across all variants to conserve memory,
+      respect CP/M TPA headroom, and eliminate state desynchronization.
+      Directional page navigation is handled exclusively via dedicated `PgUp`
+      and `PgDn` keys; `Ctrl+U` and `Ctrl+V` are removed as paging shortcuts.
   - [ ] **Bug 2.1.8: Combined Length Barrier Non-Conformity on Line Joining**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:2078-2088` (`JOIN_TWO_LINES`), when
