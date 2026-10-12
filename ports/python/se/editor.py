@@ -265,8 +265,14 @@ class Editor:
 
     def action_find(self):
         """Prompt for search text with Tab case toggle and search forward."""
+        initial = self.search_query
+        if self.buffer.block_active > 0:
+            selected = self.buffer.get_selected_text()
+            if selected:
+                initial = selected.split("\n")[0]
+
         query, case_sens = self.modal.show_find_dialog(
-            initial_text=self.search_query,
+            initial_text=initial,
             initial_case_sensitive=self.case_sensitive,
         )
         self.case_sensitive = case_sens

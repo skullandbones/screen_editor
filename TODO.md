@@ -527,7 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 4 Defects Open (Bugs 2.7.50–2.7.53; Bug 2.7.45 Rejected).
+- **Status**: Active / 3 Defects Open (Bugs 2.7.51–2.7.53; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1193,16 +1193,18 @@ have been resolved and archived.
       and integrated into `action_save_file` and `action_block_save` in
       `editor.py`. Validated via Step 38 in `test_editor.py`
       (`test_bug_2_7_49_overwrite_modal_geometry_and_phrasing`).
-  - [ ] **Bug 2.7.50: Active Block Text Not Pre-filled in Find (Ctrl+F)**:
+  - [x] **Bug 2.7.50: Active Block Text Not Pre-filled in Find (Ctrl+F)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
     - *Issue*: In `ports/python/se/editor.py:268-271`, `action_find()`
       unconditionally passes `initial_text=self.search_query` to
       `show_find_dialog`. If a block selection is active (`block_active > 0`),
       the highlighted text selection is not extracted or pre-filled into the
       Find input buffer.
-    - *Required Fix*: When `block_active > 0`, extract active selection text
-      (or current row block segment) and pre-fill it into `show_find_dialog`
-      as specified in Section 8.3 Archetype C.
+    - *Resolution*: Implemented `get_selected_text()` on `DocumentBuffer` and
+      updated `action_find()` in `ports/python/se/editor.py` to extract active
+      selection text when `block_active > 0` and pre-fill it into
+      `show_find_dialog`. Validated via Step 39 in `test_editor.py`
+      (`test_bug_2_7_50_active_block_prefills_find_dialog`).
   - [ ] **Bug 2.7.51: Find Text Modal Dialog Geometry & Layout Discrepancies**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C).
     - *Issue*: In `ports/python/se/modal.py:219-245`, `show_find_dialog` builds

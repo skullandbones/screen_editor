@@ -355,21 +355,26 @@ class DocumentBuffer:
             return r2, c2, r1, c1
         return r1, c1, r2, c2
 
+    def get_selected_text(self) -> str:
+        """Return selected block text without modifying clipboard."""
+        if self.block_active == 0:
+            return ""
+        r1, c1, r2, c2 = self.get_normalized_block()
+        if r1 == r2:
+            return self.lines[r1][c1:c2]
+        parts = [self.lines[r1][c1:]]
+        for r in range(r1 + 1, r2):
+            parts.append(self.lines[r])
+        parts.append(self.lines[r2][:c2])
+        return "\n".join(parts)
+
     def copy_block(self) -> str:
         """Copy selected block text into clipboard buffer."""
         if self.block_active == 0:
             return ""
         if self.block_active == 1:
             self.solidify_block()
-        r1, c1, r2, c2 = self.get_normalized_block()
-        if r1 == r2:
-            text = self.lines[r1][c1:c2]
-        else:
-            parts = [self.lines[r1][c1:]]
-            for r in range(r1 + 1, r2):
-                parts.append(self.lines[r])
-            parts.append(self.lines[r2][:c2])
-            text = "\n".join(parts)
+        text = self.get_selected_text()
         self.clipboard = text
         return text
 

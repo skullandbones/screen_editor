@@ -1861,6 +1861,44 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_50_active_block_prefills_find_dialog(self):
+        """Step 39: Verify active block pre-fills Find dialog (Bug 2.7.50)."""
+        print(
+            "[*] Step 39: Testing active block text pre-fill in Find...",
+            flush=True,
+        )
+        self.editor.modal.show_find_dialog = MagicMock(
+            return_value=("needle", True)
+        )
+        self.editor.action_find_next = MagicMock()
+
+        # 1. No active block -> uses self.search_query
+        self.editor.buffer.block_active = 0
+        self.editor.search_query = "previous_search"
+        self.editor.action_find()
+        self.editor.modal.show_find_dialog.assert_called_with(
+            initial_text="previous_search",
+            initial_case_sensitive=True,
+        )
+
+        # 2. Dynamic block active -> extracts selected block text
+        self.editor.buffer.lines = ["The quick brown fox"]
+        self.editor.buffer.block_active = 1
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 4
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 9  # "quick"
+        self.editor.action_find()
+        self.editor.modal.show_find_dialog.assert_called_with(
+            initial_text="quick",
+            initial_case_sensitive=True,
+        )
+
+        print(
+            "[+] Step 39: Active block text pre-fill in Find verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
