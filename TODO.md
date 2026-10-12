@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 13 Defects Open (Bugs 2.1.3, 2.1.7, 2.1.8 Rejected).
+- **Status**: Active / 12 Open (Bugs 2.1.3, 2.1.7-2.1.9 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -117,20 +117,18 @@ have been resolved and archived.
       `editor.c`), fully supported by horizontal panning (`[Pan +40]`).
       `docs/UI_UX_DESIGN.md` has been corrected to reference the canonical
       1,000-character barrier.
-  - [ ] **Bug 2.1.9: Sticky Target Column Clamping within Expanded Tab**:
+  - [x] **Bug 2.1.9: Column Clamping on Expanded Tab [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
-    - *Issue*: In `src/core/editor.asm:581-618` (`ADJUST_COL_TO_TARGET`), during
-      vertical cursor movement (`CURSOR_UP`, `CURSOR_DOWN`, `PAGE_UP`,
-      `PAGE_DOWN`), the routine accumulates visual columns to match sticky
-      `TARGET_COL`. When encountering `KEY_TAB`, if `ACT_VIS_ACC < TARGET_COL <
-      ACT_VIS_ACC + tab_spaces`, the code increments `BC` past the tab and adds
-      `tab_spaces` to `ACT_VIS_ACC`. On the next iteration, `ACT_VIS_ACC >=
-      TARGET_COL`, setting `CUR_COL` to `BC` (after the tab). This violates the
-      Tab Exclusion Mandate, which requires clamping `CUR_COL` to the start of
-      the tab (`vis_acc < TARGET_COL < vis_acc + spaces`).
-    - *Required Fix*: In `ADJUST_COL_TO_TARGET`, check if `ACT_VIS_ACC +
-      tab_spaces > TARGET_COL`. If so, break immediately before incrementing
-      `BC`, clamping `CUR_COL` to the start of the tab.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The Tab Exclusion Mandate is 100% satisfied in `SE.COM`;
+      the cursor never rests within a tab because `CUR_COL` is an integer byte
+      offset into document memory. When `TARGET_COL` falls across an expanded
+      tab (`vis_acc < TARGET_COL < vis_acc + spaces`), `SE.COM` intentionally
+      uses "snap-forward" behavior (`ADJUST_COL_TO_TARGET`), aligning with the
+      character boundary directly after the tab (e.g. column 8 rather than
+      column 0). This preserves alignment with indented text during vertical
+      navigation. `docs/UI_UX_DESIGN.md` has been updated to explicitly codify
+      snap-forward alignment.
   - [ ] **Bug 2.1.10: Missing In-Field Cursor Movement in Archetype C Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
     - *Issue*: In `src/core/editor.asm` (`DO_GOTO_LINE_UI:1333-1420`) and
