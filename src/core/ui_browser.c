@@ -439,7 +439,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                                  ? "CP/M" : "Linux");
                 hal_console_puts("]   [^F]=Toggle Format");
             } else if (total_pages >= 2) {
-                char pbuf[32];
+                char pbuf[48];
                 snprintf(pbuf, sizeof(pbuf),
                          "  [Page %d/%d]  <PgUp>/<PgDn>=Page",
                          cur_page + 1, total_pages);
