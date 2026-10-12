@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 12 Open (Bugs 2.1.3, 2.1.7-2.1.10 Rejected).
+- **Status**: Active / 11 Open (Bugs 2.1.3, 2.1.7-2.1.11 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -144,23 +144,20 @@ have been resolved and archived.
       modals is rejected. The separate defect where unexpected keystrokes (such
       as cursor arrow keys) cancel the modal dialog has been split out and
       tracked as Bug 2.1.17.
-  - [ ] **Bug 2.1.11: Config Manager Tier 1 Layout & Menu Inconsistency**:
+  - [x] **Bug 2.1.11: Config Manager Menu Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
-    - *Issue*: In `src/se.asm:3086-3300`, `SHOW_CONFIG_SCREEN` renders a 5-item
-      menu preceded by an unnumbered status row (`Config Status`, `1. Screen
-      Geometry`, `2. RAM Drive`, `3. Max Doc Lines`, `4. Tab Width`, `5. Plugin
-      Manager`) with footer `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`.
-      It lacks the canonical `Enter option: _` prompt line with interactive
-      cursor placement adjacent to the prompt (instead homing and hiding cursor
-      at row 1).
-    - *Required Fix*: Conform `SHOW_CONFIG_SCREEN` in `src/se.asm` to the
-      canonical 4-option layout defined in Section 7.4:
-      1. Screen Geometry  : 80x24
-      2. Tab Width        : 4
-      3. Max Line Capacity: 32K
-      4. RAM Drive Mode   : Disabled
-      Footer: `[S] Save to SE.CFG    [ESC]/[Enter] Return`
-      Prompt: `Enter option: _` with terminal cursor placed at the prompt.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The 4-option wireframe in `docs/UI_UX_DESIGN.md` Section 7.4
+      was an early conceptual sketch that omitted the Plugin Manager and
+      Config Status. In `SE.COM`, Option 5 (`5. Plugin Manager`) is required
+      to configure whether the Far RAM plugin subsystem is autoloaded or
+      disabled, and `Config Status` provides essential feedback on whether
+      `SE.CFG` was loaded from current or program drive. Furthermore, the
+      Configuration Manager is an instant-reaction hotkey event loop
+      (`1-5` toggle, `S` save, `ESC`/`Enter`/`Q` return); an `Enter option: _`
+      prompt line with an interactive terminal cursor is inappropriate and
+      misleading for a single-keypress dispatch loop. `docs/UI_UX_DESIGN.md`
+      has been updated to reflect the canonical 5-option hotkey layout.
   - [ ] **Bug 2.1.12: Splash Screen Hotkey Inversion & Screen Debris**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
     - *Issue*: In `src/se.asm:578-605` and `src/core/plugin_mgr.asm:4290-4291`:
