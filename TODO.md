@@ -527,7 +527,7 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 6 Defects Open (Bugs 2.7.48–2.7.53; Bug 2.7.45 Rejected).
+- **Status**: Active / 5 Defects Open (Bugs 2.7.49–2.7.53; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1167,17 +1167,19 @@ have been resolved and archived.
       `LINE_JOIN_LIMIT = 120` in `buffer.py`. Enabled horizontal panning
       in 120-column geometries. Validated via Step 2 and Step 14 in
       `test_buffer.py` (`test_bug_2_7_47_line_capacity_limit_and_panning`).
-  - [ ] **Bug 2.7.48: Missing File Not Found Modal Alert in Directory Browser**:
+  - [x] **Bug 2.7.48: Missing File Not Found Modal Alert in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype A).
     - *Issue*: In `ports/python/se/editor.py:485`, attempting to open or insert
       a non-existent file causes `action_directory_browser` to return target
       and exit back to editor, where `action_open_file` and
       `action_insert_file` display a generic notification alert over the
       editor, discarding directory browser state and user input buffer.
-    - *Required Fix*: Implement canonical 50x7 `File Not Found` modal alert
-      in `action_directory_browser` when an entered target file does not exist,
-      returning directly back to the directory browser with input buffer and
-      cursor position preserved upon any keypress.
+    - *Resolution*: Added canonical 50x7 `show_file_not_found` modal alert
+      in `ports/python/se/modal.py` and invoked it inside
+      `action_directory_browser` on non-existent targets in open/insert modes,
+      returning directly to the directory browser with input text and cursor
+      preserved. Validated via Step 37 in `test_editor.py`
+      (`test_bug_2_7_48_file_not_found_modal_alert`).
   - [ ] **Bug 2.7.49: Overwrite File Modal Phrasing & Geometry Non-Conformity**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B).
     - *Issue*: In `ports/python/se/editor.py:572-576` (`action_save_file`) and

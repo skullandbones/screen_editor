@@ -3,6 +3,7 @@ Tier 2 centered modal pop-up dialog engine for SE editor.
 Implements framed pop-up boxes, query modals, and single-level lifecycles.
 """
 
+import os
 from typing import List, Optional, Tuple, TYPE_CHECKING
 from se.terminal import (
     Terminal,
@@ -87,6 +88,26 @@ class ModalDialog:
             "---",
             message,
             "",
+            "Press any key to continue",
+        ]
+        self.draw_box(top, left, width, lines)
+        self.term.get_key()
+        self.term.show_cursor()
+
+    def show_file_not_found(self, filename: str):
+        """
+        Display canonical Archetype A File Not Found modal alert (50x7).
+        Dismissible by any key.
+        """
+        width = 50
+        height = 7
+        top, left = self.compute_popup_pos(width, height)
+        base = os.path.basename(filename) or filename
+        lines = [
+            "File Not Found",
+            "---",
+            f"'{base}' was not found.",
+            "Specified file not found on disk.",
             "Press any key to continue",
         ]
         self.draw_box(top, left, width, lines)

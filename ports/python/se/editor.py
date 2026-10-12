@@ -482,6 +482,9 @@ class Editor:
                     cursor_pos = 0
                     page_idx = 0
                     continue
+                if mode in ("open", "insert") and not os.path.isfile(target):
+                    self.modal.show_file_not_found(cleaned)
+                    continue
                 return (target, fmt_cpm)
             elif key == KEY_PGUP or key == KEY_CTRL_U:
                 page_idx = max(0, page_idx - 1)
@@ -525,10 +528,6 @@ class Editor:
         filename, _fmt = target
         if os.path.isfile(filename):
             self.buffer.load_file(filename)
-        else:
-            self.modal.show_notification(
-                title="Open Error", message="File not found"
-            )
 
     def action_insert_file(self):
         """Insert disk file contents into document buffer at cursor."""
@@ -540,9 +539,6 @@ class Editor:
             return
         filename, _fmt = target
         if not os.path.isfile(filename):
-            self.modal.show_notification(
-                title="Insert Error", message="File not found"
-            )
             return
 
         ok = self.buffer.insert_file(filename)

@@ -1780,6 +1780,49 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_48_file_not_found_modal_alert(self):
+        """Step 37: Verify 50x7 File Not Found alert in browser (Bug 2.7.48)."""
+        print(
+            "[*] Step 37: Testing File Not Found modal alert in browser...",
+            flush=True,
+        )
+        # 1. Verify show_file_not_found framing and canonical 50x7 lines
+        captured_boxes = []
+
+        def mock_draw(top, left, width, lines):
+            captured_boxes.append((top, left, width, lines))
+
+        self.editor.modal.draw_box = mock_draw
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+
+        self.editor.modal.show_file_not_found("TESTFILE.DAT")
+        self.assertEqual(len(captured_boxes), 1)
+        _, _, width, lines = captured_boxes[0]
+        self.assertEqual(width, 50)
+        self.assertEqual(len(lines), 5)  # 5 interior lines + 2 borders = 7
+        self.assertEqual(lines[0], "File Not Found")
+        self.assertEqual(lines[1], "---")
+        self.assertEqual(lines[2], "'TESTFILE.DAT' was not found.")
+        self.assertEqual(lines[3], "Specified file not found on disk.")
+        self.assertEqual(lines[4], "Press any key to continue")
+
+        # 2. action_directory_browser shows alert and preserves browser state
+        self.editor.modal.show_file_not_found = MagicMock()
+        keys = list("no_such_file.txt") + [KEY_ENTER, KEY_ESC]
+        key_iter = iter(keys)
+        self.editor.terminal.get_key = lambda: next(key_iter)
+
+        res = self.editor.action_directory_browser(mode="open")
+        self.assertIsNone(res)
+        self.editor.modal.show_file_not_found.assert_called_once_with(
+            "no_such_file.txt"
+        )
+
+        print(
+            "[+] Step 37: File Not Found modal alert in browser verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
