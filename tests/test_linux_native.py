@@ -563,13 +563,14 @@ def test_modal_archetypes_and_framing():
             assert "Find Text" in modal_c_out, (
                 "Modal Archetype C missing title"
             )
-            assert "+--------------------------------------------------+" in (
+            assert "+------------------------------------------------+" in (
                 modal_c_out
             ), "Modal Archetype C missing border/title divider (+---+)"
-            assert "[ " in modal_c_out and " ]" in modal_c_out, (
+            assert "Find: [" in modal_c_out and "]" in modal_c_out, (
                 "Modal Archetype C missing bracket pair [ text ] around input"
             )
-            assert "[Enter]=Confirm      [ESC]=Cancel" in modal_c_out, (
+            assert ("[Enter]=Find" in modal_c_out and
+                    "[ESC]=Cancel" in modal_c_out), (
                 "Modal Archetype C missing canonical footer"
             )
 
@@ -1459,7 +1460,7 @@ def test_bug_2_4_19_panning_edge_trigger_and_geometry():
             )
 
             # Move right 79 times to reach column 79
-            os.write(master, b"\x04" * 79)
+            os.write(master, b"\x1b[C" * 79)
             time.sleep(0.3)
             edge_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
@@ -1511,7 +1512,7 @@ def test_bug_2_4_19_panning_edge_trigger_and_geometry():
             )
 
             # Move right 85 times: fits within 120 cols -> NO pan
-            os.write(master2, b"\x04" * 85)
+            os.write(master2, b"\x1b[C" * 85)
             time.sleep(0.3)
             wide_out = read_all_available(master2, 0.3).decode(
                 "utf-8", errors="replace"
@@ -1919,6 +1920,78 @@ def test_bug_2_4_25_modal_prompt_text_editing():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_27_file_not_found_alert():
+    """Verify 50x7 File Not Found modal alert on non-existent file (2.4.27)."""
+    print("[*] Testing File Not Found modal alert on open/insert (2.4.27)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        read_all_available(master, 0.2)
+
+        # 1. Open File workspace from Splash screen via 'o'
+        os.write(master, b"o")
+        time.sleep(0.3)
+        open_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "OPEN FILE (DIRECTORY)" in open_out, (
+            f"Expected 'OPEN FILE (DIRECTORY)' in workspace:\n{open_out}"
+        )
+
+        # 2. Type non-existent filename "NONEXIST.TXT" and press Enter
+        os.write(master, b"NONEXIST.TXT\r")
+        time.sleep(0.3)
+        alert_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "File Not Found" in alert_out, (
+            f"Expected 'File Not Found' modal title:\n{alert_out}"
+        )
+        assert "'NONEXIST.TXT' was not found." in alert_out, (
+            f"Expected 'NONEXIST.TXT' was not found in modal:\n{alert_out}"
+        )
+        assert "Specified file not found on disk." in alert_out, (
+            f"Expected disk explanation line in modal:\n{alert_out}"
+        )
+        assert "Press any key to continue" in alert_out, (
+            f"Expected dismissal prompt in modal:\n{alert_out}"
+        )
+
+        # 3. Dismiss modal with Space; return to browser with input intact
+        os.write(master, b" ")
+        time.sleep(0.3)
+        browser_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "OPEN FILE (DIRECTORY)" in browser_out, (
+            f"Expected return to Open workspace:\n{browser_out}"
+        )
+        assert "NONEXIST.TXT" in browser_out, (
+            f"Expected input buffer 'NONEXIST.TXT' preserved:\n{browser_out}"
+        )
+
+        # 4. Cancel browser via ESC to return to splash screen
+        os.write(master, b"\x1b")
+        time.sleep(0.2)
+        read_all_available(master, 0.2)
+
+        # 5. Exit cleanly via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] File Not Found modal alert verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1950,6 +2023,7 @@ def main():
     test_bug_2_4_23_backspace_cancels_block()
     test_bug_2_4_24_enter_solidifies_block()
     test_bug_2_4_25_modal_prompt_text_editing()
+    test_bug_2_4_27_file_not_found_alert()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

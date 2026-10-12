@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 14 Defects Open (Bugs 2.4.27–2.4.40).
+- **Status**: Active / 13 Defects Open (Bugs 2.4.28–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -521,7 +521,7 @@ have been resolved and archived.
       truncation errors. Restored persistent `^K: Editor keys |` in Field 4,
       routed mode indicators into Field 5, and restored Tier 2 save
       notifications under `#ifndef __CPM__` in `src/core/file_io.c`.
-  - [ ] **Bug 2.4.27: Missing File Not Found Modal Alert on Open and Insert**:
+  - [x] **Bug 2.4.27: Missing File Not Found Modal Alert on Open and Insert**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype A).
     - *Issue*: In `src/core/editor.c:560`, `src/core/ui_render.c:355`, and
       `src/core/file_io.c:93`, attempting to open or insert a non-existent file
@@ -531,11 +531,14 @@ have been resolved and archived.
       `'FILENAME' was not found.`, `Specified file not found on disk.`,
       `Press any key to continue`), and either initializes an empty buffer or
       silently drops the action without notifying the user.
-    - *Required Fix*: Implement `modal_alert_file_not_found(const char *fname)`
-      using the canonical 50x7 Archetype A layout. When `file_load()` or
-      `file_insert()` encounters a non-existent file, trigger this alert and
-      return the user to the active directory browser workspace with the input
-      buffer preserved.
+    - *Resolution*: Implemented canonical 50x7 File Not Found modal alert
+      (`modal_alert_file_not_found`) adhering to Archetype A in
+      `src/core/ui_modal.c` and declared in `src/include/ui_modal.h`. Added
+      pre-flight existence checks in `file_read_op()` (`src/core/file_io.c`) and
+      in `ui_browser_workspace()` (`src/core/ui_browser.c`) for Open and Insert
+      operations, returning the user directly to the active browser workspace
+      with input buffer preserved upon dismissal. Validated via
+      `test_bug_2_4_27_file_not_found_alert` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.28: Missing Overwrite File Confirmation Dialog on Save**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B).
     - *Issue*: In `src/core/file_io.c:189` (`file_write_op`) and

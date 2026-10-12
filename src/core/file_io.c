@@ -90,6 +90,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
 
     fp = fopen(filename, "rb");
     if (!fp) {
+        modal_alert_file_not_found(filename);
         return -1;
     }
 
