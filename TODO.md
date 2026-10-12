@@ -648,8 +648,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.58
-  Resolved; Bug 2.7.45 Rejected; Bug 2.7.59 Open).
+- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
+  Resolved; Bug 2.7.45 Rejected).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1433,7 +1433,7 @@ have been resolved and archived.
       indicator on geometry line when native mode is active. Validated via
       Step 46 in `test_editor.py`
       (`test_bug_2_7_58_config_screen_native_mode_toggle`).
-  - [ ] **Bug 2.7.59: Startup Raw Mode Overrides Configured Geometry**:
+  - [x] **Bug 2.7.59: Startup Raw Mode Overrides Configured Geometry**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.1.
     - *Symptom*: Setting `SCREEN=80x24` or `SCREEN=120x40` in `SE.CFG` is
       overridden on startup, forcing editor dimensions to the host window
@@ -1442,9 +1442,13 @@ have been resolved and archived.
       unconditionally calls `self.update_geometry()`, which queries
       `os.get_terminal_size()` and clobbers `self.cols` and `self.rows`,
       ignoring the fixed geometry configured in `SE.CFG`.
-    - *Action Required*: Preserve configured fixed geometry in
-      `enter_raw_mode()` when explicit fixed geometry emulation is
-      configured. Add test in `test_editor.py`.
+    - *Resolution*: In `ports/python/se/terminal.py` and `editor.py`, added
+      `fixed_geometry` support to `Terminal`, initialized from
+      `Config.is_native_screen` on startup, and updated upon splash/config
+      geometry changes. `update_geometry()` and `enter_raw_mode()` preserve
+      configured fixed dimensions (`80x24` or `120x40`) when `fixed_geometry`
+      is active. Validated via Step 47 in `test_editor.py`
+      (`test_bug_2_7_59_startup_geometry_emulation_preserved`).
 
 ---
 

@@ -76,11 +76,12 @@ class Terminal:
     Manages raw terminal state, cursor positioning, and key decoding.
     """
 
-    def __init__(self, default_cols=80, default_rows=24):
+    def __init__(self, default_cols=80, default_rows=24, fixed_geometry=False):
         self.default_cols = default_cols
         self.default_rows = default_rows
         self.cols = default_cols
         self.rows = default_rows
+        self.fixed_geometry = fixed_geometry
         self.in_raw_mode = False
         self.old_termios = None
         self.resized = False
@@ -97,6 +98,11 @@ class Terminal:
 
     def update_geometry(self):
         """Query terminal dimensions and update active cols and rows."""
+        if self.fixed_geometry:
+            self.cols = self.default_cols
+            self.rows = self.default_rows
+            self.resized = False
+            return self.cols, self.rows
         try:
             sz = os.get_terminal_size(sys.stdin.fileno())
             if sz.columns > 0 and sz.lines > 0:
@@ -121,7 +127,8 @@ class Terminal:
         self.old_termios = termios.tcgetattr(fd)
         tty.setraw(fd)
         self.in_raw_mode = True
-        self.update_geometry()
+        if not self.fixed_geometry:
+            self.update_geometry()
 
     def exit_raw_mode(self):
         """Restore previous terminal mode and ensure cursor is visible."""

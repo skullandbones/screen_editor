@@ -2221,6 +2221,54 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_59_startup_geometry_emulation_preserved(self):
+        """Step 47: Verify configured fixed geometry preserved on startup."""
+        print(
+            "[*] Step 47: Testing startup fixed geometry emulation...",
+            flush=True,
+        )
+        from se.editor import Editor
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            "w+", suffix=".cfg", delete=False
+        ) as f:
+            f.write("SCREEN=80x24\r\n")
+            cfg_path = f.name
+
+        try:
+            ed = Editor(config_path=cfg_path)
+            self.assertTrue(ed.terminal.fixed_geometry)
+            self.assertEqual(ed.terminal.cols, 80)
+            self.assertEqual(ed.terminal.rows, 24)
+
+            cols, rows = ed.terminal.update_geometry()
+            self.assertEqual(cols, 80)
+            self.assertEqual(rows, 24)
+            self.assertEqual(ed.terminal.cols, 80)
+            self.assertEqual(ed.terminal.rows, 24)
+        finally:
+            if os.path.exists(cfg_path):
+                os.unlink(cfg_path)
+
+        with tempfile.NamedTemporaryFile(
+            "w+", suffix=".cfg", delete=False
+        ) as f:
+            f.write("SCREEN=NATIVE\r\n")
+            cfg_path = f.name
+
+        try:
+            ed_native = Editor(config_path=cfg_path)
+            self.assertFalse(ed_native.terminal.fixed_geometry)
+        finally:
+            if os.path.exists(cfg_path):
+                os.unlink(cfg_path)
+
+        print(
+            "[+] Step 47: Startup fixed geometry emulation verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

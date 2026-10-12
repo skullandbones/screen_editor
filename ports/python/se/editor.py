@@ -63,7 +63,10 @@ class Editor:
         self.config = Config()
         self.loaded_config_path = self.config.discover_and_load(config_path)
         cols, rows = self.config.screen_geometry
-        self.terminal = Terminal(default_cols=cols, default_rows=rows)
+        is_fixed = not self.config.is_native_screen
+        self.terminal = Terminal(
+            default_cols=cols, default_rows=rows, fixed_geometry=is_fixed
+        )
         self.renderer = UIRenderer(self.terminal)
         self.modal = ModalDialog(self.terminal)
         self.buffer = DocumentBuffer(
@@ -818,18 +821,25 @@ class Editor:
             elif ch == "1":
                 self.terminal.term_init()
                 self.config.set("SCREEN", "80x24")
-                self.terminal.cols = self.config.screen_cols
-                self.terminal.rows = self.config.screen_rows
+                self.terminal.fixed_geometry = True
+                self.terminal.default_cols = 80
+                self.terminal.default_rows = 24
+                self.terminal.cols = 80
+                self.terminal.rows = 24
                 need_render = True
             elif ch == "2":
                 self.terminal.term_init()
                 self.config.set("SCREEN", "120x40")
-                self.terminal.cols = self.config.screen_cols
-                self.terminal.rows = self.config.screen_rows
+                self.terminal.fixed_geometry = True
+                self.terminal.default_cols = 120
+                self.terminal.default_rows = 40
+                self.terminal.cols = 120
+                self.terminal.rows = 40
                 need_render = True
             elif ch == "3":
                 self.terminal.term_init()
                 self.config.set("SCREEN", "NATIVE")
+                self.terminal.fixed_geometry = False
                 self.terminal.update_geometry()
                 need_render = True
             elif ch == "q" or k == KEY_CTRL_Q:
@@ -910,13 +920,20 @@ class Editor:
                 cur_screen = self.config.get("SCREEN", "120X40").upper()
                 if cur_screen == "80X24":
                     self.config.set("SCREEN", "120x40")
+                    self.terminal.fixed_geometry = True
+                    self.terminal.default_cols = 120
+                    self.terminal.default_rows = 40
                     self.terminal.cols = 120
                     self.terminal.rows = 40
                 elif cur_screen == "120X40":
                     self.config.set("SCREEN", "NATIVE")
+                    self.terminal.fixed_geometry = False
                     self.terminal.update_geometry()
                 else:
                     self.config.set("SCREEN", "80x24")
+                    self.terminal.fixed_geometry = True
+                    self.terminal.default_cols = 80
+                    self.terminal.default_rows = 24
                     self.terminal.cols = 80
                     self.terminal.rows = 24
             elif ch == "2":
