@@ -89,8 +89,8 @@ START:
 	; Initialize Direct BIOS Console Vectors
 	CALL INIT_BIOS_JUMPS
 
-	; Initialize Screen Geometry to Default (120x40)
-	CALL SET_MODE_120X40
+	; Initialize Screen Geometry to Default 80x24 for Next hardware
+	CALL SET_MODE_80X24
 
 	; Check if filename was provided in FCB1 (populates WORK_FCB and
 	; HAS_FILE_ARG)
