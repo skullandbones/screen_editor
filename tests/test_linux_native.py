@@ -2340,6 +2340,96 @@ def test_bug_2_4_30_block_menu_popup():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_31_find_modal_cursor_navigation():
+    """Verify in-field cursor editing in Find Text modal (Bug 2.4.31)."""
+    print("[*] Testing in-field cursor navigation in Find modal (2.4.31)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_find_nav_")
+    try:
+        sample_path = os.path.join(temp_dir, "FIND_SAMPLE.TXT")
+        with open(sample_path, "w") as f:
+            f.write("Line 1: Target word TARGETMATCH is here.\n")
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", "FIND_SAMPLE.TXT")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.4)
+
+            # 1. Open Find Text modal via Ctrl+F (\x06)
+            os.write(master, b"\x06")
+            time.sleep(0.3)
+            modal_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Find Text" in modal_out, (
+                f"Expected 'Find Text' modal:\n{modal_out}"
+            )
+
+            # 2. Type "TAGET"
+            os.write(master, b"TAGET")
+            time.sleep(0.1)
+
+            # 3. Left arrow 3 times (\x1b[D\x1b[D\x1b[D) -> between 'A' and 'G'
+            os.write(master, b"\x1b[D\x1b[D\x1b[D")
+            time.sleep(0.1)
+
+            # 4. Insert 'R' -> buffer is "TARGET"
+            os.write(master, b"R")
+            time.sleep(0.1)
+
+            # 5. Home (Ctrl+A / \x01) -> pos 0
+            os.write(master, b"\x01")
+            time.sleep(0.1)
+
+            # 6. Type "X" at pos 0 -> buffer is "XTARGET"
+            os.write(master, b"X")
+            time.sleep(0.1)
+
+            # 7. Left arrow to pos 0, then Delete (\x1b[3~) -> removes 'X'
+            os.write(master, b"\x1b[D")
+            time.sleep(0.1)
+            os.write(master, b"\x1b[3~")
+            time.sleep(0.1)
+
+            # 8. End (Ctrl+E / \x05) -> pos 6 (end of "TARGET")
+            os.write(master, b"\x05")
+            time.sleep(0.1)
+
+            # 9. Type "MATCH" -> buffer is "TARGETMATCH"
+            os.write(master, b"MATCH")
+            time.sleep(0.1)
+
+            # 10. Press Enter -> finds TARGETMATCH in document
+            os.write(master, b"\r")
+            time.sleep(0.3)
+            doc_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "TARGETMATCH" in doc_out, (
+                f"Expected editor to display matched TARGETMATCH:\n{doc_out}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Find modal in-field cursor editing verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2375,6 +2465,7 @@ def main():
     test_bug_2_4_28_overwrite_confirmation()
     test_bug_2_4_29_block_save_and_insert()
     test_bug_2_4_30_block_menu_popup()
+    test_bug_2_4_31_find_modal_cursor_navigation()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

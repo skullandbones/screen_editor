@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 10 Defects Open (Bugs 2.4.31–2.4.40).
+- **Status**: Active / 9 Defects Open (Bugs 2.4.32–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -601,7 +601,7 @@ have been resolved and archived.
       Clear, ESC), and verified screen restoration.
       Validated via `test_bug_2_4_30_block_menu_popup` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.31: Missing In-Field Cursor Navigation in Find Text Modal**:
+  - [x] **Bug 2.4.31: Missing In-Field Cursor Navigation in Find Text Modal**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 10.1, 10.2.
     - *Issue*: In `src/core/search.c:215-289` (`do_ctrl_f_find`), the 50x7 Find
       Text modal dialog lacks cursor navigation. The cursor is pinned to
@@ -615,6 +615,12 @@ have been resolved and archived.
       (`Ctrl+A`) / End (`Ctrl+E`), character insertion at `cursor_pos`,
       Backspace deleting left of cursor (`cursor_pos - 1`), and Delete /
       `Ctrl+D` forward-deleting character at `cursor_pos`.
+    - *Resolution*: Implemented `cursor_pos` navigation in `do_ctrl_f_find()`
+      and `draw_find_field()` (`src/core/search.c`) supporting Left/Right
+      arrows, Home (`Ctrl+A`), End (`Ctrl+E`), Backspace left-deletion, Delete /
+      `Ctrl+D` forward character deletion, and in-field character insertion.
+      Validated via `test_bug_2_4_31_find_modal_cursor_navigation` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.32: Multi-Byte Escape Sequence Trailing Byte Leakage**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c:142-145`, when an
