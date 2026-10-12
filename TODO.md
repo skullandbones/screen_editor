@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 14 Defects Open (Bugs 2.4.20–2.4.33).
+- **Status**: Active / 13 Defects Open (Bugs 2.4.20–2.4.25, 2.4.27–2.4.33).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -498,7 +498,7 @@ have been resolved and archived.
       deleting character under cursor (`cursor_pos`), Left/Right arrow keys
       shifting cursor index, and Home (`Ctrl+A`) / End (`Ctrl+E`) moving to
       boundaries.
-  - [ ] **Bug 2.4.26: Status Bar Layout Regression & Format Truncation Error**:
+  - [x] **Bug 2.4.26: Status Bar Layout Regression & Format Truncation Error**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1
       (Anti-Pattern #1).
     - *Issue*: In `src/core/ui_render.c:170-245` (`render_status_bar`), buffer
@@ -508,11 +508,12 @@ have been resolved and archived.
       `[Pan +40]`, and `[Overwrite]`, clobbering persistent `^K: Editor keys |`
       and violating the canonical status bar invariant that mode flags and
       indicators belong exclusively in Field 5.
-    - *Required Fix*: Expand buffer capacities to prevent compiler truncation
-      warnings under `-Wall -Wextra -Werror -O2`. Restore persistent `^K: Editor
-      keys | ` in Field 4 across all editing states, and route selection
-      indicators (`[SEL]`, `[BLK LOCK]`), pan indicator (`[Pan +40]`), and
-      overwrite flag into Field 5.
+    - *Resolution*: Isolated CP/M status bar optimizations under
+      `#ifdef __CPM__` and restored canonical Linux SE status bar with 80-byte
+      `raw_name` and 256-byte `core`/`full_bar` buffers, eliminating format
+      truncation errors. Restored persistent `^K: Editor keys |` in Field 4,
+      routed mode indicators into Field 5, and restored Tier 2 save
+      notifications under `#ifndef __CPM__` in `src/core/file_io.c`.
   - [ ] **Bug 2.4.27: Missing File Not Found Modal Alert on Open and Insert**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype A).
     - *Issue*: In `src/core/editor.c:560`, `src/core/ui_render.c:355`, and

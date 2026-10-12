@@ -222,6 +222,10 @@ int file_save(const char *filename, uint8_t format)
             g_current_filename[sizeof(g_current_filename) - 1] = '\0';
         }
         g_doc_modified = 0;
+#ifndef __CPM__
+        modal_show_notification("Save Complete",
+                                filename ? filename : g_current_filename);
+#endif
     }
     return res;
 }
@@ -229,5 +233,11 @@ int file_save(const char *filename, uint8_t format)
 int file_save_block(const char *filename, uint16_t start_row,
                     uint16_t end_row, uint8_t format)
 {
-    return file_write_op(filename, start_row, end_row, format);
+    int res = file_write_op(filename, start_row, end_row, format);
+#ifndef __CPM__
+    if (res == 0) {
+        modal_show_notification("Export Complete", filename);
+    }
+#endif
+    return res;
 }
