@@ -25,6 +25,7 @@
 ;------------------------------------------------------------------------------
 TARGET_NEXT		EQU	1
 TARGET_NEXT_NATIVE	EQU	1
+TEST_UART_BRIDGE	EQU	1
 BDOS_ENTRY		EQU	NATIVE_BDOS_ENTRY
 DEFAULT_DMA		EQU	DEFAULT_DMA_BUF
 CMD_LEN			EQU	DEFAULT_DMA_BUF
