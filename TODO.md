@@ -148,7 +148,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 15 Defects Open (Bugs 2.4.25, 2.4.27–2.4.40).
+- **Status**: Active / 14 Defects Open (Bugs 2.4.27–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -489,7 +489,7 @@ have been resolved and archived.
       via `solidify_block()`, triggers status bar re-rendering, and returns
       without splitting the line. Validated via
       `test_bug_2_4_24_enter_solidifies_block` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.25: Missing In-Field Editing Keys in Archetype C Modals**:
+  - [x] **Bug 2.4.25: Missing In-Field Editing Keys in Archetype C Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
     - *Issue*: In `src/core/ui_modal.c:258-318` (`modal_prompt_text`), the
       parametric input field pins the cursor to the end of the input string
@@ -498,12 +498,13 @@ have been resolved and archived.
       `KEY_END`, `KEY_CTRL_A`, `KEY_CTRL_E`). Furthermore, `KEY_DEL` is mapped
       to backspace (deleting the last character), and `KEY_CTRL_D` is unhandled,
       violating the mandate for forward character deletion under the cursor.
-    - *Required Fix*: Implement in-field cursor position tracking (`cursor_pos`)
-      in `modal_prompt_text()`. Support character insertion at cursor position,
-      Backspace deleting left of cursor (`cursor_pos - 1`), Delete and `Ctrl+D`
-      deleting character under cursor (`cursor_pos`), Left/Right arrow keys
-      shifting cursor index, and Home (`Ctrl+A`) / End (`Ctrl+E`) moving to
-      boundaries.
+    - *Resolution*: Implemented internal cursor index (`cursor_pos`) in
+      `modal_prompt_text()` in `src/core/ui_modal.c`. Added full support for
+      Left/Right navigation, Home (`Ctrl+A`), End (`Ctrl+E`), character
+      insertion at `cursor_pos`, Backspace deleting left of cursor, and Delete /
+      `Ctrl+D` deleting under cursor. Validated via
+      `test_bug_2_4_25_modal_prompt_text_editing` in
+      `tests/test_linux_native.py`.
   - [x] **Bug 2.4.26: Status Bar Layout Regression & Format Truncation Error**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1
       (Anti-Pattern #1).

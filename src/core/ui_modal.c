@@ -18,6 +18,9 @@
 #include "../include/ui_modal.h"
 #include "../include/file_io.h"
 #include "../include/hal.h"
+#ifndef __CPM__
+#include <unistd.h>
+#endif
 
 #ifdef __CPM__
 #define MODAL_BOX_WIDTH   50
@@ -178,7 +181,12 @@ int modal_confirm(const char *title, const char *msg,
         hal_console_puts("      [ESC]=Cancel        |");
 #endif
 
-        int k = hal_console_getkey();
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
         if (k == KEY_ENTER || k == ' ') {
             g_need_screen_render = 1;
             return (selected == 0) ? MODAL_RES_YES : MODAL_RES_NO;
@@ -258,12 +266,13 @@ int modal_confirm_3btn(const char *title, const char *msg,
 int modal_prompt_text(const char *title, const char *prompt,
                       char *buffer, size_t max_len)
 {
-    uint8_t width = 52;
+    uint8_t width = MODAL_BOX_WIDTH;
     uint8_t height = 8;
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
     uint8_t field_len = 30;
     size_t cur_len = buffer ? strlen(buffer) : 0;
+    size_t cursor_pos = cur_len;
     uint8_t input_left;
     size_t i;
 
@@ -292,10 +301,15 @@ int modal_prompt_text(const char *title, const char *prompt,
         hal_console_puts(" ]");
 
         /* Terminal cursor placed directly inside bracket field */
-        hal_console_locate(top + 4, (uint8_t)(input_left + 2 + cur_len));
+        hal_console_locate(top + 4, (uint8_t)(input_left + 2 + cursor_pos));
         hal_console_show_cursor();
 
-        int k = hal_console_getkey();
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
         if (k == KEY_ENTER) {
             hal_console_hide_cursor();
             g_need_screen_render = 1;
@@ -310,14 +324,40 @@ int modal_prompt_text(const char *title, const char *prompt,
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return k;
-        } else if (k == KEY_BACKSPACE || k == KEY_DEL) {
-            if (cur_len > 0) {
+        } else if (k == KEY_LEFT) {
+            if (cursor_pos > 0) {
+                cursor_pos--;
+            }
+        } else if (k == KEY_RIGHT) {
+            if (cursor_pos < cur_len) {
+                cursor_pos++;
+            }
+        } else if (k == KEY_HOME || k == KEY_CTRL_A) {
+            cursor_pos = 0;
+        } else if (k == KEY_END || k == KEY_CTRL_E) {
+            cursor_pos = cur_len;
+        } else if (k == KEY_BACKSPACE || k == 8 || k == 127) {
+            if (cursor_pos > 0) {
+                memmove(buffer + cursor_pos - 1, buffer + cursor_pos,
+                        cur_len - cursor_pos + 1);
+                cur_len--;
+                cursor_pos--;
+                buffer[cur_len] = '\0';
+            }
+        } else if (k == KEY_DEL || k == KEY_CTRL_D) {
+            if (cursor_pos < cur_len) {
+                memmove(buffer + cursor_pos, buffer + cursor_pos + 1,
+                        cur_len - cursor_pos);
                 cur_len--;
                 buffer[cur_len] = '\0';
             }
         } else if (k >= 32 && k <= 126 && cur_len + 1 < max_len &&
                    cur_len < field_len) {
-            buffer[cur_len++] = (char)k;
+            memmove(buffer + cursor_pos + 1, buffer + cursor_pos,
+                    cur_len - cursor_pos + 1);
+            buffer[cursor_pos] = (char)k;
+            cur_len++;
+            cursor_pos++;
             buffer[cur_len] = '\0';
         }
     }

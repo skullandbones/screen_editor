@@ -1824,6 +1824,101 @@ def test_bug_2_4_24_enter_solidifies_block():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_25_modal_prompt_text_editing():
+    """Verify in-field editing keys in Archetype C modals (§8.3, §10.1)."""
+    print("[*] Testing Bug 2.4.25: Archetype C in-field editing keys...")
+    with tempfile.NamedTemporaryFile("w+", prefix="tb25_", suffix=".txt",
+                                     delete=False) as tf:
+        for i in range(100):
+            tf.write(f"Line {i+1}\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Trigger Goto Line (Ctrl+L / 0x0C)
+            os.write(master, b"\x0c")
+            time.sleep(0.2)
+            out_modal = read_all_available(master, 0.2)
+            assert b"Goto Line" in out_modal, "Goto Line modal not rendered"
+
+            # Type "1234"
+            os.write(master, b"1234")
+            time.sleep(0.1)
+
+            # Left arrow twice (\x1b[D\x1b[D) -> pos 2
+            os.write(master, b"\x1b[D\x1b[D")
+            time.sleep(0.1)
+
+            # Insert "9" -> "12934", pos 3
+            os.write(master, b"9")
+            time.sleep(0.1)
+
+            # Home (Ctrl+A / 0x01) -> pos 0
+            os.write(master, b"\x01")
+            time.sleep(0.1)
+
+            # Delete key (\x1b[3~) -> deletes '1', buffer is "2934"
+            os.write(master, b"\x1b[3~")
+            time.sleep(0.1)
+
+            # Right arrow (\x1b[C) -> pos 1
+            os.write(master, b"\x1b[C")
+            time.sleep(0.1)
+
+            # Backspace (0x08) -> deletes '2', buffer is "934"
+            os.write(master, b"\x08")
+            time.sleep(0.1)
+
+            # Ctrl+D (0x04) -> deletes '9', buffer is "34"
+            os.write(master, b"\x04")
+            time.sleep(0.1)
+
+            # End (Ctrl+E / 0x05) -> pos 2
+            os.write(master, b"\x05")
+            time.sleep(0.1)
+
+            # Type "5" -> buffer is "345"
+            os.write(master, b"5")
+            time.sleep(0.1)
+
+            # Press Enter (\r)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+
+            out_nav = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line  100/100" in out_nav or "Line 100/100" in out_nav, (
+                f"Expected jump to line 100, got:\n{out_nav}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        print("    [+] Archetype C in-field editing verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -1854,6 +1949,7 @@ def main():
     test_bug_2_4_22_delete_active_block()
     test_bug_2_4_23_backspace_cancels_block()
     test_bug_2_4_24_enter_solidifies_block()
+    test_bug_2_4_25_modal_prompt_text_editing()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
