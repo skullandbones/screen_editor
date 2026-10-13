@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 7 Defects Open (Bugs 2.4.43–2.4.49).
+- **Status**: Active / 6 Defects Open (Bugs 2.4.44–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1259,7 +1259,7 @@ have been resolved and archived.
       em-dash with ASCII hyphen `-`. Validated via
       `test_bug_2_4_42_config_screen_canonical_layout` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.43: Splash Screen Layout Non-Conformity & Clean Header**:
+  - [x] **Bug 2.4.43: Splash Screen Layout Non-Conformity & Clean Header**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 14.6.
     - *Issue*: In `src/core/ui_render.c:422-442` (`s_splash_lines`):
       1. Violates the Clean Header Mandate by rendering `Version v1.1.0 (C)` on
@@ -1278,6 +1278,13 @@ have been resolved and archived.
       `src/core/ui_render.c` to conform to the 21x50 canonical layout: ASCII
       hyphen header, removal of version/language line, inclusion of the 4
       diagnostic status lines, and standard geometry option presentation.
+    - *Resolution*: Updated `show_splash_screen()` in `src/core/ui_render.c` to
+      conform to canonical 21-line by 50-column layout: enforced Clean Header
+      Mandate with `SE - Screen Editor` on Row 1 using ASCII hyphen `-`, removed
+      premature version/language line, centered standard command hotkeys, and
+      dynamically formatted the 4 canonical diagnostic status lines (Active
+      Screen, RAM Drive (A:), Plugin System, Max Lines). Validated via
+      `test_bug_2_4_43_splash_canonical_layout` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.44: Non-Conforming About Screen Layout & Missing Credits**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.11, 14.6.
     - *Issue*: In `src/core/ui_render.c:583-599` (`show_about_screen`), the

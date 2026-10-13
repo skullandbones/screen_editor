@@ -419,35 +419,84 @@ static void render_tier1_workspace_screen(const char **lines,
 
 void show_splash_screen(void)
 {
-    static const char *s_splash_lines[19] = {
-        "                  SE — Screen Editor                  ",
-        "                  Version v1.1.0 (C)                  ",
-        "                                                      ",
-        "        type   [E]  or  [Enter] to edit               ",
-        "        type   [N]              to new file           ",
-        "        type   [O]              to open file          ",
-        "        type   [S]              to save file          ",
-        "        type   [W]  or  [^W]    to close file         ",
-        "        type   [L]  or  [^L]    to goto line          ",
-        "        type   [A]              for about             ",
-        "        type   [M]              for memory info       ",
-        "        type   [P]              for plugins           ",
-        "        type   [^P]             for context plugin menu",
-        "        type   [C]              to configure          ",
-        "        type   [1]              set 80x24             ",
-        "        type   [2]              set 120x40            ",
-        "        type   [3]              set native            ",
-        "        type   [Q]  or  [^Q]    to exit               ",
-        "                                                      "
-    };
+    char line_screen[64];
+    char line_ram[64];
+    char line_plug[64];
+    char line_lines[64];
+    const char *splash_lines[21];
+    const char *ram_val;
+    const char *plug_val;
     int k;
     char dlg_fname[32];
     uint8_t need_render = 1;
 
+    hal_console_hide_cursor();
     g_is_splash_screen = 1;
+
     while (1) {
+        if (g_config.screen_mode == MODE_120X40) {
+            snprintf(line_screen, sizeof(line_screen),
+                     "   Active Screen : %-31.31s",
+                     "[120x40 (Modern Default)]");
+        } else if (g_config.screen_mode == MODE_NATIVE) {
+            snprintf(line_screen, sizeof(line_screen),
+                     "   Active Screen : %-31.31s",
+                     "[Native (Dynamic Console)]");
+        } else {
+            snprintf(line_screen, sizeof(line_screen),
+                     "   Active Screen : %-31.31s",
+                     "[80x24 (Classic Terminal)]");
+        }
+
+        if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
+            ram_val = "[Overwritten (Max RAM)]";
+        } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
+            ram_val = "[Hibernated (Temp Image)]";
+        } else {
+            ram_val = "[Preserved (Active)]";
+        }
+        snprintf(line_ram, sizeof(line_ram),
+                 "   RAM Drive (A:): %-31.31s", ram_val);
+
+        if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
+            plug_val = "[Disabled]";
+        } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
+            plug_val = "[On Demand]";
+        } else {
+            plug_val = "[Operational]";
+        }
+        snprintf(line_plug, sizeof(line_plug),
+                 "   Plugin System : %-31.31s", plug_val);
+
+        snprintf(line_lines, sizeof(line_lines),
+                 "   Max Lines     : %-31.31s",
+                 (g_config.lines_mode == 1) ? "[32,768 lines]" :
+                                              "[16,384 lines]");
+
+        splash_lines[0]  = "                SE - Screen Editor                ";
+        splash_lines[1]  = "                                                  ";
+        splash_lines[2]  = "   type   [E]  or  [Enter] to edit                ";
+        splash_lines[3]  = "   type   [N]              to new file            ";
+        splash_lines[4]  = "   type   [O]              to open file           ";
+        splash_lines[5]  = "   type   [S]              to save file           ";
+        splash_lines[6]  = "   type   [W]  or  [^W]    to close file          ";
+        splash_lines[7]  = "   type   [L]  or  [^L]    to goto line           ";
+        splash_lines[8]  = "   type   [A]              for about              ";
+        splash_lines[9]  = "   type   [M]              for memory info        ";
+        splash_lines[10] = "   type   [P]              for plugins            ";
+        splash_lines[11] = "   type   [^P]             for context plugin menu";
+        splash_lines[12] = "   type   [C]              to configure           ";
+        splash_lines[13] = "   type   [1]              set 80x24              ";
+        splash_lines[14] = "   type   [2]              set 120x40             ";
+        splash_lines[15] = "   type   [Q]  or  [^Q]    to exit                ";
+        splash_lines[16] = "                                                  ";
+        splash_lines[17] = line_screen;
+        splash_lines[18] = line_ram;
+        splash_lines[19] = line_plug;
+        splash_lines[20] = line_lines;
+
         if (need_render) {
-            render_tier1_workspace_screen(s_splash_lines, 19, 54);
+            render_tier1_workspace_screen(splash_lines, 21, 50);
             need_render = 0;
         }
         while ((k = hal_console_getkey()) <= 0) {
@@ -549,6 +598,7 @@ void show_splash_screen(void)
         }
     }
     clear_screen();
+    hal_console_show_cursor();
     g_is_splash_screen = 0;
     g_need_screen_render = 1;
 }

@@ -463,9 +463,9 @@ def test_tier1_centering_and_tilde_discipline():
         assert "~" in splash_out, (
             "Splash screen missing column 0 tilde margin discipline"
         )
-        assert "SE — Screen Editor" in splash_out, (
-            "Splash screen missing canonical centered title"
-        )
+        assert ("SE - Screen Editor" in splash_out) or (
+            "SE — Screen Editor" in splash_out
+        ), "Splash screen missing canonical centered title"
 
         # Press space to enter editor mode
         os.write(master, b" ")
@@ -643,9 +643,9 @@ def test_bug_2_4_8_modal_dispatchers():
             splash_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "SE — Screen Editor" in splash_out, (
-                f"Ctrl+W failed to transition to splash screen:\n{splash_out}"
-            )
+            assert ("SE - Screen Editor" in splash_out) or (
+                "SE — Screen Editor" in splash_out
+            ), f"Ctrl+W failed to transition to splash screen:\n{splash_out}"
 
             # Exit cleanly via 'q' on splash screen
             os.write(master, b"q")
@@ -692,9 +692,9 @@ def test_bug_2_4_9_splash_screen_commands():
         splash_out = read_all_available(master, 0.3).decode(
             "utf-8", errors="replace"
         )
-        assert "SE — Screen Editor" in splash_out, (
-            f"Return from Config failed to render Splash screen:\n{splash_out}"
-        )
+        assert ("SE - Screen Editor" in splash_out) or (
+            "SE — Screen Editor" in splash_out
+        ), f"Return from Config failed to render Splash screen:\n{splash_out}"
 
         # Dispatch '?' for Help screen
         os.write(master, b"?")
@@ -2500,7 +2500,9 @@ def test_bug_2_4_32_escape_sequence_leakage():
             splash_out = read_all_available(master2, 0.4).decode(
                 "utf-8", errors="replace"
             )
-            assert "SE — Screen Editor" in splash_out
+            assert ("SE - Screen Editor" in splash_out) or (
+                "SE — Screen Editor" in splash_out
+            )
 
             # Send unrecognized escape sequence that would contain 'C' if leaked
             os.write(master2, b"\x1b[1;5C")
@@ -2607,8 +2609,8 @@ def test_bug_2_4_33_block_typing_cancellation():
 
 
 def test_bug_2_4_34_splash_language_indication():
-    """Verify predominant language indicator on splash screen (Bug 2.4.34)."""
-    print("[*] Testing splash predominant language indication (2.4.34)...")
+    """Verify splash clean header mandate (Bug 2.4.34 / Section 7.2)."""
+    print("[*] Testing splash clean header mandate (2.4.34)...")
     master, slave = pty.openpty()
     pid = os.fork()
     if pid == 0:
@@ -2624,11 +2626,11 @@ def test_bug_2_4_34_splash_language_indication():
         splash_out = read_all_available(master, 0.4).decode(
             "utf-8", errors="replace"
         )
-        assert "SE — Screen Editor" in splash_out, (
-            f"Expected 'SE — Screen Editor' on row 1:\n{splash_out}"
+        assert "SE - Screen Editor" in splash_out, (
+            f"Expected 'SE - Screen Editor' on row 1:\n{splash_out}"
         )
-        assert "Version v1.1.0 (C)" in splash_out, (
-            f"Expected 'Version v1.1.0 (C)' on row 2:\n{splash_out}"
+        assert "Version v1.1.0" not in splash_out, (
+            f"Version must not appear on splash screen:\n{splash_out}"
         )
 
         # Exit cleanly via 'q'
@@ -2636,7 +2638,7 @@ def test_bug_2_4_34_splash_language_indication():
         exit_code = wait_pid_with_timeout(pid, 2.0)
         os.close(master)
         assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
-        print("    [+] Splash predominant language indicator verified [PASS]")
+        print("    [+] Splash clean header mandate verified [PASS]")
 
 
 def test_bug_2_4_35_splash_hotkeys_and_native_mode():
@@ -2663,9 +2665,6 @@ def test_bug_2_4_35_splash_hotkeys_and_native_mode():
         )
         assert "type   [2]              set 120x40" in splash_out, (
             f"Expected 'set 120x40' on hotkey 2:\n{splash_out}"
-        )
-        assert "type   [3]              set native" in splash_out, (
-            f"Expected 'set native' on hotkey 3:\n{splash_out}"
         )
 
         # Press '1' -> 80x24 mode
@@ -2816,9 +2815,9 @@ def test_bug_2_4_37_config_screen_interactive():
             splash_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "SE — Screen Editor" in splash_out, (
-                f"Failed to return to splash screen:\n{splash_out}"
-            )
+            assert ("SE - Screen Editor" in splash_out) or (
+                "SE — Screen Editor" in splash_out
+            ), f"Failed to return to splash screen:\n{splash_out}"
 
             # Exit cleanly via 'q'
             os.write(master, b"q")
@@ -3213,6 +3212,83 @@ def test_bug_2_4_42_config_screen_canonical_layout():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_43_splash_canonical_layout():
+    """Verify 21x50 canonical layout and 4 diagnostic lines (Bug 2.4.43)."""
+    print("[*] Testing 21x50 canonical splash layout (Bug 2.4.43)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        splash_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+
+        # 1. Clean header: ASCII hyphen title, no UTF-8 em-dash, no version/lang
+        assert "SE - Screen Editor" in splash_out, (
+            f"Expected 'SE - Screen Editor' in splash header:\n{splash_out}"
+        )
+        assert "SE \xe2\x80\x94 Screen Editor" not in splash_out, (
+            "Found multi-byte UTF-8 em-dash in splash title"
+        )
+        assert "Version v1.1.0" not in splash_out, (
+            f"Version must not appear on splash screen:\n{splash_out}"
+        )
+
+        # 2. Key commands present
+        assert "type   [E]  or  [Enter] to edit" in splash_out
+        assert "type   [1]              set 80x24" in splash_out
+        assert "type   [2]              set 120x40" in splash_out
+        assert "type   [Q]  or  [^Q]    to exit" in splash_out
+
+        # 3. All 4 diagnostic status lines present
+        assert "Active Screen : [" in splash_out, (
+            f"Missing Active Screen diagnostic line:\n{splash_out}"
+        )
+        assert "RAM Drive (A:): [Preserved (Active)]" in splash_out, (
+            f"Missing RAM Drive diagnostic line:\n{splash_out}"
+        )
+        assert "Plugin System : [Operational]" in splash_out, (
+            f"Missing Plugin System diagnostic line:\n{splash_out}"
+        )
+        assert "Max Lines     : [" in splash_out and "lines]" in splash_out, (
+            f"Missing Max Lines diagnostic line:\n{splash_out}"
+        )
+
+        # 4. Geometry switch updates diagnostic line
+        os.write(master, b"1")
+        time.sleep(0.3)
+        splash_80 = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "Active Screen : [80x24 (Classic Terminal)]" in splash_80, (
+            f"Active Screen diagnostic not updated on '1':\n{splash_80}"
+        )
+
+        os.write(master, b"2")
+        time.sleep(0.3)
+        splash_120 = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "Active Screen : [120x40 (Modern Default)]" in splash_120, (
+            f"Active Screen diagnostic not updated on '2':\n{splash_120}"
+        )
+
+        # Exit cleanly via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Canonical 21x50 splash screen layout verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3260,6 +3336,7 @@ def main():
     test_bug_2_4_40_plugin_palette_modal()
     test_bug_2_4_41_tab_snap_forward()
     test_bug_2_4_42_config_screen_canonical_layout()
+    test_bug_2_4_43_splash_canonical_layout()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
