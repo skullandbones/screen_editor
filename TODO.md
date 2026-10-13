@@ -2375,7 +2375,7 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Complete / 0 Defects Open.
+- **Status**: Active / 9 Defects Open.
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2417,6 +2417,129 @@ have been resolved and archived.
       4. Fixed `workspace_root` resolution in `test_editor_headless.py` and
          consolidated Step 17 save prompt capture buffer.
       5. Verified 100% pass across Steps 17–24 in headless test suite.
+  - [ ] **Bug 2.8.2: TPA Memory Overflow Overwriting BDOS and CCP (BAD LOAD)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.4, 14.5; `TODO.md`
+      Section 7.1; `check_tpa.py SEC.COM`.
+    - *Issue*: When running `SEC.COM` on RomWBW RC2014 CP/M, CCP reports
+      `BAD LOAD` and immediately aborts execution. `check_tpa.py SEC.COM`
+      reports -3,336 bytes of negative headroom below BDOS (`0xD800`), with
+      code and data spanning 54,854 bytes (0x0100..0xD746) and BSS reaching
+      `0xE508` (58,376 bytes consumed / 106.06% of TPA capacity).
+    - *Root Cause*: Code growth from Linux profile feature additions in
+      `src/core/`, unpruned rodata string literals (~5.5 KB), multiple
+      `snprintf` calls with large format buffers, and CRT stdio redirection
+      exceed the 55,040-byte TPA limit, directly overwriting CCP (`0xD000`) and
+      BDOS (`0xD800`).
+    - *Remedy*: Apply `#ifdef __CPM__` / `#ifndef __CPM__` conditional
+      directives across shared C modules to isolate Linux-specific routines,
+      eliminate redundant `snprintf` formatters on CP/M, trim string literals,
+      configure z88dk pragmas to trim unused CRT/stdio features, and restore
+      positive TPA headroom below `0xD800`.
+  - [ ] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 7.3, 7.4, 7.12,
+      11.10.
+    - *Issue*: Multi-byte UTF-8 em-dash characters (`—` / `\xe2\x80\x94`) are
+      emitted across title banners in the Splash, Help, About, and Configuration
+      screens, producing visual glitches and character corruption (e.g. `â€”`)
+      on standard CP/M VT100 / ANSI serial terminals.
+    - *Root Cause*: Static string tables in `src/core/ui_render.c`
+      (`s_splash_lines[0]`, `s_help_lines[0]`, `s_about_lines[0]`, and
+      `cfg_lines[0]`) contain UTF-8 em-dashes instead of 7-bit standard ASCII.
+    - *Remedy*: Replace all multi-byte UTF-8 em-dash characters in
+      `src/core/ui_render.c` and shared UI routines with standard 7-bit ASCII
+      hyphens (`-`) in strict conformance with Section 2.6.
+  - [ ] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
+    - *Issue*: The splash screen in `SEC.COM` displays unsupported Option 3
+      (`type [3] set native`), includes redundant `Version v1.1.0 (C)` on Row 2,
+      and completely omits the four canonical dynamic system metadata rows
+      (`Active Screen`, `RAM Drive`, `Plugin System`, `Max Lines`).
+    - *Root Cause*: `show_splash_screen()` in `src/core/ui_render.c` uses a
+      static 19-line string array that does not conditionally omit Option 3 on
+      CP/M, violates the clean header mandate by including version info on
+      Row 2, and lacks formatting logic for the four dynamic system fields.
+    - *Remedy*: Conditionally hide Option 3 on CP/M targets (`#ifndef __CPM__`),
+      remove version/language from Row 2, and dynamically render the four
+      canonical system status fields from `g_config` matching canonical
+      `SE.COM`.
+  - [ ] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 11.1, 13.2.
+    - *Issue*: Configuration Manager in `SEC.COM` renders a prohibited
+      `Enter option: _` input prompt line (violating anti-pattern 1), uses
+      non-canonical 4-option numbering, displays non-standard footer
+      `[S] Save to SE.CFG [ESC]/[Enter] Return`, and serializes illegal
+      `FORMAT=...` parameter into `SE.CFG`.
+    - *Root Cause*: `show_config_screen()` in `src/core/ui_render.c` uses an
+      ad-hoc 4-option layout with an embedded `Enter option: _` text line, and
+      `config_save_file()` in `src/core/config.c` serializes `FORMAT=%s`.
+    - *Remedy*: Harmonize `show_config_screen()` to the canonical 5-option
+      hotkey layout (1 Geometry, 2 RAM Drive, 3 Max Lines, 4 Tab Width,
+      5 Plugins), remove `Enter option: _`, format canonical footer
+      `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`, and remove `FORMAT`
+      parameter serialization from `config_save_file()`.
+  - [ ] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
+    - *Issue*: About screen in `SEC.COM` displays `SE.COM — Screen Editor
+      (Linux)` when executed on CP/M hardware or RomWBW emulator, uses an
+      abbreviated 6-line layout, and omits author and license credits.
+    - *Root Cause*: `s_about_lines` in `src/core/ui_render.c` hardcodes
+      `(Linux)` into the title string and uses an ad-hoc 6-line format instead
+      of the canonical 9-line specification.
+    - *Remedy*: Refactor `show_about_screen()` in `src/core/ui_render.c` to
+      adopt the canonical 9-line centered layout from Section 7.12, format
+      `version 1.1.0 (2026-10-09) (C)` in Row 2, and include author and
+      Antigravity/Gemini open-source credits.
+  - [ ] **Bug 2.8.7: Status Bar Field 4 Context Clobber & Mode Placement**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 6.6, 11.1.
+    - *Issue*: Status bar Field 4 (`^K: Editor keys`) is clobbered and replaced
+      by horizontal pan indicator `[Pan +40]`, selection metrics, and transient
+      status messages, while Field 5 lacks canonical mode indicators (`[SEL]`,
+      `[BLK LOCK]`). Furthermore, status bar framing inserts extraneous leading
+      spaces on 80-column terminals.
+    - *Root Cause*: `render_status_bar()` in `src/core/ui_render.c:192-234`
+      formats mode indicators and transient messages into `field4` rather than
+      appending them to `field5`, and calculates padding that misaligns
+      Column 1 on 80x24 screens.
+    - *Remedy*: Preserve `^K: Editor keys |` persistently in Field 4, relocate
+      `[Pan +X]`, `[SEL]`, and `[BLK LOCK]` indicators to Field 5, eliminate
+      transient message formatting in the status bar (routing alerts strictly
+      to Tier 2 modals), and anchor the status bar at Column 1 on 80x24 screens.
+  - [ ] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
+    - *Issue*: Help screen (`Ctrl+K`) displays `Ctrl+U / Ctrl+V: Page Up / Down`
+      alongside `Ctrl+V: Paste Block` (duplicating `Ctrl+V` on the same line),
+      and lists `Ctrl+X: Cut Block` / `Ctrl+C: Copy Block` instead of canonical
+      `Move Block to Cursor` / `Copy Block to Cursor`.
+    - *Root Cause*: `s_help_lines` in `src/core/ui_render.c` retains deprecated
+      WordStar/legacy paging aliases and non-canonical block action verbs.
+    - *Remedy*: Update `s_help_lines` in `src/core/ui_render.c` to display
+      `PgUp / PgDn : Page Up / Down` and `Ctrl+D: Delete Block`, and standardize
+      block descriptions to `Copy Block to Cursor` and `Move Block to Cursor`
+      matching Section 7.3.
+  - [ ] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 7.10.
+    - *Issue*: Goto Line modal dialog renders with 8 rows instead of canonical
+      7 rows, lacks canonical `Goto line: [ ... ]` query framing, and repaints
+      the entire inverse-video field on every single keystroke.
+    - *Root Cause*: `modal_prompt_text()` in `src/core/ui_modal.c` sets
+      `height = 8` and redraws the full bracketed field in its event loop
+      rather than performing in-place character echoing.
+    - *Remedy*: Standardize `modal_prompt_text()` (or create dedicated
+      `modal_goto_line()`) to canonical 7-row framing (`50 cols x 7 rows`)
+      adhering to Archetype C, and implement in-place prompt character echoing
+      per Section 7.10.
+  - [ ] **Bug 2.8.10: Unsaved Document Close Loss on Untitled Buffer (Ctrl+W)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11.
+    - *Issue*: Closing an untitled modified document via `Ctrl+W` prompts "Save
+      changes?", but selecting `[Y]es` fails silently and discards edits because
+      `file_save(NULL, ...)` cannot save without a filename.
+    - *Root Cause*: `modal_confirm_save_changes()` in `src/core/ui_modal.c:378`
+      calls `file_save(NULL, ...)` directly without redirecting to the Save
+      File dialog when `g_current_filename` is empty.
+    - *Remedy*: In `modal_confirm_save_changes()`, if
+      `g_current_filename[0] == '\0'`, redirect `[Y]es` to
+      `ui_browser_save_dialog()` so the user can enter a destination filename
+      before closing to the splash screen.
 
 ---
 
