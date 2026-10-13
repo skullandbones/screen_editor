@@ -23,7 +23,7 @@ int hal_storage_open(const char *path, void *handle)
         return -1;
     }
     file_populate_fcb(path, fcb);
-    return (bdos(15, (int)fcb) == 255) ? -1 : 0;
+    return ((uint8_t)bdos(15, (int)fcb) == 0xFF) ? -1 : 0;
 }
 
 int hal_storage_make(const char *path, void *handle)
@@ -34,7 +34,7 @@ int hal_storage_make(const char *path, void *handle)
     }
     file_populate_fcb(path, fcb);
     bdos(19, (int)fcb);
-    return (bdos(22, (int)fcb) == 255) ? -1 : 0;
+    return ((uint8_t)bdos(22, (int)fcb) == 0xFF) ? -1 : 0;
 }
 
 int hal_storage_close(void *handle)

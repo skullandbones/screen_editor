@@ -97,7 +97,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     }
 
     file_populate_fcb(filename, &s_cpm_io_fcb);
-    if (bdos(15, (int)&s_cpm_io_fcb) == 255) {
+    if ((uint8_t)bdos(15, (int)&s_cpm_io_fcb) == 0xFF) {
         modal_alert_file_not_found(filename);
         return -1;
     }
@@ -199,7 +199,7 @@ static int file_write_op(const char *filename, uint16_t start_row,
 
     file_populate_fcb(filename, &s_cpm_io_fcb);
     bdos(19, (int)&s_cpm_io_fcb);
-    if (bdos(22, (int)&s_cpm_io_fcb) == 255) {
+    if ((uint8_t)bdos(22, (int)&s_cpm_io_fcb) == 0xFF) {
         return -1;
     }
 

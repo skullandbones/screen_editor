@@ -163,7 +163,7 @@ int config_load_file(const char *filename)
     }
 
     file_populate_fcb(filename, &s_cfg_fcb);
-    if (bdos(15, (int)&s_cfg_fcb) == 255) {
+    if ((uint8_t)bdos(15, (int)&s_cfg_fcb) == 0xFF) {
         return -1;
     }
 
@@ -250,7 +250,7 @@ int config_save_file(const char *filename)
 
     file_populate_fcb(filename, &s_cfg_fcb);
     bdos(19, (int)&s_cfg_fcb);
-    if (bdos(22, (int)&s_cfg_fcb) == 255) {
+    if ((uint8_t)bdos(22, (int)&s_cfg_fcb) == 0xFF) {
         return -1;
     }
 

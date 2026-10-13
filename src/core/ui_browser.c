@@ -586,7 +586,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                     } else {
                         s_dir_fcb[0] = (uint8_t)(s_browser_drive - 'A' + 1);
                     }
-                    if (bdos(15, (int)s_dir_fcb) == 255) {
+                    if ((uint8_t)bdos(15, (int)s_dir_fcb) == 0xFF) {
                         modal_alert_file_not_found(input_buf);
                         need_full_render = 1;
                         continue;
