@@ -294,8 +294,8 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 4 Open
-  (Bugs 2.2.2, 2.2.7, 2.2.10, 2.2.13 Resolved;
+- **Status**: Active / 3 Open
+  (Bugs 2.2.2, 2.2.7, 2.2.10, 2.2.11, 2.2.13 Resolved;
   Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
@@ -401,7 +401,7 @@ have been resolved and archived.
       `version 1.1.0 (2026-10-09) (Z80 Assembly)` dynamically centered on
       the About screen while preserving RomWBW CP/M binary invariance.
       Validated via `tests/test_bug_2_2_10.py`.
-  - [ ] **Bug 2.2.11: Forward Deletion Line Join Sticky Target Column Update**:
+  - [x] **Bug 2.2.11: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
@@ -409,6 +409,11 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
+    - *Resolution*: Updated `DO_DEL_JOIN_OK` in `src/core/editor.asm` under
+      `TARGET_NEXT` to invoke `CHECKOUT_ACTIVE_LINE` and `CALC_VISUAL_COL`
+      and update `(TARGET_COL),HL`, ensuring subsequent vertical navigation
+      adheres to the join column while preserving RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_2_11.py`.
   - [ ] **Bug 2.2.12: Modal Dialog Cancellation by Unexpected Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
