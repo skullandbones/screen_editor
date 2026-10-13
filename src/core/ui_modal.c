@@ -267,7 +267,7 @@ int modal_prompt_text(const char *title, const char *prompt,
                       char *buffer, size_t max_len)
 {
     uint8_t width = MODAL_BOX_WIDTH;
-    uint8_t height = 8;
+    uint8_t height = 7;
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
     uint8_t field_len = 30;
@@ -280,7 +280,7 @@ int modal_prompt_text(const char *title, const char *prompt,
     if (prompt && *prompt) {
         modal_puts_centered(top + 3, left, width, prompt);
     }
-    modal_puts_centered(top + 6, left, width,
+    modal_puts_centered(top + 5, left, width,
                         "[Enter]=Confirm      [ESC]=Cancel");
 
     /* Centered Bracket Framing: [ text ] */
@@ -359,6 +359,70 @@ int modal_prompt_text(const char *title, const char *prompt,
             cur_len++;
             cursor_pos++;
             buffer[cur_len] = '\0';
+        }
+    }
+}
+
+int modal_goto_line(char *buffer, size_t max_len)
+{
+    uint8_t width = 50;
+    uint8_t height = 7;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    size_t len = 0;
+    int k;
+
+    if (!buffer || max_len < 2) {
+        return MODAL_RES_CANCEL;
+    }
+    buffer[0] = '\0';
+
+    hal_console_hide_cursor();
+    modal_draw_frame(top, left, width, height, "Goto Line");
+    modal_draw_row_centered(top + 3, left, width,
+                            "Enter line number to jump to");
+    modal_draw_row_centered(top + 4, left, width,
+                            "Goto line: [     ]");
+    modal_draw_row_centered(top + 5, left, width,
+                            "[Enter]=Goto Line     [ESC]=Cancel");
+
+    /* Position cursor at first digit inside brackets: left + 28 */
+    hal_console_locate(top + 4, (uint8_t)(left + 28));
+    hal_console_show_cursor();
+
+    while (1) {
+        k = hal_console_getkey();
+        if (k <= 0) {
+            continue;
+        }
+
+        if (k == KEY_ENTER) {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            if (len == 0) {
+                return MODAL_RES_CANCEL;
+            }
+            return MODAL_RES_OK;
+        } else if (k == KEY_ESC) {
+            while (hal_console_getkey() > 0) {
+                /* Drain trailing escape sequence bytes */
+            }
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return MODAL_RES_CANCEL;
+        } else if (k == KEY_BACKSPACE || k == 8 || k == 127) {
+            if (len > 0) {
+                len--;
+                buffer[len] = '\0';
+                hal_console_puts("\x08 \x08");
+            }
+        } else if (k >= '0' && k <= '9') {
+            if (len < 5 && len + 1 < max_len) {
+                buffer[len] = (char)k;
+                len++;
+                buffer[len] = '\0';
+                hal_console_putc((char)k);
+            }
         }
     }
 }

@@ -2400,8 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 3 Defects Open (Bugs 2.8.1, 2.8.3–2.8.6, 2.8.8 Resolved;
-  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.9, 2.8.10 Open).
+- **Status**: Active / 2 Defects Open (Bugs 2.8.1, 2.8.3–2.8.6, 2.8.8,
+  2.8.9 Resolved; Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2562,7 +2562,7 @@ have been resolved and archived.
       eliminating duplicate `Ctrl+V: Paste Block` and non-canonical `Cut Block`,
       and displaying `Delete / Ctrl+D` and `Copy/Move solidified block`.
       Verified with `tests/test_sec_help_screen.py`.
-  - [ ] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
+  - [x] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 7.10.
     - *Issue*: Goto Line modal dialog renders with 8 rows instead of canonical
       7 rows, lacks canonical `Goto line: [ ... ]` query framing, and repaints
@@ -2574,6 +2574,12 @@ have been resolved and archived.
       `modal_goto_line()`) to canonical 7-row framing (`50 cols x 7 rows`)
       adhering to Archetype C, and implement in-place prompt character echoing
       per Section 7.10.
+    - *Resolution*: Implemented `modal_goto_line()` in `src/core/ui_modal.c`
+      with canonical 50x7 dimensions, `Goto line: [     ]` query framing, and
+      explicit `[Enter]=Goto Line     [ESC]=Cancel` action footer. Replaced full
+      frame redraws with in-place character echoing and visual backspacing.
+      Standardized `modal_prompt_text()` to 7 rows. Verified with
+      `tests/test_sec_goto_line.py`.
   - [ ] **Bug 2.8.10: Unsaved Document Close Loss on Untitled Buffer (Ctrl+W)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11.
     - *Issue*: Closing an untitled modified document via `Ctrl+W` prompts "Save

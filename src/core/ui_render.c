@@ -566,8 +566,7 @@ void show_splash_screen(void)
             need_render = 1;
         } else if (k == 'l' || k == 'L' || k == KEY_CTRL_L) {
             char lbuf[16] = {0};
-            if (modal_prompt_text("Goto Line", "Enter destination line:",
-                                  lbuf, sizeof(lbuf)) == MODAL_RES_OK &&
+            if (modal_goto_line(lbuf, sizeof(lbuf)) == MODAL_RES_OK &&
                 lbuf[0]) {
                 int line_num = atoi(lbuf);
                 if (line_num > 0) {

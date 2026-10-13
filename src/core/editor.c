@@ -596,8 +596,7 @@ int editor_handle_key(int key)
         break;
     case KEY_CTRL_L: {
         char buf[16] = {0};
-        if (modal_prompt_text("Goto Line", "Enter destination line number:",
-                              buf, sizeof(buf)) == MODAL_RES_OK && buf[0]) {
+        if (modal_goto_line(buf, sizeof(buf)) == MODAL_RES_OK && buf[0]) {
             int line_num = atoi(buf);
             if (line_num > 0) {
                 goto_line((uint16_t)line_num);
