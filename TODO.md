@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 6 Defects Open (Bugs 2.4.44–2.4.49).
+- **Status**: Active / 5 Defects Open (Bugs 2.4.45–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1285,7 +1285,7 @@ have been resolved and archived.
       dynamically formatted the 4 canonical diagnostic status lines (Active
       Screen, RAM Drive (A:), Plugin System, Max Lines). Validated via
       `test_bug_2_4_43_splash_canonical_layout` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.44: Non-Conforming About Screen Layout & Missing Credits**:
+  - [x] **Bug 2.4.44: Non-Conforming About Screen Layout & Missing Credits**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.11, 14.6.
     - *Issue*: In `src/core/ui_render.c:583-599` (`show_about_screen`), the
       About screen displays a non-conforming 6-line, 46-column text block:
@@ -1302,6 +1302,15 @@ have been resolved and archived.
     - *Required Fix*: Rewrite `show_about_screen()` in `src/core/ui_render.c` to
       render the standardized 9-line by 54-column template adhering to Section
       7.11 and 14.6.
+    - *Resolution*: Rewrote `show_about_screen()` in `src/core/ui_render.c` to
+      render the standardized 9-line by 54-column template: canonical title
+      `SE - Screen Editor` using ASCII hyphen `-`, release version with build
+      date and predominant language `version 1.1.0 (2026-10-09) (C)`, author
+      attribution (`by Dean Jenkins`), AI toolchain credits (`Google
+      Antigravity 2.19.1 & Gemini FLASH 3.8 high`), MIT license notice, and
+      canonical prompt `Press any key to continue`. Validated via
+      `test_bug_2_4_44_about_screen_canonical_layout` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.45: Line Ending Decoupling Failure & Global Config Mutation**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2.
     - *Issue*: Section 13.2 explicitly removes `FORMAT` from `SE.CFG`,

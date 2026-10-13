@@ -3289,6 +3289,84 @@ def test_bug_2_4_43_splash_canonical_layout():
         print("    [+] Canonical 21x50 splash screen layout verified [PASS]")
 
 
+def test_bug_2_4_44_about_screen_canonical_layout():
+    """Verify 9x54 canonical About screen layout and credits (Bug 2.4.44)."""
+    print("[*] Testing 9x54 canonical About screen layout (Bug 2.4.44)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        read_all_available(master, 0.3)
+
+        # Open About screen via 'a'
+        os.write(master, b"a")
+        time.sleep(0.3)
+        about_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+
+        # 1. Canonical ASCII hyphen title
+        assert "SE - Screen Editor" in about_out, (
+            f"Expected 'SE - Screen Editor' in About title:\n{about_out}"
+        )
+        assert "SE.COM \xe2\x80\x94 Screen Editor (Linux)" not in about_out, (
+            "Found non-canonical UTF-8 em-dash host label in About title"
+        )
+
+        # 2. Canonical version with build date and predominant language
+        assert "version 1.1.0 (2026-10-09) (C)" in about_out, (
+            f"Expected 'version 1.1.0 (2026-10-09) (C)' in:\n{about_out}"
+        )
+
+        # 3. Author attribution
+        assert "by Dean Jenkins" in about_out, (
+            f"Missing author attribution in:\n{about_out}"
+        )
+
+        # 4. Toolchain and AI credits
+        assert "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high" in (
+            about_out
+        ), f"Missing toolchain credits in:\n{about_out}"
+
+        # 5. MIT license notice
+        assert "Open source software under the MIT License" in about_out, (
+            f"Missing MIT license notice in:\n{about_out}"
+        )
+
+        # 6. Canonical return prompt
+        assert "Press any key to continue" in about_out, (
+            f"Expected canonical 'Press any key to continue' in:\n{about_out}"
+        )
+        assert "Press any key to return..." not in about_out, (
+            "Found non-canonical 'Press any key to return...' prompt"
+        )
+
+        # 7. Press any key to return to splash screen
+        os.write(master, b" ")
+        time.sleep(0.3)
+        splash_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "Screen Editor" in splash_out, (
+            f"Failed to return to splash screen after dismiss:\n{splash_out}"
+        )
+
+        # Exit cleanly via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Canonical 9x54 About screen layout verified [PASS]")
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3337,6 +3415,7 @@ def main():
     test_bug_2_4_41_tab_snap_forward()
     test_bug_2_4_42_config_screen_canonical_layout()
     test_bug_2_4_43_splash_canonical_layout()
+    test_bug_2_4_44_about_screen_canonical_layout()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
