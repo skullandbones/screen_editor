@@ -461,8 +461,9 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 6 Open Defects
-  (Bugs 2.3.1, 2.3.3 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 5 Open Defects
+  (Bugs 2.3.1, 2.3.3, 2.3.4 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8
+  Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -516,7 +517,7 @@ have been resolved and archived.
       hardware queries via NextReg 0x01/0x14 and mapped 16 32KB Next MMU
       Far RAM banks in `src/se_next.asm`. Preserved RomWBW CP/M binary
       invariance. Validated via `tests/test_bug_2_3_3.py`.
-  - [ ] **Bug 2.3.4: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
+  - [x] **Bug 2.3.4: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: In `src/se_next.asm:625-631` and `src/core/plugin_mgr.asm`,
       hotkey `1` selects 120x40 and `2` selects 80x24. ZX Spectrum Next
@@ -524,6 +525,10 @@ have been resolved and archived.
       `1` causes visual corruption and terminal column spill across the screen.
     - *Required Fix*: In `src/se_next.asm`, assign `1` to 80x24 classic
       terminal mode and omit or disable 120x40 mode per Section 2.1 mandate.
+    - *Resolution*: Mapped hotkey '1' to 80x24 classic terminal mode, disabled
+      hotkey '2', and enforced 80x24 on 120x40 requests in `src/se_next.asm`.
+      Preserved RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_4.py`.
   - [ ] **Bug 2.3.5: Predominant Language Indication on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
