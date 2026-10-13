@@ -294,8 +294,8 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 2 Open
-  (Bugs 2.2.2, 2.2.7, 2.2.9, 2.2.10, 2.2.11, 2.2.13 Resolved;
+- **Status**: Active / 1 Open
+  (Bugs 2.2.2, 2.2.7, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13 Resolved;
   Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
@@ -419,7 +419,7 @@ have been resolved and archived.
       and update `(TARGET_COL),HL`, ensuring subsequent vertical navigation
       adheres to the join column while preserving RomWBW CP/M binary
       invariance. Validated via `tests/test_bug_2_2_11.py`.
-  - [ ] **Bug 2.2.12: Modal Dialog Cancellation by Unexpected Keystrokes**:
+  - [x] **Bug 2.2.12: Modal Dialog Cancellation by Unexpected Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and
@@ -429,6 +429,12 @@ have been resolved and archived.
       active dialog. Modals must only dismiss on `Enter` or `ESC`.
     - *Required Fix*: In modal input loops, drain and discard unexpected escape
       sequences and non-input keys, preserving active dialog state.
+    - *Resolution*: Implemented `DRAIN_ESCAPE_SEQUENCE` in `src/core/editor.asm`
+      under `TARGET_NEXT` to drain and discard multi-byte escape sequences
+      (CSI, SS3) without moving document cursor or closing active dialogs.
+      Routed `GOTO_GOT_ESC_SEQ`, `FIND_GOT_ESC_SEQ`, and `REP_GOT_ESC_SEQ` to
+      it, gated `Ctrl+U`/`Ctrl+V` in Goto Line, and preserved input state.
+      Validated via `tests/test_bug_2_2_12.py`.
   - [x] **Bug 2.2.13: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: In `src/se_next_cpm.asm:582-589` and `src/core/plugin_mgr.asm`,

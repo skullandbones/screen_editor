@@ -1361,6 +1361,7 @@ GOTO_UI_LOOP:
 	CP KEY_ESC
 	JR Z,GOTO_UI_CHECK_ESC
 
+	IFNDEF TARGET_NEXT
 	; Ctrl+U -> cancel and Page Up
 	CP KEY_CTRL_U
 	JR Z,GOTO_UI_PGUP
@@ -1368,6 +1369,7 @@ GOTO_UI_LOOP:
 	; Ctrl+V -> cancel and Page Down
 	CP KEY_CTRL_V
 	JR Z,GOTO_UI_PGDN
+	ENDIF
 
 	; Enter -> confirm goto line
 	CP KEY_ENTER
@@ -1456,12 +1458,17 @@ GOTO_WAIT_ESC:
 	JR GOTO_UI_CANCEL
 
 GOTO_GOT_ESC_SEQ:
+	IFDEF TARGET_NEXT
+	CALL DRAIN_ESCAPE_SEQUENCE
+	JP GOTO_UI_LOOP
+	ELSE
 	; User pressed an escape sequence (e.g. cursor arrow keys, PgUp, PgDn)
 	CALL GOT_ESC_BYTE
 	CALL RENDER_SCREEN
 	CALL RENDER_STATUS_BAR
 	CALL LOCATE_CURSOR
 	RET
+	ENDIF
 
 GOTO_UI_ENTER:
 	; If empty (user just pressed enter with no digits), treat as cancel
@@ -2389,5 +2396,36 @@ DRC_WAIT:
 DRC_READ:
 	CALL GET_KEY
 	JR DRC_CHECK
+
+;------------------------------------------------------------------------------
+; DRAIN_ESCAPE_SEQUENCE: Consume entire pending escape sequence after ESC (0x1B)
+;
+; Purpose:
+;   Drains pending CSI, SS3, or multi-byte escape sequence from console
+;   buffer without executing actions or altering screen/cursor state.
+;   Used by modal dialog input loops to absorb unexpected keystrokes.
+;
+; Preserves:
+;   BC, DE, HL
+;------------------------------------------------------------------------------
+DRAIN_ESCAPE_SEQUENCE:
+	PUSH BC
+	PUSH DE
+	PUSH HL
+	CALL GET_KEY
+	CP '['
+	JR NZ,DES_NOT_CSI
+	CALL GET_KEY
+	CALL DRAIN_REMAINING_CSI
+	JR DES_DONE
+DES_NOT_CSI:
+	CP 'O'
+	JR NZ,DES_DONE
+	CALL GET_KEY
+DES_DONE:
+	POP HL
+	POP DE
+	POP BC
+	RET
 	ENDIF
 
