@@ -1308,6 +1308,8 @@ or display notifications.
 | `Ctrl+R`     | `0x12`| `KEY_CTRL_R`  | Open Search & Replace modal dialog  |
 | `Ctrl+S`     | `0x13`| `KEY_CTRL_S`  | Save File to disk                   |
 | `Ctrl+T`     | `0x14`| `KEY_CTRL_T`  | Jump to Top of document (Row 0)     |
+| `Ctrl+U`     | `0x15`| `KEY_CTRL_U`  | Page Up (viewport rows - 2)         |
+| `Ctrl+V`     | `0x16`| `KEY_CTRL_V`  | Page Down (viewport rows - 2)       |
 | `Ctrl+X`     | `0x18`| `KEY_CTRL_X`  | Move block directly to cursor       |
 | `Ctrl+Y`     | `0x19`| `KEY_CTRL_Y`  | Run BEAUTIFY code formatter plugin  |
 | `ESC`        | `0x1B`| `KEY_ESC`     | Return to Splash / Cancel modal     |
@@ -1328,10 +1330,11 @@ or display notifications.
 > Forward, `Ctrl+E` for End of Line, and `Ctrl+X` for Move Block.
 > Directional cursor navigation across all variants and surfaces is provided
 > exclusively via standard ANSI VT100 arrow keys (`Up`, `Down`, `Left`,
-> `Right`), dedicated paging keys (`PgUp`, `PgDn`), and standard motion
-> shortcuts (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G` Bottom).
-> Legacy `Ctrl+U` and `Ctrl+V` motion aliases are removed as all target
-> keyboards provide dedicated Page Up and Page Down keys.
+> `Right`), dedicated paging keys (`PgUp`, `PgDn`), paging control aliases
+> (`Ctrl+U` Page Up, `Ctrl+V` Page Down), and standard motion shortcuts
+> (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G` Bottom). Legacy
+> intermediary `Ctrl+V` clipboard paste is eliminated across all variants in
+> favor of direct in-place block manipulation and Page Down.
 >
 > WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly
 > NOT supported anywhere in SE (including the Document Editor, Centered

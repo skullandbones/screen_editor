@@ -25,8 +25,8 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 8 Open
-  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15 Rejected).
+- **Status**: Active / 7 Open
+  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -276,18 +276,17 @@ have been resolved and archived.
     - *Required Fix*: Update `DO_REPLACE_CURRENT` in `src/core/search.asm` to
       evaluate line capacity using a 16-bit comparison against
       `MAX_INPUT_LINE_CHARS` (1,000 characters) and update line strings.
-  - [ ] **Bug 2.1.20: Deprecated Paging Keys (Ctrl+U / Ctrl+V) in Editor**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.1, 10.2.
-    - *Issue*: In `src/se.asm:1253-1259`, `MAIN_LOOP` continues to trap
-      `KEY_CTRL_U` (`0x15`) and `KEY_CTRL_V` (`0x16`) and dispatch them to
-      `PAGE_UP` and `PAGE_DOWN`. In `plugins/help.asm:383, 385`, `STR_HELP_BODY`
-      continues to advertise `Ctrl+U / PgUp` and `Ctrl+V / PgDn`. Per Section
-      9.3 and 10.1, legacy `Ctrl+U` and `Ctrl+V` motion aliases are strictly
-      removed across all variants, and directional page navigation is handled
-      exclusively via dedicated `PgUp` and `PgDn` keys.
-    - *Required Fix*: Remove `Ctrl+U` and `Ctrl+V` key handlers from `MAIN_LOOP`
-      in `src/se.asm:1253-1259` and update `STR_HELP_BODY` in `plugins/help.asm`
-      to list only dedicated `PgUp` and `PgDn` keys.
+  - [x] **Bug 2.1.20: Deprecated Paging Keys (Ctrl+U / Ctrl+V) [REJECTED]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Section 7.3 explicitly codifies `Ctrl+U / PgUp` (Page Up)
+      and `Ctrl+V / PgDn` (Page Down) in the canonical 22-line Help Screen
+      template across all SE variants. On standard serial terminals, VT100
+      consoles, and retro keyboards lacking dedicated PgUp and PgDn keys,
+      `Ctrl+U` and `Ctrl+V` are standard paging control keys. Removing them
+      from `SE.COM` would break terminal accessibility and contradict Section
+      7.3. Section 10 has been updated to include `Ctrl+U` and `Ctrl+V` as
+      paging aliases while reaffirming the prohibition of clipboard paste.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
@@ -295,21 +294,20 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 8 Open
-  (Bugs 2.2.2 Resolved, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 7 Open
+  (Bugs 2.2.2 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: Status bar Field 4 displays free memory on splash, selection
-      metrics on block mode, and pan offset when panned in `se_next_cpm.asm`,
-      violating the universal `^K: Editor keys |` invariant. Field 3 displays
-      `CP/M  |` with slash rather than `CPM   |`. Field 2 in 80x24 mode prints
-      with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm` to
-      canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
+  - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1 and Bug 2.3.2. Status bar Field 4 is
+      canonically defined as a dynamic 15-character contextual slot (+ " | ")
+      operating under a strict priority hierarchy (Free Memory, Block Selection
+      metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
+      indicators belong strictly in Field 4; appending variable-length tags to
+      Field 5 violates Field 5's fixed-width jitter-free coordinate budget and
+      exceeds terminal column limits (Anti-Pattern #3). Furthermore, `CP/M  |`
+      (with slash) is the canonical format string in Section 4.3 and 13.2.
   - [x] **Bug 2.2.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: Next CP/M profile defaults to 120x40 instead of standard 80x24.
@@ -2402,7 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 9 Defects Open.
+- **Status**: Active / 8 Defects Open (Bug 2.8.1 Resolved; Bug 2.8.7 Rejected;
+  Bugs 2.8.2–2.8.6, 2.8.8–2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2516,21 +2515,17 @@ have been resolved and archived.
       adopt the canonical 9-line centered layout from Section 7.12, format
       `version 1.1.0 (2026-10-09) (C)` in Row 2, and include author and
       Antigravity/Gemini open-source credits.
-  - [ ] **Bug 2.8.7: Status Bar Field 4 Context Clobber & Mode Placement**:
+  - [x] **Bug 2.8.7: Status Bar Field 4 Context Clobber [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 6.6, 11.1.
-    - *Issue*: Status bar Field 4 (`^K: Editor keys`) is clobbered and replaced
-      by horizontal pan indicator `[Pan +40]`, selection metrics, and transient
-      status messages, while Field 5 lacks canonical mode indicators (`[SEL]`,
-      `[BLK LOCK]`). Furthermore, status bar framing inserts extraneous leading
-      spaces on 80-column terminals.
-    - *Root Cause*: `render_status_bar()` in `src/core/ui_render.c:192-234`
-      formats mode indicators and transient messages into `field4` rather than
-      appending them to `field5`, and calculates padding that misaligns
-      Column 1 on 80x24 screens.
-    - *Remedy*: Preserve `^K: Editor keys |` persistently in Field 4, relocate
-      `[Pan +X]`, `[SEL]`, and `[BLK LOCK]` indicators to Field 5, eliminate
-      transient message formatting in the status bar (routing alerts strictly
-      to Tier 2 modals), and anchor the status bar at Column 1 on 80x24 screens.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1, 2.2.1, and 2.3.2. Section 4.3
+      codifies Field 4 as the dynamic 15-character contextual slot governed
+      by a strict priority hierarchy (Free Memory, Block Selection metrics,
+      Pan offset, Overwrite mode, Help Key Hint). Relocating mode indicators
+      (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`) to Field 5 directly violates Section
+      4.3's Jitter-Free Mandate ("Field 5 MUST NOT contain variable-length
+      tags, mode indicators, or pan offsets... All mode and contextual
+      indicators belong strictly in Field 4").
   - [ ] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
     - *Issue*: Help screen (`Ctrl+K`) displays `Ctrl+U / Ctrl+V: Page Up / Down`
