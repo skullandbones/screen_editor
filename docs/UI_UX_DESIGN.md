@@ -696,29 +696,96 @@ content blocks rather than top-aligned text.
 
 
 3. Help Screen Layout (`Ctrl+K`):
-   - Content Width: 70 columns, Content Height: 17 lines.
-   - Arranged in two clean tabular columns:
+   - Canonical Template: Canonical `SE.COM` (`plugins/help.asm` / `HELP.OVL`)
+     serves as the authoritative Editor Mode Keys Help screen template for all
+     SE variants across all target platforms.
+   - Content Dimensions: Content Height: exactly 22 lines (`HELP_LINES = 22`).
+     Content Width: 80 columns baseline (79 content chars + column 0 tilde `~`).
+   - Activation Protocol:
+     - In editor mode with no active block (`BLOCK_ACTIVE == 0`): `Ctrl+K`
+       loads and displays the full-screen Help workspace.
+     - Note: When a block is actively marked (`BLOCK_ACTIVE != 0`), `Ctrl+K`
+       instead opens the Tier 2 Block Operations modal dialog
+       (`DO_BLOCK_MENU_POPUP`) per Section 9.3.
+     - From splash / command menus, hotkeys `?`, `h`, `H`, or `:?` open the
+       Help workspace.
+   - Visual Structure (Canonical SE.COM Template):
      ```text
-     ~
-     ~                       SE.COM — EDITOR MODE KEYS
-     ~
-     ~  Cursor Navigation:                 Block Operations:
-     ~    Arrows / ANSI VT100                 Ctrl+B: Toggle Block
-     ~    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block to Cursor
-     ~    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Move Block to Cursor
-     ~    PgUp / PgDn    : Page Up / Down     Ctrl+D: Delete Block
-     ~
-     ~  Search & Replace:                  File & System:
-     ~    Ctrl+F: Find Text                   Ctrl+S: Save File
-     ~    Ctrl+N: Find Next                   Ctrl+O: Open File
-     ~    Ctrl+R: Search and Replace          Ctrl+Q: Safe Quit
-     ~    Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette
-     ~    Ctrl+Y: Beautify Source Code        ESC   : Splash Screen
-     ~
-     ~                   Press any key to continue
+     ~========================================================================
+     ~                               EDITOR MODE KEYS
+     ~========================================================================
+     ~  FILE & SYSTEM:
+     ~    Ctrl+O          Open file screen       Ctrl+S         Save file screen
+     ~    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M
+     ~    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up
+     ~  NAVIGATION & SEARCH:
+     ~    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line
+     ~    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line
+     ~    Ctrl+V / PgDn   Page Down              Ctrl+T / ^Home Top of file
+     ~    Ctrl+L          Goto line number       Ctrl+G / ^End  Bottom of file
+     ~    Ctrl+F          Find text              Ctrl+N         Find next
+     ~    Ctrl+R          Search and Replace     Ctrl+I / Tab   Toggle find case
+     ~  EDITING & BLOCK:
+     ~    Insert          Toggle Insert/Ovr      Enter          New line
+     ~    ASCII 32..126   Insert/Overwrite text  Backspace      Delete left/join
+     ~    Delete / Ctrl+D Delete char or block   Ctrl+B         Start/Toggle blk
+     ~    Ctrl+C          Copy solidified block  Ctrl+K         Solidify block
+     ~    Ctrl+X          Move solidified block  ESC            Clear block
+     ~------------------------------------------------------------------------
+     ~                          Press any key to continue
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Layout Structure & Line Composition (22 Lines Total):
+     - Row 1: Full-width horizontal rule of `'='` across columns 1..79.
+     - Row 2: Centered Title `EDITOR MODE KEYS` (31 leading spaces in 80 cols,
+       51 spaces in 120 cols). Application banners and executable name prefixes
+       (e.g. `SE.COM — ` or `SE - `) are strictly PROHIBITED per Section 7.1.
+     - Row 3: Full-width horizontal rule of `'='`.
+     - Rows 4..20: Help Key Descriptions (17 lines) grouped under 3 functional
+       category headers (`FILE & SYSTEM:`, `NAVIGATION & SEARCH:`,
+       `EDITING & BLOCK:`).
+     - Row 21: Full-width horizontal dash rule of `'-'`.
+     - Row 22: Centered Return Prompt: `Press any key to continue` (26 leading
+       spaces in 80 columns). Standardized phrasing without trailing ellipsis.
+   - Symmetrical Centering & Tilde Discipline:
+     - In 80x24 Geometry:
+       - Available text rows: 23 (`HOST_ROWS - 1`, excluding status bar).
+       - Vertical top padding: `(23 - 22) / 2 = 0` margin rows. The content
+         block begins directly on Screen Row 1.
+       - Vertical bottom padding: `23 - 0 - 22 = 1` row (Screen Row 23 displays
+         `~` in column 0).
+       - Row 24 displays the Universal Status Bar.
+     - In 120x40 Geometry:
+       - Available text rows: 39 (`HOST_ROWS - 1`).
+       - Vertical top padding: `(39 - 22) / 2 = 8` margin rows. Rows 1..8
+         display `~` in column 0.
+       - Content block occupies Rows 9..30.
+       - Vertical bottom padding: `39 - 8 - 22 = 9` margin rows (Rows 31..39
+         display `~` in column 0).
+       - Horizontal left padding: `(120 - 80) / 2 = 20` spaces after column 0
+         `~` on body rows.
+       - Full-width rules extend across columns 1..119 (119 characters).
+       - Row 40 displays the Universal Status Bar.
+     - Column 0 Tilde Mandate:
+       Every single line of the Help screen (margin rows, horizontal rules,
+       title, headers, key description rows, footer prompt, and bottom margin
+       rows) strictly displays `~` in column 0. Only the status bar row has no
+       tilde.
+   - Dismissal & Key Dispatch Protocol:
+     - Single-Key Dismissal: Pressing any regular key dismisses the Help
+       screen and immediately returns to the editor (or originating screen).
+     - Standalone `ESC`: Drains any trailing ANSI escape sequence bytes before
+       returning cleanly to editor mode.
+     - `Ctrl+P`: Dispatches the context plugin pop-up palette
+       (`PLUG_CTX_HELP`), restoring and re-rendering the Help workspace upon
+       dismissal.
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during Help overlay
+     execution. On variants lacking dynamic memory reading, Field 4 is left
+     blank (`               | `), conforming strictly to Section 4.3.
 
 4. Configuration Manager Workspace (`:c` from Splash):
    - Displays active parameters, config file origin, and instant hotkey

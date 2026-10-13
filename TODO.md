@@ -25,8 +25,8 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 10 Open
-  (Bugs 2.1.1, 2.1.3, 2.1.5, 2.1.7-2.1.12, 2.1.15 Rejected).
+- **Status**: Active / 9 Open
+  (Bugs 2.1.1, 2.1.3, 2.1.4, 2.1.5, 2.1.7-2.1.12, 2.1.15 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -62,18 +62,21 @@ have been resolved and archived.
       is excessively invasive to established SE.COM keymappings. Cursor
       navigation remains fully supported via ANSI/VT100 arrow keys and
       Home/End (`Ctrl+A`/`Ctrl+E`).
-  - [ ] **Bug 2.1.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+  - [x] **Bug 2.1.4: Tier 1 Help Screen Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: In `plugins/help.asm`, content height is 22 lines, leaving 0
-      top margin rows on an 80x24 screen, violating 1-based vertical centering.
-      Rows 1 and 3 render ASCII banner rules (`=============================`)
-      and Row 21 renders `-----------------------------`. Status bar Field 4
-      displays `Free: 63 KB |`. Help text lists obsolete/colliding non-WordStar
-      keybindings.
-    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`plugins/help.asm` / `HELP.OVL`)
+      confirms that the 22-line Help screen is the authoritative reference
+      template across all SE variants. The proposed 17-line layout was an
+      obsolete early wireframe containing duplicated keys (`Ctrl+V`),
+      fictitious commands (`Ctrl+Y`), and redundant title prefixes
+      (`SE.COM — `). In 80x24 mode, the 22-line block fits within the 23
+      available text rows (0 top margin rows, 1 bottom margin row of `~` at
+      Row 23, and status bar at Row 24). In 120x40 mode, it is symmetrically
+      centered with 8 top and 9 bottom margin rows and 20 columns of horizontal
+      padding. Banner rules `=` and `-` adhere to Tier 1 framing standards.
+      Field 4 canonically displays free memory during overlay execution per
+      Section 4.3.
   - [x] **Bug 2.1.5: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -291,8 +294,8 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 9 Open
-  (Bugs 2.2.2 Resolved, 2.2.3, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 8 Open
+  (Bugs 2.2.2 Resolved, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -315,15 +318,12 @@ have been resolved and archived.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
     - *Rationale*: Dropped support for WordStar diamond navigation in
       `SE_NEXT.COM` to preserve established SE.COM keymappings.
-  - [ ] **Bug 2.2.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+  - [x] **Bug 2.2.4: Tier 1 Help Screen Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: In `plugins/help.asm`, content height is 22 lines with 0 top
-      margin rows on an 80x24 screen, rendering ASCII banner rules and
-      displaying obsolete keybindings.
-    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.4. The 22-line Help screen template in
+      `plugins/help.asm` is the authoritative reference design codified in
+      Section 7.3. The 17-line layout was an obsolete conceptual mockup.
   - [x] **Bug 2.2.5: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -425,7 +425,8 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 9 Open Defects (Bugs 2.3.2, 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 8 Open Defects
+  (Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -487,15 +488,11 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
-  - [ ] **Bug 2.3.6: Tier 1 Centering & Banner Rules on Help Screen**:
+  - [x] **Bug 2.3.6: Tier 1 Help Screen Rules [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: `HELP.OVL` in `plugins/help.asm` content height is 22 lines with
-      0 top margin rows on an 80x24 screen, rendering ASCII banner rules and
-      displaying obsolete keybindings.
-    - *Required Fix*: Standardize `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.4. `plugins/help.asm` (`HELP.OVL`) is
+      the canonical 22-line Help screen template codified in Section 7.3.
   - [x] **Bug 2.3.7: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
