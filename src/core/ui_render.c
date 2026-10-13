@@ -638,7 +638,7 @@ static const char *s_help_lines[22] = {
   "                    SE.COM - EDITOR MODE KEYS                             ",
   "==========================================================================",
   "  FILE & SYSTEM:                                                          ",
-  "    Ctrl+O          Open file screen       Ctrl+S         Save file screen",
+  "    Ctrl+O           Open file screen      Ctrl+S         Save file screen",
   "    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M    ",
   "    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up  ",
   "  NAVIGATION & SEARCH:                                                    ",
