@@ -25,8 +25,8 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 9 Open
-  (Bugs 2.1.1, 2.1.3, 2.1.4, 2.1.5, 2.1.7-2.1.12, 2.1.15 Rejected).
+- **Status**: Active / 8 Open
+  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -87,16 +87,17 @@ have been resolved and archived.
       to edit...`) as the authoritative splash screen template across ALL SE
       variants, and expressly prohibits queries such as `Enter option: _`.
       `SE.COM` already implements this canonical 21-line template.
-  - [ ] **Bug 2.1.6: Tier 2 Goto Line Modal Footer Action Button Formatting**:
+  - [x] **Bug 2.1.6: Goto Line Modal Footer Buttons [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: In `src/core/plugin_mgr.asm:4179` (`STR_GOTO_POPUP_KEYS`), the
-      footer action buttons display `[Enter]=Goto Line     [ESC]=Cancel` instead
-      of the canonical Archetype C footer `[Enter]=Confirm      [ESC]=Cancel`
-      specified in Section 8.3. (The 50x7 modal framing and title divider
-      `+---+` in `SE.COM` already strictly adhere to Archetype C dimensions).
-    - *Required Fix*: In `src/core/plugin_mgr.asm:4179`, update
-      `STR_GOTO_POPUP_KEYS` to display `[Enter]=Confirm      [ESC]=Cancel`,
-      matching canonical Archetype C action button phrasing.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`src/core/editor.asm:1466-1518` and
+      `src/core/plugin_mgr.asm:4170-4180`) confirms that `[Enter]=Goto Line
+      [ESC]=Cancel` is the canonical footer phrasing. The draft wireframe in
+      Section 8.3 previously rendered an inaccurate 8-row box with generic
+      `[Enter]=Confirm`. Archetype C modals consistently use specific action
+      verbs (`[Enter]=Find` for Find Text, `[Enter]=Replace` for Replace, and
+      `[Enter]=Goto Line` for Goto Line). Section 8.3 has been codified to
+      match `SE.COM`'s canonical 50x7 layout and explicit footer.
   - [x] **Bug 2.1.7: Clipboard Paste & Buffer Primitives [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9, 10.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -342,9 +343,9 @@ have been resolved and archived.
       `docs/UI_UX_DESIGN.md` Section 8.3. The specification explicitly
       standardizes all Archetype C input modals (Goto Line, Find Text, Overwrite
       File) to 50 columns by 7 rows (`50 cols x 7 rows`). `src/core/editor.asm`
-      already implements the canonical 50x7 dimensions. Updating the footer
-      button phrasing (`[Enter]=Confirm [ESC]=Cancel`) in shared
-      `src/core/plugin_mgr.asm` is tracked under Bug 2.1.6.
+      already implements the canonical 50x7 dimensions, and the explicit
+      action footer `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
+      (Bug 2.1.6 Rejected).
   - [ ] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.1.
     - *Issue*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm:56-60`,
@@ -511,8 +512,9 @@ have been resolved and archived.
       `docs/UI_UX_DESIGN.md` Section 8.3. The specification explicitly
       standardizes all Archetype C input modals to 50 columns by 7 rows
       (`50 cols x 7 rows`). `src/core/editor.asm` already implements the
-      canonical 50x7 dimensions. Updating the footer button phrasing in shared
-      `src/core/plugin_mgr.asm` is tracked under Bug 2.1.6.
+      canonical 50x7 dimensions, and the explicit action footer
+      `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
+      (Bug 2.1.6 Rejected).
   - [ ] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI` sub-handlers),

@@ -1169,22 +1169,39 @@ or display notifications.
 
      Goto Line Modal Dialog (50 cols x 7 rows):
      ```text
-     +--------------------------------------------------+
-     |                     Goto Line                    |
-     +--------------------------------------------------+
-     |        Enter target line number to jump to       |
-     |                Goto line: [ 45       ]           |
-     |                                                  |
-     |          [Enter]=Confirm      [ESC]=Cancel       |
-     +--------------------------------------------------+
+     +------------------------------------------------+
+     |                   Goto Line                    |
+     +------------------------------------------------+
+     |          Enter line number to jump to          |
+     |               Goto line: [     ]               |
+     |       [Enter]=Goto Line     [ESC]=Cancel       |
+     +------------------------------------------------+
      ```
+     - Canonical Template: Canonical `SE.COM` (`src/core/editor.asm:1466-1518`
+       and `src/core/plugin_mgr.asm:4170-4180`) defines the authoritative
+       Goto Line modal dialog for all SE variants.
+     - Exact Dimensions: 50 columns wide by 7 rows high (`50 cols x 7 rows`).
+       Framed with outer ASCII box, title separator `+---+`, 3 query body lines
+       (description, query prompt, action footer), and bottom border.
+     - Action Footer Phrasing:
+       The action footer strictly displays `[Enter]=Goto Line     [ESC]=Cancel`,
+       utilizing the explicit action verb `Goto Line` (matching the specific
+       action button style of Find Text `[Enter]=Find` and Replace
+       `[Enter]=Replace`) rather than generic `[Enter]=Confirm`.
+     - Input Field & Buffer:
+       The numeric line buffer is a 5-digit field enclosed in brackets
+       `Goto line: [     ]`. Hardware cursor is placed directly at the first
+       digit offset inside the bracketed field (`POPUP_COL + 28`).
      - Keystroke Rendering Discipline (In-Place Echo):
-       Single-line modal text input fields adhere strictly to the in-place
-       echo discipline defined in Section 7.10: character entry, inline
-       deletion, and cursor navigation update only the contents within the
-       bracketed input field `[  text  ]` and the hardware cursor position.
-       Modal frame borders, background rows, and underlying screen surfaces
-       MUST NOT be redrawn on individual text-entry keystrokes.
+       Adheres strictly to the in-place character echo discipline defined in
+       Section 7.10: typed digits ('0'..'9') append to the buffer and echo
+       directly at the cursor; Backspace/Delete emits `\x08 \x20 \x08`. Frame
+       borders and prompt text MUST NOT be repainted on individual keystrokes.
+     - Submission & Cancellation:
+       `<Enter>` confirms the line number, jumps to the target line, and
+       redraws the editor and status bar smoothly without a screen flash.
+       Pressing `<Enter>` with an empty buffer or pressing `<ESC>` cancels and
+       dismisses the modal cleanly without moving the document cursor.
 
    Archetype D: Selection Menu (`show_menu` / Plugin Palette)
      Used for choosing from dynamic list (Plugin Palette, Directory list).
