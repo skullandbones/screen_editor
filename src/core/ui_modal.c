@@ -16,6 +16,7 @@
 #include "../include/buffer.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/ui_browser.h"
 #include "../include/file_io.h"
 #include "../include/hal.h"
 #ifndef __CPM__
@@ -439,7 +440,24 @@ int modal_confirm_save_changes(void)
                         "Any unsaved edits will be lost if discarded.",
                         "Yes", "No");
     if (res == MODAL_RES_YES) {
-        file_save(NULL, g_config.save_format);
+        if (!g_current_filename[0]) {
+            char dlg_fname[32];
+            dlg_fname[0] = '\0';
+            if (ui_browser_save_dialog(dlg_fname, sizeof(dlg_fname)) !=
+                MODAL_RES_OK || !dlg_fname[0]) {
+                return MODAL_RES_CANCEL;
+            }
+            if (file_save(dlg_fname, g_config.save_format) != 0) {
+                return MODAL_RES_CANCEL;
+            }
+            strncpy(g_current_filename, dlg_fname,
+                    sizeof(g_current_filename) - 1);
+            g_current_filename[sizeof(g_current_filename) - 1] = '\0';
+        } else {
+            if (file_save(NULL, g_config.save_format) != 0) {
+                return MODAL_RES_CANCEL;
+            }
+        }
         return MODAL_RES_OK;
     } else if (res == MODAL_RES_NO) {
         return MODAL_RES_OK;
