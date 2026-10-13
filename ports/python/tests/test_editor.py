@@ -73,33 +73,18 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
-    def test_ctrl_v_pastes_clipboard(self):
-        """Step 2: Verify Ctrl+V dispatches paste_block (Bug 2.7.3)."""
+    def test_ctrl_v_pages_down_not_paste(self):
+        """Step 2: Verify Ctrl+V dispatches page_down (Bug 2.7.60)."""
         print(
-            "[*] Step 2: Testing Ctrl+V dispatches paste_block...",
+            "[*] Step 2: Testing Ctrl+V dispatches page_down...",
             flush=True,
         )
-        self.editor.buffer.lines = ["Hello World"]
-        self.editor.buffer.cursor_row = 0
-        self.editor.buffer.cursor_col = 5
-        self.editor.buffer.clipboard = " Beautiful"
-
-        # Dispatch Ctrl+V
-        self.editor.dispatch_key(KEY_CTRL_V)
-
-        self.assertEqual(
-            self.editor.buffer.current_line, "Hello Beautiful World"
-        )
-        self.assertEqual(self.editor.buffer.cursor_col, 15)
-
-        # Verify empty clipboard falls back to page_down
-        self.editor.buffer.clipboard = ""
         self.editor.buffer.page_down = MagicMock()
         self.editor.dispatch_key(KEY_CTRL_V)
         self.editor.buffer.page_down.assert_called_once()
 
         print(
-            "[+] Step 2: Ctrl+V paste dispatch verified successfully.",
+            "[+] Step 2: Ctrl+V page down dispatch verified.",
             flush=True,
         )
 
@@ -1606,26 +1591,36 @@ class TestEditor(unittest.TestCase):
         self.editor.action_block_popup()
         self.assertEqual(self.editor.buffer.block_active, 0)
 
-        # c. Copy copies text and keeps solidified
+        # c. Copy copies text to cursor in-place and keeps solidified
+        self.editor.buffer.lines = ["Alpha Line Text"]
         self.editor.buffer.block_active = 2
         self.editor.buffer.block_start_row = 0
         self.editor.buffer.block_start_col = 0
         self.editor.buffer.block_end_row = 0
         self.editor.buffer.block_end_col = 5
-        self.editor.buffer.clipboard = ""
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 15
         self.editor.terminal.get_key = MagicMock(return_value="c")
         self.editor.action_block_popup()
-        self.assertEqual(self.editor.buffer.clipboard, "Alpha")
+        self.assertEqual(self.editor.buffer.lines[0], "Alpha Line TextAlpha")
         self.assertEqual(self.editor.buffer.block_active, 2)
 
-        # d. Cut cuts text, clears block, modifies document
+        # d. Move moves text to cursor in-place and keeps solidified at dest
+        self.editor.buffer.lines = ["Alpha Line Text"]
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 5
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 15
         self.editor.terminal.get_key = MagicMock(return_value="x")
         self.editor.action_block_popup()
-        self.assertEqual(self.editor.buffer.clipboard, "Alpha")
-        self.assertEqual(self.editor.buffer.block_active, 0)
-        self.assertEqual(self.editor.buffer.lines[0], " Line Text")
+        self.assertEqual(self.editor.buffer.lines[0], " Line TextAlpha")
+        self.assertEqual(self.editor.buffer.block_active, 2)
 
         # e. Delete deletes text without modifying clipboard
+        self.editor.buffer.lines = [" Line Text"]
         self.editor.buffer.block_active = 2
         self.editor.buffer.block_start_row = 0
         self.editor.buffer.block_start_col = 0
@@ -2266,6 +2261,65 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 47: Startup fixed geometry emulation verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_60_direct_in_place_block_ops(self):
+        """Step 48: Direct in-place block copy/move without clipboard."""
+        print(
+            "[*] Step 48: Testing direct in-place block copy and move...",
+            flush=True,
+        )
+        # 1. Direct copy block to cursor
+        self.editor.buffer.lines = ["FIRST LINE", "SECOND LINE", "THIRD LINE"]
+        self.editor.buffer.cursor_row = 1
+        self.editor.buffer.cursor_col = 0
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 1
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 1
+        self.editor.buffer.block_end_col = 6  # "SECOND"
+
+        # Position cursor at top of third line
+        self.editor.buffer.cursor_row = 2
+        self.editor.buffer.cursor_col = 0
+
+        # Dispatch Ctrl+C (in-place copy)
+        self.editor.dispatch_key(KEY_CTRL_C)
+        self.assertEqual(self.editor.buffer.get_line(2), "SECONDTHIRD LINE")
+
+        # 2. Direct move block to cursor
+        self.editor.buffer.lines = ["HEADER", "TARGET", "FOOTER"]
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 1
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 1
+        self.editor.buffer.block_end_col = 6  # "TARGET"
+
+        # Position cursor at line 0 col 0 (before block)
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0
+
+        # Dispatch Ctrl+X (in-place move)
+        self.editor.dispatch_key(KEY_CTRL_X)
+        self.assertEqual(self.editor.buffer.get_line(0), "TARGETHEADER")
+        self.assertEqual(self.editor.buffer.get_line(1), "")
+
+        # 3. Cannot move block into itself
+        self.editor.buffer.lines = ["ALPHA BETA GAMMA"]
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 6
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 10  # "BETA"
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 8  # Inside "BETA"
+        res = self.editor.buffer.move_block_to_cursor()
+        self.assertFalse(res)
+        self.assertEqual(self.editor.buffer.lines, ["ALPHA BETA GAMMA"])
+
+        print(
+            "[+] Step 48: Direct in-place block operations verified.",
             flush=True,
         )
 

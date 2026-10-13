@@ -2203,7 +2203,7 @@ have been resolved and archived.
       configured fixed dimensions (`80x24` or `120x40`) when `fixed_geometry`
       is active. Validated via Step 47 in `test_editor.py`
       (`test_bug_2_7_59_startup_geometry_emulation_preserved`).
-  - [ ] **Bug 2.7.60: Intermediary Clipboard & Missing In-Place Block Ops**:
+  - [x] **Bug 2.7.60: Intermediary Clipboard & Missing In-Place Block Ops**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, Section 10.
     - *Issue*: Section 9.3 mandates Direct In-Place Block Manipulation across
       all SE implementations and strictly prohibits intermediary clipboard
@@ -2217,10 +2217,14 @@ have been resolved and archived.
       copy to this detached buffer, `paste_block()` pastes from it, and
       `ports/python/se/editor.py:168-175` binds `Ctrl+C`, `Ctrl+X`, and
       `Ctrl+V` to clipboard primitives.
-    - *Action Required*: Eliminate `self.clipboard` from `DocumentBuffer`.
-      Implement direct in-place copy and move operations to current cursor
-      position in `buffer.py` and `editor.py`. Remove `KEY_CTRL_V` paste
-      handling.
+    - *Resolution*: Implemented `is_cursor_in_block()`,
+      `copy_block_to_cursor()`, and `move_block_to_cursor()` on
+      `DocumentBuffer` in `buffer.py`. Updated `editor.py` to route
+      `KEY_CTRL_C` to `copy_block_to_cursor()` and `KEY_CTRL_X` to
+      `move_block_to_cursor()`, mapped `KEY_CTRL_V` to `page_down()`, and
+      updated `action_block_popup()` to invoke in-place manipulation. Validated
+      via Step 15 in `test_buffer.py` and Step 2 and Step 48 in `test_editor.py`
+      (`test_bug_2_7_60_direct_in_place_block_ops`).
   - [ ] **Bug 2.7.61: Non-Canonical Splash Template & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.7, 7.2.
     - *Issue*: Section 7.2 mandates the 21-line canonical `SE.COM` splash

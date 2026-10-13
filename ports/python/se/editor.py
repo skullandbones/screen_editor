@@ -131,7 +131,7 @@ class Editor:
             self.buffer.move_bottom()
         elif key == KEY_PGUP or key == KEY_CTRL_U:
             self.buffer.page_up(self.terminal.rows - 2)
-        elif key == KEY_PGDN:
+        elif key in (KEY_PGDN, KEY_CTRL_V):
             self.buffer.page_down(self.terminal.rows - 2)
 
         # 2. Text Editing & Layout
@@ -162,16 +162,13 @@ class Editor:
                     self.buffer.cancel_block()
                 self.buffer.insert_char("\t")
 
-        # 3. Block Selection & Clipboard
+        # 3. Block Selection & Manipulation
         elif key == KEY_CTRL_B:
             self.buffer.toggle_block()
         elif key == KEY_CTRL_C:
-            self.buffer.copy_block()
+            self.buffer.copy_block_to_cursor()
         elif key == KEY_CTRL_X:
-            self.buffer.cut_block()
-        elif key == KEY_CTRL_V:
-            if not self.buffer.paste_block():
-                self.buffer.page_down(self.terminal.rows - 2)
+            self.buffer.move_block_to_cursor()
 
         # 4. Modals and Workspaces
         elif key == KEY_CTRL_F:
@@ -638,9 +635,9 @@ class Editor:
         elif action == "clear":
             self.buffer.cancel_block()
         elif action == "copy":
-            self.buffer.copy_block()
-        elif action == "cut":
-            self.buffer.cut_block()
+            self.buffer.copy_block_to_cursor()
+        elif action in ("cut", "move"):
+            self.buffer.move_block_to_cursor()
         elif action == "delete":
             self.buffer.delete_block()
         elif action == "save":

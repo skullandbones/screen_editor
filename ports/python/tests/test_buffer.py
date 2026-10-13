@@ -570,6 +570,49 @@ class TestBuffer(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_60_direct_in_place_block_ops(self):
+        """Step 15: Verify direct in-place copy and move block methods."""
+        print(
+            "[*] Step 15: Testing direct in-place block methods...",
+            flush=True,
+        )
+        buf = DocumentBuffer()
+        buf.lines = ["Line 1", "Line 2 - TARGET", "Line 3"]
+        buf.cursor_row = 1
+        buf.cursor_col = 9
+        buf.block_active = 2
+        buf.block_start_row = 1
+        buf.block_start_col = 9
+        buf.block_end_row = 1
+        buf.block_end_col = 15  # "TARGET"
+
+        # Check cursor inside block
+        self.assertTrue(buf.is_cursor_in_block(1, 10))
+        self.assertFalse(buf.is_cursor_in_block(1, 8))
+        self.assertFalse(buf.is_cursor_in_block(1, 15))
+
+        # Copy block to Line 0 Col 0
+        buf.cursor_row = 0
+        buf.cursor_col = 0
+        ok = buf.copy_block_to_cursor()
+        self.assertTrue(ok)
+        self.assertEqual(buf.lines[0], "TARGETLine 1")
+        # Source block shifted
+        self.assertEqual(buf.block_start_row, 1)
+
+        # Move block from Line 1 to Line 2 Col 0
+        buf.cursor_row = 2
+        buf.cursor_col = 0
+        ok = buf.move_block_to_cursor()
+        self.assertTrue(ok)
+        self.assertEqual(buf.lines[2], "TARGETLine 3")
+        self.assertEqual(buf.lines[1], "Line 2 - ")
+
+        print(
+            "[+] Step 15: Direct in-place block methods verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     t0 = time.time()

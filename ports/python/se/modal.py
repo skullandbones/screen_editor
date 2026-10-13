@@ -441,7 +441,7 @@ class ModalDialog:
             if k in (KEY_CTRL_C, "c", "C"):
                 self.term.show_cursor()
                 return "copy"
-            if k in (KEY_CTRL_X, "x", "X"):
+            if k in (KEY_CTRL_X, "x", "X", "m", "M"):
                 self.term.show_cursor()
                 return "cut"
             if k in (KEY_CTRL_D, "d", "D", KEY_DELETE):
