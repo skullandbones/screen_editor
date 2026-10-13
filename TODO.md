@@ -25,22 +25,23 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 11 Open
-  (Bugs 2.1.3, 2.1.5, 2.1.7-2.1.12, 2.1.15 Rejected).
+- **Status**: Active / 10 Open
+  (Bugs 2.1.1, 2.1.3, 2.1.5, 2.1.7-2.1.12, 2.1.15 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: Status bar Field 4 is overwritten with free memory
-      (`Free: 64 KB |`) on splash screen, with selection metrics
-      (`Sel: 0 chars |`) when block mode is active, and with `[Pan +40] |`
-      when horizontally panned, violating the universal `^K: Editor keys |`
-      invariant. Field 3 displays `CP/M  |` with slash rather than `CPM   |`.
-      Field 2 in 80x24 mode prints with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm`
-      to canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
+  - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`src/core/ui_render.asm:998-1244`)
+      establishes that Field 4 is canonically defined as a dynamic 15-character
+      contextual slot (+ " | " separator) operating under a strict priority
+      hierarchy (Free Memory on splash/plugin, Block Selection metrics, Pan
+      offset, Overwrite mode, or default Help Key Hint). Anti-Pattern #1
+      (Status Bar Squatting) governs interactive input loops on row 24, not
+      contextual status indicators. Appending mode tags to Field 5 would
+      violate Field 5's fixed 22-character jitter-free coordinate budget and
+      cause line wrapping (> 78 cols). Furthermore, Field 3 `CP/M  |` is the
+      canonical format string in Section 4.3, and Field 2 uses 1 leading space
+      (` 80x24 | `) matching `120x40 | ` width.
   - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
@@ -424,7 +425,7 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 10 Open Defects (Bugs 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 9 Open Defects (Bugs 2.3.2, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -448,19 +449,15 @@ have been resolved and archived.
       `\x1b[D`) or direct editor movement codes (`KEY_UP`, `KEY_DOWN`,
       `KEY_LEFT`, `KEY_RIGHT`), and map Delete (Caps+0) to `0x7F`
       (`KEY_DELETE`).
-  - [ ] **Bug 2.3.2: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: In `src/core/ui_render.asm:938-1020`, Field 4 is overwritten
-      with free memory (`Free: 64 KB |`) on splash, selection metrics on block
-      mode, and `[Pan +40] |` when panned, violating the universal
-      `^K: Editor keys |` invariant. Field 3 displays `CP/M  |` with slash
-      rather than `CPM   |` (or native environment indicator). Field 2 in
-      80x24 mode prints with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm` to
-      canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |` (or `Next  |`).
+  - [x] **Bug 2.3.2: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1. Status bar Field 4 is canonically
+      defined as a dynamic 15-character contextual slot (+ " | " separator)
+      operating under a strict priority hierarchy (Free Memory, Block Selection
+      metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
+      indicators belong in Field 4, while Field 5 is strictly reserved for
+      fixed-width cursor coordinates (`Line <cur>/<tot> Col <col> |`).
   - [ ] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next.asm:3523` (`SHOW_MEM_INFO_SCREEN`), the native

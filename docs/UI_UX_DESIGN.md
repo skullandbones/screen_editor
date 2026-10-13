@@ -178,30 +178,96 @@ The status bar is the sole fixed screen anchor in SE.
      the status bar text is centered or evenly padded across the full row.
 
 3. Field Layout & Structure (80-Column Budget):
-   The status bar consists of 5 fixed functional fields separated by `|`:
+   The status bar consists of 5 fixed functional fields enclosed within outer
+   separators, totaling exactly 78 reverse-video characters centered on screen
+   (1 leading space, 78 enclosed characters, 1 trailing space = 80 columns):
 
-   +-------------------------------------------------------------------------+
-   | | FILENAME.EXT* | 80x24 | Linux | ^K: Editor keys | Line   1 Col  0 |   |
-   +-------------------------------------------------------------------------+
+   +-----------------------------------------------------------------------+
+   | | FILENAME.EXT* |  80x24 | CP/M  | ^K: Editor keys | Line   1/1 Col 0 | |
+   +-----------------------------------------------------------------------+
+
+   - Enclosure & Alignment Budget:
+     - Symmetrical Margin Padding:
+       `LeftPad = RightPad = (ACTIVE_COLS - 78) / 2`
+       On 80-column screens: 1 space left, 1 space right (`1 + 78 + 1 = 80`).
+       On 120-column screens: 21 spaces left, 21 spaces right.
+     - Extreme Left Enclosure (2 chars): `| `
+     - Extreme Right Enclosure (2 chars): ` |`
+     - Total Enclosed Width (`STATUS_ENCLOSED_WIDTH`): exactly 78 characters.
 
    - Editor Name & Version Exclusion Mandate:
      The status bar does NOT show 'SE.COM' or the version number. Field 1
      strictly displays the active document filename `{name}{mod}`. Port
      implementations must never replace Field 1 with application banners.
-   - Field 1 (Filename, 16 chars): `| {name}{mod} |`
+
+   - Field 1 (Filename, 17 chars: 14 chars name + ` | ` separator):
      - `{name}`: Active filename (e.g. `README.TXT`, `C:MAIN.C`, `(Untitled)`).
      - `{mod}`: `*` if document has unsaved modifications; space otherwise.
-     - Padded to exactly 14 characters plus surrounding spaces.
-   - Field 2 (Geometry, 8 chars): ` {geom} |`
-     - E.g. ` 80x24 |` or ` 120x40 |`.
-   - Field 3 (Operating Environment / Format, 8 chars): ` {fmt} |`
-     - E.g. ` CP/M  |` or ` Linux |`.
-   - Field 4 (Help Hint / Context, 18 chars): ` ^K: Editor keys |`
-     - Shows default help key hint.
-   - Field 5 (Cursor & Mode Indicator, variable):
-     - Line & col: `Line {cur_line:>4}/{tot_lines:<4} Col {col:<3}`
-     - Horizontal pan indicator (when `pan_col > 0`): ` [Pan +{pan_col}]`
-     - Block mode indicator: ` [SEL]` (active selection) or ` [BLK LOCK]`
+     - Filename content is padded with spaces to exactly 14 characters.
+     - Followed by field separator: ` | ` (3 chars). Total: 17 characters.
+
+   - Field 2 (Geometry, 9 chars): ` {geom} | `
+     - Formatted string: ` 80x24 | ` (1 leading space) or `120x40 | `
+       (0 leading spaces). Total: exactly 9 characters.
+
+   - Field 3 (Operating Environment / Format, 8 chars): ` {fmt} | `
+     - Formatted string: `CP/M  | ` (default CP/M 2.2), `Linux | `, or spaces
+       during file loading (`      | `).
+     - Total: exactly 8 characters.
+
+   - Field 4 (Dynamic Context / Mode, 18 chars: 15 chars content + ` | `):
+     Field 4 is a dedicated 15-character contextual slot followed by separator
+     ` | ` (18 characters total). It operates under a strict priority hierarchy
+     applicable across all SE variants:
+     1. Splash Screen & Far Plugin Execution:
+        Displays free document memory in whole KB: `Free: <N> KB` padded with
+        spaces to 15 characters, followed by ` | ` (e.g. `Free: 48 KB    | `).
+        - Variant Free Memory Reading Fallback Rule:
+          If a port, target platform, or variant does not support a free memory
+          reading method (or dynamic TPA/heap query), the free memory status on
+          the status bar shall be left blank (15 spaces + separator:
+          `               | `).
+     2. Active Dynamic Block Selection (`BLOCK_ACTIVE == 1`):
+        Displays live selection size metrics padded to 15 characters + ` | `:
+        - Single-line: `Sel: <N> char | ` (1 char) or `Sel: <N> chars | `
+        - Multi-line: `Sel: <N> line | ` (1 line) or `Sel: <N> lines | `
+     3. Solidified Block Selection (`BLOCK_ACTIVE == 2`):
+        Displays locked block size metrics padded to 15 characters + ` | `:
+        - Single-line: `Block: <N> char | ` / `Block: <N> chars | ` (or
+          `Block: <N>c   | ` if characters >= 100)
+        - Multi-line: `Block: <N> line | ` / `Block: <N> lines | ` (or
+          `Block: <N>L    | ` if lines >= 100)
+     4. Horizontal Viewport Panning (`VIEW_LEFT_COL > 0`, normal keys):
+        Displays `[Pan +<offset>]` padded with spaces to 15 characters + ` | `
+        (e.g. `[Pan +40]      | `).
+     5. Overwrite Mode (`!INSERT_MODE`):
+        Displays `Overwrite mode  | ` (15 chars content + separator).
+     6. Default Editor Help Hint (Normal Insert Mode):
+        Displays `^K: Editor keys | ` (15 chars content + separator).
+
+   - Field 5 (Fixed Cursor Coordinates, 24 chars: 22 chars content + ` |`):
+     Field 5 is a fixed-width, jitter-free coordinate anchor strictly dedicated
+     to cursor coordinates:
+     - Fixed Content (22 chars): `Line <cur:4>/<tot:4> Col <col:3>`
+       - `"Line "` (5 chars label)
+       - `<cur:4>`: Current document line (1-indexed), right-justified in 4
+         characters (`   1` .. `9999`)
+       - `"/"` (1 char fixed delimiter)
+       - `<tot:4>`: Total document lines, left-justified in 4 characters
+         (`1   ` .. `9999`)
+       - `" Col "` (5 chars fixed delimiter)
+       - `<col:3>`: Visual column (0-indexed, tabs expanded), left-justified in
+         3 characters (`0  ` .. `999`)
+     - Followed by Extreme Right Enclosure: ` |` (2 chars).
+     - Loading State: During asynchronous loading, displays
+       `Line    1/---- Col   0 |`.
+     - Fixed-Width Jitter-Free Mandate:
+       Field 5 MUST NOT contain variable-length tags, mode indicators, or pan
+       offsets (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`). Appending variable-length
+       tags to Field 5 causes severe cursor coordinate jitter, destroys column
+       alignment, and exceeds the 78-character enclosed width (Anti-Pattern #3:
+       Terminal Column Spill). All mode and contextual indicators belong
+       strictly in Field 4.
 
 4. Status Event Prohibition:
    - The status bar shall NEVER display status events (e.g. "File saved",
@@ -433,9 +499,13 @@ viewport panning algorithms defined in `src/core/editor.asm` and
          `VIEW_LEFT_COL = ((vis_col - 1) / 40) * 40` (rounds down to multiple
          of 40).
    - Status Bar Pan Indicator:
-     - When `VIEW_LEFT_COL > 0`, Status Bar Field 5 displays
-       `[Pan +{VIEW_LEFT_COL}]` (e.g. `[Pan +40]`, `[Pan +80]`).
-     - When `VIEW_LEFT_COL == 0`, the indicator is cleared.
+     - When `VIEW_LEFT_COL > 0`, Status Bar Field 4 (Context / Mode field)
+       displays `[Pan +{VIEW_LEFT_COL}]` padded with spaces to 15 characters
+       plus separator ` | ` (e.g. `[Pan +40]      | `).
+     - When `VIEW_LEFT_COL == 0`, Field 4 reverts to normal mode cues or
+       the default help key hint `^K: Editor keys | `.
+     - Field 5 remains strictly reserved for cursor coordinates, ensuring
+       jitter-free coordinate tracking without column spill.
 
 7. Terminal Hardware Cursor Placement (`LOCATE_CURSOR`):
    After all navigation, panning, or editing steps, the hardware cursor is
@@ -1084,8 +1154,12 @@ or display notifications.
 
 2. Visual Presentation:
    - Highlighting is rendered using ANSI Inverse Video (`\x1b[7m`).
-   - Status Bar shows `[SEL]` while selection is in progress.
-   - Status Bar shows `[BLK LOCK]` when a search match is pinned.
+   - Status Bar Field 4 dynamically displays selection metrics:
+     - Dynamic Selection (`BLOCK_ACTIVE == 1`): `Sel: <N> char(s)` (single-line)
+       or `Sel: <N> line(s)` (multi-line) padded to 15 chars + ` | `.
+     - Solidified Block (`BLOCK_ACTIVE == 2`): `Block: <N> char(s)` / `<N>c` or
+       `Block: <N> line(s)` / `<N>L` padded to 15 chars + ` | `.
+   - Status Bar Field 5 retains fixed-width cursor coordinates without jitter.
 
 3. Direct In-Place Block Manipulation Mandate:
    All SE implementations across all target platforms (CP/M Z80 `SE.COM`,
@@ -1103,10 +1177,10 @@ or display notifications.
 
    - Canonical Block Operation Key Combinations (from `SE.COM`):
      - `Ctrl+B`: Toggle block selection mode. If inactive (0), anchors
-       selection at current cursor (`[SEL]`). If active (1 or 2), cancels block
-       selection (`CANCEL_BLOCK`).
+       selection at current cursor (dynamic selection). If active (1 or 2),
+       cancels block selection (`CANCEL_BLOCK`).
      - `Enter`: Solidify/lock dynamic block selection (`SOLIDIFY_BLOCK`).
-       Freezes normalized `START` and `END` boundaries (`[BLK LOCK]`),
+       Freezes normalized `START` and `END` boundaries (solidified block),
        allowing free cursor navigation without moving boundaries.
      - `Ctrl+C`: Copy marked block directly to cursor (`DO_COPY_BLOCK`). If
        dynamic selection is active (1), implies solidify first. Injects block
@@ -1530,8 +1604,9 @@ specific architectural adaptations.
        __linux__`) must gate:
        - Full-sized stack buffers (`raw_name[80]`, `core[256]`, `full_bar[256]`)
          preventing string format truncation.
-       - Persistent Field 4 help anchor (`^K: Editor keys |`) and Field 5
-         mode indicators (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`) per Section 4.3.
+       - Canonical Field 4 contextual hierarchy (help key hint, mode cues,
+         block metrics, pan indicator, or free memory) and Field 5 fixed
+         coordinate anchor per Section 4.3.
        - Tier 2 centered modal save notifications (`Save Complete`, `Export
          Complete`) per Section 4.4 and Section 11.1.
        - POSIX directory scanning and dynamic terminal size querying.
