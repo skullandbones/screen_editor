@@ -311,7 +311,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 12 Defects Open (Bugs 2.4.38–2.4.49).
+- **Status**: Active / 11 Defects Open (Bugs 2.4.39–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -907,7 +907,7 @@ have been resolved and archived.
       returning to caller on `ESC`/`Enter`.
       Validated via `test_bug_2_4_37_config_screen_interactive` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
+  - [x] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4.
     - *Issue*: Section 6.2 defines default tab stop intervals as
       `CFG_TAB_WIDTH = 4` columns (configurable to 8). In `src/core/config.c:41`
@@ -916,6 +916,11 @@ have been resolved and archived.
     - *Required Fix*: Change `g_config.tab_width` default in
       `src/core/config.c:41` to `4`, and update fallback in
       `src/core/editor.c:54` to `4`.
+    - *Resolution*: Updated `g_config.tab_width` default to `4` in
+      `src/core/config.c` and updated fallback tab widths to `4` in
+      `src/core/editor.c` and `src/core/ui_render.c`. Adjusted config header and
+      updated regression test suite, adding `test_bug_2_4_38_default_tab_width`
+      in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.3, 6.4, 7.3.
     - *Issue*: In `src/core/ui_render.c:528`, the Help workspace displays
