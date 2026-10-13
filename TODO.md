@@ -2400,8 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 6 Defects Open (Bugs 2.8.1, 2.8.3, 2.8.4 Resolved;
-  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.5, 2.8.6, 2.8.8–2.8.10 Open).
+- **Status**: Active / 5 Defects Open (Bugs 2.8.1, 2.8.3–2.8.5 Resolved;
+  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.6, 2.8.8–2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2497,7 +2497,7 @@ have been resolved and archived.
       info from Row 2, and added dynamic rendering of Active Screen, RAM Drive,
       Plugin System, and Max Lines fields from `g_config`. Verified with
       `tests/test_sec_splash_metadata.py`.
-  - [ ] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
+  - [x] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 11.1, 13.2.
     - *Issue*: Configuration Manager in `SEC.COM` renders a prohibited
       `Enter option: _` input prompt line (violating anti-pattern 1), uses
@@ -2512,6 +2512,11 @@ have been resolved and archived.
       5 Plugins), remove `Enter option: _`, format canonical footer
       `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`, and remove `FORMAT`
       parameter serialization from `config_save_file()`.
+    - *Resolution*: Harmonized `show_config_screen()` in `src/core/ui_render.c`
+      to canonical 5-option hotkey layout with proper parameter toggling,
+      eliminated `Enter option: _` input prompt, rendered canonical footer, and
+      removed `FORMAT=` serialization from `src/core/config.c`. Verified with
+      `tests/test_sec_config_layout.py`.
   - [ ] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: About screen in `SEC.COM` displays `SE.COM — Screen Editor

@@ -202,8 +202,6 @@ int config_save_file(const char *filename)
             (g_config.screen_mode == MODE_NATIVE) ? "NATIVE" :
             ((g_config.screen_mode == MODE_120X40) ? "120X40" : "80X24"));
     fprintf(fp, "TAB=%u\r\n", (unsigned)g_config.tab_width);
-    fprintf(fp, "FORMAT=%s\r\n",
-            (g_config.save_format == FMT_LINUX) ? "LINUX" : "CPM");
     fprintf(fp, "LINES=%s\r\n",
             (g_config.lines_mode == 1) ? "32K" : "16K");
     fprintf(fp, "RAMDRIVE=%s\r\n", ramdrv_str);

@@ -676,22 +676,27 @@ void show_about_screen(void)
 void show_config_screen(void)
 {
     char line_geom[64];
-    char line_tab[64];
-    char line_lines[64];
     char line_ram[64];
-    const char *cfg_lines[11];
+    char line_lines[64];
+    char line_tab[64];
+    char line_plug[64];
+    const char *cfg_lines[10];
     const char *geom_str;
     const char *ram_str;
+    const char *lines_str;
+    const char *tab_str;
+    const char *plug_str;
     int k;
     uint8_t need_render = 1;
 
+    hal_console_hide_cursor();
     while (1) {
         if (g_config.screen_mode == MODE_120X40) {
-            geom_str = "120x40";
+            geom_str = "120x40 (Wide)";
         } else if (g_config.screen_mode == MODE_NATIVE) {
             geom_str = "Native";
         } else {
-            geom_str = "80x24";
+            geom_str = "80x24 (Classic)";
         }
 
         if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
@@ -699,34 +704,54 @@ void show_config_screen(void)
         } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
             ram_str = "Hibernate";
         } else {
-            ram_str = "Disabled";
+            ram_str = "Protected";
+        }
+
+        if (g_config.lines_mode == 1) {
+            lines_str = "32K (32,768 Lines)";
+        } else {
+            lines_str = "16K (16,384 Lines)";
+        }
+
+        if (g_config.tab_width == 4) {
+            tab_str = "4 Spaces";
+        } else {
+            tab_str = "8 Spaces (Default)";
+        }
+
+        if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
+            plug_str = "Disabled";
+        } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
+            plug_str = "On Demand";
+        } else {
+            plug_str = "Autoload";
         }
 
         snprintf(line_geom, sizeof(line_geom),
-                 "         1. Screen Geometry  : %-19s", geom_str);
-        snprintf(line_tab, sizeof(line_tab),
-                 "         2. Tab Width        : %-19u",
-                 (unsigned)g_config.tab_width);
-        snprintf(line_lines, sizeof(line_lines),
-                 "         3. Max Line Capacity: %-19s",
-                 (g_config.lines_mode == 1) ? "32K" : "16K");
+                 "         1. Screen Geometry  : %-22s ", geom_str);
         snprintf(line_ram, sizeof(line_ram),
-                 "         4. RAM Drive Mode   : %-19s", ram_str);
+                 "         2. RAM Drive Mode   : %-22s ", ram_str);
+        snprintf(line_lines, sizeof(line_lines),
+                 "         3. Max Doc Lines    : %-22s ", lines_str);
+        snprintf(line_tab, sizeof(line_tab),
+                 "         4. Tab Width        : %-22s ", tab_str);
+        snprintf(line_plug, sizeof(line_plug),
+                 "         5. Plugin Manager   : %-22s ", plug_str);
 
-        cfg_lines[0]  = "            SE - Configuration Manager            ";
-        cfg_lines[1]  = "                                                  ";
-        cfg_lines[2]  = line_geom;
-        cfg_lines[3]  = line_tab;
-        cfg_lines[4]  = line_lines;
-        cfg_lines[5]  = line_ram;
-        cfg_lines[6]  = "                                                  ";
-        cfg_lines[7]  = "   [S] Save to SE.CFG    [ESC]/[Enter] Return     ";
-        cfg_lines[8]  = "                                                  ";
-        cfg_lines[9]  = "                Enter option: _                   ";
-        cfg_lines[10] = "                                                  ";
+        cfg_lines[0] =
+            "                  SE - Configuration Manager                  ";
+        cfg_lines[1] = "                                                      ";
+        cfg_lines[2] = line_geom;
+        cfg_lines[3] = line_ram;
+        cfg_lines[4] = line_lines;
+        cfg_lines[5] = line_tab;
+        cfg_lines[6] = line_plug;
+        cfg_lines[7] = "                                                      ";
+        cfg_lines[8] = " [1-5]=Toggle Option   [S]=Save Config   [ESC]=Exit  ";
+        cfg_lines[9] = "                                                      ";
 
         if (need_render) {
-            render_tier1_workspace_screen(cfg_lines, 11, 50);
+            render_tier1_workspace_screen(cfg_lines, 10, 54);
             need_render = 0;
         }
 
@@ -734,7 +759,7 @@ void show_config_screen(void)
             /* Wait for user keystroke */
         }
 
-        if (k == KEY_ESC || k == KEY_ENTER) {
+        if (k == KEY_ESC || k == KEY_ENTER || k == 'q' || k == 'Q') {
             break;
         } else if (k == '1') {
             clear_screen();
@@ -742,6 +767,7 @@ void show_config_screen(void)
                 g_config.screen_mode = MODE_120X40;
                 g_active_cols = SCREEN_COLS_120;
                 g_active_rows = SCREEN_ROWS_40;
+#ifndef __CPM__
             } else if (g_config.screen_mode == MODE_120X40) {
                 uint8_t ncols = 0, nrows = 0;
                 g_config.screen_mode = MODE_NATIVE;
@@ -753,6 +779,7 @@ void show_config_screen(void)
                     g_active_cols = SCREEN_COLS_80;
                     g_active_rows = SCREEN_ROWS_24;
                 }
+#endif
             } else {
                 g_config.screen_mode = MODE_80X24;
                 g_active_cols = SCREEN_COLS_80;
@@ -760,18 +787,27 @@ void show_config_screen(void)
             }
             need_render = 1;
         } else if (k == '2') {
-            g_config.tab_width = (g_config.tab_width == 4) ? 8 : 4;
-            need_render = 1;
-        } else if (k == '3') {
-            g_config.lines_mode = (g_config.lines_mode == 0) ? 1 : 0;
-            need_render = 1;
-        } else if (k == '4') {
             if (g_config.ramdrive_mode == RAMDRV_MODE_PROTECTED) {
                 g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
             } else if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
                 g_config.ramdrive_mode = RAMDRV_MODE_HIBERNATE;
             } else {
                 g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
+            }
+            need_render = 1;
+        } else if (k == '3') {
+            g_config.lines_mode = (g_config.lines_mode == 0) ? 1 : 0;
+            need_render = 1;
+        } else if (k == '4') {
+            g_config.tab_width = (g_config.tab_width == 4) ? 8 : 4;
+            need_render = 1;
+        } else if (k == '5') {
+            if (g_config.plugin_mode == PLUGIN_MODE_AUTOLOAD) {
+                g_config.plugin_mode = PLUGIN_MODE_ONDEMAND;
+            } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
+                g_config.plugin_mode = PLUGIN_MODE_DISABLED;
+            } else {
+                g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
             }
             need_render = 1;
         } else if (k == 's' || k == 'S') {
