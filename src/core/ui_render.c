@@ -550,31 +550,61 @@ void show_splash_screen(void)
     g_need_screen_render = 1;
 }
 
-static const char *s_help_lines[17] = {
-    "                       SE.COM — EDITOR MODE KEYS                      ",
-    "                                                                      ",
-    "  Cursor Navigation:                 Block Operations:                ",
-    "    Arrows / ANSI VT100                 Ctrl+B: Toggle Block          ",
-    "    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block            ",
-    "    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block             ",
-    "    Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block           ",
-    "                                                                      ",
-    "  Search & Replace:                  File & System:                   ",
-    "    Ctrl+F: Find Text                   Ctrl+S: Save File             ",
-    "    Ctrl+N: Find Next                   Ctrl+O: Open File             ",
-    "    Ctrl+R: Search and Replace          Ctrl+Q: Safe Quit             ",
-    "    Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette        ",
-    "    Ctrl+Y: Beautify Source Code        ESC   : Splash Screen         ",
-    "                                                                      ",
-    "                      Press any key to continue                       ",
-    "                                                                      "
+static const char *s_help_lines[22] = {
+    "========================================"
+    "======================================",
+    "                               EDITOR MODE KEYS",
+    "========================================"
+    "======================================",
+    "  FILE & SYSTEM:",
+    "    Ctrl+O          Open file screen       "
+    "Ctrl+S         Save file screen",
+    "    Ctrl+W          Close file to splash   "
+    "Ctrl+Q         Quit to CP/M",
+    "    Ctrl+K          Help / Solidify block  "
+    "Ctrl+P         Plugins pop-up",
+    "  NAVIGATION & SEARCH:",
+    "    Arrow Keys      Move cursor            "
+    "Ctrl+A / Home  Start of line",
+    "    Ctrl+U / PgUp   Page Up                "
+    "Ctrl+E / End   End of line",
+    "    Ctrl+V / PgDn   Page Down              "
+    "Ctrl+T / ^Home Top of file",
+    "    Ctrl+L          Goto line number       "
+    "Ctrl+G / ^End  Bottom of file",
+    "    Ctrl+F          Find text              "
+    "Ctrl+N         Find next",
+    "    Ctrl+R          Search and Replace     "
+    "Ctrl+I / Tab   Toggle find case",
+    "  EDITING & BLOCK:",
+    "    Insert          Toggle Insert/Ovr      "
+    "Enter          New line",
+    "    ASCII 32..126   Insert/Overwrite text  "
+    "Backspace      Delete left/join",
+    "    Delete / Ctrl+D Delete char or block   "
+    "Ctrl+B         Start/Toggle blk",
+    "    Ctrl+C          Copy solidified block  "
+    "Ctrl+K         Solidify block",
+    "    Ctrl+X          Move solidified block  "
+    "ESC            Clear block",
+    "----------------------------------------"
+    "--------------------------------------",
+    "                          Press any key to continue"
 };
 
 void show_help_screen(void)
 {
-    render_tier1_workspace_screen(s_help_lines, 17, 70);
-    while (hal_console_getkey() <= 0) {
-        /* Wait for user keystroke */
+    int k;
+    while (1) {
+        render_tier1_workspace_screen(s_help_lines, 22, 78);
+        while ((k = hal_console_getkey()) <= 0) {
+            /* Wait for user keystroke */
+        }
+        if (k == KEY_CTRL_P) {
+            plugin_manager_ui();
+            continue;
+        }
+        break;
     }
     clear_screen();
     g_need_screen_render = 1;

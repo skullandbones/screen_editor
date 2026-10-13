@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 11 Defects Open (Bugs 2.4.39–2.4.49).
+- **Status**: Active / 10 Defects Open (Bugs 2.4.40–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1171,7 +1171,7 @@ have been resolved and archived.
       `src/core/editor.c` and `src/core/ui_render.c`. Adjusted config header and
       updated regression test suite, adding `test_bug_2_4_38_default_tab_width`
       in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
+  - [x] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.3, 6.4, 7.3.
     - *Issue*: In `src/core/ui_render.c:528`, the Help workspace displays
       `Arrows / WordStar (^S,^D,^E,^X)`. Sections 6.3, 6.4, and 7.3 explicitly
@@ -1182,6 +1182,12 @@ have been resolved and archived.
       `Arrows / ANSI VT100`.
     - *Required Fix*: Update `s_help_lines` in `src/core/ui_render.c` to
       display `Arrows / ANSI VT100` and remove misleading WordStar references.
+    - *Resolution*: Replaced obsolete Help screen mockup with canonical 22-line
+      template from Section 7.3 and `plugins/help.asm`, displaying ANSI cursor
+      navigation (`Arrow Keys`), direct block commands, and standard editor
+      shortcuts while eliminating legacy WordStar diamond references. Validated
+      via `test_bug_2_4_39_help_screen_canonical_layout` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.40: Missing Archetype D Selection Modal on Ctrl+P**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 8.3 (Archetype D), 10.
     - *Issue*: In `src/core/editor.c:568` and `src/core/ui_render.c:501`,

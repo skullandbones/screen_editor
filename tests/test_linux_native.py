@@ -476,7 +476,7 @@ def test_tier1_centering_and_tilde_discipline():
         os.write(master, b"\x0b")
         help_out = read_all_available(master, 0.4).decode("utf-8",
                                                           errors="replace")
-        assert "SE.COM — EDITOR MODE KEYS" in help_out, (
+        assert "EDITOR MODE KEYS" in help_out, (
             "Help screen missing canonical centered title"
         )
         assert "~" in help_out, (
@@ -2887,6 +2887,63 @@ def test_bug_2_4_38_default_tab_width():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_39_help_screen_canonical_layout():
+    """Verify canonical 22-line Help screen and ANSI keys (Bug 2.4.39)."""
+    print("[*] Testing Help screen canonical layout & ANSI keys (2.4.39)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_help.txt")
+    with open(test_file, "w") as f:
+        f.write("Line 1\nLine 2\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Press Ctrl+K in editor mode with no block to open Help screen
+            os.write(master, b"\x0b")
+            time.sleep(0.2)
+            help_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "EDITOR MODE KEYS" in help_out, (
+                f"Expected 'EDITOR MODE KEYS' in Help screen:\n{help_out}"
+            )
+            assert "Arrows / WordStar" not in help_out, (
+                f"Obsolete WordStar keys still present in Help:\n{help_out}"
+            )
+            assert "Arrow Keys" in help_out, (
+                f"Expected 'Arrow Keys' in Help screen:\n{help_out}"
+            )
+            assert "Press any key to continue" in help_out, (
+                f"Expected return prompt in Help screen:\n{help_out}"
+            )
+
+            # Dismiss Help screen with Enter
+            os.write(master, b"\r")
+            time.sleep(0.1)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.close(master)
+            os.waitpid(pid, 0)
+            print("    [+] Help screen canonical layout verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2930,6 +2987,7 @@ def main():
     test_bug_2_4_36_geometry_switch_clear()
     test_bug_2_4_37_config_screen_interactive()
     test_bug_2_4_38_default_tab_width()
+    test_bug_2_4_39_help_screen_canonical_layout()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
