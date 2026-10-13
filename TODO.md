@@ -2400,8 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 4 Defects Open (Bugs 2.8.1, 2.8.3–2.8.6 Resolved;
-  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.8–2.8.10 Open).
+- **Status**: Active / 3 Defects Open (Bugs 2.8.1, 2.8.3–2.8.6, 2.8.8 Resolved;
+  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.9, 2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2545,7 +2545,7 @@ have been resolved and archived.
       4.3's Jitter-Free Mandate ("Field 5 MUST NOT contain variable-length
       tags, mode indicators, or pan offsets... All mode and contextual
       indicators belong strictly in Field 4").
-  - [ ] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
+  - [x] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
     - *Issue*: Help screen (`Ctrl+K`) displays `Ctrl+U / Ctrl+V: Page Up / Down`
       alongside `Ctrl+V: Paste Block` (duplicating `Ctrl+V` on the same line),
@@ -2557,6 +2557,11 @@ have been resolved and archived.
       `PgUp / PgDn : Page Up / Down` and `Ctrl+D: Delete Block`, and standardize
       block descriptions to `Copy Block to Cursor` and `Move Block to Cursor`
       matching Section 7.3.
+    - *Resolution*: Harmonized `s_help_lines` in `src/core/ui_render.c` to the
+      canonical 22-line layout matching `plugins/help.asm` and Section 7.3,
+      eliminating duplicate `Ctrl+V: Paste Block` and non-canonical `Cut Block`,
+      and displaying `Delete / Ctrl+D` and `Copy/Move solidified block`.
+      Verified with `tests/test_sec_help_screen.py`.
   - [ ] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 7.10.
     - *Issue*: Goto Line modal dialog renders with 8 rows instead of canonical
