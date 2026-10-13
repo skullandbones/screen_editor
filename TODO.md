@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 4 Defects Open (Bugs 2.4.46–2.4.49).
+- **Status**: Active / 3 Defects Open (Bugs 2.4.47–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1349,7 +1349,7 @@ have been resolved and archived.
       in `src/core/ui_browser.c` to `g_file_format` without mutating `g_config`.
       Defaulted `g_config.screen_mode` to `MODE_80X24`. Validated via
       `test_bug_2_4_45_line_ending_decoupling` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.46: Premature Modal Dismissal on Unexpected Keys**:
+  - [x] **Bug 2.4.46: Premature Modal Dismissal on Unexpected Keys**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3.
     - *Issue*: In `src/core/ui_modal.c:321-326` (`modal_prompt_text`), pressing
       `Up`, `Down`, `PgUp`, `PgDn`, `Ctrl+U`, or `Ctrl+V` exits the modal dialog
@@ -1363,6 +1363,13 @@ have been resolved and archived.
     - *Required Fix*: Remove lines 321-326 in `modal_prompt_text()`
       (`src/core/ui_modal.c`) so that unexpected keys are safely discarded
       without dismissing the input dialog or altering state.
+    - *Resolution*: Removed premature modal dismissal on unexpected navigation
+      keys (`Up`, `Down`, `PgUp`, `PgDn`, `Ctrl+U`, `Ctrl+V`) from
+      `modal_prompt_text()` in `src/core/ui_modal.c`, enforcing the Section 8.3
+      Unexpected Keystroke Protection Mandate and ensuring input modals remain
+      active with buffer preserved until explicit `Enter` or `ESC`. Validated
+      via `test_bug_2_4_46_unexpected_keys_in_modals` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.47: Retention of Intermediary Clipboard Primitives**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 9.3, 10.
     - *Issue*: Section 9.3 establishes the "Direct In-Place Block Manipulation

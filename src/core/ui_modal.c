@@ -339,12 +339,6 @@ int modal_prompt_text(const char *title, const char *prompt,
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_DOWN || k == KEY_UP ||
-                   k == KEY_PGDN || k == KEY_CTRL_V ||
-                   k == KEY_PGUP || k == KEY_CTRL_U) {
-            hal_console_hide_cursor();
-            g_need_screen_render = 1;
-            return k;
         } else if (k == KEY_LEFT) {
             if (cursor_pos > 0) {
                 cursor_pos--;

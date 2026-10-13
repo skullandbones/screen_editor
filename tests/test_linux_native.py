@@ -3510,6 +3510,88 @@ def test_bug_2_4_45_line_ending_decoupling():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_46_unexpected_keys_in_modals():
+    """Verify input modals are not dismissed by unexpected keys (Bug 2.4.46)."""
+    print("[*] Testing unexpected keystroke protection in modals (2.4.46)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_modal_",
+                                     suffix=".txt", delete=False) as tf:
+        for i in range(1, 101):
+            tf.write(f"Line {i}: Sample test content\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Open Goto Line modal via Ctrl+L (\x0c)
+            os.write(master, b"\x0c")
+            time.sleep(0.2)
+            out_modal = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Goto Line" in out_modal, "Goto Line modal not rendered"
+
+            # Type "42"
+            os.write(master, b"42")
+            time.sleep(0.1)
+
+            # Send unexpected keys: Up, Down, PgUp, PgDn, Ctrl+U, Ctrl+V
+            # None of these should cancel or dismiss the modal
+            os.write(master, b"\x1b[A")  # Up
+            time.sleep(0.05)
+            os.write(master, b"\x1b[B")  # Down
+            time.sleep(0.05)
+            os.write(master, b"\x1b[5~")  # PgUp
+            time.sleep(0.05)
+            os.write(master, b"\x1b[6~")  # PgDn
+            time.sleep(0.05)
+            os.write(master, b"\x15")  # Ctrl+U
+            time.sleep(0.05)
+            os.write(master, b"\x16")  # Ctrl+V
+            time.sleep(0.1)
+
+            mid_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            # The modal must still be active and display the input
+            assert "Goto Line" in mid_out or "42" in mid_out, (
+                f"Modal prematurely dismissed on unexpected keys:\n{mid_out}"
+            )
+
+            # Press Enter (\r) to confirm jump to line 42
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            nav_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "42/100" in nav_out, (
+                f"Expected jump to line 42, got:\n{nav_out}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Unexpected keystroke protection verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3560,6 +3642,7 @@ def main():
     test_bug_2_4_43_splash_canonical_layout()
     test_bug_2_4_44_about_screen_canonical_layout()
     test_bug_2_4_45_line_ending_decoupling()
+    test_bug_2_4_46_unexpected_keys_in_modals()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
