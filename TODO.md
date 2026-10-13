@@ -461,8 +461,8 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 7 Open Defects
-  (Bug 2.3.1 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 6 Open Defects
+  (Bugs 2.3.1, 2.3.3 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -500,7 +500,7 @@ have been resolved and archived.
       metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
       indicators belong in Field 4, while Field 5 is strictly reserved for
       fixed-width cursor coordinates (`Line <cur>/<tot> Col <col> |`).
-  - [ ] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
+  - [x] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next.asm:3523` (`SHOW_MEM_INFO_SCREEN`), the native
       Next application invokes `QUERY_MEM_SCREEN_INFO`, which executes RomWBW
@@ -512,6 +512,10 @@ have been resolved and archived.
       `src/se_next.asm` that queries Next hardware registers (NextReg `0x01`
       Machine ID, `0x14` Global RAM paging) and visualizes the 8KB MMU page
       allocations (pages 32..43) instead of invoking HBIOS discovery.
+    - *Resolution*: Replaced RomWBW HBIOS memory queries with native Next
+      hardware queries via NextReg 0x01/0x14 and mapped 16 32KB Next MMU
+      Far RAM banks in `src/se_next.asm`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_3_3.py`.
   - [ ] **Bug 2.3.4: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: In `src/se_next.asm:625-631` and `src/core/plugin_mgr.asm`,
