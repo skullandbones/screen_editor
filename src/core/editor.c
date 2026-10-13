@@ -77,7 +77,7 @@ void update_horizontal_pan(void)
     vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
     view_right = g_horiz_pan_offset + view_width;
 
-    /* Canonical lookahead edge trigger per §6.6:
+    /* Canonical lookahead edge trigger per Section 6.6:
      * When vis_col == VIEW_RIGHT_COL - 1 and active line continues beyond
      * CUR_COL (character at CUR_COL and next character are non-null),
      * pan viewport right by 40 columns.

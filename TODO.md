@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 2 Defects Open (Bugs 2.4.48–2.4.49).
+- **Status**: Active / 1 Defect Open (Bug 2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1406,7 +1406,7 @@ have been resolved and archived.
       `PgUp` and `PgDn` keys. Validated via
       `test_bug_2_4_47_direct_inplace_block_manipulation` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.48: UTF-8 Multi-Byte Encodings in Screen Headers**:
+  - [x] **Bug 2.4.48: UTF-8 Multi-Byte Encodings in Screen Headers**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6.
     - *Issue*: Section 2.6 establishes the VT100 & ASCII Terminal Encoding
       Mandate (UTF-8 Prohibition): all text and control output must strictly
@@ -1424,6 +1424,12 @@ have been resolved and archived.
     - *Required Fix*: Replace all occurrences of Unicode em-dash `—` in UI
       string literals with ASCII hyphen-minus `-` (`0x2D`) in
       `src/core/ui_render.c`.
+    - *Resolution*: Replaced all occurrences of Unicode em-dash `—` across
+      all workspace headers, Help screen, Splash screen, About screen, and
+      Configuration Manager with canonical ASCII hyphen-minus `-` (`0x2D`),
+      and eliminated non-ASCII section symbols from core modules to guarantee
+      strict 7-bit ASCII conformance. Validated via
+      `test_bug_2_4_48_utf8_prohibition` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.49: Off-by-One Barrier on Line Joins at Maximum Capacity**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:216` (`do_backspace`) and

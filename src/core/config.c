@@ -42,7 +42,7 @@ void config_init_defaults(void)
     g_config_loaded = 0;
     g_config.tab_width = 4;
     g_config.lines_mode = 0;             /* 16K lines */
-    g_config.screen_mode = MODE_80X24;  /* Canonical 80x24 (§13.2) */
+    g_config.screen_mode = MODE_80X24;  /* Canonical 80x24 (Section 13.2) */
     g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
     g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
 #ifdef __CPM__

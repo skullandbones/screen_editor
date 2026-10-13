@@ -3702,6 +3702,102 @@ def test_bug_2_4_47_direct_inplace_block_manipulation():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_48_utf8_prohibition():
+    """Bug 2.4.48: VT100 & ASCII Terminal Encoding Mandate (UTF-8 Prohibition).
+
+    Verifies Section 2.6: no multi-byte UTF-8 em-dash sequences (\xE2\x80\x94)
+    exist in binary or terminal output, and screens use ASCII hyphen-minus '-'.
+    """
+    print("[*] Testing UTF-8 prohibition & ASCII headers (Bug 2.4.48)...")
+
+    # 1. Inspect compiled se-linux binary for forbidden UTF-8 em-dash bytes
+    with open(SE_LINUX_BIN, "rb") as f:
+        bin_data = f.read()
+
+    assert b"\xe2\x80\x94" not in bin_data, (
+        "Binary contains prohibited UTF-8 em-dash (0xE2 0x80 0x94)"
+    )
+
+    # 2. Interactive PTY verification across Splash, Help, About, and Config
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        try:
+            time.sleep(0.3)
+            # Splash screen output
+            splash_bytes = read_all_available(master, 0.4)
+            assert b"\xe2\x80\x94" not in splash_bytes, (
+                "Splash screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"SE - Screen Editor" in splash_bytes, (
+                "Splash screen header must use ASCII hyphen '-'"
+            )
+
+            # Open Help screen via 'h'
+            os.write(master, b"h")
+            time.sleep(0.2)
+            help_bytes = read_all_available(master, 0.3)
+            assert b"\xe2\x80\x94" not in help_bytes, (
+                "Help screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"EDITOR MODE KEYS" in help_bytes, (
+                "Help screen title missing in output"
+            )
+            # Return from Help screen
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Open About screen via 'a'
+            os.write(master, b"a")
+            time.sleep(0.2)
+            about_bytes = read_all_available(master, 0.3)
+            assert b"\xe2\x80\x94" not in about_bytes, (
+                "About screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"SE - Screen Editor" in about_bytes, (
+                "About screen header must use ASCII hyphen '-'"
+            )
+            # Return from About screen
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Open Config screen via 'c'
+            os.write(master, b"c")
+            time.sleep(0.2)
+            cfg_bytes = read_all_available(master, 0.3)
+            assert b"\xe2\x80\x94" not in cfg_bytes, (
+                "Config screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"SE - Configuration Manager" in cfg_bytes, (
+                "Config screen header must use ASCII hyphen '-'"
+            )
+            # Exit Config screen via ESC
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Quit to OS prompt via 'q'
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            assert exit_code == 0, f"Expected clean exit 0, got {exit_code}"
+            print("    [+] UTF-8 prohibition & ASCII headers verified [PASS]")
+        finally:
+            try:
+                os.close(master)
+            except OSError:
+                pass
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3754,6 +3850,7 @@ def main():
     test_bug_2_4_45_line_ending_decoupling()
     test_bug_2_4_46_unexpected_keys_in_modals()
     test_bug_2_4_47_direct_inplace_block_manipulation()
+    test_bug_2_4_48_utf8_prohibition()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
