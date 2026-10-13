@@ -25,22 +25,23 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 11 Open
-  (Bugs 2.1.3, 2.1.5, 2.1.7-2.1.12, 2.1.15 Rejected).
+- **Status**: Active / 7 Open
+  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: Status bar Field 4 is overwritten with free memory
-      (`Free: 64 KB |`) on splash screen, with selection metrics
-      (`Sel: 0 chars |`) when block mode is active, and with `[Pan +40] |`
-      when horizontally panned, violating the universal `^K: Editor keys |`
-      invariant. Field 3 displays `CP/M  |` with slash rather than `CPM   |`.
-      Field 2 in 80x24 mode prints with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm`
-      to canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
+  - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`src/core/ui_render.asm:998-1244`)
+      establishes that Field 4 is canonically defined as a dynamic 15-character
+      contextual slot (+ " | " separator) operating under a strict priority
+      hierarchy (Free Memory on splash/plugin, Block Selection metrics, Pan
+      offset, Overwrite mode, or default Help Key Hint). Anti-Pattern #1
+      (Status Bar Squatting) governs interactive input loops on row 24, not
+      contextual status indicators. Appending mode tags to Field 5 would
+      violate Field 5's fixed 22-character jitter-free coordinate budget and
+      cause line wrapping (> 78 cols). Furthermore, Field 3 `CP/M  |` is the
+      canonical format string in Section 4.3, and Field 2 uses 1 leading space
+      (` 80x24 | `) matching `120x40 | ` width.
   - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
@@ -61,18 +62,21 @@ have been resolved and archived.
       is excessively invasive to established SE.COM keymappings. Cursor
       navigation remains fully supported via ANSI/VT100 arrow keys and
       Home/End (`Ctrl+A`/`Ctrl+E`).
-  - [ ] **Bug 2.1.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+  - [x] **Bug 2.1.4: Tier 1 Help Screen Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: In `plugins/help.asm`, content height is 22 lines, leaving 0
-      top margin rows on an 80x24 screen, violating 1-based vertical centering.
-      Rows 1 and 3 render ASCII banner rules (`=============================`)
-      and Row 21 renders `-----------------------------`. Status bar Field 4
-      displays `Free: 63 KB |`. Help text lists obsolete/colliding non-WordStar
-      keybindings.
-    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`plugins/help.asm` / `HELP.OVL`)
+      confirms that the 22-line Help screen is the authoritative reference
+      template across all SE variants. The proposed 17-line layout was an
+      obsolete early wireframe containing duplicated keys (`Ctrl+V`),
+      fictitious commands (`Ctrl+Y`), and redundant title prefixes
+      (`SE.COM — `). In 80x24 mode, the 22-line block fits within the 23
+      available text rows (0 top margin rows, 1 bottom margin row of `~` at
+      Row 23, and status bar at Row 24). In 120x40 mode, it is symmetrically
+      centered with 8 top and 9 bottom margin rows and 20 columns of horizontal
+      padding. Banner rules `=` and `-` adhere to Tier 1 framing standards.
+      Field 4 canonically displays free memory during overlay execution per
+      Section 4.3.
   - [x] **Bug 2.1.5: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -83,16 +87,17 @@ have been resolved and archived.
       to edit...`) as the authoritative splash screen template across ALL SE
       variants, and expressly prohibits queries such as `Enter option: _`.
       `SE.COM` already implements this canonical 21-line template.
-  - [ ] **Bug 2.1.6: Tier 2 Goto Line Modal Footer Action Button Formatting**:
+  - [x] **Bug 2.1.6: Goto Line Modal Footer Buttons [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: In `src/core/plugin_mgr.asm:4179` (`STR_GOTO_POPUP_KEYS`), the
-      footer action buttons display `[Enter]=Goto Line     [ESC]=Cancel` instead
-      of the canonical Archetype C footer `[Enter]=Confirm      [ESC]=Cancel`
-      specified in Section 8.3. (The 50x7 modal framing and title divider
-      `+---+` in `SE.COM` already strictly adhere to Archetype C dimensions).
-    - *Required Fix*: In `src/core/plugin_mgr.asm:4179`, update
-      `STR_GOTO_POPUP_KEYS` to display `[Enter]=Confirm      [ESC]=Cancel`,
-      matching canonical Archetype C action button phrasing.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`src/core/editor.asm:1466-1518` and
+      `src/core/plugin_mgr.asm:4170-4180`) confirms that `[Enter]=Goto Line
+      [ESC]=Cancel` is the canonical footer phrasing. The draft wireframe in
+      Section 8.3 previously rendered an inaccurate 8-row box with generic
+      `[Enter]=Confirm`. Archetype C modals consistently use specific action
+      verbs (`[Enter]=Find` for Find Text, `[Enter]=Replace` for Replace, and
+      `[Enter]=Goto Line` for Goto Line). Section 8.3 has been codified to
+      match `SE.COM`'s canonical 50x7 layout and explicit footer.
   - [x] **Bug 2.1.7: Clipboard Paste & Buffer Primitives [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9, 10.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -271,18 +276,17 @@ have been resolved and archived.
     - *Required Fix*: Update `DO_REPLACE_CURRENT` in `src/core/search.asm` to
       evaluate line capacity using a 16-bit comparison against
       `MAX_INPUT_LINE_CHARS` (1,000 characters) and update line strings.
-  - [ ] **Bug 2.1.20: Deprecated Paging Keys (Ctrl+U / Ctrl+V) in Editor**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.1, 10.2.
-    - *Issue*: In `src/se.asm:1253-1259`, `MAIN_LOOP` continues to trap
-      `KEY_CTRL_U` (`0x15`) and `KEY_CTRL_V` (`0x16`) and dispatch them to
-      `PAGE_UP` and `PAGE_DOWN`. In `plugins/help.asm:383, 385`, `STR_HELP_BODY`
-      continues to advertise `Ctrl+U / PgUp` and `Ctrl+V / PgDn`. Per Section
-      9.3 and 10.1, legacy `Ctrl+U` and `Ctrl+V` motion aliases are strictly
-      removed across all variants, and directional page navigation is handled
-      exclusively via dedicated `PgUp` and `PgDn` keys.
-    - *Required Fix*: Remove `Ctrl+U` and `Ctrl+V` key handlers from `MAIN_LOOP`
-      in `src/se.asm:1253-1259` and update `STR_HELP_BODY` in `plugins/help.asm`
-      to list only dedicated `PgUp` and `PgDn` keys.
+  - [x] **Bug 2.1.20: Deprecated Paging Keys (Ctrl+U / Ctrl+V) [REJECTED]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Section 7.3 explicitly codifies `Ctrl+U / PgUp` (Page Up)
+      and `Ctrl+V / PgDn` (Page Down) in the canonical 22-line Help Screen
+      template across all SE variants. On standard serial terminals, VT100
+      consoles, and retro keyboards lacking dedicated PgUp and PgDn keys,
+      `Ctrl+U` and `Ctrl+V` are standard paging control keys. Removing them
+      from `SE.COM` would break terminal accessibility and contradict Section
+      7.3. Section 10 has been updated to include `Ctrl+U` and `Ctrl+V` as
+      paging aliases while reaffirming the prohibition of clipboard paste.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
@@ -290,20 +294,20 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 12 Open (Bugs 2.2.2 Resolved, 2.2.3 Rejected).
+- **Status**: Active / 7 Open
+  (Bugs 2.2.2 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: Status bar Field 4 displays free memory on splash, selection
-      metrics on block mode, and pan offset when panned in `se_next_cpm.asm`,
-      violating the universal `^K: Editor keys |` invariant. Field 3 displays
-      `CP/M  |` with slash rather than `CPM   |`. Field 2 in 80x24 mode prints
-      with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm` to
-      canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
+  - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1 and Bug 2.3.2. Status bar Field 4 is
+      canonically defined as a dynamic 15-character contextual slot (+ " | ")
+      operating under a strict priority hierarchy (Free Memory, Block Selection
+      metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
+      indicators belong strictly in Field 4; appending variable-length tags to
+      Field 5 violates Field 5's fixed-width jitter-free coordinate budget and
+      exceeds terminal column limits (Anti-Pattern #3). Furthermore, `CP/M  |`
+      (with slash) is the canonical format string in Section 4.3 and 13.2.
   - [x] **Bug 2.2.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: Next CP/M profile defaults to 120x40 instead of standard 80x24.
@@ -313,36 +317,33 @@ have been resolved and archived.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
     - *Rationale*: Dropped support for WordStar diamond navigation in
       `SE_NEXT.COM` to preserve established SE.COM keymappings.
-  - [ ] **Bug 2.2.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+  - [x] **Bug 2.2.4: Tier 1 Help Screen Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: In `plugins/help.asm`, content height is 22 lines with 0 top
-      margin rows on an 80x24 screen, rendering ASCII banner rules and
-      displaying obsolete keybindings.
-    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
-  - [ ] **Bug 2.2.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.4. The 22-line Help screen template in
+      `plugins/help.asm` is the authoritative reference design codified in
+      Section 7.3. The 17-line layout was an obsolete conceptual mockup.
+  - [x] **Bug 2.2.5: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
-    - *Issue*: `RENDER_SPLASH` in `src/se_next_cpm.asm` renders a 21-line menu
-      structure with fixed menu items (`type [E] or [Enter] to edit...`),
-      lacking the canonical 14-line centered presentation (`:e to edit`,
-      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
-      `:? for help`, `:q to quit`).
-    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
-      `src/se_next_cpm.asm` to match the canonical 14-line, 50-column Tier 1
-      splash layout specified in Section 7.2.
-  - [ ] **Bug 2.2.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The demand to replace `SE_NEXT.COM`'s splash menu with an
+      obsolete 14-line (`:e to edit`, `:o to open file`) layout was based on an
+      early conceptual wireframe. `docs/UI_UX_DESIGN.md` Section 7.2 explicitly
+      codifies canonical `SE.COM`'s 21-line centered menu (`type [E] or [Enter]
+      to edit...`) as the authoritative splash screen template across ALL SE
+      variants, and expressly prohibits colon commands and queries such as
+      `Enter option: _`. Rejected for parity with Bug 2.1.5.
+  - [x] **Bug 2.2.6: Tier 2 Modal Framing (52x8 Box) [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: In `DO_GOTO_LINE_UI` (`src/core/editor.asm`), dialog width is
-      50 columns instead of canonical 52 columns. Footer buttons display
-      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
-      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
-      `src/core/search.asm` exhibit similar non-standard widths.
-    - *Required Fix*: Standardize modal pop-up routines in `src/core/editor.asm`
-      and `src/core/search.asm` to strictly conform to Archetype C (52x8 box,
-      `+---+` title divider, `[Enter]=Confirm      [ESC]=Cancel` footer,
-      bracketed input `[  ]`).
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that Archetype C input modals must use a 52-column
+      width and 52x8 framing is factually incorrect and contrary to
+      `docs/UI_UX_DESIGN.md` Section 8.3. The specification explicitly
+      standardizes all Archetype C input modals (Goto Line, Find Text, Overwrite
+      File) to 50 columns by 7 rows (`50 cols x 7 rows`). `src/core/editor.asm`
+      already implements the canonical 50x7 dimensions, and the explicit
+      action footer `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
+      (Bug 2.1.6 Rejected).
   - [ ] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.1.
     - *Issue*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm:56-60`,
@@ -423,7 +424,8 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 12 Open Defects.
+- **Status**: Active / 8 Open Defects
+  (Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -447,19 +449,15 @@ have been resolved and archived.
       `\x1b[D`) or direct editor movement codes (`KEY_UP`, `KEY_DOWN`,
       `KEY_LEFT`, `KEY_RIGHT`), and map Delete (Caps+0) to `0x7F`
       (`KEY_DELETE`).
-  - [ ] **Bug 2.3.2: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: In `src/core/ui_render.asm:938-1020`, Field 4 is overwritten
-      with free memory (`Free: 64 KB |`) on splash, selection metrics on block
-      mode, and `[Pan +40] |` when panned, violating the universal
-      `^K: Editor keys |` invariant. Field 3 displays `CP/M  |` with slash
-      rather than `CPM   |` (or native environment indicator). Field 2 in
-      80x24 mode prints with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm` to
-      canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |` (or `Next  |`).
+  - [x] **Bug 2.3.2: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1. Status bar Field 4 is canonically
+      defined as a dynamic 15-character contextual slot (+ " | " separator)
+      operating under a strict priority hierarchy (Free Memory, Block Selection
+      metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
+      indicators belong in Field 4, while Field 5 is strictly reserved for
+      fixed-width cursor coordinates (`Line <cur>/<tot> Col <col> |`).
   - [ ] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next.asm:3523` (`SHOW_MEM_INFO_SCREEN`), the native
@@ -489,36 +487,32 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
-  - [ ] **Bug 2.3.6: Tier 1 Centering & Banner Rules on Help Screen**:
+  - [x] **Bug 2.3.6: Tier 1 Help Screen Rules [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: `HELP.OVL` in `plugins/help.asm` content height is 22 lines with
-      0 top margin rows on an 80x24 screen, rendering ASCII banner rules and
-      displaying obsolete keybindings.
-    - *Required Fix*: Standardize `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
-  - [ ] **Bug 2.3.7: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.4. `plugins/help.asm` (`HELP.OVL`) is
+      the canonical 22-line Help screen template codified in Section 7.3.
+  - [x] **Bug 2.3.7: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
-    - *Issue*: `RENDER_SPLASH` in `src/se_next.asm` renders a 21-line menu
-      structure with fixed menu items (`type [E] or [Enter] to edit...`),
-      lacking the canonical 14-line centered presentation (`:e to edit`,
-      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
-      `:? for help`, `:q to quit`).
-    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
-      `src/se_next.asm` to match the canonical 14-line, 50-column Tier 1 splash
-      layout specified in Section 7.2.
-  - [ ] **Bug 2.3.8: Tier 2 Modal Dialog Framing (50 Columns vs 52 Columns)**:
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The demand to replace `SE.NEX`'s 21-line splash menu with an
+      obsolete 14-line (`:e to edit`, `:o to open file`) layout was based on an
+      early conceptual wireframe. `docs/UI_UX_DESIGN.md` Section 7.2 explicitly
+      codifies canonical `SE.COM`'s 21-line centered menu (`type [E] or [Enter]
+      to edit...`) as the authoritative splash screen template across ALL SE
+      variants, and expressly prohibits colon commands and queries such as
+      `Enter option: _`. Rejected for parity with Bug 2.1.5 and Bug 2.2.5.
+  - [x] **Bug 2.3.8: Tier 2 Modal Framing (52 Cols) [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: In `src/core/editor.asm:1420` (`DO_GOTO_LINE_UI`), dialog width
-      is 50 columns instead of canonical 52 columns. Footer buttons display
-      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
-      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
-      `src/core/search.asm` exhibit similar non-standard widths.
-    - *Required Fix*: Standardize modal pop-up routines in `src/core/editor.asm`
-      and `src/core/search.asm` to strictly conform to Archetype C (52x8 box,
-      `+---+` title divider, `[Enter]=Confirm      [ESC]=Cancel` footer,
-      bracketed input `[  ]`).
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that 50-column modal dialogs are non-canonical and
+      should be 52 columns is factually incorrect and contrary to
+      `docs/UI_UX_DESIGN.md` Section 8.3. The specification explicitly
+      standardizes all Archetype C input modals to 50 columns by 7 rows
+      (`50 cols x 7 rows`). `src/core/editor.asm` already implements the
+      canonical 50x7 dimensions, and the explicit action footer
+      `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
+      (Bug 2.1.6 Rejected).
   - [ ] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI` sub-handlers),
@@ -1408,7 +1402,8 @@ have been resolved and archived.
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
-  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.60–2.7.72 Open).
+  Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; Bugs 2.7.60–2.7.63,
+  2.7.65–2.7.71 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -2268,20 +2263,17 @@ have been resolved and archived.
     - *Action Required*: Reorganize `action_config_screen()` in `editor.py`
       to match the canonical 5-option layout, remove `Enter option:`, add
       option 5, and conform title to ASCII encoding.
-  - [ ] **Bug 2.7.64: Status Bar Field Squatting & Format Truncation**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5; `TODO.md` Bug 2.4.26.
-    - *Issue*: Section 5 explicitly assigns Field 4 (Context / Key Cue,
-      17 chars) to display contextual cues: `| ^K: Editor keys |` normally,
-      `| [SEL]           |` during dynamic block selection, and
-      `| [BLK LOCK]      |` when block is locked. Field 5 (Line & Column
-      Position, 19 chars) strictly displays line, column, and pan coordinates.
-    - *Root Cause*: In `ports/python/se/ui.py:60-96`, Field 4 is hardcoded to
-      `" ^K: Editor keys |"`, while `[SEL]` and `[BLK LOCK]` are appended into
-      Field 5 (`pos_field`). This causes Field 5 to overflow past 80 columns,
-      triggering an ad-hoc column condensation fallback.
-    - *Action Required*: In `ports/python/se/ui.py`, route `[SEL]` and
-      `[BLK LOCK]` into Field 4 when block selection is active, preserving
-      Field 5 exclusively for line, column, and panning indicators.
+  - [x] **Bug 2.7.64: Field 4 Status Bar Placement [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that `docs/UI_UX_DESIGN.md` assigns block mode cues
+      (`[SEL]`, `[BLK LOCK]`) to Field 4 is factually false. Section 4.3
+      explicitly defines Field 4 as persistent help key hint
+      (`^K: Editor keys |`) and places mode indicators (`[SEL]`, `[BLK LOCK]`)
+      and horizontal panning (`[Pan +{pan_col}]`) in Field 5 alongside cursor
+      coordinates. `ports/python/se/ui.py` already conforms 100% to Section 4.3;
+      routing mode indicators into Field 4 would clobber Field 4 and violate
+      Anti-Pattern #1 (Status Bar Squatting / Context Clobber).
   - [ ] **Bug 2.7.65: Sticky Column Clamping Retreats on Expanded Tabs**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
     - *Issue*: Section 6.2 and 6.4 mandate snap-forward vertical alignment
@@ -2384,17 +2376,23 @@ have been resolved and archived.
       to default to 120x40 wide console mode rather than canonical 80x24.
     - *Action Required*: In `ports/python/se/config.py:16`, set
       `DEFAULT_SCREEN = "80X24"`.
-  - [ ] **Bug 2.7.72: Default Tab Width Inversion in Config Defaults**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4; `TODO.md`
-      Bug 2.4.38.
-    - *Issue*: Section 6.2 defines default tab stop intervals as
-      `CFG_TAB_WIDTH = 4` columns (configurable to 8).
-    - *Root Cause*: In `ports/python/se/config.py:17`, `DEFAULT_TAB_WIDTH = 8`
-      and `tab_width` fallback is `8`, which inverts the canonical 4-column
-      default and conflicts with `buffer.py:78` defaulting to `4`.
-    - *Action Required*: In `ports/python/se/config.py:17, 85, 87`, update
-      `DEFAULT_TAB_WIDTH = 4` and fallback to `4` for consistency with
-      Section 6.2 and `buffer.py`.
+  - [x] **Bug 2.7.72: Default Tab Width Inversion in Config Defaults**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4, 13.2; `TODO.md`
+      Bug 2.4.38; `src/se.asm:4620`.
+    - *Status*: REJECTED / INVALID (WONTFIX).
+    - *Reason for Rejection*:
+      1. Default tab stop spacing across all SE variants (`SE.COM`, `se-linux`,
+         `se-py`, `SEC.COM`) is canonically 8 columns, configurable to 4. In
+         `SE.COM` (`src/se.asm`), `CFG_TAB_WIDTH: DB 8` has always defined 8
+         as the default. Furthermore, Section 7.4 (Configuration Manager) and
+         Section 13.2 (`TAB / TABS Default: 8`) define 8 columns.
+      2. The statement in Section 6.2 mentioning "default 4 columns" was an
+         erroneous specification defect that contradicted `SE.COM`, Section 7.4,
+         and Section 13.2. Section 6.2 has been corrected to codify 8 columns as
+         the universal default across all SE variants.
+      3. `ports/python/se/config.py` correctly defines `DEFAULT_TAB_WIDTH = 8`
+         and fallback `8`. In addition, `ports/python/se/buffer.py` default
+         parameter has been updated to 8 for full architectural parity.
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
@@ -2402,7 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 9 Defects Open.
+- **Status**: Active / 8 Defects Open (Bug 2.8.1 Resolved; Bug 2.8.7 Rejected;
+  Bugs 2.8.2–2.8.6, 2.8.8–2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2516,21 +2515,17 @@ have been resolved and archived.
       adopt the canonical 9-line centered layout from Section 7.12, format
       `version 1.1.0 (2026-10-09) (C)` in Row 2, and include author and
       Antigravity/Gemini open-source credits.
-  - [ ] **Bug 2.8.7: Status Bar Field 4 Context Clobber & Mode Placement**:
+  - [x] **Bug 2.8.7: Status Bar Field 4 Context Clobber [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 6.6, 11.1.
-    - *Issue*: Status bar Field 4 (`^K: Editor keys`) is clobbered and replaced
-      by horizontal pan indicator `[Pan +40]`, selection metrics, and transient
-      status messages, while Field 5 lacks canonical mode indicators (`[SEL]`,
-      `[BLK LOCK]`). Furthermore, status bar framing inserts extraneous leading
-      spaces on 80-column terminals.
-    - *Root Cause*: `render_status_bar()` in `src/core/ui_render.c:192-234`
-      formats mode indicators and transient messages into `field4` rather than
-      appending them to `field5`, and calculates padding that misaligns
-      Column 1 on 80x24 screens.
-    - *Remedy*: Preserve `^K: Editor keys |` persistently in Field 4, relocate
-      `[Pan +X]`, `[SEL]`, and `[BLK LOCK]` indicators to Field 5, eliminate
-      transient message formatting in the status bar (routing alerts strictly
-      to Tier 2 modals), and anchor the status bar at Column 1 on 80x24 screens.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1, 2.2.1, and 2.3.2. Section 4.3
+      codifies Field 4 as the dynamic 15-character contextual slot governed
+      by a strict priority hierarchy (Free Memory, Block Selection metrics,
+      Pan offset, Overwrite mode, Help Key Hint). Relocating mode indicators
+      (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`) to Field 5 directly violates Section
+      4.3's Jitter-Free Mandate ("Field 5 MUST NOT contain variable-length
+      tags, mode indicators, or pan offsets... All mode and contextual
+      indicators belong strictly in Field 4").
   - [ ] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
     - *Issue*: Help screen (`Ctrl+K`) displays `Ctrl+U / Ctrl+V: Page Up / Down`
