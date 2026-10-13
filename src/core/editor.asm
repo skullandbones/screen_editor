@@ -269,7 +269,11 @@ HANDLE_CSI:
 	JP C,CSI_DONE
 	CP '9'+1
 	JP C,HANDLE_CSI_LOOP_DIGIT
+	IFDEF TARGET_NEXT
+	JP DRAIN_REMAINING_CSI
+	ELSE
 	RET
+	ENDIF
 
 HANDLE_CSI_1:
 	LD A,'1'
@@ -279,7 +283,11 @@ HANDLE_CSI_1:
 	JP Z,CURSOR_HOME
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
+	IFDEF TARGET_NEXT
+	JP DRAIN_REMAINING_CSI
+	ELSE
 	RET
+	ENDIF
 
 HANDLE_CSI_2:
 	LD A,'2'
@@ -298,7 +306,11 @@ HANDLE_CSI_2:
 	JP Z,SHIFT_CURSOR_LEFT
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
+	IFDEF TARGET_NEXT
+	JP DRAIN_REMAINING_CSI
+	ELSE
 	RET
+	ENDIF
 
 HANDLE_CSI_4:
 	LD A,'4'
@@ -308,7 +320,11 @@ HANDLE_CSI_4:
 	JP Z,CURSOR_END
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
+	IFDEF TARGET_NEXT
+	JP DRAIN_REMAINING_CSI
+	ELSE
 	RET
+	ENDIF
 
 HANDLE_CSI_7:
 	CALL GET_KEY
@@ -356,7 +372,11 @@ HANDLE_CSI_LOOP_DIGIT:
 HANDLE_CSI_LOOP:
 	CALL GET_KEY
 	CP '~'
+	IFDEF TARGET_NEXT
+	JP Z,HANDLE_CSI_TILDE
+	ELSE
 	JR Z,HANDLE_CSI_TILDE
+	ENDIF
 	CP 'A'
 	JP Z,HANDLE_CSI_A
 	CP 'B'
@@ -380,7 +400,11 @@ HANDLE_CSI_LOOP:
 	CP '9'+1
 	JR C,HANDLE_CSI_LOOP_DIGIT
 CSI_DONE:
+	IFDEF TARGET_NEXT
+	JP DRAIN_REMAINING_CSI
+	ELSE
 	RET
+	ENDIF
 
 CHECK_CSI_SHIFT:
 	LD A,(CSI_MODIFIER)
@@ -2335,5 +2359,35 @@ HBIOS_DETECT:
 	POP IX
 	OR A
 	RET
+	ENDIF
+
+	IFDEF TARGET_NEXT
+;------------------------------------------------------------------------------
+; DRAIN_REMAINING_CSI: Consume trailing bytes of unhandled escape sequence
+;
+; Purpose:
+;   Drains pending sequence bytes from console buffer until terminating
+;   final byte (0x40..0x7E, e.g. '~', 'A'..'Z', 'a'..'z') or timeout,
+;   preventing stray bytes from leaking into the document text buffer.
+;------------------------------------------------------------------------------
+DRAIN_REMAINING_CSI:
+DRC_CHECK:
+	CP 040H				; Final bytes in CSI are 0x40..0x7E
+	JR C,DRC_NEXT
+	CP 07FH
+	RET C				; Final byte consumed; drain done
+DRC_NEXT:
+	LD BC,ESC_TIMEOUT_LOOPS
+DRC_WAIT:
+	CALL CHECK_KEY_READY
+	JR NZ,DRC_READ
+	DEC BC
+	LD A,B
+	OR C
+	JR NZ,DRC_WAIT
+	RET				; Timeout
+DRC_READ:
+	CALL GET_KEY
+	JR DRC_CHECK
 	ENDIF
 

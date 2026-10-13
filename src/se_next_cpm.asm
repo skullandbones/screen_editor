@@ -4572,12 +4572,6 @@ PREFIX_DRIVE:		DB	0	; Parsed prefix drive (1..16 or 0)
 PREFIX_USER:		DB	0FFH	; Parsed prefix user (0..15 or 0xFF)
 ; Consolidated transient CP/M File Control Block (36 bytes)
 ; Shared across sequential operations: dir search, raw disk, config, ramdrv
-SHARED_TEMP_FCB:	DS	36
-DIR_SEARCH_FCB		EQU	SHARED_TEMP_FCB
-RAW_TEST_FCB		EQU	SHARED_TEMP_FCB
-CFG_FCB			EQU	SHARED_TEMP_FCB
-COM_PROBE_FCB		EQU	SHARED_TEMP_FCB
-HIB_FCB			EQU	SHARED_TEMP_FCB
 DIR_FILE_COUNT:	DB	0
 DIR_PAGE_INDEX:	DB	0
 DIR_PAGE_COUNT:	DB	0
@@ -4588,12 +4582,10 @@ DIR_COL_WIDTH:		DB	15
 DIR_PAGE_CAPACITY:	DB	60
 DIR_LEFT_PAD:		DB	2
 DIR_TOP_PAD_COUNT:	DB	0
-DIR_TEMP_ENTRY:		DS	16
 INPUT_BUF_LEN:		DB	0
 INPUT_CURSOR_POS:	DB	0
 INPUT_CHAR_TEMP:	DB	0
 INLINE_MSG_LEN:		DB	16
-INPUT_FILENAME_BUF:	DS	32
 ; 11-byte FCB wildcard pattern (8 name + 3 ext)
 DIR_FILTER_FCB:		DB	"???????????"
 ; Display string for active filter (null-terminated)
@@ -4649,6 +4641,19 @@ PLUGIN_TPA_SLOT	EQU	LINE_STORAGE
 ; Overlay transient config and sector buffers onto LINE_STORAGE beyond plugin
 CFG_IO_BUF		EQU	LINE_STORAGE + 4096
 RAW_SECTOR_BUF		EQU	LINE_STORAGE + 4096 + 256
+
+; Consolidated transient CP/M File Control Block (36 bytes)
+; Shared across sequential operations: dir search, raw disk, config, ramdrv
+SHARED_TEMP_FCB		EQU	LINE_STORAGE + 4608
+DIR_SEARCH_FCB		EQU	SHARED_TEMP_FCB
+RAW_TEST_FCB		EQU	SHARED_TEMP_FCB
+CFG_FCB			EQU	SHARED_TEMP_FCB
+COM_PROBE_FCB		EQU	SHARED_TEMP_FCB
+HIB_FCB			EQU	SHARED_TEMP_FCB
+
+; Scratch directory and input filename buffers overlaid onto LINE_STORAGE
+DIR_TEMP_ENTRY		EQU	LINE_STORAGE + 4644	; 16 bytes
+INPUT_FILENAME_BUF	EQU	LINE_STORAGE + 4660	; 32 bytes
 
 ; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
 ; Overlaid on upper half of SPLIT_LINE_TEMP to keep BSS strictly below CCP

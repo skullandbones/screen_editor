@@ -294,8 +294,8 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 3 Open
-  (Bugs 2.2.2, 2.2.7, 2.2.10, 2.2.11, 2.2.13 Resolved;
+- **Status**: Active / 2 Open
+  (Bugs 2.2.2, 2.2.7, 2.2.9, 2.2.10, 2.2.11, 2.2.13 Resolved;
   Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
@@ -375,7 +375,7 @@ have been resolved and archived.
       `src/se_next_cpm.asm` that queries Next hardware memory capacity via
       NextReg `0x01` / `0x14` and reports active Next MMU Far RAM bank slots
       rather than invoking HBIOS discovery.
-  - [ ] **Bug 2.2.9: Escape Sequence Trailing Byte Leakage in Editor**:
+  - [x] **Bug 2.2.9: Escape Sequence Trailing Byte Leakage in Editor**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
       `HANDLE_CSI_2`, `HANDLE_CSI_LOOP`), when an unhandled or extended
@@ -387,6 +387,11 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
       to atomically drain unrecognized multi-byte sequences until a terminating
       character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
+    - *Resolution*: Implemented `DRAIN_REMAINING_CSI` in `src/core/editor.asm`
+      under `TARGET_NEXT` to drain trailing sequence bytes until terminal byte
+      boundary (`0x40`..`0x7E`) or timeout, routing unhandled CSI branches to
+      it. Optimized NextCPM BSS overlay to preserve +2,048 B TPA headroom and
+      RomWBW CP/M binary invariance. Validated via `tests/test_bug_2_2_9.py`.
   - [x] **Bug 2.2.10: Predominant Language Indication on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
