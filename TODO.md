@@ -461,10 +461,10 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 8 Open Defects
-  (Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 7 Open Defects
+  (Bug 2.3.1 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
+  - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
     - *Issue*: In `src/hal/next_native/hal_next_keyboard.asm:22-26, 309-313`,
       the Sinclair matrix keyboard decoder maps dedicated cursor keys to legacy
@@ -486,6 +486,11 @@ have been resolved and archived.
       `\x1b[D`) or direct editor movement codes (`KEY_UP`, `KEY_DOWN`,
       `KEY_LEFT`, `KEY_RIGHT`), and map Delete (Caps+0) to `0x7F`
       (`KEY_DELETE`).
+    - *Resolution*: Replaced legacy WordStar equates with ANSI VT100 escape
+      sequence generator for dedicated arrow keys (`\x1b[A`, `\x1b[B`,
+      `\x1b[C`, `\x1b[D`) and mapped Delete (Caps+0) to `0x7F` in
+      `src/hal/next_native/hal_next_keyboard.asm`. Preserved RomWBW CP/M
+      binary invariance. Validated via `tests/test_bug_2_3_1.py`.
   - [x] **Bug 2.3.2: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
