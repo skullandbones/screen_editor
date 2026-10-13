@@ -822,7 +822,13 @@ content blocks rather than top-aligned text.
      - 80x24 mode: 5 columns x 12 rows (60 files/page), column width 15 chars.
      - 120x40 mode: 7 columns x 28 rows (196 files/page), width 16 chars.
    - Paging navigation via `<PgUp>` and `<PgDn>` when file count exceeds page.
-   - Visual Structure (80x24 Mode):
+   - Single-Page vs. Multi-Page Invariant:
+     - When `total_pages <= 1` (single-page mode), the pagination footer row
+       (`[Page %d/%d]  <PgUp>/<PgDn>=Page`) is suppressed to avoid premature
+       pagination prompts, leaving an empty margin row (`~`).
+     - When `total_pages > 1` (multi-page mode), the pagination footer row
+       displays `[Page %d/%d]  <PgUp>/<PgDn>=Page`.
+   - Visual Structure (80x24 Mode, Multi-Page Example):
      ```text
      ~====================================================================
      ~                      OPEN FILE (DIRECTORY - DRIVE A:)
@@ -843,7 +849,7 @@ content blocks rather than top-aligned text.
    - Solidifies dynamic block bounds and opens directory browser in insert mode.
    - Streams selected file content into document at cursor without replacing
      existing document lines.
-   - Visual Structure (80x24 Mode):
+   - Visual Structure (80x24 Mode, Single-Page Example):
      ```text
      ~====================================================================
      ~                     INSERT FILE (DIRECTORY - DRIVE A:)
@@ -851,7 +857,7 @@ content blocks rather than top-aligned text.
      ~  HEADER  .INC    MACROS  .LIB    SNIPPET .ASM    TEST    .C
      ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
      ~
-     ~  [Page 1/1]  <PgUp>/<PgDn>=Page
+     ~
      ~--------------------------------------------------------------------
      ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
      ~  Enter filename to insert: [ HEADER.INC          ]
