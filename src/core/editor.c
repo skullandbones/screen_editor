@@ -485,9 +485,6 @@ void adjust_col_to_target(uint16_t target_vis_col)
     while (char_idx < g_active_line_len && vis_acc < target_vis_col) {
         if (g_active_line_buf[char_idx] == '\t') {
             uint16_t spaces = (uint16_t)(tab_w - (vis_acc % tab_w));
-            if (vis_acc + spaces > target_vis_col) {
-                break;
-            }
             vis_acc += spaces;
             char_idx++;
         } else {

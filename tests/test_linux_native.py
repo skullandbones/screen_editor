@@ -1082,14 +1082,14 @@ def test_bug_2_4_15_sticky_target_col_and_tab_clamping():
             read_all_available(master, 0.2)
 
             # Move down 2 lines to Line 3 (\tXYZ). Target 2 is inside tab.
-            # Must clamp to beginning of tab (index 0, Col 0).
+            # Snap-forward alignment (§6.2, §6.4) snaps to Col 4 (index 1).
             os.write(master, b"\x1b[B\x1b[B")
             time.sleep(0.1)
             out_tab = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Line    3/3" in out_tab and "Col 0" in out_tab, (
-                f"Expected tab interior clamped to Col 0:\n{out_tab}"
+            assert "Line    3/3" in out_tab and "Col 4" in out_tab, (
+                f"Expected tab interior snap-forward to Col 4:\n{out_tab}"
             )
 
             # Move up 2 lines back to Line 1: TARGET_COL 2 preserved!
@@ -3034,6 +3034,71 @@ def test_bug_2_4_40_plugin_palette_modal():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_41_tab_snap_forward():
+    """Verify snap-forward tab alignment in adjust_col_to_target (2.4.41)."""
+    print("[*] Testing snap-forward tab alignment (Bug 2.4.41)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_tab_snap.txt")
+    with open(test_file, "w") as f:
+        f.write("0123456789\n\tABCDEF\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move right 2 columns on Line 1: TARGET_COL = 2
+            os.write(master, b"\x1b[C" * 2)
+            time.sleep(0.1)
+            out_l1 = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    1/2" in out_l1 and "Col 2" in out_l1, (
+                f"Expected Line 1 Col 2:\n{out_l1}"
+            )
+
+            # Move down to Line 2 (\tABCDEF): TARGET_COL 2 falls inside tab.
+            # Snap-forward alignment snaps across tab to Col 4 (char 'A').
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+            out_l2 = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    2/2" in out_l2 and "Col 4" in out_l2, (
+                f"Expected Line 2 Col 4 via snap-forward:\n{out_l2}"
+            )
+
+            # Move up back to Line 1: sticky TARGET_COL 2 preserved!
+            os.write(master, b"\x1b[A")
+            time.sleep(0.1)
+            out_l1_back = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    1/2" in out_l1_back and "Col 2" in out_l1_back, (
+                f"Expected restored Line 1 Col 2:\n{out_l1_back}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.close(master)
+            os.waitpid(pid, 0)
+            print("    [+] Snap-forward tab alignment verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3079,6 +3144,7 @@ def main():
     test_bug_2_4_38_default_tab_width()
     test_bug_2_4_39_help_screen_canonical_layout()
     test_bug_2_4_40_plugin_palette_modal()
+    test_bug_2_4_41_tab_snap_forward()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

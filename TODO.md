@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 9 Defects Open (Bugs 2.4.41–2.4.49).
+- **Status**: Active / 8 Defects Open (Bugs 2.4.42–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1207,7 +1207,7 @@ have been resolved and archived.
       to this modal in `src/core/editor.c` and `src/core/ui_render.c`.
       Validated via `test_bug_2_4_40_plugin_palette_modal` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.41: Tab Traversal Halts Early vs Snap-Forward Alignment**:
+  - [x] **Bug 2.4.41: Tab Traversal Halts Early vs Snap-Forward Alignment**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
     - *Issue*: In `src/core/editor.c:485-497` (`adjust_col_to_target`), when
       traversing an active line to match sticky target column `target_vis_col`,
@@ -1221,6 +1221,12 @@ have been resolved and archived.
     - *Required Fix*: Update `adjust_col_to_target()` in `src/core/editor.c` to
       remove early loop breaks on tab boundaries, advancing across the tab to
       snap forward to the discrete character position following the tab.
+    - *Resolution*: Removed premature loop break on tab boundaries in
+      `adjust_col_to_target()` in `src/core/editor.c`, ensuring traversal
+      advances across the tab (`vis_acc += spaces`, `char_idx++`) to snap
+      forward to the discrete character boundary following the tab per
+      Section 6.2 and 6.4. Updated regression test expectations and added
+      `test_bug_2_4_41_tab_snap_forward` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.42: Config Manager Layout Divergence & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
     - *Issue*: In `src/core/ui_render.c:601-706` (`show_config_screen`):
