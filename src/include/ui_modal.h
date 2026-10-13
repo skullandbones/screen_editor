@@ -46,6 +46,7 @@ int  modal_prompt_text(const char *title, const char *prompt,
 int  modal_confirm_save_changes(void);
 int  modal_confirm_overwrite(void);
 void modal_show_notification(const char *title, const char *message);
+void modal_alert_file_not_found(const char *fname);
 
 #ifdef __cplusplus
 }

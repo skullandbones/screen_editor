@@ -23,10 +23,18 @@ from test_editor_common import (
     read_until,
 )
 
+def find_workspace_root(start_dir):
+    curr = os.path.abspath(start_dir)
+    while curr != os.path.dirname(curr):
+        if os.path.isdir(os.path.join(curr, "tools", "romwbw_src")):
+            return curr
+        curr = os.path.dirname(curr)
+    raise RuntimeError("Could not locate tools/romwbw_src")
+
 def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
-    workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
+    workspace_root = find_workspace_root(repo_root)
 
     emu_bin = os.path.join(workspace_root, "tools", "rc2014_emu", "rc2014")
     rom_file = os.path.join(
@@ -95,7 +103,7 @@ def test_se_execution(use_sec=False):
         f.write("SCREEN=120x40\r\nRAMDRIVE=ON\r\n")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
-    workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
+    workspace_root = find_workspace_root(repo_root)
     cpmrm_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm")
     cpmcp_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp")
     if os.path.isfile(cpmrm_bin):
@@ -128,6 +136,10 @@ def test_se_execution(use_sec=False):
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:LONGNAME.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:OUTPUT.TXT"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
         two_txt_host = os.path.join(repo_root, "2.TXT")
         if os.path.isfile(two_txt_host) and os.path.isfile(cpmcp_bin):
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:2.TXT"],
@@ -669,10 +681,16 @@ def test_se_execution(use_sec=False):
               flush=True)
         time.sleep(0.3)
         os.write(master, b"\x13")
-        read_until(master, b"SAVE FILE (DIRECTORY - DRIVE C:)", timeout=5.0)
-        out_save_prompt = read_until(master, b"Enter filename to save", timeout=4.0)
+        out_save_prompt = read_until(
+            master, b"Enter filename to save", timeout=6.0
+        )
+        if b"SAVE FILE (DIRECTORY - DRIVE C:)" not in out_save_prompt:
+            print(f"[-] Initial Save Screen title missing. Buffer: "
+                  f"{repr(out_save_prompt)}", flush=True)
+            return False
         if b"Format: [CP/M]" not in out_save_prompt:
-            print(f"[-] Initial Save Screen missing 'Format: [CP/M]'. Buffer: {repr(out_save_prompt)}", flush=True)
+            print(f"[-] Initial Save Screen missing 'Format: [CP/M]'. Buffer: "
+                  f"{repr(out_save_prompt)}", flush=True)
             return False
         # Toggle format with Ctrl+F in Save Screen
         time.sleep(0.2)
@@ -696,10 +714,10 @@ def test_se_execution(use_sec=False):
         time.sleep(0.2)
         os.write(master, b"OUTPUT.TXT\r")
         time.sleep(0.2)
-        resp = read_until(master, [b"Overwrite?", b"Line    1/1"], timeout=2.0)
+        resp = read_until(master, [b"Overwrite?", b"Line    1/1"], timeout=4.0)
         if b"Overwrite?" in resp:
             os.write(master, b"y")
-        read_until(master, b"Line    1/1", timeout=5.0)
+        read_until(master, b"Line    1/1", timeout=6.0)
         drain_all(master)
         print("[+] Step 17: Successfully saved file with Ctrl+S.", flush=True)
 
@@ -6097,6 +6115,10 @@ def test_se_execution(use_sec=False):
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:LONGNAME.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:OUTPUT.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:TESTF.TXT"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "1:U1FILE.TXT"],

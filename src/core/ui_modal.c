@@ -18,6 +18,9 @@
 #include "../include/ui_modal.h"
 #include "../include/file_io.h"
 #include "../include/hal.h"
+#ifndef __CPM__
+#include <unistd.h>
+#endif
 
 #ifdef __CPM__
 #define MODAL_BOX_WIDTH   50
@@ -178,7 +181,12 @@ int modal_confirm(const char *title, const char *msg,
         hal_console_puts("      [ESC]=Cancel        |");
 #endif
 
-        int k = hal_console_getkey();
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
         if (k == KEY_ENTER || k == ' ') {
             g_need_screen_render = 1;
             return (selected == 0) ? MODAL_RES_YES : MODAL_RES_NO;
@@ -186,8 +194,7 @@ int modal_confirm(const char *title, const char *msg,
             /* Cancelable solely by ESC (not Ctrl+C or q) */
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT ||
-                   k == KEY_CTRL_D || k == KEY_CTRL_S) {
+        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT) {
             selected = (selected == 0) ? 1 : 0;
         } else if (k == 'y' || k == 'Y') {
             g_need_screen_render = 1;
@@ -248,9 +255,9 @@ int modal_confirm_3btn(const char *title, const char *msg,
         } else if (k == KEY_ESC) {
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_TAB || k == KEY_RIGHT || k == KEY_CTRL_D) {
+        } else if (k == KEY_TAB || k == KEY_RIGHT) {
             selected = (selected + 1) % 3;
-        } else if (k == KEY_LEFT || k == KEY_CTRL_S) {
+        } else if (k == KEY_LEFT) {
             selected = (selected + 2) % 3;
         }
     }
@@ -259,12 +266,13 @@ int modal_confirm_3btn(const char *title, const char *msg,
 int modal_prompt_text(const char *title, const char *prompt,
                       char *buffer, size_t max_len)
 {
-    uint8_t width = 52;
+    uint8_t width = MODAL_BOX_WIDTH;
     uint8_t height = 8;
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
     uint8_t field_len = 30;
     size_t cur_len = buffer ? strlen(buffer) : 0;
+    size_t cursor_pos = cur_len;
     uint8_t input_left;
     size_t i;
 
@@ -293,10 +301,15 @@ int modal_prompt_text(const char *title, const char *prompt,
         hal_console_puts(" ]");
 
         /* Terminal cursor placed directly inside bracket field */
-        hal_console_locate(top + 4, (uint8_t)(input_left + 2 + cur_len));
+        hal_console_locate(top + 4, (uint8_t)(input_left + 2 + cursor_pos));
         hal_console_show_cursor();
 
-        int k = hal_console_getkey();
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
         if (k == KEY_ENTER) {
             hal_console_hide_cursor();
             g_need_screen_render = 1;
@@ -311,14 +324,40 @@ int modal_prompt_text(const char *title, const char *prompt,
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return k;
-        } else if (k == KEY_BACKSPACE || k == KEY_DEL) {
-            if (cur_len > 0) {
+        } else if (k == KEY_LEFT) {
+            if (cursor_pos > 0) {
+                cursor_pos--;
+            }
+        } else if (k == KEY_RIGHT) {
+            if (cursor_pos < cur_len) {
+                cursor_pos++;
+            }
+        } else if (k == KEY_HOME || k == KEY_CTRL_A) {
+            cursor_pos = 0;
+        } else if (k == KEY_END || k == KEY_CTRL_E) {
+            cursor_pos = cur_len;
+        } else if (k == KEY_BACKSPACE || k == 8 || k == 127) {
+            if (cursor_pos > 0) {
+                memmove(buffer + cursor_pos - 1, buffer + cursor_pos,
+                        cur_len - cursor_pos + 1);
+                cur_len--;
+                cursor_pos--;
+                buffer[cur_len] = '\0';
+            }
+        } else if (k == KEY_DEL || k == KEY_CTRL_D) {
+            if (cursor_pos < cur_len) {
+                memmove(buffer + cursor_pos, buffer + cursor_pos + 1,
+                        cur_len - cursor_pos);
                 cur_len--;
                 buffer[cur_len] = '\0';
             }
         } else if (k >= 32 && k <= 126 && cur_len + 1 < max_len &&
                    cur_len < field_len) {
-            buffer[cur_len++] = (char)k;
+            memmove(buffer + cursor_pos + 1, buffer + cursor_pos,
+                    cur_len - cursor_pos + 1);
+            buffer[cursor_pos] = (char)k;
+            cur_len++;
+            cursor_pos++;
             buffer[cur_len] = '\0';
         }
     }
@@ -346,10 +385,72 @@ int modal_confirm_save_changes(void)
 
 int modal_confirm_overwrite(void)
 {
-    return modal_confirm("Overwrite File",
-                         "Existing file contents will be lost",
-                         "File already exists. Overwrite?",
-                         NULL);
+    uint8_t width = MODAL_BOX_WIDTH;
+    uint8_t height = 7;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    uint8_t selected = 0;
+
+    hal_console_hide_cursor();
+    modal_draw_frame(top, left, width, height, "Overwrite File");
+    modal_draw_row_centered(top + 3, left, width,
+                            "Existing file contents will be lost");
+    modal_draw_row_centered(top + 4, left, width,
+                            "File already exists. Overwrite?");
+
+    while (1) {
+        /* Render Options: [Y]es      [N]o      [ESC]=Cancel */
+        hal_console_locate(top + 5, left);
+#ifdef __CPM__
+        hal_console_puts("|        ");
+#else
+        hal_console_puts("|         ");
+#endif
+        if (selected == 0) hal_console_inverse_on();
+        hal_console_puts("[Y]es");
+        if (selected == 0) hal_console_inverse_off();
+
+        hal_console_puts("      ");
+        if (selected == 1) hal_console_inverse_on();
+        hal_console_puts("[N]o");
+        if (selected == 1) hal_console_inverse_off();
+
+#ifdef __CPM__
+        hal_console_puts("      [ESC]=Cancel       |");
+#else
+        hal_console_puts("      [ESC]=Cancel        |");
+#endif
+
+        /* Position cursor after Overwrite? (Col 40 relative to popup) */
+        hal_console_locate(top + 4, (uint8_t)(left + 40));
+        hal_console_show_cursor();
+
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
+        if (k == 'y' || k == 'Y') {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return MODAL_RES_OK;
+        } else if (k == 'n' || k == 'N') {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return MODAL_RES_NO;
+        } else if (k == KEY_ESC) {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return MODAL_RES_CANCEL;
+        } else if (k == KEY_ENTER || k == ' ') {
+            hal_console_hide_cursor();
+            g_need_screen_render = 1;
+            return (selected == 0) ? MODAL_RES_OK : MODAL_RES_NO;
+        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT) {
+            selected = 1 - selected;
+        }
+    }
 }
 
 void modal_show_notification(const char *title, const char *message)
@@ -369,6 +470,33 @@ void modal_show_notification(const char *title, const char *message)
 
     while (hal_console_getkey() <= 0) {
         /* Wait for user keystroke */
+    }
+    g_need_screen_render = 1;
+}
+
+void modal_alert_file_not_found(const char *fname)
+{
+    uint8_t width = 50;
+    uint8_t height = 7;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    char msg[64];
+
+    snprintf(msg, sizeof(msg), "'%s' was not found.",
+             fname ? fname : "FILE");
+
+    hal_console_hide_cursor();
+    modal_draw_frame(top, left, width, height, "File Not Found");
+    modal_draw_row_centered(top + 3, left, width, msg);
+    modal_draw_row_centered(top + 4, left, width,
+                            "Specified file not found on disk.");
+    modal_draw_row_centered(top + 5, left, width,
+                            "Press any key to continue");
+
+    while (hal_console_getkey() <= 0) {
+#ifndef __CPM__
+        usleep(5000);
+#endif
     }
     g_need_screen_render = 1;
 }

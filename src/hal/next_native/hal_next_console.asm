@@ -178,8 +178,12 @@ NATIVE_CONOUT:
 	PUSH HL
 
 	IFDEF TEST_UART_BRIDGE
-	; Mirror raw console stream character to Next hardware UART
+	; Mirror raw console stream character to Next hardware UART / debug file
 	CALL HAL_NEXT_UART_TX
+	POP HL
+	POP DE
+	POP BC
+	RET
 	ENDIF
 
 	; Keep Sinclair ROM scroll counter at 255 to prevent "scroll?" prompt
@@ -357,26 +361,9 @@ ACO_CMD_CLEAR:
 	XOR A
 	LD (ANSI_STATE),A
 
-	; Clear 6144-byte ULA pixel bitmap
-	LD HL,04000H
-	LD (HL),0
-	LD DE,04001H
-	LD BC,017FFH
-	LDIR
-
-	; Set 768-byte ULA attribute cells
-	LD A,(CURRENT_ATTR)
-	LD (HL),A
-	LD BC,002FFH
-	LDIR
-
-	; Reset Sinclair ROM scroll counter and home cursor
-	LD A,0FFH
-	LD (05C8CH),A
-	LD HL,01821H			; Line 24, Col 33 -> Sinclair (0, 0)
-	LD (05C88H),HL
-	LD HL,04000H
-	LD (05C84H),HL
+	; Clear Sinclair display via ROM CLS control code (ASCII 12)
+	LD A,12
+	RST ZX_RST_PRINT_CHAR
 	JP ACO_DONE
 
 ;------------------------------------------------------------------------------
@@ -476,19 +463,16 @@ HAL_NEXT_UART_TX:
 	PUSH AF
 	PUSH BC
 	PUSH DE
-	LD D,100			; Bounded poll timeout
-HNUT_WAIT:
-	LD BC,0133BH			; UART TX / Status port
-	IN A,(C)
-	BIT 1,A				; Bit 1: TX busy (1 = busy, 0 = ready)
-	JR Z,HNUT_SEND
-	DEC D
-	JR NZ,HNUT_WAIT
-	JR HNUT_DONE
-HNUT_SEND:
-	LD A,C
-	OUT (C),A			; Transmit byte to UART TX
-HNUT_DONE:
+
+	LD E,C				; Preserve character byte in E
+
+	; Mirror character in E to ZEsarUX Hardware Debug Console
+	LD BC,0CF3BH
+	LD A,6
+	OUT (C),A			; Register 6: HARDWARE_DEBUG_BYTE_FILE
+	LD BC,0DF3BH
+	OUT (C),E			; Output raw byte to debug file
+
 	POP DE
 	POP BC
 	POP AF

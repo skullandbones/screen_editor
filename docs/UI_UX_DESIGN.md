@@ -44,23 +44,30 @@ breaks another.
 2. Terminal Architecture, Geometries & Character Budget
 --------------------------------------------------------------------------------
 1. Standard Screen Geometries:
-   - Option 1 — Standard Terminal: 80 columns x 24 rows (`80x24`).
+   - Option 1 — Standard Terminal (Default): 80 columns x 24 rows (`80x24`).
      - Rows 1 to 23: Workspace / Document text viewport.
      - Row 24: Universal Status Bar (fixed bottom anchor).
-     - Universal baseline standard supported across all hardware targets.
-   - Option 2 — Wide Console: 120 columns x 40 rows (`120x40`).
+     - Universal baseline standard and default screen size across all SE
+       implementations and hardware targets because 80x24 is supported on all
+       systems.
+     - On splash screens, hotkey `1` is universally assigned to `80x24`.
+   - Option 2 — Wide Console (if supported): 120 columns x 40 rows (`120x40`).
      - Rows 1 to 39: Workspace / Document text viewport.
      - Row 40: Universal Status Bar (fixed bottom anchor).
-     - Note: If 120x40 screen size is not supported on a target platform,
-       option 2 on the splash screen will not be shown and 120x40 screen size
-       will not be supported on that target.
-   - Option 3 — Native Host Terminal:
+     - On platforms supporting 120x40 wide console mode, hotkey `2` is
+       assigned to `120x40`.
+     - If 120x40 screen size is not supported on a target platform, Option 2 on
+       the splash screen will not be shown and 120x40 screen size will not be
+       supported on that target.
+   - Option 3 — Native Host Terminal (if supported):
      - Dynamic host terminal dimensions (`HOST_COLS x HOST_ROWS`).
      - Supported on native platforms (Linux, POSIX, macOS) capable of querying
        actual terminal emulator dimensions (via `ioctl(TIOCGWINSZ)` or
        `os.get_terminal_size()`).
-     - Option 3 is added to the splash screen when a native screen size is also
-       supported.
+     - On platforms supporting dynamic native resizing, hotkey `3` is assigned
+       to `Native` mode.
+     - If dynamic host sizing is not supported on a target platform, Option 3
+       will not be shown on the splash screen.
    - Screen Switching Debris Prevention Mandate:
      Prior to switching screen sizes (between 80x24, 120x40, or Native), the
      terminal screen must be explicitly cleared (emitting ANSI clear sequence
@@ -113,6 +120,20 @@ breaks another.
      Under no circumstances may an SE port terminate leaving dirty viewport
      contents, hidden cursors, or unreset video attributes in the terminal.
 
+6. VT100 & ASCII Terminal Encoding Mandate (UTF-8 Prohibition):
+   If the terminal is VT100, VT102, or a similar CRT/serial terminal (standard
+   across 8-bit CP/M and retro hardware), the use of UTF-8 (such as Unicode
+   em-dashes `—`, curly quotes, or multi-byte glyphs) is strictly not allowed
+   to be used by the editor. All text and control output must strictly adhere
+   to standard 7-bit ASCII (`0x20`–`0x7E`). Application titles must use the
+   ASCII hyphen-minus `-` (`0x2D`), e.g. `SE - Screen Editor`.
+
+7. Version Number Harmonization Mandate:
+   All SE variants across all target platforms (CP/M, ZX Spectrum Next, Linux,
+   Python, etc.) must use the exact same release version number as canonical
+   SE.COM (e.g. `v1.1.0`). Independent or divergent versioning across ports is
+   strictly prohibited.
+
 3. Screen Surface Taxonomy (The Three Tiers)
 --------------------------------------------------------------------------------
 Every visual surface in SE belongs strictly to one of three tiers. Ports must
@@ -163,6 +184,10 @@ The status bar is the sole fixed screen anchor in SE.
    | | FILENAME.EXT* | 80x24 | Linux | ^K: Editor keys | Line   1 Col  0 |   |
    +-------------------------------------------------------------------------+
 
+   - Editor Name & Version Exclusion Mandate:
+     The status bar does NOT show 'SE.COM' or the version number. Field 1
+     strictly displays the active document filename `{name}{mod}`. Port
+     implementations must never replace Field 1 with application banners.
    - Field 1 (Filename, 16 chars): `| {name}{mod} |`
      - `{name}`: Active filename (e.g. `README.TXT`, `C:MAIN.C`, `(Untitled)`).
      - `{mod}`: `*` if document has unsaved modifications; space otherwise.
@@ -277,9 +302,11 @@ viewport panning algorithms defined in `src/core/editor.asm` and
        this rule. The cursor must never land inside a tab.
      - Vertical Alignment Clamping (`ADJUST_COL_TO_TARGET`): If the sticky
        target column `TARGET_COL` falls within the span of an expanded tab
-       (`vis_acc < TARGET_COL < vis_acc + spaces`), the cursor must clamp to
-       the beginning of the tab (`char_idx` / `vis_acc`) rather than resting
-       within the tab.
+       (`vis_acc < TARGET_COL < vis_acc + spaces`), the editor employs
+       snap-forward alignment: the cursor snaps forward to the discrete
+       character boundary directly following the tab (`vis_acc + spaces`),
+       preserving the Tab Exclusion Mandate while keeping the cursor adjacent
+       to indented code rather than retreating to the margin.
 
 3. Horizontal Navigation (Left, Right, Home, End) & Line Wrapping:
    Horizontal cursor movements update both `CUR_COL` and sticky `TARGET_COL`.
@@ -330,13 +357,15 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      2. While `char_idx < len(line)` and `vis_acc < TARGET_COL`:
         - If `line[char_idx] == 0x09` (`KEY_TAB`):
           `spaces = tab_width - (vis_acc % tab_width)`.
-          If `vis_acc + spaces > TARGET_COL`: Break (stop at tab boundary).
-          `vis_acc += spaces`.
+          Advance across tab (snap-forward): `vis_acc += spaces`,
           `char_idx += 1`.
         - Else:
           `vis_acc += 1`.
           `char_idx += 1`.
      3. Set `CUR_COL = char_idx`.
+     Note: When `TARGET_COL` falls across an expanded tab, the loop advances
+     through the tab to snap-forward to the character immediately following
+     the tab, preserving tab exclusion and keeping cursor on indented text.
    - Cursor Up (`CURSOR_UP` / Arrow Up):
      - If `CUR_DOC_ROW == 0`: Blocked (no-op).
      - `CUR_DOC_ROW -= 1`.
@@ -349,13 +378,13 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - Viewport scroll: If `CUR_DOC_ROW - TOP_DOC_ROW > ACTIVE_ROWS - 2`:
        `TOP_DOC_ROW += 1`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
-   - Page Up (`PAGE_UP` / `Ctrl+U`):
+   - Page Up (`PAGE_UP` / dedicated `PgUp` key):
      - `step = ACTIVE_ROWS - 2` (22 on 80x24; 38 on 120x40).
      - `CUR_DOC_ROW = max(0, CUR_DOC_ROW - step)`.
      - `TOP_DOC_ROW = max(0, TOP_DOC_ROW - step)`.
      - Clamp: Ensure `TOP_DOC_ROW <= CUR_DOC_ROW`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
-   - Page Down (`PAGE_DOWN` / `Ctrl+V` without block):
+   - Page Down (`PAGE_DOWN` / dedicated `PgDn` key):
      - `step = ACTIVE_ROWS - 2`.
      - `max_row = max(0, DOC_TOTAL_LINES - 1)`.
      - `CUR_DOC_ROW = min(max_row, CUR_DOC_ROW + step)`.
@@ -438,7 +467,7 @@ viewport panning algorithms defined in `src/core/editor.asm` and
          - Let `prev_len = len(line[CUR_DOC_ROW - 1])` and
            `cur_len = len(line[CUR_DOC_ROW])`.
          - Combined Length Barrier Check:
-           If `prev_len + cur_len <= 120` (canonical `MAX_LINE` limit):
+           If `prev_len + cur_len <= MAX_INPUT_LINE_CHARS` (1,000 chars):
            - Appends current line contents to previous line:
              `line[CUR_DOC_ROW - 1] += line[CUR_DOC_ROW]`.
            - Deletes row `CUR_DOC_ROW` from document line pointer table.
@@ -450,9 +479,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
            - Triggers full viewport re-render (`NEED_SCREEN_RENDER = 1`).
            - Viewport Scroll: If `CUR_DOC_ROW < TOP_DOC_ROW`, scrolls up:
              `TOP_DOC_ROW = CUR_DOC_ROW`.
-           If `prev_len + cur_len > 120`:
-           - Join is inhibited (no-op) to enforce the 120-column line limit
-             and prevent buffer overflow or unplanned line truncation.
+           If `prev_len + cur_len > MAX_INPUT_LINE_CHARS`:
+           - Join is inhibited (no-op) to enforce the 1,000-character line
+             limit and prevent buffer overflow.
        - If `CUR_DOC_ROW == 0` (top of document):
          - Blocked (no-op; beginning of file reached).
      - Block Mode Interaction:
@@ -472,7 +501,7 @@ viewport panning algorithms defined in `src/core/editor.asm` and
          - Let `cur_len = len(line[CUR_DOC_ROW])` and
            `next_len = len(line[CUR_DOC_ROW + 1])`.
          - Combined Length Barrier Check:
-           If `cur_len + next_len <= 120` (canonical `MAX_LINE` limit):
+           If `cur_len + next_len <= MAX_INPUT_LINE_CHARS` (1,000 chars):
            - Appends next line contents to current line:
              `line[CUR_DOC_ROW] += line[CUR_DOC_ROW + 1]`.
            - Deletes row `CUR_DOC_ROW + 1` from document pointer table.
@@ -481,8 +510,8 @@ viewport panning algorithms defined in `src/core/editor.asm` and
            - Updates sticky target: `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
            - Marks document modified: `MODIFIED = 1`.
            - Triggers full viewport re-render (`NEED_SCREEN_RENDER = 1`).
-           If `cur_len + next_len > 120`:
-           - Pull-up is inhibited (no-op) to preserve 120-column line limit.
+           If `cur_len + next_len > MAX_INPUT_LINE_CHARS`:
+           - Pull-up is inhibited (no-op) to preserve 1,000-character limit.
        - If `CUR_DOC_ROW + 1 >= DOC_TOTAL_LINES` (end of document):
          - Blocked (no-op; end of file reached).
      - Block Mode Interaction:
@@ -503,53 +532,62 @@ content blocks rather than top-aligned text.
    - `LeftCol = max(2, ((HOST_COLS - ContentWidth) // 2) + 1)`
 
 2. Splash Screen Layout (Tier 1):
-   - Content Height: 14 lines, Content Width: 50 columns.
-   - All rows above `TopRow` and below `TopRow + 14` (up to Row 23) display `~`.
+   - Canonical Template: Canonical `SE.COM` serves as the authoritative splash
+     screen template for all SE variants across all target platforms.
+   - Content Height: 21 lines, Content Width: 50 columns.
+   - All rows above `TopRow` and below `TopRow + 21` (up to Row 23) display `~`.
    - Screen Geometry Option Presentation:
-     On splash screens where screen geometry options are presented:
-     - `Option 1`: Standard `80x24` classic terminal mode (universal).
-     - `Option 2`: Wide `120x40` modern console mode. Note: If 120x40 screen
-       size is not supported on the target platform, option 2 on the splash
-       screen will not be shown and 120x40 screen size will not be supported.
-     - `Option 3`: Native host terminal mode. Added to the splash screen when
-       a native screen size is also supported (e.g. on native Linux ports
-       running in modern terminal emulators).
-   - Predominant Programming Language Display Mandate:
-     The splash screen shall show which programming language was predominantly
-     used to create SE. Specifically, row 2 of the 14-line splash screen
-     content block (directly beneath the title `SE — Screen Editor`) shall
-     display the release version along with the programming language
-     predominantly used to create that specific SE port or binary, formatted
-     as `Version <version> (<Language>)`:
-     - 8-bit CP/M (`SE.COM`): `Version v1.1.0 (Z80 Assembly)`
-     - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
-       `Version v1.1.0 (Z80 Assembly)`
-     - Linux Native C port (`se-linux` / `SEC.COM`): `Version v1.1.0 (C)`
-     - Linux Native Python port (`se-py`): `Version 1.0.0 (Python)`
-     - Future Rust port (`se-rs`): `Version 1.0.0 (Rust)`
-     The splash banner must not display generic host operating system labels
-     (such as `(Linux)`), but must explicitly state the predominant
-     programming language used to create the editor binary.
-   - Visual Structure:
+     80x24 is the default screen size because it is supported on all systems.
+     Going forward, splash screen geometry options are standardized to:
+     - `Option 1`: Standard `80x24` classic terminal mode (universal baseline
+       and default on all systems). Hotkey `1` (`DO_SET_80X24`).
+     - `Option 2`: Wide `120x40` modern console mode (if supported). Hotkey `2`
+       (`DO_SET_120X40`). Note: If 120x40 screen size is not supported on the
+       target platform, Option 2 on the splash screen will not be shown and
+       120x40 screen size will not be supported on that target.
+     - `Option 3`: Native host terminal mode (if supported). Hotkey `3`
+       (`DO_SET_NATIVE`). Added to the splash screen only when dynamic host
+       terminal sizing is supported (e.g. on native Linux/POSIX ports).
+   - Visual Structure (Canonical SE.COM Template):
      ```text
      ~
-     ~                SE — Screen Editor
-     ~              Version v1.1.0 (Language)
+     ~                 SE - Screen Editor
      ~
-     ~       Free Memory: [Dynamic Heap]   Lines: [32K Max]
+     ~         type   [E]  or  [Enter] to edit
+     ~         type   [N]              to new file
+     ~         type   [O]              to open file
+     ~         type   [S]              to save file
+     ~         type   [W]  or  [^W]    to close file
+     ~         type   [L]  or  [^L]    to goto line
+     ~         type   [A]              for about
+     ~         type   [M]              for memory info
+     ~         type   [P]              for plugins
+     ~         type   [^P]             for context plugin menu
+     ~         type   [C]              to configure
+     ~         type   [1]              set 80x24
+     ~         type   [2]              set 120x40
+     ~         type   [Q]  or  [^Q]    to exit
      ~
-     ~                     :e to edit
-     ~                     :o to open file
-     ~                     :s to save file
-     ~                     :c for config
-     ~                     :p for plugins
-     ~                     :? for help
-     ~                     :q to quit
-     ~
-     ~                   Enter choice: _
+     ~         Active Screen : [80x24 (Classic Terminal)]
+     ~         RAM Drive (A:): [Preserved (Active)]
+     ~         Plugin System : [Operational]
+     ~         Max Lines     : [32,768 lines]
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Instant Single-Keystroke Protocol & "Enter Option" Exclusion:
+     - The splash screen dispatches commands immediately on a single keystroke.
+     - The hardware terminal cursor must remain hidden (`\x1b[?25l`).
+     - Under NO circumstances may an interactive prompt (such as
+       `Enter option: _` or `Enter choice: _`) be displayed on the splash
+       screen. Any such query which has appeared in some SE variants is
+       strictly prohibited and removed.
+   - Clean Header Mandate (No Version or Language on Splash):
+     - Row 1 displays `SE - Screen Editor` using ASCII hyphen `-` (never UTF-8
+       `—`).
+     - The splash screen does not display the release version number or the
+       predominant programming language. Those details are consolidated
+       exclusively onto the About screen (`[A]`).
    - Keyboard Dispatch & Keystroke Protocol:
      - Document Entry Keys: Only `E` / `e` or `Enter` (`KEY_ENTER`) may
        enter or resume the editor workspace.
@@ -565,14 +603,12 @@ content blocks rather than top-aligned text.
        - `Ctrl+P`: Context-Aware Plugin Palette (`DO_CONTEXT_PLUGIN_POPUP`).
        - `C` / `c`: Open Configuration Manager (`DO_CONFIG_SCREEN`).
        - `1`: Set 80x24 classic terminal mode (`DO_SET_80X24`). Universal
-         baseline standard.
-       - `2`: Set 120x40 modern terminal mode (`DO_SET_120X40`). Note: If
-         120x40 screen size is not supported on the target platform, option 2
-         on the splash screen will not be shown and 120x40 screen size will not
-         be supported.
-       - `3`: Set Native dynamic terminal mode (`DO_SET_NATIVE`). Added to the
-         splash screen when a native screen size is also supported (e.g. Linux
-         native ports). Reverts geometry to auto-detected host terminal size.
+         baseline standard and default screen size across all platforms.
+       - `2`: Set 120x40 modern console mode (`DO_SET_120X40`), if supported
+         on the target platform. If unsupported, Option 2 is omitted.
+       - `3`: Set Native dynamic terminal mode (`DO_SET_NATIVE`), if supported
+         on the target platform (e.g. Linux native ports). If dynamic resizing
+         is unsupported, Option 3 is omitted.
        - `Q` / `q` / `Ctrl+Q`: Safe quit / exit back to OS.
      - Non-Entry Key Exclusion & Silent Rejection Mandate:
        - The Space bar (`0x20`), ANSI cursor arrow keys (`Up`, `Down`, `Left`,
@@ -598,9 +634,9 @@ content blocks rather than top-aligned text.
      ~
      ~  Cursor Navigation:                 Block Operations:
      ~    Arrows / ANSI VT100                 Ctrl+B: Toggle Block
-     ~    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block
-     ~    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Cut Block
-     ~    Ctrl+U / Ctrl+V: Page Up / Down     Ctrl+V: Paste Block
+     ~    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block to Cursor
+     ~    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Move Block to Cursor
+     ~    PgUp / PgDn    : Page Up / Down     Ctrl+D: Delete Block
      ~
      ~  Search & Replace:                  File & System:
      ~    Ctrl+F: Find Text                   Ctrl+S: Save File
@@ -615,22 +651,33 @@ content blocks rather than top-aligned text.
      ```
 
 4. Configuration Manager Workspace (`:c` from Splash):
-   - Displays active parameters and allows direct hotkey toggling:
+   - Displays active parameters, config file origin, and instant hotkey
+     toggling:
      ```text
      ~
      ~                      SE — Configuration Manager
      ~
+     ~                   Config Status: Loaded from A:SE.CFG
+     ~
      ~                   1. Screen Geometry  : 80x24
-     ~                   2. Tab Width        : 4
-     ~                   3. Max Line Capacity: 32K
-     ~                   4. RAM Drive Mode   : Disabled
+     ~                   2. RAM Drive Mode   : Protected
+     ~                   3. Max Doc Lines    : 32K
+     ~                   4. Tab Width        : 8
+     ~                   5. Plugin Manager   : Autoload
      ~
-     ~             [S] Save to SE.CFG    [ESC]/[Enter] Return
-     ~
-     ~                          Enter option: _
+     ~             [1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Instant Keystroke Dispatch Protocol:
+     - Keys `1` through `5` immediately toggle the corresponding configuration
+       parameter and redraw the workspace.
+     - Key `S` / `s` immediately saves active settings to `SE.CFG`.
+     - `ESC`, `Q` / `q`, or `Enter` immediately exits back to the Splash
+       screen.
+     - The workspace operates as a non-buffered, instant-response hotkey menu.
+       An `Enter option: _` prompt line is strictly prohibited and the
+       terminal hardware cursor is cleanly hidden (`TERM_HIDE_CURSOR`).
 
 5. File Open Workspace (`Ctrl+O` / `:o` from Splash):
    - Full-screen Tier 1 directory browser listing files on current drive/user.
@@ -678,8 +725,26 @@ content blocks rather than top-aligned text.
 7. Save File Workspace (`Ctrl+S` / `:s` from Splash):
    - Full-screen Tier 1 save workspace displaying directory contents, target
      filename input box, and line ending format indicator.
-   - Line ending format toggle: Pressing `Ctrl+F` toggles between CP/M (`CRLF`)
-     and Linux (`LF`) formats.
+   - Document End-of-Line Handling Specification (All Variants):
+     Text file line ending format is strictly managed per-document across all
+     SE variants (CP/M, ZX Spectrum Next, Linux, Python, Rust):
+     - Native Default for New Files: When saving a newly created document
+       (`(Untitled)`), the editor defaults to the host platform's native text
+       file format:
+       - CP/M & Next targets (`SE.COM`, `SE_NEXT.COM`): Defaults to native
+         CP/M format (`CRLF`, `0x0D, 0x0A`).
+       - Linux & POSIX targets (`se-linux`, `se-py`, `se-rs`): Defaults to
+         native Linux format (`LF`, `0x0A`).
+     - Line Ending Preservation for Existing Files: When opening an existing
+       file from storage, the editor automatically inspects line terminators
+       and preserves the file's current end-of-line markers (CRLF or LF)
+       throughout all editing operations. An open file continues to use its
+       detected line ending format upon save unless explicitly overridden.
+     - Save Screen Format Override (`Ctrl+F`): The Save File screen explicitly
+       displays the active save format on row 9 (`Format: [CP/M]` or
+       `Format: [Linux]`). The user can press `Ctrl+F` (`[^F]=Toggle Format`)
+       to toggle and override the line ending format for that specific save.
+       Status bar Field 3 immediately updates to reflect the active format.
    - Pre-fills active filename if document already has an associated file.
    - Visual Structure (80x24 Mode):
      ```text
@@ -718,31 +783,123 @@ content blocks rather than top-aligned text.
      [STATUS BAR AT ROW 24]
      ```
 
-9. Document Close Lifecycle (`Ctrl+W` / `:w` from Splash):
-   - Closing an active document returns the user directly to the Tier 1
-     Splash Screen workspace.
-   - Clean Document (`DOC_MODIFIED == 0`):
-     Immediately closes the active file, frees working buffers, and displays
-     the Splash Screen workspace without prompting.
-   - Modified Document (`DOC_MODIFIED == 1`):
-     Intercepts close and presents a Tier 2 Centered Boxed Modal Pop-up
-     querying whether to save unsaved modifications:
-     ```text
-     +--------------------------------------------------+
-     |              Unsaved Modifications               |
-     +--------------------------------------------------+
-     |   Any unsaved edits will be lost if discarded.   |
-     |                  Save changes?                   |
-     |                                                  |
-     |        [Y]es      [N]o      [ESC]=Cancel         |
-     +--------------------------------------------------+
-     ```
-     - Response `[Y]es`: Transitions to Save File workspace to write changes,
-       then closes document to Splash Screen.
-     - Response `[N]o`: Discards unsaved modifications and closes document to
-       Splash Screen.
-     - Response `[ESC]=Cancel`: Cancels close request and returns directly to
-       the active editor workspace with document state intact.
+9. Directory Screen Filename Input Line Editing:
+   The filename input fields across all directory workspaces (Open File,
+   File Insert, Save File, and Block Save) support full in-field cursor
+   navigation and editing identically across all SE variants:
+   - Left and Right cursor keys: `<Left>` and `<Right>` arrow keys (or
+     `<Ctrl+S>` and `<Ctrl+D>`) move the insertion cursor horizontally within
+     the input box without erasing characters.
+   - Delete key: `<Del>` (or `<Ctrl+G>`) deletes the character directly under
+     the cursor, shifting following characters leftward.
+   - Backspace key: `<BS>` (`0x08`, `0x7F`) deletes the character immediately
+     to the left of the cursor, shifting following characters leftward.
+   - Home and End keys: `<Home>` (or `<Ctrl+A>`) repositions the cursor at the
+     start of the input box; `<End>` (or `<Ctrl+E>`) positions the cursor
+     directly after the last character in the buffer.
+   - In-Place Character Insertion: Typing printable characters when the cursor
+     is positioned within existing text shifts trailing characters rightward,
+     inserting without overwriting existing input.
+   - Confirmation and Cancellation: `<Enter>` confirms the filename; `<ESC>`
+     cancels the directory workspace and returns to the previous screen.
+
+10. Workspace Prompt Input & Keystroke Rendering Discipline (SE.COM Parity):
+    When entering filenames, paths, or drive specs in Tier 1 directory browsers
+    (File Open, Insert, Save, Save Block):
+    - In-Place Character Echo (Reference Architecture):
+      - As ASCII keystrokes (`0x20..0x7E`) are received, they are appended or
+        inserted into `INPUT_FILENAME_BUF` and echoed directly to the console
+        at the current hardware cursor position (`PUTC`), advancing
+        `cursor_pos`.
+      - Inline deletions (`Backspace` deleting left of cursor, `Delete`
+        deleting character under cursor) and in-place insertions redraw only
+        the bracketed input field on the prompt row and reposition the cursor
+        via `\x1b[{row};{col}H`.
+      - Directional navigation (`Left`, `Right`, `Home`, `End`) repositions the
+        hardware cursor within the bracket boundaries without emitting text.
+    - Prohibition of Full-Screen Redraw During Typing:
+      - Implementations MUST NOT re-render the 24-row (or 40-row) screen,
+        file grid, borders, or Row 24 status bar upon receiving individual
+        text input keystrokes.
+      - Re-emitting the status bar or repainting the file grid on every
+        keystroke creates severe display flicker and serial latency on
+        4–10 MHz Z80 CP/M systems, overflows input FIFO buffers during rapid
+        typing, and emits premature status bar updates (e.g. `Line    1/1`)
+        that break automated test harness synchronization.
+    - Discrete Full-Screen Redraw Triggers:
+      - Full-screen re-renders (`RENDER_SAVE_PAGE`, `RENDER_OPEN_PAGE`) are
+        strictly reserved for macroscopic state changes:
+        1. Initial entry into the workspace.
+        2. Page changes via `<PgUp>` or `<PgDn>`.
+        3. Drive, user, or wildcard filter pattern changes applied upon
+           pressing `Enter` (e.g. `B:`, `1C:`, `*.TXT`).
+        4. Line ending format toggling via `Ctrl+F` in the Save workspace.
+        5. Dismissal of child modal dialogs (e.g. Overwrite Confirmation).
+
+11. Document Close Lifecycle (`Ctrl+W` / `:w` from Splash):
+    - Closing an active document returns the user directly to the Tier 1
+      Splash Screen workspace.
+    - Clean Document (`DOC_MODIFIED == 0`):
+      Immediately closes the active file, frees working buffers, and displays
+      the Splash Screen workspace without prompting.
+    - Modified Document (`DOC_MODIFIED == 1`):
+      Intercepts close and presents a Tier 2 Centered Boxed Modal Pop-up
+      querying whether to save unsaved modifications:
+      ```text
+      +--------------------------------------------------+
+      |              Unsaved Modifications               |
+      +--------------------------------------------------+
+      |   Any unsaved edits will be lost if discarded.   |
+      |                  Save changes?                   |
+      |                                                  |
+      |        [Y]es      [N]o      [ESC]=Cancel         |
+      +--------------------------------------------------+
+      ```
+      - Response `[Y]es`: Transitions to Save File workspace to write changes,
+        then closes document to Splash Screen.
+      - Response `[N]o`: Discards unsaved modifications and closes document to
+        Splash Screen.
+      - Response `[ESC]=Cancel`: Cancels close request and returns directly to
+        the active editor workspace with document state intact.
+
+12. About Screen Layout (`[A]` from Splash):
+    - Content Height: 9 lines, Content Width: 54 columns.
+    - All rows above `TopRow` and below `TopRow + 9` (up to Row 23) display `~`.
+    - Visual Structure:
+      ```text
+      ~
+      ~                 SE - Screen Editor
+      ~       version 1.1.0 (2026-10-09) (Z80 Assembly)
+      ~                  by Dean Jenkins
+      ~
+      ~ Google Antigravity 2.19.1 & Gemini FLASH 3.8 high
+      ~     Open source software under the MIT License
+      ~
+      ~             Press any key to continue
+      ~
+      [STATUS BAR AT ROW 24]
+      ```
+    - Predominant Programming Language Display Mandate:
+      Row 2 of the About screen displays the release version number, build date,
+      and the predominant programming language used to create that specific SE
+      port or binary, formatted as `version <version> (<date>) (<Language>)`:
+      - 8-bit CP/M (`SE.COM`):
+        `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+      - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
+        `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+      - Linux Native C port (`se-linux` / `SEC.COM`):
+        `version 1.1.0 (2026-10-09) (C)`
+      - Linux Native Python port (`se-py`):
+        `version 1.1.0 (2026-10-09) (Python)`
+      - Future Rust port (`se-rs`):
+        `version 1.1.0 (2026-10-09) (Rust)`
+      Generic host OS labels (such as `(Linux)`) must not be used; each
+      binary shall clearly state its predominant programming language on the
+      About screen.
+    - Version Harmonization: All SE variants share the exact same release
+      version number as canonical `SE.COM` (e.g. `v1.1.0`).
+    - Dismissal: Any key press dismisses the About screen and returns to the
+      Splash Screen.
 
 8. Tier 2 Centered Boxed Modal Pop-ups
 --------------------------------------------------------------------------------
@@ -842,9 +999,21 @@ or display notifications.
      Used for text parameters (Find string, Replace string, Goto Line).
      Target input field enclosed in bracket pair `[  text  ]`.
      Terminal cursor placed directly inside bracket field.
-     Supports standard editing keys: character entry, Backspace (deletes left),
-     Delete / Ctrl+D (deletes under cursor), Left/Right arrows, and Home/End.
-     WordStar diamond key mappings (e.g. `Ctrl+S` for left) are not supported.
+     In-field cursor movement behaviors are identical across all SE variants.
+     Unlike Tier 1 directory filename fields (Section 7.9) which provide full
+     in-field cursor navigation, Archetype C modals operate strictly as
+     lightweight, append/backspace linear input fields across all variants:
+     - Character entry: Printable characters append to the end of the buffer.
+     - Backspace / Delete: Erases character directly preceding the cursor.
+     - Confirmation: `<Enter>` confirms and submits the input buffer.
+     - Cancellation: Standalone `<ESC>` cancels and dismisses the dialog.
+     - Unexpected Keystroke Protection Mandate:
+       Modals MUST NOT be cancelled or dismissed by unexpected keys or escape
+       sequences (such as cursor arrow keys, `PgUp`/`PgDn`, function keys, or
+       stray control keys). Any unexpected sequences received while an input
+       modal is active must be discarded without altering the modal's input
+       buffer, without moving the underlying document cursor, and without
+       cancelling the dialog.
      Find Text Modal Dialog (50 cols x 7 rows):
      ```text
      +------------------------------------------------+
@@ -872,6 +1041,13 @@ or display notifications.
      |          [Enter]=Confirm      [ESC]=Cancel       |
      +--------------------------------------------------+
      ```
+     - Keystroke Rendering Discipline (In-Place Echo):
+       Single-line modal text input fields adhere strictly to the in-place
+       echo discipline defined in Section 7.10: character entry, inline
+       deletion, and cursor navigation update only the contents within the
+       bracketed input field `[  text  ]` and the hardware cursor position.
+       Modal frame borders, background rows, and underlying screen surfaces
+       MUST NOT be redrawn on individual text-entry keystrokes.
 
    Archetype D: Selection Menu (`show_menu` / Plugin Palette)
      Used for choosing from dynamic list (Plugin Palette, Directory list).
@@ -911,10 +1087,48 @@ or display notifications.
    - Status Bar shows `[SEL]` while selection is in progress.
    - Status Bar shows `[BLK LOCK]` when a search match is pinned.
 
-3. Clipboard Primitives:
-   - `Ctrl+C`: Copy active block to internal clipboard buffer.
-   - `Ctrl+X`: Cut active block to internal clipboard buffer and delete text.
-   - `Ctrl+V`: Paste clipboard buffer at active cursor position.
+3. Direct In-Place Block Manipulation Mandate:
+   All SE implementations across all target platforms (CP/M Z80 `SE.COM`,
+   NextCPM `SE_NEXT.COM`, Native Next `SE.NEX`, Linux C `se-linux`, Python
+   `se-py`, and future ports) must strictly implement Direct In-Place Block
+   Manipulation.
+
+   - Prohibition of Intermediary Clipboards:
+     The use of an intermediary clipboard buffer (copying text to a detached
+     clipboard storage followed by an asynchronous paste step) is strictly
+     PROHIBITED across all SE implementations. All block manipulations operate
+     directly between the active marked block and the current cursor position
+     in document memory. Intermediary clipboard buffers waste memory, break
+     CP/M TPA budget constraints, and introduce state desynchronization.
+
+   - Canonical Block Operation Key Combinations (from `SE.COM`):
+     - `Ctrl+B`: Toggle block selection mode. If inactive (0), anchors
+       selection at current cursor (`[SEL]`). If active (1 or 2), cancels block
+       selection (`CANCEL_BLOCK`).
+     - `Enter`: Solidify/lock dynamic block selection (`SOLIDIFY_BLOCK`).
+       Freezes normalized `START` and `END` boundaries (`[BLK LOCK]`),
+       allowing free cursor navigation without moving boundaries.
+     - `Ctrl+C`: Copy marked block directly to cursor (`DO_COPY_BLOCK`). If
+       dynamic selection is active (1), implies solidify first. Injects block
+       text into the document at the active cursor position without modifying
+       or clearing the source block.
+     - `Ctrl+X`: Move marked block directly to cursor (`DO_MOVE_BLOCK`). If
+       dynamic selection is active (1), implies solidify first. Relocates block
+       text to destination cursor location and deletes the original block,
+       re-establishing block bounds around the moved text at destination.
+     - `Ctrl+D` / `Delete`: Delete marked block range (`DO_DELETE_BLOCK`).
+       Deletes all characters and lines within the highlighted block, closes
+       the gap, returns cursor to block start, and clears block selection.
+     - `Ctrl+K`: Open Block Operations Modal Dialog (`DO_BLOCK_MENU_POPUP`).
+       Centered 50x7 modal pop-up displaying block metrics and action hotkeys:
+       `[Enter]=Lock  [C]opy  [X]Move  [D]el  [S]ave  [B]Clear  [ESC]=Exit`.
+     - `Ctrl+S`: Save marked block to disk (`DO_BLOCK_SAVE_FILE`). Solidifies
+       block and opens save dialog in block mode, saving only highlighted text.
+     - `Ctrl+O`: Insert file at cursor into block (`DO_BLOCK_INSERT_FILE`).
+       Solidifies block and streams selected file content at cursor position.
+     - `Ctrl+Y`: Beautify marked block (`DO_CTRL_Y_BEAUTIFY`). Runs source code
+       formatter restricted to the highlighted line range.
+     - `ESC`: Clear/cancel active block selection and restore normal editing.
 
 10. Canonical Keybinding Matrix & Behavior
 --------------------------------------------------------------------------------
@@ -922,7 +1136,7 @@ or display notifications.
 | :---         | :---  | :---          | :---                                |
 | `Ctrl+A`     | `0x01`| `KEY_CTRL_A`  | Jump to beginning of line (Home)    |
 | `Ctrl+B`     | `0x02`| `KEY_CTRL_B`  | Toggle block selection mode         |
-| `Ctrl+C`     | `0x03`| `KEY_CTRL_C`  | Copy block to clipboard             |
+| `Ctrl+C`     | `0x03`| `KEY_CTRL_C`  | Copy block directly to cursor       |
 | `Ctrl+D`     | `0x04`| `KEY_CTRL_D`  | Delete character forward (DEL)      |
 | `Ctrl+E`     | `0x05`| `KEY_CTRL_E`  | Jump to end of line (End)           |
 | `Ctrl+F`     | `0x06`| `KEY_CTRL_F`  | Open Find Text modal dialog         |
@@ -936,9 +1150,7 @@ or display notifications.
 | `Ctrl+R`     | `0x12`| `KEY_CTRL_R`  | Open Search & Replace modal dialog  |
 | `Ctrl+S`     | `0x13`| `KEY_CTRL_S`  | Save File to disk                   |
 | `Ctrl+T`     | `0x14`| `KEY_CTRL_T`  | Jump to Top of document (Row 0)     |
-| `Ctrl+U`     | `0x15`| `KEY_CTRL_U`  | Page Up (viewport rows - 2)         |
-| `Ctrl+V`     | `0x16`| `KEY_CTRL_V`  | Page Down / Paste block             |
-| `Ctrl+X`     | `0x18`| `KEY_CTRL_X`  | Cut block to clipboard / Move block |
+| `Ctrl+X`     | `0x18`| `KEY_CTRL_X`  | Move block directly to cursor       |
 | `Ctrl+Y`     | `0x19`| `KEY_CTRL_Y`  | Run BEAUTIFY code formatter plugin  |
 | `ESC`        | `0x1B`| `KEY_ESC`     | Return to Splash / Cancel modal     |
 | `Enter`      | `0x0D`| `KEY_ENTER`   | Split line at cursor / Confirm modal|
@@ -949,15 +1161,19 @@ or display notifications.
 | `Down Arrow` | ANSI  | `KEY_DOWN`    | Move cursor Down one line           |
 | `Left Arrow` | ANSI  | `KEY_LEFT`    | Move cursor Left one character      |
 | `Right Arrow`| ANSI  | `KEY_RIGHT`   | Move cursor Right one character     |
+| `PgUp`       | ANSI  | `KEY_PGUP`    | Page Up (viewport rows - 2)         |
+| `PgDn`       | ANSI  | `KEY_PGDN`    | Page Down (viewport rows - 2)       |
 
 > [!IMPORTANT]
 > Architectural Policy on Navigation Keys & WordStar Diamond Deprecation:
 > Canonical SE mappings designate `Ctrl+S` for Save File, `Ctrl+D` for Delete
-> Forward, `Ctrl+E` for End of Line, and `Ctrl+X` for Cut/Move Block.
+> Forward, `Ctrl+E` for End of Line, and `Ctrl+X` for Move Block.
 > Directional cursor navigation across all variants and surfaces is provided
 > exclusively via standard ANSI VT100 arrow keys (`Up`, `Down`, `Left`,
-> `Right`) and standard motion shortcuts (`Ctrl+A` Home, `Ctrl+E` End,
-> `Ctrl+T` Top, `Ctrl+G` Bottom, `Ctrl+U` PgUp, `Ctrl+V` PgDn).
+> `Right`), dedicated paging keys (`PgUp`, `PgDn`), and standard motion
+> shortcuts (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G` Bottom).
+> Legacy `Ctrl+U` and `Ctrl+V` motion aliases are removed as all target
+> keyboards provide dedicated Page Up and Page Down keys.
 >
 > WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly
 > NOT supported anywhere in SE (including the Document Editor, Centered
@@ -975,7 +1191,7 @@ or display notifications.
        (`CUR_COL - 1`) and moves cursor left. When pressed at column 0
        (`CUR_COL == 0`), joins the current line to the previous line (landing
        the cursor at the junction column) provided the combined line length
-       does not exceed 120 columns; blocked at Row 0 Column 0.
+       does not exceed MAX_INPUT_LINE_CHARS (1,000 chars); blocked at Row 0.
      - Block-Active Context: Cancels dynamic block (`BLOCK_ACTIVE = 0`)
        to safeguard highlighted text against accidental deletion.
      - Modal Input Dialogs (Archetype C): Deletes character preceding the
@@ -986,8 +1202,8 @@ or display notifications.
      - Editor Workspace: Deletes the character directly under the cursor
        without altering cursor column. When pressed at the end of a line
        (`CUR_COL >= len(line)`), pulls up and joins the next line to the
-       current line provided the combined length does not exceed 120 columns;
-       blocked at the end of the last line.
+       current line provided the combined length does not exceed
+       MAX_INPUT_LINE_CHARS (1,000 chars); blocked at the end of the file.
      - Block-Active Context: Solidifies selection and deletes the entire
        highlighted block range (`DO_DELETE_BLOCK`), resetting block mode and
        moving following text up to the block start.
@@ -1006,9 +1222,12 @@ or display notifications.
      line at column 0. In modal input fields, shifts cursor index left.
    - `Right Arrow` (`KEY_RIGHT`): Moves cursor right one column; wraps to next
      line at end of line. In modal input fields, shifts cursor index right.
+   - Dedicated Paging Keys: `PgUp` (`KEY_PGUP`, ANSI `\x1b[5~` / Page Up),
+     `PgDn` (`KEY_PGDN`, ANSI `\x1b[6~` / Page Down).
    - Motion Shortcuts: `Ctrl+A` (Home / Start of input), `Ctrl+E` (End of line
      / End of input), `Ctrl+T` (Top of document), `Ctrl+G` (Bottom of
-     document), `Ctrl+U` (Page Up), `Ctrl+V` (Page Down without active block).
+     document). Legacy `Ctrl+U` and `Ctrl+V` paging aliases are removed as all
+     target keyboards provide dedicated `PgUp` and `PgDn` keys.
    - WordStar Prohibition: WordStar diamond navigation keys (`Ctrl+S`,
      `Ctrl+D`, `Ctrl+E`, `Ctrl+X`) are strictly not supported for navigation
      in any editor workspace or modal input dialog.
@@ -1019,14 +1238,16 @@ or display notifications.
      must discretely tokenize multi-byte escape sequences (e.g. `\x1b[A`,
      `\x1b[B`, `\x1b[C`, `\x1b[D`, `\x1b[1~`..`\x1b[6~`, `\x1bOA`..`\x1bOF`).
    - Anti-Leakage Invariant:
-     When an escape sequence begins with `ESC` followed by `[` or `O`, the HAL
-     input decoder must wait with sufficient timeout to assemble the
-     entire sequence. If an incomplete or unrecognized escape sequence is
-     received, the HAL must drain and discard all sequence bytes
-     atomically. Under NO circumstances may trailing sequence characters
-     (such as `'C'` from `\x1b[C`) be leaked back into the console stream as
-     regular typed keystrokes, as doing so erroneously triggers hotkeys
-     (e.g. Configuration Manager on `'C'`) or corrupts text buffers.
+     When an escape sequence begins with `ESC` followed by `[` or `O`, the
+     input decoder must wait with sufficient timeout to assemble the entire
+     sequence. If an incomplete or unrecognized escape sequence is received
+     (such as unhandled function keys F5–F12 emitting `\x1b[15~`..`\x1b[24~`,
+     mouse tracking events, or bracketed paste markers), the input decoder
+     must drain and discard all sequence bytes atomically until the sequence
+     terminator (e.g. `~`, `A`–`Z`, `a`–`z`, or timeout). Under NO
+     circumstances may trailing sequence characters (such as `~` or trailing
+     parameters) be leaked back into the console stream as regular typed
+     keystrokes, as doing so corrupts document text buffers.
 
 11. The Ten UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
@@ -1130,22 +1351,24 @@ allocations, screen mode, tab stops, and subsystem behaviors.
 2. Canonical CP/M Defaults in SE.COM:
    | Parameter | Default | Values | Description |
    | :--- | :--- | :--- | :--- |
-   | `SCREEN` | `120X40` | `80X24`, `120X40` | Screen geometry mode |
+   | `SCREEN` | `80X24` | `80X24`, `120X40` | Screen geometry mode |
    | `TAB` | `8` | `4`, `8` | Tab stop spacing |
-   | `FORMAT` | `CPM` | `CPM`, `LINUX` | File line ending mode |
    | `LINES` | `16K` | `16K`, `32K` | Document line ceiling |
    | `RAMDRIVE` | `PRESERVE` | `PRESERVE`, `ON`, `HIB` | Far RAM bank usage |
    | `PLUGIN` | `AUTOLOAD` | `AUTO`, `DEMAND`, `OFF` | Plugin loading mode |
 
-   - `SCREEN` (Default: `120X40`):
-     Geometry mode in `config.inc` (`MODE_120X40` = 0). On classic 80-column
-     CRT/terminals, `80X24` (`MODE_80X24` = 1) is selected.
+   - `SCREEN` (Default: `80X24`):
+     Geometry mode in `config.inc`. Standard classic 80-column terminal mode
+     is selected by default (`MODE_80X24` = 1).
    - `TAB` / `TABS` (Default: `8`):
      Tab stop column interval (`4` or `8`). In `se.asm`, default is 8
      (`CFG_TAB_WIDTH = 8`, mask = 7).
-   - `FORMAT` (Default: `CPM`):
-     Default line ending format for new documents (`CPM` = CRLF `0x0D, 0x0A`,
-     `LINUX` = LF `0x0A`).
+   - Document Line Ending Format Exclusion:
+     Text file line ending format (`CPM` CRLF vs `Linux` LF) is NOT an `SE.CFG`
+     configuration setting. As specified in Section 7.7, line endings are
+     governed per-document: new files default to host native format, opened
+     files preserve their existing end-of-line markers, and format can be
+     toggled per-file in the Save File screen via `Ctrl+F`.
    - `LINES` / `MAXLINES` (Default: `16K`):
      Maximum document line pointer table capacity (`16K` = 16,384 lines,
      `32K` = 32,768 lines).
@@ -1320,14 +1543,20 @@ specific architectural adaptations.
        - Hardware MMU memory banking and copper/layer 2 configurations vs
          standard CP/M BDOS memory and console calls.
 
-6. Splash Screen Implementation Language Identification:
+6. About Screen Implementation Language Identification:
    All cross-platform ports and binaries of SE must display the programming
-   language predominantly used to create that specific port on row 2 of the
-   Tier 1 Splash screen (Section 7.2). For example:
-   - `SE.COM` / `SE_NEXT.COM`: `(Z80 Assembly)`
-   - `se-linux` / `SEC.COM`: `(C)`
-   - `se-py`: `(Python)`
-   - `se-rs`: `(Rust)`
-   Generic host operating system names (such as `(Linux)`) must not be used on
-   the splash version line; each binary shall clearly show its predominant
-   programming language.
+   language predominantly used to create that specific port appended to the
+   version number and build date line on the Tier 1 About screen
+   (Section 7.12). For example:
+   - `SE.COM` / `SE_NEXT.COM`:
+     `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+   - `se-linux` / `SEC.COM`:
+     `version 1.1.0 (2026-10-09) (C)`
+   - `se-py`:
+     `version 1.1.0 (2026-10-09) (Python)`
+   - `se-rs`:
+     `version 1.1.0 (2026-10-09) (Rust)`
+   All SE variants shall share the identical version number as canonical
+   `SE.COM` (e.g. `v1.1.0`). Generic host OS labels (such as `(Linux)`) must
+   not be used; each binary shall clearly state its predominant programming
+   language on the About screen.

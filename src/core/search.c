@@ -91,7 +91,8 @@ static void restore_editor_screen(void)
 }
 
 static void draw_find_field(uint8_t top, uint8_t left,
-                            const char *input, uint8_t cur_len)
+                            const char *input, uint8_t cur_len,
+                            uint8_t cursor_pos)
 {
     uint8_t i;
     hal_console_locate(top + 4, (uint8_t)(left + 14));
@@ -99,7 +100,7 @@ static void draw_find_field(uint8_t top, uint8_t left,
         hal_console_putc((i < cur_len) ? input[i] : ' ');
     }
     hal_console_puts(s_find_close);
-    hal_console_locate(top + 4, (uint8_t)(left + 14 + cur_len));
+    hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
 }
 
 int execute_find_forward(void)
@@ -218,6 +219,7 @@ int do_ctrl_f_find(void)
     uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
     uint8_t cur_len = check_start_from_block(input);
+    uint8_t cursor_pos = cur_len;
     uint8_t row;
     int k;
 
@@ -235,13 +237,13 @@ int do_ctrl_f_find(void)
                              s_find_mode_sens : s_find_mode_insens);
         } else if (row == 4) {
             hal_console_puts("|      Find: [");
-            draw_find_field(top, left, input, cur_len);
+            draw_find_field(top, left, input, cur_len, cursor_pos);
         } else {
             hal_console_puts(s_find_keys);
         }
     }
 
-    hal_console_locate(top + 4, (uint8_t)(left + 14 + cur_len));
+    hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
     hal_console_show_cursor();
 
     while (1) {
@@ -266,22 +268,63 @@ int do_ctrl_f_find(void)
             hal_console_locate(top + 3, left);
             hal_console_puts(g_search_case_sensitive ?
                              s_find_mode_sens : s_find_mode_insens);
-            hal_console_locate(top + 4, (uint8_t)(left + 14 + cur_len));
+            hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
             continue;
         }
-        if (k == KEY_BACKSPACE || k == KEY_DEL) {
-            if (cur_len > 0) {
+        if (k == KEY_LEFT) {
+            if (cursor_pos > 0) {
+                cursor_pos--;
+                hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+            }
+            continue;
+        }
+        if (k == KEY_RIGHT) {
+            if (cursor_pos < cur_len) {
+                cursor_pos++;
+                hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+            }
+            continue;
+        }
+        if (k == KEY_HOME || k == KEY_CTRL_A) {
+            cursor_pos = 0;
+            hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+            continue;
+        }
+        if (k == KEY_END || k == KEY_CTRL_E) {
+            cursor_pos = cur_len;
+            hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+            continue;
+        }
+        if (k == KEY_BACKSPACE || k == 8) {
+            if (cursor_pos > 0) {
+                memmove(input + cursor_pos - 1, input + cursor_pos,
+                        cur_len - cursor_pos + 1);
+                cur_len--;
+                cursor_pos--;
+                input[cur_len] = '\0';
+                draw_find_field(top, left, input, cur_len, cursor_pos);
+            }
+            continue;
+        }
+        if (k == KEY_DEL || k == KEY_CTRL_D) {
+            if (cursor_pos < cur_len) {
+                memmove(input + cursor_pos, input + cursor_pos + 1,
+                        cur_len - cursor_pos);
                 cur_len--;
                 input[cur_len] = '\0';
-                draw_find_field(top, left, input, cur_len);
+                draw_find_field(top, left, input, cur_len, cursor_pos);
             }
             continue;
         }
         if (k >= 32 && k <= 126) {
             if (cur_len < FIND_POPUP_FIELD_LEN) {
-                input[cur_len++] = (char)k;
+                memmove(input + cursor_pos + 1, input + cursor_pos,
+                        cur_len - cursor_pos + 1);
+                input[cursor_pos] = (char)k;
+                cur_len++;
+                cursor_pos++;
                 input[cur_len] = '\0';
-                draw_find_field(top, left, input, cur_len);
+                draw_find_field(top, left, input, cur_len, cursor_pos);
             }
             continue;
         }

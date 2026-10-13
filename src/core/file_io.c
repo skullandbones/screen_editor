@@ -90,6 +90,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
 
     fp = fopen(filename, "rb");
     if (!fp) {
+        modal_alert_file_not_found(filename);
         return -1;
     }
 
@@ -236,7 +237,7 @@ int file_save_block(const char *filename, uint16_t start_row,
     int res = file_write_op(filename, start_row, end_row, format);
 #ifndef __CPM__
     if (res == 0) {
-        modal_show_notification("Export Complete", filename);
+        modal_show_notification("Save Complete", filename);
     }
 #endif
     return res;

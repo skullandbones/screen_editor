@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Verification Complete / 5 Defects Open (Bug 2.1.3 Rejected).
+- **Status**: Active / 10 Open (Bugs 2.1.3, 2.1.7-2.1.12, 2.1.15 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -93,6 +93,169 @@ have been resolved and archived.
       `src/core/editor.asm` and `src/core/search.asm` to strictly conform to
       Archetype C (52x8 box, `+---+` title divider,
       `[Enter]=Confirm      [ESC]=Cancel` footer, bracketed input `[  ]`).
+  - [x] **Bug 2.1.7: Clipboard Paste & Buffer Primitives [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9, 10.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Dropped support for detached intermediary clipboard buffers
+      and `Ctrl+V` clipboard paste across all SE variants. All implementations
+      strictly enforce Direct In-Place Block Manipulation (`Ctrl+B` toggle,
+      `Enter` solidify, `Ctrl+C` copy directly to cursor, `Ctrl+X` move
+      directly to cursor, `Ctrl+D` / `DEL` delete block, `Ctrl+K` block menu
+      popup, `Ctrl+S` save block, `Ctrl+O` insert file). Intermediary clipboard
+      buffers are strictly prohibited across all variants to conserve memory,
+      respect CP/M TPA headroom, and eliminate state desynchronization.
+      Directional page navigation is handled exclusively via dedicated `PgUp`
+      and `PgDn` keys; `Ctrl+U` and `Ctrl+V` are removed as paging shortcuts.
+  - [x] **Bug 2.1.8: Line Join Length Barrier [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The 120-column limit in `docs/UI_UX_DESIGN.md` was an error
+      in the design specification that conflated terminal screen width (120x40
+      console mode) with document line buffer capacity. `SE.COM` correctly
+      enforces `MAX_INPUT_LINE_CHARS` (1,000 characters) across `src/core/`
+      (`JOIN_TWO_LINES` in `editor.asm`, `do_backspace` / `do_delete` in
+      `editor.c`), fully supported by horizontal panning (`[Pan +40]`).
+      `docs/UI_UX_DESIGN.md` has been corrected to reference the canonical
+      1,000-character barrier.
+  - [x] **Bug 2.1.9: Column Clamping on Expanded Tab [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The Tab Exclusion Mandate is 100% satisfied in `SE.COM`;
+      the cursor never rests within a tab because `CUR_COL` is an integer byte
+      offset into document memory. When `TARGET_COL` falls across an expanded
+      tab (`vis_acc < TARGET_COL < vis_acc + spaces`), `SE.COM` intentionally
+      uses "snap-forward" behavior (`ADJUST_COL_TO_TARGET`), aligning with the
+      character boundary directly after the tab (e.g. column 8 rather than
+      column 0). This preserves alignment with indented text during vertical
+      navigation. `docs/UI_UX_DESIGN.md` has been updated to explicitly codify
+      snap-forward alignment.
+  - [x] **Bug 2.1.10: Modal In-Field Cursor Movement [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: In-field cursor movement behaviors are identical across all
+      SE variants. Full in-field cursor movement (Left/Right arrows, Delete
+      under cursor, Backspace, Home, and End) is supported across all variants
+      in the Tier 1 directory filename input screens (Section 7.9). In
+      contrast, Archetype C single-line modals (Find, Replace, Goto Line) are
+      intentionally designed as lightweight append/backspace linear input
+      fields across all variants to conserve memory, preserve CP/M TPA
+      headroom, and keep modal interactions robust. The requirement for
+      intra-field cursor tracking and mid-string insertion inside Archetype C
+      modals is rejected. The separate defect where unexpected keystrokes (such
+      as cursor arrow keys) cancel the modal dialog has been split out and
+      tracked as Bug 2.1.17.
+  - [x] **Bug 2.1.11: Config Manager Menu Layout [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The 4-option wireframe in `docs/UI_UX_DESIGN.md` Section 7.4
+      was an early conceptual sketch that omitted the Plugin Manager and
+      Config Status. In `SE.COM`, Option 5 (`5. Plugin Manager`) is required
+      to configure whether the Far RAM plugin subsystem is autoloaded or
+      disabled, and `Config Status` provides essential feedback on whether
+      `SE.CFG` was loaded from current or program drive. Furthermore, the
+      Configuration Manager is an instant-reaction hotkey event loop
+      (`1-5` toggle, `S` save, `ESC`/`Enter`/`Q` return); an `Enter option: _`
+      prompt line with an interactive terminal cursor is inappropriate and
+      misleading for a single-keypress dispatch loop. `docs/UI_UX_DESIGN.md`
+      has been updated to reflect the canonical 5-option hotkey layout.
+  - [x] **Bug 2.1.12: Splash Hotkeys & Screen Debris [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that switching modes leaves screen debris due to
+      omitting `\x1b[2J\x1b[H` was factually false; `RENDER_SPLASH` in
+      `src/se.asm:2595` already executes `CALL TERM_CLEAR_SCREEN` emitting
+      `\x1b[2J\x1b[H` before repainting the splash workspace and status bar.
+      Furthermore, in `SE.COM`, `[1]` = 120x40 and `[2]` = 80x24 was
+      synchronized between `STR_SPLASH_CMDS` and `SPLASH_LOOP` for RomWBW
+      hardware. The requirement to harmonize splash screen hotkeys across all
+      variants (`1` = 80x24 default, `2` = 120x40 if supported) has been
+      split out and tracked as a discrete enhancement in Bug 2.1.18.
+  - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Editor**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
+    - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
+      `HANDLE_CSI_2`, and `HANDLE_CSI_LOOP`), when an unhandled or extended
+      multi-byte escape sequence is encountered (such as function keys F5–F12:
+      `\x1b[15~`–`\x1b[24~`, bracketed paste sequences `\x1b[200~`, or mouse
+      tracking events), the sub-handlers execute `RET` upon encountering
+      unrecognized digits or non-matching characters without consuming the
+      remainder of the sequence. Trailing sequence characters (specifically the
+      terminating `'~'` or trailing parameter digits) remain pending in the
+      BIOS console input buffer and are subsequently read by `MAIN_LOOP` as
+      regular typed keystrokes, erroneously inserting literal `'~'` or digits
+      directly into the document text buffer.
+    - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
+      (`HANDLE_CSI_1`, `HANDLE_CSI_2`, `HANDLE_CSI_LOOP`) and `HANDLE_SS3` so
+      that unrecognized or unhandled multi-byte sequences drain remaining bytes
+      until a terminating character (e.g. `'~'`, `'A'..'Z'`, `'a'..'z'`) or
+      timeout, preventing trailing escape sequence bytes from leaking into the
+      editor document buffer.
+  - [ ] **Bug 2.1.14: Predominant Language Indication on About Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
+    - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
+      `version 1.1.0 (2026-10-09)`, omitting the predominant programming
+      language. Per `docs/UI_UX_DESIGN.md` Section 7.12 and 14.6, all SE
+      variants must display the predominant programming language appended to
+      the version number and build date on the About screen (`[A]` from
+      splash): `version 1.1.0 (2026-10-09) (Z80 Assembly)`. (The splash screen
+      itself serves as the clean canonical template across all variants
+      without displaying programming language or version numbers).
+    - *Required Fix*: In `src/core/plugin_mgr.asm:4384`, update
+      `STR_ABOUT_VERSION` to append ` (Z80 Assembly)`:
+      `STR_ABOUT_VERSION: DB "version 1.1.0 (2026-10-09) (Z80 Assembly)", "$"`.
+      Ensure `SHOW_ABOUT_SCREEN` in `src/se.asm`, `src/se_next.asm`, and
+      `src/se_next_cpm.asm` centers the line cleanly within the content block.
+  - [x] **Bug 2.1.15: FORMAT Parameter in SE.CFG [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: Text file line ending format (`CPM` vs `Linux`) is strictly
+      a per-document property and not an installation setting in `SE.CFG`.
+      Across all SE variants, newly created documents default to the host
+      platform's native text file format (CRLF on CP/M and Next, LF on Linux),
+      opened files preserve their existing detected end-of-line markers, and
+      format can be toggled per-file in the Save File screen via `Ctrl+F`
+      before writing to disk. `SE.CFG` strictly mirrors the 5 canonical options
+      of the Configuration Manager (`SCREEN`, `RAMDRIVE`, `LINES`, `TAB`,
+      `PLUGIN`), which has no format option. `docs/UI_UX_DESIGN.md` has been
+      updated to remove `FORMAT` from `SE.CFG` and detail per-document line
+      ending handling in Section 7.7.
+  - [ ] **Bug 2.1.16: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
+    - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
+      when the current line and next line are joined on Delete at EOL,
+      `JOIN_TWO_LINES` merges the lines, but `DO_DEL_FWD_JOIN_NEXT` fails to
+      update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+    - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
+      `(TARGET_COL),HL`.
+  - [ ] **Bug 2.1.17: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
+    - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
+      `src/core/search.asm:214-233` (`DO_FIND_UI`), and
+      `src/core/search.asm:1940-1960` (`DO_REPLACE_UI`):
+      - Receiving unexpected keys or escape sequences (such as cursor arrow
+        keys, PgUp/PgDn, or function keys) routes into `GOT_ESC_SEQ` handlers.
+      - These handlers invoke `CALL GOT_ESC_BYTE`, executing cursor navigation
+        commands on the underlying document beneath the modal and abruptly
+        dismissing the dialog.
+      - Modals must only be dismissed by explicit `Enter` (confirm) or
+        standalone `ESC` (cancel); unexpected keys and multi-byte escape
+        sequences must be cleanly drained and discarded without executing
+        background actions or aborting the active dialog.
+    - *Required Fix*: In `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`,
+      drain and discard unexpected escape sequences and unassigned keys,
+      preserving the active modal dialog and retaining input buffer state.
+  - [ ] **Bug 2.1.18: Splash Screen Geometry Hotkeys (1=80x24, 2=120x40)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
+    - *Issue*: Splash screen geometry hotkeys are standardized across all SE
+      variants so that `1` selects 80x24 (universal baseline and default)
+      and `2` selects 120x40 (if supported). In `SE.COM`, `STR_SPLASH_CMDS` in
+      `src/core/plugin_mgr.asm:4290-4291` currently displays `type [1] set
+      120x40` and `type [2] set 80x24`, and `SPLASH_LOOP` in
+      `src/se.asm:578-584` dispatches `'1'` to `DO_SET_120X40` and `'2'` to
+      `DO_SET_80X24`.
+    - *Required Fix*: In `src/core/plugin_mgr.asm:4290-4291`, update
+      `STR_SPLASH_CMDS` to display `type [1] set 80x24` and `type [2] set
+      120x40`. In `src/se.asm:578-584`, update `SPLASH_LOOP` to dispatch
+      `'1'` to `DO_SET_80X24` and `'2'` to `DO_SET_120X40`.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
@@ -148,7 +311,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 13 Defects Open (Bugs 2.4.20–2.4.25, 2.4.27–2.4.33).
+- **Status**: Active / 3 Defects Open (Bugs 2.4.38–2.4.40).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -396,7 +559,7 @@ have been resolved and archived.
       and preserving hysteresis retention. Validated via
       `test_bug_2_4_19_panning_edge_trigger_and_geometry` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.20: Deprecated WordStar Diamond Navigation & Key Aliases**:
+  - [x] **Bug 2.4.20: Deprecated WordStar Diamond Navigation & Key Aliases**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 6.3, 6.4, 7.3, 10, 11
       (Anti-Pattern #8).
     - *Issue*: Directional cursor navigation across all surfaces is mandated
@@ -419,13 +582,15 @@ have been resolved and archived.
       5. In `src/core/ui_render.c:412`, `s_help_lines` advertises
          `Arrows / WordStar (^S,^D,^E,^X)` instead of canonical
          `Arrows / ANSI VT100`.
-    - *Required Fix*: Disassociate WordStar diamond keys from cursor movement
-      across all modules. Bind `KEY_CTRL_E` to `cursor_end()`, `KEY_CTRL_D` to
-      `do_delete()`, and remove `cursor_down()` fallback on `KEY_CTRL_X` in
-      `editor.c`. Remove WordStar key aliases from `ui_browser.c` and
-      `ui_modal.c`. Update `s_help_lines` in `ui_render.c` to display
-      `Arrows / ANSI VT100`.
-  - [ ] **Bug 2.4.21: Off-by-Zero Column Anchor on Backspace Line Join**:
+    - *Resolution*: Disassociated WordStar diamond keys from cursor movement
+      across all core and UI modules. Re-bound `KEY_CTRL_D` to `do_delete()` and
+      `KEY_CTRL_E` to `cursor_end()` in `src/core/editor.c`. Removed
+      `KEY_CTRL_E` and `KEY_CTRL_X` grid aliases from `src/core/ui_browser.c`.
+      Removed `KEY_CTRL_D` and `KEY_CTRL_S` button aliases from
+      `src/core/ui_modal.c`. Updated `s_help_lines` in `src/core/ui_render.c` to
+      render `Arrows / ANSI VT100`. Validated via
+      `test_arrow_and_wordstar_navigation` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.21: Off-by-Zero Column Anchor on Backspace Line Join**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:229-231` (`do_backspace`), when joining
       current line (`g_cur_doc_row`) to previous line (`g_cur_doc_row - 1`)
@@ -436,12 +601,14 @@ have been resolved and archived.
       Because `g_active_line_len` was just assigned `prev_len`, `g_cur_col`
       evaluates to `0`. The cursor is incorrectly anchored to column 0 of the
       joined line instead of the junction boundary (`orig_prev_len`).
-    - *Required Fix*: Preserve the original length of the previous line before
-      concatenation (`uint16_t orig_prev_len = prev_len;`). After deleting the
-      document row and checking out the joined line, set
-      `g_cur_col = orig_prev_len;` and update sticky target column
-      `g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);`.
-  - [ ] **Bug 2.4.22: Delete & Ctrl+D Fail to Delete Active Block Selection**:
+    - *Resolution*: Preserved `join_col` before concatenation in
+      `src/core/editor.c`. Invalidated active line before deleting document row
+      to avoid redundant commits. Explicitly assigned `target_row =
+      g_cur_doc_row - 1`, anchored cursor to junction boundary (`g_cur_col =
+      join_col`), updated sticky target column, and triggered status bar
+      rendering. Validated via `test_bug_2_4_21_backspace_line_join` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.22: Delete & Ctrl+D Fail to Delete Active Block Selection**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:240-274` (`do_delete`), pressing `Delete`
       or `Ctrl+D` unconditionally performs inline character deletion under the
@@ -452,13 +619,12 @@ have been resolved and archived.
       (`do_delete_block()`), resetting `g_block_mode = BLOCK_MODE_OFF`.
       Currently, active selection is ignored and only a single character under
       the cursor is deleted.
-    - *Required Fix*: In `do_delete()` (and `editor_handle_key` on `KEY_DEL` /
-      `KEY_CTRL_D`), inspect `g_block_mode`. When `g_block_mode !=`
-      `BLOCK_MODE_OFF`, solidify selection if selecting, invoke
-      `do_delete_block()`, reset `g_block_mode = BLOCK_MODE_OFF`, mark
-      `g_doc_modified = 1`, and trigger screen re-render
-      (`g_need_screen_render = 1`).
-  - [ ] **Bug 2.4.23: Backspace Fails to Cancel Dynamic Block Selection**:
+    - *Resolution*: Updated `do_delete()` in `src/core/editor.c` to inspect
+      `g_block_mode`. When active, it solidifies selection if dynamically
+      selecting, invokes `do_delete_block()`, and recalculates sticky visual
+      column target. Validated via `test_bug_2_4_22_delete_active_block` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.23: Backspace Fails to Cancel Dynamic Block Selection**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:192-238` (`do_backspace`), pressing
       Backspace while dynamic block selection is underway
@@ -468,11 +634,12 @@ have been resolved and archived.
       selection (`g_block_mode = BLOCK_MODE_OFF`) to safeguard highlighted
       text against unintended modification, keeping the cursor stationary
       without deleting text.
-    - *Required Fix*: In `do_backspace()`, check if `g_block_mode ==
-      BLOCK_MODE_SELECTING`. If so, invoke `cancel_block()`, set
-      `g_need_status_render = 1`, and return immediately without modifying line
-      buffer contents or cursor column.
-  - [ ] **Bug 2.4.24: Enter Key in Dynamic Block Mode Splits Active Line**:
+    - *Resolution*: Updated `do_backspace()` in `src/core/editor.c` to inspect
+      `g_block_mode`. When `BLOCK_MODE_SELECTING`, it cancels the block via
+      `cancel_block()`, triggers status bar re-rendering, and returns
+      immediately without mutating text or moving cursor. Validated via
+      `test_bug_2_4_23_backspace_cancels_block` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.24: Enter Key in Dynamic Block Mode Splits Active Line**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 9.1, 10.
     - *Issue*: In `src/core/editor.c:276-307` (`do_enter`), pressing Enter
       unconditionally splits the active line at `g_cur_col` and creates a new
@@ -480,10 +647,12 @@ have been resolved and archived.
       BLOCK_MODE_SELECTING`), pressing Enter must solidify the selection
       (`solidify_block()`, locking `g_block_mode = BLOCK_MODE_SOLIDIFIED`)
       without splitting the line or mutating document text.
-    - *Required Fix*: In `do_enter()`, check if `g_block_mode ==
-      BLOCK_MODE_SELECTING`. If so, invoke `solidify_block()`, set
-      `g_need_status_render = 1`, and return without splitting the line.
-  - [ ] **Bug 2.4.25: Missing In-Field Editing Keys in Archetype C Modals**:
+    - *Resolution*: Updated `do_enter()` in `src/core/editor.c` to inspect
+      `g_block_mode`. When `BLOCK_MODE_SELECTING`, it solidifies the selection
+      via `solidify_block()`, triggers status bar re-rendering, and returns
+      without splitting the line. Validated via
+      `test_bug_2_4_24_enter_solidifies_block` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.25: Missing In-Field Editing Keys in Archetype C Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3, 10.1, 10.2.
     - *Issue*: In `src/core/ui_modal.c:258-318` (`modal_prompt_text`), the
       parametric input field pins the cursor to the end of the input string
@@ -492,12 +661,13 @@ have been resolved and archived.
       `KEY_END`, `KEY_CTRL_A`, `KEY_CTRL_E`). Furthermore, `KEY_DEL` is mapped
       to backspace (deleting the last character), and `KEY_CTRL_D` is unhandled,
       violating the mandate for forward character deletion under the cursor.
-    - *Required Fix*: Implement in-field cursor position tracking (`cursor_pos`)
-      in `modal_prompt_text()`. Support character insertion at cursor position,
-      Backspace deleting left of cursor (`cursor_pos - 1`), Delete and `Ctrl+D`
-      deleting character under cursor (`cursor_pos`), Left/Right arrow keys
-      shifting cursor index, and Home (`Ctrl+A`) / End (`Ctrl+E`) moving to
-      boundaries.
+    - *Resolution*: Implemented internal cursor index (`cursor_pos`) in
+      `modal_prompt_text()` in `src/core/ui_modal.c`. Added full support for
+      Left/Right navigation, Home (`Ctrl+A`), End (`Ctrl+E`), character
+      insertion at `cursor_pos`, Backspace deleting left of cursor, and Delete /
+      `Ctrl+D` deleting under cursor. Validated via
+      `test_bug_2_4_25_modal_prompt_text_editing` in
+      `tests/test_linux_native.py`.
   - [x] **Bug 2.4.26: Status Bar Layout Regression & Format Truncation Error**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1
       (Anti-Pattern #1).
@@ -514,7 +684,7 @@ have been resolved and archived.
       truncation errors. Restored persistent `^K: Editor keys |` in Field 4,
       routed mode indicators into Field 5, and restored Tier 2 save
       notifications under `#ifndef __CPM__` in `src/core/file_io.c`.
-  - [ ] **Bug 2.4.27: Missing File Not Found Modal Alert on Open and Insert**:
+  - [x] **Bug 2.4.27: Missing File Not Found Modal Alert on Open and Insert**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype A).
     - *Issue*: In `src/core/editor.c:560`, `src/core/ui_render.c:355`, and
       `src/core/file_io.c:93`, attempting to open or insert a non-existent file
@@ -524,12 +694,15 @@ have been resolved and archived.
       `'FILENAME' was not found.`, `Specified file not found on disk.`,
       `Press any key to continue`), and either initializes an empty buffer or
       silently drops the action without notifying the user.
-    - *Required Fix*: Implement `modal_alert_file_not_found(const char *fname)`
-      using the canonical 50x7 Archetype A layout. When `file_load()` or
-      `file_insert()` encounters a non-existent file, trigger this alert and
-      return the user to the active directory browser workspace with the input
-      buffer preserved.
-  - [ ] **Bug 2.4.28: Missing Overwrite File Confirmation Dialog on Save**:
+    - *Resolution*: Implemented canonical 50x7 File Not Found modal alert
+      (`modal_alert_file_not_found`) adhering to Archetype A in
+      `src/core/ui_modal.c` and declared in `src/include/ui_modal.h`. Added
+      pre-flight existence checks in `file_read_op()` (`src/core/file_io.c`) and
+      in `ui_browser_workspace()` (`src/core/ui_browser.c`) for Open and Insert
+      operations, returning the user directly to the active browser workspace
+      with input buffer preserved upon dismissal. Validated via
+      `test_bug_2_4_27_file_not_found_alert` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.28: Missing Overwrite File Confirmation Dialog on Save**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B).
     - *Issue*: In `src/core/file_io.c:189` (`file_write_op`) and
       `src/core/ui_browser.c` (`ui_browser_workspace` in `BROWSER_MODE_SAVE`
@@ -540,13 +713,16 @@ have been resolved and archived.
       `File already exists. Overwrite?`, `[Y]es   [N]o   [ESC]=Cancel`) with the
       terminal cursor positioned on the prompt line after `Overwrite? ` at
       Column 40.
-    - *Required Fix*: Before creating or truncating a file in `file_save()` or
-      `ui_browser_save_dialog()`, verify if destination file exists on disk.
-      If so, render the canonical 50x7 Overwrite File modal dialog; proceed only
-      if confirmed via `Y`/`y`, or cancel without mutating disk on
-      `N`/`n`/`ESC`.
-  - [ ] **Bug 2.4.29: Missing Block-Active File Insert and Block Save Modes**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, 10.
+    - *Resolution*: Implemented canonical Archetype B Overwrite File modal
+      dialog (`modal_confirm_overwrite`) in `src/core/ui_modal.c` with terminal
+      cursor positioned after `Overwrite? ` at Column 40 (`left + 40`). Added
+      destination file existence checks in `ui_browser_workspace` for both typed
+      and grid-selected entries in `BROWSER_MODE_SAVE` and
+      `BROWSER_MODE_SAVE_BLOCK`, proceeding only on `Y`/`y` or Enter on Yes, and
+      returning to browser with input intact on `N`/`n` or ESC. Validated via
+      `test_bug_2_4_28_overwrite_confirmation` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.29: Missing Block-Active File Insert and Block Save Modes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6, 7.8, 9.1, 10.
     - *Issue*: In `src/core/editor.c:535-565`, pressing `Ctrl+O` while a block
       is active replaces the entire document buffer via `file_load()`, rather
       than opening the Insert File workspace and streaming file contents into
@@ -554,14 +730,20 @@ have been resolved and archived.
       while a block is active saves the full document buffer via `file_save()`,
       rather than opening the Save Block workspace and writing only the
       highlighted block range (`file_save_block()`).
-    - *Required Fix*: In `editor.c`, inspect `g_block_mode != BLOCK_MODE_OFF` on
-      `KEY_CTRL_O` and `KEY_CTRL_S`. When a block is active:
-      - Route `KEY_CTRL_O` to `ui_browser_insert_dialog()` and stream inserted
-        lines into active document at cursor via `file_insert()`.
-      - Route `KEY_CTRL_S` to `ui_browser_save_block_dialog()` and write only
-        normalized block lines (`g_norm_start_row`..`g_norm_end_row`) via
-        `file_save_block()`.
-  - [ ] **Bug 2.4.30: Missing Tier 2 Block Operations Pop-up Menu on Ctrl+K**:
+    - *Resolution*: Updated `KEY_CTRL_O` and `KEY_CTRL_S` handlers in
+      `src/core/editor.c` to inspect `g_block_mode != BLOCK_MODE_OFF`. When a
+      block is active:
+      - Solidifies dynamic selection if selecting.
+      - On `Ctrl+S`, routes to `ui_browser_save_block_dialog()` and saves only
+        normalized block range (`g_norm_start_row`..`g_norm_end_row`) via
+        `file_save_block()`, preserving selection state.
+      - On `Ctrl+O`, routes to `ui_browser_insert_dialog()` and streams lines
+        into document at cursor via `file_insert()`, clearing selection.
+      - Updated `do_paste_block()` in `src/core/block.c` to clear active block
+        selection upon pasting per Section 9.1.
+      Validated via `test_bug_2_4_29_block_save_and_insert` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.30: Missing Tier 2 Block Operations Pop-up Menu on Ctrl+K**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 7.6, 7.8, 8.3, 10.
     - *Issue*: In `src/core/editor.c:576`, pressing `KEY_CTRL_K` unconditionally
       displays the full-screen Help workspace (`show_help_screen()`). When a
@@ -576,7 +758,13 @@ have been resolved and archived.
       Save Block, Insert File, and ESC Cancel. Update `KEY_CTRL_K` dispatch in
       `src/core/editor.c` to invoke `do_block_menu_popup()` when
       `g_block_mode != BLOCK_MODE_OFF`.
-  - [ ] **Bug 2.4.31: Missing In-Field Cursor Navigation in Find Text Modal**:
+    - *Resolution*: Implemented canonical 50x7 Tier 2 Block Operations modal
+      in `src/core/block.c` with metric calculation, dynamic vs solidified
+      shortcuts, hotkey dispatch (Enter, Copy, Move, Delete, Save, Insert,
+      Clear, ESC), and verified screen restoration.
+      Validated via `test_bug_2_4_30_block_menu_popup` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.31: Missing In-Field Cursor Navigation in Find Text Modal**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 10.1, 10.2.
     - *Issue*: In `src/core/search.c:215-289` (`do_ctrl_f_find`), the 50x7 Find
       Text modal dialog lacks cursor navigation. The cursor is pinned to
@@ -590,7 +778,13 @@ have been resolved and archived.
       (`Ctrl+A`) / End (`Ctrl+E`), character insertion at `cursor_pos`,
       Backspace deleting left of cursor (`cursor_pos - 1`), and Delete /
       `Ctrl+D` forward-deleting character at `cursor_pos`.
-  - [ ] **Bug 2.4.32: Multi-Byte Escape Sequence Trailing Byte Leakage**:
+    - *Resolution*: Implemented `cursor_pos` navigation in `do_ctrl_f_find()`
+      and `draw_find_field()` (`src/core/search.c`) supporting Left/Right
+      arrows, Home (`Ctrl+A`), End (`Ctrl+E`), Backspace left-deletion, Delete /
+      `Ctrl+D` forward character deletion, and in-field character insertion.
+      Validated via `test_bug_2_4_31_find_modal_cursor_navigation` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.32: Multi-Byte Escape Sequence Trailing Byte Leakage**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/hal/linux/hal_linux_keyboard.c:142-145`, when an
       unrecognized escape prefix is encountered, the HAL calls
@@ -604,7 +798,14 @@ have been resolved and archived.
     - *Required Fix*: In `hal_linux_keyboard.c`, implement atomic escape
       sequence draining on unrecognized or malformed sequences following
       `ESC [` or `ESC O`, ensuring zero trailing bytes leak into standard input.
-  - [ ] **Bug 2.4.33: Typing Characters and Tab Fail to Clear Active Block**:
+    - *Resolution*: Implemented `drain_csi_sequence()` in
+      `src/hal/linux/hal_linux_keyboard.c` consuming intermediate and final
+      bytes (0x40..0x7E) atomically upon encountering unrecognized or
+      unhandled CSI / SS3 escape sequences, returning 0 without leaking
+      trailing bytes or triggering spurious hotkeys.
+      Validated via `test_bug_2_4_32_escape_sequence_leakage` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.33: Typing Characters and Tab Fail to Clear Active Block**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2, 10.1;
       `src/se.asm:1361-1399`.
     - *Issue*: In `src/core/editor.c:591-600`, typing printable characters or
@@ -619,6 +820,125 @@ have been resolved and archived.
       `cancel_block()`, update status render, and return without inserting
       characters. If `g_block_mode == BLOCK_MODE_SOLIDIFIED`, cancel block and
       proceed with normal character insertion.
+    - *Resolution*: Updated printable character and tab handling in
+      `editor_handle_key()` (`src/core/editor.c`) to cancel dynamic block
+      selection without inserting characters, and clear solidified block
+      selection before proceeding with normal character insertion.
+      Validated via `test_bug_2_4_33_block_typing_cancellation` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.34: Missing Predominant Language Indication on Splash**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.6.
+    - *Issue*: Section 7.2 and Section 14.6 mandate that row 2 of the 14-line
+      splash content block display `Version <version> (<Language>)`, explicitly
+      specifying `(C)` for Linux native C builds (`Version v1.1.0 (C)`). Row 1
+      must display `SE — Screen Editor`. In `src/core/ui_render.c:409-411`,
+      row 1 displays `SE.COM — Screen Editor` and row 2 displays
+      `"                    Version v1.1.0                    "`, omitting the
+      mandatory language indicator.
+    - *Required Fix*: Update `s_splash_lines` in `src/core/ui_render.c` to
+      render `SE — Screen Editor` on row 1 and `Version v1.1.0 (C)` on row 2.
+    - *Resolution*: Updated `s_splash_lines` in `src/core/ui_render.c` to render
+      canonical title `SE — Screen Editor` on row 1 and release version with
+      predominant language indicator `Version v1.1.0 (C)` on row 2.
+      Validated via `test_bug_2_4_34_splash_language_indication` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.35: Splash Screen Hotkey Inversion & Missing Native Mode**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Issue*: Section 2.1 and Section 7.2 designate Option 1 (`80x24`) as
+      standard classic terminal mode triggered by hotkey `1`, Option 2
+      (`120x40`) as wide console mode triggered by hotkey `2`, and Option 3
+      (`Native host terminal`) triggered by hotkey `3` on platforms supporting
+      dynamic dimension querying. In `src/core/ui_render.c:424-425, 507-517`:
+      - Splash menu lines display `type [1] set 120x40` and
+        `type [2] set 80x24`.
+      - Key handler maps `1` to `MODE_120X40` and `2` to `MODE_80X24`
+        (inverted).
+      - Option 3 (`Native` dynamic host dimensions via `ioctl(TIOCGWINSZ)`) is
+        completely missing from menu and key handler.
+    - *Required Fix*: In `s_splash_lines` and splash event loop in
+      `ui_render.c`, map `1` to Option 1 (`80x24`), `2` to Option 2 (`120x40`),
+      and add `3` for Option 3 (`Native host terminal`). Support dynamic host
+      terminal dimensions when native mode is active in `hal_linux_console.c`.
+    - *Resolution*: Updated `s_splash_lines` and hotkey dispatch in
+      `src/core/ui_render.c` mapping `1` to 80x24 (`MODE_80X24`), `2` to 120x40
+      (`MODE_120X40`), and `3` to Native (`MODE_NATIVE`). Implemented
+      `hal_console_get_native_size` and dynamic terminal querying via
+      `ioctl(TIOCGWINSZ)` in `src/hal/linux/hal_linux_console.c`. Updated
+      status bar geometry formatting to dynamically render native dimensions.
+      Validated via `test_bug_2_4_35_splash_hotkeys_and_native_mode` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.36: Missing Screen Clearance on Screen Geometry Switching**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 14.1.
+    - *Issue*: Sections 2.1, 7.2, and 14.1 mandate that prior to switching
+      screen geometries, the editor must explicitly clear the entire terminal
+      screen (emitting ANSI clear sequence `\x1b[2J\x1b[H` / `TERM_INIT`)
+      before applying new dimensions and re-rendering. In
+      `src/core/ui_render.c:507-517`, switching modes updates
+      `g_config.screen_mode`, `g_active_cols`, and `g_active_rows` and sets
+      `need_render = 1` without clearing the screen. Switching from 120x40 or
+      Native to 80x24 leaves stale character debris, tildes, and ghost status
+      bar remnants on rows 25..40 and columns 81..120.
+    - *Required Fix*: In `show_splash_screen()`, invoke `clear_screen()` /
+      `hal_console_clear()` before updating dimensions and re-rendering on
+      geometry switch keys.
+    - *Resolution*: Invoked `clear_screen()` prior to mutating active dimensions
+      and triggering screen repaint on keys `1`, `2`, and `3` in
+      `show_splash_screen()` (`src/core/ui_render.c`), completely wiping dirty
+      screen remnants and viewport artifacts.
+      Validated via `test_bug_2_4_36_geometry_switch_clear` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.37: Non-Interactive Configuration Manager Workspace**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 13.1, 13.2.
+    - *Issue*: In `src/core/ui_render.c:572-593` (`show_config_screen`), the
+      Tier 1 Configuration Manager workspace renders a static 11-line text
+      block with hardcoded values (`80x24`, Tab 8, 32K, RAM Drive Disabled) and
+      unconditionally exits on the first keystroke received. It lacks an
+      interactive event loop to toggle settings (`1` Geometry, `2` Tab Width,
+      `3` Max Lines, `4` RAM Drive) or persist settings to `SE.CFG` on `S`/`s`
+      via `config_save()`.
+    - *Required Fix*: Implement an interactive event loop in
+      `show_config_screen()` (`src/core/ui_render.c`) that dynamically formats
+      current parameters from `g_config`, toggles values on `1`, `2`, `3`, `4`,
+      saves to `SE.CFG` on `S`/`s`, and returns on `ESC`/`Enter`.
+    - *Resolution*: Implemented dynamic interactive event loop in
+      `show_config_screen()` (`src/core/ui_render.c`), formatting active
+      parameters from `g_config`, toggling options on keys `1`, `2`, `3`, `4`,
+      persisting configuration to `SE.CFG` via `config_save()` on `S`/`s`, and
+      returning to caller on `ESC`/`Enter`.
+      Validated via `test_bug_2_4_37_config_screen_interactive` in
+      `tests/test_linux_native.py`.
+  - [ ] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4.
+    - *Issue*: Section 6.2 defines default tab stop intervals as
+      `CFG_TAB_WIDTH = 4` columns (configurable to 8). In `src/core/config.c:41`
+      (`config_init_defaults`) and `src/core/editor.c:54`, default tab width is
+      hardcoded to `8` columns instead of `4`.
+    - *Required Fix*: Change `g_config.tab_width` default in
+      `src/core/config.c:41` to `4`, and update fallback in
+      `src/core/editor.c:54` to `4`.
+  - [ ] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.3, 6.4, 7.3.
+    - *Issue*: In `src/core/ui_render.c:528`, the Help workspace displays
+      `Arrows / WordStar (^S,^D,^E,^X)`. Sections 6.3, 6.4, and 7.3 explicitly
+      mandate that legacy WordStar diamond navigation keys (`Ctrl+S`, `Ctrl+D`,
+      `Ctrl+E`, `Ctrl+X`) are unsupported for directional movement to avoid
+      collisions with Save File, Delete, End of Line, and Cut Block. The
+      canonical Help Screen layout in Section 7.3 explicitly specifies
+      `Arrows / ANSI VT100`.
+    - *Required Fix*: Update `s_help_lines` in `src/core/ui_render.c` to
+      display `Arrows / ANSI VT100` and remove misleading WordStar references.
+  - [ ] **Bug 2.4.40: Missing Archetype D Selection Modal on Ctrl+P**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 8.3 (Archetype D), 10.
+    - *Issue*: In `src/core/editor.c:568` and `src/core/ui_render.c:501`,
+      pressing `Ctrl+P` directly opens the slot table of `plugin_manager_ui()`.
+      Per Section 7.2, Section 8.3, and Section 10, `Ctrl+P` is bound to the
+      context-aware Plugin Palette (`DO_CONTEXT_PLUGIN_POPUP`), which must
+      present the canonical 50x8 Archetype D modal (`Select a plugin to
+      execute:`, numbered entries, `> ` active pointer, Up/Down navigation,
+      Enter to run, ESC to cancel).
+    - *Required Fix*: Implement `show_plugin_palette()` adhering to Archetype D
+      in `src/core/plugin_mgr.c`, and route `KEY_CTRL_P` in `editor.c` and
+      `ui_render.c` to this modal.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
@@ -1449,6 +1769,55 @@ have been resolved and archived.
       configured fixed dimensions (`80x24` or `120x40`) when `fixed_geometry`
       is active. Validated via Step 47 in `test_editor.py`
       (`test_bug_2_7_59_startup_geometry_emulation_preserved`).
+
+### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
+- **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
+  standard 64KB TPA).
+- **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
+  Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
+- **Build Target**: `make sec-cpm` (or `make SEC.COM`).
+- **Status**: Complete / 0 Defects Open.
+- **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
+  - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
+      `TODO.md` Section 7.1.
+    - *Symptom*: When running `tests/test_editor_headless.py --sec`, Step 17
+      enters `OUTPUT.TXT\r` in the Save Screen. Step 18 immediately fails on
+      `Ctrl+Q` clean exit back to CP/M with `Buffer captured: b''` because
+      `SEC.COM` fails to return to the `C>` prompt.
+    - *Root Cause Analysis*:
+      1. In `src/core/ui_browser.c:325-448` (`ui_browser_workspace`), every
+         character received during filename input (such as typing
+         `"OUTPUT.TXT\r"`) loops back to the top of `while (1)` and executes
+         a full-screen re-render of all 24 rows, including repainting the
+         file grid, borders, and Row 24 status bar via `render_status_bar()`.
+      2. Repainting 24 rows 11 times across a 4–10 MHz Z80 CP/M serial console
+         causes extreme display latency and floods the terminal stream with
+         redundant status bars containing `Line    1/1`.
+      3. The headless test runner in Step 17 looks for `Line    1/1` to detect
+         save completion. Because the browser emits `Line    1/1` on the very
+         first character typed (`'O'`), the test runner prematurely declares
+         save completion, drains the PTY, and sends `\x11` (`Ctrl+Q`) for
+         Step 18 while `SEC.COM` is still processing queued redraws for the
+         remaining characters of `"UTPUT.TXT\r"`.
+      4. `ui_browser_workspace()` does not handle `Ctrl+Q` as an input key, so
+         `\x11` is dropped, the save is never committed to disk, and `SEC.COM`
+         remains stuck in the browser rather than exiting cleanly to CP/M.
+      5. Automatic local stack buffers in `ui_browser_workspace()` exceeded TPA
+         stack headroom (+451 B), causing stack collision into `_g_config`.
+    - *Resolution*:
+      1. Introduced `render_browser_prompt()` in `src/core/ui_browser.c` to
+         perform localized in-place prompt updates on text input, deletions,
+         and navigation without repainting the directory grid or status bar.
+      2. Gated full-screen re-renders behind `need_full_render` for macro
+         events (initial display, pagination, drive/filter changes, and format
+         toggles).
+      3. Relocated CP/M browser buffers to static BSS and right-sized
+         `MAX_BROWSER_FILES` to 64 entries, expanding TPA stack headroom from
+         +451 B to +1,519 B below BDOS (`0xD800`).
+      4. Fixed `workspace_root` resolution in `test_editor_headless.py` and
+         consolidated Step 17 save prompt capture buffer.
+      5. Verified 100% pass across Steps 17–24 in headless test suite.
 
 ---
 
