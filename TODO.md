@@ -294,9 +294,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 1 Open
-  (Bugs 2.2.2, 2.2.7, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13 Resolved;
-  Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 0 Open (All 7 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10,
+  2.2.11, 2.2.12, 2.2.13 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
+  Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -363,7 +363,7 @@ have been resolved and archived.
       (`src/hal/next_cpm/hal_nextcpm_console.asm`), distinguishing forward
       deletion and block deletion from Backspace.
       Validated via `tests/test_bug_2_2_7.py`.
-  - [ ] **Bug 2.2.8: Memory Screen Queries RomWBW HBIOS Under NextCPM**:
+  - [x] **Bug 2.2.8: Memory Screen Queries RomWBW HBIOS Under NextCPM**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next_cpm.asm:3480`, `SHOW_MEM_INFO_SCREEN` invokes
       `QUERY_MEM_SCREEN_INFO`, which queries RomWBW HBIOS function vectors
@@ -375,6 +375,10 @@ have been resolved and archived.
       `src/se_next_cpm.asm` that queries Next hardware memory capacity via
       NextReg `0x01` / `0x14` and reports active Next MMU Far RAM bank slots
       rather than invoking HBIOS discovery.
+    - *Resolution*: Replaced RomWBW HBIOS memory queries with native Next
+      hardware queries via NextReg 0x01/0x14 and mapped 16 32KB Next MMU
+      Far RAM banks in `src/se_next_cpm.asm`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_2_8.py`.
   - [x] **Bug 2.2.9: Escape Sequence Trailing Byte Leakage in Editor**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
