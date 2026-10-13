@@ -228,8 +228,8 @@ class TestEditor(unittest.TestCase):
         )
         self.editor.renderer.render_centered_workspace = MagicMock()
 
-        # Press '3' (toggle max lines), '4' (toggle ramdrive), and Enter (exit)
-        keys = ["3", "4", "\r"]
+        # Press '2' (toggle ramdrive), '3' (toggle max lines), and Enter (exit)
+        keys = ["2", "3", "\r"]
         key_iter = iter(keys)
         self.editor.terminal.get_key = lambda: next(key_iter)
 
@@ -241,7 +241,7 @@ class TestEditor(unittest.TestCase):
 
         # Option 3 toggles 16K -> 32K
         self.assertEqual(self.editor.config.max_lines, "32K")
-        # Option 4 toggles PRESERVE -> DISABLED
+        # Option 2 toggles PRESERVE -> DISABLED
         self.assertFalse(self.editor.config.ramdrive_enabled)
 
         print(
@@ -2376,6 +2376,52 @@ class TestEditor(unittest.TestCase):
         self.assertNotIn("(Linux)", about_str)
         print(
             "[+] Step 50: About screen predominant language verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_63_canonical_5_option_config_screen(self):
+        """Step 51: Verify canonical 5-option config manager workspace."""
+        print(
+            "[*] Step 51: Testing canonical 5-option config screen...",
+            flush=True,
+        )
+        rendered = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": (
+                rendered.append(list(lines))
+            )
+        )
+        # Test toggling option 5 (Plugin Manager: AUTOLOAD -> DISABLED)
+        self.editor.config.set("PLUGIN", "AUTOLOAD")
+        self.editor.terminal.get_key = MagicMock(side_effect=["5", "q"])
+        self.editor.action_config_screen()
+
+        self.assertEqual(self.editor.config.get("PLUGIN"), "DISABLED")
+        lines = rendered[0]
+
+        # 1. ASCII hyphen title
+        self.assertEqual(lines[0], "SE - Configuration Manager")
+        self.assertNotIn("—", lines[0])
+
+        # 2. Config Status header present
+        self.assertTrue(lines[2].startswith("Config Status: "))
+
+        # 3. Canonical 5 options in order
+        self.assertTrue(lines[4].startswith("1. Screen Geometry  :"))
+        self.assertTrue(lines[5].startswith("2. RAM Drive Mode   :"))
+        self.assertTrue(lines[6].startswith("3. Max Doc Lines    :"))
+        self.assertTrue(lines[7].startswith("4. Tab Width        :"))
+        self.assertTrue(lines[8].startswith("5. Plugin Manager   :"))
+
+        # 4. Canonical footer without Enter option prompt
+        self.assertEqual(
+            lines[10], "[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit"
+        )
+        for line in lines:
+            self.assertNotIn("Enter option:", line)
+
+        print(
+            "[+] Step 51: Canonical 5-option config screen verified.",
             flush=True,
         )
 

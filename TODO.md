@@ -2256,7 +2256,7 @@ have been resolved and archived.
       `editor.py` to `version 1.1.0 (2026-10-09) (Python)`. Validated via
       Step 16 and Step 50 in `test_editor.py`
       (`test_bug_2_7_62_about_screen_predominant_language`).
-  - [ ] **Bug 2.7.63: Config Manager Inverted Layout & Prohibited Prompt**:
+  - [x] **Bug 2.7.63: Config Manager Inverted Layout & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.4.
     - *Issue*: Section 7.4 mandates a canonical 5-option hotkey layout:
       1. Screen Geometry, 2. RAM Drive Mode, 3. Max Doc Lines, 4. Tab Width,
@@ -2269,9 +2269,12 @@ have been resolved and archived.
       Plugin Manager is missing), uses Unicode em-dash in title
       (`SE — Configuration Manager`), displays prohibited `"Enter option: "`,
       and shows non-standard navigation options.
-    - *Action Required*: Reorganize `action_config_screen()` in `editor.py`
-      to match the canonical 5-option layout, remove `Enter option:`, add
-      option 5, and conform title to ASCII encoding.
+    - *Resolution*: Reorganized `action_config_screen()` in `editor.py` to
+      match the canonical 5-option layout, removed `Enter option:`, added
+      option 5 Plugin Manager toggle, conformed title to ASCII hyphen
+      (`SE - Configuration Manager`), and added canonical status/footer.
+      Validated via Step 7 and Step 51 in `test_editor.py`
+      (`test_bug_2_7_63_canonical_5_option_config_screen`).
   - [x] **Bug 2.7.64: Field 4 Status Bar Placement [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.

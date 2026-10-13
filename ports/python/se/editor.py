@@ -894,74 +894,105 @@ class Editor:
 
     def action_config_screen(self):
         """Display centered Configuration Screen workspace."""
-        while True:
-            cols = self.terminal.cols
-            rows = self.terminal.rows
-            ram = "Enabled" if self.config.ramdrive_enabled else "Disabled"
-            geom_lbl = (
-                f"{cols}x{rows} (Native)"
-                if self.config.is_native_screen
-                else f"{cols}x{rows}"
-            )
-            lines = [
-                "SE — Configuration Manager",
-                "",
-                f"1. Screen Geometry  : {geom_lbl}",
-                f"2. Tab Width        : {self.config.tab_width}",
-                f"3. Max Line Capacity: {self.config.max_lines}",
-                f"4. RAM Drive Mode   : {ram}",
-                "",
-                "[S] Save to SE.CFG    [ESC]/[Enter] Return",
-                "",
-                "Enter option: ",
-            ]
-            geom = f"{self.terminal.cols}x{self.terminal.rows}"
-            self.renderer.render_centered_workspace(
-                lines, self.buffer, geometry_str=geom
-            )
-
-            k = self.terminal.get_key()
-            if not k:
-                continue
-            ch = k.lower()
-            if ch in ("\r", "\x1b", "q"):
-                return
-            elif ch == "1":
-                self.terminal.term_init()
-                cur_screen = self.config.get("SCREEN", "120X40").upper()
-                if cur_screen == "80X24":
-                    self.config.set("SCREEN", "120x40")
-                    self.terminal.fixed_geometry = True
-                    self.terminal.default_cols = 120
-                    self.terminal.default_rows = 40
-                    self.terminal.cols = 120
-                    self.terminal.rows = 40
-                elif cur_screen == "120X40":
-                    self.config.set("SCREEN", "NATIVE")
-                    self.terminal.fixed_geometry = False
-                    self.terminal.update_geometry()
-                else:
-                    self.config.set("SCREEN", "80x24")
-                    self.terminal.fixed_geometry = True
-                    self.terminal.default_cols = 80
-                    self.terminal.default_rows = 24
-                    self.terminal.cols = 80
-                    self.terminal.rows = 24
-            elif ch == "2":
-                new_tab = "4" if self.config.tab_width == 8 else "8"
-                self.config.set("TAB", new_tab)
-            elif ch == "3":
-                cur_cap = self.config.max_lines
-                new_cap = "32K" if cur_cap == "16K" else "16K"
-                self.config.set("MAXLINES", new_cap)
-            elif ch == "4":
+        self.terminal.hide_cursor()
+        try:
+            while True:
+                cols = self.terminal.cols
+                rows = self.terminal.rows
                 cur_ram = self.config.get("RAMDRIVE", "PRESERVE").upper()
-                new_ram = "DISABLED" if cur_ram != "DISABLED" else "PRESERVE"
-                self.config.set("RAMDRIVE", new_ram)
-            elif ch == "s":
-                self.config.save_config()
-                self.modal.show_notification(
-                    title="Config Saved",
-                    message="Configuration saved to SE.CFG.",
+                if cur_ram == "PRESERVE":
+                    ram_lbl = "Protected"
+                elif cur_ram == "DISABLED":
+                    ram_lbl = "Disabled"
+                else:
+                    ram_lbl = cur_ram.capitalize()
+
+                geom_lbl = (
+                    f"{cols}x{rows} (Native)"
+                    if self.config.is_native_screen
+                    else f"{cols}x{rows}"
                 )
+
+                cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
+                plugin_lbl = (
+                    "Autoload" if cur_plg != "DISABLED" else "Disabled"
+                )
+
+                cfg_origin = (
+                    "Loaded from SE.CFG"
+                    if os.path.exists("SE.CFG")
+                    else "Defaults"
+                )
+
+                lines = [
+                    "SE - Configuration Manager",
+                    "",
+                    f"Config Status: {cfg_origin}",
+                    "",
+                    f"1. Screen Geometry  : {geom_lbl}",
+                    f"2. RAM Drive Mode   : {ram_lbl}",
+                    f"3. Max Doc Lines    : {self.config.max_lines}",
+                    f"4. Tab Width        : {self.config.tab_width}",
+                    f"5. Plugin Manager   : {plugin_lbl}",
+                    "",
+                    "[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit",
+                ]
+                geom = f"{self.terminal.cols}x{self.terminal.rows}"
+                self.renderer.render_centered_workspace(
+                    lines, self.buffer, geometry_str=geom
+                )
+
+                k = self.terminal.get_key()
+                if not k:
+                    continue
+                ch = k.lower() if isinstance(k, str) else ""
+                if k in (KEY_ESC, KEY_ENTER, "\r", "\x1b") or ch == "q":
+                    return
+                elif ch == "1":
+                    self.terminal.term_init()
+                    cur_screen = self.config.get("SCREEN", "120X40").upper()
+                    if cur_screen == "80X24":
+                        self.config.set("SCREEN", "120x40")
+                        self.terminal.fixed_geometry = True
+                        self.terminal.default_cols = 120
+                        self.terminal.default_rows = 40
+                        self.terminal.cols = 120
+                        self.terminal.rows = 40
+                    elif cur_screen == "120X40":
+                        self.config.set("SCREEN", "NATIVE")
+                        self.terminal.fixed_geometry = False
+                        self.terminal.update_geometry()
+                    else:
+                        self.config.set("SCREEN", "80x24")
+                        self.terminal.fixed_geometry = True
+                        self.terminal.default_cols = 80
+                        self.terminal.default_rows = 24
+                        self.terminal.cols = 80
+                        self.terminal.rows = 24
+                elif ch == "2":
+                    new_ram = (
+                        "DISABLED" if cur_ram != "DISABLED" else "PRESERVE"
+                    )
+                    self.config.set("RAMDRIVE", new_ram)
+                elif ch == "3":
+                    cur_cap = self.config.max_lines
+                    new_cap = "32K" if cur_cap == "16K" else "16K"
+                    self.config.set("MAXLINES", new_cap)
+                elif ch == "4":
+                    new_tab = "4" if self.config.tab_width == 8 else "8"
+                    self.config.set("TAB", new_tab)
+                elif ch == "5":
+                    cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
+                    new_plg = (
+                        "DISABLED" if cur_plg != "DISABLED" else "AUTOLOAD"
+                    )
+                    self.config.set("PLUGIN", new_plg)
+                elif ch == "s":
+                    self.config.save_config()
+                    self.modal.show_notification(
+                        title="Config Saved",
+                        message="Configuration saved to SE.CFG.",
+                    )
+        finally:
+            self.terminal.show_cursor()
 
