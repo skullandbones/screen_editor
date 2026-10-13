@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 5 Defects Open (Bugs 2.4.45–2.4.49).
+- **Status**: Active / 4 Defects Open (Bugs 2.4.46–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1311,7 +1311,7 @@ have been resolved and archived.
       canonical prompt `Press any key to continue`. Validated via
       `test_bug_2_4_44_about_screen_canonical_layout` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.45: Line Ending Decoupling Failure & Global Config Mutation**:
+  - [x] **Bug 2.4.45: Line Ending Decoupling Failure & Global Config Mutation**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2.
     - *Issue*: Section 13.2 explicitly removes `FORMAT` from `SE.CFG`,
       mandating that line endings are managed strictly per-document: newly
@@ -1340,6 +1340,15 @@ have been resolved and archived.
       Ensure all save operations use the active document's `g_file_format`.
       Ensure `Ctrl+F` in `ui_browser.c` toggles `g_file_format` without mutating
       global configuration. Default `g_config.screen_mode` to `MODE_80X24`.
+    - *Resolution*: Removed `FORMAT` parsing and serialization from `SE.CFG`
+      in `src/core/config.c`. Defaulted new documents on Linux to `FMT_LINUX`
+      (`LF`) in `src/core/buffer.c`, `src/core/file_io.c`, and
+      `src/core/config.c`. Updated all save operations in `src/core/editor.c`,
+      `src/core/block.c`, `src/core/ui_render.c`, and `src/core/ui_modal.c` to
+      pass active document `g_file_format`. Isolated `Ctrl+F` format toggling
+      in `src/core/ui_browser.c` to `g_file_format` without mutating `g_config`.
+      Defaulted `g_config.screen_mode` to `MODE_80X24`. Validated via
+      `test_bug_2_4_45_line_ending_decoupling` in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.46: Premature Modal Dismissal on Unexpected Keys**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3.
     - *Issue*: In `src/core/ui_modal.c:321-326` (`modal_prompt_text`), pressing

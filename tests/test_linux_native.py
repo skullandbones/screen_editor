@@ -1308,9 +1308,9 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
                 "int main(void) {\n"
                 "    /* 1. Defaults verification (§13.2) */\n"
                 "    config_init_defaults();\n"
-                "    assert(g_config.screen_mode == MODE_120X40);\n"
+                "    assert(g_config.screen_mode == MODE_80X24);\n"
                 "    assert(g_config.tab_width == 4);\n"
-                "    assert(g_config.save_format == FMT_CPM);\n"
+                "    assert(g_config.save_format == FMT_LINUX);\n"
                 "    assert(g_config.lines_mode == 0);\n"
                 "    assert(g_config.ramdrive_mode == "
                 "RAMDRV_MODE_PROTECTED);\n"
@@ -1335,7 +1335,6 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
                 '    assert(config_load_file("TEST.CFG") == 0);\n'
                 "    assert(g_config.screen_mode == MODE_80X24);\n"
                 "    assert(g_config.tab_width == 4);\n"
-                "    assert(g_config.save_format == FMT_LINUX);\n"
                 "    assert(g_config.lines_mode == 1);\n"
                 "    assert(g_config.ramdrive_mode == "
                 "RAMDRV_MODE_HIBERNATE);\n"
@@ -1376,7 +1375,9 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
             f"Missing SCREEN in output:\n{text}"
         )
         assert "TAB=4\r\n" in text, f"Missing TAB in output:\n{text}"
-        assert "FORMAT=LINUX\r\n" in text, f"Missing FORMAT in output:\n{text}"
+        assert "FORMAT=" not in text, (
+            f"FORMAT should not be serialized in CFG:\n{text}"
+        )
         assert "LINES=32K\r\n" in text, f"Missing LINES in output:\n{text}"
         assert "RAMDRIVE=HIB\r\n" in text, (
             f"Missing RAMDRIVE in output:\n{text}"
@@ -3367,6 +3368,148 @@ def test_bug_2_4_44_about_screen_canonical_layout():
         print("    [+] Canonical 9x54 About screen layout verified [PASS]")
 
 
+def test_bug_2_4_45_line_ending_decoupling():
+    """Verify line ending decoupling, native LF default, and format toggle."""
+    print("[*] Testing line ending decoupling & config isolation (2.4.45)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_le_")
+    try:
+        # 1. New document on Linux defaults to Linux (LF) format in status bar
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            # Dismiss splash screen by pressing Enter
+            os.write(master, b"\r")
+            time.sleep(0.3)
+            ed_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Linux |" in ed_out, (
+                f"Expected 'Linux |' format in status bar:\n{ed_out}"
+            )
+
+            # Type text and open Save dialog (Ctrl+S / \x13)
+            os.write(master, b"Hello Linux World\n")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            os.write(master, b"\x13")
+            time.sleep(0.3)
+            save_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Format: [Linux]" in save_out, (
+                f"Expected 'Format: [Linux]' in save screen:\n{save_out}"
+            )
+
+            # Toggle format using Ctrl+F (\x06) to CP/M
+            os.write(master, b"\x06")
+            time.sleep(0.3)
+            toggled_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Format: [CP/M]" in toggled_out, (
+                f"Expected 'Format: [CP/M]' after Ctrl+F:\n{toggled_out}"
+            )
+
+            # Toggle back to Linux format
+            os.write(master, b"\x06")
+            time.sleep(0.3)
+            toggled_out2 = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Format: [Linux]" in toggled_out2, (
+                f"Expected 'Format: [Linux]' after Ctrl+F:\n{toggled_out2}"
+            )
+
+            # Type filename and press Enter
+            os.write(master, b"TEST_LF.TXT\r")
+            time.sleep(0.3)
+            # Dismiss Save Complete notification modal
+            os.write(master, b" ")
+            time.sleep(0.2)
+            read_all_available(master, 0.4)
+
+            # Exit editor via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            lf_path = os.path.join(temp_dir, "TEST_LF.TXT")
+            assert os.path.exists(lf_path), "TEST_LF.TXT was not created"
+            with open(lf_path, "rb") as f:
+                raw_bytes = f.read()
+            assert b"\r\n" not in raw_bytes, (
+                f"New document saved with CRLF on Linux: {raw_bytes!r}"
+            )
+            assert b"\n" in raw_bytes, "New document missing LF endings"
+
+        # 2. Open file with CRLF endings: detected as CP/M format
+        cpm_file = os.path.join(temp_dir, "TEST_CRLF.TXT")
+        with open(cpm_file, "wb") as f:
+            f.write(b"Line 1 CRLF\r\nLine 2 CRLF\r\n")
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", "TEST_CRLF.TXT")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            ed_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "CPM   |" in ed_out, (
+                f"Expected 'CPM   |' in status bar for CRLF file:\n{ed_out}"
+            )
+
+            # Save via Ctrl+S -> directly saves and preserves detected format
+            os.write(master, b"\x13")
+            time.sleep(0.3)
+            save_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Save Complete" in save_out, (
+                f"Expected 'Save Complete' notification modal:\n{save_out}"
+            )
+            # Dismiss notification modal
+            os.write(master, b" ")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            with open(cpm_file, "rb") as f:
+                cpm_bytes = f.read()
+            assert b"\r\n" in cpm_bytes, (
+                f"Saved CRLF document lost CRLF endings: {cpm_bytes!r}"
+            )
+
+        print("    [+] Line ending decoupling & per-doc format verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3416,6 +3559,7 @@ def main():
     test_bug_2_4_42_config_screen_canonical_layout()
     test_bug_2_4_43_splash_canonical_layout()
     test_bug_2_4_44_about_screen_canonical_layout()
+    test_bug_2_4_45_line_ending_decoupling()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

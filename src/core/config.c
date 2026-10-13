@@ -42,10 +42,14 @@ void config_init_defaults(void)
     g_config_loaded = 0;
     g_config.tab_width = 4;
     g_config.lines_mode = 0;             /* 16K lines */
-    g_config.screen_mode = MODE_120X40;  /* Canonical 120x40 (§13.2) */
+    g_config.screen_mode = MODE_80X24;  /* Canonical 80x24 (§13.2) */
     g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
     g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
+#ifdef __CPM__
     g_config.save_format = FMT_CPM;
+#else
+    g_config.save_format = FMT_LINUX;
+#endif
     g_config.auto_indent = 1;
     g_config.show_line_endings = 0;
 }
@@ -107,14 +111,6 @@ int config_load_file(const char *filename)
             int w = atoi(val);
             if (w == 4 || w == 8) {
                 g_config.tab_width = (uint8_t)w;
-            }
-        } else if (strcasecmp(key, "FORMAT") == 0 ||
-                   strcasecmp(key, "SAVE_FMT") == 0) {
-            if (strcasecmp(val, "LINUX") == 0 || strcasecmp(val, "LF") == 0) {
-                g_config.save_format = FMT_LINUX;
-            } else if (strcasecmp(val, "CPM") == 0 ||
-                       strcasecmp(val, "CRLF") == 0) {
-                g_config.save_format = FMT_CPM;
             }
         } else if (strcasecmp(key, "LINES") == 0 ||
                    strcasecmp(key, "MAXLINES") == 0 ||
@@ -205,8 +201,6 @@ int config_save_file(const char *filename)
             (g_config.screen_mode == MODE_NATIVE) ? "NATIVE" :
             ((g_config.screen_mode == MODE_120X40) ? "120X40" : "80X24"));
     fprintf(fp, "TAB=%u\r\n", (unsigned)g_config.tab_width);
-    fprintf(fp, "FORMAT=%s\r\n",
-            (g_config.save_format == FMT_LINUX) ? "LINUX" : "CPM");
     fprintf(fp, "LINES=%s\r\n",
             (g_config.lines_mode == 1) ? "32K" : "16K");
     fprintf(fp, "RAMDRIVE=%s\r\n", ramdrv_str);

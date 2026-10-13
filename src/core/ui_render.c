@@ -531,7 +531,7 @@ void show_splash_screen(void)
             dlg_fname[0] = '\0';
             if (ui_browser_save_dialog(dlg_fname, sizeof(dlg_fname)) ==
                 MODAL_RES_OK && dlg_fname[0]) {
-                file_save(dlg_fname, g_config.save_format);
+                file_save(dlg_fname, g_file_format);
             }
             need_render = 1;
         } else if (k == 'w' || k == 'W' || k == KEY_CTRL_W) {

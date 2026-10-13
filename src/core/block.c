@@ -585,7 +585,7 @@ int do_block_menu_popup(void)
             if (ui_browser_save_block_dialog(fname, sizeof(fname)) ==
                 MODAL_RES_OK && fname[0]) {
                 file_save_block(fname, g_norm_start_row,
-                                g_norm_end_row, g_config.save_format);
+                                g_norm_end_row, g_file_format);
             }
             break;
         } else if (key == KEY_CTRL_O || key == 'r' || key == 'R') {

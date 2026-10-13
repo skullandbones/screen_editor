@@ -396,7 +396,7 @@ int modal_confirm_save_changes(void)
                         "Any unsaved edits will be lost if discarded.",
                         "Yes", "No");
     if (res == MODAL_RES_YES) {
-        file_save(NULL, g_config.save_format);
+        file_save(NULL, g_file_format);
         return MODAL_RES_OK;
     } else if (res == MODAL_RES_NO) {
         return MODAL_RES_OK;
