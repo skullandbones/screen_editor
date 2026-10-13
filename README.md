@@ -364,8 +364,8 @@ Install the prerequisites on your host distribution:
 From the project repository directory:
 
 ```bash
-# Launch ZEsarUX in TBBlue Next mode with the MMC card image:
-$TOOLS_DIR/zesarux/zesarux --machine TBBlue --tbblue-fast-boot-mode \
+# Launch ZEsarUX in TBBlue Next mode with DivMMC and the MMC card image:
+$TOOLS_DIR/zesarux/zesarux --machine TBBlue --enable-mmc --enable-divmmc \
     --mmc-file disks/tbblue.mmc
 ```
 
