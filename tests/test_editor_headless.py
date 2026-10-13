@@ -2345,68 +2345,33 @@ def test_se_execution(use_sec=False):
             print(f"[-] Step 42 failed: ESC did not restore {repr(lbl_1)}. Buffer: {repr(out_s42_esc)}", flush=True)
             return False
 
-        # 2b. Abort with Down Arrow (\x1b[B): verify prompt aborts, cursor moves to Line 2, no debris!
-        lbl_2 = b"Line    2/" + total_str
+        # 2b. Verify unexpected keys/sequences do not abort Goto Line
+        # (Bug 2.1.17)
         os.write(master, b"\x0c")
         read_until(master, b"Goto line:", timeout=4.0)
-        os.write(master, b"\x1b[B")
-        out_s42_down = read_until(master, lbl_2, timeout=4.0)
-        if lbl_2 not in out_s42_down:
-            print(f"[-] Step 42 failed: Down Arrow did not move to Line 2. Buffer: {repr(out_s42_down)}", flush=True)
+        # Send unexpected escape sequences (Down/Up Arrow, PgDn/PgUp)
+        os.write(master, b"\x1b[B\x1b[A\x1b[6~\x1b[5~")
+        time.sleep(0.2)
+        # Send unassigned control keys
+        os.write(master, b"\x16\x15")
+        time.sleep(0.2)
+        # Verify dialog remains open and prompt is intact; cancel with ESC
+        os.write(master, b"\x1b")
+        out_s42_esc2 = read_until(master, lbl_1, timeout=4.0)
+        if lbl_1 not in out_s42_esc2:
+            print(f"[-] Step 42 failed: ESC did not restore {repr(lbl_1)}. "
+                  f"Buffer: {repr(out_s42_esc2)}", flush=True)
             return False
 
-        # Abort with Up Arrow (\x1b[A): verify prompt aborts, cursor moves back to Line 1, no debris!
-        os.write(master, b"\x0c")
-        read_until(master, b"Goto line:", timeout=4.0)
-        os.write(master, b"\x1b[A")
-        out_s42_up = read_until(master, lbl_1, timeout=4.0)
-        if lbl_1 not in out_s42_up:
-            print(f"[-] Step 42 failed: Up Arrow did not move back to Line 1. Buffer: {repr(out_s42_up)}", flush=True)
-            return False
-
-        # Verify no control debris ('[B', '[A') was inserted into the text at cursor (lines 1 and 2)
+        # Verify no control debris ('[B', '[A') was inserted into text at cursor
         drain_all(master)
         os.write(master, b"\x14\x01")
         time.sleep(0.1)
         out_debris_check = drain_all(master)
         lines_1_and_2 = out_debris_check.split(b"\r\n")[:2]
         if any(b"[B" in l or b"[A" in l for l in lines_1_and_2):
-            print(f"[-] Step 42 failed: Control debris found in text! Lines: {repr(lines_1_and_2)}", flush=True)
-            return False
-
-        # 2c. Abort with PageDown (\x1b[6~): verify prompt aborts, screen scrolls, NO highlight mode!
-        os.write(master, b"\x0c")
-        read_until(master, b"Goto line:", timeout=4.0)
-        os.write(master, b"\x1b[6~")
-        out_s42_pgdn = read_until(master, b"Line ", timeout=4.0)
-        if b"\x1b[7m\x1b[H" in out_s42_pgdn or b"\x1b[7m\x1b[K" in out_s42_pgdn:
-            print(f"[-] Step 42 failed: Highlight mode active during PageDown redraw! Buffer: {repr(out_s42_pgdn)}", flush=True)
-            return False
-
-        # 2d. Abort with PageUp (\x1b[5~): verify prompt aborts, screen scrolls back to Line 1, NO highlight mode!
-        os.write(master, b"\x0c")
-        read_until(master, b"Goto line:", timeout=4.0)
-        os.write(master, b"\x1b[5~")
-        out_s42_pgup = read_until(master, lbl_1, timeout=4.0)
-        if lbl_1 not in out_s42_pgup:
-            print(f"[-] Step 42 failed: PageUp did not restore Line 1. Buffer: {repr(out_s42_pgup)}", flush=True)
-            return False
-        if b"\x1b[7m\x1b[H" in out_s42_pgup or b"\x1b[7m\x1b[K" in out_s42_pgup:
-            print(f"[-] Step 42 failed: Highlight mode active during PageUp redraw! Buffer: {repr(out_s42_pgup)}", flush=True)
-            return False
-
-        # 2e. Abort with Ctrl+V (Page Down) and Ctrl+U (Page Up) shortcuts
-        os.write(master, b"\x0c")
-        read_until(master, b"Goto line:", timeout=4.0)
-        os.write(master, b"\x16")
-        read_until(master, b"Line ", timeout=4.0)
-
-        os.write(master, b"\x0c")
-        read_until(master, b"Goto line:", timeout=4.0)
-        os.write(master, b"\x15")
-        out_s42_ctrl_u = read_until(master, lbl_1, timeout=4.0)
-        if lbl_1 not in out_s42_ctrl_u:
-            print(f"[-] Step 42 failed: Ctrl+U did not restore Line 1. Buffer: {repr(out_s42_ctrl_u)}", flush=True)
+            print(f"[-] Step 42 failed: Control debris found in text! "
+                  f"Lines: {repr(lines_1_and_2)}", flush=True)
             return False
 
         # 3. Jump to line 10: Ctrl+L, '10', Enter -> verify no \x1b[7m\x1b[2J clear screen flash!
@@ -3430,9 +3395,9 @@ def test_se_execution(use_sec=False):
             print(f"[-] Step 58 failed: Splash screen failed to display. Buffer: {repr(out_s58_sp)}", flush=True)
             return False
 
-        # Switch to 80x24 mode with '2'
+        # Switch to 80x24 mode with '1'
         drain_all(master)
-        os.write(master, b"2")
+        os.write(master, b"1")
         read_until(master, b"for about", timeout=6.0)
         drain_all(master)
         time.sleep(0.3)
@@ -3546,9 +3511,9 @@ def test_se_execution(use_sec=False):
             print(f"[-] Step 59 failed: Splash screen not displayed: {repr(out_s59_splash[-200:])}", flush=True)
             return False
 
-        # Switch to 80x24 mode with '2'
+        # Switch to 80x24 mode with '1'
         drain_all(master)
-        os.write(master, b"2")
+        os.write(master, b"1")
         read_until(master, b"for about", timeout=6.0)
         drain_all(master)
         time.sleep(0.3)
@@ -3584,20 +3549,18 @@ def test_se_execution(use_sec=False):
         # Test block mode suppression: press Ctrl+B
         drain_all(master)
         os.write(master, b"\x02")  # Ctrl+B
-        read_until(master, b"Sel:", timeout=6.0)
-        drain_all(master)
-        # Force screen redraw with Ctrl+L
-        os.write(master, b"\x0c")
-        out_s59_block = read_until(master, b"Col 0", timeout=6.0)
+        out_s59_block = read_until(master, b"Sel:", timeout=6.0)
         time.sleep(0.2)
         out_s59_block += drain_all(master)
         if expected_cont_seq in out_s59_block:
-            print(f"[-] Step 59 failed: Continuation highlight not suppressed during block mode: {repr(out_s59_block)}", flush=True)
+            print(f"[-] Step 59 failed: Continuation highlight not suppressed "
+                  f"during block mode: {repr(out_s59_block)}", flush=True)
             return False
 
         # Cancel block mode with ESC
         drain_all(master)
         os.write(master, b"\x1b")  # ESC
+        read_until(master, b"Col 0", timeout=6.0)
         time.sleep(0.2)
         drain_all(master)
 
@@ -3821,8 +3784,8 @@ def test_se_execution(use_sec=False):
         time.sleep(0.2)
         drain_all(master)
 
-        # Switch to 80x24 mode with '2'
-        os.write(master, b"2")
+        # Switch to 80x24 mode with '1'
+        os.write(master, b"1")
         time.sleep(0.2)
         drain_all(master)
 
@@ -3888,8 +3851,8 @@ def test_se_execution(use_sec=False):
         time.sleep(0.2)
         drain_all(master)
 
-        # 4. On splash screen, select 80x24 mode with '2'
-        os.write(master, b"2")
+        # 4. On splash screen, select 80x24 mode with '1'
+        os.write(master, b"1")
         time.sleep(0.2)
         drain_all(master)
 
@@ -3951,8 +3914,8 @@ def test_se_execution(use_sec=False):
         time.sleep(0.3)
         drain_all(master)
 
-        # 2. Select 80x24 mode ('2')
-        os.write(master, b"2")
+        # 2. Select 80x24 mode ('1')
+        os.write(master, b"1")
         read_until(master, SPLASH_FREE_TARGETS, timeout=8.0)
         time.sleep(0.3)
         drain_all(master)
