@@ -1380,8 +1380,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
-  Resolved; Bug 2.7.45 Rejected).
+- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
+  Resolved; Bug 2.7.45 Rejected; Bugs 2.7.60–2.7.72 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -2181,6 +2181,193 @@ have been resolved and archived.
       configured fixed dimensions (`80x24` or `120x40`) when `fixed_geometry`
       is active. Validated via Step 47 in `test_editor.py`
       (`test_bug_2_7_59_startup_geometry_emulation_preserved`).
+  - [ ] **Bug 2.7.60: Intermediary Clipboard & Missing In-Place Block Ops**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, Section 10.
+    - *Issue*: Section 9.3 mandates Direct In-Place Block Manipulation across
+      all SE implementations and strictly prohibits intermediary clipboard
+      buffers. All block manipulations operate directly between the marked
+      block and active cursor in document memory. `Ctrl+C` must copy marked
+      block directly to cursor (`DO_COPY_BLOCK`), `Ctrl+X` must move marked
+      block directly to cursor (`DO_MOVE_BLOCK`), and legacy `Ctrl+V` pasting
+      aliases are removed.
+    - *Root Cause*: In `ports/python/se/buffer.py:91`, `DocumentBuffer`
+      maintains `self.clipboard: str = ""`. `copy_block()` and `cut_block()`
+      copy to this detached buffer, `paste_block()` pastes from it, and
+      `ports/python/se/editor.py:168-175` binds `Ctrl+C`, `Ctrl+X`, and
+      `Ctrl+V` to clipboard primitives.
+    - *Action Required*: Eliminate `self.clipboard` from `DocumentBuffer`.
+      Implement direct in-place copy and move operations to current cursor
+      position in `buffer.py` and `editor.py`. Remove `KEY_CTRL_V` paste
+      handling.
+  - [ ] **Bug 2.7.61: Non-Canonical Splash Template & Prohibited Prompt**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.7, 7.2.
+    - *Issue*: Section 7.2 mandates the 21-line canonical `SE.COM` splash
+      screen template (`type [E] or [Enter] to edit`, etc.) with instant
+      single-keystroke dispatch across all SE variants, and strictly prohibits
+      interactive prompts (such as `Enter option: _` or `Enter choice: _`).
+      Unassigned keys (including `ESC` and Space) must be silently rejected.
+    - *Root Cause*: In `ports/python/se/editor.py:757-772`,
+      `action_splash_screen()` renders an obsolete 14-line layout using colon
+      command syntax (`:e to edit`, etc.) and displays prohibited prompt
+      `"Enter choice: "` on line 771. Furthermore, line 789 improperly allows
+      `KEY_ESC` to enter the editor workspace.
+    - *Action Required*: Update `action_splash_screen()` in `editor.py` to
+      render the canonical 21-line `SE.COM` template without interactive
+      prompt strings, and silently ignore unassigned keystrokes.
+  - [ ] **Bug 2.7.62: Missing Predominant Language on About Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6; `TODO.md`
+      Bug 2.1.14.
+    - *Issue*: Section 7.12 and 14.6 mandate that all SE variants display the
+      programming language predominantly used to create that specific port
+      appended to the version number and build date line on the Tier 1 About
+      screen: `version 1.1.0 (2026-10-09) (Python)`.
+    - *Root Cause*: In `ports/python/se/editor.py:699`, `action_about()`
+      displays `version 1.1.0 (2026-10-09)` without ` (Python)`.
+    - *Action Required*: In `ports/python/se/editor.py:699`, update the version
+      line to `version 1.1.0 (2026-10-09) (Python)`.
+  - [ ] **Bug 2.7.63: Config Manager Inverted Layout & Prohibited Prompt**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.4.
+    - *Issue*: Section 7.4 mandates a canonical 5-option hotkey layout:
+      1. Screen Geometry, 2. RAM Drive Mode, 3. Max Doc Lines, 4. Tab Width,
+      and 5. Plugin Manager, with prompt line `[1-5]=Toggle Option
+      [S]=Save Config  [ESC]=Exit`. An `Enter option: _` prompt line is
+      strictly prohibited, and titles must use ASCII hyphen `-`.
+    - *Root Cause*: In `ports/python/se/editor.py:895-906`,
+      `action_config_screen()` defines only 4 options with inverted numbering
+      (2 is Tab Width, 3 is Max Line Capacity, 4 is RAM Drive Mode; option 5
+      Plugin Manager is missing), uses Unicode em-dash in title
+      (`SE — Configuration Manager`), displays prohibited `"Enter option: "`,
+      and shows non-standard navigation options.
+    - *Action Required*: Reorganize `action_config_screen()` in `editor.py`
+      to match the canonical 5-option layout, remove `Enter option:`, add
+      option 5, and conform title to ASCII encoding.
+  - [ ] **Bug 2.7.64: Status Bar Field Squatting & Format Truncation**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5; `TODO.md` Bug 2.4.26.
+    - *Issue*: Section 5 explicitly assigns Field 4 (Context / Key Cue,
+      17 chars) to display contextual cues: `| ^K: Editor keys |` normally,
+      `| [SEL]           |` during dynamic block selection, and
+      `| [BLK LOCK]      |` when block is locked. Field 5 (Line & Column
+      Position, 19 chars) strictly displays line, column, and pan coordinates.
+    - *Root Cause*: In `ports/python/se/ui.py:60-96`, Field 4 is hardcoded to
+      `" ^K: Editor keys |"`, while `[SEL]` and `[BLK LOCK]` are appended into
+      Field 5 (`pos_field`). This causes Field 5 to overflow past 80 columns,
+      triggering an ad-hoc column condensation fallback.
+    - *Action Required*: In `ports/python/se/ui.py`, route `[SEL]` and
+      `[BLK LOCK]` into Field 4 when block selection is active, preserving
+      Field 5 exclusively for line, column, and panning indicators.
+  - [ ] **Bug 2.7.65: Sticky Column Clamping Retreats on Expanded Tabs**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
+    - *Issue*: Section 6.2 and 6.4 mandate snap-forward vertical alignment
+      clamping (`ADJUST_COL_TO_TARGET`): if sticky `TARGET_COL` falls across
+      an expanded tab (`vis_acc < TARGET_COL < vis_acc + spaces`), the cursor
+      must snap forward to the character boundary directly following the tab
+      (`vis_acc + spaces`) to stay adjacent to indented code rather than
+      retreating to the margin.
+    - *Root Cause*: In `ports/python/se/buffer.py:59-65`
+      (`adjust_col_to_target`), the loop executes
+      `if vis_acc + spaces > target_col: break`, halting alignment before the
+      tab and retreating the cursor to the margin.
+    - *Action Required*: In `ports/python/se/buffer.py`, update
+      `adjust_col_to_target` to advance `vis_acc += spaces` and
+      `char_idx += 1` through the tab when `vis_acc + spaces > target_col`.
+  - [ ] **Bug 2.7.66: Premature Line Join Inhibition at 120 Columns**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 6.6, 10.
+    - *Issue*: Section 6.5, 6.6, and Section 10 specify that Backspace
+      (at col 0) and Delete (at end of line) line joins are permitted up to
+      `MAX_INPUT_LINE_CHARS` (1,000 characters).
+    - *Root Cause*: In `ports/python/se/buffer.py:12, 220, 247`,
+      `LINE_JOIN_LIMIT = 120`. Joins are prematurely blocked when combined
+      length exceeds 120 columns even though line buffer capacity supports up
+      to 1,000 characters (`MAX_LINE_CHARS = 1000`).
+    - *Action Required*: In `ports/python/se/buffer.py`, update
+      `LINE_JOIN_LIMIT = MAX_INPUT_LINE_CHARS` (1,000).
+  - [ ] **Bug 2.7.67: Inverted Default File Format & SE.CFG Persistence**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2; `TODO.md`
+      Bug 2.1.15.
+    - *Issue*: Section 7.7 specifies that new documents created on Linux/POSIX
+      hosts (`se-linux`, `se-py`, `se-rs`) must default to host native text
+      format (`LF`, `format_cpm = False`). Furthermore, Section 7.7 and
+      Section 13.2 mandate that file line ending format is governed
+      per-document and is NOT an `SE.CFG` setting.
+    - *Root Cause*: In `ports/python/se/buffer.py:90`, `DocumentBuffer.__init__`
+      defaults `self.format_cpm: bool = True` (`CRLF`). In
+      `ports/python/se/editor.py:582`, `action_save_file()` persists
+      `self.config.set("FORMAT", ...)` to `SE.CFG`.
+    - *Action Required*: In `ports/python/se/buffer.py:90`, default `format_cpm`
+      to `False` on Linux native Python. In `ports/python/se/editor.py:582`,
+      remove `self.config.set("FORMAT", ...)` so format is not written to
+      `SE.CFG`.
+  - [ ] **Bug 2.7.68: Trailing Byte Leakage on Unrecognized Escape Sequences**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10; `TODO.md` Bug 2.1.13,
+      Bug 2.4.32.
+    - *Issue*: Section 10 Anti-Leakage Invariant dictates that if an incomplete
+      or unrecognized escape sequence is received (e.g. unhandled function keys
+      F5–F12 emitting `\x1b[15~`..`\x1b[24~`, mouse reporting, bracketed
+      paste), the input decoder must drain and discard all sequence bytes
+      atomically until the sequence terminator (`~`, alpha) or timeout.
+      Trailing characters must NEVER leak into console stream as keystrokes.
+    - *Root Cause*: In `ports/python/se/terminal.py:280-294`, when an
+      unrecognized CSI sequence like `\x1b[15~` arrives, `c2` is `'1'` and
+      `c3` is `'5'`. Because `c3 != '~'`, `get_key()` immediately returns
+      `KEY_ESC`, leaving trailing `~` in stdin, which leaks as a normal typed
+      character on the next keystroke and corrupts the document buffer.
+    - *Action Required*: In `ports/python/se/terminal.py`, update `get_key()`
+      to drain and discard remaining sequence characters until a valid
+      terminator (`~`, `A`–`Z`, `a`–`z`) or timeout occurs.
+  - [ ] **Bug 2.7.69: Full-Screen Workspace Redraw on Typing Keystrokes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
+      `TODO.md` Bug 2.8.1.
+    - *Issue*: Section 7.10 strictly prohibits full-screen re-rendering
+      (`render_directory_workspace`) upon receiving individual text input
+      keystrokes in Tier 1 directory workspaces. Typing characters,
+      backspaces, and cursor navigation must echo in-place or update only the
+      bracketed prompt row; full-screen redraws are strictly reserved for entry
+      and page changes.
+    - *Root Cause*: In `ports/python/se/editor.py:458-529`
+      (`action_directory_browser`), every single keystroke triggers
+      `self.renderer.render_directory_workspace(...)`, redrawing the entire
+      screen, file grid, and status bar on every character entered.
+    - *Action Required*: In `ports/python/se/editor.py`, update
+      `action_directory_browser` to perform in-place prompt row redraws on
+      typing and inline deletions, restricting full workspace rendering to
+      initial display and pagination.
+  - [ ] **Bug 2.7.70: Obsolete Help Screen Key Mappings & Unicode Em-Dash**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.3, 10; `TODO.md`
+      Bug 2.4.39.
+    - *Issue*: Section 7.3 specifies the canonical Help Screen layout:
+      `PgUp / PgDn : Page Up / Down`, `Ctrl+C: Copy Block to Cursor`,
+      `Ctrl+X: Move Block to Cursor`, `Ctrl+D: Delete Block`. Section 2.6
+      prohibits Unicode em-dash `—` (must use ASCII hyphen `-`).
+    - *Root Cause*: In `ports/python/se/editor.py:368-384`, `action_help()`
+      displays obsolete references: `Ctrl+U / Ctrl+V: Page Up / Down`,
+      `Ctrl+V: Paste Block`, `Ctrl+C: Copy Block` (without target),
+      `Ctrl+X: Cut Block`, and uses Unicode em-dash in header:
+      `"SE.COM — EDITOR MODE KEYS"`.
+    - *Action Required*: In `ports/python/se/editor.py:368-384`, update
+      `action_help` to canonical Help layout adhering to direct block operation
+      semantics and ASCII hyphen encoding.
+  - [ ] **Bug 2.7.71: Startup Screen Geometry Inversion in Config Defaults**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 13.2; `TODO.md`
+      Bug 2.1.2.
+    - *Issue*: Section 2.1 and Section 13.2 mandate `80x24` as the universal
+      baseline standard and default screen geometry across all SE
+      implementations (`SCREEN=80X24`).
+    - *Root Cause*: In `ports/python/se/config.py:16`,
+      `DEFAULT_SCREEN = "120X40"`, causing editor instances without `SE.CFG`
+      to default to 120x40 wide console mode rather than canonical 80x24.
+    - *Action Required*: In `ports/python/se/config.py:16`, set
+      `DEFAULT_SCREEN = "80X24"`.
+  - [ ] **Bug 2.7.72: Default Tab Width Inversion in Config Defaults**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4; `TODO.md`
+      Bug 2.4.38.
+    - *Issue*: Section 6.2 defines default tab stop intervals as
+      `CFG_TAB_WIDTH = 4` columns (configurable to 8).
+    - *Root Cause*: In `ports/python/se/config.py:17`, `DEFAULT_TAB_WIDTH = 8`
+      and `tab_width` fallback is `8`, which inverts the canonical 4-column
+      default and conflicts with `buffer.py:78` defaulting to `4`.
+    - *Action Required*: In `ports/python/se/config.py:17, 85, 87`, update
+      `DEFAULT_TAB_WIDTH = 4` and fallback to `4` for consistency with
+      Section 6.2 and `buffer.py`.
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
