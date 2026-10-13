@@ -195,7 +195,7 @@ The status bar is the sole fixed screen anchor in SE.
    - Field 2 (Geometry, 8 chars): ` {geom} |`
      - E.g. ` 80x24 |` or ` 120x40 |`.
    - Field 3 (Operating Environment / Format, 8 chars): ` {fmt} |`
-     - E.g. ` CPM   |` or ` Linux |`.
+     - E.g. ` CP/M  |` or ` Linux |`.
    - Field 4 (Help Hint / Context, 18 chars): ` ^K: Editor keys |`
      - Shows default help key hint.
    - Field 5 (Cursor & Mode Indicator, variable):
@@ -1364,11 +1364,11 @@ allocations, screen mode, tab stops, and subsystem behaviors.
      Tab stop column interval (`4` or `8`). In `se.asm`, default is 8
      (`CFG_TAB_WIDTH = 8`, mask = 7).
    - Document Line Ending Format Exclusion:
-     Text file line ending format (`CPM` CRLF vs `Linux` LF) is NOT an `SE.CFG`
-     configuration setting. As specified in Section 7.7, line endings are
-     governed per-document: new files default to host native format, opened
-     files preserve their existing end-of-line markers, and format can be
-     toggled per-file in the Save File screen via `Ctrl+F`.
+     Text file line ending format (`CP/M` CRLF vs `Linux` LF) is NOT an
+     `SE.CFG` configuration setting. As specified in Section 7.7, line
+     endings are governed per-document: new files default to host native
+     format, opened files preserve their existing end-of-line markers, and
+     format can be toggled per-file in the Save File screen via `Ctrl+F`.
    - `LINES` / `MAXLINES` (Default: `16K`):
      Maximum document line pointer table capacity (`16K` = 16,384 lines,
      `32K` = 32,768 lines).
