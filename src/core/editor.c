@@ -51,7 +51,7 @@ uint16_t calc_visual_col(const char *buf, uint16_t char_col)
 {
     uint16_t vis_col = 0;
     uint16_t i;
-    uint8_t tab_w = g_config.tab_width ? g_config.tab_width : 8;
+    uint8_t tab_w = g_config.tab_width ? g_config.tab_width : 4;
 
     if (!buf) {
         return 0;
@@ -478,7 +478,7 @@ void adjust_col_to_target(uint16_t target_vis_col)
 {
     uint16_t char_idx = 0;
     uint16_t vis_acc = 0;
-    uint8_t tab_w = g_config.tab_width ? g_config.tab_width : 8;
+    uint8_t tab_w = g_config.tab_width ? g_config.tab_width : 4;
 
     checkout_active_line(g_cur_doc_row);
 

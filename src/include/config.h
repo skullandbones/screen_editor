@@ -137,7 +137,7 @@ extern "C" {
 
 /* Configuration State Structure */
 typedef struct {
-    uint8_t tab_width;          /* Tab width in spaces (default: 8) */
+    uint8_t tab_width;          /* Tab width in spaces (default: 4) */
     uint8_t lines_mode;         /* 0 = 16K lines, 1 = 32K lines */
     uint8_t screen_mode;        /* MODE_120X40 or MODE_80X24 */
     uint8_t ramdrive_mode;      /* RAMDRV_MODE_* */
