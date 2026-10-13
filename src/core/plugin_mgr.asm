@@ -4287,8 +4287,8 @@ STR_SPLASH_CMDS:
 	DB "  type   [P]              for plugins",13,10
 	DB "  type   [^P]             for context plugin menu",13,10
 	DB "  type   [C]              to configure",13,10
-	DB "  type   [1]              set 120x40",13,10
-	DB "  type   [2]              set 80x24",13,10
+	DB "  type   [1]              set 80x24",13,10
+	DB "  type   [2]              set 120x40",13,10
 	DB "  type   [Q]  or  [^Q]    to exit",13,10
 	DB 0
 

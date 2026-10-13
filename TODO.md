@@ -25,9 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 5 Open
+- **Status**: Active / 4 Open
   (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
-  Bugs 2.1.2, 2.1.14 Fixed).
+  Bugs 2.1.2, 2.1.14, 2.1.18 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -249,7 +249,7 @@ have been resolved and archived.
     - *Required Fix*: In `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`,
       drain and discard unexpected escape sequences and unassigned keys,
       preserving the active modal dialog and retaining input buffer state.
-  - [ ] **Bug 2.1.18: Splash Screen Geometry Hotkeys (1=80x24, 2=120x40)**:
+  - [x] **Bug 2.1.18: Splash Screen Geometry Hotkeys [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: Splash screen geometry hotkeys are standardized across all SE
       variants so that `1` selects 80x24 (universal baseline and default)

@@ -579,13 +579,13 @@ SPLASH_NOT_CTRL_P:
 	CP 'C'
 	JP Z,DO_CONFIG_SCREEN
 
-	; Option: '1' -> Modern Screen Mode (120x40)
+	; Option: '1' -> Classic Screen Mode (80x24)
 	CP '1'
-	JP Z,DO_SET_120X40
-
-	; Option: '2' -> Classic Screen Mode (80x24)
-	CP '2'
 	JP Z,DO_SET_80X24
+
+	; Option: '2' -> Modern Screen Mode (120x40)
+	CP '2'
+	JP Z,DO_SET_120X40
 
 	; Option: 'E' or 'e' or Enter -> Enter/Resume Editor
 	CP 'e'
