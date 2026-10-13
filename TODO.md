@@ -294,8 +294,8 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 5 Open
-  (Bugs 2.2.2, 2.2.7, 2.2.13 Resolved;
+- **Status**: Active / 4 Open
+  (Bugs 2.2.2, 2.2.7, 2.2.10, 2.2.13 Resolved;
   Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
@@ -387,7 +387,7 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
       to atomically drain unrecognized multi-byte sequences until a terminating
       character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
-  - [ ] **Bug 2.2.10: Predominant Language Indication on About Screen**:
+  - [x] **Bug 2.2.10: Predominant Language Indication on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
@@ -396,6 +396,11 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
+    - *Resolution*: Appended ` (Z80 Assembly)` to `STR_ABOUT_VERSION` under
+      `TARGET_NEXT` in `src/core/plugin_mgr.asm`, displaying
+      `version 1.1.0 (2026-10-09) (Z80 Assembly)` dynamically centered on
+      the About screen while preserving RomWBW CP/M binary invariance.
+      Validated via `tests/test_bug_2_2_10.py`.
   - [ ] **Bug 2.2.11: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
