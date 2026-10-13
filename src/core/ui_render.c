@@ -657,15 +657,18 @@ void show_help_screen(void)
 
 void show_about_screen(void)
 {
-    static const char *s_about_lines[6] = {
-        "        SE.COM - Screen Editor (Linux)        ",
-        "                Version v1.1.0                ",
-        "                                              ",
-        "        CP/M, ZX Spectrum Next, Linux         ",
-        "                                              ",
-        "          Press any key to return...          "
+    static const char *s_about_lines[9] = {
+        "                 SE - Screen Editor                   ",
+        "           version 1.1.0 (2026-10-09) (C)             ",
+        "                  by Dean Jenkins                     ",
+        "                                                      ",
+        "   Google Antigravity 2.19.1 & Gemini FLASH 3.8 high  ",
+        "      Open source software under the MIT License      ",
+        "                                                      ",
+        "              Press any key to continue               ",
+        "                                                      "
     };
-    render_tier1_workspace_screen(s_about_lines, 6, 46);
+    render_tier1_workspace_screen(s_about_lines, 9, 54);
     while (hal_console_getkey() <= 0) {
         /* Wait for user keystroke */
     }

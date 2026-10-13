@@ -2400,8 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 5 Defects Open (Bugs 2.8.1, 2.8.3–2.8.5 Resolved;
-  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.6, 2.8.8–2.8.10 Open).
+- **Status**: Active / 4 Defects Open (Bugs 2.8.1, 2.8.3–2.8.6 Resolved;
+  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.8–2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2517,7 +2517,7 @@ have been resolved and archived.
       eliminated `Enter option: _` input prompt, rendered canonical footer, and
       removed `FORMAT=` serialization from `src/core/config.c`. Verified with
       `tests/test_sec_config_layout.py`.
-  - [ ] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
+  - [x] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: About screen in `SEC.COM` displays `SE.COM — Screen Editor
       (Linux)` when executed on CP/M hardware or RomWBW emulator, uses an
@@ -2529,6 +2529,11 @@ have been resolved and archived.
       adopt the canonical 9-line centered layout from Section 7.12, format
       `version 1.1.0 (2026-10-09) (C)` in Row 2, and include author and
       Antigravity/Gemini open-source credits.
+    - *Resolution*: Refactored `show_about_screen()` in `src/core/ui_render.c`
+      to canonical 9-line centered layout (54 cols width), eliminated the
+      `(Linux)` tag, added canonical `version 1.1.0 (2026-10-09) (C)`, and
+      included full author and open-source credits. Verified with
+      `tests/test_sec_about_screen.py`.
   - [x] **Bug 2.8.7: Status Bar Field 4 Context Clobber [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 6.6, 11.1.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
