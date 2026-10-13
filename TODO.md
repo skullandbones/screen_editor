@@ -2317,7 +2317,7 @@ have been resolved and archived.
       mandated 1,000-character line capacity limit. Validated via Step 14
       and Step 17 in `test_buffer.py`
       (`test_bug_2_7_66_line_join_limit_1000_chars`).
-  - [ ] **Bug 2.7.67: Inverted Default File Format & SE.CFG Persistence**:
+  - [x] **Bug 2.7.67: Inverted Default File Format & SE.CFG Persistence**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2; `TODO.md`
       Bug 2.1.15.
     - *Issue*: Section 7.7 specifies that new documents created on Linux/POSIX
@@ -2329,10 +2329,11 @@ have been resolved and archived.
       defaults `self.format_cpm: bool = True` (`CRLF`). In
       `ports/python/se/editor.py:582`, `action_save_file()` persists
       `self.config.set("FORMAT", ...)` to `SE.CFG`.
-    - *Action Required*: In `ports/python/se/buffer.py:90`, default `format_cpm`
-      to `False` on Linux native Python. In `ports/python/se/editor.py:582`,
-      remove `self.config.set("FORMAT", ...)` so format is not written to
-      `SE.CFG`.
+    - *Resolution*: Defaulted `format_cpm = False` (Linux native LF) in
+      `DocumentBuffer.__init__` in `buffer.py`. Removed
+      `self.config.set("FORMAT", ...)` in `editor.py` so line ending format is
+      not persisted to `SE.CFG`. Validated via Step 52 in `test_editor.py`
+      (`test_bug_2_7_67_default_lf_and_decouple_config_save`).
   - [ ] **Bug 2.7.68: Trailing Byte Leakage on Unrecognized Escape Sequences**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10; `TODO.md` Bug 2.1.13,
       Bug 2.4.32.

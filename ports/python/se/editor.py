@@ -576,7 +576,6 @@ class Editor:
                 return False
 
         self.buffer.format_cpm = fmt_cpm
-        self.config.set("FORMAT", "CPM" if fmt_cpm else "LINUX")
         ok = self.buffer.save_file(target_name, format_cpm=fmt_cpm)
         if ok:
             self.modal.show_notification(

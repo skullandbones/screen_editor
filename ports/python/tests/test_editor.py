@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock
 
+from se.buffer import DocumentBuffer
 from se.editor import Editor
 from se.modal import ModalDialog
 from se.terminal import (
@@ -2422,6 +2423,37 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 51: Canonical 5-option config screen verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_67_default_lf_and_decouple_config_save(self):
+        """Step 52: Verify default LF format and decoupling from SE.CFG."""
+        print(
+            "[*] Step 52: Testing default LF format & SE.CFG decoupling...",
+            flush=True,
+        )
+        new_buf = DocumentBuffer()
+        self.assertFalse(new_buf.format_cpm)
+
+        orig_fmt = self.editor.config.get("FORMAT")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "test_lf.txt")
+            key_seq = list(save_path) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=key_seq)
+            self.editor.buffer.lines = ["Line 1", "Line 2"]
+            self.assertFalse(self.editor.buffer.format_cpm)
+
+            ok = self.editor.action_save_file()
+            self.assertTrue(ok)
+            self.assertTrue(os.path.isfile(save_path))
+            with open(save_path, "rb") as f:
+                content = f.read()
+            self.assertEqual(content, b"Line 1\nLine 2\n")
+            # Config FORMAT setting was NOT mutated
+            self.assertEqual(self.editor.config.get("FORMAT"), orig_fmt)
+
+        print(
+            "[+] Step 52: Default LF format & SE.CFG decoupling verified.",
             flush=True,
         )
 

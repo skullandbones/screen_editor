@@ -85,7 +85,7 @@ class DocumentBuffer:
         self.pan_col: int = 0
         self.tab_width: int = tab_width
         self.modified: bool = False
-        self.format_cpm: bool = True  # True = CP/M CRLF, False = Linux LF
+        self.format_cpm: bool = False  # False = Linux LF, True = CP/M CRLF
         self.clipboard: str = ""
 
         # Block selection state: 0 = none, 1 = dynamic, 2 = solidified
