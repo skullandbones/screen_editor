@@ -25,9 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 2 Open
+- **Status**: Active / 1 Open
   (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
-  Bugs 2.1.2, 2.1.14, 2.1.16, 2.1.18, 2.1.19 Fixed).
+  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.18, 2.1.19 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -176,7 +176,7 @@ have been resolved and archived.
       hardware. The requirement to harmonize splash screen hotkeys across all
       variants (`1` = 80x24 default, `2` = 120x40 if supported) has been
       split out and tracked as a discrete enhancement in Bug 2.1.18.
-  - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Editor**:
+  - [x] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
       `HANDLE_CSI_2`, and `HANDLE_CSI_LOOP`), when an unhandled or extended

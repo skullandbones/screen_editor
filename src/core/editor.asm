@@ -212,7 +212,7 @@ HANDLE_SS3:
 	JP Z,CURSOR_HOME
 	CP 'F'				; End
 	JP Z,CURSOR_END
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI:
 	XOR A
@@ -269,7 +269,7 @@ HANDLE_CSI:
 	JP C,CSI_DONE
 	CP '9'+1
 	JP C,HANDLE_CSI_LOOP_DIGIT
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_1:
 	LD A,'1'
@@ -279,7 +279,7 @@ HANDLE_CSI_1:
 	JP Z,CURSOR_HOME
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_2:
 	LD A,'2'
@@ -298,7 +298,7 @@ HANDLE_CSI_2:
 	JP Z,SHIFT_CURSOR_LEFT
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_4:
 	LD A,'4'
@@ -308,23 +308,29 @@ HANDLE_CSI_4:
 	JP Z,CURSOR_END
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_7:
 	CALL GET_KEY
 	CP '^'
 	JP Z,JUMP_FILE_TOP		; rxvt Ctrl+Home (ESC [ 7 ^)
-	JP CURSOR_HOME
+	CP '~'
+	JP Z,CURSOR_HOME
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_8:
 	CALL GET_KEY
 	CP '^'
 	JP Z,JUMP_FILE_BOTTOM		; rxvt Ctrl+End (ESC [ 8 ^)
-	JP CURSOR_END
+	CP '~'
+	JP Z,CURSOR_END
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_DEL:
 	; Consume trailing '~'
 	CALL GET_KEY
+	CP '~'
+	CALL NZ,DRAIN_CSI_TAIL
 	LD A,(BLOCK_ACTIVE)
 	CP 2
 	JR Z,DO_CSI_DEL_BLOCK
@@ -342,12 +348,16 @@ DO_CSI_DEL_BLOCK:
 HANDLE_CSI_PGUP:
 	; Consume trailing '~'
 	CALL GET_KEY
+	CP '~'
+	CALL NZ,DRAIN_CSI_TAIL
 	CALL PAGE_UP
 	RET
 
 HANDLE_CSI_PGDN:
 	; Consume trailing '~'
 	CALL GET_KEY
+	CP '~'
+	CALL NZ,DRAIN_CSI_TAIL
 	CALL PAGE_DOWN
 	RET
 
@@ -356,7 +366,7 @@ HANDLE_CSI_LOOP_DIGIT:
 HANDLE_CSI_LOOP:
 	CALL GET_KEY
 	CP '~'
-	JR Z,HANDLE_CSI_TILDE
+	JP Z,HANDLE_CSI_TILDE
 	CP 'A'
 	JP Z,HANDLE_CSI_A
 	CP 'B'
@@ -380,7 +390,51 @@ HANDLE_CSI_LOOP:
 	CP '9'+1
 	JR C,HANDLE_CSI_LOOP_DIGIT
 CSI_DONE:
+	JP DRAIN_CSI_TAIL
+
+;------------------------------------------------------------------------------
+; DRAIN_CSI_TAIL: Drain unhandled CSI parameters and terminating byte
+;
+; Purpose:
+;   Drains trailing bytes of unhandled or extended multi-byte escape sequences
+;   until terminating character ('~', 'A'..'Z', 'a'..'z') or timeout.
+;------------------------------------------------------------------------------
+DRAIN_CSI_TAIL:
+	CP '~'
+	RET Z
+	CP 'A'
+	JR C,DCT_DRAIN_LOOP
+	CP 'Z'+1
+	RET C
+	CP 'a'
+	JR C,DCT_DRAIN_LOOP
+	CP 'z'+1
+	RET C
+
+DCT_DRAIN_LOOP:
+	LD BC,ESC_TIMEOUT_LOOPS
+DCT_WAIT:
+	CALL CHECK_KEY_READY
+	JR NZ,DCT_GOT_BYTE
+	DEC BC
+	LD A,B
+	OR C
+	JR NZ,DCT_WAIT
 	RET
+
+DCT_GOT_BYTE:
+	CALL GET_KEY
+	CP '~'
+	RET Z
+	CP 'A'
+	JR C,DCT_DRAIN_LOOP
+	CP 'Z'+1
+	RET C
+	CP 'a'
+	JR C,DCT_DRAIN_LOOP
+	CP 'z'+1
+	RET C
+	JR DCT_DRAIN_LOOP
 
 CHECK_CSI_SHIFT:
 	LD A,(CSI_MODIFIER)
