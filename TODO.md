@@ -2225,7 +2225,7 @@ have been resolved and archived.
       updated `action_block_popup()` to invoke in-place manipulation. Validated
       via Step 15 in `test_buffer.py` and Step 2 and Step 48 in `test_editor.py`
       (`test_bug_2_7_60_direct_in_place_block_ops`).
-  - [ ] **Bug 2.7.61: Non-Canonical Splash Template & Prohibited Prompt**:
+  - [x] **Bug 2.7.61: Non-Canonical Splash Template & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.7, 7.2.
     - *Issue*: Section 7.2 mandates the 21-line canonical `SE.COM` splash
       screen template (`type [E] or [Enter] to edit`, etc.) with instant
@@ -2237,9 +2237,12 @@ have been resolved and archived.
       command syntax (`:e to edit`, etc.) and displays prohibited prompt
       `"Enter choice: "` on line 771. Furthermore, line 789 improperly allows
       `KEY_ESC` to enter the editor workspace.
-    - *Action Required*: Update `action_splash_screen()` in `editor.py` to
-      render the canonical 21-line `SE.COM` template without interactive
-      prompt strings, and silently ignore unassigned keystrokes.
+    - *Resolution*: Updated `action_splash_screen()` in `editor.py` to render
+      the canonical 21-line `SE.COM` template without prompt strings, removed
+      colon command parsing in favor of instant single-keystroke dispatch, and
+      silently ignored unassigned keystrokes (including `KEY_ESC`). Validated
+      via Step 14, Step 42, and Step 49 in `test_editor.py`
+      (`test_bug_2_7_61_canonical_21_line_splash_template`).
   - [ ] **Bug 2.7.62: Missing Predominant Language on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6; `TODO.md`
       Bug 2.1.14.

@@ -747,25 +747,44 @@ class Editor:
         need_render = True
         while True:
             if need_render:
-                max_lines_lbl = f"{self.config.max_lines} Max"
-                mem_lines_str = (
-                    f"Free Memory: [Dynamic Heap]   Lines: [{max_lines_lbl}]"
+                screen_mode_label = (
+                    f"{self.terminal.cols}x{self.terminal.rows}"
                 )
+                if getattr(self.config, "is_native_screen", False):
+                    geom_tag = f"{screen_mode_label} (Native Terminal)"
+                elif self.terminal.cols >= 120:
+                    geom_tag = f"{screen_mode_label} (Wide Console)"
+                else:
+                    geom_tag = f"{screen_mode_label} (Classic Terminal)"
+
+                if self.config.max_lines == "16K":
+                    max_lines_str = "16,384 lines"
+                elif self.config.max_lines == "32K":
+                    max_lines_str = "32,768 lines"
+                else:
+                    max_lines_str = f"{self.config.max_lines} lines"
                 lines = [
                     "SE - Screen Editor",
-                    "Version 1.0.0 (Python)",
                     "",
-                    mem_lines_str,
+                    "type   [E]  or  [Enter] to edit",
+                    "type   [N]              to new file",
+                    "type   [O]              to open file",
+                    "type   [S]              to save file",
+                    "type   [W]  or  [^W]    to close file",
+                    "type   [L]  or  [^L]    to goto line",
+                    "type   [A]              for about",
+                    "type   [M]              for memory info",
+                    "type   [P]              for plugins",
+                    "type   [^P]             for context plugin menu",
+                    "type   [C]              to configure",
+                    "type   [1]              set 80x24",
+                    "type   [2]              set 120x40",
+                    "type   [Q]  or  [^Q]    to exit",
                     "",
-                    ":e to edit",
-                    ":o to open file",
-                    ":s to save file",
-                    ":c for config",
-                    ":p for plugins",
-                    ":? for help",
-                    ":q to quit",
-                    "",
-                    "Enter choice: ",
+                    f"Active Screen : [{geom_tag}]",
+                    "RAM Drive (A:): [Preserved (Active)]",
+                    "Plugin System : [Operational]",
+                    f"Max Lines     : [{max_lines_str}]",
                 ]
                 geom = f"{self.terminal.cols}x{self.terminal.rows}"
                 self.renderer.render_centered_workspace(
@@ -776,14 +795,9 @@ class Editor:
             k = self.terminal.get_key()
             if not k:
                 continue
-            if k == ":":
-                next_k = self.terminal.get_key()
-                if not next_k:
-                    continue
-                k = next_k
 
             ch = k.lower() if isinstance(k, str) else ""
-            if ch in ("e", "\r") or k in (KEY_ENTER, KEY_ESC):
+            if ch == "e" or k == KEY_ENTER or k == "\r":
                 return  # Return to editor
             elif ch == "n":
                 self.action_new_file()
@@ -843,7 +857,7 @@ class Editor:
                 self.action_quit()
                 return
             else:
-                # Non-entry key exclusion: silently ignore Space, arrows, etc.
+                # Non-entry key exclusion: silently ignore Space, ESC, arrows
                 continue
 
     def action_plugin_palette(self):

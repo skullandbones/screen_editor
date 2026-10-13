@@ -305,11 +305,11 @@ class TestEditor(unittest.TestCase):
         self.editor.dispatch_key(KEY_ESC)
         self.editor.action_splash_screen.assert_called_once()
 
-        # Case C: On splash screen, KEY_ESC exits back to editor
+        # Case C: On splash screen, KEY_ESC is ignored; 'e' or Enter exits
         del self.editor.action_splash_screen  # restore real method
         self.editor.renderer.render_centered_workspace = MagicMock()
-        self.editor.terminal.get_key = MagicMock(return_value=KEY_ESC)
-        self.editor.action_splash_screen()  # Must return cleanly on KEY_ESC
+        self.editor.terminal.get_key = MagicMock(side_effect=[KEY_ESC, "e"])
+        self.editor.action_splash_screen()
 
         print(
             "[+] Step 9: ESC block cancel and splash dual-exit verified.",
@@ -513,20 +513,20 @@ class TestEditor(unittest.TestCase):
 
         # Verify canonical commands
         expected_commands = [
-            ":e to edit",
-            ":o to open file",
-            ":s to save file",
-            ":c for config",
-            ":p for plugins",
-            ":? for help",
-            ":q to quit",
+            "type   [E]  or  [Enter] to edit",
+            "type   [O]              to open file",
+            "type   [S]              to save file",
+            "type   [C]              to configure",
+            "type   [P]              for plugins",
+            "type   [Q]  or  [^Q]    to exit",
         ]
         for cmd in expected_commands:
             self.assertIn(cmd, splash_text)
 
         # Verify status info
-        self.assertIn("Free Memory: [Dynamic Heap]", splash_text)
-        self.assertIn("Lines: [", splash_text)
+        self.assertIn("Active Screen : [", splash_text)
+        self.assertIn("Plugin System : [Operational]", splash_text)
+        self.assertIn("Max Lines     : [", splash_text)
 
         # Verify geometry switching: initial 80x24 -> 120x40 -> 80x24
         self.assertEqual(self.editor.terminal.cols, 80)
@@ -1968,22 +1968,22 @@ class TestEditor(unittest.TestCase):
     def test_bug_2_7_53_splash_screen_dimensions_and_colon_commands(self):
         """Step 42: Verify splash 14x50 geometry & colon cmds (Bug 2.7.53)."""
         print(
-            "[*] Step 42: Testing splash 14x50 geometry & colon commands...",
+            "[*] Step 42: Testing splash 21x50 geometry & hotkeys...",
             flush=True,
         )
         rendered_lines_list = []
         self.editor.renderer.render_centered_workspace = (
-            lambda lines, buf, geometry_str="80x24": rendered_lines_list.append(
-                list(lines)
+            lambda lines, buf, geometry_str="80x24": (
+                rendered_lines_list.append(list(lines))
             )
         )
 
-        # 1. Verify 14 lines and <= 50 column width
+        # 1. Verify 21 lines and <= 50 column width
         self.editor.terminal.get_key = MagicMock(return_value="e")
         self.editor.action_splash_screen()
         self.assertEqual(len(rendered_lines_list), 1)
         lines = rendered_lines_list[0]
-        self.assertEqual(len(lines), 14)
+        self.assertEqual(len(lines), 21)
         for idx, line in enumerate(lines):
             self.assertLessEqual(
                 len(line),
@@ -1991,63 +1991,55 @@ class TestEditor(unittest.TestCase):
                 f"Line {idx} exceeds 50 columns: {line}",
             )
 
-        # Verify mathematical centering yields top_row == 5 on 80x24
+        # Verify mathematical centering yields top_row == 2 on 80x24
         from se.ui import compute_centering
         content_w = max(len(ln) for ln in lines)
-        top_row, left_col = compute_centering(80, 24, content_w, 14)
-        self.assertEqual(top_row, 5)
-        self.assertTrue(18 <= left_col <= 20)
+        top_row, left_col = compute_centering(80, 24, content_w, 21)
+        self.assertEqual(top_row, 2)
+        self.assertTrue(16 <= left_col <= 22)
 
-        # 2. Verify colon commands dispatch
-        # :e returns to editor
-        self.editor.terminal.get_key = MagicMock(side_effect=[":", "e"])
+        # 2. Verify single hotkey dispatch
+        # e returns to editor
+        self.editor.terminal.get_key = MagicMock(return_value="e")
         self.editor.action_splash_screen()
 
-        # :o calls action_open_file
+        # o calls action_open_file
         self.editor.action_open_file = MagicMock(return_value=True)
-        self.editor.terminal.get_key = MagicMock(side_effect=[":", "o"])
+        self.editor.terminal.get_key = MagicMock(return_value="o")
         self.editor.action_splash_screen()
         self.editor.action_open_file.assert_called_once()
 
-        # :s calls action_save_file
+        # s calls action_save_file
         self.editor.action_save_file = MagicMock(return_value=True)
-        self.editor.terminal.get_key = MagicMock(
-            side_effect=[":", "s", ":", "e"]
-        )
+        self.editor.terminal.get_key = MagicMock(side_effect=["s", "e"])
         self.editor.action_splash_screen()
         self.editor.action_save_file.assert_called_once()
 
-        # :c calls action_config_screen
+        # c calls action_config_screen
         self.editor.action_config_screen = MagicMock()
-        self.editor.terminal.get_key = MagicMock(
-            side_effect=[":", "c", ":", "e"]
-        )
+        self.editor.terminal.get_key = MagicMock(side_effect=["c", "e"])
         self.editor.action_splash_screen()
         self.editor.action_config_screen.assert_called_once()
 
-        # :p calls action_plugin_palette
+        # p calls action_plugin_palette
         self.editor.action_plugin_palette = MagicMock()
-        self.editor.terminal.get_key = MagicMock(
-            side_effect=[":", "p", ":", "e"]
-        )
+        self.editor.terminal.get_key = MagicMock(side_effect=["p", "e"])
         self.editor.action_splash_screen()
         self.editor.action_plugin_palette.assert_called_once()
 
-        # :? calls action_help
+        # ? calls action_help
         self.editor.action_help = MagicMock()
-        self.editor.terminal.get_key = MagicMock(
-            side_effect=[":", "?", ":", "e"]
-        )
+        self.editor.terminal.get_key = MagicMock(side_effect=["?", "e"])
         self.editor.action_splash_screen()
         self.editor.action_help.assert_called_once()
 
-        # :q calls action_quit
+        # q calls action_quit
         self.editor.action_quit = MagicMock()
-        self.editor.terminal.get_key = MagicMock(side_effect=[":", "q"])
+        self.editor.terminal.get_key = MagicMock(return_value="q")
         self.editor.action_splash_screen()
         self.editor.action_quit.assert_called_once()
 
-        # 3. Verify silent rejection: space bar, arrow keys, unassigned
+        # 3. Verify silent rejection: space bar, arrow keys, unassigned, ESC
         render_mock = MagicMock()
         self.editor.renderer.render_centered_workspace = render_mock
         non_entry_keys = [
@@ -2056,8 +2048,8 @@ class TestEditor(unittest.TestCase):
             KEY_DOWN,
             KEY_LEFT,
             KEY_RIGHT,
+            KEY_ESC,
             "z",
-            ":",
             "e",
         ]
         self.editor.terminal.get_key = MagicMock(side_effect=non_entry_keys)
@@ -2066,7 +2058,7 @@ class TestEditor(unittest.TestCase):
         self.assertEqual(render_mock.call_count, 1)
 
         print(
-            "[+] Step 42: Splash 14x50 geometry & colon commands verified.",
+            "[+] Step 42: Splash 21x50 geometry & hotkeys verified.",
             flush=True,
         )
 
@@ -2320,6 +2312,49 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 48: Direct in-place block operations verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_61_canonical_21_line_splash_template(self):
+        """Step 49: Canonical 21-line splash template and no prompt."""
+        print(
+            "[*] Step 49: Testing canonical 21-line splash template...",
+            flush=True,
+        )
+        captured = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": (
+                captured.append(list(lines))
+            )
+        )
+        # Verify ESC does not exit splash to editor (silently ignored)
+        self.editor.terminal.get_key = MagicMock(
+            side_effect=[KEY_ESC, " ", KEY_UP, "e"]
+        )
+        self.editor.action_splash_screen()
+        self.assertEqual(len(captured), 1)
+        lines = captured[0]
+
+        # 1. Height is exactly 21 lines
+        self.assertEqual(len(lines), 21)
+
+        # 2. Clean header mandate: Row 0 has title, no version/language
+        self.assertEqual(lines[0], "SE - Screen Editor")
+        self.assertEqual(lines[1], "")
+        for line in lines:
+            self.assertNotIn("Version", line)
+            self.assertNotIn("Python", line)
+            self.assertNotIn("Enter choice:", line)
+            self.assertNotIn("Enter option:", line)
+
+        # 3. 4 diagnostic status lines at bottom
+        self.assertTrue(lines[17].startswith("Active Screen : ["))
+        self.assertEqual(lines[18], "RAM Drive (A:): [Preserved (Active)]")
+        self.assertEqual(lines[19], "Plugin System : [Operational]")
+        self.assertTrue(lines[20].startswith("Max Lines     : ["))
+
+        print(
+            "[+] Step 49: Canonical 21-line splash template verified.",
             flush=True,
         )
 
