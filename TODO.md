@@ -461,9 +461,9 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 4 Open Defects
-  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8
-  Rejected).
+- **Status**: Active / 3 Open Defects
+  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7,
+  2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -569,7 +569,7 @@ have been resolved and archived.
       canonical 50x7 dimensions, and the explicit action footer
       `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
       (Bug 2.1.6 Rejected).
-  - [ ] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
+  - [x] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI` sub-handlers),
       when an unhandled or extended multi-byte escape sequence is received
@@ -580,6 +580,12 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
       to atomically drain unrecognized multi-byte sequences until a terminating
       character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
+    - *Resolution*: Routed unhandled CSI branches (`CSI_DONE`, `HANDLE_CSI_*`)
+      to `DRAIN_REMAINING_CSI` in `src/core/editor.asm` under `TARGET_NEXT` to
+      atomically consume trailing sequence bytes until terminal boundary
+      (`0x40`..`0x7E`) or timeout, preventing stray bytes from leaking into
+      document text on native Next `SE.NEX` and `.se`. Preserved RomWBW CP/M
+      binary invariance. Validated via `tests/test_bug_2_3_9.py`.
   - [ ] **Bug 2.3.10: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
