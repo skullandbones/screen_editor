@@ -454,7 +454,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 hal_console_puts((g_config.save_format == FMT_CPM)
                                  ? "CP/M" : "Linux");
                 hal_console_puts("]   [^F]=Toggle Format");
-            } else {
+            } else if (total_pages > 1) {
                 char pbuf[48];
                 snprintf(pbuf, sizeof(pbuf),
                          "  [Page %d/%d]  <PgUp>/<PgDn>=Page",
