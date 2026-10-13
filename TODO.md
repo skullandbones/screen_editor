@@ -461,9 +461,9 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 3 Open Defects
-  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7,
-  2.3.8 Rejected).
+- **Status**: Active / 2 Open Defects
+  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9, 2.3.10 Resolved; Bugs 2.3.2,
+  2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -586,7 +586,7 @@ have been resolved and archived.
       (`0x40`..`0x7E`) or timeout, preventing stray bytes from leaking into
       document text on native Next `SE.NEX` and `.se`. Preserved RomWBW CP/M
       binary invariance. Validated via `tests/test_bug_2_3_9.py`.
-  - [ ] **Bug 2.3.10: Forward Deletion Line Join Sticky Target Column Update**:
+  - [x] **Bug 2.3.10: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
@@ -594,6 +594,12 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
+    - *Resolution*: Updated `DO_DEL_JOIN_OK` in `src/core/editor.asm` under
+      `TARGET_NEXT` to invoke `CHECKOUT_ACTIVE_LINE` and `CALC_VISUAL_COL`
+      and update `(TARGET_COL),HL`, ensuring subsequent vertical navigation
+      adheres to the join column across native Next targets `SE.NEX` and `.se`
+      while preserving RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_10.py`.
   - [ ] **Bug 2.3.11: Modal Dialog Cancellation by Unexpected Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
