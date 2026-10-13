@@ -579,13 +579,13 @@ SPLASH_NOT_CTRL_P:
 	CP 'C'
 	JP Z,DO_CONFIG_SCREEN
 
-	; Option: '1' -> Modern Screen Mode (120x40)
+	; Option: '1' -> Classic Screen Mode (80x24)
 	CP '1'
-	JP Z,DO_SET_120X40
-
-	; Option: '2' -> Classic Screen Mode (80x24)
-	CP '2'
 	JP Z,DO_SET_80X24
+
+	; Option: '2' -> Unsupported on Next hardware (fixed 80-col)
+	CP '2'
+	JP Z,SPLASH_LOOP
 
 	; Option: 'E' or 'e' or Enter -> Enter/Resume Editor
 	CP 'e'
@@ -598,7 +598,8 @@ SPLASH_NOT_CTRL_P:
 	JP SPLASH_LOOP
 
 DO_SET_120X40:
-	CALL SET_MODE_120X40
+	; 120x40 is unsupported on Next fixed 80-column hardware; enforce 80x24
+	CALL SET_MODE_80X24
 	JP SHOW_SPLASH_SCREEN
 
 DO_SET_80X24:
@@ -731,12 +732,7 @@ CONFIG_NOT_ESC:
 	JR CONFIG_LOOP
 
 CONFIG_TOGGLE_MODE:
-	LD A,(SCREEN_MODE)
-	CP MODE_120X40
-	JR Z,CONFIG_SET_80
-	CALL SET_MODE_120X40
-	JR CONFIG_REDRAW
-CONFIG_SET_80:
+	; 120x40 is unsupported on Next fixed 80-column hardware; enforce 80x24
 	CALL SET_MODE_80X24
 CONFIG_REDRAW:
 	CALL SHOW_CONFIG_SCREEN
@@ -4331,13 +4327,13 @@ HBIOS_VER_PATCH:	DB	0
 CPM_VERSION_ID:		DW	0
 MEM_BANK_LOOP_IDX:	DB	0
 
-SCREEN_MODE:	DB	MODE_120X40	; Default to 120x40
-ACTIVE_ROWS:	DB	40		; Default 40 rows
-ACTIVE_COLS:	DB	120		; Default 120 cols
+SCREEN_MODE:	DB	MODE_80X24	; Default to 80x24 on Next hardware
+ACTIVE_ROWS:	DB	24		; Default 24 rows
+ACTIVE_COLS:	DB	80		; Default 80 cols
 ; Horizontal viewport left column offset (0..1000)
 VIEW_LEFT_COL:	DW	0
 ; Cached right column bound (VIEW_LEFT_COL + ACTIVE_COLS)
-VIEW_RIGHT_COL:	DW	120
+VIEW_RIGHT_COL:	DW	80
 
 ; Screen cursor coordinates use "row" (0..ACTIVE_ROWS-2) internally for terminal
 ; positioning (LOCATE_CURSOR: Screen Row = CUR_DOC_ROW - TOP_DOC_ROW + 1).

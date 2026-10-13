@@ -294,8 +294,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 6 Open
-  (Bugs 2.2.2, 2.2.7 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 5 Open
+  (Bugs 2.2.2, 2.2.7, 2.2.13 Resolved;
+  Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -413,7 +414,7 @@ have been resolved and archived.
       active dialog. Modals must only dismiss on `Enter` or `ESC`.
     - *Required Fix*: In modal input loops, drain and discard unexpected escape
       sequences and non-input keys, preserving active dialog state.
-  - [ ] **Bug 2.2.13: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
+  - [x] **Bug 2.2.13: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: In `src/se_next_cpm.asm:582-589` and `src/core/plugin_mgr.asm`,
       hotkey `1` selects 120x40 and `2` selects 80x24 (inverted per Section
@@ -422,6 +423,11 @@ have been resolved and archived.
       Triggering `1` causes horizontal column spill and corrupted wrapping.
     - *Required Fix*: In `src/se_next_cpm.asm`, assign `1` to 80x24 classic
       terminal mode and omit or disable 120x40 mode per Section 2.1 mandate.
+    - *Resolution*: Mapped hotkey '1' to 80x24 classic terminal mode, disabled
+      hotkey '2', and enforced 80x24 on 120x40 requests in `src/se_next_cpm.asm`.
+      Updated `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm` under
+      `TARGET_NEXT` to display `type [1] set 80x24`.
+      Validated via `tests/test_bug_2_2_13.py`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
