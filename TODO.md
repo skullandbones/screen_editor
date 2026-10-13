@@ -25,9 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 3 Open
+- **Status**: Active / 2 Open
   (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
-  Bugs 2.1.2, 2.1.14, 2.1.16, 2.1.18 Fixed).
+  Bugs 2.1.2, 2.1.14, 2.1.16, 2.1.18, 2.1.19 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -262,7 +262,7 @@ have been resolved and archived.
       `STR_SPLASH_CMDS` to display `type [1] set 80x24` and `type [2] set
       120x40`. In `src/se.asm:578-584`, update `SPLASH_LOOP` to dispatch
       `'1'` to `DO_SET_80X24` and `'2'` to `DO_SET_120X40`.
-  - [ ] **Bug 2.1.19: Search & Replace 120-Character Line Length Barrier**:
+  - [x] **Bug 2.1.19: Search & Replace Line Length Barrier [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
     - *Issue*: In `src/core/search.asm:2386-2400` (`DO_REPLACE_CURRENT`), after
       computing replacement line length `L' = C - B + E`, the code executes

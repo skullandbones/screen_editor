@@ -4152,7 +4152,7 @@ STR_POPUP_SEARCH_COMP_MSG2:
 STR_POPUP_TOO_LONG_TITLE:
 	DB "|                 Line Too Long                  |", 0
 STR_POPUP_TOO_LONG_MSG1:
-	DB "|          Line > 120 chars - skipped.           |", 0
+	DB "|         Line > 1000 chars - skipped.           |", 0
 STR_POPUP_TOO_LONG_MSG2:
 	DB "|     Line length limit exceeded on replace.     |", 0
 
