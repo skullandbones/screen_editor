@@ -88,6 +88,9 @@ sec-cpm: $(TARGET_SEC)
 $(TARGET_SEC): $(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
 	@echo "==> Compiling $(TARGET_SEC) with zcc +cpm..."
 	$(ZCC) +cpm -O3 -create-app -m -pragma-define:CRT_TRIM_BSS=1 \
+		-pragma-define:CRT_ENABLE_COMMANDLINE=0 \
+		-pragma-define:CRT_COMMANDLINE_REDIRECTION=0 \
+		-pragma-define:CLIB_OPEN_MAX=0 \
 		-Isrc/include -o $(TARGET_SEC) \
 		$(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
 

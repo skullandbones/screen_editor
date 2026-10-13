@@ -177,20 +177,26 @@ void render_status_bar(void)
     snprintf(field1, sizeof(field1), "| %-14.14s | ", raw_name);
 
     if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
-        snprintf(field2, sizeof(field2), " 80x24 | ");
+        strcpy(field2, " 80x24 | ");
     } else if (g_active_cols == SCREEN_COLS_120 &&
                g_active_rows == SCREEN_ROWS_40) {
-        snprintf(field2, sizeof(field2), "120x40 | ");
+        strcpy(field2, "120x40 | ");
     } else {
         snprintf(field2, sizeof(field2), "%3ux%-2u | ",
                  (unsigned)g_active_cols, (unsigned)g_active_rows);
     }
 
-    snprintf(field3, sizeof(field3), "%s | ",
-             (g_file_format == FMT_CPM) ? "CP/M " : "Linux");
+    strcpy(field3, (g_file_format == FMT_CPM) ? "CP/M  | " : "Linux | ");
 
     if (g_is_splash_screen) {
-        snprintf(field4, sizeof(field4), "Free: 48 KB     | ");
+        uint16_t free_kb = 320;
+        if (g_doc_total_lines > 1) {
+            uint16_t slots = (10 * 256 > g_doc_total_lines) ?
+                             (10 * 256 - g_doc_total_lines) : 0;
+            free_kb = slots / 8;
+        }
+        snprintf(field4, sizeof(field4), "Free: %u KB    | ",
+                 (unsigned)free_kb);
     } else if (g_block_mode == BLOCK_MODE_SELECTING) {
         normalize_block_bounds();
         if (g_norm_start_row == g_norm_end_row) {
@@ -228,9 +234,9 @@ void render_status_bar(void)
         snprintf(pbuf, sizeof(pbuf), "[Pan +%u]", (unsigned)g_horiz_pan_offset);
         snprintf(field4, sizeof(field4), "%-15s | ", pbuf);
     } else if (!g_insert_mode) {
-        snprintf(field4, sizeof(field4), "Overwrite mode  | ");
+        strcpy(field4, "Overwrite mode  | ");
     } else {
-        snprintf(field4, sizeof(field4), "^K: Editor keys | ");
+        strcpy(field4, "^K: Editor keys | ");
     }
 
     if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
@@ -242,8 +248,11 @@ void render_status_bar(void)
              (unsigned)g_doc_total_lines,
              (unsigned)vis_col);
 
-    snprintf(core, sizeof(core), "%s%s%s%s%s",
-             field1, field2, field3, field4, field5);
+    strcpy(core, field1);
+    strcat(core, field2);
+    strcat(core, field3);
+    strcat(core, field4);
+    strcat(core, field5);
 
     pad = (g_active_cols > 78) ? (g_active_cols - 78) / 2 : 1;
     right_pad = (g_active_cols > (78 + pad)) ? (g_active_cols - 78 - pad) : 1;
@@ -419,7 +428,7 @@ static void render_tier1_workspace_screen(const char **lines,
 
 void show_splash_screen(void)
 {
-    static const char *splash_lines[24];
+    const char *splash_lines[24];
     size_t line_count;
     const char *screen_lbl;
     const char *ram_lbl;
@@ -626,7 +635,7 @@ void show_splash_screen(void)
 
 static const char *s_help_lines[22] = {
   "==========================================================================",
-  "                              EDITOR MODE KEYS                            ",
+  "                    SE.COM - EDITOR MODE KEYS                             ",
   "==========================================================================",
   "  FILE & SYSTEM:                                                          ",
   "    Ctrl+O          Open file screen       Ctrl+S         Save file screen",

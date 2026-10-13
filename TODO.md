@@ -2400,8 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 1 Defect Open (Bugs 2.8.1, 2.8.3–2.8.6, 2.8.8–2.8.10
-  Resolved; Bug 2.8.7 Rejected; Bug 2.8.2 Open).
+- **Status**: Active / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.10
+  Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2443,7 +2443,7 @@ have been resolved and archived.
       4. Fixed `workspace_root` resolution in `test_editor_headless.py` and
          consolidated Step 17 save prompt capture buffer.
       5. Verified 100% pass across Steps 17–24 in headless test suite.
-  - [ ] **Bug 2.8.2: TPA Memory Overflow Overwriting BDOS and CCP (BAD LOAD)**:
+  - [x] **Bug 2.8.2: TPA Memory Overflow Overwriting BDOS and CCP (BAD LOAD)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.4, 14.5; `TODO.md`
       Section 7.1; `check_tpa.py SEC.COM`.
     - *Issue*: When running `SEC.COM` on RomWBW RC2014 CP/M, CCP reports
@@ -2461,6 +2461,20 @@ have been resolved and archived.
       eliminate redundant `snprintf` formatters on CP/M, trim string literals,
       configure z88dk pragmas to trim unused CRT/stdio features, and restore
       positive TPA headroom below `0xD800`.
+    - *Resolution*:
+      1. Replaced POSIX stdio file operations with native BDOS sector I/O calls
+         (Calls 15, 16, 19, 20, 21, 22, 26, 34).
+      2. Set `-pragma-define:CLIB_OPEN_MAX=0` in `Makefile` to eliminate CRT
+         file descriptors, FILE structs, and stdio buffer allocations.
+      3. Unified 128-byte sector DMA buffers and FCBs across `file_io.c`,
+         `config.c`, and `ui_browser.c` into a single shared `g_cpm_dma_buf`
+         and `g_cpm_fcb`.
+      4. Right-sized CP/M browser capacity to 32 entries and implemented
+         insertion sort to eliminate CRT `qsort`.
+      5. Replaced `snprintf` formatters with `strncpy` in `search.c` and
+         `beautify.c`.
+      6. Verified positive headroom (+890 bytes below BDOS `0xD800`) via
+         automated test `tests/test_sec_tpa_headroom.py`.
   - [x] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 7.3, 7.4, 7.12,
       11.10.

@@ -3,86 +3,66 @@
  *
  * Purpose:
  *   Implements 128-byte sector file operations (open, make, close, read, write)
- *   for CP/M file systems.
+ *   for CP/M file systems using native BDOS calls, eliminating stdio fopen.
  *   Strictly adheres to docs/UI_UX_DESIGN.md.
  *
  * Part of SE.COM / CP/M C Semantic Equivalent Profile (SEC.COM)
  *============================================================================*/
 
-#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <cpm.h>
 #include "../../include/config.h"
 #include "../../include/hal.h"
+#include "../../include/file_io.h"
 
 int hal_storage_open(const char *path, void *handle)
 {
-    FILE *fp;
+    cpm_fcb_t *fcb = (cpm_fcb_t *)handle;
     if (!path || !handle) {
         return -1;
     }
-    fp = fopen(path, "rb");
-    if (!fp) {
-        return -1;
-    }
-    *(FILE **)handle = fp;
-    return 0;
+    file_populate_fcb(path, fcb);
+    return (bdos(15, (int)fcb) == 255) ? -1 : 0;
 }
 
 int hal_storage_make(const char *path, void *handle)
 {
-    FILE *fp;
+    cpm_fcb_t *fcb = (cpm_fcb_t *)handle;
     if (!path || !handle) {
         return -1;
     }
-    fp = fopen(path, "wb+");
-    if (!fp) {
-        return -1;
-    }
-    *(FILE **)handle = fp;
-    return 0;
+    file_populate_fcb(path, fcb);
+    bdos(19, (int)fcb);
+    return (bdos(22, (int)fcb) == 255) ? -1 : 0;
 }
 
 int hal_storage_close(void *handle)
 {
-    FILE *fp;
+    cpm_fcb_t *fcb = (cpm_fcb_t *)handle;
     if (!handle) {
         return -1;
     }
-    fp = *(FILE **)handle;
-    if (fp) {
-        fclose(fp);
-        *(FILE **)handle = NULL;
-    }
+    bdos(16, (int)fcb);
     return 0;
 }
 
 int hal_storage_read_sec(void *handle, uint8_t *buf)
 {
-    FILE *fp;
-    size_t n;
+    cpm_fcb_t *fcb = (cpm_fcb_t *)handle;
     if (!handle || !buf) {
         return -1;
     }
-    fp = *(FILE **)handle;
-    if (!fp) {
-        return -1;
-    }
-    n = fread(buf, 1, 128, fp);
-    return (n == 128) ? 0 : 1;
+    bdos(26, (int)buf);
+    return (bdos(20, (int)fcb) == 0) ? 0 : 1;
 }
 
 int hal_storage_write_sec(void *handle, const uint8_t *buf)
 {
-    FILE *fp;
-    size_t n;
+    cpm_fcb_t *fcb = (cpm_fcb_t *)handle;
     if (!handle || !buf) {
         return -1;
     }
-    fp = *(FILE **)handle;
-    if (!fp) {
-        return -1;
-    }
-    n = fwrite(buf, 1, 128, fp);
-    return (n == 128) ? 0 : 1;
+    bdos(26, (int)buf);
+    return (bdos(21, (int)fcb) == 0) ? 0 : 1;
 }
