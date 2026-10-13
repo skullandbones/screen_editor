@@ -419,27 +419,12 @@ static void render_tier1_workspace_screen(const char **lines,
 
 void show_splash_screen(void)
 {
-    static const char *s_splash_lines[19] = {
-        "                  SE - Screen Editor                  ",
-        "                  Version v1.1.0 (C)                  ",
-        "                                                      ",
-        "        type   [E]  or  [Enter] to edit               ",
-        "        type   [N]              to new file           ",
-        "        type   [O]              to open file          ",
-        "        type   [S]              to save file          ",
-        "        type   [W]  or  [^W]    to close file         ",
-        "        type   [L]  or  [^L]    to goto line          ",
-        "        type   [A]              for about             ",
-        "        type   [M]              for memory info       ",
-        "        type   [P]              for plugins           ",
-        "        type   [^P]             for context plugin menu",
-        "        type   [C]              to configure          ",
-        "        type   [1]              set 80x24             ",
-        "        type   [2]              set 120x40            ",
-        "        type   [3]              set native            ",
-        "        type   [Q]  or  [^Q]    to exit               ",
-        "                                                      "
-    };
+    static const char *splash_lines[24];
+    size_t line_count;
+    const char *screen_lbl;
+    const char *ram_lbl;
+    const char *plug_lbl;
+    const char *lines_lbl;
     int k;
     char dlg_fname[32];
     uint8_t need_render = 1;
@@ -447,7 +432,95 @@ void show_splash_screen(void)
     g_is_splash_screen = 1;
     while (1) {
         if (need_render) {
-            render_tier1_workspace_screen(s_splash_lines, 19, 54);
+            line_count = 0;
+            splash_lines[line_count++] =
+                "                  SE - Screen Editor                  ";
+            splash_lines[line_count++] =
+                "                                                      ";
+            splash_lines[line_count++] =
+                "        type   [E]  or  [Enter] to edit               ";
+            splash_lines[line_count++] =
+                "        type   [N]              to new file           ";
+            splash_lines[line_count++] =
+                "        type   [O]              to open file          ";
+            splash_lines[line_count++] =
+                "        type   [S]              to save file          ";
+            splash_lines[line_count++] =
+                "        type   [W]  or  [^W]    to close file         ";
+            splash_lines[line_count++] =
+                "        type   [L]  or  [^L]    to goto line          ";
+            splash_lines[line_count++] =
+                "        type   [A]              for about             ";
+            splash_lines[line_count++] =
+                "        type   [M]              for memory info       ";
+            splash_lines[line_count++] =
+                "        type   [P]              for plugins           ";
+            splash_lines[line_count++] =
+                "        type   [^P]             for context plugin menu";
+            splash_lines[line_count++] =
+                "        type   [C]              to configure          ";
+            splash_lines[line_count++] =
+                "        type   [1]              set 80x24             ";
+            splash_lines[line_count++] =
+                "        type   [2]              set 120x40            ";
+#ifndef __CPM__
+            splash_lines[line_count++] =
+                "        type   [3]              set native            ";
+#endif
+            splash_lines[line_count++] =
+                "        type   [Q]  or  [^Q]    to exit               ";
+            splash_lines[line_count++] =
+                "                                                      ";
+
+            /* Dynamic system metadata rows per docs/UI_UX_DESIGN.md §7.2 */
+            if (g_config.screen_mode == MODE_120X40) {
+                screen_lbl =
+                    "        Active Screen : [120x40 (Modern Default)]     ";
+            } else if (g_config.screen_mode == MODE_NATIVE) {
+                screen_lbl =
+                    "        Active Screen : [Native (Dynamic Mode)]       ";
+            } else {
+                screen_lbl =
+                    "        Active Screen : [80x24 (Classic Terminal)]    ";
+            }
+            splash_lines[line_count++] = screen_lbl;
+
+            if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
+                ram_lbl =
+                    "        RAM Drive (A:): [Overwritten (Max RAM)]       ";
+            } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
+                ram_lbl =
+                    "        RAM Drive (A:): [Hibernated (Temp Image)]     ";
+            } else {
+                ram_lbl =
+                    "        RAM Drive (A:): [Preserved (Active)]          ";
+            }
+            splash_lines[line_count++] = ram_lbl;
+
+            if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
+                plug_lbl =
+                    "        Plugin System : [Disabled]                    ";
+            } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
+                plug_lbl =
+                    "        Plugin System : [On Demand]                   ";
+            } else {
+                plug_lbl =
+                    "        Plugin System : [Operational]                 ";
+            }
+            splash_lines[line_count++] = plug_lbl;
+
+            if (g_config.lines_mode == 1) {
+                lines_lbl =
+                    "        Max Lines     : [32,768 lines]                ";
+            } else {
+                lines_lbl =
+                    "        Max Lines     : [16,384 lines]                ";
+            }
+            splash_lines[line_count++] = lines_lbl;
+            splash_lines[line_count++] =
+                "                                                      ";
+
+            render_tier1_workspace_screen(splash_lines, line_count, 54);
             need_render = 0;
         }
         while ((k = hal_console_getkey()) <= 0) {
@@ -530,6 +603,7 @@ void show_splash_screen(void)
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
             need_render = 1;
+#ifndef __CPM__
         } else if (k == '3') {
             uint8_t ncols = 0, nrows = 0;
             clear_screen();
@@ -543,6 +617,7 @@ void show_splash_screen(void)
                 g_active_rows = SCREEN_ROWS_24;
             }
             need_render = 1;
+#endif
         }
     }
     clear_screen();

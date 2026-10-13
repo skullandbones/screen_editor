@@ -2400,8 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 7 Defects Open (Bugs 2.8.1, 2.8.3 Resolved;
-  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.4–2.8.6, 2.8.8–2.8.10 Open).
+- **Status**: Active / 6 Defects Open (Bugs 2.8.1, 2.8.3, 2.8.4 Resolved;
+  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.5, 2.8.6, 2.8.8–2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2478,7 +2478,7 @@ have been resolved and archived.
       `src/core/ui_render.c` with standard 7-bit ASCII hyphens (`-`). Added
       automated test suite `tests/test_sec_utf8_ascii.py` verifying zero UTF-8
       em-dash sequences across all C source files and compiled `SEC.COM`.
-  - [ ] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
+  - [x] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: The splash screen in `SEC.COM` displays unsupported Option 3
       (`type [3] set native`), includes redundant `Version v1.1.0 (C)` on Row 2,
@@ -2492,6 +2492,11 @@ have been resolved and archived.
       remove version/language from Row 2, and dynamically render the four
       canonical system status fields from `g_config` matching canonical
       `SE.COM`.
+    - *Resolution*: Conditionally omitted Option 3 on CP/M via
+      `#ifndef __CPM__`, enforced clean header mandate by removing version
+      info from Row 2, and added dynamic rendering of Active Screen, RAM Drive,
+      Plugin System, and Max Lines fields from `g_config`. Verified with
+      `tests/test_sec_splash_metadata.py`.
   - [ ] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 11.1, 13.2.
     - *Issue*: Configuration Manager in `SEC.COM` renders a prohibited
