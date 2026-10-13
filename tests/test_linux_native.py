@@ -3798,6 +3798,178 @@ def test_bug_2_4_48_utf8_prohibition():
                 pass
 
 
+def test_bug_2_4_49_line_join_boundary():
+    """Bug 2.4.49: Line join barrier at MAX_INPUT_LINE_CHARS (Section 6.8).
+
+    Verifies Section 6.8: two lines summing to exactly 1,000 characters join
+    successfully on backspace and delete, while joins > 1000 are inhibited.
+    """
+    print("[*] Testing line join barrier at capacity (Bug 2.4.49)...")
+
+    # 1. Backspace join at exactly 1,000 characters (600 + 400 = 1000)
+    with tempfile.NamedTemporaryFile("w+", prefix="test_bs_join_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("A" * 600 + "\n" + "B" * 400 + "\n")
+        file1 = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", file1)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move to Line 2, Col 0
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+            os.write(master, b"\x01")
+            time.sleep(0.1)
+
+            # Press Backspace (0x08) to join
+            os.write(master, b"\x08")
+            time.sleep(0.2)
+
+            # Save via Ctrl+S and dismiss modal
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\n")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(file1, "r") as f:
+                lines = [line.rstrip("\r\n") for line in f.readlines()]
+            assert len(lines) == 1, (
+                f"Expected 1 joined line, got {len(lines)} lines"
+            )
+            assert len(lines[0]) == 1000, (
+                f"Expected joined line length 1000, got {len(lines[0])}"
+            )
+            assert lines[0] == ("A" * 600 + "B" * 400), (
+                "Joined content mismatch"
+            )
+    finally:
+        if os.path.exists(file1):
+            os.remove(file1)
+
+    # 2. Forward delete join at exactly 1,000 characters (500 + 500 = 1000)
+    with tempfile.NamedTemporaryFile("w+", prefix="test_del_join_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("X" * 500 + "\n" + "Y" * 500 + "\n")
+        file2 = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", file2)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move to end of Line 1 via Ctrl+E
+            os.write(master, b"\x05")
+            time.sleep(0.1)
+
+            # Press Delete (\x1b[3~) to pull up and join Line 2
+            os.write(master, b"\x1b[3~")
+            time.sleep(0.2)
+
+            # Save via Ctrl+S and dismiss modal
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\n")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(file2, "r") as f:
+                lines = [line.rstrip("\r\n") for line in f.readlines()]
+            assert len(lines) == 1, (
+                f"Expected 1 joined line, got {len(lines)} lines"
+            )
+            assert len(lines[0]) == 1000, (
+                f"Expected joined line length 1000, got {len(lines[0])}"
+            )
+            assert lines[0] == ("X" * 500 + "Y" * 500), (
+                "Joined content mismatch"
+            )
+    finally:
+        if os.path.exists(file2):
+            os.remove(file2)
+
+    # 3. Oversized join (> 1000 chars) must be inhibited (600 + 401 = 1001)
+    with tempfile.NamedTemporaryFile("w+", prefix="test_over_join_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("C" * 600 + "\n" + "D" * 401 + "\n")
+        file3 = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", file3)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move to Line 2 Col 0
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+            os.write(master, b"\x01")
+            time.sleep(0.1)
+
+            # Press Backspace - join should be inhibited
+            os.write(master, b"\x08")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q and decline save (n)
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(file3, "r") as f:
+                lines = [line.rstrip("\r\n") for line in f.readlines()]
+            assert len(lines) == 2, (
+                f"Expected 2 lines (join inhibited), got {len(lines)} lines"
+            )
+            print("    [+] Line join barrier at capacity verified [PASS]")
+    finally:
+        if os.path.exists(file3):
+            os.remove(file3)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3851,6 +4023,7 @@ def main():
     test_bug_2_4_46_unexpected_keys_in_modals()
     test_bug_2_4_47_direct_inplace_block_manipulation()
     test_bug_2_4_48_utf8_prohibition()
+    test_bug_2_4_49_line_join_boundary()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

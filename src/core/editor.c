@@ -213,7 +213,7 @@ void do_backspace(void)
                                                  MAX_ACTIVE_PAYLOAD);
         uint16_t join_col = prev_len;
 
-        if (prev_len + g_active_line_len < MAX_INPUT_LINE_CHARS) {
+        if (prev_len + g_active_line_len <= MAX_INPUT_LINE_CHARS) {
             memcpy(prev_buf + prev_len, g_active_line_buf, g_active_line_len);
             prev_len += g_active_line_len;
             prev_buf[prev_len] = '\0';
@@ -272,7 +272,7 @@ void do_delete(void)
                                                  next_buf,
                                                  MAX_ACTIVE_PAYLOAD);
 
-        if (g_active_line_len + next_len < MAX_INPUT_LINE_CHARS) {
+        if (g_active_line_len + next_len <= MAX_INPUT_LINE_CHARS) {
             memcpy(g_active_line_buf + g_active_line_len, next_buf, next_len);
             g_active_line_len += next_len;
             g_active_line_buf[g_active_line_len] = '\0';

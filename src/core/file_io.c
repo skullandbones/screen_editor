@@ -130,7 +130,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
             col = 0;
             continue;
         }
-        if (col + 1 < MAX_INPUT_LINE_CHARS) {
+        if (col < MAX_INPUT_LINE_CHARS) {
             line_buf[col++] = (char)c;
         }
     }

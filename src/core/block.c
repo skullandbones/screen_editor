@@ -305,7 +305,7 @@ int do_delete_block(void)
         }
         if (tail_len > tail_start) {
             uint16_t copy_cnt = tail_len - tail_start;
-            if (g_active_line_len + copy_cnt < MAX_INPUT_LINE_CHARS) {
+            if (g_active_line_len + copy_cnt <= MAX_INPUT_LINE_CHARS) {
                 memcpy(g_active_line_buf + g_active_line_len,
                        tail_buf + tail_start, copy_cnt);
                 g_active_line_len += copy_cnt;

@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 1 Defect Open (Bug 2.4.49).
+- **Status**: All 49 Defects Resolved (100% Conformance).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1430,7 +1430,7 @@ have been resolved and archived.
       and eliminated non-ASCII section symbols from core modules to guarantee
       strict 7-bit ASCII conformance. Validated via
       `test_bug_2_4_48_utf8_prohibition` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.49: Off-by-One Barrier on Line Joins at Maximum Capacity**:
+  - [x] **Bug 2.4.49: Off-by-One Barrier on Line Joins at Maximum Capacity**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:216` (`do_backspace`) and
       `src/core/editor.c:275` (`do_delete`), the combined length barrier check
@@ -1448,6 +1448,12 @@ have been resolved and archived.
     - *Required Fix*: Change `< MAX_INPUT_LINE_CHARS` to `<=
       MAX_INPUT_LINE_CHARS` in `src/core/editor.c:216, 275` and
       `src/core/block.c:317`.
+    - *Resolution*: Updated line join and tail join boundary checks from `<`
+      to `<=` in `src/core/editor.c` (`do_backspace` and `do_delete`),
+      `src/core/block.c` (`do_delete_block`), and `src/core/file_io.c`
+      (`file_read_op`), enabling successful joins and loading up to exactly
+      `MAX_INPUT_LINE_CHARS` (1,000 characters per Section 6.8). Validated via
+      `test_bug_2_4_49_line_join_boundary` in `tests/test_linux_native.py`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
