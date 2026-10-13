@@ -31,6 +31,12 @@ def test_next_cpm():
         f"Expected 47,872 or 47,360 bytes, got {size}"
     )
 
+    with open(path, "rb") as f:
+        first_byte = f.read(1)[0]
+    assert first_byte == 0xC3, (
+        f"Expected JP (0xC3) at entry 0x0100, got 0x{first_byte:02X}"
+    )
+
     # Run check_tpa.py
     cmd = [sys.executable, os.path.join(PROJECT_DIR, "check_tpa.py"), path]
     res = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_DIR)
@@ -39,7 +45,10 @@ def test_next_cpm():
     assert (
         "+2,048 bytes" in res.stdout or "+2,560 bytes" in res.stdout
     ), "Expected positive TPA headroom margin"
-    print(f"    [+] SE_NEXT.COM: {size} B, positive TPA headroom margin [PASS]")
+    print(
+        f"    [+] SE_NEXT.COM: {size} B, JP START at 0x0100, "
+        "positive TPA headroom margin [PASS]"
+    )
 
 
 def test_next_nex():
