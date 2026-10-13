@@ -523,7 +523,7 @@ class TestBuffer(unittest.TestCase):
         )
         self.assertEqual(MAX_LINE_CHARS, 1000)
         self.assertEqual(MAX_INPUT_LINE_CHARS, 1000)
-        self.assertEqual(LINE_JOIN_LIMIT, 120)
+        self.assertEqual(LINE_JOIN_LIMIT, 1000)
 
         # 1. calc_visual_col clamps at 1,000 chars
         line_1000 = "A" * 1000
@@ -548,22 +548,22 @@ class TestBuffer(unittest.TestCase):
         buf.update_pan(view_cols=120)
         self.assertEqual(buf.pan_col, 80)
 
-        # 3. Line joining is preserved at LINE_JOIN_LIMIT (120 chars)
+        # 3. Line joining is preserved at LINE_JOIN_LIMIT (1,000 chars)
         join_buf = DocumentBuffer()
-        join_buf.lines = ["A" * 70, "B" * 60]  # 70 + 60 = 130 > 120
+        join_buf.lines = ["A" * 600, "B" * 500]  # 600 + 500 = 1100 > 1000
         join_buf.cursor_row = 0
-        join_buf.cursor_col = 70
+        join_buf.cursor_col = 600
         self.assertFalse(join_buf.delete_char())
         join_buf.cursor_row = 1
         join_buf.cursor_col = 0
         self.assertFalse(join_buf.backspace())
 
-        # Join when sum <= 120
-        join_buf.lines = ["A" * 60, "B" * 60]  # 60 + 60 = 120
+        # Join when sum <= 1000
+        join_buf.lines = ["A" * 500, "B" * 500]  # 500 + 500 = 1000
         join_buf.cursor_row = 0
-        join_buf.cursor_col = 60
+        join_buf.cursor_col = 500
         self.assertTrue(join_buf.delete_char())
-        self.assertEqual(len(join_buf.lines[0]), 120)
+        self.assertEqual(len(join_buf.lines[0]), 1000)
 
         print(
             "[+] Step 14: 1,000-char capacity and 120x40 pan verified.",
@@ -650,6 +650,48 @@ class TestBuffer(unittest.TestCase):
 
         print(
             "[+] Step 16: Snap-forward tab alignment clamping verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_66_line_join_limit_1000_chars(self):
+        """Step 17: Verify line join barrier limit at 1,000 characters."""
+        print(
+            "[*] Step 17: Testing line join barrier limit at 1,000 chars...",
+            flush=True,
+        )
+        self.assertEqual(LINE_JOIN_LIMIT, 1000)
+        self.assertEqual(LINE_JOIN_LIMIT, MAX_INPUT_LINE_CHARS)
+
+        # Lines whose sum is 121 (previously blocked by 120 limit) now join
+        buf = DocumentBuffer()
+        buf.lines = ["A" * 60, "B" * 61]
+        buf.cursor_row = 0
+        buf.cursor_col = 60
+        self.assertTrue(buf.delete_char())
+        self.assertEqual(len(buf.lines[0]), 121)
+
+        # Backspace at col 0 joins up to 1000 chars
+        buf2 = DocumentBuffer()
+        buf2.lines = ["Hello " * 50, "World " * 50]  # 300 + 300 = 600
+        buf2.cursor_row = 1
+        buf2.cursor_col = 0
+        self.assertTrue(buf2.backspace())
+        self.assertEqual(len(buf2.lines[0]), 600)
+        self.assertEqual(buf2.cursor_row, 0)
+        self.assertEqual(buf2.cursor_col, 300)
+
+        # Combined length > 1,000 is rejected
+        buf3 = DocumentBuffer()
+        buf3.lines = ["A" * 700, "B" * 301]  # 700 + 301 = 1001 > 1000
+        buf3.cursor_row = 0
+        buf3.cursor_col = 700
+        self.assertFalse(buf3.delete_char())
+        buf3.cursor_row = 1
+        buf3.cursor_col = 0
+        self.assertFalse(buf3.backspace())
+
+        print(
+            "[+] Step 17: Line join barrier limit 1,000 chars verified.",
             flush=True,
         )
 

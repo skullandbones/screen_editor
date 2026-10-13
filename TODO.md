@@ -2303,7 +2303,7 @@ have been resolved and archived.
       `vis_acc < target_col` per Section 6.4, snapping forward to the character
       directly following the tab. Validated via Step 10 and Step 16 in
       `test_buffer.py` (`test_bug_2_7_65_snap_forward_tab_alignment`).
-  - [ ] **Bug 2.7.66: Premature Line Join Inhibition at 120 Columns**:
+  - [x] **Bug 2.7.66: Premature Line Join Inhibition at 120 Columns**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 6.6, 10.
     - *Issue*: Section 6.5, 6.6, and Section 10 specify that Backspace
       (at col 0) and Delete (at end of line) line joins are permitted up to
@@ -2312,8 +2312,11 @@ have been resolved and archived.
       `LINE_JOIN_LIMIT = 120`. Joins are prematurely blocked when combined
       length exceeds 120 columns even though line buffer capacity supports up
       to 1,000 characters (`MAX_LINE_CHARS = 1000`).
-    - *Action Required*: In `ports/python/se/buffer.py`, update
-      `LINE_JOIN_LIMIT = MAX_INPUT_LINE_CHARS` (1,000).
+    - *Resolution*: Updated `LINE_JOIN_LIMIT = MAX_INPUT_LINE_CHARS` (1,000)
+      in `buffer.py`, allowing line joins via Backspace and Delete up to the
+      mandated 1,000-character line capacity limit. Validated via Step 14
+      and Step 17 in `test_buffer.py`
+      (`test_bug_2_7_66_line_join_limit_1000_chars`).
   - [ ] **Bug 2.7.67: Inverted Default File Format & SE.CFG Persistence**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2; `TODO.md`
       Bug 2.1.15.

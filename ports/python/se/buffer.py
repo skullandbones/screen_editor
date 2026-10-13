@@ -9,7 +9,7 @@ from typing import List, Optional, Tuple
 MAX_LINE_CHARS = 1000
 MAX_INPUT_LINE_CHARS = 1000
 MAX_LINE_LENGTH = MAX_LINE_CHARS
-LINE_JOIN_LIMIT = 120
+LINE_JOIN_LIMIT = MAX_INPUT_LINE_CHARS
 
 
 def calc_visual_col(line: str, cur_col: int, tab_width: int = 8) -> int:
