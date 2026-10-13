@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 10 Defects Open (Bugs 2.4.40–2.4.49).
+- **Status**: Active / 9 Defects Open (Bugs 2.4.41–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1188,7 +1188,7 @@ have been resolved and archived.
       shortcuts while eliminating legacy WordStar diamond references. Validated
       via `test_bug_2_4_39_help_screen_canonical_layout` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.40: Missing Archetype D Selection Modal on Ctrl+P**:
+  - [x] **Bug 2.4.40: Missing Archetype D Selection Modal on Ctrl+P**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 8.3 (Archetype D), 10.
     - *Issue*: In `src/core/editor.c:568` and `src/core/ui_render.c:501`,
       pressing `Ctrl+P` directly opens the slot table of `plugin_manager_ui()`.
@@ -1200,6 +1200,13 @@ have been resolved and archived.
     - *Required Fix*: Implement `show_plugin_palette()` adhering to Archetype D
       in `src/core/plugin_mgr.c`, and route `KEY_CTRL_P` in `editor.c` and
       `ui_render.c` to this modal.
+    - *Resolution*: Implemented canonical Archetype D Plugin Palette modal
+      dialog (`show_plugin_palette`) in `src/core/plugin_mgr.c` featuring
+      50-col framing, active pointer (`> `), Up/Down navigation, direct digit
+      selection, Enter execution, and ESC cancellation. Bound `KEY_CTRL_P`
+      to this modal in `src/core/editor.c` and `src/core/ui_render.c`.
+      Validated via `test_bug_2_4_40_plugin_palette_modal` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.41: Tab Traversal Halts Early vs Snap-Forward Alignment**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
     - *Issue*: In `src/core/editor.c:485-497` (`adjust_col_to_target`), when

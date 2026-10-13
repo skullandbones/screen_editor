@@ -631,7 +631,7 @@ int editor_handle_key(int key)
         }
         break;
     }
-    case KEY_CTRL_P: plugin_manager_ui(); break;
+    case KEY_CTRL_P: show_plugin_palette(); break;
     case KEY_CTRL_W:
         if (modal_confirm_save_changes() == MODAL_RES_OK) {
             init_empty_document();

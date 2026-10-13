@@ -71,6 +71,27 @@ void modal_draw_row_centered(uint8_t row, uint8_t left,
     hal_console_putc('|');
 }
 
+void modal_draw_row_left(uint8_t row, uint8_t left,
+                         uint8_t width, const char *str)
+{
+    size_t len = str ? strlen(str) : 0;
+    uint8_t interior_w = (width > 2) ? (width - 2) : 0;
+    size_t i;
+
+    if (len > interior_w) {
+        len = interior_w;
+    }
+    hal_console_locate(row, left);
+    hal_console_putc('|');
+    for (i = 0; i < len; i++) {
+        hal_console_putc(str[i]);
+    }
+    for (i = len; i < interior_w; i++) {
+        hal_console_putc(' ');
+    }
+    hal_console_putc('|');
+}
+
 void modal_draw_frame(uint8_t top, uint8_t left,
                       uint8_t width, uint8_t height,
                       const char *title)

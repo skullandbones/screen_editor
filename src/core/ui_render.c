@@ -512,8 +512,11 @@ void show_splash_screen(void)
         } else if (k == 'm' || k == 'M') {
             show_mem_info_screen();
             need_render = 1;
-        } else if (k == 'p' || k == 'P' || k == KEY_CTRL_P) {
+        } else if (k == 'p' || k == 'P') {
             plugin_manager_ui();
+            need_render = 1;
+        } else if (k == KEY_CTRL_P) {
+            show_plugin_palette();
             need_render = 1;
         } else if (k == '?' || k == 'h' || k == 'H' || k == KEY_CTRL_K) {
             show_help_screen();
@@ -601,7 +604,7 @@ void show_help_screen(void)
             /* Wait for user keystroke */
         }
         if (k == KEY_CTRL_P) {
-            plugin_manager_ui();
+            show_plugin_palette();
             continue;
         }
         break;

@@ -2944,6 +2944,96 @@ def test_bug_2_4_39_help_screen_canonical_layout():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_40_plugin_palette_modal():
+    """Verify Archetype D Plugin Palette modal on Ctrl+P (Bug 2.4.40)."""
+    print("[*] Testing Archetype D Plugin Palette on Ctrl+P (2.4.40)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_palette.txt")
+    with open(test_file, "w") as f:
+        f.write("Hello world\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Press Ctrl+P (0x10) to open Plugin Palette modal
+            os.write(master, b"\x10")
+            time.sleep(0.2)
+            modal_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Plugin Palette" in modal_out, (
+                f"Missing 'Plugin Palette' title:\n{modal_out}"
+            )
+            assert "+------------------------------------------------+" in (
+                modal_out
+            ), f"Missing 50-col frame border:\n{modal_out}"
+            assert "Select a plugin to execute:" in modal_out, (
+                f"Missing prompt in palette:\n{modal_out}"
+            )
+            assert "> 1. ROT13" in modal_out, (
+                f"Missing active selector on ROT13:\n{modal_out}"
+            )
+            assert "WORDCNT" in modal_out and "BEAUTIFY" in modal_out, (
+                f"Missing plugin entries:\n{modal_out}"
+            )
+            assert "[Up/Down]=Select" in modal_out, (
+                f"Missing navigation footer:\n{modal_out}"
+            )
+
+            # Move selection down via Down arrow (ESC [ B)
+            os.write(master, b"\x1b[B")
+            time.sleep(0.2)
+            down_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "> 2. WORDCNT" in down_out, (
+                f"Expected selection moved to WORDCNT:\n{down_out}"
+            )
+
+            # Cancel via ESC
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Re-open via Ctrl+P and execute ROT13 via Enter
+            os.write(master, b"\x10")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            rot_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            # ROT13 of "Hello" is "Uryyb"
+            assert "Uryyb" in rot_out, (
+                f"Expected ROT13 transformation 'Uryyb' in editor:\n{rot_out}"
+            )
+
+            # Exit cleanly via Ctrl+Q then 'n' to discard
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.write(master, b"n")
+            time.sleep(0.1)
+            os.close(master)
+            os.waitpid(pid, 0)
+            print("    [+] Archetype D Plugin Palette verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2988,6 +3078,7 @@ def main():
     test_bug_2_4_37_config_screen_interactive()
     test_bug_2_4_38_default_tab_width()
     test_bug_2_4_39_help_screen_canonical_layout()
+    test_bug_2_4_40_plugin_palette_modal()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
