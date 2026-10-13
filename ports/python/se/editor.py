@@ -362,14 +362,16 @@ class Editor:
     def action_help(self):
         """Display full-screen Help workspace (17 lines, 70 cols)."""
         lines = [
-            "SE.COM — EDITOR MODE KEYS".center(70),
+            "SE - EDITOR MODE KEYS".center(70),
             "",
             "  Cursor Navigation:".ljust(38) + "Block Operations:",
             "    Arrows / ANSI VT100".ljust(38) + "Ctrl+B: Toggle Block",
-            "    Ctrl+A / Ctrl+E: Home / End".ljust(38) + "Ctrl+C: Copy Block",
-            "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38) + "Ctrl+X: Cut Block",
-            "    Ctrl+U / Ctrl+V: Page Up / Down".ljust(38)
-            + "Ctrl+V: Paste Block",
+            "    Ctrl+A / Ctrl+E: Home / End".ljust(38)
+            + "Ctrl+C: Copy Block to Cursor",
+            "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38)
+            + "Ctrl+X: Move Block to Cursor",
+            "    PgUp / PgDn : Page Up / Down".ljust(38)
+            + "Ctrl+D: Delete Block",
             "",
             "  Search & Replace:".ljust(38) + "File & System:",
             "    Ctrl+F: Find Text".ljust(38) + "Ctrl+S: Save File",

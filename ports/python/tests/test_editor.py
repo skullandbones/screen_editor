@@ -2498,6 +2498,49 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_70_canonical_help_screen_keys(self):
+        """Step 54: Verify canonical Help screen keys and ASCII title."""
+        print(
+            "[*] Step 54: Testing canonical Help screen keys & title...",
+            flush=True,
+        )
+        rendered_lines = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines.extend(
+                lines
+            )
+        )
+        self.editor.terminal.get_key = lambda timeout=None: " "
+        self.editor.action_help()
+
+        # 1. Height and width
+        self.assertEqual(len(rendered_lines), 17)
+        self.assertEqual(max(len(ln) for ln in rendered_lines), 70)
+
+        help_text = "\n".join(rendered_lines)
+
+        # 2. ASCII title without Unicode em-dash
+        self.assertIn("SE - EDITOR MODE KEYS", help_text)
+        self.assertNotIn("—", help_text)
+
+        # 3. Canonical block operations
+        self.assertIn("Ctrl+C: Copy Block to Cursor", help_text)
+        self.assertIn("Ctrl+X: Move Block to Cursor", help_text)
+        self.assertIn("Ctrl+D: Delete Block", help_text)
+
+        # 4. Canonical navigation
+        self.assertIn("PgUp / PgDn : Page Up / Down", help_text)
+
+        # 5. Obsolete references removed
+        self.assertNotIn("Paste Block", help_text)
+        self.assertNotIn("Cut Block", help_text)
+        self.assertNotIn("Ctrl+U / Ctrl+V", help_text)
+
+        print(
+            "[+] Step 54: Canonical Help screen keys & title verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

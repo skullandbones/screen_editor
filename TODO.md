@@ -2372,7 +2372,7 @@ have been resolved and archived.
       restricting full workspace redraws to initial entry, pagination,
       and pattern updates. Validated via Step 53 in `test_editor.py`
       (`test_bug_2_7_69_directory_browser_in_place_prompt_echoing`).
-  - [ ] **Bug 2.7.70: Obsolete Help Screen Key Mappings & Unicode Em-Dash**:
+  - [x] **Bug 2.7.70: Obsolete Help Screen Key Mappings & Unicode Em-Dash**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.3, 10; `TODO.md`
       Bug 2.4.39.
     - *Issue*: Section 7.3 specifies the canonical Help Screen layout:
@@ -2384,9 +2384,13 @@ have been resolved and archived.
       `Ctrl+V: Paste Block`, `Ctrl+C: Copy Block` (without target),
       `Ctrl+X: Cut Block`, and uses Unicode em-dash in header:
       `"SE.COM — EDITOR MODE KEYS"`.
-    - *Action Required*: In `ports/python/se/editor.py:368-384`, update
-      `action_help` to canonical Help layout adhering to direct block operation
-      semantics and ASCII hyphen encoding.
+    - *Resolution*: Updated `action_help()` in `editor.py` to canonical Help
+      Screen key mappings (`PgUp / PgDn : Page Up / Down`,
+      `Ctrl+C: Copy Block to Cursor`, `Ctrl+X: Move Block to Cursor`,
+      `Ctrl+D: Delete Block`), removed obsolete paste/cut mappings, and
+      conformed title to ASCII hyphen (`SE - EDITOR MODE KEYS`). Validated
+      via Step 19 and Step 54 in `test_editor.py`
+      (`test_bug_2_7_70_canonical_help_screen_keys`).
   - [ ] **Bug 2.7.71: Startup Screen Geometry Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 13.2; `TODO.md`
       Bug 2.1.2.
