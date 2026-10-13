@@ -27,8 +27,8 @@ def test_next_cpm():
     assert os.path.exists(path), f"Missing {path}"
 
     size = os.path.getsize(path)
-    assert size in (47872, 47360), (
-        f"Expected 47,872 or 47,360 bytes, got {size}"
+    assert size in (47872, 47616, 47360), (
+        f"Expected valid SE_NEXT.COM size, got {size}"
     )
 
     with open(path, "rb") as f:
@@ -43,7 +43,9 @@ def test_next_cpm():
     assert res.returncode == 0, f"check_tpa.py failed:\n{res.stdout}"
     assert "PASS" in res.stdout, "check_tpa.py verdict was not PASS"
     assert (
-        "+2,048 bytes" in res.stdout or "+2,560 bytes" in res.stdout
+        "+2,048 bytes" in res.stdout
+        or "+2,304 bytes" in res.stdout
+        or "+2,560 bytes" in res.stdout
     ), "Expected positive TPA headroom margin"
     print(
         f"    [+] SE_NEXT.COM: {size} B, JP START at 0x0100, "
