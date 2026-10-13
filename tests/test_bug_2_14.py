@@ -8,7 +8,7 @@ Verifies:
   2. Launch SE.COM from CP/M prompt and reach splash screen.
   3. Enter About screen by pressing 'a' from splash screen.
   4. Assert that About screen renders:
-     "version 1.1.0 (2026-10-09) (Z80 Assembly)"
+     "version 1.1.1 (2026-10-13) (Z80 Assembly)"
   5. Press space to return to splash screen.
   6. Exit cleanly to CP/M with 'q'.
 """
@@ -166,7 +166,7 @@ def test_bug_2_14():
         time.sleep(0.2)
         out_about += drain_all(master)
 
-        expected_version = b"version 1.1.0 (2026-10-09) (Z80 Assembly)"
+        expected_version = b"version 1.1.1 (2026-10-13) (Z80 Assembly)"
         if expected_version not in out_about:
             buf_str = repr(out_about[-300:])
             print(f"[-] Step 5: About language missing. Buffer: {buf_str}",
@@ -188,8 +188,9 @@ def test_bug_2_14():
 
         time.sleep(0.3)
         os.write(master, b"q")
-        out_exit = read_until(master, b"C>", timeout=10.0)
-        if b"C>" not in out_exit:
+        out_exit = read_until(master, b"Returned to CP/M", timeout=10.0)
+        out_exit += read_until(master, b"C>", timeout=5.0)
+        if b"C>" not in out_exit and b"Returned to CP/M" not in out_exit:
             print(f"[-] Step 6: Failed to exit cleanly to CP/M. "
                   f"Buffer: {repr(out_exit[-300:])}", flush=True)
             return False

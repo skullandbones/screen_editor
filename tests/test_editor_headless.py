@@ -4084,7 +4084,7 @@ def test_se_execution(use_sec=False):
         if b"SE - Screen Editor" not in out_s65_about:
             print(f"[-] Step 65 failed: 'SE - Screen Editor' title not found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        if b"version 1.1.0" not in out_s65_about:
+        if b"version 1.1.1" not in out_s65_about:
 
             print(f"[-] Step 65 failed: Version details not found on About "
                   f"screen: {repr(out_s65_about)}", flush=True)
