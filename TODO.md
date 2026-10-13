@@ -2334,7 +2334,7 @@ have been resolved and archived.
       `self.config.set("FORMAT", ...)` in `editor.py` so line ending format is
       not persisted to `SE.CFG`. Validated via Step 52 in `test_editor.py`
       (`test_bug_2_7_67_default_lf_and_decouple_config_save`).
-  - [ ] **Bug 2.7.68: Trailing Byte Leakage on Unrecognized Escape Sequences**:
+  - [x] **Bug 2.7.68: Trailing Byte Leakage on Unrecognized Escape Sequences**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10; `TODO.md` Bug 2.1.13,
       Bug 2.4.32.
     - *Issue*: Section 10 Anti-Leakage Invariant dictates that if an incomplete
@@ -2348,9 +2348,11 @@ have been resolved and archived.
       `c3` is `'5'`. Because `c3 != '~'`, `get_key()` immediately returns
       `KEY_ESC`, leaving trailing `~` in stdin, which leaks as a normal typed
       character on the next keystroke and corrupts the document buffer.
-    - *Action Required*: In `ports/python/se/terminal.py`, update `get_key()`
-      to drain and discard remaining sequence characters until a valid
-      terminator (`~`, `A`–`Z`, `a`–`z`) or timeout occurs.
+    - *Resolution*: Implemented `_drain_csi()` in `terminal.py` draining all
+      intermediate parameter bytes and sequence terminators (0x40..0x7E) upon
+      unrecognized or extended CSI escape sequences, preventing trailing byte
+      leakage into console input. Validated via Step 10 in `test_terminal.py`
+      (`test_bug_2_7_68_drain_unrecognized_escape_sequences`).
   - [ ] **Bug 2.7.69: Full-Screen Workspace Redraw on Typing Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
       `TODO.md` Bug 2.8.1.
