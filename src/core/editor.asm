@@ -1874,9 +1874,13 @@ DO_DEL_JOIN_OK:
 	; Join CUR_DOC_ROW and CUR_DOC_ROW + 1
 	LD BC,(CUR_DOC_ROW)		; BC = upper line (CUR_DOC_ROW)
 	CALL JOIN_TWO_LINES
-	JR C,DO_DEL_JOIN_FAIL		; If combined length > 120, reject
+	JR C,DO_DEL_JOIN_FAIL		; If combined length > 1000, reject
 
 	; Join succeeded: cursor remains at CUR_DOC_ROW, CUR_COL
+	CALL CHECKOUT_ACTIVE_LINE
+	CALL CALC_VISUAL_COL
+	LD (TARGET_COL),HL
+
 	LD A,1
 	LD (NEED_SCREEN_RENDER),A
 	RET

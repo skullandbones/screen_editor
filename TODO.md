@@ -25,9 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 4 Open
+- **Status**: Active / 3 Open
   (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
-  Bugs 2.1.2, 2.1.14, 2.1.18 Fixed).
+  Bugs 2.1.2, 2.1.14, 2.1.16, 2.1.18 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -224,7 +224,7 @@ have been resolved and archived.
       `PLUGIN`), which has no format option. `docs/UI_UX_DESIGN.md` has been
       updated to remove `FORMAT` from `SE.CFG` and detail per-document line
       ending handling in Section 7.7.
-  - [ ] **Bug 2.1.16: Forward Deletion Line Join Sticky Target Column Update**:
+  - [x] **Bug 2.1.16: Forward Deletion Line Join Target Column [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
