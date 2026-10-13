@@ -25,7 +25,8 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 10 Open (Bugs 2.1.3, 2.1.7-2.1.12, 2.1.15 Rejected).
+- **Status**: Active / 11 Open
+  (Bugs 2.1.3, 2.1.5, 2.1.7-2.1.12, 2.1.15 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
@@ -72,27 +73,26 @@ have been resolved and archived.
       canonical 17-line, 70-column two-column tabular layout, centered
       vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
       universal status bar presence on Row 24.
-  - [ ] **Bug 2.1.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+  - [x] **Bug 2.1.5: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
-    - *Issue*: `RENDER_SPLASH` in `src/se.asm` renders a 21-line menu
-      structure with fixed menu items (`type [E] or [Enter] to edit...`),
-      lacking the canonical 14-line centered presentation (`:e to edit`,
-      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
-      `:? for help`, `:q to quit`).
-    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
-      `src/se.asm` to match the canonical 14-line, 50-column Tier 1 splash
-      layout specified in Section 7.2.
-  - [ ] **Bug 2.1.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The demand to replace `SE.COM`'s 21-line splash menu with an
+      obsolete 14-line (`:e to edit`, `:o to open`) presentation was based on an
+      early conceptual wireframe. `docs/UI_UX_DESIGN.md` Section 7.2 explicitly
+      codifies canonical `SE.COM`'s 21-line centered menu (`type [E] or [Enter]
+      to edit...`) as the authoritative splash screen template across ALL SE
+      variants, and expressly prohibits queries such as `Enter option: _`.
+      `SE.COM` already implements this canonical 21-line template.
+  - [ ] **Bug 2.1.6: Tier 2 Goto Line Modal Footer Action Button Formatting**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: In `DO_GOTO_LINE_UI` (`src/core/editor.asm`), dialog width is
-      50 columns instead of canonical 52 columns. Footer buttons display
-      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
-      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
-      `src/core/search.asm` exhibit similar non-standard widths.
-    - *Required Fix*: Standardize CP/M modal pop-up routines in
-      `src/core/editor.asm` and `src/core/search.asm` to strictly conform to
-      Archetype C (52x8 box, `+---+` title divider,
-      `[Enter]=Confirm      [ESC]=Cancel` footer, bracketed input `[  ]`).
+    - *Issue*: In `src/core/plugin_mgr.asm:4179` (`STR_GOTO_POPUP_KEYS`), the
+      footer action buttons display `[Enter]=Goto Line     [ESC]=Cancel` instead
+      of the canonical Archetype C footer `[Enter]=Confirm      [ESC]=Cancel`
+      specified in Section 8.3. (The 50x7 modal framing and title divider
+      `+---+` in `SE.COM` already strictly adhere to Archetype C dimensions).
+    - *Required Fix*: In `src/core/plugin_mgr.asm:4179`, update
+      `STR_GOTO_POPUP_KEYS` to display `[Enter]=Confirm      [ESC]=Cancel`,
+      matching canonical Archetype C action button phrasing.
   - [x] **Bug 2.1.7: Clipboard Paste & Buffer Primitives [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9, 10.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -256,6 +256,33 @@ have been resolved and archived.
       `STR_SPLASH_CMDS` to display `type [1] set 80x24` and `type [2] set
       120x40`. In `src/se.asm:578-584`, update `SPLASH_LOOP` to dispatch
       `'1'` to `DO_SET_80X24` and `'2'` to `DO_SET_120X40`.
+  - [ ] **Bug 2.1.19: Search & Replace 120-Character Line Length Barrier**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
+    - *Issue*: In `src/core/search.asm:2386-2400` (`DO_REPLACE_CURRENT`), after
+      computing replacement line length `L' = C - B + E`, the code executes
+      `CP MAX_LINE_STRIDE-7` (121) using an 8-bit comparison. If the resulting
+      line exceeds 120 characters, it halts replacement, calls
+      `SHOW_POPUP_LINE_TOO_LONG`, and displays `Line > 120 chars - skipped.`
+      from `STR_POPUP_TOO_LONG_MSG1`. Per Section 6.6, all SE variants support
+      line lengths up to `MAX_INPUT_LINE_CHARS` (1,000 characters), supported by
+      horizontal panning (`[Pan +40]`). Limiting Search & Replace to 120
+      characters truncates replacements on long lines and creates an artificial
+      barrier contradicting the 1,000-character standard.
+    - *Required Fix*: Update `DO_REPLACE_CURRENT` in `src/core/search.asm` to
+      evaluate line capacity using a 16-bit comparison against
+      `MAX_INPUT_LINE_CHARS` (1,000 characters) and update line strings.
+  - [ ] **Bug 2.1.20: Deprecated Paging Keys (Ctrl+U / Ctrl+V) in Editor**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, 10.1, 10.2.
+    - *Issue*: In `src/se.asm:1253-1259`, `MAIN_LOOP` continues to trap
+      `KEY_CTRL_U` (`0x15`) and `KEY_CTRL_V` (`0x16`) and dispatch them to
+      `PAGE_UP` and `PAGE_DOWN`. In `plugins/help.asm:383, 385`, `STR_HELP_BODY`
+      continues to advertise `Ctrl+U / PgUp` and `Ctrl+V / PgDn`. Per Section
+      9.3 and 10.1, legacy `Ctrl+U` and `Ctrl+V` motion aliases are strictly
+      removed across all variants, and directional page navigation is handled
+      exclusively via dedicated `PgUp` and `PgDn` keys.
+    - *Required Fix*: Remove `Ctrl+U` and `Ctrl+V` key handlers from `MAIN_LOOP`
+      in `src/se.asm:1253-1259` and update `STR_HELP_BODY` in `plugins/help.asm`
+      to list only dedicated `PgUp` and `PgDn` keys.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
