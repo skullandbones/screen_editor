@@ -40,8 +40,9 @@ HAL_KEYBOARD_INIT:
 ; HAL_KEYBOARD_TRANSLATE: Translate NextCPM raw scan code to editor keycode
 ;
 ; Purpose:
-;   Normalizes NextCPM keyboard codes into editor internal control codes
-;   (e.g. mapping Delete to destructive Backspace or Delete forward).
+;   Normalizes NextCPM keyboard codes into editor internal control codes.
+;   Preserves NEXT_KEY_DELETE (0x7F / KEY_DEL) without normalizing to
+;   Backspace (0x08), enabling forward deletion and block deletion.
 ;
 ; Inputs:
 ;   A = Raw ASCII character / scan code from GET_KEY.
@@ -53,8 +54,5 @@ HAL_KEYBOARD_INIT:
 ;   Preserves BC, DE, HL; modifies AF.
 ;------------------------------------------------------------------------------
 HAL_KEYBOARD_TRANSLATE:
-	CP NEXT_KEY_DELETE
-	RET NZ
-	; Normalize 0x7F (Delete) to 0x08 (Backspace) if desired
-	LD A,KEY_BACKSPACE
+	; Preserve 0x7F (NEXT_KEY_DELETE) for forward and block deletion
 	RET

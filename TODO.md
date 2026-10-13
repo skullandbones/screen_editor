@@ -294,8 +294,8 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 7 Open
-  (Bugs 2.2.2 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 6 Open
+  (Bugs 2.2.2, 2.2.7 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -344,7 +344,7 @@ have been resolved and archived.
       already implements the canonical 50x7 dimensions, and the explicit
       action footer `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
       (Bug 2.1.6 Rejected).
-  - [ ] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
+  - [x] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.1.
     - *Issue*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm:56-60`,
       `HAL_KEYBOARD_TRANSLATE` intercepts `NEXT_KEY_DELETE` (`0x7F`) and
@@ -356,6 +356,12 @@ have been resolved and archived.
     - *Required Fix*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm`, preserve
       `0x7F` (`KEY_DELETE`) so that the editor engine distinguishes forward
       deletion and block range deletion from destructive backward deletion.
+    - *Resolution*: Preserved `0x7F` (`NEXT_KEY_DELETE` / `KEY_DEL`) in
+      `HAL_KEYBOARD_TRANSLATE` (`src/hal/next_cpm/hal_nextcpm_keyboard.asm`)
+      and hooked translation in `GET_KEY`
+      (`src/hal/next_cpm/hal_nextcpm_console.asm`), distinguishing forward
+      deletion and block deletion from Backspace.
+      Validated via `tests/test_bug_2_2_7.py`.
   - [ ] **Bug 2.2.8: Memory Screen Queries RomWBW HBIOS Under NextCPM**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next_cpm.asm:3480`, `SHOW_MEM_INFO_SCREEN` invokes
