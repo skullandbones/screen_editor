@@ -25,21 +25,23 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 10 Open (Bugs 2.1.3, 2.1.7-2.1.12, 2.1.15 Rejected).
+- **Status**: Active / 7 Open
+  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.1.1: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: Status bar Field 4 is overwritten with free memory
-      (`Free: 64 KB |`) on splash screen, with selection metrics
-      (`Sel: 0 chars |`) when block mode is active, and with `[Pan +40] |`
-      when horizontally panned, violating the universal `^K: Editor keys |`
-      invariant. Field 3 displays `CP/M  |` with slash rather than `CPM   |`.
-      Field 2 in 80x24 mode prints with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm`
-      to canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
+  - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`src/core/ui_render.asm:998-1244`)
+      establishes that Field 4 is canonically defined as a dynamic 15-character
+      contextual slot (+ " | " separator) operating under a strict priority
+      hierarchy (Free Memory on splash/plugin, Block Selection metrics, Pan
+      offset, Overwrite mode, or default Help Key Hint). Anti-Pattern #1
+      (Status Bar Squatting) governs interactive input loops on row 24, not
+      contextual status indicators. Appending mode tags to Field 5 would
+      violate Field 5's fixed 22-character jitter-free coordinate budget and
+      cause line wrapping (> 78 cols). Furthermore, Field 3 `CP/M  |` is the
+      canonical format string in Section 4.3, and Field 2 uses 1 leading space
+      (` 80x24 | `) matching `120x40 | ` width.
   - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
@@ -60,39 +62,42 @@ have been resolved and archived.
       is excessively invasive to established SE.COM keymappings. Cursor
       navigation remains fully supported via ANSI/VT100 arrow keys and
       Home/End (`Ctrl+A`/`Ctrl+E`).
-  - [ ] **Bug 2.1.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+  - [x] **Bug 2.1.4: Tier 1 Help Screen Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: In `plugins/help.asm`, content height is 22 lines, leaving 0
-      top margin rows on an 80x24 screen, violating 1-based vertical centering.
-      Rows 1 and 3 render ASCII banner rules (`=============================`)
-      and Row 21 renders `-----------------------------`. Status bar Field 4
-      displays `Free: 63 KB |`. Help text lists obsolete/colliding non-WordStar
-      keybindings.
-    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
-  - [ ] **Bug 2.1.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`plugins/help.asm` / `HELP.OVL`)
+      confirms that the 22-line Help screen is the authoritative reference
+      template across all SE variants. The proposed 17-line layout was an
+      obsolete early wireframe containing duplicated keys (`Ctrl+V`),
+      fictitious commands (`Ctrl+Y`), and redundant title prefixes
+      (`SE.COM — `). In 80x24 mode, the 22-line block fits within the 23
+      available text rows (0 top margin rows, 1 bottom margin row of `~` at
+      Row 23, and status bar at Row 24). In 120x40 mode, it is symmetrically
+      centered with 8 top and 9 bottom margin rows and 20 columns of horizontal
+      padding. Banner rules `=` and `-` adhere to Tier 1 framing standards.
+      Field 4 canonically displays free memory during overlay execution per
+      Section 4.3.
+  - [x] **Bug 2.1.5: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
-    - *Issue*: `RENDER_SPLASH` in `src/se.asm` renders a 21-line menu
-      structure with fixed menu items (`type [E] or [Enter] to edit...`),
-      lacking the canonical 14-line centered presentation (`:e to edit`,
-      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
-      `:? for help`, `:q to quit`).
-    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
-      `src/se.asm` to match the canonical 14-line, 50-column Tier 1 splash
-      layout specified in Section 7.2.
-  - [ ] **Bug 2.1.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The demand to replace `SE.COM`'s 21-line splash menu with an
+      obsolete 14-line (`:e to edit`, `:o to open`) presentation was based on an
+      early conceptual wireframe. `docs/UI_UX_DESIGN.md` Section 7.2 explicitly
+      codifies canonical `SE.COM`'s 21-line centered menu (`type [E] or [Enter]
+      to edit...`) as the authoritative splash screen template across ALL SE
+      variants, and expressly prohibits queries such as `Enter option: _`.
+      `SE.COM` already implements this canonical 21-line template.
+  - [x] **Bug 2.1.6: Goto Line Modal Footer Buttons [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: In `DO_GOTO_LINE_UI` (`src/core/editor.asm`), dialog width is
-      50 columns instead of canonical 52 columns. Footer buttons display
-      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
-      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
-      `src/core/search.asm` exhibit similar non-standard widths.
-    - *Required Fix*: Standardize CP/M modal pop-up routines in
-      `src/core/editor.asm` and `src/core/search.asm` to strictly conform to
-      Archetype C (52x8 box, `+---+` title divider,
-      `[Enter]=Confirm      [ESC]=Cancel` footer, bracketed input `[  ]`).
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Analysis of `SE.COM` (`src/core/editor.asm:1466-1518` and
+      `src/core/plugin_mgr.asm:4170-4180`) confirms that `[Enter]=Goto Line
+      [ESC]=Cancel` is the canonical footer phrasing. The draft wireframe in
+      Section 8.3 previously rendered an inaccurate 8-row box with generic
+      `[Enter]=Confirm`. Archetype C modals consistently use specific action
+      verbs (`[Enter]=Find` for Find Text, `[Enter]=Replace` for Replace, and
+      `[Enter]=Goto Line` for Goto Line). Section 8.3 has been codified to
+      match `SE.COM`'s canonical 50x7 layout and explicit footer.
   - [x] **Bug 2.1.7: Clipboard Paste & Buffer Primitives [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9, 10.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -256,6 +261,32 @@ have been resolved and archived.
       `STR_SPLASH_CMDS` to display `type [1] set 80x24` and `type [2] set
       120x40`. In `src/se.asm:578-584`, update `SPLASH_LOOP` to dispatch
       `'1'` to `DO_SET_80X24` and `'2'` to `DO_SET_120X40`.
+  - [ ] **Bug 2.1.19: Search & Replace 120-Character Line Length Barrier**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
+    - *Issue*: In `src/core/search.asm:2386-2400` (`DO_REPLACE_CURRENT`), after
+      computing replacement line length `L' = C - B + E`, the code executes
+      `CP MAX_LINE_STRIDE-7` (121) using an 8-bit comparison. If the resulting
+      line exceeds 120 characters, it halts replacement, calls
+      `SHOW_POPUP_LINE_TOO_LONG`, and displays `Line > 120 chars - skipped.`
+      from `STR_POPUP_TOO_LONG_MSG1`. Per Section 6.6, all SE variants support
+      line lengths up to `MAX_INPUT_LINE_CHARS` (1,000 characters), supported by
+      horizontal panning (`[Pan +40]`). Limiting Search & Replace to 120
+      characters truncates replacements on long lines and creates an artificial
+      barrier contradicting the 1,000-character standard.
+    - *Required Fix*: Update `DO_REPLACE_CURRENT` in `src/core/search.asm` to
+      evaluate line capacity using a 16-bit comparison against
+      `MAX_INPUT_LINE_CHARS` (1,000 characters) and update line strings.
+  - [x] **Bug 2.1.20: Deprecated Paging Keys (Ctrl+U / Ctrl+V) [REJECTED]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Section 7.3 explicitly codifies `Ctrl+U / PgUp` (Page Up)
+      and `Ctrl+V / PgDn` (Page Down) in the canonical 22-line Help Screen
+      template across all SE variants. On standard serial terminals, VT100
+      consoles, and retro keyboards lacking dedicated PgUp and PgDn keys,
+      `Ctrl+U` and `Ctrl+V` are standard paging control keys. Removing them
+      from `SE.COM` would break terminal accessibility and contradict Section
+      7.3. Section 10 has been updated to include `Ctrl+U` and `Ctrl+V` as
+      paging aliases while reaffirming the prohibition of clipboard paste.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
@@ -263,20 +294,20 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 12 Open (Bugs 2.2.2 Resolved, 2.2.3 Rejected).
+- **Status**: Active / 7 Open
+  (Bugs 2.2.2 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: Status bar Field 4 displays free memory on splash, selection
-      metrics on block mode, and pan offset when panned in `se_next_cpm.asm`,
-      violating the universal `^K: Editor keys |` invariant. Field 3 displays
-      `CP/M  |` with slash rather than `CPM   |`. Field 2 in 80x24 mode prints
-      with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm` to
-      canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
+  - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1 and Bug 2.3.2. Status bar Field 4 is
+      canonically defined as a dynamic 15-character contextual slot (+ " | ")
+      operating under a strict priority hierarchy (Free Memory, Block Selection
+      metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
+      indicators belong strictly in Field 4; appending variable-length tags to
+      Field 5 violates Field 5's fixed-width jitter-free coordinate budget and
+      exceeds terminal column limits (Anti-Pattern #3). Furthermore, `CP/M  |`
+      (with slash) is the canonical format string in Section 4.3 and 13.2.
   - [x] **Bug 2.2.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: Next CP/M profile defaults to 120x40 instead of standard 80x24.
@@ -286,36 +317,33 @@ have been resolved and archived.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
     - *Rationale*: Dropped support for WordStar diamond navigation in
       `SE_NEXT.COM` to preserve established SE.COM keymappings.
-  - [ ] **Bug 2.2.4: Tier 1 Centering & Tilde Violations on Help Screen**:
+  - [x] **Bug 2.2.4: Tier 1 Help Screen Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: In `plugins/help.asm`, content height is 22 lines with 0 top
-      margin rows on an 80x24 screen, rendering ASCII banner rules and
-      displaying obsolete keybindings.
-    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
-  - [ ] **Bug 2.2.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.4. The 22-line Help screen template in
+      `plugins/help.asm` is the authoritative reference design codified in
+      Section 7.3. The 17-line layout was an obsolete conceptual mockup.
+  - [x] **Bug 2.2.5: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
-    - *Issue*: `RENDER_SPLASH` in `src/se_next_cpm.asm` renders a 21-line menu
-      structure with fixed menu items (`type [E] or [Enter] to edit...`),
-      lacking the canonical 14-line centered presentation (`:e to edit`,
-      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
-      `:? for help`, `:q to quit`).
-    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
-      `src/se_next_cpm.asm` to match the canonical 14-line, 50-column Tier 1
-      splash layout specified in Section 7.2.
-  - [ ] **Bug 2.2.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The demand to replace `SE_NEXT.COM`'s splash menu with an
+      obsolete 14-line (`:e to edit`, `:o to open file`) layout was based on an
+      early conceptual wireframe. `docs/UI_UX_DESIGN.md` Section 7.2 explicitly
+      codifies canonical `SE.COM`'s 21-line centered menu (`type [E] or [Enter]
+      to edit...`) as the authoritative splash screen template across ALL SE
+      variants, and expressly prohibits colon commands and queries such as
+      `Enter option: _`. Rejected for parity with Bug 2.1.5.
+  - [x] **Bug 2.2.6: Tier 2 Modal Framing (52x8 Box) [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: In `DO_GOTO_LINE_UI` (`src/core/editor.asm`), dialog width is
-      50 columns instead of canonical 52 columns. Footer buttons display
-      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
-      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
-      `src/core/search.asm` exhibit similar non-standard widths.
-    - *Required Fix*: Standardize modal pop-up routines in `src/core/editor.asm`
-      and `src/core/search.asm` to strictly conform to Archetype C (52x8 box,
-      `+---+` title divider, `[Enter]=Confirm      [ESC]=Cancel` footer,
-      bracketed input `[  ]`).
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that Archetype C input modals must use a 52-column
+      width and 52x8 framing is factually incorrect and contrary to
+      `docs/UI_UX_DESIGN.md` Section 8.3. The specification explicitly
+      standardizes all Archetype C input modals (Goto Line, Find Text, Overwrite
+      File) to 50 columns by 7 rows (`50 cols x 7 rows`). `src/core/editor.asm`
+      already implements the canonical 50x7 dimensions, and the explicit
+      action footer `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
+      (Bug 2.1.6 Rejected).
   - [ ] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.1.
     - *Issue*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm:56-60`,
@@ -396,7 +424,8 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 12 Open Defects.
+- **Status**: Active / 8 Open Defects
+  (Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -420,19 +449,15 @@ have been resolved and archived.
       `\x1b[D`) or direct editor movement codes (`KEY_UP`, `KEY_DOWN`,
       `KEY_LEFT`, `KEY_RIGHT`), and map Delete (Caps+0) to `0x7F`
       (`KEY_DELETE`).
-  - [ ] **Bug 2.3.2: Status Bar Field Squatting & Non-Canonical Layout**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
-    - *Issue*: In `src/core/ui_render.asm:938-1020`, Field 4 is overwritten
-      with free memory (`Free: 64 KB |`) on splash, selection metrics on block
-      mode, and `[Pan +40] |` when panned, violating the universal
-      `^K: Editor keys |` invariant. Field 3 displays `CP/M  |` with slash
-      rather than `CPM   |` (or native environment indicator). Field 2 in
-      80x24 mode prints with 2 leading spaces (`  80x24 |`).
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm` to
-      canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
-      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
-      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
-      `^K: Editor keys |`. Update Field 3 string to `CPM   |` (or `Next  |`).
+  - [x] **Bug 2.3.2: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1. Status bar Field 4 is canonically
+      defined as a dynamic 15-character contextual slot (+ " | " separator)
+      operating under a strict priority hierarchy (Free Memory, Block Selection
+      metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
+      indicators belong in Field 4, while Field 5 is strictly reserved for
+      fixed-width cursor coordinates (`Line <cur>/<tot> Col <col> |`).
   - [ ] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next.asm:3523` (`SHOW_MEM_INFO_SCREEN`), the native
@@ -462,36 +487,32 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
-  - [ ] **Bug 2.3.6: Tier 1 Centering & Banner Rules on Help Screen**:
+  - [x] **Bug 2.3.6: Tier 1 Help Screen Rules [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: `HELP.OVL` in `plugins/help.asm` content height is 22 lines with
-      0 top margin rows on an 80x24 screen, rendering ASCII banner rules and
-      displaying obsolete keybindings.
-    - *Required Fix*: Standardize `HELP.OVL` in `plugins/help.asm` to use the
-      canonical 17-line, 70-column two-column tabular layout, centered
-      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
-      universal status bar presence on Row 24.
-  - [ ] **Bug 2.3.7: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.4. `plugins/help.asm` (`HELP.OVL`) is
+      the canonical 22-line Help screen template codified in Section 7.3.
+  - [x] **Bug 2.3.7: Splash Screen Centering & Menu [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
-    - *Issue*: `RENDER_SPLASH` in `src/se_next.asm` renders a 21-line menu
-      structure with fixed menu items (`type [E] or [Enter] to edit...`),
-      lacking the canonical 14-line centered presentation (`:e to edit`,
-      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
-      `:? for help`, `:q to quit`).
-    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
-      `src/se_next.asm` to match the canonical 14-line, 50-column Tier 1 splash
-      layout specified in Section 7.2.
-  - [ ] **Bug 2.3.8: Tier 2 Modal Dialog Framing (50 Columns vs 52 Columns)**:
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The demand to replace `SE.NEX`'s 21-line splash menu with an
+      obsolete 14-line (`:e to edit`, `:o to open file`) layout was based on an
+      early conceptual wireframe. `docs/UI_UX_DESIGN.md` Section 7.2 explicitly
+      codifies canonical `SE.COM`'s 21-line centered menu (`type [E] or [Enter]
+      to edit...`) as the authoritative splash screen template across ALL SE
+      variants, and expressly prohibits colon commands and queries such as
+      `Enter option: _`. Rejected for parity with Bug 2.1.5 and Bug 2.2.5.
+  - [x] **Bug 2.3.8: Tier 2 Modal Framing (52 Cols) [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: In `src/core/editor.asm:1420` (`DO_GOTO_LINE_UI`), dialog width
-      is 50 columns instead of canonical 52 columns. Footer buttons display
-      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
-      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
-      `src/core/search.asm` exhibit similar non-standard widths.
-    - *Required Fix*: Standardize modal pop-up routines in `src/core/editor.asm`
-      and `src/core/search.asm` to strictly conform to Archetype C (52x8 box,
-      `+---+` title divider, `[Enter]=Confirm      [ESC]=Cancel` footer,
-      bracketed input `[  ]`).
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that 50-column modal dialogs are non-canonical and
+      should be 52 columns is factually incorrect and contrary to
+      `docs/UI_UX_DESIGN.md` Section 8.3. The specification explicitly
+      standardizes all Archetype C input modals to 50 columns by 7 rows
+      (`50 cols x 7 rows`). `src/core/editor.asm` already implements the
+      canonical 50x7 dimensions, and the explicit action footer
+      `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
+      (Bug 2.1.6 Rejected).
   - [ ] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI` sub-handlers),
@@ -540,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 3 Defects Open (Bugs 2.4.38–2.4.40).
+- **Status**: Active / 11 Defects Open (Bugs 2.4.39–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1136,7 +1157,7 @@ have been resolved and archived.
       returning to caller on `ESC`/`Enter`.
       Validated via `test_bug_2_4_37_config_screen_interactive` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
+  - [x] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4.
     - *Issue*: Section 6.2 defines default tab stop intervals as
       `CFG_TAB_WIDTH = 4` columns (configurable to 8). In `src/core/config.c:41`
@@ -1145,6 +1166,11 @@ have been resolved and archived.
     - *Required Fix*: Change `g_config.tab_width` default in
       `src/core/config.c:41` to `4`, and update fallback in
       `src/core/editor.c:54` to `4`.
+    - *Resolution*: Updated `g_config.tab_width` default to `4` in
+      `src/core/config.c` and updated fallback tab widths to `4` in
+      `src/core/editor.c` and `src/core/ui_render.c`. Adjusted config header and
+      updated regression test suite, adding `test_bug_2_4_38_default_tab_width`
+      in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.3, 6.4, 7.3.
     - *Issue*: In `src/core/ui_render.c:528`, the Help workspace displays
@@ -1168,6 +1194,184 @@ have been resolved and archived.
     - *Required Fix*: Implement `show_plugin_palette()` adhering to Archetype D
       in `src/core/plugin_mgr.c`, and route `KEY_CTRL_P` in `editor.c` and
       `ui_render.c` to this modal.
+  - [ ] **Bug 2.4.41: Tab Traversal Halts Early vs Snap-Forward Alignment**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
+    - *Issue*: In `src/core/editor.c:485-497` (`adjust_col_to_target`), when
+      traversing an active line to match sticky target column `target_vis_col`,
+      if the target falls within an expanded tab (`vis_acc + spaces >
+      target_vis_col`), the loop executes `break;`. This snaps the cursor
+      backward to the start of the tab (`vis_acc`). Section 6.2 and 6.4 strictly
+      mandate snap-forward alignment: the cursor must advance across the tab
+      (`vis_acc += spaces`, `char_idx++`) to snap forward to the discrete
+      character boundary directly following the tab, keeping the cursor
+      adjacent to indented code rather than retreating to the margin.
+    - *Required Fix*: Update `adjust_col_to_target()` in `src/core/editor.c` to
+      remove early loop breaks on tab boundaries, advancing across the tab to
+      snap forward to the discrete character position following the tab.
+  - [ ] **Bug 2.4.42: Config Manager Layout Divergence & Prohibited Prompt**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
+    - *Issue*: In `src/core/ui_render.c:601-706` (`show_config_screen`):
+      1. Displays only 4 options in non-canonical order (`1. Screen Geometry`,
+         `2. Tab Width`, `3. Max Line Capacity`, `4. RAM Drive Mode`), omitting
+         Option 5 (`Plugin Manager`). Canonical order is (1) Screen Geometry,
+         (2) RAM Drive Mode, (3) Max Doc Lines, (4) Tab Width, (5) Plugin
+         Manager.
+      2. Renders an interactive prompt line `Enter option: _` on row 9, which
+         Section 7.4 strictly prohibits ("The workspace operates as a
+         non-buffered, instant-response hotkey menu. An `Enter option: _`
+         prompt line is strictly prohibited").
+      3. Footer displays `[S] Save to SE.CFG    [ESC]/[Enter] Return` instead
+         of canonical `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`.
+      4. Omits the `Config Status:` origin header (`Config Status: Loaded
+         from SE.CFG` or `Defaults`).
+      5. Fails to support `Q` / `q` for exiting to the Splash screen.
+      6. Fails to hide the terminal hardware cursor (`TERM_HIDE_CURSOR`).
+      7. Uses UTF-8 em-dash `—` in title instead of ASCII hyphen `-`.
+    - *Required Fix*: Refactor `show_config_screen()` to match canonical Section
+      7.4 layout: 5 options in canonical order, `Config Status:` header,
+      canonical footer, instant single-keystroke dispatch on 1-5, S/s save,
+      ESC/Q/Enter exit, hidden cursor, and elimination of `Enter option: _`.
+  - [ ] **Bug 2.4.43: Splash Screen Layout Non-Conformity & Clean Header**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 14.6.
+    - *Issue*: In `src/core/ui_render.c:422-442` (`s_splash_lines`):
+      1. Violates the Clean Header Mandate by rendering `Version v1.1.0 (C)` on
+         Row 2 directly beneath the application title. Section 7.2 strictly
+         mandates that the splash screen does not display the release version or
+         programming language (consolidated exclusively onto the About screen).
+      2. Uses UTF-8 em-dash `SE — Screen Editor` on Row 1 instead of standard
+         ASCII hyphen `SE - Screen Editor` (violating Section 2.6).
+      3. Omits the 4 canonical diagnostic status lines at the bottom of the
+         splash content block: `Active Screen : [80x24 (Classic Terminal)]`,
+         `RAM Drive (A:): [Preserved (Active)]`, `Plugin System :
+         [Operational]`, and `Max Lines     : [32,768 lines]`.
+      4. Uses a 19-line by 54-column bounding box instead of the standardized
+         21-line by 50-column geometry.
+    - *Required Fix*: Update `s_splash_lines` and `show_splash_screen()` in
+      `src/core/ui_render.c` to conform to the 21x50 canonical layout: ASCII
+      hyphen header, removal of version/language line, inclusion of the 4
+      diagnostic status lines, and standard geometry option presentation.
+  - [ ] **Bug 2.4.44: Non-Conforming About Screen Layout & Missing Credits**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.11, 14.6.
+    - *Issue*: In `src/core/ui_render.c:583-599` (`show_about_screen`), the
+      About screen displays a non-conforming 6-line, 46-column text block:
+      1. Uses UTF-8 em-dash and generic host operating system label `SE.COM —
+         Screen Editor (Linux)` instead of canonical title `SE - Screen Editor`.
+      2. Row 2 displays `Version v1.1.0`, omitting the mandatory build date and
+         predominant programming language `version 1.1.0 (2026-10-09) (C)`.
+      3. Omits author attribution (`by Dean Jenkins`), AI toolchain credits
+         (`Google Antigravity 2.19.1 & Gemini FLASH 3.8 high`), and license
+         notice (`Open source software under the MIT License`).
+      4. Prompt reads `Press any key to return...` instead of canonical
+         `Press any key to continue`.
+      5. Geometry is 6 lines x 46 columns instead of 9 lines x 54 columns.
+    - *Required Fix*: Rewrite `show_about_screen()` in `src/core/ui_render.c` to
+      render the standardized 9-line by 54-column template adhering to Section
+      7.11 and 14.6.
+  - [ ] **Bug 2.4.45: Line Ending Decoupling Failure & Global Config Mutation**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2.
+    - *Issue*: Section 13.2 explicitly removes `FORMAT` from `SE.CFG`,
+      mandating that line endings are managed strictly per-document: newly
+      created files default to host-native format (LF on Linux, CRLF on CP/M),
+      opened files preserve their detected line endings, and the Save File
+      screen (`Ctrl+F`) toggles format for that specific document.
+      In Linux SE:
+      1. `src/core/config.c:46` sets `g_config.save_format = FMT_CPM`, and
+         `src/core/config.c:205` serializes `FORMAT=CPM`/`FORMAT=LINUX` into
+         `SE.CFG`.
+      2. `src/core/buffer.c:63` initializes new empty documents with
+         `g_file_format = g_config.save_format`, causing new documents on Linux
+         to default to CP/M CRLF endings rather than native Linux LF endings.
+      3. In `src/core/editor.c:568, 580, 588, 591`, `src/core/ui_render.c:485`,
+         and `src/core/ui_modal.c:378`, document saves invoke `file_save(...,
+         g_config.save_format)` passing the global config format rather than
+         the document's `g_file_format`.
+      4. In `src/core/ui_browser.c:647-649`, pressing `Ctrl+F` toggles
+         `g_config.save_format` (global configuration) rather than toggling
+         solely the document's per-file `g_file_format`.
+      5. `src/core/config.c:40` defaults `g_config.screen_mode` to
+         `MODE_120X40` instead of `MODE_80X24` (`SCREEN=80X24` per Section
+         13.2).
+    - *Required Fix*: Remove `FORMAT` from `SE.CFG` serialization and parsing in
+      `src/core/config.c`. Default new documents on Linux to `FMT_LINUX` (`LF`).
+      Ensure all save operations use the active document's `g_file_format`.
+      Ensure `Ctrl+F` in `ui_browser.c` toggles `g_file_format` without mutating
+      global configuration. Default `g_config.screen_mode` to `MODE_80X24`.
+  - [ ] **Bug 2.4.46: Premature Modal Dismissal on Unexpected Keys**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3.
+    - *Issue*: In `src/core/ui_modal.c:321-326` (`modal_prompt_text`), pressing
+      `Up`, `Down`, `PgUp`, `PgDn`, `Ctrl+U`, or `Ctrl+V` exits the modal dialog
+      and returns `k`. Section 8.3 explicitly mandates the Unexpected Keystroke
+      Protection Mandate: "Modals MUST NOT be cancelled or dismissed by
+      unexpected keys or escape sequences (such as cursor arrow keys, PgUp/PgDn,
+      function keys, or stray control keys). Any unexpected sequences received
+      while an input modal is active must be discarded without altering the
+      modal's input buffer, without moving the underlying document cursor, and
+      without cancelling the dialog."
+    - *Required Fix*: Remove lines 321-326 in `modal_prompt_text()`
+      (`src/core/ui_modal.c`) so that unexpected keys are safely discarded
+      without dismissing the input dialog or altering state.
+  - [ ] **Bug 2.4.47: Retention of Intermediary Clipboard Primitives**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 9.3, 10.
+    - *Issue*: Section 9.3 establishes the "Direct In-Place Block Manipulation
+      Mandate", strictly prohibiting intermediary clipboard buffers
+      (`s_clipboard_buf`) and asynchronous paste steps across all SE variants.
+      Block operations must execute directly between the marked block and
+      cursor: `Ctrl+C` (Copy Block to Cursor), `Ctrl+X` (Move Block to
+      Cursor), and `Ctrl+D` (Delete Block). Furthermore, legacy `Ctrl+U` and
+      `Ctrl+V` motion aliases are removed in favor of dedicated `PgUp` and
+      `PgDn` keys, and `Ctrl+V` paste is eliminated.
+      In Linux SE:
+      1. In `src/core/editor.c:541-547`, `KEY_CTRL_U` is bound to `page_up()`,
+         and `KEY_CTRL_V` is bound to `do_paste_block()` / `page_down()`.
+      2. In `src/core/block.c:232, 246, 336-373`, `s_clipboard_buf`,
+         `do_cut_block()`, and `do_paste_block()` are retained as intermediary
+         clipboard mechanisms.
+      3. In `src/core/ui_render.c:560`, `s_help_lines` advertises
+         `Ctrl+U / Ctrl+V: Page Up / Down`, `Ctrl+V: Paste Block`,
+         `Ctrl+X: Cut Block`, and `Ctrl+C: Copy Block` instead of canonical
+         direct block shortcuts and dedicated `PgUp`/`PgDn` paging keys.
+    - *Required Fix*: Eliminate intermediary clipboard routines (`do_cut_block`,
+      `do_paste_block`, `s_clipboard_buf`) in `src/core/block.c` in favor of
+      direct in-place block manipulation. Remove `KEY_CTRL_U` and `KEY_CTRL_V`
+      aliases from `src/core/editor.c`. Update `s_help_lines` in
+      `src/core/ui_render.c` to advertise canonical direct block shortcuts and
+      dedicated `PgUp`/`PgDn` paging keys.
+  - [ ] **Bug 2.4.48: UTF-8 Multi-Byte Encodings in Screen Headers**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6.
+    - *Issue*: Section 2.6 establishes the VT100 & ASCII Terminal Encoding
+      Mandate (UTF-8 Prohibition): all text and control output must strictly
+      adhere to 7-bit ASCII (`0x20`–`0x7E`), and titles must use the ASCII
+      hyphen-minus `-` (`0x2D`), e.g. `SE - Screen Editor`. Multi-byte UTF-8
+      sequences (such as Unicode em-dash `—` `0xE2 0x80 0x94`) are strictly
+      prohibited as they corrupt standard serial and retro VT100/VT102
+      terminals.
+      In `src/core/ui_render.c`:
+      - Line 423: `"                  SE — Screen Editor                  "`
+      - Line 554: `"               SE.COM — EDITOR MODE KEYS                "`
+      - Line 586: `"        SE.COM — Screen Editor (Linux)        "`
+      - Line 641: `"            SE — Configuration Manager            "`
+      All use the 3-byte UTF-8 sequence `\xE2\x80\x94`.
+    - *Required Fix*: Replace all occurrences of Unicode em-dash `—` in UI
+      string literals with ASCII hyphen-minus `-` (`0x2D`) in
+      `src/core/ui_render.c`.
+  - [ ] **Bug 2.4.49: Off-by-One Barrier on Line Joins at Maximum Capacity**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Issue*: In `src/core/editor.c:216` (`do_backspace`) and
+      `src/core/editor.c:275` (`do_delete`), the combined length barrier check
+      for joining two lines is implemented as:
+      `if (prev_len + g_active_line_len < MAX_INPUT_LINE_CHARS)`
+      `if (g_active_line_len + next_len < MAX_INPUT_LINE_CHARS)`
+      And in `src/core/block.c:317`:
+      `if (g_active_line_len + copy_cnt < MAX_INPUT_LINE_CHARS)`
+      Section 6.8 explicitly specifies:
+      `If prev_len + cur_len <= MAX_INPUT_LINE_CHARS (1,000 chars):`
+      `If cur_len + next_len <= MAX_INPUT_LINE_CHARS (1,000 chars):`
+      Using `<` instead of `<=` inhibits joining when the combined line length
+      is exactly 1,000 characters, prematurely rejecting valid joins that fit
+      within `MAX_INPUT_LINE_CHARS`.
+    - *Required Fix*: Change `< MAX_INPUT_LINE_CHARS` to `<=
+      MAX_INPUT_LINE_CHARS` in `src/core/editor.c:216, 275` and
+      `src/core/block.c:317`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
@@ -1197,8 +1401,9 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Resolved / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
-  Resolved; Bug 2.7.45 Rejected).
+- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
+  Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; Bugs 2.7.60–2.7.63,
+  2.7.65–2.7.71 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -1998,6 +2203,196 @@ have been resolved and archived.
       configured fixed dimensions (`80x24` or `120x40`) when `fixed_geometry`
       is active. Validated via Step 47 in `test_editor.py`
       (`test_bug_2_7_59_startup_geometry_emulation_preserved`).
+  - [ ] **Bug 2.7.60: Intermediary Clipboard & Missing In-Place Block Ops**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, Section 10.
+    - *Issue*: Section 9.3 mandates Direct In-Place Block Manipulation across
+      all SE implementations and strictly prohibits intermediary clipboard
+      buffers. All block manipulations operate directly between the marked
+      block and active cursor in document memory. `Ctrl+C` must copy marked
+      block directly to cursor (`DO_COPY_BLOCK`), `Ctrl+X` must move marked
+      block directly to cursor (`DO_MOVE_BLOCK`), and legacy `Ctrl+V` pasting
+      aliases are removed.
+    - *Root Cause*: In `ports/python/se/buffer.py:91`, `DocumentBuffer`
+      maintains `self.clipboard: str = ""`. `copy_block()` and `cut_block()`
+      copy to this detached buffer, `paste_block()` pastes from it, and
+      `ports/python/se/editor.py:168-175` binds `Ctrl+C`, `Ctrl+X`, and
+      `Ctrl+V` to clipboard primitives.
+    - *Action Required*: Eliminate `self.clipboard` from `DocumentBuffer`.
+      Implement direct in-place copy and move operations to current cursor
+      position in `buffer.py` and `editor.py`. Remove `KEY_CTRL_V` paste
+      handling.
+  - [ ] **Bug 2.7.61: Non-Canonical Splash Template & Prohibited Prompt**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.7, 7.2.
+    - *Issue*: Section 7.2 mandates the 21-line canonical `SE.COM` splash
+      screen template (`type [E] or [Enter] to edit`, etc.) with instant
+      single-keystroke dispatch across all SE variants, and strictly prohibits
+      interactive prompts (such as `Enter option: _` or `Enter choice: _`).
+      Unassigned keys (including `ESC` and Space) must be silently rejected.
+    - *Root Cause*: In `ports/python/se/editor.py:757-772`,
+      `action_splash_screen()` renders an obsolete 14-line layout using colon
+      command syntax (`:e to edit`, etc.) and displays prohibited prompt
+      `"Enter choice: "` on line 771. Furthermore, line 789 improperly allows
+      `KEY_ESC` to enter the editor workspace.
+    - *Action Required*: Update `action_splash_screen()` in `editor.py` to
+      render the canonical 21-line `SE.COM` template without interactive
+      prompt strings, and silently ignore unassigned keystrokes.
+  - [ ] **Bug 2.7.62: Missing Predominant Language on About Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6; `TODO.md`
+      Bug 2.1.14.
+    - *Issue*: Section 7.12 and 14.6 mandate that all SE variants display the
+      programming language predominantly used to create that specific port
+      appended to the version number and build date line on the Tier 1 About
+      screen: `version 1.1.0 (2026-10-09) (Python)`.
+    - *Root Cause*: In `ports/python/se/editor.py:699`, `action_about()`
+      displays `version 1.1.0 (2026-10-09)` without ` (Python)`.
+    - *Action Required*: In `ports/python/se/editor.py:699`, update the version
+      line to `version 1.1.0 (2026-10-09) (Python)`.
+  - [ ] **Bug 2.7.63: Config Manager Inverted Layout & Prohibited Prompt**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.4.
+    - *Issue*: Section 7.4 mandates a canonical 5-option hotkey layout:
+      1. Screen Geometry, 2. RAM Drive Mode, 3. Max Doc Lines, 4. Tab Width,
+      and 5. Plugin Manager, with prompt line `[1-5]=Toggle Option
+      [S]=Save Config  [ESC]=Exit`. An `Enter option: _` prompt line is
+      strictly prohibited, and titles must use ASCII hyphen `-`.
+    - *Root Cause*: In `ports/python/se/editor.py:895-906`,
+      `action_config_screen()` defines only 4 options with inverted numbering
+      (2 is Tab Width, 3 is Max Line Capacity, 4 is RAM Drive Mode; option 5
+      Plugin Manager is missing), uses Unicode em-dash in title
+      (`SE — Configuration Manager`), displays prohibited `"Enter option: "`,
+      and shows non-standard navigation options.
+    - *Action Required*: Reorganize `action_config_screen()` in `editor.py`
+      to match the canonical 5-option layout, remove `Enter option:`, add
+      option 5, and conform title to ASCII encoding.
+  - [x] **Bug 2.7.64: Field 4 Status Bar Placement [REJECTED / WONTFIX]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4.
+    - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
+    - *Rationale*: The claim that `docs/UI_UX_DESIGN.md` assigns block mode cues
+      (`[SEL]`, `[BLK LOCK]`) to Field 4 is factually false. Section 4.3
+      explicitly defines Field 4 as persistent help key hint
+      (`^K: Editor keys |`) and places mode indicators (`[SEL]`, `[BLK LOCK]`)
+      and horizontal panning (`[Pan +{pan_col}]`) in Field 5 alongside cursor
+      coordinates. `ports/python/se/ui.py` already conforms 100% to Section 4.3;
+      routing mode indicators into Field 4 would clobber Field 4 and violate
+      Anti-Pattern #1 (Status Bar Squatting / Context Clobber).
+  - [ ] **Bug 2.7.65: Sticky Column Clamping Retreats on Expanded Tabs**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
+    - *Issue*: Section 6.2 and 6.4 mandate snap-forward vertical alignment
+      clamping (`ADJUST_COL_TO_TARGET`): if sticky `TARGET_COL` falls across
+      an expanded tab (`vis_acc < TARGET_COL < vis_acc + spaces`), the cursor
+      must snap forward to the character boundary directly following the tab
+      (`vis_acc + spaces`) to stay adjacent to indented code rather than
+      retreating to the margin.
+    - *Root Cause*: In `ports/python/se/buffer.py:59-65`
+      (`adjust_col_to_target`), the loop executes
+      `if vis_acc + spaces > target_col: break`, halting alignment before the
+      tab and retreating the cursor to the margin.
+    - *Action Required*: In `ports/python/se/buffer.py`, update
+      `adjust_col_to_target` to advance `vis_acc += spaces` and
+      `char_idx += 1` through the tab when `vis_acc + spaces > target_col`.
+  - [ ] **Bug 2.7.66: Premature Line Join Inhibition at 120 Columns**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 6.6, 10.
+    - *Issue*: Section 6.5, 6.6, and Section 10 specify that Backspace
+      (at col 0) and Delete (at end of line) line joins are permitted up to
+      `MAX_INPUT_LINE_CHARS` (1,000 characters).
+    - *Root Cause*: In `ports/python/se/buffer.py:12, 220, 247`,
+      `LINE_JOIN_LIMIT = 120`. Joins are prematurely blocked when combined
+      length exceeds 120 columns even though line buffer capacity supports up
+      to 1,000 characters (`MAX_LINE_CHARS = 1000`).
+    - *Action Required*: In `ports/python/se/buffer.py`, update
+      `LINE_JOIN_LIMIT = MAX_INPUT_LINE_CHARS` (1,000).
+  - [ ] **Bug 2.7.67: Inverted Default File Format & SE.CFG Persistence**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2; `TODO.md`
+      Bug 2.1.15.
+    - *Issue*: Section 7.7 specifies that new documents created on Linux/POSIX
+      hosts (`se-linux`, `se-py`, `se-rs`) must default to host native text
+      format (`LF`, `format_cpm = False`). Furthermore, Section 7.7 and
+      Section 13.2 mandate that file line ending format is governed
+      per-document and is NOT an `SE.CFG` setting.
+    - *Root Cause*: In `ports/python/se/buffer.py:90`, `DocumentBuffer.__init__`
+      defaults `self.format_cpm: bool = True` (`CRLF`). In
+      `ports/python/se/editor.py:582`, `action_save_file()` persists
+      `self.config.set("FORMAT", ...)` to `SE.CFG`.
+    - *Action Required*: In `ports/python/se/buffer.py:90`, default `format_cpm`
+      to `False` on Linux native Python. In `ports/python/se/editor.py:582`,
+      remove `self.config.set("FORMAT", ...)` so format is not written to
+      `SE.CFG`.
+  - [ ] **Bug 2.7.68: Trailing Byte Leakage on Unrecognized Escape Sequences**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10; `TODO.md` Bug 2.1.13,
+      Bug 2.4.32.
+    - *Issue*: Section 10 Anti-Leakage Invariant dictates that if an incomplete
+      or unrecognized escape sequence is received (e.g. unhandled function keys
+      F5–F12 emitting `\x1b[15~`..`\x1b[24~`, mouse reporting, bracketed
+      paste), the input decoder must drain and discard all sequence bytes
+      atomically until the sequence terminator (`~`, alpha) or timeout.
+      Trailing characters must NEVER leak into console stream as keystrokes.
+    - *Root Cause*: In `ports/python/se/terminal.py:280-294`, when an
+      unrecognized CSI sequence like `\x1b[15~` arrives, `c2` is `'1'` and
+      `c3` is `'5'`. Because `c3 != '~'`, `get_key()` immediately returns
+      `KEY_ESC`, leaving trailing `~` in stdin, which leaks as a normal typed
+      character on the next keystroke and corrupts the document buffer.
+    - *Action Required*: In `ports/python/se/terminal.py`, update `get_key()`
+      to drain and discard remaining sequence characters until a valid
+      terminator (`~`, `A`–`Z`, `a`–`z`) or timeout occurs.
+  - [ ] **Bug 2.7.69: Full-Screen Workspace Redraw on Typing Keystrokes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
+      `TODO.md` Bug 2.8.1.
+    - *Issue*: Section 7.10 strictly prohibits full-screen re-rendering
+      (`render_directory_workspace`) upon receiving individual text input
+      keystrokes in Tier 1 directory workspaces. Typing characters,
+      backspaces, and cursor navigation must echo in-place or update only the
+      bracketed prompt row; full-screen redraws are strictly reserved for entry
+      and page changes.
+    - *Root Cause*: In `ports/python/se/editor.py:458-529`
+      (`action_directory_browser`), every single keystroke triggers
+      `self.renderer.render_directory_workspace(...)`, redrawing the entire
+      screen, file grid, and status bar on every character entered.
+    - *Action Required*: In `ports/python/se/editor.py`, update
+      `action_directory_browser` to perform in-place prompt row redraws on
+      typing and inline deletions, restricting full workspace rendering to
+      initial display and pagination.
+  - [ ] **Bug 2.7.70: Obsolete Help Screen Key Mappings & Unicode Em-Dash**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.3, 10; `TODO.md`
+      Bug 2.4.39.
+    - *Issue*: Section 7.3 specifies the canonical Help Screen layout:
+      `PgUp / PgDn : Page Up / Down`, `Ctrl+C: Copy Block to Cursor`,
+      `Ctrl+X: Move Block to Cursor`, `Ctrl+D: Delete Block`. Section 2.6
+      prohibits Unicode em-dash `—` (must use ASCII hyphen `-`).
+    - *Root Cause*: In `ports/python/se/editor.py:368-384`, `action_help()`
+      displays obsolete references: `Ctrl+U / Ctrl+V: Page Up / Down`,
+      `Ctrl+V: Paste Block`, `Ctrl+C: Copy Block` (without target),
+      `Ctrl+X: Cut Block`, and uses Unicode em-dash in header:
+      `"SE.COM — EDITOR MODE KEYS"`.
+    - *Action Required*: In `ports/python/se/editor.py:368-384`, update
+      `action_help` to canonical Help layout adhering to direct block operation
+      semantics and ASCII hyphen encoding.
+  - [ ] **Bug 2.7.71: Startup Screen Geometry Inversion in Config Defaults**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 13.2; `TODO.md`
+      Bug 2.1.2.
+    - *Issue*: Section 2.1 and Section 13.2 mandate `80x24` as the universal
+      baseline standard and default screen geometry across all SE
+      implementations (`SCREEN=80X24`).
+    - *Root Cause*: In `ports/python/se/config.py:16`,
+      `DEFAULT_SCREEN = "120X40"`, causing editor instances without `SE.CFG`
+      to default to 120x40 wide console mode rather than canonical 80x24.
+    - *Action Required*: In `ports/python/se/config.py:16`, set
+      `DEFAULT_SCREEN = "80X24"`.
+  - [x] **Bug 2.7.72: Default Tab Width Inversion in Config Defaults**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4, 13.2; `TODO.md`
+      Bug 2.4.38; `src/se.asm:4620`.
+    - *Status*: REJECTED / INVALID (WONTFIX).
+    - *Reason for Rejection*:
+      1. Default tab stop spacing across all SE variants (`SE.COM`, `se-linux`,
+         `se-py`, `SEC.COM`) is canonically 8 columns, configurable to 4. In
+         `SE.COM` (`src/se.asm`), `CFG_TAB_WIDTH: DB 8` has always defined 8
+         as the default. Furthermore, Section 7.4 (Configuration Manager) and
+         Section 13.2 (`TAB / TABS Default: 8`) define 8 columns.
+      2. The statement in Section 6.2 mentioning "default 4 columns" was an
+         erroneous specification defect that contradicted `SE.COM`, Section 7.4,
+         and Section 13.2. Section 6.2 has been corrected to codify 8 columns as
+         the universal default across all SE variants.
+      3. `ports/python/se/config.py` correctly defines `DEFAULT_TAB_WIDTH = 8`
+         and fallback `8`. In addition, `ports/python/se/buffer.py` default
+         parameter has been updated to 8 for full architectural parity.
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
@@ -2005,7 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Complete / 0 Defects Open.
+- **Status**: Active / 8 Defects Open (Bug 2.8.1 Resolved; Bug 2.8.7 Rejected;
+  Bugs 2.8.2–2.8.6, 2.8.8–2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2047,6 +2443,125 @@ have been resolved and archived.
       4. Fixed `workspace_root` resolution in `test_editor_headless.py` and
          consolidated Step 17 save prompt capture buffer.
       5. Verified 100% pass across Steps 17–24 in headless test suite.
+  - [ ] **Bug 2.8.2: TPA Memory Overflow Overwriting BDOS and CCP (BAD LOAD)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.4, 14.5; `TODO.md`
+      Section 7.1; `check_tpa.py SEC.COM`.
+    - *Issue*: When running `SEC.COM` on RomWBW RC2014 CP/M, CCP reports
+      `BAD LOAD` and immediately aborts execution. `check_tpa.py SEC.COM`
+      reports -3,336 bytes of negative headroom below BDOS (`0xD800`), with
+      code and data spanning 54,854 bytes (0x0100..0xD746) and BSS reaching
+      `0xE508` (58,376 bytes consumed / 106.06% of TPA capacity).
+    - *Root Cause*: Code growth from Linux profile feature additions in
+      `src/core/`, unpruned rodata string literals (~5.5 KB), multiple
+      `snprintf` calls with large format buffers, and CRT stdio redirection
+      exceed the 55,040-byte TPA limit, directly overwriting CCP (`0xD000`) and
+      BDOS (`0xD800`).
+    - *Remedy*: Apply `#ifdef __CPM__` / `#ifndef __CPM__` conditional
+      directives across shared C modules to isolate Linux-specific routines,
+      eliminate redundant `snprintf` formatters on CP/M, trim string literals,
+      configure z88dk pragmas to trim unused CRT/stdio features, and restore
+      positive TPA headroom below `0xD800`.
+  - [ ] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 7.3, 7.4, 7.12,
+      11.10.
+    - *Issue*: Multi-byte UTF-8 em-dash characters (`—` / `\xe2\x80\x94`) are
+      emitted across title banners in the Splash, Help, About, and Configuration
+      screens, producing visual glitches and character corruption (e.g. `â€”`)
+      on standard CP/M VT100 / ANSI serial terminals.
+    - *Root Cause*: Static string tables in `src/core/ui_render.c`
+      (`s_splash_lines[0]`, `s_help_lines[0]`, `s_about_lines[0]`, and
+      `cfg_lines[0]`) contain UTF-8 em-dashes instead of 7-bit standard ASCII.
+    - *Remedy*: Replace all multi-byte UTF-8 em-dash characters in
+      `src/core/ui_render.c` and shared UI routines with standard 7-bit ASCII
+      hyphens (`-`) in strict conformance with Section 2.6.
+  - [ ] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
+    - *Issue*: The splash screen in `SEC.COM` displays unsupported Option 3
+      (`type [3] set native`), includes redundant `Version v1.1.0 (C)` on Row 2,
+      and completely omits the four canonical dynamic system metadata rows
+      (`Active Screen`, `RAM Drive`, `Plugin System`, `Max Lines`).
+    - *Root Cause*: `show_splash_screen()` in `src/core/ui_render.c` uses a
+      static 19-line string array that does not conditionally omit Option 3 on
+      CP/M, violates the clean header mandate by including version info on
+      Row 2, and lacks formatting logic for the four dynamic system fields.
+    - *Remedy*: Conditionally hide Option 3 on CP/M targets (`#ifndef __CPM__`),
+      remove version/language from Row 2, and dynamically render the four
+      canonical system status fields from `g_config` matching canonical
+      `SE.COM`.
+  - [ ] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 11.1, 13.2.
+    - *Issue*: Configuration Manager in `SEC.COM` renders a prohibited
+      `Enter option: _` input prompt line (violating anti-pattern 1), uses
+      non-canonical 4-option numbering, displays non-standard footer
+      `[S] Save to SE.CFG [ESC]/[Enter] Return`, and serializes illegal
+      `FORMAT=...` parameter into `SE.CFG`.
+    - *Root Cause*: `show_config_screen()` in `src/core/ui_render.c` uses an
+      ad-hoc 4-option layout with an embedded `Enter option: _` text line, and
+      `config_save_file()` in `src/core/config.c` serializes `FORMAT=%s`.
+    - *Remedy*: Harmonize `show_config_screen()` to the canonical 5-option
+      hotkey layout (1 Geometry, 2 RAM Drive, 3 Max Lines, 4 Tab Width,
+      5 Plugins), remove `Enter option: _`, format canonical footer
+      `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`, and remove `FORMAT`
+      parameter serialization from `config_save_file()`.
+  - [ ] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
+    - *Issue*: About screen in `SEC.COM` displays `SE.COM — Screen Editor
+      (Linux)` when executed on CP/M hardware or RomWBW emulator, uses an
+      abbreviated 6-line layout, and omits author and license credits.
+    - *Root Cause*: `s_about_lines` in `src/core/ui_render.c` hardcodes
+      `(Linux)` into the title string and uses an ad-hoc 6-line format instead
+      of the canonical 9-line specification.
+    - *Remedy*: Refactor `show_about_screen()` in `src/core/ui_render.c` to
+      adopt the canonical 9-line centered layout from Section 7.12, format
+      `version 1.1.0 (2026-10-09) (C)` in Row 2, and include author and
+      Antigravity/Gemini open-source credits.
+  - [x] **Bug 2.8.7: Status Bar Field 4 Context Clobber [REJECTED]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 6.6, 11.1.
+    - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
+    - *Rationale*: Identical to Bug 2.1.1, 2.2.1, and 2.3.2. Section 4.3
+      codifies Field 4 as the dynamic 15-character contextual slot governed
+      by a strict priority hierarchy (Free Memory, Block Selection metrics,
+      Pan offset, Overwrite mode, Help Key Hint). Relocating mode indicators
+      (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`) to Field 5 directly violates Section
+      4.3's Jitter-Free Mandate ("Field 5 MUST NOT contain variable-length
+      tags, mode indicators, or pan offsets... All mode and contextual
+      indicators belong strictly in Field 4").
+  - [ ] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
+    - *Issue*: Help screen (`Ctrl+K`) displays `Ctrl+U / Ctrl+V: Page Up / Down`
+      alongside `Ctrl+V: Paste Block` (duplicating `Ctrl+V` on the same line),
+      and lists `Ctrl+X: Cut Block` / `Ctrl+C: Copy Block` instead of canonical
+      `Move Block to Cursor` / `Copy Block to Cursor`.
+    - *Root Cause*: `s_help_lines` in `src/core/ui_render.c` retains deprecated
+      WordStar/legacy paging aliases and non-canonical block action verbs.
+    - *Remedy*: Update `s_help_lines` in `src/core/ui_render.c` to display
+      `PgUp / PgDn : Page Up / Down` and `Ctrl+D: Delete Block`, and standardize
+      block descriptions to `Copy Block to Cursor` and `Move Block to Cursor`
+      matching Section 7.3.
+  - [ ] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 7.10.
+    - *Issue*: Goto Line modal dialog renders with 8 rows instead of canonical
+      7 rows, lacks canonical `Goto line: [ ... ]` query framing, and repaints
+      the entire inverse-video field on every single keystroke.
+    - *Root Cause*: `modal_prompt_text()` in `src/core/ui_modal.c` sets
+      `height = 8` and redraws the full bracketed field in its event loop
+      rather than performing in-place character echoing.
+    - *Remedy*: Standardize `modal_prompt_text()` (or create dedicated
+      `modal_goto_line()`) to canonical 7-row framing (`50 cols x 7 rows`)
+      adhering to Archetype C, and implement in-place prompt character echoing
+      per Section 7.10.
+  - [ ] **Bug 2.8.10: Unsaved Document Close Loss on Untitled Buffer (Ctrl+W)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11.
+    - *Issue*: Closing an untitled modified document via `Ctrl+W` prompts "Save
+      changes?", but selecting `[Y]es` fails silently and discards edits because
+      `file_save(NULL, ...)` cannot save without a filename.
+    - *Root Cause*: `modal_confirm_save_changes()` in `src/core/ui_modal.c:378`
+      calls `file_save(NULL, ...)` directly without redirecting to the Save
+      File dialog when `g_current_filename` is empty.
+    - *Remedy*: In `modal_confirm_save_changes()`, if
+      `g_current_filename[0] == '\0'`, redirect `[Y]es` to
+      `ui_browser_save_dialog()` so the user can enter a destination filename
+      before closing to the splash screen.
 
 ---
 

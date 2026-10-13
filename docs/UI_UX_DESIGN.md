@@ -178,30 +178,96 @@ The status bar is the sole fixed screen anchor in SE.
      the status bar text is centered or evenly padded across the full row.
 
 3. Field Layout & Structure (80-Column Budget):
-   The status bar consists of 5 fixed functional fields separated by `|`:
+   The status bar consists of 5 fixed functional fields enclosed within outer
+   separators, totaling exactly 78 reverse-video characters centered on screen
+   (1 leading space, 78 enclosed characters, 1 trailing space = 80 columns):
 
-   +-------------------------------------------------------------------------+
-   | | FILENAME.EXT* | 80x24 | Linux | ^K: Editor keys | Line   1 Col  0 |   |
-   +-------------------------------------------------------------------------+
+   +-----------------------------------------------------------------------+
+   | | FILENAME.EXT* |  80x24 | CP/M  | ^K: Editor keys | Line   1/1 Col 0 | |
+   +-----------------------------------------------------------------------+
+
+   - Enclosure & Alignment Budget:
+     - Symmetrical Margin Padding:
+       `LeftPad = RightPad = (ACTIVE_COLS - 78) / 2`
+       On 80-column screens: 1 space left, 1 space right (`1 + 78 + 1 = 80`).
+       On 120-column screens: 21 spaces left, 21 spaces right.
+     - Extreme Left Enclosure (2 chars): `| `
+     - Extreme Right Enclosure (2 chars): ` |`
+     - Total Enclosed Width (`STATUS_ENCLOSED_WIDTH`): exactly 78 characters.
 
    - Editor Name & Version Exclusion Mandate:
      The status bar does NOT show 'SE.COM' or the version number. Field 1
      strictly displays the active document filename `{name}{mod}`. Port
      implementations must never replace Field 1 with application banners.
-   - Field 1 (Filename, 16 chars): `| {name}{mod} |`
+
+   - Field 1 (Filename, 17 chars: 14 chars name + ` | ` separator):
      - `{name}`: Active filename (e.g. `README.TXT`, `C:MAIN.C`, `(Untitled)`).
      - `{mod}`: `*` if document has unsaved modifications; space otherwise.
-     - Padded to exactly 14 characters plus surrounding spaces.
-   - Field 2 (Geometry, 8 chars): ` {geom} |`
-     - E.g. ` 80x24 |` or ` 120x40 |`.
-   - Field 3 (Operating Environment / Format, 8 chars): ` {fmt} |`
-     - E.g. ` CPM   |` or ` Linux |`.
-   - Field 4 (Help Hint / Context, 18 chars): ` ^K: Editor keys |`
-     - Shows default help key hint.
-   - Field 5 (Cursor & Mode Indicator, variable):
-     - Line & col: `Line {cur_line:>4}/{tot_lines:<4} Col {col:<3}`
-     - Horizontal pan indicator (when `pan_col > 0`): ` [Pan +{pan_col}]`
-     - Block mode indicator: ` [SEL]` (active selection) or ` [BLK LOCK]`
+     - Filename content is padded with spaces to exactly 14 characters.
+     - Followed by field separator: ` | ` (3 chars). Total: 17 characters.
+
+   - Field 2 (Geometry, 9 chars): ` {geom} | `
+     - Formatted string: ` 80x24 | ` (1 leading space) or `120x40 | `
+       (0 leading spaces). Total: exactly 9 characters.
+
+   - Field 3 (Operating Environment / Format, 8 chars): ` {fmt} | `
+     - Formatted string: `CP/M  | ` (default CP/M 2.2), `Linux | `, or spaces
+       during file loading (`      | `).
+     - Total: exactly 8 characters.
+
+   - Field 4 (Dynamic Context / Mode, 18 chars: 15 chars content + ` | `):
+     Field 4 is a dedicated 15-character contextual slot followed by separator
+     ` | ` (18 characters total). It operates under a strict priority hierarchy
+     applicable across all SE variants:
+     1. Splash Screen & Far Plugin Execution:
+        Displays free document memory in whole KB: `Free: <N> KB` padded with
+        spaces to 15 characters, followed by ` | ` (e.g. `Free: 48 KB    | `).
+        - Variant Free Memory Reading Fallback Rule:
+          If a port, target platform, or variant does not support a free memory
+          reading method (or dynamic TPA/heap query), the free memory status on
+          the status bar shall be left blank (15 spaces + separator:
+          `               | `).
+     2. Active Dynamic Block Selection (`BLOCK_ACTIVE == 1`):
+        Displays live selection size metrics padded to 15 characters + ` | `:
+        - Single-line: `Sel: <N> char | ` (1 char) or `Sel: <N> chars | `
+        - Multi-line: `Sel: <N> line | ` (1 line) or `Sel: <N> lines | `
+     3. Solidified Block Selection (`BLOCK_ACTIVE == 2`):
+        Displays locked block size metrics padded to 15 characters + ` | `:
+        - Single-line: `Block: <N> char | ` / `Block: <N> chars | ` (or
+          `Block: <N>c   | ` if characters >= 100)
+        - Multi-line: `Block: <N> line | ` / `Block: <N> lines | ` (or
+          `Block: <N>L    | ` if lines >= 100)
+     4. Horizontal Viewport Panning (`VIEW_LEFT_COL > 0`, normal keys):
+        Displays `[Pan +<offset>]` padded with spaces to 15 characters + ` | `
+        (e.g. `[Pan +40]      | `).
+     5. Overwrite Mode (`!INSERT_MODE`):
+        Displays `Overwrite mode  | ` (15 chars content + separator).
+     6. Default Editor Help Hint (Normal Insert Mode):
+        Displays `^K: Editor keys | ` (15 chars content + separator).
+
+   - Field 5 (Fixed Cursor Coordinates, 24 chars: 22 chars content + ` |`):
+     Field 5 is a fixed-width, jitter-free coordinate anchor strictly dedicated
+     to cursor coordinates:
+     - Fixed Content (22 chars): `Line <cur:4>/<tot:4> Col <col:3>`
+       - `"Line "` (5 chars label)
+       - `<cur:4>`: Current document line (1-indexed), right-justified in 4
+         characters (`   1` .. `9999`)
+       - `"/"` (1 char fixed delimiter)
+       - `<tot:4>`: Total document lines, left-justified in 4 characters
+         (`1   ` .. `9999`)
+       - `" Col "` (5 chars fixed delimiter)
+       - `<col:3>`: Visual column (0-indexed, tabs expanded), left-justified in
+         3 characters (`0  ` .. `999`)
+     - Followed by Extreme Right Enclosure: ` |` (2 chars).
+     - Loading State: During asynchronous loading, displays
+       `Line    1/---- Col   0 |`.
+     - Fixed-Width Jitter-Free Mandate:
+       Field 5 MUST NOT contain variable-length tags, mode indicators, or pan
+       offsets (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`). Appending variable-length
+       tags to Field 5 causes severe cursor coordinate jitter, destroys column
+       alignment, and exceeds the 78-character enclosed width (Anti-Pattern #3:
+       Terminal Column Spill). All mode and contextual indicators belong
+       strictly in Field 4.
 
 4. Status Event Prohibition:
    - The status bar shall NEVER display status events (e.g. "File saved",
@@ -268,9 +334,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      Tab characters are stored as literal ASCII byte `0x09` (`KEY_TAB`) in
      document line buffers. A tab occupies exactly 1 byte in `CUR_COL`.
    - Tab Stop Quantum Formula (`GET_TAB_SPACES`):
-     Tab stops occur at intervals of `CFG_TAB_WIDTH` (default 4 columns,
-     configurable to 8). From any visual column `col`, the number of space
-     columns required to advance to the next tab stop is:
+     Tab stops occur at intervals of `CFG_TAB_WIDTH` (default 8 columns,
+     configurable to 4 across all SE variants). From any visual column `col`,
+     the number of space columns required to advance to the next tab stop is:
      `tab_spaces = tab_width - (col % tab_width)`
    - Visual Column Mapping (`CALC_VISUAL_COL`):
      To map buffer offset `CUR_COL` to document visual column `VisualCol`:
@@ -433,9 +499,13 @@ viewport panning algorithms defined in `src/core/editor.asm` and
          `VIEW_LEFT_COL = ((vis_col - 1) / 40) * 40` (rounds down to multiple
          of 40).
    - Status Bar Pan Indicator:
-     - When `VIEW_LEFT_COL > 0`, Status Bar Field 5 displays
-       `[Pan +{VIEW_LEFT_COL}]` (e.g. `[Pan +40]`, `[Pan +80]`).
-     - When `VIEW_LEFT_COL == 0`, the indicator is cleared.
+     - When `VIEW_LEFT_COL > 0`, Status Bar Field 4 (Context / Mode field)
+       displays `[Pan +{VIEW_LEFT_COL}]` padded with spaces to 15 characters
+       plus separator ` | ` (e.g. `[Pan +40]      | `).
+     - When `VIEW_LEFT_COL == 0`, Field 4 reverts to normal mode cues or
+       the default help key hint `^K: Editor keys | `.
+     - Field 5 remains strictly reserved for cursor coordinates, ensuring
+       jitter-free coordinate tracking without column spill.
 
 7. Terminal Hardware Cursor Placement (`LOCATE_CURSOR`):
    After all navigation, panning, or editing steps, the hardware cursor is
@@ -626,29 +696,96 @@ content blocks rather than top-aligned text.
 
 
 3. Help Screen Layout (`Ctrl+K`):
-   - Content Width: 70 columns, Content Height: 17 lines.
-   - Arranged in two clean tabular columns:
+   - Canonical Template: Canonical `SE.COM` (`plugins/help.asm` / `HELP.OVL`)
+     serves as the authoritative Editor Mode Keys Help screen template for all
+     SE variants across all target platforms.
+   - Content Dimensions: Content Height: exactly 22 lines (`HELP_LINES = 22`).
+     Content Width: 80 columns baseline (79 content chars + column 0 tilde `~`).
+   - Activation Protocol:
+     - In editor mode with no active block (`BLOCK_ACTIVE == 0`): `Ctrl+K`
+       loads and displays the full-screen Help workspace.
+     - Note: When a block is actively marked (`BLOCK_ACTIVE != 0`), `Ctrl+K`
+       instead opens the Tier 2 Block Operations modal dialog
+       (`DO_BLOCK_MENU_POPUP`) per Section 9.3.
+     - From splash / command menus, hotkeys `?`, `h`, `H`, or `:?` open the
+       Help workspace.
+   - Visual Structure (Canonical SE.COM Template):
      ```text
-     ~
-     ~                       SE.COM — EDITOR MODE KEYS
-     ~
-     ~  Cursor Navigation:                 Block Operations:
-     ~    Arrows / ANSI VT100                 Ctrl+B: Toggle Block
-     ~    Ctrl+A / Ctrl+E: Home / End         Ctrl+C: Copy Block to Cursor
-     ~    Ctrl+T / Ctrl+G: Top / Bottom       Ctrl+X: Move Block to Cursor
-     ~    PgUp / PgDn    : Page Up / Down     Ctrl+D: Delete Block
-     ~
-     ~  Search & Replace:                  File & System:
-     ~    Ctrl+F: Find Text                   Ctrl+S: Save File
-     ~    Ctrl+N: Find Next                   Ctrl+O: Open File
-     ~    Ctrl+R: Search and Replace          Ctrl+Q: Safe Quit
-     ~    Ctrl+L: Goto Line Number            Ctrl+P: Plugin Palette
-     ~    Ctrl+Y: Beautify Source Code        ESC   : Splash Screen
-     ~
-     ~                   Press any key to continue
+     ~========================================================================
+     ~                               EDITOR MODE KEYS
+     ~========================================================================
+     ~  FILE & SYSTEM:
+     ~    Ctrl+O          Open file screen       Ctrl+S         Save file screen
+     ~    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M
+     ~    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up
+     ~  NAVIGATION & SEARCH:
+     ~    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line
+     ~    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line
+     ~    Ctrl+V / PgDn   Page Down              Ctrl+T / ^Home Top of file
+     ~    Ctrl+L          Goto line number       Ctrl+G / ^End  Bottom of file
+     ~    Ctrl+F          Find text              Ctrl+N         Find next
+     ~    Ctrl+R          Search and Replace     Ctrl+I / Tab   Toggle find case
+     ~  EDITING & BLOCK:
+     ~    Insert          Toggle Insert/Ovr      Enter          New line
+     ~    ASCII 32..126   Insert/Overwrite text  Backspace      Delete left/join
+     ~    Delete / Ctrl+D Delete char or block   Ctrl+B         Start/Toggle blk
+     ~    Ctrl+C          Copy solidified block  Ctrl+K         Solidify block
+     ~    Ctrl+X          Move solidified block  ESC            Clear block
+     ~------------------------------------------------------------------------
+     ~                          Press any key to continue
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Layout Structure & Line Composition (22 Lines Total):
+     - Row 1: Full-width horizontal rule of `'='` across columns 1..79.
+     - Row 2: Centered Title `EDITOR MODE KEYS` (31 leading spaces in 80 cols,
+       51 spaces in 120 cols). Application banners and executable name prefixes
+       (e.g. `SE.COM — ` or `SE - `) are strictly PROHIBITED per Section 7.1.
+     - Row 3: Full-width horizontal rule of `'='`.
+     - Rows 4..20: Help Key Descriptions (17 lines) grouped under 3 functional
+       category headers (`FILE & SYSTEM:`, `NAVIGATION & SEARCH:`,
+       `EDITING & BLOCK:`).
+     - Row 21: Full-width horizontal dash rule of `'-'`.
+     - Row 22: Centered Return Prompt: `Press any key to continue` (26 leading
+       spaces in 80 columns). Standardized phrasing without trailing ellipsis.
+   - Symmetrical Centering & Tilde Discipline:
+     - In 80x24 Geometry:
+       - Available text rows: 23 (`HOST_ROWS - 1`, excluding status bar).
+       - Vertical top padding: `(23 - 22) / 2 = 0` margin rows. The content
+         block begins directly on Screen Row 1.
+       - Vertical bottom padding: `23 - 0 - 22 = 1` row (Screen Row 23 displays
+         `~` in column 0).
+       - Row 24 displays the Universal Status Bar.
+     - In 120x40 Geometry:
+       - Available text rows: 39 (`HOST_ROWS - 1`).
+       - Vertical top padding: `(39 - 22) / 2 = 8` margin rows. Rows 1..8
+         display `~` in column 0.
+       - Content block occupies Rows 9..30.
+       - Vertical bottom padding: `39 - 8 - 22 = 9` margin rows (Rows 31..39
+         display `~` in column 0).
+       - Horizontal left padding: `(120 - 80) / 2 = 20` spaces after column 0
+         `~` on body rows.
+       - Full-width rules extend across columns 1..119 (119 characters).
+       - Row 40 displays the Universal Status Bar.
+     - Column 0 Tilde Mandate:
+       Every single line of the Help screen (margin rows, horizontal rules,
+       title, headers, key description rows, footer prompt, and bottom margin
+       rows) strictly displays `~` in column 0. Only the status bar row has no
+       tilde.
+   - Dismissal & Key Dispatch Protocol:
+     - Single-Key Dismissal: Pressing any regular key dismisses the Help
+       screen and immediately returns to the editor (or originating screen).
+     - Standalone `ESC`: Drains any trailing ANSI escape sequence bytes before
+       returning cleanly to editor mode.
+     - `Ctrl+P`: Dispatches the context plugin pop-up palette
+       (`PLUG_CTX_HELP`), restoring and re-rendering the Help workspace upon
+       dismissal.
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during Help overlay
+     execution. On variants lacking dynamic memory reading, Field 4 is left
+     blank (`               | `), conforming strictly to Section 4.3.
 
 4. Configuration Manager Workspace (`:c` from Splash):
    - Displays active parameters, config file origin, and instant hotkey
@@ -1032,22 +1169,39 @@ or display notifications.
 
      Goto Line Modal Dialog (50 cols x 7 rows):
      ```text
-     +--------------------------------------------------+
-     |                     Goto Line                    |
-     +--------------------------------------------------+
-     |        Enter target line number to jump to       |
-     |                Goto line: [ 45       ]           |
-     |                                                  |
-     |          [Enter]=Confirm      [ESC]=Cancel       |
-     +--------------------------------------------------+
+     +------------------------------------------------+
+     |                   Goto Line                    |
+     +------------------------------------------------+
+     |          Enter line number to jump to          |
+     |               Goto line: [     ]               |
+     |       [Enter]=Goto Line     [ESC]=Cancel       |
+     +------------------------------------------------+
      ```
+     - Canonical Template: Canonical `SE.COM` (`src/core/editor.asm:1466-1518`
+       and `src/core/plugin_mgr.asm:4170-4180`) defines the authoritative
+       Goto Line modal dialog for all SE variants.
+     - Exact Dimensions: 50 columns wide by 7 rows high (`50 cols x 7 rows`).
+       Framed with outer ASCII box, title separator `+---+`, 3 query body lines
+       (description, query prompt, action footer), and bottom border.
+     - Action Footer Phrasing:
+       The action footer strictly displays `[Enter]=Goto Line     [ESC]=Cancel`,
+       utilizing the explicit action verb `Goto Line` (matching the specific
+       action button style of Find Text `[Enter]=Find` and Replace
+       `[Enter]=Replace`) rather than generic `[Enter]=Confirm`.
+     - Input Field & Buffer:
+       The numeric line buffer is a 5-digit field enclosed in brackets
+       `Goto line: [     ]`. Hardware cursor is placed directly at the first
+       digit offset inside the bracketed field (`POPUP_COL + 28`).
      - Keystroke Rendering Discipline (In-Place Echo):
-       Single-line modal text input fields adhere strictly to the in-place
-       echo discipline defined in Section 7.10: character entry, inline
-       deletion, and cursor navigation update only the contents within the
-       bracketed input field `[  text  ]` and the hardware cursor position.
-       Modal frame borders, background rows, and underlying screen surfaces
-       MUST NOT be redrawn on individual text-entry keystrokes.
+       Adheres strictly to the in-place character echo discipline defined in
+       Section 7.10: typed digits ('0'..'9') append to the buffer and echo
+       directly at the cursor; Backspace/Delete emits `\x08 \x20 \x08`. Frame
+       borders and prompt text MUST NOT be repainted on individual keystrokes.
+     - Submission & Cancellation:
+       `<Enter>` confirms the line number, jumps to the target line, and
+       redraws the editor and status bar smoothly without a screen flash.
+       Pressing `<Enter>` with an empty buffer or pressing `<ESC>` cancels and
+       dismisses the modal cleanly without moving the document cursor.
 
    Archetype D: Selection Menu (`show_menu` / Plugin Palette)
      Used for choosing from dynamic list (Plugin Palette, Directory list).
@@ -1084,8 +1238,12 @@ or display notifications.
 
 2. Visual Presentation:
    - Highlighting is rendered using ANSI Inverse Video (`\x1b[7m`).
-   - Status Bar shows `[SEL]` while selection is in progress.
-   - Status Bar shows `[BLK LOCK]` when a search match is pinned.
+   - Status Bar Field 4 dynamically displays selection metrics:
+     - Dynamic Selection (`BLOCK_ACTIVE == 1`): `Sel: <N> char(s)` (single-line)
+       or `Sel: <N> line(s)` (multi-line) padded to 15 chars + ` | `.
+     - Solidified Block (`BLOCK_ACTIVE == 2`): `Block: <N> char(s)` / `<N>c` or
+       `Block: <N> line(s)` / `<N>L` padded to 15 chars + ` | `.
+   - Status Bar Field 5 retains fixed-width cursor coordinates without jitter.
 
 3. Direct In-Place Block Manipulation Mandate:
    All SE implementations across all target platforms (CP/M Z80 `SE.COM`,
@@ -1103,10 +1261,10 @@ or display notifications.
 
    - Canonical Block Operation Key Combinations (from `SE.COM`):
      - `Ctrl+B`: Toggle block selection mode. If inactive (0), anchors
-       selection at current cursor (`[SEL]`). If active (1 or 2), cancels block
-       selection (`CANCEL_BLOCK`).
+       selection at current cursor (dynamic selection). If active (1 or 2),
+       cancels block selection (`CANCEL_BLOCK`).
      - `Enter`: Solidify/lock dynamic block selection (`SOLIDIFY_BLOCK`).
-       Freezes normalized `START` and `END` boundaries (`[BLK LOCK]`),
+       Freezes normalized `START` and `END` boundaries (solidified block),
        allowing free cursor navigation without moving boundaries.
      - `Ctrl+C`: Copy marked block directly to cursor (`DO_COPY_BLOCK`). If
        dynamic selection is active (1), implies solidify first. Injects block
@@ -1150,13 +1308,15 @@ or display notifications.
 | `Ctrl+R`     | `0x12`| `KEY_CTRL_R`  | Open Search & Replace modal dialog  |
 | `Ctrl+S`     | `0x13`| `KEY_CTRL_S`  | Save File to disk                   |
 | `Ctrl+T`     | `0x14`| `KEY_CTRL_T`  | Jump to Top of document (Row 0)     |
+| `Ctrl+U`     | `0x15`| `KEY_CTRL_U`  | Page Up (viewport rows - 2)         |
+| `Ctrl+V`     | `0x16`| `KEY_CTRL_V`  | Page Down (viewport rows - 2)       |
 | `Ctrl+X`     | `0x18`| `KEY_CTRL_X`  | Move block directly to cursor       |
 | `Ctrl+Y`     | `0x19`| `KEY_CTRL_Y`  | Run BEAUTIFY code formatter plugin  |
 | `ESC`        | `0x1B`| `KEY_ESC`     | Return to Splash / Cancel modal     |
 | `Enter`      | `0x0D`| `KEY_ENTER`   | Split line at cursor / Confirm modal|
 | `Backspace`  | `0x08`| `KEY_BACKSPACE`| Delete char left / join line       |
 | `Delete`     | `0x7F`| `KEY_DELETE`  | Delete char under cursor / join line|
-| `Tab`        | `0x09`| `KEY_TAB`     | Insert spaces to next tab stop (4/8)|
+| `Tab`        | `0x09`| `KEY_TAB`     | Insert spaces to next tab stop (8/4)|
 | `Up Arrow`   | ANSI  | `KEY_UP`      | Move cursor Up one line             |
 | `Down Arrow` | ANSI  | `KEY_DOWN`    | Move cursor Down one line           |
 | `Left Arrow` | ANSI  | `KEY_LEFT`    | Move cursor Left one character      |
@@ -1170,10 +1330,11 @@ or display notifications.
 > Forward, `Ctrl+E` for End of Line, and `Ctrl+X` for Move Block.
 > Directional cursor navigation across all variants and surfaces is provided
 > exclusively via standard ANSI VT100 arrow keys (`Up`, `Down`, `Left`,
-> `Right`), dedicated paging keys (`PgUp`, `PgDn`), and standard motion
-> shortcuts (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G` Bottom).
-> Legacy `Ctrl+U` and `Ctrl+V` motion aliases are removed as all target
-> keyboards provide dedicated Page Up and Page Down keys.
+> `Right`), dedicated paging keys (`PgUp`, `PgDn`), paging control aliases
+> (`Ctrl+U` Page Up, `Ctrl+V` Page Down), and standard motion shortcuts
+> (`Ctrl+A` Home, `Ctrl+E` End, `Ctrl+T` Top, `Ctrl+G` Bottom). Legacy
+> intermediary `Ctrl+V` clipboard paste is eliminated across all variants in
+> favor of direct in-place block manipulation and Page Down.
 >
 > WordStar diamond directional navigation (`^S`, `^D`, `^E`, `^X`) is strictly
 > NOT supported anywhere in SE (including the Document Editor, Centered
@@ -1361,14 +1522,14 @@ allocations, screen mode, tab stops, and subsystem behaviors.
      Geometry mode in `config.inc`. Standard classic 80-column terminal mode
      is selected by default (`MODE_80X24` = 1).
    - `TAB` / `TABS` (Default: `8`):
-     Tab stop column interval (`4` or `8`). In `se.asm`, default is 8
-     (`CFG_TAB_WIDTH = 8`, mask = 7).
+     Tab stop column interval (`4` or `8`). Applicable across all SE variants;
+     default is 8 (`CFG_TAB_WIDTH = 8`, mask = 7), configurable to 4.
    - Document Line Ending Format Exclusion:
-     Text file line ending format (`CPM` CRLF vs `Linux` LF) is NOT an `SE.CFG`
-     configuration setting. As specified in Section 7.7, line endings are
-     governed per-document: new files default to host native format, opened
-     files preserve their existing end-of-line markers, and format can be
-     toggled per-file in the Save File screen via `Ctrl+F`.
+     Text file line ending format (`CP/M` CRLF vs `Linux` LF) is NOT an
+     `SE.CFG` configuration setting. As specified in Section 7.7, line
+     endings are governed per-document: new files default to host native
+     format, opened files preserve their existing end-of-line markers, and
+     format can be toggled per-file in the Save File screen via `Ctrl+F`.
    - `LINES` / `MAXLINES` (Default: `16K`):
      Maximum document line pointer table capacity (`16K` = 16,384 lines,
      `32K` = 32,768 lines).
@@ -1530,8 +1691,9 @@ specific architectural adaptations.
        __linux__`) must gate:
        - Full-sized stack buffers (`raw_name[80]`, `core[256]`, `full_bar[256]`)
          preventing string format truncation.
-       - Persistent Field 4 help anchor (`^K: Editor keys |`) and Field 5
-         mode indicators (`[SEL]`, `[BLK LOCK]`, `[Pan +40]`) per Section 4.3.
+       - Canonical Field 4 contextual hierarchy (help key hint, mode cues,
+         block metrics, pan indicator, or free memory) and Field 5 fixed
+         coordinate anchor per Section 4.3.
        - Tier 2 centered modal save notifications (`Save Complete`, `Export
          Complete`) per Section 4.4 and Section 11.1.
        - POSIX directory scanning and dynamic terminal size querying.
