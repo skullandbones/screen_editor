@@ -21,8 +21,8 @@ class TestConfig(unittest.TestCase):
     def test_default_settings(self):
         """Step 1: Verify default settings match canonical SE specifications."""
         print("[*] Step 1: Verifying default settings...", flush=True)
-        self.assertEqual(self.cfg.get("SCREEN"), "120X40")
-        self.assertEqual(self.cfg.screen_geometry, (120, 40))
+        self.assertEqual(self.cfg.get("SCREEN"), "80X24")
+        self.assertEqual(self.cfg.screen_geometry, (80, 24))
         self.assertEqual(self.cfg.tab_width, 8)
         self.assertTrue(self.cfg.format_cpm)
         self.assertTrue(self.cfg.plugin_autoload)
@@ -105,14 +105,14 @@ class TestConfig(unittest.TestCase):
         print("[+] Step 3: SE.CFG load and save cycle verified.", flush=True)
 
     def test_secfg_canonical_default_and_discovery(self):
-        """Step 4: Verify startup SE.CFG discovery and 120x40 default."""
+        """Step 4: Verify startup SE.CFG discovery and 80x24 default."""
         print(
-            "[*] Step 4: Testing canonical 120x40 default and discovery...",
+            "[*] Step 4: Testing canonical 80x24 default and discovery...",
             flush=True,
         )
         cfg = Config()
-        self.assertEqual(cfg.DEFAULT_SCREEN, "120X40")
-        self.assertEqual(cfg.screen_geometry, (120, 40))
+        self.assertEqual(cfg.DEFAULT_SCREEN, "80X24")
+        self.assertEqual(cfg.screen_geometry, (80, 24))
 
         # Test custom path discovery
         with tempfile.NamedTemporaryFile(
@@ -161,7 +161,7 @@ class TestConfig(unittest.TestCase):
                 prog_cfg = os.path.join(prog_dir, "SE.CFG")
                 if not os.path.isfile(prog_cfg):
                     self.assertIsNone(cfg_empty.discover_and_load())
-                    self.assertEqual(cfg_empty.screen_geometry, (120, 40))
+                    self.assertEqual(cfg_empty.screen_geometry, (80, 24))
             finally:
                 os.chdir(orig_cwd)
 
@@ -184,6 +184,25 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(self.cfg.screen_rows, 48)
 
         print("[+] Step 5: NATIVE screen geometry verified.", flush=True)
+
+    def test_bug_2_7_71_startup_screen_geometry_default(self):
+        """Step 6: Verify startup screen geometry defaults to 80x24."""
+        print(
+            "[*] Step 6: Testing startup screen geometry default 80x24...",
+            flush=True,
+        )
+        cfg = Config()
+        self.assertEqual(cfg.DEFAULT_SCREEN, "80X24")
+        self.assertEqual(cfg.get("SCREEN"), "80X24")
+        self.assertEqual(cfg.screen_geometry, (80, 24))
+        self.assertEqual(cfg.screen_cols, 80)
+        self.assertEqual(cfg.screen_rows, 24)
+        self.assertFalse(cfg.is_native_screen)
+
+        print(
+            "[+] Step 6: Startup screen geometry default 80x24 verified.",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

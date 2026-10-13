@@ -1401,9 +1401,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
-  Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; Bugs 2.7.60–2.7.63,
-  2.7.65–2.7.71 Open).
+- **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
+  2.7.65–2.7.71 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; 0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -2391,7 +2390,7 @@ have been resolved and archived.
       conformed title to ASCII hyphen (`SE - EDITOR MODE KEYS`). Validated
       via Step 19 and Step 54 in `test_editor.py`
       (`test_bug_2_7_70_canonical_help_screen_keys`).
-  - [ ] **Bug 2.7.71: Startup Screen Geometry Inversion in Config Defaults**:
+  - [x] **Bug 2.7.71: Startup Screen Geometry Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 13.2; `TODO.md`
       Bug 2.1.2.
     - *Issue*: Section 2.1 and Section 13.2 mandate `80x24` as the universal
@@ -2400,8 +2399,11 @@ have been resolved and archived.
     - *Root Cause*: In `ports/python/se/config.py:16`,
       `DEFAULT_SCREEN = "120X40"`, causing editor instances without `SE.CFG`
       to default to 120x40 wide console mode rather than canonical 80x24.
-    - *Action Required*: In `ports/python/se/config.py:16`, set
-      `DEFAULT_SCREEN = "80X24"`.
+    - *Resolution*: Updated `DEFAULT_SCREEN = "80X24"` in `config.py`,
+      conforming default startup console geometry to canonical 80x24 across
+      unconfigured instances. Validated via Step 1, Step 4, and Step 6 in
+      `test_config.py` and Step 28 and Step 55 in `test_editor.py`
+      (`test_bug_2_7_71_startup_screen_geometry_defaults`).
   - [x] **Bug 2.7.72: Default Tab Width Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4, 13.2; `TODO.md`
       Bug 2.4.38; `src/se.asm:4620`.

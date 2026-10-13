@@ -1147,12 +1147,12 @@ class TestEditor(unittest.TestCase):
             "[*] Step 28: Testing Editor startup SE.CFG discovery...",
             flush=True,
         )
-        # Default Editor instance defaults to 120x40 canonical geometry
+        # Default Editor instance defaults to 80x24 canonical geometry
         ed_default = Editor()
-        self.assertEqual(ed_default.config.DEFAULT_SCREEN, "120X40")
-        self.assertEqual(ed_default.config.screen_geometry, (120, 40))
-        self.assertEqual(ed_default.terminal.cols, 120)
-        self.assertEqual(ed_default.terminal.rows, 40)
+        self.assertEqual(ed_default.config.DEFAULT_SCREEN, "80X24")
+        self.assertEqual(ed_default.config.screen_geometry, (80, 24))
+        self.assertEqual(ed_default.terminal.cols, 80)
+        self.assertEqual(ed_default.terminal.rows, 24)
         self.assertEqual(ed_default.buffer.tab_width, 8)
 
         # Editor with custom config path overrides geometry and tab width
@@ -1162,14 +1162,14 @@ class TestEditor(unittest.TestCase):
             tmp_path = tmp_file.name
         try:
             with open(tmp_path, "wb") as f:
-                f.write(b"SCREEN=80x24\r\nTAB=4\r\n")
+                f.write(b"SCREEN=120x40\r\nTAB=4\r\n")
 
             ed_custom = Editor(config_path=tmp_path)
             self.assertEqual(
                 ed_custom.loaded_config_path, os.path.abspath(tmp_path)
             )
-            self.assertEqual(ed_custom.terminal.cols, 80)
-            self.assertEqual(ed_custom.terminal.rows, 24)
+            self.assertEqual(ed_custom.terminal.cols, 120)
+            self.assertEqual(ed_custom.terminal.rows, 40)
             self.assertEqual(ed_custom.buffer.tab_width, 4)
         finally:
             if os.path.exists(tmp_path):
@@ -2538,6 +2538,24 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 54: Canonical Help screen keys & title verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_71_startup_screen_geometry_defaults(self):
+        """Step 55: Verify startup screen geometry defaults to 80x24."""
+        print(
+            "[*] Step 55: Testing startup screen geometry default 80x24...",
+            flush=True,
+        )
+        ed = Editor()
+        self.assertEqual(ed.config.DEFAULT_SCREEN, "80X24")
+        self.assertEqual(ed.config.screen_geometry, (80, 24))
+        self.assertEqual(ed.terminal.cols, 80)
+        self.assertEqual(ed.terminal.rows, 24)
+        self.assertTrue(ed.terminal.fixed_geometry)
+
+        print(
+            "[+] Step 55: Startup screen geometry default 80x24 verified.",
             flush=True,
         )
 
