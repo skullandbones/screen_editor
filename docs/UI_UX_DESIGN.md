@@ -715,9 +715,9 @@ content blocks rather than top-aligned text.
      ~                               EDITOR MODE KEYS
      ~========================================================================
      ~  FILE & SYSTEM:
-     ~    Ctrl+O          Open file screen       Ctrl+S         Save file screen
-     ~    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M
-     ~    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up
+     ~    Ctrl+O           Open file screen      Ctrl+S         Save file screen
+     ~    Ctrl+W           Close file to splash  Ctrl+Q         Quit to CP/M
+     ~    Ctrl+K           Help / Solidify block Ctrl+P         Plugins pop-up
      ~  NAVIGATION & SEARCH:
      ~    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line
      ~    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line
@@ -748,6 +748,13 @@ content blocks rather than top-aligned text.
      - Row 21: Full-width horizontal dash rule of `'-'`.
      - Row 22: Centered Return Prompt: `Press any key to continue` (26 leading
        spaces in 80 columns). Standardized phrasing without trailing ellipsis.
+   - Column Grid & Key Alignment (Two-Column Layout across Columns 4..78):
+     - Column 1 Key begins at Column 4 (4 leading spaces).
+     - Column 1 Description begins at Column 21 (11 spaces following 6-char
+       keys like `Ctrl+O`, `Ctrl+W`, `Ctrl+K`, `Ctrl+L`, `Ctrl+F`, `Ctrl+R`).
+     - Column 2 Key begins at Column 45.
+     - Column 2 Description begins at Column 61 (10 spaces following
+       `Ctrl+S`, `Ctrl+Q`, `Ctrl+P`).
    - Symmetrical Centering & Tilde Discipline:
      - In 80x24 Geometry:
        - Available text rows: 23 (`HOST_ROWS - 1`, excluding status bar).
