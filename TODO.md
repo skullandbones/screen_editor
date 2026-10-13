@@ -25,9 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 1 Open
+- **Status**: Complete / 0 Open
   (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
-  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.18, 2.1.19 Fixed).
+  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -232,7 +232,7 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
-  - [ ] **Bug 2.1.17: Modal Dialog Cancellation by Unexpected Keystrokes**:
+  - [x] **Bug 2.1.17: Modal Cancellation by Unexpected Keys [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and

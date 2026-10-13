@@ -62,9 +62,10 @@ CHECK_KEY_READY:
 ;   Pending escape sequence consumed from serial buffer.
 ;
 ; Preserves / Modifies:
-;   Clobbers all working registers.
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 DRAIN_ESC_SEQUENCE:
+	PUSH BC
 	LD BC,ESC_TIMEOUT_LOOPS
 DES_WAIT:
 	CALL CHECK_KEY_READY
@@ -73,24 +74,34 @@ DES_WAIT:
 	LD A,B
 	OR C
 	JR NZ,DES_WAIT
+	POP BC
 	RET				; Standalone ESC, nothing to drain
 
 DES_DRAIN_FIRST:
 	CALL GET_KEY		; Consume byte following ESC ('[' or 'O' etc.)
-DES_DRAIN_MORE:
-	LD BC,500
-DES_DRAIN_WAIT:
+	CP '['
+	JR NZ,DES_CHECK_SS3
+	CALL DCT_DRAIN_LOOP
+	JR DES_DRAIN_DONE
+
+DES_CHECK_SS3:
+	CP 'O'
+	JR NZ,DES_DRAIN_DONE
+	LD BC,ESC_TIMEOUT_LOOPS
+DES_SS3_WAIT:
 	CALL CHECK_KEY_READY
-	JR NZ,DES_DRAIN_BYTE
+	JR NZ,DES_SS3_BYTE
 	DEC BC
 	LD A,B
 	OR C
-	JR NZ,DES_DRAIN_WAIT
-	RET				; Sequence drained
-
-DES_DRAIN_BYTE:
+	JR NZ,DES_SS3_WAIT
+	JR DES_DRAIN_DONE
+DES_SS3_BYTE:
 	CALL GET_KEY
-	JR DES_DRAIN_MORE
+
+DES_DRAIN_DONE:
+	POP BC
+	RET
 
 ;------------------------------------------------------------------------------
 ; DRAIN_INPUT_BUFFER: Flush all pending keystrokes from console input buffer
@@ -1348,7 +1359,7 @@ PARSE_DEC_LOOP:
 ;   and navigates to target line.
 ;
 ; Call Usage / Protocol:
-;   Jumped to from MAIN_LOOP on Ctrl+G.
+;   Called via CALL from MAIN_LOOP on Ctrl+L.
 ;
 ; Inputs:
 ;   ACTIVE_COLS, ACTIVE_ROWS.
@@ -1390,14 +1401,6 @@ GOTO_UI_LOOP:
 	; ESC or escape sequence (e.g. cursor keys, PgUp, PgDn)
 	CP KEY_ESC
 	JR Z,GOTO_UI_CHECK_ESC
-
-	; Ctrl+U -> cancel and Page Up
-	CP KEY_CTRL_U
-	JR Z,GOTO_UI_PGUP
-
-	; Ctrl+V -> cancel and Page Down
-	CP KEY_CTRL_V
-	JR Z,GOTO_UI_PGDN
 
 	; Enter -> confirm goto line
 	CP KEY_ENTER
@@ -1457,22 +1460,9 @@ GOTO_UI_BS:
 	CALL PUTC
 	JR GOTO_UI_LOOP
 
-GOTO_UI_PGUP:
-	CALL PAGE_UP
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
-
-GOTO_UI_PGDN:
-	CALL PAGE_DOWN
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
-
 GOTO_UI_CHECK_ESC:
 	; Check if a character follows ESC within a short timeout
+	PUSH BC
 	LD BC,ESC_TIMEOUT_LOOPS
 GOTO_WAIT_ESC:
 	CALL CHECK_KEY_READY
@@ -1483,15 +1473,14 @@ GOTO_WAIT_ESC:
 	JR NZ,GOTO_WAIT_ESC
 
 	; Standalone ESC key: cancel prompt without moving cursor
+	POP BC
 	JR GOTO_UI_CANCEL
 
 GOTO_GOT_ESC_SEQ:
-	; User pressed an escape sequence (e.g. cursor arrow keys, PgUp, PgDn)
-	CALL GOT_ESC_BYTE
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
+	; Unexpected escape sequence (e.g. cursor keys, PgUp, PgDn)
+	CALL DRAIN_ESC_SEQUENCE
+	POP BC
+	JP GOTO_UI_LOOP
 
 GOTO_UI_ENTER:
 	; If empty (user just pressed enter with no digits), treat as cancel
