@@ -263,14 +263,20 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Verification Complete / 5 Defects Open (Bug 2.2.3 Rejected).
+- **Status**: Active / 12 Open (Bugs 2.2.2 Resolved, 2.2.3 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [ ] **Bug 2.2.1: Status Bar Field Squatting & Non-Canonical Layout**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
     - *Issue*: Status bar Field 4 displays free memory on splash, selection
-      metrics on block mode, and pan offset when panned in `se_next_cpm.asm`.
-    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/se_next_cpm.asm` to
-      canonical 5-field layout; move indicators to Field 5.
+      metrics on block mode, and pan offset when panned in `se_next_cpm.asm`,
+      violating the universal `^K: Editor keys |` invariant. Field 3 displays
+      `CP/M  |` with slash rather than `CPM   |`. Field 2 in 80x24 mode prints
+      with 2 leading spaces (`  80x24 |`).
+    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm` to
+      canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
+      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
+      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
+      `^K: Editor keys |`. Update Field 3 string to `CPM   |`.
   - [x] **Bug 2.2.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: Next CP/M profile defaults to 120x40 instead of standard 80x24.
@@ -282,16 +288,106 @@ have been resolved and archived.
       `SE_NEXT.COM` to preserve established SE.COM keymappings.
   - [ ] **Bug 2.2.4: Tier 1 Centering & Tilde Violations on Help Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
-    - *Issue*: Help overlay displays 22-line banner box with zero top margin.
-    - *Required Fix*: Standardize to 17-line 70-column centered layout.
+    - *Issue*: In `plugins/help.asm`, content height is 22 lines with 0 top
+      margin rows on an 80x24 screen, rendering ASCII banner rules and
+      displaying obsolete keybindings.
+    - *Required Fix*: Redesign `HELP.OVL` in `plugins/help.asm` to use the
+      canonical 17-line, 70-column two-column tabular layout, centered
+      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
+      universal status bar presence on Row 24.
   - [ ] **Bug 2.2.5: Tier 1 Splash Screen Centering & Menu Inconsistency**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
-    - *Issue*: Splash screen displays legacy 21-line menu in `se_next_cpm.asm`.
-    - *Required Fix*: Align with canonical 14-line centered splash layout.
+    - *Issue*: `RENDER_SPLASH` in `src/se_next_cpm.asm` renders a 21-line menu
+      structure with fixed menu items (`type [E] or [Enter] to edit...`),
+      lacking the canonical 14-line centered presentation (`:e to edit`,
+      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
+      `:? for help`, `:q to quit`).
+    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
+      `src/se_next_cpm.asm` to match the canonical 14-line, 50-column Tier 1
+      splash layout specified in Section 7.2.
   - [ ] **Bug 2.2.6: Tier 2 Modal Dialog Framing & Action Button Formatting**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
-    - *Issue*: 50-column dialog framing and non-standard action button footers.
-    - *Required Fix*: Align dialog boxes with 52-column Archetype C format.
+    - *Issue*: In `DO_GOTO_LINE_UI` (`src/core/editor.asm`), dialog width is
+      50 columns instead of canonical 52 columns. Footer buttons display
+      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
+      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
+      `src/core/search.asm` exhibit similar non-standard widths.
+    - *Required Fix*: Standardize modal pop-up routines in `src/core/editor.asm`
+      and `src/core/search.asm` to strictly conform to Archetype C (52x8 box,
+      `+---+` title divider, `[Enter]=Confirm      [ESC]=Cancel` footer,
+      bracketed input `[  ]`).
+  - [ ] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.1.
+    - *Issue*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm:56-60`,
+      `HAL_KEYBOARD_TRANSLATE` intercepts `NEXT_KEY_DELETE` (`0x7F`) and
+      replaces it with `KEY_BACKSPACE` (`0x08`). This turns the dedicated Next
+      Delete key into a backward deletion key. It completely prevents forward
+      deletion under cursor in the document editor and Archetype C modals, and
+      erroneously causes Delete to cancel dynamic block selection rather than
+      executing `DO_DELETE_BLOCK`.
+    - *Required Fix*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm`, preserve
+      `0x7F` (`KEY_DELETE`) so that the editor engine distinguishes forward
+      deletion and block range deletion from destructive backward deletion.
+  - [ ] **Bug 2.2.8: Memory Screen Queries RomWBW HBIOS Under NextCPM**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
+    - *Issue*: In `src/se_next_cpm.asm:3480`, `SHOW_MEM_INFO_SCREEN` invokes
+      `QUERY_MEM_SCREEN_INFO`, which queries RomWBW HBIOS function vectors
+      (`HBIOS_SYS_GET`). Under NextCPM, HBIOS is absent; the screen displays
+      `HBIOS: None | OS: CP/M 2.2 | RAM: 64 KB Base` and renders an empty
+      16-row HBIOS bank table (`80h..8Fh`), ignoring the 1024 KB / 2048 KB
+      Next SRAM and 8KB MMU Far RAM allocations (NextRegs `0x50`–`0x57`).
+    - *Required Fix*: Implement a NextCPM-specific memory map reporter in
+      `src/se_next_cpm.asm` that queries Next hardware memory capacity via
+      NextReg `0x01` / `0x14` and reports active Next MMU Far RAM bank slots
+      rather than invoking HBIOS discovery.
+  - [ ] **Bug 2.2.9: Escape Sequence Trailing Byte Leakage in Editor**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
+    - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
+      `HANDLE_CSI_2`, `HANDLE_CSI_LOOP`), when an unhandled or extended
+      multi-byte escape sequence is received (e.g. function keys F5–F12,
+      bracketed paste, or mouse tracking events), the handlers execute `RET`
+      upon encountering unrecognized characters without consuming the remainder
+      of the sequence. Trailing sequence bytes (such as terminating `'~'`)
+      remain pending in the console input buffer and leak into document text.
+    - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
+      to atomically drain unrecognized multi-byte sequences until a terminating
+      character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
+  - [ ] **Bug 2.2.10: Predominant Language Indication on About Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
+    - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
+      `version 1.1.0 (2026-10-09)`, omitting the predominant programming
+      language. Per Section 7.12 and 14.6, `SE_NEXT.COM` must display
+      `version 1.1.0 (2026-10-09) (Z80 Assembly)` on the About screen.
+    - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
+      to append ` (Z80 Assembly)`, ensuring clean centering in
+      `SHOW_ABOUT_SCREEN` across all 80x24 screens.
+  - [ ] **Bug 2.2.11: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
+    - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
+      when the current line and next line are joined on Delete at EOL,
+      `JOIN_TWO_LINES` merges the lines, but `DO_DEL_FWD_JOIN_NEXT` fails to
+      update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+    - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
+      `(TARGET_COL),HL`.
+  - [ ] **Bug 2.2.12: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
+    - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
+      `src/core/search.asm:214-233` (`DO_FIND_UI`), and
+      `src/core/search.asm:1940-1960` (`DO_REPLACE_UI`), receiving unexpected
+      escape sequences (e.g. arrow keys, PgUp/PgDn) routes into `GOT_ESC_SEQ`,
+      executing background document cursor movements and abruptly aborting the
+      active dialog. Modals must only dismiss on `Enter` or `ESC`.
+    - *Required Fix*: In modal input loops, drain and discard unexpected escape
+      sequences and non-input keys, preserving active dialog state.
+  - [ ] **Bug 2.2.13: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
+    - *Issue*: In `src/se_next_cpm.asm:582-589` and `src/core/plugin_mgr.asm`,
+      hotkey `1` selects 120x40 and `2` selects 80x24 (inverted per Section
+      2.1). Furthermore, ZX Spectrum Next hardware text mode is fixed 80
+      columns; 120x40 wide console mode is unsupported on Next hardware.
+      Triggering `1` causes horizontal column spill and corrupted wrapping.
+    - *Required Fix*: In `src/se_next_cpm.asm`, assign `1` to 80x24 classic
+      terminal mode and omit or disable 120x40 mode per Section 2.1 mandate.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
@@ -300,9 +396,142 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / Verification in Progress.
-- **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; report new Profile 3 defects here).*
+- **Status**: Active / 12 Open Defects.
+- **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
+  - [ ] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
+    - *Issue*: In `src/hal/next_native/hal_next_keyboard.asm:22-26, 309-313`,
+      the Sinclair matrix keyboard decoder maps dedicated cursor keys to legacy
+      WordStar diamond control codes:
+      - Left Arrow (Caps+5) emits `0x13` (`KEY_WORDSTAR_LEFT` = `Ctrl+S`),
+        triggering Save File in the editor!
+      - Right Arrow (Caps+8) emits `0x04` (`KEY_WORDSTAR_RIGHT` = `Ctrl+D`),
+        triggering character deletion!
+      - Up Arrow (Caps+7) emits `0x05` (`KEY_WORDSTAR_UP` = `Ctrl+E`),
+        jumping to End of line!
+      - Down Arrow (Caps+6) emits `0x18` (`KEY_WORDSTAR_DOWN` = `Ctrl+X`),
+        triggering Move Block!
+      - Delete (Caps+0) emits `0x07` (`KEY_WORDSTAR_DEL` = `Ctrl+G`),
+        jumping to EOF (bottom of document)!
+      This directly violates the canonical navigation key mandate in Section 1
+      and Section 10, creating catastrophic command collisions.
+    - *Required Fix*: Update `KEY_TABLE_CAPS` in `hal_next_keyboard.asm` to emit
+      standard ANSI VT100 arrow escape sequences (`\x1b[A`, `\x1b[B`, `\x1b[C`,
+      `\x1b[D`) or direct editor movement codes (`KEY_UP`, `KEY_DOWN`,
+      `KEY_LEFT`, `KEY_RIGHT`), and map Delete (Caps+0) to `0x7F`
+      (`KEY_DELETE`).
+  - [ ] **Bug 2.3.2: Status Bar Field Squatting & Non-Canonical Layout**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.1, 4.3, 4.4, 11.1.
+    - *Issue*: In `src/core/ui_render.asm:938-1020`, Field 4 is overwritten
+      with free memory (`Free: 64 KB |`) on splash, selection metrics on block
+      mode, and `[Pan +40] |` when panned, violating the universal
+      `^K: Editor keys |` invariant. Field 3 displays `CP/M  |` with slash
+      rather than `CPM   |` (or native environment indicator). Field 2 in
+      80x24 mode prints with 2 leading spaces (`  80x24 |`).
+    - *Required Fix*: Conform `RENDER_STATUS_BAR` in `src/core/ui_render.asm` to
+      canonical 5-field invariant (`| {name}{mod} | {geom} | {fmt} | `
+      `^K: Editor keys | Line ... Col ... |`). Move `[SEL]`, `[BLK LOCK]`, and
+      `[Pan +40]` indicators into Field 5. Keep Field 4 persistently displaying
+      `^K: Editor keys |`. Update Field 3 string to `CPM   |` (or `Next  |`).
+  - [ ] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
+    - *Issue*: In `src/se_next.asm:3523` (`SHOW_MEM_INFO_SCREEN`), the native
+      Next application invokes `QUERY_MEM_SCREEN_INFO`, which executes RomWBW
+      HBIOS queries (`HBIOS_SYS_GET`). Under native NextZXOS / ESXDOS, HBIOS is
+      non-existent. The screen displays `HBIOS: None | OS: CP/M 2.2 | RAM: 64 KB
+      Base` and prints an empty 16-row HBIOS bank table (`80h..8Fh`), ignoring
+      the 1024 KB / 2048 KB Next SRAM and 8KB MMU Far RAM allocations.
+    - *Required Fix*: Implement a native Next memory map renderer in
+      `src/se_next.asm` that queries Next hardware registers (NextReg `0x01`
+      Machine ID, `0x14` Global RAM paging) and visualizes the 8KB MMU page
+      allocations (pages 32..43) instead of invoking HBIOS discovery.
+  - [ ] **Bug 2.3.4: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
+    - *Issue*: In `src/se_next.asm:625-631` and `src/core/plugin_mgr.asm`,
+      hotkey `1` selects 120x40 and `2` selects 80x24. ZX Spectrum Next
+      hardware text mode is fixed 80 columns; 120x40 is unsupported. Selecting
+      `1` causes visual corruption and terminal column spill across the screen.
+    - *Required Fix*: In `src/se_next.asm`, assign `1` to 80x24 classic
+      terminal mode and omit or disable 120x40 mode per Section 2.1 mandate.
+  - [ ] **Bug 2.3.5: Predominant Language Indication on About Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
+    - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
+      `version 1.1.0 (2026-10-09)`, omitting the predominant programming
+      language. Per Section 7.12 and 14.6, `SE.NEX` and `.se` must display
+      `version 1.1.0 (2026-10-09) (Z80 Assembly)` on the About screen.
+    - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
+      to append ` (Z80 Assembly)`, ensuring clean centering in
+      `SHOW_ABOUT_SCREEN` across all 80x24 screens.
+  - [ ] **Bug 2.3.6: Tier 1 Centering & Banner Rules on Help Screen**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
+    - *Issue*: `HELP.OVL` in `plugins/help.asm` content height is 22 lines with
+      0 top margin rows on an 80x24 screen, rendering ASCII banner rules and
+      displaying obsolete keybindings.
+    - *Required Fix*: Standardize `HELP.OVL` in `plugins/help.asm` to use the
+      canonical 17-line, 70-column two-column tabular layout, centered
+      vertically with `~` in column 0 for rows 1..3 and 21..23, and maintain
+      universal status bar presence on Row 24.
+  - [ ] **Bug 2.3.7: Tier 1 Splash Screen Centering & Menu Inconsistency**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2.
+    - *Issue*: `RENDER_SPLASH` in `src/se_next.asm` renders a 21-line menu
+      structure with fixed menu items (`type [E] or [Enter] to edit...`),
+      lacking the canonical 14-line centered presentation (`:e to edit`,
+      `:o to open file`, `:s to save file`, `:c for config`, `:p for plugins`,
+      `:? for help`, `:q to quit`).
+    - *Required Fix*: Update `STR_SPLASH_CMDS` and `RENDER_SPLASH` in
+      `src/se_next.asm` to match the canonical 14-line, 50-column Tier 1 splash
+      layout specified in Section 7.2.
+  - [ ] **Bug 2.3.8: Tier 2 Modal Dialog Framing (50 Columns vs 52 Columns)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.3 (Archetype C).
+    - *Issue*: In `src/core/editor.asm:1420` (`DO_GOTO_LINE_UI`), dialog width
+      is 50 columns instead of canonical 52 columns. Footer buttons display
+      `[Enter]=Goto Line     [ESC]=Cancel` instead of canonical Archetype C
+      footer `[Enter]=Confirm      [ESC]=Cancel`. Modal prompt routines in
+      `src/core/search.asm` exhibit similar non-standard widths.
+    - *Required Fix*: Standardize modal pop-up routines in `src/core/editor.asm`
+      and `src/core/search.asm` to strictly conform to Archetype C (52x8 box,
+      `+---+` title divider, `[Enter]=Confirm      [ESC]=Cancel` footer,
+      bracketed input `[  ]`).
+  - [ ] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
+    - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI` sub-handlers),
+      when an unhandled or extended multi-byte escape sequence is received
+      (e.g. function keys F5–F12, bracketed paste, or mouse tracking events),
+      the handlers execute `RET` upon encountering unrecognized characters
+      without consuming the remainder of the sequence. Trailing sequence bytes
+      leak into the document buffer.
+    - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
+      to atomically drain unrecognized multi-byte sequences until a terminating
+      character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
+  - [ ] **Bug 2.3.10: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
+    - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
+      when the current line and next line are joined on Delete at EOL,
+      `JOIN_TWO_LINES` merges the lines, but `DO_DEL_FWD_JOIN_NEXT` fails to
+      update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
+    - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
+      `(TARGET_COL),HL`.
+  - [ ] **Bug 2.3.11: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
+    - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
+      `src/core/search.asm:214-233` (`DO_FIND_UI`), and
+      `src/core/search.asm:1940-1960` (`DO_REPLACE_UI`), receiving unexpected
+      escape sequences (e.g. arrow keys, PgUp/PgDn) routes into `GOT_ESC_SEQ`,
+      executing background document cursor movements and abruptly aborting the
+      active dialog. Modals must only dismiss on `Enter` or `ESC`.
+    - *Required Fix*: In modal input loops, drain and discard unexpected escape
+      sequences and non-input keys, preserving active dialog state.
+  - [ ] **Bug 2.3.12: File Browser Displays CP/M User Areas Under NextZXOS**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.6, 7.7.
+    - *Issue*: In `src/core/ui_browser.asm`, the directory browser prompt line
+      displays `[ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)`.
+      Under native NextZXOS / ESXDOS FAT storage, user areas (`u:`) are
+      non-existent; files are organized in hierarchical directories and paths
+      (e.g. `/`, `/dot`). Prompting the user for `[u:]` under NextZXOS causes
+      user confusion and visual non-conformance.
+    - *Required Fix*: In `src/core/ui_browser.asm`, adapt the directory browser
+      prompt line under `TARGET_NEXT_NATIVE` to display native path syntax
+      rather than CP/M drive/user area notation.
 
 ### 2.4 Profile 4: Linux Native C Profile (`se-linux`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
