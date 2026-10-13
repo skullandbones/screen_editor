@@ -2400,8 +2400,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 8 Defects Open (Bug 2.8.1 Resolved; Bug 2.8.7 Rejected;
-  Bugs 2.8.2–2.8.6, 2.8.8–2.8.10 Open).
+- **Status**: Active / 7 Defects Open (Bugs 2.8.1, 2.8.3 Resolved;
+  Bug 2.8.7 Rejected; Bugs 2.8.2, 2.8.4–2.8.6, 2.8.8–2.8.10 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2461,7 +2461,7 @@ have been resolved and archived.
       eliminate redundant `snprintf` formatters on CP/M, trim string literals,
       configure z88dk pragmas to trim unused CRT/stdio features, and restore
       positive TPA headroom below `0xD800`.
-  - [ ] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
+  - [x] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 7.3, 7.4, 7.12,
       11.10.
     - *Issue*: Multi-byte UTF-8 em-dash characters (`—` / `\xe2\x80\x94`) are
@@ -2474,6 +2474,10 @@ have been resolved and archived.
     - *Remedy*: Replace all multi-byte UTF-8 em-dash characters in
       `src/core/ui_render.c` and shared UI routines with standard 7-bit ASCII
       hyphens (`-`) in strict conformance with Section 2.6.
+    - *Resolution*: Replaced all 4 multi-byte UTF-8 em-dash characters in
+      `src/core/ui_render.c` with standard 7-bit ASCII hyphens (`-`). Added
+      automated test suite `tests/test_sec_utf8_ascii.py` verifying zero UTF-8
+      em-dash sequences across all C source files and compiled `SEC.COM`.
   - [ ] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: The splash screen in `SEC.COM` displays unsupported Option 3

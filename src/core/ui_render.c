@@ -420,7 +420,7 @@ static void render_tier1_workspace_screen(const char **lines,
 void show_splash_screen(void)
 {
     static const char *s_splash_lines[19] = {
-        "                  SE — Screen Editor                  ",
+        "                  SE - Screen Editor                  ",
         "                  Version v1.1.0 (C)                  ",
         "                                                      ",
         "        type   [E]  or  [Enter] to edit               ",
@@ -551,7 +551,7 @@ void show_splash_screen(void)
 }
 
 static const char *s_help_lines[17] = {
-    "                       SE.COM — EDITOR MODE KEYS                      ",
+    "                       SE.COM - EDITOR MODE KEYS                      ",
     "                                                                      ",
     "  Cursor Navigation:                 Block Operations:                ",
     "    Arrows / ANSI VT100                 Ctrl+B: Toggle Block          ",
@@ -583,7 +583,7 @@ void show_help_screen(void)
 void show_about_screen(void)
 {
     static const char *s_about_lines[6] = {
-        "        SE.COM — Screen Editor (Linux)        ",
+        "        SE.COM - Screen Editor (Linux)        ",
         "                Version v1.1.0                ",
         "                                              ",
         "        CP/M, ZX Spectrum Next, Linux         ",
@@ -638,7 +638,7 @@ void show_config_screen(void)
         snprintf(line_ram, sizeof(line_ram),
                  "         4. RAM Drive Mode   : %-19s", ram_str);
 
-        cfg_lines[0]  = "            SE — Configuration Manager            ";
+        cfg_lines[0]  = "            SE - Configuration Manager            ";
         cfg_lines[1]  = "                                                  ";
         cfg_lines[2]  = line_geom;
         cfg_lines[3]  = line_tab;
