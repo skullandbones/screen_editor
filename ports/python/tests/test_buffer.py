@@ -356,8 +356,8 @@ class TestBuffer(unittest.TestCase):
         buf.target_col = 2
         buf.move_down()
         self.assertEqual(buf.cursor_row, 1)
-        # Target 2 falls inside the tab (0..3), so it must clamp to 0
-        self.assertEqual(buf.cursor_col, 0)
+        # Target 2 falls inside tab, snap-forward aligns to col 1 (after tab)
+        self.assertEqual(buf.cursor_col, 1)
         self.assertEqual(buf.target_col, 2)
 
         # Moving down restores cursor to col 2 on line without leading tabs
@@ -610,6 +610,46 @@ class TestBuffer(unittest.TestCase):
 
         print(
             "[+] Step 15: Direct in-place block methods verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_65_snap_forward_tab_alignment(self):
+        """Step 16: Verify snap-forward vertical tab alignment clamping."""
+        print(
+            "[*] Step 16: Testing snap-forward tab alignment clamping...",
+            flush=True,
+        )
+        line = "\tindented"  # tab expands to columns 0..7
+        # Target column 0 stays at 0 (before tab)
+        self.assertEqual(adjust_col_to_target(line, 0, tab_width=8), 0)
+        # Target columns 1..7 fall within the tab, so cursor snaps forward
+        # to char_idx 1 (column 8, directly after tab)
+        for col in range(1, 8):
+            self.assertEqual(
+                adjust_col_to_target(line, col, tab_width=8),
+                1,
+                f"Failed for target col {col}",
+            )
+        # Target column 8 is at the boundary (char_idx 1)
+        self.assertEqual(adjust_col_to_target(line, 8, tab_width=8), 1)
+        # Target column 9 points to 'n' (char_idx 2)
+        self.assertEqual(adjust_col_to_target(line, 9, tab_width=8), 2)
+
+        # Also test on DocumentBuffer cursor vertical movement
+        buf = DocumentBuffer(tab_width=8)
+        buf.lines = ["12345678", "\tindented"]
+        buf.cursor_row = 0
+        buf.cursor_col = 4
+        buf.target_col = 4
+        buf.move_down()
+        # Should snap forward to char_idx 1 (after tab) rather than 0
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 1)
+        # Target col remains sticky at 4
+        self.assertEqual(buf.target_col, 4)
+
+        print(
+            "[+] Step 16: Snap-forward tab alignment clamping verified.",
             flush=True,
         )
 

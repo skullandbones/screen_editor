@@ -2286,7 +2286,7 @@ have been resolved and archived.
       coordinates. `ports/python/se/ui.py` already conforms 100% to Section 4.3;
       routing mode indicators into Field 4 would clobber Field 4 and violate
       Anti-Pattern #1 (Status Bar Squatting / Context Clobber).
-  - [ ] **Bug 2.7.65: Sticky Column Clamping Retreats on Expanded Tabs**:
+  - [x] **Bug 2.7.65: Sticky Column Clamping Retreats on Expanded Tabs**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
     - *Issue*: Section 6.2 and 6.4 mandate snap-forward vertical alignment
       clamping (`ADJUST_COL_TO_TARGET`): if sticky `TARGET_COL` falls across
@@ -2298,9 +2298,11 @@ have been resolved and archived.
       (`adjust_col_to_target`), the loop executes
       `if vis_acc + spaces > target_col: break`, halting alignment before the
       tab and retreating the cursor to the margin.
-    - *Action Required*: In `ports/python/se/buffer.py`, update
-      `adjust_col_to_target` to advance `vis_acc += spaces` and
-      `char_idx += 1` through the tab when `vis_acc + spaces > target_col`.
+    - *Resolution*: Updated `adjust_col_to_target()` in `buffer.py` to advance
+      `vis_acc += spaces` and `char_idx += 1` through the tab when
+      `vis_acc < target_col` per Section 6.4, snapping forward to the character
+      directly following the tab. Validated via Step 10 and Step 16 in
+      `test_buffer.py` (`test_bug_2_7_65_snap_forward_tab_alignment`).
   - [ ] **Bug 2.7.66: Premature Line Join Inhibition at 120 Columns**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 6.6, 10.
     - *Issue*: Section 6.5, 6.6, and Section 10 specify that Backspace

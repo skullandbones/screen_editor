@@ -59,8 +59,6 @@ def adjust_col_to_target(
     while char_idx < len(line) and vis_acc < target_col:
         if line[char_idx] == "\t":
             spaces = tab_width - (vis_acc % tab_width)
-            if vis_acc + spaces > target_col:
-                break
             vis_acc += spaces
             char_idx += 1
         else:
