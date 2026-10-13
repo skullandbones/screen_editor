@@ -12,7 +12,7 @@ MAX_LINE_LENGTH = MAX_LINE_CHARS
 LINE_JOIN_LIMIT = 120
 
 
-def calc_visual_col(line: str, cur_col: int, tab_width: int = 4) -> int:
+def calc_visual_col(line: str, cur_col: int, tab_width: int = 8) -> int:
     """
     Map buffer byte offset cur_col to 0-indexed document visual column.
     Expands tab characters (0x09) to tab stops according to tab_width.
@@ -30,7 +30,7 @@ def calc_visual_col(line: str, cur_col: int, tab_width: int = 4) -> int:
     return min(vis_col, MAX_LINE_CHARS)
 
 
-def expand_tabs_visual(line: str, tab_width: int = 4) -> str:
+def expand_tabs_visual(line: str, tab_width: int = 8) -> str:
     """
     Expand tab characters in line into visual space for terminal display.
     """
@@ -48,7 +48,7 @@ def expand_tabs_visual(line: str, tab_width: int = 4) -> str:
 
 
 def adjust_col_to_target(
-    line: str, target_col: int, tab_width: int = 4
+    line: str, target_col: int, tab_width: int = 8
 ) -> int:
     """
     Compute buffer column offset aligned with target visual column
@@ -75,7 +75,7 @@ class DocumentBuffer:
     """
 
     def __init__(
-        self, filename: Optional[str] = None, tab_width: int = 4
+        self, filename: Optional[str] = None, tab_width: int = 8
     ):
         self.filename: str = filename if filename else "(Untitled)"
         self.has_file: bool = bool(filename)

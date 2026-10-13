@@ -334,9 +334,9 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      Tab characters are stored as literal ASCII byte `0x09` (`KEY_TAB`) in
      document line buffers. A tab occupies exactly 1 byte in `CUR_COL`.
    - Tab Stop Quantum Formula (`GET_TAB_SPACES`):
-     Tab stops occur at intervals of `CFG_TAB_WIDTH` (default 4 columns,
-     configurable to 8). From any visual column `col`, the number of space
-     columns required to advance to the next tab stop is:
+     Tab stops occur at intervals of `CFG_TAB_WIDTH` (default 8 columns,
+     configurable to 4 across all SE variants). From any visual column `col`,
+     the number of space columns required to advance to the next tab stop is:
      `tab_spaces = tab_width - (col % tab_width)`
    - Visual Column Mapping (`CALC_VISUAL_COL`):
      To map buffer offset `CUR_COL` to document visual column `VisualCol`:
@@ -1314,7 +1314,7 @@ or display notifications.
 | `Enter`      | `0x0D`| `KEY_ENTER`   | Split line at cursor / Confirm modal|
 | `Backspace`  | `0x08`| `KEY_BACKSPACE`| Delete char left / join line       |
 | `Delete`     | `0x7F`| `KEY_DELETE`  | Delete char under cursor / join line|
-| `Tab`        | `0x09`| `KEY_TAB`     | Insert spaces to next tab stop (4/8)|
+| `Tab`        | `0x09`| `KEY_TAB`     | Insert spaces to next tab stop (8/4)|
 | `Up Arrow`   | ANSI  | `KEY_UP`      | Move cursor Up one line             |
 | `Down Arrow` | ANSI  | `KEY_DOWN`    | Move cursor Down one line           |
 | `Left Arrow` | ANSI  | `KEY_LEFT`    | Move cursor Left one character      |
@@ -1519,8 +1519,8 @@ allocations, screen mode, tab stops, and subsystem behaviors.
      Geometry mode in `config.inc`. Standard classic 80-column terminal mode
      is selected by default (`MODE_80X24` = 1).
    - `TAB` / `TABS` (Default: `8`):
-     Tab stop column interval (`4` or `8`). In `se.asm`, default is 8
-     (`CFG_TAB_WIDTH = 8`, mask = 7).
+     Tab stop column interval (`4` or `8`). Applicable across all SE variants;
+     default is 8 (`CFG_TAB_WIDTH = 8`, mask = 7), configurable to 4.
    - Document Line Ending Format Exclusion:
      Text file line ending format (`CP/M` CRLF vs `Linux` LF) is NOT an
      `SE.CFG` configuration setting. As specified in Section 7.7, line

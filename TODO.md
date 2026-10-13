@@ -1404,8 +1404,8 @@ have been resolved and archived.
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
-  Resolved; Bugs 2.7.45, 2.7.64 Rejected; Bugs 2.7.60–2.7.63,
-  2.7.65–2.7.72 Open).
+  Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; Bugs 2.7.60–2.7.63,
+  2.7.65–2.7.71 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -2378,17 +2378,23 @@ have been resolved and archived.
       to default to 120x40 wide console mode rather than canonical 80x24.
     - *Action Required*: In `ports/python/se/config.py:16`, set
       `DEFAULT_SCREEN = "80X24"`.
-  - [ ] **Bug 2.7.72: Default Tab Width Inversion in Config Defaults**:
-    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4; `TODO.md`
-      Bug 2.4.38.
-    - *Issue*: Section 6.2 defines default tab stop intervals as
-      `CFG_TAB_WIDTH = 4` columns (configurable to 8).
-    - *Root Cause*: In `ports/python/se/config.py:17`, `DEFAULT_TAB_WIDTH = 8`
-      and `tab_width` fallback is `8`, which inverts the canonical 4-column
-      default and conflicts with `buffer.py:78` defaulting to `4`.
-    - *Action Required*: In `ports/python/se/config.py:17, 85, 87`, update
-      `DEFAULT_TAB_WIDTH = 4` and fallback to `4` for consistency with
-      Section 6.2 and `buffer.py`.
+  - [x] **Bug 2.7.72: Default Tab Width Inversion in Config Defaults**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4, 13.2; `TODO.md`
+      Bug 2.4.38; `src/se.asm:4620`.
+    - *Status*: REJECTED / INVALID (WONTFIX).
+    - *Reason for Rejection*:
+      1. Default tab stop spacing across all SE variants (`SE.COM`, `se-linux`,
+         `se-py`, `SEC.COM`) is canonically 8 columns, configurable to 4. In
+         `SE.COM` (`src/se.asm`), `CFG_TAB_WIDTH: DB 8` has always defined 8
+         as the default. Furthermore, Section 7.4 (Configuration Manager) and
+         Section 13.2 (`TAB / TABS Default: 8`) define 8 columns.
+      2. The statement in Section 6.2 mentioning "default 4 columns" was an
+         erroneous specification defect that contradicted `SE.COM`, Section 7.4,
+         and Section 13.2. Section 6.2 has been corrected to codify 8 columns as
+         the universal default across all SE variants.
+      3. `ports/python/se/config.py` correctly defines `DEFAULT_TAB_WIDTH = 8`
+         and fallback `8`. In addition, `ports/python/se/buffer.py` default
+         parameter has been updated to 8 for full architectural parity.
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
