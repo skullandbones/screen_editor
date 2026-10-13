@@ -693,7 +693,7 @@ class Editor:
         """Display Tier 1 About screen workspace."""
         lines = [
             "SE - Screen Editor",
-            "version 1.1.0 (2026-10-09)",
+            "version 1.1.0 (2026-10-09) (Python)",
             "by Dean Jenkins",
             "",
             "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high",

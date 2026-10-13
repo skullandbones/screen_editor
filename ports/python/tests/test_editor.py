@@ -580,6 +580,7 @@ class TestEditor(unittest.TestCase):
         self.editor.action_about()
         about_text = "\n".join(rendered_lines)
         self.assertIn("SE - Screen Editor", about_text)
+        self.assertIn("version 1.1.0 (2026-10-09) (Python)", about_text)
         self.assertIn("by Dean Jenkins", about_text)
         self.assertIn("MIT License", about_text)
         self.assertIn("Press any key to continue", about_text)
@@ -2355,6 +2356,26 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 49: Canonical 21-line splash template verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_62_about_screen_predominant_language(self):
+        """Step 50: Verify About screen displays predominant language."""
+        print(
+            "[*] Step 50: Testing About screen predominant language...",
+            flush=True,
+        )
+        rendered = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered.extend(lines)
+        )
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_about()
+        about_str = "\n".join(rendered)
+        self.assertIn("version 1.1.0 (2026-10-09) (Python)", about_str)
+        self.assertNotIn("(Linux)", about_str)
+        print(
+            "[+] Step 50: About screen predominant language verified.",
             flush=True,
         )
 

@@ -2243,7 +2243,7 @@ have been resolved and archived.
       silently ignored unassigned keystrokes (including `KEY_ESC`). Validated
       via Step 14, Step 42, and Step 49 in `test_editor.py`
       (`test_bug_2_7_61_canonical_21_line_splash_template`).
-  - [ ] **Bug 2.7.62: Missing Predominant Language on About Screen**:
+  - [x] **Bug 2.7.62: Missing Predominant Language on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6; `TODO.md`
       Bug 2.1.14.
     - *Issue*: Section 7.12 and 14.6 mandate that all SE variants display the
@@ -2252,8 +2252,10 @@ have been resolved and archived.
       screen: `version 1.1.0 (2026-10-09) (Python)`.
     - *Root Cause*: In `ports/python/se/editor.py:699`, `action_about()`
       displays `version 1.1.0 (2026-10-09)` without ` (Python)`.
-    - *Action Required*: In `ports/python/se/editor.py:699`, update the version
-      line to `version 1.1.0 (2026-10-09) (Python)`.
+    - *Resolution*: Updated the version string in `action_about()` in
+      `editor.py` to `version 1.1.0 (2026-10-09) (Python)`. Validated via
+      Step 16 and Step 50 in `test_editor.py`
+      (`test_bug_2_7_62_about_screen_predominant_language`).
   - [ ] **Bug 2.7.63: Config Manager Inverted Layout & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.4.
     - *Issue*: Section 7.4 mandates a canonical 5-option hotkey layout:
