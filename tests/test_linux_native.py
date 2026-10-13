@@ -2785,23 +2785,23 @@ def test_bug_2_4_37_config_screen_interactive():
                 f"Failed to enter Configuration Manager:\n{cfg_out}"
             )
 
-            # Toggle Tab Width via '2' (4 -> 8)
-            os.write(master, b"2")
+            # Toggle Tab Width via '4' (4 -> 8)
+            os.write(master, b"4")
             time.sleep(0.2)
             tab_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "2. Tab Width        : 8" in tab_out, (
+            assert "4. Tab Width        : 8" in tab_out, (
                 f"Tab width toggle failed:\n{tab_out}"
             )
 
-            # Toggle Max Line Capacity via '3' (16K -> 32K)
+            # Toggle Max Doc Lines via '3' (16K -> 32K)
             os.write(master, b"3")
             time.sleep(0.2)
             lines_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "3. Max Line Capacity: 32K" in lines_out, (
+            assert "3. Max Doc Lines    : 32K" in lines_out, (
                 f"Lines mode toggle failed:\n{lines_out}"
             )
 
@@ -3099,6 +3099,120 @@ def test_bug_2_4_41_tab_snap_forward():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_42_config_screen_canonical_layout():
+    """Verify canonical Configuration Manager layout and order (Bug 2.4.42)."""
+    print("[*] Testing canonical Configuration Manager layout (Bug 2.4.42)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_cfg_canonical_")
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.chdir(temp_dir)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.3)
+
+            # Open Configuration Manager via 'c'
+            os.write(master, b"c")
+            time.sleep(0.2)
+            cfg_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+
+            # 1. Canonical ASCII hyphen title
+            assert "SE - Configuration Manager" in cfg_out, (
+                f"Expected 'SE - Configuration Manager' in title:\n{cfg_out}"
+            )
+            assert "SE \xe2\x80\x94 Configuration Manager" not in cfg_out, (
+                "Unexpected UTF-8 em-dash in Configuration Manager title"
+            )
+
+            # 2. Origin status header
+            assert "Config Status: Defaults" in cfg_out, (
+                f"Expected 'Config Status: Defaults' in:\n{cfg_out}"
+            )
+
+            # 3. Canonical option order and labels
+            assert "1. Screen Geometry  :" in cfg_out, (
+                f"Expected Option 1 Screen Geometry:\n{cfg_out}"
+            )
+            assert "2. RAM Drive Mode   :" in cfg_out, (
+                f"Expected Option 2 RAM Drive Mode:\n{cfg_out}"
+            )
+            assert "3. Max Doc Lines    :" in cfg_out, (
+                f"Expected Option 3 Max Doc Lines:\n{cfg_out}"
+            )
+            assert "4. Tab Width        :" in cfg_out, (
+                f"Expected Option 4 Tab Width:\n{cfg_out}"
+            )
+            assert "5. Plugin Manager   :" in cfg_out, (
+                f"Expected Option 5 Plugin Manager:\n{cfg_out}"
+            )
+
+            # 4. Canonical footer
+            assert "[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit" in (
+                cfg_out
+            ), f"Expected canonical footer in:\n{cfg_out}"
+
+            # 5. Prohibited prompt absence
+            assert "Enter option:" not in cfg_out, (
+                f"Prohibited 'Enter option:' prompt found in:\n{cfg_out}"
+            )
+
+            # 6. Toggle Option 5 (Plugin Manager: Autoload -> Demand)
+            os.write(master, b"5")
+            time.sleep(0.2)
+            out_p = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "5. Plugin Manager   : Demand" in out_p, (
+                f"Expected '5. Plugin Manager   : Demand' in:\n{out_p}"
+            )
+
+            # 7. Save config via 's'
+            os.write(master, b"s")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # 8. Exit to splash via 'q'
+            os.write(master, b"q")
+            time.sleep(0.2)
+            out_splash = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Screen Editor" in out_splash, (
+                f"Expected splash screen after 'q' exit:\n{out_splash}"
+            )
+
+            # 9. Re-enter Configuration Manager ('c'): origin must be SE.CFG
+            os.write(master, b"c")
+            time.sleep(0.2)
+            out_cfg2 = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Config Status: Loaded from SE.CFG" in out_cfg2, (
+                f"Expected 'Loaded from SE.CFG' status in:\n{out_cfg2}"
+            )
+
+            # 10. Exit back to splash and terminate cleanly
+            os.write(master, b"q")
+            time.sleep(0.2)
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Canonical Configuration Manager verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3145,6 +3259,7 @@ def main():
     test_bug_2_4_39_help_screen_canonical_layout()
     test_bug_2_4_40_plugin_palette_modal()
     test_bug_2_4_41_tab_snap_forward()
+    test_bug_2_4_42_config_screen_canonical_layout()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

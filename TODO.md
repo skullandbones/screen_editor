@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 8 Defects Open (Bugs 2.4.42–2.4.49).
+- **Status**: Active / 7 Defects Open (Bugs 2.4.43–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1227,7 +1227,7 @@ have been resolved and archived.
       forward to the discrete character boundary following the tab per
       Section 6.2 and 6.4. Updated regression test expectations and added
       `test_bug_2_4_41_tab_snap_forward` in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.42: Config Manager Layout Divergence & Prohibited Prompt**:
+  - [x] **Bug 2.4.42: Config Manager Layout Divergence & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
     - *Issue*: In `src/core/ui_render.c:601-706` (`show_config_screen`):
       1. Displays only 4 options in non-canonical order (`1. Screen Geometry`,
@@ -1250,6 +1250,15 @@ have been resolved and archived.
       7.4 layout: 5 options in canonical order, `Config Status:` header,
       canonical footer, instant single-keystroke dispatch on 1-5, S/s save,
       ESC/Q/Enter exit, hidden cursor, and elimination of `Enter option: _`.
+    - *Resolution*: Refactored `show_config_screen()` in `src/core/ui_render.c`
+      to conform to canonical Section 7.4 layout: rendered 5 options in
+      canonical order, added `Config Status:` header tracking `g_config_loaded`,
+      removed prohibited `Enter option: _` prompt, updated footer to canonical
+      `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`, supported `Q`/`q`
+      exit to Splash screen, hid terminal hardware cursor, and replaced UTF-8
+      em-dash with ASCII hyphen `-`. Validated via
+      `test_bug_2_4_42_config_screen_canonical_layout` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.43: Splash Screen Layout Non-Conformity & Clean Header**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 14.6.
     - *Issue*: In `src/core/ui_render.c:422-442` (`s_splash_lines`):

@@ -17,6 +17,7 @@
 
 /* Global Configuration Instance */
 editor_config_t g_config;
+uint8_t         g_config_loaded = 0;
 
 static char *trim_whitespace(char *str)
 {
@@ -38,6 +39,7 @@ static char *trim_whitespace(char *str)
 
 void config_init_defaults(void)
 {
+    g_config_loaded = 0;
     g_config.tab_width = 4;
     g_config.lines_mode = 0;             /* 16K lines */
     g_config.screen_mode = MODE_120X40;  /* Canonical 120x40 (§13.2) */
@@ -163,6 +165,7 @@ int config_load_file(const char *filename)
     }
 
     fclose(fp);
+    g_config_loaded = 1;
     return 0;
 }
 
@@ -211,6 +214,7 @@ int config_save_file(const char *filename)
     fprintf(fp, "AUTO_INDENT=%u\r\n", (unsigned)g_config.auto_indent);
 
     fclose(fp);
+    g_config_loaded = 1;
     return 0;
 }
 

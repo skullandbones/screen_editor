@@ -633,15 +633,20 @@ void show_about_screen(void)
 
 void show_config_screen(void)
 {
+    char line_status[64];
     char line_geom[64];
-    char line_tab[64];
-    char line_lines[64];
     char line_ram[64];
+    char line_lines[64];
+    char line_tab[64];
+    char line_plugin[64];
     const char *cfg_lines[11];
     const char *geom_str;
     const char *ram_str;
+    const char *plugin_str;
     int k;
     uint8_t need_render = 1;
+
+    hal_console_hide_cursor();
 
     while (1) {
         if (g_config.screen_mode == MODE_120X40) {
@@ -657,31 +662,44 @@ void show_config_screen(void)
         } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
             ram_str = "Hibernate";
         } else {
-            ram_str = "Disabled";
+            ram_str = "Protected";
         }
 
-        snprintf(line_geom, sizeof(line_geom),
-                 "         1. Screen Geometry  : %-19s", geom_str);
-        snprintf(line_tab, sizeof(line_tab),
-                 "         2. Tab Width        : %-19u",
-                 (unsigned)g_config.tab_width);
-        snprintf(line_lines, sizeof(line_lines),
-                 "         3. Max Line Capacity: %-19s",
-                 (g_config.lines_mode == 1) ? "32K" : "16K");
-        snprintf(line_ram, sizeof(line_ram),
-                 "         4. RAM Drive Mode   : %-19s", ram_str);
+        if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
+            plugin_str = "Demand";
+        } else if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
+            plugin_str = "Disabled";
+        } else {
+            plugin_str = "Autoload";
+        }
 
-        cfg_lines[0]  = "            SE — Configuration Manager            ";
+        snprintf(line_status, sizeof(line_status),
+                 "         Config Status: %-26.26s",
+                 g_config_loaded ? "Loaded from SE.CFG" : "Defaults");
+        snprintf(line_geom, sizeof(line_geom),
+                 "         1. Screen Geometry  : %-19.19s", geom_str);
+        snprintf(line_ram, sizeof(line_ram),
+                 "         2. RAM Drive Mode   : %-19.19s", ram_str);
+        snprintf(line_lines, sizeof(line_lines),
+                 "         3. Max Doc Lines    : %-19.19s",
+                 (g_config.lines_mode == 1) ? "32K" : "16K");
+        snprintf(line_tab, sizeof(line_tab),
+                 "         4. Tab Width        : %-19u",
+                 (unsigned)g_config.tab_width);
+        snprintf(line_plugin, sizeof(line_plugin),
+                 "         5. Plugin Manager   : %-19.19s", plugin_str);
+
+        cfg_lines[0]  = "            SE - Configuration Manager            ";
         cfg_lines[1]  = "                                                  ";
-        cfg_lines[2]  = line_geom;
-        cfg_lines[3]  = line_tab;
-        cfg_lines[4]  = line_lines;
+        cfg_lines[2]  = line_status;
+        cfg_lines[3]  = "                                                  ";
+        cfg_lines[4]  = line_geom;
         cfg_lines[5]  = line_ram;
-        cfg_lines[6]  = "                                                  ";
-        cfg_lines[7]  = "   [S] Save to SE.CFG    [ESC]/[Enter] Return     ";
-        cfg_lines[8]  = "                                                  ";
-        cfg_lines[9]  = "                Enter option: _                   ";
-        cfg_lines[10] = "                                                  ";
+        cfg_lines[6]  = line_lines;
+        cfg_lines[7]  = line_tab;
+        cfg_lines[8]  = line_plugin;
+        cfg_lines[9]  = "                                                  ";
+        cfg_lines[10] = "  [1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit";
 
         if (need_render) {
             render_tier1_workspace_screen(cfg_lines, 11, 50);
@@ -692,7 +710,7 @@ void show_config_screen(void)
             /* Wait for user keystroke */
         }
 
-        if (k == KEY_ESC || k == KEY_ENTER) {
+        if (k == KEY_ESC || k == KEY_ENTER || k == 'q' || k == 'Q') {
             break;
         } else if (k == '1') {
             clear_screen();
@@ -718,12 +736,6 @@ void show_config_screen(void)
             }
             need_render = 1;
         } else if (k == '2') {
-            g_config.tab_width = (g_config.tab_width == 4) ? 8 : 4;
-            need_render = 1;
-        } else if (k == '3') {
-            g_config.lines_mode = (g_config.lines_mode == 0) ? 1 : 0;
-            need_render = 1;
-        } else if (k == '4') {
             if (g_config.ramdrive_mode == RAMDRV_MODE_PROTECTED) {
                 g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
             } else if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
@@ -732,12 +744,28 @@ void show_config_screen(void)
                 g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
             }
             need_render = 1;
+        } else if (k == '3') {
+            g_config.lines_mode = (g_config.lines_mode == 0) ? 1 : 0;
+            need_render = 1;
+        } else if (k == '4') {
+            g_config.tab_width = (g_config.tab_width == 4) ? 8 : 4;
+            need_render = 1;
+        } else if (k == '5') {
+            if (g_config.plugin_mode == PLUGIN_MODE_AUTOLOAD) {
+                g_config.plugin_mode = PLUGIN_MODE_ONDEMAND;
+            } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
+                g_config.plugin_mode = PLUGIN_MODE_DISABLED;
+            } else {
+                g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
+            }
+            need_render = 1;
         } else if (k == 's' || k == 'S') {
             config_save();
             need_render = 1;
         }
     }
     clear_screen();
+    hal_console_show_cursor();
     g_need_screen_render = 1;
 }
 
