@@ -38,7 +38,7 @@ static char *trim_whitespace(char *str)
 
 void config_init_defaults(void)
 {
-    g_config.tab_width = 8;
+    g_config.tab_width = 4;
     g_config.lines_mode = 0;             /* 16K lines */
     g_config.screen_mode = MODE_120X40;  /* Canonical 120x40 (§13.2) */
     g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;

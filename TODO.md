@@ -540,7 +540,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 3 Defects Open (Bugs 2.4.38–2.4.40).
+- **Status**: Active / 11 Defects Open (Bugs 2.4.39–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1136,7 +1136,7 @@ have been resolved and archived.
       returning to caller on `ESC`/`Enter`.
       Validated via `test_bug_2_4_37_config_screen_interactive` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
+  - [x] **Bug 2.4.38: Default Tab Width Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4.
     - *Issue*: Section 6.2 defines default tab stop intervals as
       `CFG_TAB_WIDTH = 4` columns (configurable to 8). In `src/core/config.c:41`
@@ -1145,6 +1145,11 @@ have been resolved and archived.
     - *Required Fix*: Change `g_config.tab_width` default in
       `src/core/config.c:41` to `4`, and update fallback in
       `src/core/editor.c:54` to `4`.
+    - *Resolution*: Updated `g_config.tab_width` default to `4` in
+      `src/core/config.c` and updated fallback tab widths to `4` in
+      `src/core/editor.c` and `src/core/ui_render.c`. Adjusted config header and
+      updated regression test suite, adding `test_bug_2_4_38_default_tab_width`
+      in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.3, 6.4, 7.3.
     - *Issue*: In `src/core/ui_render.c:528`, the Help workspace displays
@@ -1168,6 +1173,184 @@ have been resolved and archived.
     - *Required Fix*: Implement `show_plugin_palette()` adhering to Archetype D
       in `src/core/plugin_mgr.c`, and route `KEY_CTRL_P` in `editor.c` and
       `ui_render.c` to this modal.
+  - [ ] **Bug 2.4.41: Tab Traversal Halts Early vs Snap-Forward Alignment**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
+    - *Issue*: In `src/core/editor.c:485-497` (`adjust_col_to_target`), when
+      traversing an active line to match sticky target column `target_vis_col`,
+      if the target falls within an expanded tab (`vis_acc + spaces >
+      target_vis_col`), the loop executes `break;`. This snaps the cursor
+      backward to the start of the tab (`vis_acc`). Section 6.2 and 6.4 strictly
+      mandate snap-forward alignment: the cursor must advance across the tab
+      (`vis_acc += spaces`, `char_idx++`) to snap forward to the discrete
+      character boundary directly following the tab, keeping the cursor
+      adjacent to indented code rather than retreating to the margin.
+    - *Required Fix*: Update `adjust_col_to_target()` in `src/core/editor.c` to
+      remove early loop breaks on tab boundaries, advancing across the tab to
+      snap forward to the discrete character position following the tab.
+  - [ ] **Bug 2.4.42: Config Manager Layout Divergence & Prohibited Prompt**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
+    - *Issue*: In `src/core/ui_render.c:601-706` (`show_config_screen`):
+      1. Displays only 4 options in non-canonical order (`1. Screen Geometry`,
+         `2. Tab Width`, `3. Max Line Capacity`, `4. RAM Drive Mode`), omitting
+         Option 5 (`Plugin Manager`). Canonical order is (1) Screen Geometry,
+         (2) RAM Drive Mode, (3) Max Doc Lines, (4) Tab Width, (5) Plugin
+         Manager.
+      2. Renders an interactive prompt line `Enter option: _` on row 9, which
+         Section 7.4 strictly prohibits ("The workspace operates as a
+         non-buffered, instant-response hotkey menu. An `Enter option: _`
+         prompt line is strictly prohibited").
+      3. Footer displays `[S] Save to SE.CFG    [ESC]/[Enter] Return` instead
+         of canonical `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`.
+      4. Omits the `Config Status:` origin header (`Config Status: Loaded
+         from SE.CFG` or `Defaults`).
+      5. Fails to support `Q` / `q` for exiting to the Splash screen.
+      6. Fails to hide the terminal hardware cursor (`TERM_HIDE_CURSOR`).
+      7. Uses UTF-8 em-dash `—` in title instead of ASCII hyphen `-`.
+    - *Required Fix*: Refactor `show_config_screen()` to match canonical Section
+      7.4 layout: 5 options in canonical order, `Config Status:` header,
+      canonical footer, instant single-keystroke dispatch on 1-5, S/s save,
+      ESC/Q/Enter exit, hidden cursor, and elimination of `Enter option: _`.
+  - [ ] **Bug 2.4.43: Splash Screen Layout Non-Conformity & Clean Header**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 14.6.
+    - *Issue*: In `src/core/ui_render.c:422-442` (`s_splash_lines`):
+      1. Violates the Clean Header Mandate by rendering `Version v1.1.0 (C)` on
+         Row 2 directly beneath the application title. Section 7.2 strictly
+         mandates that the splash screen does not display the release version or
+         programming language (consolidated exclusively onto the About screen).
+      2. Uses UTF-8 em-dash `SE — Screen Editor` on Row 1 instead of standard
+         ASCII hyphen `SE - Screen Editor` (violating Section 2.6).
+      3. Omits the 4 canonical diagnostic status lines at the bottom of the
+         splash content block: `Active Screen : [80x24 (Classic Terminal)]`,
+         `RAM Drive (A:): [Preserved (Active)]`, `Plugin System :
+         [Operational]`, and `Max Lines     : [32,768 lines]`.
+      4. Uses a 19-line by 54-column bounding box instead of the standardized
+         21-line by 50-column geometry.
+    - *Required Fix*: Update `s_splash_lines` and `show_splash_screen()` in
+      `src/core/ui_render.c` to conform to the 21x50 canonical layout: ASCII
+      hyphen header, removal of version/language line, inclusion of the 4
+      diagnostic status lines, and standard geometry option presentation.
+  - [ ] **Bug 2.4.44: Non-Conforming About Screen Layout & Missing Credits**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.11, 14.6.
+    - *Issue*: In `src/core/ui_render.c:583-599` (`show_about_screen`), the
+      About screen displays a non-conforming 6-line, 46-column text block:
+      1. Uses UTF-8 em-dash and generic host operating system label `SE.COM —
+         Screen Editor (Linux)` instead of canonical title `SE - Screen Editor`.
+      2. Row 2 displays `Version v1.1.0`, omitting the mandatory build date and
+         predominant programming language `version 1.1.0 (2026-10-09) (C)`.
+      3. Omits author attribution (`by Dean Jenkins`), AI toolchain credits
+         (`Google Antigravity 2.19.1 & Gemini FLASH 3.8 high`), and license
+         notice (`Open source software under the MIT License`).
+      4. Prompt reads `Press any key to return...` instead of canonical
+         `Press any key to continue`.
+      5. Geometry is 6 lines x 46 columns instead of 9 lines x 54 columns.
+    - *Required Fix*: Rewrite `show_about_screen()` in `src/core/ui_render.c` to
+      render the standardized 9-line by 54-column template adhering to Section
+      7.11 and 14.6.
+  - [ ] **Bug 2.4.45: Line Ending Decoupling Failure & Global Config Mutation**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2.
+    - *Issue*: Section 13.2 explicitly removes `FORMAT` from `SE.CFG`,
+      mandating that line endings are managed strictly per-document: newly
+      created files default to host-native format (LF on Linux, CRLF on CP/M),
+      opened files preserve their detected line endings, and the Save File
+      screen (`Ctrl+F`) toggles format for that specific document.
+      In Linux SE:
+      1. `src/core/config.c:46` sets `g_config.save_format = FMT_CPM`, and
+         `src/core/config.c:205` serializes `FORMAT=CPM`/`FORMAT=LINUX` into
+         `SE.CFG`.
+      2. `src/core/buffer.c:63` initializes new empty documents with
+         `g_file_format = g_config.save_format`, causing new documents on Linux
+         to default to CP/M CRLF endings rather than native Linux LF endings.
+      3. In `src/core/editor.c:568, 580, 588, 591`, `src/core/ui_render.c:485`,
+         and `src/core/ui_modal.c:378`, document saves invoke `file_save(...,
+         g_config.save_format)` passing the global config format rather than
+         the document's `g_file_format`.
+      4. In `src/core/ui_browser.c:647-649`, pressing `Ctrl+F` toggles
+         `g_config.save_format` (global configuration) rather than toggling
+         solely the document's per-file `g_file_format`.
+      5. `src/core/config.c:40` defaults `g_config.screen_mode` to
+         `MODE_120X40` instead of `MODE_80X24` (`SCREEN=80X24` per Section
+         13.2).
+    - *Required Fix*: Remove `FORMAT` from `SE.CFG` serialization and parsing in
+      `src/core/config.c`. Default new documents on Linux to `FMT_LINUX` (`LF`).
+      Ensure all save operations use the active document's `g_file_format`.
+      Ensure `Ctrl+F` in `ui_browser.c` toggles `g_file_format` without mutating
+      global configuration. Default `g_config.screen_mode` to `MODE_80X24`.
+  - [ ] **Bug 2.4.46: Premature Modal Dismissal on Unexpected Keys**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3.
+    - *Issue*: In `src/core/ui_modal.c:321-326` (`modal_prompt_text`), pressing
+      `Up`, `Down`, `PgUp`, `PgDn`, `Ctrl+U`, or `Ctrl+V` exits the modal dialog
+      and returns `k`. Section 8.3 explicitly mandates the Unexpected Keystroke
+      Protection Mandate: "Modals MUST NOT be cancelled or dismissed by
+      unexpected keys or escape sequences (such as cursor arrow keys, PgUp/PgDn,
+      function keys, or stray control keys). Any unexpected sequences received
+      while an input modal is active must be discarded without altering the
+      modal's input buffer, without moving the underlying document cursor, and
+      without cancelling the dialog."
+    - *Required Fix*: Remove lines 321-326 in `modal_prompt_text()`
+      (`src/core/ui_modal.c`) so that unexpected keys are safely discarded
+      without dismissing the input dialog or altering state.
+  - [ ] **Bug 2.4.47: Retention of Intermediary Clipboard Primitives**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 9.3, 10.
+    - *Issue*: Section 9.3 establishes the "Direct In-Place Block Manipulation
+      Mandate", strictly prohibiting intermediary clipboard buffers
+      (`s_clipboard_buf`) and asynchronous paste steps across all SE variants.
+      Block operations must execute directly between the marked block and
+      cursor: `Ctrl+C` (Copy Block to Cursor), `Ctrl+X` (Move Block to
+      Cursor), and `Ctrl+D` (Delete Block). Furthermore, legacy `Ctrl+U` and
+      `Ctrl+V` motion aliases are removed in favor of dedicated `PgUp` and
+      `PgDn` keys, and `Ctrl+V` paste is eliminated.
+      In Linux SE:
+      1. In `src/core/editor.c:541-547`, `KEY_CTRL_U` is bound to `page_up()`,
+         and `KEY_CTRL_V` is bound to `do_paste_block()` / `page_down()`.
+      2. In `src/core/block.c:232, 246, 336-373`, `s_clipboard_buf`,
+         `do_cut_block()`, and `do_paste_block()` are retained as intermediary
+         clipboard mechanisms.
+      3. In `src/core/ui_render.c:560`, `s_help_lines` advertises
+         `Ctrl+U / Ctrl+V: Page Up / Down`, `Ctrl+V: Paste Block`,
+         `Ctrl+X: Cut Block`, and `Ctrl+C: Copy Block` instead of canonical
+         direct block shortcuts and dedicated `PgUp`/`PgDn` paging keys.
+    - *Required Fix*: Eliminate intermediary clipboard routines (`do_cut_block`,
+      `do_paste_block`, `s_clipboard_buf`) in `src/core/block.c` in favor of
+      direct in-place block manipulation. Remove `KEY_CTRL_U` and `KEY_CTRL_V`
+      aliases from `src/core/editor.c`. Update `s_help_lines` in
+      `src/core/ui_render.c` to advertise canonical direct block shortcuts and
+      dedicated `PgUp`/`PgDn` paging keys.
+  - [ ] **Bug 2.4.48: UTF-8 Multi-Byte Encodings in Screen Headers**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6.
+    - *Issue*: Section 2.6 establishes the VT100 & ASCII Terminal Encoding
+      Mandate (UTF-8 Prohibition): all text and control output must strictly
+      adhere to 7-bit ASCII (`0x20`–`0x7E`), and titles must use the ASCII
+      hyphen-minus `-` (`0x2D`), e.g. `SE - Screen Editor`. Multi-byte UTF-8
+      sequences (such as Unicode em-dash `—` `0xE2 0x80 0x94`) are strictly
+      prohibited as they corrupt standard serial and retro VT100/VT102
+      terminals.
+      In `src/core/ui_render.c`:
+      - Line 423: `"                  SE — Screen Editor                  "`
+      - Line 554: `"               SE.COM — EDITOR MODE KEYS                "`
+      - Line 586: `"        SE.COM — Screen Editor (Linux)        "`
+      - Line 641: `"            SE — Configuration Manager            "`
+      All use the 3-byte UTF-8 sequence `\xE2\x80\x94`.
+    - *Required Fix*: Replace all occurrences of Unicode em-dash `—` in UI
+      string literals with ASCII hyphen-minus `-` (`0x2D`) in
+      `src/core/ui_render.c`.
+  - [ ] **Bug 2.4.49: Off-by-One Barrier on Line Joins at Maximum Capacity**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
+    - *Issue*: In `src/core/editor.c:216` (`do_backspace`) and
+      `src/core/editor.c:275` (`do_delete`), the combined length barrier check
+      for joining two lines is implemented as:
+      `if (prev_len + g_active_line_len < MAX_INPUT_LINE_CHARS)`
+      `if (g_active_line_len + next_len < MAX_INPUT_LINE_CHARS)`
+      And in `src/core/block.c:317`:
+      `if (g_active_line_len + copy_cnt < MAX_INPUT_LINE_CHARS)`
+      Section 6.8 explicitly specifies:
+      `If prev_len + cur_len <= MAX_INPUT_LINE_CHARS (1,000 chars):`
+      `If cur_len + next_len <= MAX_INPUT_LINE_CHARS (1,000 chars):`
+      Using `<` instead of `<=` inhibits joining when the combined line length
+      is exactly 1,000 characters, prematurely rejecting valid joins that fit
+      within `MAX_INPUT_LINE_CHARS`.
+    - *Required Fix*: Change `< MAX_INPUT_LINE_CHARS` to `<=
+      MAX_INPUT_LINE_CHARS` in `src/core/editor.c:216, 275` and
+      `src/core/block.c:317`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.

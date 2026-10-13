@@ -1076,12 +1076,12 @@ def test_bug_2_4_15_sticky_target_col_and_tab_clamping():
                 f"Expected restored Line 1 Col 10:\n{out_l1_back}"
             )
 
-            # Set TARGET_COL to 4 (home then 4 right)
-            os.write(master, b"\x01" + b"\x1b[C" * 4)
+            # Set TARGET_COL to 2 (home then 2 right)
+            os.write(master, b"\x01" + b"\x1b[C" * 2)
             time.sleep(0.1)
             read_all_available(master, 0.2)
 
-            # Move down 2 lines to Line 3 (\tXYZ). Target 4 is inside tab.
+            # Move down 2 lines to Line 3 (\tXYZ). Target 2 is inside tab.
             # Must clamp to beginning of tab (index 0, Col 0).
             os.write(master, b"\x1b[B\x1b[B")
             time.sleep(0.1)
@@ -1092,14 +1092,14 @@ def test_bug_2_4_15_sticky_target_col_and_tab_clamping():
                 f"Expected tab interior clamped to Col 0:\n{out_tab}"
             )
 
-            # Move up 2 lines back to Line 1: TARGET_COL 4 preserved!
+            # Move up 2 lines back to Line 1: TARGET_COL 2 preserved!
             os.write(master, b"\x1b[A\x1b[A")
             time.sleep(0.1)
             out_tab_back = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Line    1/3" in out_tab_back and "Col 4" in out_tab_back, (
-                f"Expected Line 1 Col 4 restored:\n{out_tab_back}"
+            assert "Line    1/3" in out_tab_back and "Col 2" in out_tab_back, (
+                f"Expected Line 1 Col 2 restored:\n{out_tab_back}"
             )
 
             # Exit cleanly via Ctrl+Q
@@ -1120,7 +1120,7 @@ def test_bug_2_4_16_status_bar_field_invariance_and_visual_col():
     temp_dir = tempfile.mkdtemp()
     cfg_file = os.path.join(temp_dir, "SE.CFG")
     with open(cfg_file, "w") as f:
-        f.write("SCREEN=80X24\r\n")
+        f.write("SCREEN=80X24\r\nTAB=8\r\n")
 
     long_line = "\tABCDEF" + ("X" * 80) + "\nSecond line\n"
     with tempfile.NamedTemporaryFile("w+", prefix="testdoc_statbar_",
@@ -1309,7 +1309,7 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
                 "    /* 1. Defaults verification (§13.2) */\n"
                 "    config_init_defaults();\n"
                 "    assert(g_config.screen_mode == MODE_120X40);\n"
-                "    assert(g_config.tab_width == 8);\n"
+                "    assert(g_config.tab_width == 4);\n"
                 "    assert(g_config.save_format == FMT_CPM);\n"
                 "    assert(g_config.lines_mode == 0);\n"
                 "    assert(g_config.ramdrive_mode == "
@@ -2785,13 +2785,13 @@ def test_bug_2_4_37_config_screen_interactive():
                 f"Failed to enter Configuration Manager:\n{cfg_out}"
             )
 
-            # Toggle Tab Width via '2' (8 -> 4)
+            # Toggle Tab Width via '2' (4 -> 8)
             os.write(master, b"2")
             time.sleep(0.2)
             tab_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "2. Tab Width        : 4" in tab_out, (
+            assert "2. Tab Width        : 8" in tab_out, (
                 f"Tab width toggle failed:\n{tab_out}"
             )
 
@@ -2831,11 +2831,58 @@ def test_bug_2_4_37_config_screen_interactive():
             assert os.path.exists(cfg_path), "SE.CFG was not created"
             with open(cfg_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            assert "TAB=4" in content, f"Expected TAB=4 in SE.CFG:\n{content}"
+            assert "TAB=8" in content, f"Expected TAB=8 in SE.CFG:\n{content}"
             assert "LINES=32K" in content, (
                 f"Expected LINES=32K in SE.CFG:\n{content}"
             )
             print("    [+] Interactive config workspace verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_bug_2_4_38_default_tab_width():
+    """Verify default tab width is 4 columns (Bug 2.4.38)."""
+    print("[*] Testing default tab width is 4 columns (Bug 2.4.38)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_tab.txt")
+    with open(test_file, "w") as f:
+        f.write("\tABC\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            init_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Col 0" in init_out, f"Expected initial Col 0:\n{init_out}"
+
+            # Move right 1 character past tab: visual column must leap to 4
+            os.write(master, b"\x1b[C")
+            time.sleep(0.1)
+            out_tab = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Col 4" in out_tab, (
+                f"Expected visual Col 4 after default tab width 4:\n{out_tab}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.close(master)
+            os.waitpid(pid, 0)
+            print("    [+] Default tab width 4 verified [PASS]")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -2882,6 +2929,7 @@ def main():
     test_bug_2_4_35_splash_hotkeys_and_native_mode()
     test_bug_2_4_36_geometry_switch_clear()
     test_bug_2_4_37_config_screen_interactive()
+    test_bug_2_4_38_default_tab_width()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
