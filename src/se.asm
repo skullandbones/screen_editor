@@ -85,8 +85,8 @@ START:
 	; Initialize Direct BIOS Console Vectors
 	CALL INIT_BIOS_JUMPS
 
-	; Initialize Screen Geometry to Default (120x40)
-	CALL SET_MODE_120X40
+	; Initialize Screen Geometry to Default (80x24)
+	CALL SET_MODE_80X24
 
 	; Check if filename was provided in FCB1 (populates WORK_FCB and
 	; HAS_FILE_ARG)
@@ -4327,13 +4327,13 @@ HBIOS_VER_PATCH:	DB	0
 CPM_VERSION_ID:		DW	0
 MEM_BANK_LOOP_IDX:	DB	0
 
-SCREEN_MODE:	DB	MODE_120X40	; Default to 120x40
-ACTIVE_ROWS:	DB	40		; Default 40 rows
-ACTIVE_COLS:	DB	120		; Default 120 cols
+SCREEN_MODE:	DB	MODE_80X24	; Default to 80x24
+ACTIVE_ROWS:	DB	24		; Default 24 rows
+ACTIVE_COLS:	DB	80		; Default 80 cols
 ; Horizontal viewport left column offset (0..1000)
 VIEW_LEFT_COL:	DW	0
 ; Cached right column bound (VIEW_LEFT_COL + ACTIVE_COLS)
-VIEW_RIGHT_COL:	DW	120
+VIEW_RIGHT_COL:	DW	80
 
 ; Screen cursor coordinates use "row" (0..ACTIVE_ROWS-2) internally for terminal
 ; positioning (LOCATE_CURSOR: Screen Row = CUR_DOC_ROW - TOP_DOC_ROW + 1).

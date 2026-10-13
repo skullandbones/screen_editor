@@ -25,8 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 6 Open
-  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected; Bug 2.1.14 Fixed).
+- **Status**: Active / 5 Open
+  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
+  Bugs 2.1.2, 2.1.14 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -42,7 +43,7 @@ have been resolved and archived.
       cause line wrapping (> 78 cols). Furthermore, Field 3 `CP/M  |` is the
       canonical format string in Section 4.3, and Field 2 uses 1 leading space
       (` 80x24 | `) matching `120x40 | ` width.
-  - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
+  - [x] **Bug 2.1.2: Startup Screen Geometry Inversion [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
       default. On standard CP/M terminals and serial consoles (VT100 / ANSI,
