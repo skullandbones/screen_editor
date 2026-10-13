@@ -619,9 +619,9 @@ static const char *s_help_lines[22] = {
     "  NAVIGATION & SEARCH:",
     "    Arrow Keys      Move cursor            "
     "Ctrl+A / Home  Start of line",
-    "    Ctrl+U / PgUp   Page Up                "
+    "    PgUp            Page Up                "
     "Ctrl+E / End   End of line",
-    "    Ctrl+V / PgDn   Page Down              "
+    "    PgDn            Page Down              "
     "Ctrl+T / ^Home Top of file",
     "    Ctrl+L          Goto line number       "
     "Ctrl+G / ^End  Bottom of file",

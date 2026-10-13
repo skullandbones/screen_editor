@@ -535,14 +535,6 @@ int editor_handle_key(int key)
     case KEY_CTRL_T: jump_file_top(); break;
     case KEY_BACKSPACE: do_backspace(); break;
     case KEY_ENTER: do_enter(); break;
-    case KEY_CTRL_U: page_up(); break;
-    case KEY_CTRL_V:
-        if (get_clipboard_len() > 0) {
-            do_paste_block();
-        } else {
-            page_down();
-        }
-        break;
     case KEY_CTRL_B: toggle_block_mode(); break;
     case KEY_CTRL_C:
         if (g_block_mode != BLOCK_MODE_OFF) {

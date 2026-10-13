@@ -561,7 +561,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 3 Defects Open (Bugs 2.4.47–2.4.49).
+- **Status**: Active / 2 Defects Open (Bugs 2.4.48–2.4.49).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1370,7 +1370,7 @@ have been resolved and archived.
       active with buffer preserved until explicit `Enter` or `ESC`. Validated
       via `test_bug_2_4_46_unexpected_keys_in_modals` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.47: Retention of Intermediary Clipboard Primitives**:
+  - [x] **Bug 2.4.47: Retention of Intermediary Clipboard Primitives**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 9.3, 10.
     - *Issue*: Section 9.3 establishes the "Direct In-Place Block Manipulation
       Mandate", strictly prohibiting intermediary clipboard buffers
@@ -1396,6 +1396,16 @@ have been resolved and archived.
       aliases from `src/core/editor.c`. Update `s_help_lines` in
       `src/core/ui_render.c` to advertise canonical direct block shortcuts and
       dedicated `PgUp`/`PgDn` paging keys.
+    - *Resolution*: Eliminated intermediary clipboard buffer
+      (`s_clipboard_buf`), clipboard length tracker, `do_cut_block()`,
+      `do_paste_block()`, and clipboard getters from `src/core/block.c` and
+      `src/include/block.h`. Refactored `do_copy_block()` to operate directly
+      in-place without static clipboard storage. Removed legacy `KEY_CTRL_U`
+      and `KEY_CTRL_V` motion and paste aliases from `src/core/editor.c`.
+      Updated `s_help_lines` in `src/core/ui_render.c` to display dedicated
+      `PgUp` and `PgDn` keys. Validated via
+      `test_bug_2_4_47_direct_inplace_block_manipulation` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.48: UTF-8 Multi-Byte Encodings in Screen Headers**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6.
     - *Issue*: Section 2.6 establishes the VT100 & ASCII Terminal Encoding

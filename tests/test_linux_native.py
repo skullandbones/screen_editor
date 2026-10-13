@@ -889,36 +889,45 @@ def test_bug_2_4_12_clipboard_copy_paste():
             os.write(master, b"\x1b[C" * 5)
             time.sleep(0.1)
 
-            # Copy via Ctrl+C
-            os.write(master, b"\x03")
+            # Solidify block via Enter (\r)
+            os.write(master, b"\r")
             time.sleep(0.1)
-            out_copy = read_all_available(master, 0.2).decode(
+            out_lock = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[BLK LOCK]" in out_copy, (
-                f"Expected '[BLK LOCK]' status indicator:\n{out_copy}"
+            assert "[BLK LOCK]" in out_lock, (
+                f"Expected '[BLK LOCK]' status indicator:\n{out_lock}"
             )
-            assert "^K: Editor keys |" in out_copy, (
-                f"Expected Field 4 preserved after copy:\n{out_copy}"
+            assert "^K: Editor keys |" in out_lock, (
+                f"Expected Field 4 preserved after lock:\n{out_lock}"
             )
 
             # Move down to line 2 and jump to Col 0 via Ctrl+A
             os.write(master, b"\x1b[B\x01")
             time.sleep(0.1)
 
-            # Paste via Ctrl+V at beginning of line 2
-            os.write(master, b"\x16")
+            # Direct in-place copy via Ctrl+C at beginning of line 2
+            os.write(master, b"\x03")
             time.sleep(0.2)
+
+            # Verify Ctrl+V does not execute paste (paste eliminated)
+            os.write(master, b"\x16")
+            time.sleep(0.1)
+
+            # Clear block via ESC (\x1b) so Ctrl+S saves document, not block
+            os.write(master, b"\x1b")
+            time.sleep(0.1)
 
             # Save file via Ctrl+S
             os.write(master, b"\x13")
             time.sleep(0.2)
-            # Dismiss save notification modal (press enter or space)
-            os.write(master, b"\n")
+            # Dismiss save notification modal
+            os.write(master, b" ")
             time.sleep(0.2)
 
             # Exit cleanly via Ctrl+Q
-            os.write(master, b"\x11\n")
+            os.write(master, b"\x11")
+            time.sleep(0.2)
             exit_code = wait_pid_with_timeout(pid, 2.0)
             os.close(master)
 
@@ -928,9 +937,12 @@ def test_bug_2_4_12_clipboard_copy_paste():
                 saved_content = f.read()
 
             assert "12345Second Line" in saved_content, (
-                f"Pasted content '12345' missing from line 2:\n{saved_content}"
+                f"Direct copy '12345' missing from line 2:\n{saved_content}"
             )
-            print("    [+] Clipboard copy & paste verified on disk [PASS]")
+            assert "1234512345" not in saved_content, (
+                f"Spurious paste occurred on line 2:\n{saved_content}"
+            )
+            print("    [+] Direct block copy verified on disk [PASS]")
     finally:
         if os.path.exists(test_file_path):
             os.remove(test_file_path)
@@ -3592,6 +3604,104 @@ def test_bug_2_4_46_unexpected_keys_in_modals():
             os.remove(test_file_path)
 
 
+def test_bug_2_4_47_direct_inplace_block_manipulation():
+    """Verify direct in-place block manipulation and no clipboard (2.4.47)."""
+    print("[*] Testing direct in-place block manipulation (2.4.47)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_direct_block.txt")
+    with open(test_file, "w") as f:
+        f.write("Line 1: Alpha\nLine 2: Bravo\nLine 3: Charlie\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move to Line 2 ("Line 2: Bravo")
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+
+            # Start block selection via Ctrl+B (\x02)
+            os.write(master, b"\x02")
+            time.sleep(0.1)
+
+            # Select down one line
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+
+            # Solidify block via Enter (\r)
+            os.write(master, b"\r")
+            time.sleep(0.1)
+
+            # Move cursor to end of document (Line 3 Col 0) via Ctrl+G
+            os.write(master, b"\x07")
+            time.sleep(0.1)
+
+            # Direct Move via Ctrl+X (\x18)
+            os.write(master, b"\x18")
+            time.sleep(0.2)
+
+            # Clear block via ESC (\x1b)
+            os.write(master, b"\x1b")
+            time.sleep(0.1)
+
+            # Open Help screen via Ctrl+K (\x0b)
+            os.write(master, b"\x0b")
+            time.sleep(0.2)
+            help_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "PgUp" in help_out and "Page Up" in help_out, (
+                f"Missing dedicated PgUp in Help screen:\n{help_out}"
+            )
+            assert "PgDn" in help_out and "Page Down" in help_out, (
+                f"Missing dedicated PgDn in Help screen:\n{help_out}"
+            )
+            assert "Ctrl+U / PgUp" not in help_out, (
+                f"Found obsolete 'Ctrl+U / PgUp' in Help screen:\n{help_out}"
+            )
+            assert "Ctrl+V / PgDn" not in help_out, (
+                f"Found obsolete 'Ctrl+V / PgDn' in Help screen:\n{help_out}"
+            )
+
+            # Dismiss Help screen via Enter
+            os.write(master, b"\r")
+            time.sleep(0.1)
+
+            # Save file via Ctrl+S
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            # Dismiss save notification modal
+            os.write(master, b"\n")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(test_file, "r") as f:
+                saved = f.read()
+
+            # "Line 2: Bravo" was moved to after "Line 3: Charlie"
+            assert "Line 1: Alpha" in saved, f"Missing Line 1 in:\n{saved}"
+            print("    [+] Direct in-place block manipulation verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -3643,6 +3753,7 @@ def main():
     test_bug_2_4_44_about_screen_canonical_layout()
     test_bug_2_4_45_line_ending_decoupling()
     test_bug_2_4_46_unexpected_keys_in_modals()
+    test_bug_2_4_47_direct_inplace_block_manipulation()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
