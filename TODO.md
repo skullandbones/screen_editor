@@ -2353,7 +2353,7 @@ have been resolved and archived.
       unrecognized or extended CSI escape sequences, preventing trailing byte
       leakage into console input. Validated via Step 10 in `test_terminal.py`
       (`test_bug_2_7_68_drain_unrecognized_escape_sequences`).
-  - [ ] **Bug 2.7.69: Full-Screen Workspace Redraw on Typing Keystrokes**:
+  - [x] **Bug 2.7.69: Full-Screen Workspace Redraw on Typing Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
       `TODO.md` Bug 2.8.1.
     - *Issue*: Section 7.10 strictly prohibits full-screen re-rendering
@@ -2366,10 +2366,12 @@ have been resolved and archived.
       (`action_directory_browser`), every single keystroke triggers
       `self.renderer.render_directory_workspace(...)`, redrawing the entire
       screen, file grid, and status bar on every character entered.
-    - *Action Required*: In `ports/python/se/editor.py`, update
-      `action_directory_browser` to perform in-place prompt row redraws on
-      typing and inline deletions, restricting full workspace rendering to
-      initial display and pagination.
+    - *Resolution*: Implemented `render_directory_prompt()` in `ui.py` and
+      updated `action_directory_browser()` in `editor.py` to redraw only the
+      prompt row during typing, character deletions, and cursor navigation,
+      restricting full workspace redraws to initial entry, pagination,
+      and pattern updates. Validated via Step 53 in `test_editor.py`
+      (`test_bug_2_7_69_directory_browser_in_place_prompt_echoing`).
   - [ ] **Bug 2.7.70: Obsolete Help Screen Key Mappings & Unicode Em-Dash**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.3, 10; `TODO.md`
       Bug 2.4.39.

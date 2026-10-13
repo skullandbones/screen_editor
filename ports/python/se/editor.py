@@ -436,34 +436,52 @@ class Editor:
         if geometry_str not in ("80x24", "120x40"):
             geometry_str = "80x24"
 
+        need_full_render = True
+        all_entries: List[str] = []
+        page_capacity = 60
+        grid_rows = 12
+
         while True:
             if self.terminal.resized:
                 self.terminal.update_geometry()
                 geometry_str = f"{self.terminal.cols}x{self.terminal.rows}"
                 if geometry_str not in ("80x24", "120x40"):
                     geometry_str = "80x24"
+                need_full_render = True
 
-            all_entries = self._get_dir_entries(current_dir, filter_pattern)
             num_cols = 7 if self.terminal.cols >= 120 else 5
             grid_rows = 28 if self.terminal.rows >= 40 else 12
             page_capacity = num_cols * grid_rows
-            page_count = max(
-                1, (len(all_entries) + page_capacity - 1) // page_capacity
-            )
-            page_idx = max(0, min(page_idx, page_count - 1))
 
-            self.renderer.render_directory_workspace(
-                mode=mode,
-                current_dir=current_dir,
-                files=all_entries,
-                page_idx=page_idx,
-                page_count=page_count,
-                input_text=input_text,
-                cursor_pos=cursor_pos,
-                buf=self.buffer,
-                format_cpm=fmt_cpm,
-                geometry_str=geometry_str,
-            )
+            if need_full_render:
+                all_entries = self._get_dir_entries(
+                    current_dir, filter_pattern
+                )
+                page_count = max(
+                    1, (len(all_entries) + page_capacity - 1) // page_capacity
+                )
+                page_idx = max(0, min(page_idx, page_count - 1))
+
+                self.renderer.render_directory_workspace(
+                    mode=mode,
+                    current_dir=current_dir,
+                    files=all_entries,
+                    page_idx=page_idx,
+                    page_count=page_count,
+                    input_text=input_text,
+                    cursor_pos=cursor_pos,
+                    buf=self.buffer,
+                    format_cpm=fmt_cpm,
+                    geometry_str=geometry_str,
+                )
+                need_full_render = False
+            else:
+                self.renderer.render_directory_prompt(
+                    mode=mode,
+                    input_text=input_text,
+                    cursor_pos=cursor_pos,
+                    grid_rows=grid_rows,
+                )
 
             key = self.terminal.get_key()
             if key is None:
@@ -480,6 +498,7 @@ class Editor:
                     input_text = ""
                     cursor_pos = 0
                     page_idx = 0
+                    need_full_render = True
                     continue
                 target = os.path.abspath(os.path.join(current_dir, cleaned))
                 if os.path.isdir(target):
@@ -487,18 +506,24 @@ class Editor:
                     input_text = ""
                     cursor_pos = 0
                     page_idx = 0
+                    need_full_render = True
                     continue
                 if mode in ("open", "insert") and not os.path.isfile(target):
                     self.modal.show_file_not_found(cleaned)
+                    need_full_render = True
                     continue
                 return (target, fmt_cpm)
             elif key == KEY_PGUP or key == KEY_CTRL_U:
-                page_idx = max(0, page_idx - 1)
+                if page_idx > 0:
+                    page_idx -= 1
+                    need_full_render = True
             elif key == KEY_PGDN or key == KEY_CTRL_V:
                 if (page_idx + 1) * page_capacity < len(all_entries):
                     page_idx += 1
+                    need_full_render = True
             elif key == KEY_CTRL_F and mode in ("save", "save_block"):
                 fmt_cpm = not fmt_cpm
+                need_full_render = True
             elif key == KEY_LEFT:
                 cursor_pos = max(0, cursor_pos - 1)
             elif key == KEY_RIGHT:

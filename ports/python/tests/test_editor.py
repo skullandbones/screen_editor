@@ -2457,6 +2457,47 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_69_directory_browser_in_place_prompt_echoing(self):
+        """Step 53: Verify in-place prompt echoing in directory browser."""
+        print(
+            "[*] Step 53: Testing in-place prompt echoing in directory...",
+            flush=True,
+        )
+        full_renders = []
+        prompt_renders = []
+
+        orig_full = self.editor.renderer.render_directory_workspace
+        orig_prompt = self.editor.renderer.render_directory_prompt
+
+        def mock_full(*args, **kwargs):
+            full_renders.append((args, kwargs))
+            return orig_full(*args, **kwargs)
+
+        def mock_prompt(*args, **kwargs):
+            prompt_renders.append((args, kwargs))
+            return orig_prompt(*args, **kwargs)
+
+        self.editor.renderer.render_directory_workspace = mock_full
+        self.editor.renderer.render_directory_prompt = mock_prompt
+
+        # Sequence of 5 keystrokes: 'a', 'b', KEY_BACKSPACE, KEY_LEFT, KEY_ESC
+        keystrokes = ["a", "b", KEY_BACKSPACE, KEY_LEFT, KEY_ESC]
+        self.editor.terminal.get_key = MagicMock(side_effect=keystrokes)
+
+        result = self.editor.action_directory_browser(mode="open")
+        self.assertIsNone(result)
+
+        # Full workspace render called exactly once on entry
+        self.assertEqual(len(full_renders), 1)
+
+        # In-place prompt row render called for 'a', 'b', backspace, left
+        self.assertEqual(len(prompt_renders), 4)
+
+        print(
+            "[+] Step 53: In-place prompt echoing in directory verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

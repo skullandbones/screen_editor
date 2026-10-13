@@ -397,3 +397,46 @@ class UIRenderer:
         self.term.locate(prompt_screen_row, prompt_cursor_col)
         self.term.flush()
 
+    def render_directory_prompt(
+        self,
+        mode: str,
+        input_text: str,
+        cursor_pos: int,
+        grid_rows: Optional[int] = None,
+    ):
+        """
+        Redraw only prompt row and update hardware cursor in-place,
+        avoiding full-screen redraws on typing per Section 7.10.
+        """
+        cols = self.term.cols
+        rows = self.term.rows
+        body_rows = rows - 1
+        if grid_rows is None:
+            grid_rows = 28 if rows >= 40 else 12
+
+        content_h = 3 + grid_rows + 4
+        top_row = max(1, (body_rows - content_h) // 2 + 1)
+        prompt_screen_row = top_row + content_h - 1
+
+        verb_map = {
+            "open": "open",
+            "insert": "insert",
+            "save": "save",
+            "save_block": "save",
+        }
+        verb = verb_map.get(mode, "open")
+        prompt_prefix = f"  Enter filename to {verb}: ["
+        box_width = min(30, max(12, cols - len(prompt_prefix) - 6))
+        offset = max(0, cursor_pos - box_width + 1)
+        visible_text = input_text[offset : offset + box_width].ljust(box_width)
+        prompt_line = f"{prompt_prefix} {visible_text} ]"
+
+        cursor_offset = cursor_pos - offset
+        prompt_cursor_col = len(prompt_prefix) + cursor_offset + 3
+
+        self.term.locate(prompt_screen_row, 1)
+        self.term.write("~" + prompt_line)
+        self.term.clear_eol()
+        self.term.locate(prompt_screen_row, prompt_cursor_col)
+        self.term.flush()
+
