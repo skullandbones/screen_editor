@@ -461,8 +461,8 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 2 Open Defects
-  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9, 2.3.10 Resolved; Bugs 2.3.2,
+- **Status**: Active / 1 Open Defect
+  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9, 2.3.10, 2.3.11 Resolved; Bugs 2.3.2,
   2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
@@ -600,7 +600,7 @@ have been resolved and archived.
       adheres to the join column across native Next targets `SE.NEX` and `.se`
       while preserving RomWBW CP/M binary invariance. Validated via
       `tests/test_bug_2_3_10.py`.
-  - [ ] **Bug 2.3.11: Modal Dialog Cancellation by Unexpected Keystrokes**:
+  - [x] **Bug 2.3.11: Modal Dialog Cancellation by Unexpected Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and
@@ -610,6 +610,12 @@ have been resolved and archived.
       active dialog. Modals must only dismiss on `Enter` or `ESC`.
     - *Required Fix*: In modal input loops, drain and discard unexpected escape
       sequences and non-input keys, preserving active dialog state.
+    - *Resolution*: Implemented `DRAIN_ESCAPE_SEQUENCE` under `TARGET_NEXT` in
+      `src/core/editor.asm` to absorb multi-byte escape sequences without
+      moving document cursor or dismissing active modals. Routed
+      `GOTO_GOT_ESC_SEQ`, `FIND_GOT_ESC_SEQ`, and `REP_GOT_ESC_SEQ` to it in
+      native Next targets `SE.NEX` and `.se`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_3_11.py`.
   - [ ] **Bug 2.3.12: File Browser Displays CP/M User Areas Under NextZXOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.6, 7.7.
     - *Issue*: In `src/core/ui_browser.asm`, the directory browser prompt line
