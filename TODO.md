@@ -461,8 +461,8 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 5 Open Defects
-  (Bugs 2.3.1, 2.3.3, 2.3.4 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8
+- **Status**: Active / 4 Open Defects
+  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5 Resolved; Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8
   Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
@@ -529,7 +529,7 @@ have been resolved and archived.
       hotkey '2', and enforced 80x24 on 120x40 requests in `src/se_next.asm`.
       Preserved RomWBW CP/M binary invariance. Validated via
       `tests/test_bug_2_3_4.py`.
-  - [ ] **Bug 2.3.5: Predominant Language Indication on About Screen**:
+  - [x] **Bug 2.3.5: Predominant Language Indication on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
@@ -538,6 +538,11 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
+    - *Resolution*: Displayed `version 1.1.0 (2026-10-09) (Z80 Assembly)` on
+      native Next `SE.NEX` and `.se` via `TARGET_NEXT` in
+      `src/core/plugin_mgr.asm`, centered dynamically on the About screen
+      while preserving RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_5.py`.
   - [x] **Bug 2.3.6: Tier 1 Help Screen Rules [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.

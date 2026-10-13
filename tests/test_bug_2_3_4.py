@@ -45,7 +45,8 @@ def test_bug_2_3_4():
 
     assert "CP '1'" in splash_section, "Option '1' check not found"
     assert "DO_SET_80X24" in splash_section, "Option '1' must set 80x24"
-    assert "DO_SET_120X40" not in splash_section[:splash_section.find("DO_SET")], (
+    do_set_pos = splash_section.find("DO_SET")
+    assert "DO_SET_120X40" not in splash_section[:do_set_pos], (
         "Option '1' must not set 120x40"
     )
     print("    [+] Splash hotkey [1] maps to DO_SET_80X24")
