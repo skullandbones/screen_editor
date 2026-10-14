@@ -1249,8 +1249,10 @@ def test_bug_2_4_17_tier1_file_workspaces_and_directory_scan():
         assert "Enter filename to open:" in open_out, (
             f"Expected filename prompt in open workspace:\n{open_out}"
         )
-        assert "<PgUp>/<PgDn>=Page" in open_out, (
-            f"Expected page controls in open workspace:\n{open_out}"
+        # Single-page directory suppresses pagination controls (Section 7.5)
+        assert "<PgUp>/<PgDn>=Page" not in open_out, (
+            "Expected pagination controls suppressed in single-page "
+            f"workspace:\n{open_out}"
         )
         # Directory scanning verification: Makefile or TODO.md in grid
         assert "Makefile" in open_out or "TODO.md" in open_out, (
@@ -1299,6 +1301,48 @@ def test_bug_2_4_17_tier1_file_workspaces_and_directory_scan():
         os.close(master)
 
         assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        # Multi-page directory displays pagination controls (Section 7.5)
+        multi_dir = tempfile.mkdtemp()
+        try:
+            for i in range(65):
+                fpath = os.path.join(multi_dir, f"file_{i:02d}.txt")
+                with open(fpath, "w") as f:
+                    f.write("test\n")
+            m_master, m_slave = pty.openpty()
+            m_pid = os.fork()
+            if m_pid == 0:
+                os.chdir(multi_dir)
+                os.close(m_master)
+                os.dup2(m_slave, 0)
+                os.dup2(m_slave, 1)
+                os.dup2(m_slave, 2)
+                os.close(m_slave)
+                os.execl(SE_LINUX_BIN, "se-linux")
+            else:
+                os.close(m_slave)
+                time.sleep(0.3)
+                read_all_available(m_master, 0.2)
+                os.write(m_master, b"o")
+                time.sleep(0.3)
+                multi_out = read_all_available(m_master, 0.4).decode(
+                    "utf-8", errors="replace"
+                )
+                assert "<PgUp>/<PgDn>=Page" in multi_out, (
+                    "Expected page controls in multi-page workspace:\n"
+                    f"{multi_out}"
+                )
+                assert "[Page 1/2]" in multi_out, (
+                    f"Expected [Page 1/2] in multi-page workspace:\n{multi_out}"
+                )
+                os.write(m_master, b"\x1b")
+                time.sleep(0.2)
+                os.write(m_master, b"q")
+                wait_pid_with_timeout(m_pid, 2.0)
+                os.close(m_master)
+        finally:
+            shutil.rmtree(multi_dir, ignore_errors=True)
+
         print("    [+] Tier 1 file workspaces & dir scanning verified [PASS]")
 
 
@@ -3668,11 +3712,11 @@ def test_bug_2_4_47_direct_inplace_block_manipulation():
             assert "PgDn" in help_out and "Page Down" in help_out, (
                 f"Missing dedicated PgDn in Help screen:\n{help_out}"
             )
-            assert "Ctrl+U / PgUp" not in help_out, (
-                f"Found obsolete 'Ctrl+U / PgUp' in Help screen:\n{help_out}"
+            assert "Paste Block" not in help_out, (
+                f"Found prohibited 'Paste Block' in Help screen:\n{help_out}"
             )
-            assert "Ctrl+V / PgDn" not in help_out, (
-                f"Found obsolete 'Ctrl+V / PgDn' in Help screen:\n{help_out}"
+            assert "Cut Block" not in help_out, (
+                f"Found non-canonical 'Cut Block' in Help screen:\n{help_out}"
             )
 
             # Dismiss Help screen via Enter
