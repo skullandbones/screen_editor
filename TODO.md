@@ -25,8 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 7 Open
-  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected).
+- **Status**: Complete / 0 Open
+  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
+  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -42,7 +43,7 @@ have been resolved and archived.
       cause line wrapping (> 78 cols). Furthermore, Field 3 `CP/M  |` is the
       canonical format string in Section 4.3, and Field 2 uses 1 leading space
       (` 80x24 | `) matching `120x40 | ` width.
-  - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
+  - [x] **Bug 2.1.2: Startup Screen Geometry Inversion [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
       default. On standard CP/M terminals and serial consoles (VT100 / ANSI,
@@ -175,7 +176,7 @@ have been resolved and archived.
       hardware. The requirement to harmonize splash screen hotkeys across all
       variants (`1` = 80x24 default, `2` = 120x40 if supported) has been
       split out and tracked as a discrete enhancement in Bug 2.1.18.
-  - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Editor**:
+  - [x] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
       `HANDLE_CSI_2`, and `HANDLE_CSI_LOOP`), when an unhandled or extended
@@ -194,7 +195,7 @@ have been resolved and archived.
       until a terminating character (e.g. `'~'`, `'A'..'Z'`, `'a'..'z'`) or
       timeout, preventing trailing escape sequence bytes from leaking into the
       editor document buffer.
-  - [ ] **Bug 2.1.14: Predominant Language Indication on About Screen**:
+  - [x] **Bug 2.1.14: Predominant Language on About Screen [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
@@ -223,7 +224,7 @@ have been resolved and archived.
       `PLUGIN`), which has no format option. `docs/UI_UX_DESIGN.md` has been
       updated to remove `FORMAT` from `SE.CFG` and detail per-document line
       ending handling in Section 7.7.
-  - [ ] **Bug 2.1.16: Forward Deletion Line Join Sticky Target Column Update**:
+  - [x] **Bug 2.1.16: Forward Deletion Line Join Target Column [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
@@ -231,7 +232,7 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
-  - [ ] **Bug 2.1.17: Modal Dialog Cancellation by Unexpected Keystrokes**:
+  - [x] **Bug 2.1.17: Modal Cancellation by Unexpected Keys [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and
@@ -248,7 +249,7 @@ have been resolved and archived.
     - *Required Fix*: In `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`,
       drain and discard unexpected escape sequences and unassigned keys,
       preserving the active modal dialog and retaining input buffer state.
-  - [ ] **Bug 2.1.18: Splash Screen Geometry Hotkeys (1=80x24, 2=120x40)**:
+  - [x] **Bug 2.1.18: Splash Screen Geometry Hotkeys [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: Splash screen geometry hotkeys are standardized across all SE
       variants so that `1` selects 80x24 (universal baseline and default)
@@ -261,7 +262,7 @@ have been resolved and archived.
       `STR_SPLASH_CMDS` to display `type [1] set 80x24` and `type [2] set
       120x40`. In `src/se.asm:578-584`, update `SPLASH_LOOP` to dispatch
       `'1'` to `DO_SET_80X24` and `'2'` to `DO_SET_120X40`.
-  - [ ] **Bug 2.1.19: Search & Replace 120-Character Line Length Barrier**:
+  - [x] **Bug 2.1.19: Search & Replace Line Length Barrier [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
     - *Issue*: In `src/core/search.asm:2386-2400` (`DO_REPLACE_CURRENT`), after
       computing replacement line length `L' = C - B + E`, the code executes

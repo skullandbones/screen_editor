@@ -4152,7 +4152,7 @@ STR_POPUP_SEARCH_COMP_MSG2:
 STR_POPUP_TOO_LONG_TITLE:
 	DB "|                 Line Too Long                  |", 0
 STR_POPUP_TOO_LONG_MSG1:
-	DB "|          Line > 120 chars - skipped.           |", 0
+	DB "|         Line > 1000 chars - skipped.           |", 0
 STR_POPUP_TOO_LONG_MSG2:
 	DB "|     Line length limit exceeded on replace.     |", 0
 
@@ -4287,8 +4287,8 @@ STR_SPLASH_CMDS:
 	DB "  type   [P]              for plugins",13,10
 	DB "  type   [^P]             for context plugin menu",13,10
 	DB "  type   [C]              to configure",13,10
-	DB "  type   [1]              set 120x40",13,10
-	DB "  type   [2]              set 80x24",13,10
+	DB "  type   [1]              set 80x24",13,10
+	DB "  type   [2]              set 120x40",13,10
 	DB "  type   [Q]  or  [^Q]    to exit",13,10
 	DB 0
 
@@ -4381,7 +4381,8 @@ STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 ; About Screen Strings
 ;------------------------------------------------------------------------------
 STR_ABOUT_TITLE:	DB	"SE - Screen Editor", "$"
-STR_ABOUT_VERSION:	DB	"version 1.1.0 (2026-10-09)", "$"
+STR_ABOUT_VERSION:
+	DB	"version 1.1.1 (2026-10-13) (Z80 Assembly)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
 
 STR_ABOUT_AI:
@@ -4459,7 +4460,7 @@ STR_MEM_SPACES_3:	DB	' '
 STR_MEM_SPACES_2:	DB	' ', ' ', '$'
 
 
-STR_STATUS_PREFIX:	DB	" SE v1.1.0 | ","$"
+STR_STATUS_PREFIX:	DB	" SE v1.1.1 | ","$"
 
 
 STR_STATUS_120X40:	DB	"120x40 | ","$"

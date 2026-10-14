@@ -62,9 +62,10 @@ CHECK_KEY_READY:
 ;   Pending escape sequence consumed from serial buffer.
 ;
 ; Preserves / Modifies:
-;   Clobbers all working registers.
+;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 DRAIN_ESC_SEQUENCE:
+	PUSH BC
 	LD BC,ESC_TIMEOUT_LOOPS
 DES_WAIT:
 	CALL CHECK_KEY_READY
@@ -73,24 +74,22 @@ DES_WAIT:
 	LD A,B
 	OR C
 	JR NZ,DES_WAIT
+	POP BC
 	RET				; Standalone ESC, nothing to drain
 
 DES_DRAIN_FIRST:
 	CALL GET_KEY		; Consume byte following ESC ('[' or 'O' etc.)
-DES_DRAIN_MORE:
-	LD BC,500
-DES_DRAIN_WAIT:
-	CALL CHECK_KEY_READY
-	JR NZ,DES_DRAIN_BYTE
-	DEC BC
-	LD A,B
-	OR C
-	JR NZ,DES_DRAIN_WAIT
-	RET				; Sequence drained
+	CP '['
+	JR Z,DES_DRAIN_TAIL
+	CP 'O'
+	JR Z,DES_DRAIN_TAIL
+	POP BC
+	RET
 
-DES_DRAIN_BYTE:
-	CALL GET_KEY
-	JR DES_DRAIN_MORE
+DES_DRAIN_TAIL:
+	CALL DCT_DRAIN_LOOP
+	POP BC
+	RET
 
 ;------------------------------------------------------------------------------
 ; DRAIN_INPUT_BUFFER: Flush all pending keystrokes from console input buffer
@@ -212,7 +211,7 @@ HANDLE_SS3:
 	JP Z,CURSOR_HOME
 	CP 'F'				; End
 	JP Z,CURSOR_END
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI:
 	XOR A
@@ -269,7 +268,7 @@ HANDLE_CSI:
 	JP C,CSI_DONE
 	CP '9'+1
 	JP C,HANDLE_CSI_LOOP_DIGIT
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_1:
 	LD A,'1'
@@ -279,7 +278,7 @@ HANDLE_CSI_1:
 	JP Z,CURSOR_HOME
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_2:
 	LD A,'2'
@@ -298,7 +297,7 @@ HANDLE_CSI_2:
 	JP Z,SHIFT_CURSOR_LEFT
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_4:
 	LD A,'4'
@@ -308,23 +307,29 @@ HANDLE_CSI_4:
 	JP Z,CURSOR_END
 	CP ';'
 	JP Z,HANDLE_CSI_LOOP
-	RET
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_7:
 	CALL GET_KEY
 	CP '^'
 	JP Z,JUMP_FILE_TOP		; rxvt Ctrl+Home (ESC [ 7 ^)
-	JP CURSOR_HOME
+	CP '~'
+	JP Z,CURSOR_HOME
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_8:
 	CALL GET_KEY
 	CP '^'
 	JP Z,JUMP_FILE_BOTTOM		; rxvt Ctrl+End (ESC [ 8 ^)
-	JP CURSOR_END
+	CP '~'
+	JP Z,CURSOR_END
+	JP DRAIN_CSI_TAIL
 
 HANDLE_CSI_DEL:
 	; Consume trailing '~'
 	CALL GET_KEY
+	CP '~'
+	CALL NZ,DRAIN_CSI_TAIL
 	LD A,(BLOCK_ACTIVE)
 	CP 2
 	JR Z,DO_CSI_DEL_BLOCK
@@ -342,12 +347,16 @@ DO_CSI_DEL_BLOCK:
 HANDLE_CSI_PGUP:
 	; Consume trailing '~'
 	CALL GET_KEY
+	CP '~'
+	CALL NZ,DRAIN_CSI_TAIL
 	CALL PAGE_UP
 	RET
 
 HANDLE_CSI_PGDN:
 	; Consume trailing '~'
 	CALL GET_KEY
+	CP '~'
+	CALL NZ,DRAIN_CSI_TAIL
 	CALL PAGE_DOWN
 	RET
 
@@ -356,7 +365,7 @@ HANDLE_CSI_LOOP_DIGIT:
 HANDLE_CSI_LOOP:
 	CALL GET_KEY
 	CP '~'
-	JR Z,HANDLE_CSI_TILDE
+	JP Z,HANDLE_CSI_TILDE
 	CP 'A'
 	JP Z,HANDLE_CSI_A
 	CP 'B'
@@ -380,7 +389,51 @@ HANDLE_CSI_LOOP:
 	CP '9'+1
 	JR C,HANDLE_CSI_LOOP_DIGIT
 CSI_DONE:
+	JP DRAIN_CSI_TAIL
+
+;------------------------------------------------------------------------------
+; DRAIN_CSI_TAIL: Drain unhandled CSI parameters and terminating byte
+;
+; Purpose:
+;   Drains trailing bytes of unhandled or extended multi-byte escape sequences
+;   until terminating character ('~', 'A'..'Z', 'a'..'z') or timeout.
+;------------------------------------------------------------------------------
+DRAIN_CSI_TAIL:
+	CP '~'
+	RET Z
+	CP 'A'
+	JR C,DCT_DRAIN_LOOP
+	CP 'Z'+1
+	RET C
+	CP 'a'
+	JR C,DCT_DRAIN_LOOP
+	CP 'z'+1
+	RET C
+
+DCT_DRAIN_LOOP:
+	LD BC,ESC_TIMEOUT_LOOPS
+DCT_WAIT:
+	CALL CHECK_KEY_READY
+	JR NZ,DCT_GOT_BYTE
+	DEC BC
+	LD A,B
+	OR C
+	JR NZ,DCT_WAIT
 	RET
+
+DCT_GOT_BYTE:
+	CALL GET_KEY
+	CP '~'
+	RET Z
+	CP 'A'
+	JR C,DCT_DRAIN_LOOP
+	CP 'Z'+1
+	RET C
+	CP 'a'
+	JR C,DCT_DRAIN_LOOP
+	CP 'z'+1
+	RET C
+	JR DCT_DRAIN_LOOP
 
 CHECK_CSI_SHIFT:
 	LD A,(CSI_MODIFIER)
@@ -1294,7 +1347,7 @@ PARSE_DEC_LOOP:
 ;   and navigates to target line.
 ;
 ; Call Usage / Protocol:
-;   Jumped to from MAIN_LOOP on Ctrl+G.
+;   Called via CALL from MAIN_LOOP on Ctrl+L.
 ;
 ; Inputs:
 ;   ACTIVE_COLS, ACTIVE_ROWS.
@@ -1336,14 +1389,6 @@ GOTO_UI_LOOP:
 	; ESC or escape sequence (e.g. cursor keys, PgUp, PgDn)
 	CP KEY_ESC
 	JR Z,GOTO_UI_CHECK_ESC
-
-	; Ctrl+U -> cancel and Page Up
-	CP KEY_CTRL_U
-	JR Z,GOTO_UI_PGUP
-
-	; Ctrl+V -> cancel and Page Down
-	CP KEY_CTRL_V
-	JR Z,GOTO_UI_PGDN
 
 	; Enter -> confirm goto line
 	CP KEY_ENTER
@@ -1403,22 +1448,9 @@ GOTO_UI_BS:
 	CALL PUTC
 	JR GOTO_UI_LOOP
 
-GOTO_UI_PGUP:
-	CALL PAGE_UP
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
-
-GOTO_UI_PGDN:
-	CALL PAGE_DOWN
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
-
 GOTO_UI_CHECK_ESC:
 	; Check if a character follows ESC within a short timeout
+	PUSH BC
 	LD BC,ESC_TIMEOUT_LOOPS
 GOTO_WAIT_ESC:
 	CALL CHECK_KEY_READY
@@ -1429,15 +1461,14 @@ GOTO_WAIT_ESC:
 	JR NZ,GOTO_WAIT_ESC
 
 	; Standalone ESC key: cancel prompt without moving cursor
+	POP BC
 	JR GOTO_UI_CANCEL
 
 GOTO_GOT_ESC_SEQ:
-	; User pressed an escape sequence (e.g. cursor arrow keys, PgUp, PgDn)
-	CALL GOT_ESC_BYTE
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
+	; Unexpected escape sequence (e.g. cursor keys, PgUp, PgDn)
+	CALL DRAIN_ESC_SEQUENCE
+	POP BC
+	JP GOTO_UI_LOOP
 
 GOTO_UI_ENTER:
 	; If empty (user just pressed enter with no digits), treat as cancel
@@ -1452,16 +1483,8 @@ GOTO_UI_ENTER:
 	CALL GOTO_LINE_HL
 
 	; Redraw editor and status bar smoothly without full screen clear flash
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
-
 GOTO_UI_CANCEL:
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
+	JP RENDER_SCREEN
 
 DRAW_GOTO_POPUP_BODY:
 	CALL TERM_HIDE_CURSOR
@@ -1874,9 +1897,13 @@ DO_DEL_JOIN_OK:
 	; Join CUR_DOC_ROW and CUR_DOC_ROW + 1
 	LD BC,(CUR_DOC_ROW)		; BC = upper line (CUR_DOC_ROW)
 	CALL JOIN_TWO_LINES
-	JR C,DO_DEL_JOIN_FAIL		; If combined length > 120, reject
+	JR C,DO_DEL_JOIN_FAIL		; If combined length > 1000, reject
 
 	; Join succeeded: cursor remains at CUR_DOC_ROW, CUR_COL
+	CALL CHECKOUT_ACTIVE_LINE
+	CALL CALC_VISUAL_COL
+	LD (TARGET_COL),HL
+
 	LD A,1
 	LD (NEED_SCREEN_RENDER),A
 	RET
