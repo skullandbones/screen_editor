@@ -255,6 +255,6 @@ uint16_t mem_get_free_slots(void)
 
 uint32_t mem_get_free_kb(void)
 {
-    uint32_t free_slots = mem_get_free_slots();
-    return (free_slots * FAR_SLOT_SIZE) / 1024;
+    uint16_t free_slots = mem_get_free_slots();
+    return (uint32_t)(free_slots >> 3);
 }

@@ -22,9 +22,9 @@
 #include "../include/hal.h"
 
 /* Global Search State Variables */
-char     g_search_buf[SEARCH_BUF_MAX] = {0};
+char     g_search_buf[SEARCH_BUF_MAX];
 uint16_t g_search_len = 0;
-char     g_replace_buf[SEARCH_BUF_MAX] = {0};
+char     g_replace_buf[SEARCH_BUF_MAX];
 uint16_t g_replace_len = 0;
 uint8_t  g_search_case_sensitive = 1;
 
@@ -67,18 +67,10 @@ int find_string_in_line(const char *pattern, uint16_t pat_len,
     return -1;
 }
 
-static const char s_border_50[] =
-    "+------------------------------------------------+";
-static const char s_find_title[] =
-    "|                   Find Text                    |";
 static const char s_find_mode_sens[] =
-    "|       Search Pattern: [Case Sensitive  ]       |";
+    "Search Pattern: [Case Sensitive  ]";
 static const char s_find_mode_insens[] =
-    "|       Search Pattern: [Case Insensitive]       |";
-static const char s_find_keys[] =
-    "| [Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel |";
-static const char s_find_close[] =
-    "]      |";
+    "Search Pattern: [Case Insensitive]";
 
 static void restore_editor_screen(void)
 {
@@ -99,7 +91,7 @@ static void draw_find_field(uint8_t top, uint8_t left,
     for (i = 0; i < FIND_POPUP_FIELD_LEN; i++) {
         hal_console_putc((i < cur_len) ? input[i] : ' ');
     }
-    hal_console_puts(s_find_close);
+    hal_console_puts("]      |");
     hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
 }
 
@@ -156,22 +148,23 @@ int execute_find_forward(void)
 
 int execute_find_backward(void)
 {
-    int32_t row;
+    uint16_t r = g_cur_doc_row + 1;
     char *line_buf = g_scratch_line_buf;
 
     if (g_search_len == 0) {
         return -1;
     }
 
-    for (row = (int32_t)g_cur_doc_row; row >= 0; row--) {
-        uint16_t len = fetch_line_to_buffer((uint16_t)row, line_buf,
-                                            MAX_ACTIVE_PAYLOAD);
+    while (r > 0) {
+        uint16_t len;
         uint16_t match_col = 0;
 
+        r--;
+        len = fetch_line_to_buffer(r, line_buf, MAX_ACTIVE_PAYLOAD);
         if (find_string_in_line(g_search_buf, g_search_len,
                                 line_buf, len, &match_col) == 0) {
             commit_active_line();
-            g_cur_doc_row = (uint16_t)row;
+            g_cur_doc_row = r;
             g_cur_col = match_col;
             g_target_col = g_cur_col;
             checkout_active_line(g_cur_doc_row);
@@ -215,33 +208,29 @@ static uint8_t check_start_from_block(char *input)
 
 int do_ctrl_f_find(void)
 {
-    char input[SEARCH_BUF_MAX] = {0};
+    char input[32];
     uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
-    uint8_t cur_len = check_start_from_block(input);
-    uint8_t cursor_pos = cur_len;
-    uint8_t row;
+    uint8_t cur_len;
+    uint8_t cursor_pos;
     int k;
+
+    input[0] = '\0';
+    cur_len = check_start_from_block(input);
+    cursor_pos = cur_len;
 
     hal_console_hide_cursor();
 
     /* Draw 50x7 Find Text popup frame */
-    for (row = 0; row < 7; row++) {
-        hal_console_locate((uint8_t)(top + row), left);
-        if (row == 0 || row == 2 || row == 6) {
-            hal_console_puts(s_border_50);
-        } else if (row == 1) {
-            hal_console_puts(s_find_title);
-        } else if (row == 3) {
-            hal_console_puts(g_search_case_sensitive ?
-                             s_find_mode_sens : s_find_mode_insens);
-        } else if (row == 4) {
-            hal_console_puts("|      Find: [");
-            draw_find_field(top, left, input, cur_len, cursor_pos);
-        } else {
-            hal_console_puts(s_find_keys);
-        }
-    }
+    modal_draw_frame(top, left, 50, 7, "Find Text");
+    modal_draw_row_centered(top + 3, left, 50,
+                            g_search_case_sensitive ?
+                            s_find_mode_sens : s_find_mode_insens);
+    hal_console_locate(top + 4, left);
+    hal_console_puts("|      Find: [");
+    draw_find_field(top, left, input, cur_len, cursor_pos);
+    modal_draw_row_centered(top + 5, left, 50,
+                            "[Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel");
 
     hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
     hal_console_show_cursor();
@@ -266,9 +255,9 @@ int do_ctrl_f_find(void)
         }
         if (k == KEY_TAB || k == KEY_CTRL_I) {
             g_search_case_sensitive ^= 1;
-            hal_console_locate(top + 3, left);
-            hal_console_puts(g_search_case_sensitive ?
-                             s_find_mode_sens : s_find_mode_insens);
+            modal_draw_row_centered(top + 3, left, 50,
+                                    g_search_case_sensitive ?
+                                    s_find_mode_sens : s_find_mode_insens);
             hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
             continue;
         }
@@ -348,29 +337,26 @@ int do_find_prev(void)
 
 int do_ctrl_r_replace(void)
 {
-    char find_input[SEARCH_BUF_MAX] = {0};
-    char repl_input[SEARCH_BUF_MAX] = {0};
+    char input[32];
     uint16_t replaced_count = 0;
 
+    input[0] = '\0';
     if (modal_prompt_text("Replace Text", "Search for:",
-                          find_input, REPLACE_POPUP_FIELD_LEN) !=
-        MODAL_RES_OK) {
+                          input, REPLACE_POPUP_FIELD_LEN) !=
+        MODAL_RES_OK || input[0] == '\0') {
         return 0;
     }
-    if (find_input[0] == '\0') {
-        return 0;
-    }
-
-    if (modal_prompt_text("Replace Text", "Replace with:",
-                          repl_input, REPLACE_POPUP_FIELD_LEN) !=
-        MODAL_RES_OK) {
-        return 0;
-    }
-
-    strncpy(g_search_buf, find_input, sizeof(g_search_buf) - 1);
+    strncpy(g_search_buf, input, sizeof(g_search_buf) - 1);
     g_search_buf[sizeof(g_search_buf) - 1] = '\0';
     g_search_len = (uint16_t)strlen(g_search_buf);
-    strncpy(g_replace_buf, repl_input, sizeof(g_replace_buf) - 1);
+
+    input[0] = '\0';
+    if (modal_prompt_text("Replace Text", "Replace with:",
+                          input, REPLACE_POPUP_FIELD_LEN) !=
+        MODAL_RES_OK) {
+        return 0;
+    }
+    strncpy(g_replace_buf, input, sizeof(g_replace_buf) - 1);
     g_replace_buf[sizeof(g_replace_buf) - 1] = '\0';
     g_replace_len = (uint16_t)strlen(g_replace_buf);
 
