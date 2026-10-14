@@ -1551,12 +1551,13 @@ have been resolved and archived.
 - **Target Platform**: Linux PC / Workstation (`x86_64-unknown-linux-gnu`) and
   Raspberry Pi 4/5 (`aarch64-unknown-linux-gnu`).
 - **Core Technology**: Idiomatic Rust implementation (`ports/rust/`),
-  terminal engine (`crossterm` / raw `termios`), piece table or line-slot
-  cache buffer, WordStar / SE keybindings, `SE.CFG` parser.
-- **Build Target**: `cargo build --release` (or `make se-rust`).
-- **Status**: Implementation Pending (Roadmap Item 7.4).
+  raw `termios` / `libc` terminal engine, line-slot `Vec<Vec<u8>>` document
+  buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
+- **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
+  via `make test-rust`).
+- **Status**: Complete / Production Ready.
 - **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; implementation pending).*
+  - [ ] *(No active bugs open).*
 
 ### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
@@ -2641,7 +2642,8 @@ have been resolved and archived.
       `SE.CFG` and refreshing the `Config Status: Loaded from SE.CFG` header.
     - *Root Cause*: `action_config_screen()` in `ports/python/se/editor.py`
       only handled two states (`AUTOLOAD` and `DISABLED`) for `PLUGIN` and
-      invoked `self.modal.show_notification()` after `self.config.save_config()`.
+      invoked `self.modal.show_notification()` after
+      `self.config.save_config()`.
     - *Resolution*: Updated `action_config_screen()` in `editor.py` to cycle
       Option 5 through all three canonical states (`Autoload` -> `Demand` ->
       `Disabled` -> `Autoload`) and save `SE.CFG` immediately on `S`/`s`
@@ -3150,19 +3152,21 @@ platform hardware abstraction, targeting three primary operating profiles:
 - [ ] Add `se-cpm86` build target in `Makefile` producing `SE.CMD`.
 
 ### 7.4 Rust Native Implementation for Linux
-- [ ] Construct a native SE editor implementation in Rust for Linux.
-- [ ] Implement idiomatic Rust architecture mirroring SE UI/UX specification:
-  - Terminal engine using `crossterm`, `termion`, or raw `termios`.
-  - Tier 1 full-screen workspaces, Tier 2 centered modal pop-up dialogs,
+- [x] Construct a native SE editor implementation in Rust for Linux (`se-rs`).
+- [x] Implement idiomatic Rust architecture mirroring SE UI/UX specification:
+  - [x] Terminal engine using raw `termios` (`libc`) and non-blocking ESC
+    timing.
+  - [x] Tier 1 full-screen workspaces, Tier 2 centered modal pop-up dialogs,
     and Tier 3 persistent status bar strictly matching `docs/UI_UX_DESIGN.md`.
-  - High-performance text buffer engine (piece table or line-slot cache).
-  - WordStar / SE keybindings (`Ctrl+K`, `Ctrl+Q`, `Ctrl+F`, `Ctrl+R`).
-  - Compatible `SE.CFG` configuration parsing and serialization.
-- [ ] Target platforms:
+  - [x] High-performance line-slot text buffer engine
+    (`ports/rust/src/buffer.rs`).
+  - [x] WordStar / SE keybindings (`Ctrl+K`, `Ctrl+Q`, `Ctrl+F`, `Ctrl+R`).
+  - [x] Compatible `SE.CFG` configuration parsing and serialization.
+- [x] Target platforms:
   - PC: `x86_64-unknown-linux-gnu`.
   - Raspberry Pi: `aarch64-unknown-linux-gnu` (RPi 4 / RPi 5).
-- [ ] Add Cargo workspace / package configuration under `ports/rust/` or
-  `src/rust/`.
+- [x] Add Cargo package configuration under `ports/rust/` and `--rust` flag to
+  `tests/test_linux_native.py` and `tests/compare_cpm_linux.py`.
 
 ### 7.5 Python Native Implementation for Linux
 - [x] Construct a native SE editor implementation in Python 3 for Linux.

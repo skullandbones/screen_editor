@@ -25,7 +25,9 @@ import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
-SE_LINUX_BIN = os.path.join(PROJECT_DIR, "se-linux")
+USE_RUST = "--rust" in sys.argv
+TARGET_NAME = "se-rs" if USE_RUST else "se-linux"
+SE_LINUX_BIN = os.path.join(PROJECT_DIR, TARGET_NAME)
 
 
 def read_all_available(fd, timeout_sec=0.5):
@@ -66,17 +68,19 @@ def wait_pid_with_timeout(pid, timeout_sec=3.0):
 
 
 def test_build_and_help():
-    """Verify 'make se-linux' build and CLI help invocation."""
+    """Verify build target and CLI help invocation."""
     print("[*] Testing build and CLI help interface...")
-    cmd = ["make", "se-linux"]
+    cmd = ["make", TARGET_NAME]
     res = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_DIR)
-    assert res.returncode == 0, f"make se-linux failed:\n{res.stderr}"
+    assert res.returncode == 0, f"make {TARGET_NAME} failed:\n{res.stderr}"
     assert os.path.isfile(SE_LINUX_BIN), f"Binary not found: {SE_LINUX_BIN}"
 
     # Run --help
     cmd = [SE_LINUX_BIN, "--help"]
     res = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_DIR)
-    assert res.returncode == 0, f"se-linux --help failed with {res.returncode}"
+    assert res.returncode == 0, (
+        f"{TARGET_NAME} --help failed with {res.returncode}"
+    )
     assert "Usage: " in res.stdout, "Usage text missing from --help"
     assert "Linux Native Profile" in res.stdout, "Profile text missing"
     print("    [+] Build and --help verified successfully [PASS]")
@@ -3335,8 +3339,10 @@ def test_bug_2_4_44_about_screen_canonical_layout():
         )
 
         # 2. Canonical version with build date and predominant language
-        assert "version 1.1.0 (2026-10-09) (C)" in about_out, (
-            f"Expected 'version 1.1.0 (2026-10-09) (C)' in:\n{about_out}"
+        lang_tag = "(Rust)" if USE_RUST else "(C)"
+        expected_ver = f"version 1.1.0 (2026-10-09) {lang_tag}"
+        assert expected_ver in about_out, (
+            f"Expected '{expected_ver}' in:\n{about_out}"
         )
 
         # 3. Author attribution
@@ -3972,7 +3978,10 @@ def test_bug_2_4_49_line_join_boundary():
 
 def main():
     print("=" * 80)
-    print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
+    print(
+        f"   SE.COM Linux Native Profile ({TARGET_NAME}) "
+        f"Automated Verification"
+    )
     print("=" * 80)
 
     test_build_and_help()

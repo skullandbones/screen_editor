@@ -52,6 +52,8 @@ TARGET_NEXT_DOT = .se
 ASM_SRC_NEXT = src/se_next.asm
 
 TARGET_LINUX = se-linux
+TARGET_RUST = se-rs
+RUST_SRCS = $(wildcard ports/rust/src/*.rs) ports/rust/Cargo.toml
 C_CORE_SRCS = src/core/buffer.c src/core/memory.c src/core/editor.c \
 	src/core/block.c src/core/search.c src/core/ui_render.c \
 	src/core/ui_modal.c src/core/ui_browser.c src/core/config.c \
@@ -67,17 +69,20 @@ CPM_MAIN_SRC = src/sec_cpm.c
 ZCC ?= $(TOOLS_ROOT)/z88dk/bin/zcc
 ZCCCFG ?= $(TOOLS_ROOT)/z88dk/lib/config
 export ZCCCFG
-export PATH := $(TOOLS_ROOT)/z88dk/bin:$(PATH)
+CARGO ?= $(TOOLS_ROOT)/rust/bin/cargo
+RUSTC ?= $(TOOLS_ROOT)/rust/bin/rustc
+export RUSTC
+export PATH := $(TOOLS_ROOT)/z88dk/bin:$(TOOLS_ROOT)/rust/bin:$(PATH)
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
 
-.PHONY: all sec-cpm se-py test-py test-linux se-next-cpm se-next-native \
-	test-next demo-next plugins image next-image init-image clean-image \
-	check-tpa check-ccp check-plugins check-lines test test-sec \
-	test-sanity test-conformity test-paging test-config test-32k \
-	test-cpm3 test-plugins test-beautifier test-popup test-slots \
-	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
-	test-fatfs-hook test-full clean
+.PHONY: all sec-cpm se-py test-py test-linux se-rust test-rust \
+	se-next-cpm se-next-native test-next demo-next plugins image \
+	next-image init-image clean-image check-tpa check-ccp check-plugins \
+	check-lines test test-sec test-sanity test-conformity test-paging \
+	test-config test-32k test-cpm3 test-plugins test-beautifier \
+	test-popup test-slots test-plugin-cfg test-fatfs test-fatfs-slot \
+	test-fatfs-vfs test-fatfs-hook test-full clean
 
 
 
@@ -103,6 +108,13 @@ $(TARGET_LINUX): $(LINUX_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_LINUX_SRCS)
 	@echo "==> Compiling $(TARGET_LINUX) with $(CC)..."
 	$(CC) $(CFLAGS) -o $(TARGET_LINUX) $(LINUX_MAIN_SRC) $(C_CORE_SRCS) \
 		$(C_HAL_LINUX_SRCS)
+
+se-rust: $(TARGET_RUST)
+
+$(TARGET_RUST): $(RUST_SRCS)
+	@echo "==> Compiling $(TARGET_RUST) with cargo..."
+	$(CARGO) build --release --manifest-path ports/rust/Cargo.toml
+	cp -f ports/rust/target/release/se-rs $(TARGET_RUST)
 
 se-next-cpm: $(TARGET_NEXT_CPM)
 
@@ -316,6 +328,10 @@ test-linux: $(TARGET_LINUX)
 	@echo "==> Running Linux Native Profile automated test suite..."
 	python3 tests/test_linux_native.py
 
+test-rust: $(TARGET_RUST)
+	@echo "==> Running Linux Native Rust Profile automated test suite..."
+	python3 tests/test_linux_native.py --rust
+
 test-monkey: image
 	@echo "==> Running SE.COM drunken monkey chaos test suite..."
 	python3 tests/test_drunken_monkey.py --steps $(or $(STEPS),50)
@@ -336,13 +352,13 @@ test-py:
 test-full: test-config test-32k test-cpm3 test-conformity test-plugins \
 	test-beautifier test-popup test-slots test-plugin-cfg test-fatfs \
 	test-fatfs-slot test-fatfs-vfs test-fatfs-hook test-next test-linux \
-	test-sec test-paging test-monkey test-py
+	test-rust test-sec test-paging test-monkey test-py
 
 
 clean:
-	rm -f $(TARGET) $(TARGET_SEC) $(TARGET_LINUX) $(TARGET_NEXT_CPM) \
-		$(TARGET_NEXT_NEX) SE.nex $(TARGET_NEXT_DOT) SE SE_NEX.BIN \
-		dot_se.bin SEC.map *.lst \
+	rm -f $(TARGET) $(TARGET_SEC) $(TARGET_LINUX) $(TARGET_RUST) \
+		$(TARGET_NEXT_CPM) $(TARGET_NEXT_NEX) SE.nex \
+		$(TARGET_NEXT_DOT) SE SE_NEX.BIN dot_se.bin SEC.map *.lst \
 		src/*.lst *.obj src/*.obj *.lis *.def *.map *.sym src/*.o \
 		src/*.map src/*.sym plugins/*.PRL plugins/*.OVL plugins/*.bin \
 		plugins/*.lst plugins/*.sym
