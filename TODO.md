@@ -295,9 +295,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 0 Open (All 7 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10,
-  2.2.11, 2.2.12, 2.2.13 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
-  Rejected).
+- **Status**: Active / 1 Open (`Bug 2.2.14` Open; Bugs 2.2.2, 2.2.7, 2.2.8,
+  2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4,
+  2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -455,6 +455,26 @@ have been resolved and archived.
       Updated `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm` under
       `TARGET_NEXT` to display `type [1] set 80x24`.
       Validated via `tests/test_bug_2_2_13.py`.
+  - [ ] **Bug 2.2.14: `Ctrl+K` (`Extend + K`) Performs Cursor Up Instead of
+    Opening Help Key Overlay (`HELP.OVL`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10, 10.4.
+    - *Issue*: In `SE_NEXT.COM` editor mode, pressing `Ctrl+K` (`EXTEND + K`
+      on the ZX Spectrum Next keyboard, ASCII `0x0B` / `KEY_CTRL_K`) performs
+      a Cursor Up operation instead of opening the Help Key overlay file
+      (`HELP.OVL` / Block Menu when a block is active).
+    - *Root Cause*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm:93-94`,
+      `HAL_KEYBOARD_TRANSLATE` checks `CP 00BH` (Sinclair VT Up Arrow control
+      code) and unconditionally jumps to `HKT_SET_UP` (emitting `\x1b[A`
+      Cursor Up) without polling the ULA hardware keyboard matrix (Row 6,
+      port `0xBFFE`, bit 2 for key `'K'` or Row 4, port `0xEFFE`, bit 3 for
+      key `'7'`) to disambiguate `EXTEND + K` (`Ctrl+K` = `0x0B`) from the
+      Up Arrow key.
+    - *Required Fix*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm`,
+      disambiguate `0x0B` via the ULA keyboard matrix (checking whether key
+      `'K'` on Row 6 port `0xBFFE` bit 2 is pressed, or whether key `'7'` on
+      Row 4 port `0xEFFE` bit 3 is pressed) so that `EXTEND + K` (`Ctrl+K`)
+      returns `0x0B` (`KEY_CTRL_K`) to open `HELP.OVL` (or the Block Menu),
+      while the physical Up Arrow key continues to emit `\x1b[A`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
