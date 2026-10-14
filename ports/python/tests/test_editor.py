@@ -2392,12 +2392,12 @@ class TestEditor(unittest.TestCase):
                 rendered.append(list(lines))
             )
         )
-        # Test toggling option 5 (Plugin Manager: AUTOLOAD -> DISABLED)
+        # Test toggling option 5 (Plugin Manager: AUTOLOAD -> DEMAND)
         self.editor.config.set("PLUGIN", "AUTOLOAD")
         self.editor.terminal.get_key = MagicMock(side_effect=["5", "q"])
         self.editor.action_config_screen()
 
-        self.assertEqual(self.editor.config.get("PLUGIN"), "DISABLED")
+        self.assertEqual(self.editor.config.get("PLUGIN"), "DEMAND")
         lines = rendered[0]
 
         # 1. ASCII hyphen title
@@ -2660,6 +2660,54 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 58: 50-col plugin palette & slot order verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_76_config_plugin_toggle_cycle_and_save(self):
+        """Step 59: Verify Option 5 3-state cycle and non-blocking save."""
+        print(
+            "[*] Step 59: Testing Option 5 3-state cycle & config save...",
+            flush=True,
+        )
+        rendered = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": (
+                rendered.append(list(lines))
+            )
+        )
+        self.editor.config.set("PLUGIN", "AUTOLOAD")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp_dir)
+                # Cycle: AUTOLOAD -> DEMAND -> DISABLED -> AUTOLOAD, then 's', 'q'
+                self.editor.terminal.get_key = MagicMock(
+                    side_effect=["5", "5", "5", "s", "q"]
+                )
+                self.editor.action_config_screen()
+                self.assertTrue(os.path.exists("SE.CFG"))
+            finally:
+                os.chdir(orig_cwd)
+
+        # Rendered frames: 0=Autoload, 1=Demand, 2=Disabled, 3=Autoload, 4=Saved
+        self.assertEqual(
+            rendered[0][8], "5. Plugin Manager   : Autoload"
+        )
+        self.assertEqual(
+            rendered[1][8], "5. Plugin Manager   : Demand"
+        )
+        self.assertEqual(
+            rendered[2][8], "5. Plugin Manager   : Disabled"
+        )
+        self.assertEqual(
+            rendered[3][8], "5. Plugin Manager   : Autoload"
+        )
+        self.assertEqual(
+            rendered[4][2], "Config Status: Loaded from SE.CFG"
+        )
+
+        print(
+            "[+] Step 59: Option 5 3-state cycle & config save verified.",
             flush=True,
         )
 

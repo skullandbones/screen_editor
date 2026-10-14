@@ -941,9 +941,12 @@ class Editor:
                 )
 
                 cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
-                plugin_lbl = (
-                    "Autoload" if cur_plg != "DISABLED" else "Disabled"
-                )
+                if cur_plg in ("DEMAND", "ONDEMAND"):
+                    plugin_lbl = "Demand"
+                elif cur_plg in ("DISABLED", "OFF"):
+                    plugin_lbl = "Disabled"
+                else:
+                    plugin_lbl = "Autoload"
 
                 cfg_origin = (
                     "Loaded from SE.CFG"
@@ -1010,16 +1013,15 @@ class Editor:
                     self.config.set("TAB", new_tab)
                 elif ch == "5":
                     cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
-                    new_plg = (
-                        "DISABLED" if cur_plg != "DISABLED" else "AUTOLOAD"
-                    )
+                    if cur_plg in ("AUTOLOAD", "AUTO"):
+                        new_plg = "DEMAND"
+                    elif cur_plg in ("DEMAND", "ONDEMAND"):
+                        new_plg = "DISABLED"
+                    else:
+                        new_plg = "AUTOLOAD"
                     self.config.set("PLUGIN", new_plg)
                 elif ch == "s":
                     self.config.save_config()
-                    self.modal.show_notification(
-                        title="Config Saved",
-                        message="Configuration saved to SE.CFG.",
-                    )
         finally:
             self.terminal.show_cursor()
 
