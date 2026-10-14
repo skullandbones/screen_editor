@@ -1678,13 +1678,13 @@ class TestEditor(unittest.TestCase):
         self.editor.action_quit = MagicMock()
         self.editor.action_help = MagicMock()
 
-        # 1. Verify timeout=1.0 is passed to is_key_ready
+        # 1. Verify timeout=0.1 is passed to is_key_ready
         self.editor.terminal.is_key_ready = MagicMock(return_value=False)
         self.editor.dispatch_key(KEY_CTRL_K)
-        self.editor.terminal.is_key_ready.assert_called_once_with(timeout=1.0)
+        self.editor.terminal.is_key_ready.assert_called_once_with(timeout=0.1)
         self.editor.action_help.assert_called_once()
 
-        # 2. Interactive chords with timeout=1.0
+        # 2. Interactive chords with timeout=0.1
         # a. Ctrl+K R / r -> action_insert_file
         for r_key in ("r", "R"):
             self.editor.action_insert_file.reset_mock()
@@ -2597,6 +2597,40 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 56: Status bar Field 1 14-char truncation verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_74_ctrl_k_immediate_help_dispatch(self):
+        """Step 57: Verify Ctrl+K uses <=100ms timeout and Arrow Keys label."""
+        print(
+            "[*] Step 57: Testing immediate Ctrl+K Help dispatch...",
+            flush=True,
+        )
+        timeouts = []
+
+        def record_ready(timeout=0.0):
+            timeouts.append(timeout)
+            return False
+
+        self.editor.terminal.is_key_ready = record_ready
+        self.editor.terminal.get_key = lambda timeout=None: " "
+        rendered_lines = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines.extend(
+                lines
+            )
+        )
+        self.editor.buffer.block_active = 0
+        self.editor.dispatch_key(KEY_CTRL_K)
+
+        self.assertEqual(len(timeouts), 1)
+        self.assertLessEqual(timeouts[0], 0.1)
+        help_text = "\n".join(rendered_lines)
+        self.assertIn("Arrow Keys", help_text)
+        self.assertIn("EDITOR MODE KEYS", help_text)
+
+        print(
+            "[+] Step 57: Immediate Ctrl+K Help dispatch verified.",
             flush=True,
         )
 

@@ -182,7 +182,7 @@ class Editor:
         elif key == KEY_CTRL_K:
             if self.buffer.block_active > 0:
                 self.action_block_popup()
-            elif self.terminal.is_key_ready(timeout=1.0):
+            elif self.terminal.is_key_ready(timeout=0.1):
                 next_k = self.terminal.get_key()
                 if next_k in ("r", "R"):
                     self.action_insert_file()
@@ -365,7 +365,8 @@ class Editor:
             "SE - EDITOR MODE KEYS".center(70),
             "",
             "  Cursor Navigation:".ljust(38) + "Block Operations:",
-            "    Arrows / ANSI VT100".ljust(38) + "Ctrl+B: Toggle Block",
+            "    Arrow Keys / Arrows / ANSI VT100".ljust(38)
+            + "Ctrl+B: Toggle Block",
             "    Ctrl+A / Ctrl+E: Home / End".ljust(38)
             + "Ctrl+C: Copy Block to Cursor",
             "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38)

@@ -1566,7 +1566,7 @@ have been resolved and archived.
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
-  2.7.65–2.7.71, 2.7.73 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
+  2.7.65–2.7.71, 2.7.73–2.7.74 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
   0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
@@ -2601,6 +2601,20 @@ have been resolved and archived.
       and preserving Field 5 indicators across 80-column viewports. Validated
       via Step 56 in `test_editor.py`
       (`test_bug_2_7_73_status_bar_long_filename_truncation`).
+  - [x] **Bug 2.7.74: 1.0-Second Blocking Lag on Ctrl+K Help Screen Dispatch**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
+    - *Issue*: Pressing `Ctrl+K` with no active block freezes the editor UI for
+      1,000ms before rendering the Help screen, and swallows any dismissal key
+      pressed within that 1-second window. Furthermore, the Help screen lacked
+      the canonical `Arrow Keys` navigation label.
+    - *Root Cause*: In `ports/python/se/editor.py:185`, `dispatch_key()` polled
+      `self.terminal.is_key_ready(timeout=1.0)` waiting 1.0 second for legacy
+      WordStar `^K` two-key chords before invoking `action_help()`.
+    - *Resolution*: Reduced the `Ctrl+K` lookahead poll timeout in
+      `dispatch_key()` in `editor.py` from `1.0`s to `0.1`s (100ms) and
+      included `Arrow Keys` in `action_help()`. Validated via Step 35 and
+      Step 57 in `test_editor.py`
+      (`test_bug_2_7_74_ctrl_k_immediate_help_dispatch`).
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
