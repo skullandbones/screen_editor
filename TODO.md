@@ -2592,8 +2592,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 8 Defects Open (Bug 2.8.1 Resolved; Bug 2.8.7 Rejected;
-  Bugs 2.8.2–2.8.6, 2.8.8–2.8.10 Open).
+- **Status**: Active / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.10
+  Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2635,7 +2635,7 @@ have been resolved and archived.
       4. Fixed `workspace_root` resolution in `test_editor_headless.py` and
          consolidated Step 17 save prompt capture buffer.
       5. Verified 100% pass across Steps 17–24 in headless test suite.
-  - [ ] **Bug 2.8.2: TPA Memory Overflow Overwriting BDOS and CCP (BAD LOAD)**:
+  - [x] **Bug 2.8.2: TPA Memory Overflow Overwriting BDOS and CCP (BAD LOAD)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.4, 14.5; `TODO.md`
       Section 7.1; `check_tpa.py SEC.COM`.
     - *Issue*: When running `SEC.COM` on RomWBW RC2014 CP/M, CCP reports
@@ -2653,7 +2653,21 @@ have been resolved and archived.
       eliminate redundant `snprintf` formatters on CP/M, trim string literals,
       configure z88dk pragmas to trim unused CRT/stdio features, and restore
       positive TPA headroom below `0xD800`.
-  - [ ] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
+    - *Resolution*:
+      1. Replaced POSIX stdio file operations with native BDOS sector I/O calls
+         (Calls 15, 16, 19, 20, 21, 22, 26, 34).
+      2. Set `-pragma-define:CLIB_OPEN_MAX=0` in `Makefile` to eliminate CRT
+         file descriptors, FILE structs, and stdio buffer allocations.
+      3. Unified 128-byte sector DMA buffers and FCBs across `file_io.c`,
+         `config.c`, and `ui_browser.c` into a single shared `g_cpm_dma_buf`
+         and `g_cpm_fcb`.
+      4. Right-sized CP/M browser capacity to 32 entries and implemented
+         insertion sort to eliminate CRT `qsort`.
+      5. Replaced `snprintf` formatters with `strncpy` in `search.c` and
+         `beautify.c`.
+      6. Verified positive headroom (+890 bytes below BDOS `0xD800`) via
+         automated test `tests/test_sec_tpa_headroom.py`.
+  - [x] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 7.3, 7.4, 7.12,
       11.10.
     - *Issue*: Multi-byte UTF-8 em-dash characters (`—` / `\xe2\x80\x94`) are
@@ -2666,7 +2680,11 @@ have been resolved and archived.
     - *Remedy*: Replace all multi-byte UTF-8 em-dash characters in
       `src/core/ui_render.c` and shared UI routines with standard 7-bit ASCII
       hyphens (`-`) in strict conformance with Section 2.6.
-  - [ ] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
+    - *Resolution*: Replaced all 4 multi-byte UTF-8 em-dash characters in
+      `src/core/ui_render.c` with standard 7-bit ASCII hyphens (`-`). Added
+      automated test suite `tests/test_sec_utf8_ascii.py` verifying zero UTF-8
+      em-dash sequences across all C source files and compiled `SEC.COM`.
+  - [x] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: The splash screen in `SEC.COM` displays unsupported Option 3
       (`type [3] set native`), includes redundant `Version v1.1.0 (C)` on Row 2,
@@ -2680,7 +2698,12 @@ have been resolved and archived.
       remove version/language from Row 2, and dynamically render the four
       canonical system status fields from `g_config` matching canonical
       `SE.COM`.
-  - [ ] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
+    - *Resolution*: Conditionally omitted Option 3 on CP/M via
+      `#ifndef __CPM__`, enforced clean header mandate by removing version
+      info from Row 2, and added dynamic rendering of Active Screen, RAM Drive,
+      Plugin System, and Max Lines fields from `g_config`. Verified with
+      `tests/test_sec_splash_metadata.py`.
+  - [x] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 11.1, 13.2.
     - *Issue*: Configuration Manager in `SEC.COM` renders a prohibited
       `Enter option: _` input prompt line (violating anti-pattern 1), uses
@@ -2695,7 +2718,12 @@ have been resolved and archived.
       5 Plugins), remove `Enter option: _`, format canonical footer
       `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`, and remove `FORMAT`
       parameter serialization from `config_save_file()`.
-  - [ ] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
+    - *Resolution*: Harmonized `show_config_screen()` in `src/core/ui_render.c`
+      to canonical 5-option hotkey layout with proper parameter toggling,
+      eliminated `Enter option: _` input prompt, rendered canonical footer, and
+      removed `FORMAT=` serialization from `src/core/config.c`. Verified with
+      `tests/test_sec_config_layout.py`.
+  - [x] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: About screen in `SEC.COM` displays `SE.COM — Screen Editor
       (Linux)` when executed on CP/M hardware or RomWBW emulator, uses an
@@ -2707,6 +2735,11 @@ have been resolved and archived.
       adopt the canonical 9-line centered layout from Section 7.12, format
       `version 1.1.0 (2026-10-09) (C)` in Row 2, and include author and
       Antigravity/Gemini open-source credits.
+    - *Resolution*: Refactored `show_about_screen()` in `src/core/ui_render.c`
+      to canonical 9-line centered layout (54 cols width), eliminated the
+      `(Linux)` tag, added canonical `version 1.1.0 (2026-10-09) (C)`, and
+      included full author and open-source credits. Verified with
+      `tests/test_sec_about_screen.py`.
   - [x] **Bug 2.8.7: Status Bar Field 4 Context Clobber [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 6.6, 11.1.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
@@ -2718,7 +2751,7 @@ have been resolved and archived.
       4.3's Jitter-Free Mandate ("Field 5 MUST NOT contain variable-length
       tags, mode indicators, or pan offsets... All mode and contextual
       indicators belong strictly in Field 4").
-  - [ ] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
+  - [x] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
     - *Issue*: Help screen (`Ctrl+K`) displays `Ctrl+U / Ctrl+V: Page Up / Down`
       alongside `Ctrl+V: Paste Block` (duplicating `Ctrl+V` on the same line),
@@ -2730,7 +2763,12 @@ have been resolved and archived.
       `PgUp / PgDn : Page Up / Down` and `Ctrl+D: Delete Block`, and standardize
       block descriptions to `Copy Block to Cursor` and `Move Block to Cursor`
       matching Section 7.3.
-  - [ ] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
+    - *Resolution*: Harmonized `s_help_lines` in `src/core/ui_render.c` to the
+      canonical 22-line layout matching `plugins/help.asm` and Section 7.3,
+      eliminating duplicate `Ctrl+V: Paste Block` and non-canonical `Cut Block`,
+      and displaying `Delete / Ctrl+D` and `Copy/Move solidified block`.
+      Verified with `tests/test_sec_help_screen.py`.
+  - [x] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 7.10.
     - *Issue*: Goto Line modal dialog renders with 8 rows instead of canonical
       7 rows, lacks canonical `Goto line: [ ... ]` query framing, and repaints
@@ -2742,7 +2780,13 @@ have been resolved and archived.
       `modal_goto_line()`) to canonical 7-row framing (`50 cols x 7 rows`)
       adhering to Archetype C, and implement in-place prompt character echoing
       per Section 7.10.
-  - [ ] **Bug 2.8.10: Unsaved Document Close Loss on Untitled Buffer (Ctrl+W)**:
+    - *Resolution*: Implemented `modal_goto_line()` in `src/core/ui_modal.c`
+      with canonical 50x7 dimensions, `Goto line: [     ]` query framing, and
+      explicit `[Enter]=Goto Line     [ESC]=Cancel` action footer. Replaced full
+      frame redraws with in-place character echoing and visual backspacing.
+      Standardized `modal_prompt_text()` to 7 rows. Verified with
+      `tests/test_sec_goto_line.py`.
+  - [x] **Bug 2.8.10: Unsaved Document Close Loss on Untitled Buffer (Ctrl+W)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11.
     - *Issue*: Closing an untitled modified document via `Ctrl+W` prompts "Save
       changes?", but selecting `[Y]es` fails silently and discards edits because
@@ -2754,6 +2798,12 @@ have been resolved and archived.
       `g_current_filename[0] == '\0'`, redirect `[Y]es` to
       `ui_browser_save_dialog()` so the user can enter a destination filename
       before closing to the splash screen.
+    - *Resolution*: Updated `modal_confirm_save_changes()` in
+      `src/core/ui_modal.c` to check `if (!g_current_filename[0])`. When
+      untitled, selecting `[Y]es` redirects to `ui_browser_save_dialog()`. If
+      the user cancels the file browser dialog, it returns `MODAL_RES_CANCEL`
+      to prevent discarding unsaved changes. Verified with
+      `tests/test_sec_untitled_close.py`.
 
 ---
 

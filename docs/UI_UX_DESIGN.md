@@ -219,9 +219,13 @@ The status bar is the sole fixed screen anchor in SE.
      Field 4 is a dedicated 15-character contextual slot followed by separator
      ` | ` (18 characters total). It operates under a strict priority hierarchy
      applicable across all SE variants:
-     1. Splash Screen & Far Plugin Execution:
+     1. Splash Screen, Directory Browsers & Far Plugin Execution:
         Displays free document memory in whole KB: `Free: <N> KB` padded with
         spaces to 15 characters, followed by ` | ` (e.g. `Free: 48 KB    | `).
+        Tier 1 Directory Browser Workspaces (Open File, File Insert, Save File,
+        and Block Save) operate as overlay surfaces displaying free memory (or
+        blank per the fallback rule), strictly prohibiting editor mode cues
+        (`^K: Editor keys`).
         - Variant Free Memory Reading Fallback Rule:
           If a port, target platform, or variant does not support a free memory
           reading method (or dynamic TPA/heap query), the free memory status on
@@ -715,9 +719,9 @@ content blocks rather than top-aligned text.
      ~                               EDITOR MODE KEYS
      ~========================================================================
      ~  FILE & SYSTEM:
-     ~    Ctrl+O          Open file screen       Ctrl+S         Save file screen
-     ~    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M
-     ~    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up
+     ~    Ctrl+O           Open file screen      Ctrl+S         Save file screen
+     ~    Ctrl+W           Close file to splash  Ctrl+Q         Quit to CP/M
+     ~    Ctrl+K           Help / Solidify block Ctrl+P         Plugins pop-up
      ~  NAVIGATION & SEARCH:
      ~    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line
      ~    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line
@@ -748,6 +752,13 @@ content blocks rather than top-aligned text.
      - Row 21: Full-width horizontal dash rule of `'-'`.
      - Row 22: Centered Return Prompt: `Press any key to continue` (26 leading
        spaces in 80 columns). Standardized phrasing without trailing ellipsis.
+   - Column Grid & Key Alignment (Two-Column Layout across Columns 4..78):
+     - Column 1 Key begins at Column 4 (4 leading spaces).
+     - Column 1 Description begins at Column 21 (11 spaces following 6-char
+       keys like `Ctrl+O`, `Ctrl+W`, `Ctrl+K`, `Ctrl+L`, `Ctrl+F`, `Ctrl+R`).
+     - Column 2 Key begins at Column 45.
+     - Column 2 Description begins at Column 61 (10 spaces following
+       `Ctrl+S`, `Ctrl+Q`, `Ctrl+P`).
    - Symmetrical Centering & Tilde Discipline:
      - In 80x24 Geometry:
        - Available text rows: 23 (`HOST_ROWS - 1`, excluding status bar).
@@ -822,7 +833,13 @@ content blocks rather than top-aligned text.
      - 80x24 mode: 5 columns x 12 rows (60 files/page), column width 15 chars.
      - 120x40 mode: 7 columns x 28 rows (196 files/page), width 16 chars.
    - Paging navigation via `<PgUp>` and `<PgDn>` when file count exceeds page.
-   - Visual Structure (80x24 Mode):
+   - Single-Page vs. Multi-Page Invariant:
+     - When `total_pages <= 1` (single-page mode), the pagination footer row
+       (`[Page %d/%d]  <PgUp>/<PgDn>=Page`) is suppressed to avoid premature
+       pagination prompts, leaving an empty margin row (`~`).
+     - When `total_pages > 1` (multi-page mode), the pagination footer row
+       displays `[Page %d/%d]  <PgUp>/<PgDn>=Page`.
+   - Visual Structure (80x24 Mode, Multi-Page Example):
      ```text
      ~====================================================================
      ~                      OPEN FILE (DIRECTORY - DRIVE A:)
@@ -837,13 +854,20 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during Open File
+     directory browser execution. On variants lacking dynamic memory reading,
+     Field 4 is left blank (`               | `), conforming strictly to
+     Section 4.3.
 
 6. File Insert Workspace (`Ctrl+O` with Active Block / `Ctrl+K R`):
    - Invoked when block selection is active or via `Ctrl+K R` shortcut.
    - Solidifies dynamic block bounds and opens directory browser in insert mode.
    - Streams selected file content into document at cursor without replacing
      existing document lines.
-   - Visual Structure (80x24 Mode):
+   - Visual Structure (80x24 Mode, Single-Page Example):
      ```text
      ~====================================================================
      ~                     INSERT FILE (DIRECTORY - DRIVE A:)
@@ -851,13 +875,20 @@ content blocks rather than top-aligned text.
      ~  HEADER  .INC    MACROS  .LIB    SNIPPET .ASM    TEST    .C
      ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
      ~
-     ~  [Page 1/1]  <PgUp>/<PgDn>=Page
+     ~
      ~--------------------------------------------------------------------
      ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
      ~  Enter filename to insert: [ HEADER.INC          ]
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during File Insert
+     directory browser execution. On variants lacking dynamic memory reading,
+     Field 4 is left blank (`               | `), conforming strictly to
+     Section 4.3.
 
 7. Save File Workspace (`Ctrl+S` / `:s` from Splash):
    - Full-screen Tier 1 save workspace displaying directory contents, target
@@ -898,6 +929,13 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during Save File
+     directory browser execution. On variants lacking dynamic memory reading,
+     Field 4 is left blank (`               | `), conforming strictly to
+     Section 4.3.
 
 8. Block Save Workspace (`Ctrl+S` with Active Block / `Ctrl+K S`):
    - Invoked when block selection is active or via `Ctrl+K S` shortcut.
@@ -919,6 +957,13 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during Block Save
+     directory browser execution. On variants lacking dynamic memory reading,
+     Field 4 is left blank (`               | `), conforming strictly to
+     Section 4.3.
 
 9. Directory Screen Filename Input Line Editing:
    The filename input fields across all directory workspaces (Open File,
@@ -1420,8 +1465,11 @@ ten anti-patterns:
    - Remedy: Move prompts and alerts into Tier 2 centered modal boxes.
 
 2. Blind / Static Footers:
-   - Emitting static command options that do not apply to current screen state.
-   - Remedy: Ensure footers dynamically reflect active context.
+   - Emitting static command options or mode cues (such as `^K: Editor keys`
+     on status bar Field 4) during overlay workspaces (like Directory
+     Browsers) where editor keystrokes do not apply.
+   - Remedy: Ensure footers and status bar contextual slots dynamically
+     reflect active context (e.g. Free Memory during overlays).
 
 3. Terminal Column Spill:
    - Emitting strings or line data exceeding terminal column bounds, inducing

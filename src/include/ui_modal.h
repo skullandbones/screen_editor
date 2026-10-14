@@ -41,10 +41,13 @@ void modal_puts_centered(uint8_t row, uint8_t left,
 int  modal_alert(const char *title, const char *msg1, const char *msg2);
 int  modal_confirm(const char *title, const char *msg,
                    const char *btn1, const char *btn2);
+#ifndef __CPM__
 int  modal_confirm_3btn(const char *title, const char *msg,
                         const char *btn1, const char *btn2, const char *btn3);
+#endif
 int  modal_prompt_text(const char *title, const char *prompt,
                        char *buffer, size_t max_len);
+int  modal_goto_line(char *buffer, size_t max_len);
 int  modal_confirm_save_changes(void);
 int  modal_confirm_overwrite(void);
 void modal_show_notification(const char *title, const char *message);

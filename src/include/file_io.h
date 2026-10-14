@@ -40,6 +40,10 @@ typedef struct {
 /* Global Document Filename State */
 extern char     g_current_filename[32];
 extern uint8_t  g_file_format;
+#ifdef __CPM__
+extern uint8_t   g_cpm_dma_buf[128];
+extern cpm_fcb_t g_cpm_fcb;
+#endif
 
 /* File I/O Subsystem Function Entry Points */
 int  file_load(const char *filename);

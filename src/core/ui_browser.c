@@ -75,9 +75,8 @@ static int compare_entries(const void *a, const void *b)
 }
 
 #ifdef __CPM__
-#include <cpm.h>
-static uint8_t s_dir_dma[128];
-static uint8_t s_dir_fcb[36];
+#define s_dir_dma g_cpm_dma_buf
+#define s_dir_fcb ((uint8_t *)&g_cpm_fcb)
 static char    s_browser_drive = 'C';
 static uint8_t s_browser_user = 0;
 static char    s_browser_filter[16] = {0};
@@ -139,7 +138,7 @@ static void scan_cpm_directory(char drive, uint8_t user, const char *mask)
         drv_num = 0;
     }
 
-    memset(s_dir_fcb, 0, sizeof(s_dir_fcb));
+    memset(&g_cpm_fcb, 0, sizeof(cpm_fcb_t));
     s_dir_fcb[0] = drv_num;
     format_mask_to_fcb(mask, s_dir_fcb);
 
@@ -224,8 +223,24 @@ void ui_browser_refresh_directory(const char *mask)
 #elif defined(__CPM__)
     scan_cpm_directory(s_browser_drive, s_browser_user, mask);
 #endif
+#ifdef __CPM__
+    {
+        int i, j;
+        browser_entry_t temp;
+        for (i = 1; i < s_browser_count; i++) {
+            temp = s_browser_files[i];
+            j = i - 1;
+            while (j >= 0 && compare_entries(&s_browser_files[j], &temp) > 0) {
+                s_browser_files[j + 1] = s_browser_files[j];
+                j--;
+            }
+            s_browser_files[j + 1] = temp;
+        }
+    }
+#else
     qsort(s_browser_files, s_browser_count, sizeof(browser_entry_t),
           compare_entries);
+#endif
 }
 
 int ui_browser_get_file_count(void)
@@ -269,6 +284,7 @@ static void render_browser_prompt(uint8_t prompt_row, const char *prompt_lbl,
 static int ui_browser_workspace(int mode, char *selected_filename,
                                 size_t max_len)
 {
+    uint8_t prev_splash = g_is_splash_screen;
 #ifdef __CPM__
 #define input_buf s_browser_input
 #define title_buf s_browser_title
@@ -290,6 +306,8 @@ static int ui_browser_workspace(int mode, char *selected_filename,
     int content_width;
     uint8_t prompt_row;
     int need_full_render = 1;
+
+    g_is_splash_screen = 1;
 
 #ifdef __CPM__
     s_browser_drive = (char)('A' + bdos(25, 0));
@@ -439,7 +457,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 hal_console_puts((g_file_format == FMT_CPM)
                                  ? "CP/M" : "Linux");
                 hal_console_puts("]   [^F]=Toggle Format");
-            } else {
+            } else if (total_pages > 1) {
                 char pbuf[48];
                 snprintf(pbuf, sizeof(pbuf),
                          "  [Page %d/%d]  <PgUp>/<PgDn>=Page",
@@ -492,6 +510,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
         }
         if (k == KEY_ESC) {
             g_need_screen_render = 1;
+            g_is_splash_screen = prev_splash;
             return MODAL_RES_CANCEL;
         } else if (k == KEY_ENTER || k == '\n' || k == '\r') {
             g_need_screen_render = 1;
@@ -558,18 +577,33 @@ static int ui_browser_workspace(int mode, char *selected_filename,
 #endif
                 if (mode == BROWSER_MODE_OPEN ||
                     mode == BROWSER_MODE_INSERT) {
+#ifdef __CPM__
+                    memset(&g_cpm_fcb, 0, sizeof(cpm_fcb_t));
+                    format_mask_to_fcb(input_buf, s_dir_fcb);
+                    if (input_buf[1] == ':') {
+                        char d = input_buf[0];
+                        if (d >= 'a' && d <= 'p') {
+                            s_dir_fcb[0] = (uint8_t)(d - 'a' + 1);
+                        } else if (d >= 'A' && d <= 'P') {
+                            s_dir_fcb[0] = (uint8_t)(d - 'A' + 1);
+                        }
+                    } else {
+                        s_dir_fcb[0] = (uint8_t)(s_browser_drive - 'A' + 1);
+                    }
+                    if ((uint8_t)bdos(15, (int)s_dir_fcb) == 0xFF) {
+                        modal_alert_file_not_found(input_buf);
+                        need_full_render = 1;
+                        continue;
+                    }
+                    bdos(16, (int)s_dir_fcb);
+#else
                     char check_path[64];
                     if (input_buf[1] == ':') {
                         snprintf(check_path, sizeof(check_path), "%s",
                                  input_buf);
                     } else {
-#ifdef __CPM__
-                        snprintf(check_path, sizeof(check_path), "%c:%s",
-                                 s_browser_drive, input_buf);
-#else
                         snprintf(check_path, sizeof(check_path), "%s",
                                  input_buf);
-#endif
                     }
                     {
                         FILE *fp_check = fopen(check_path, "rb");
@@ -580,11 +614,12 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                         }
                         fclose(fp_check);
                     }
+#endif
                 }
                 if (mode == BROWSER_MODE_SAVE ||
                     mode == BROWSER_MODE_SAVE_BLOCK) {
 #ifdef __CPM__
-                    memset(s_dir_fcb, 0, sizeof(s_dir_fcb));
+                    memset(&g_cpm_fcb, 0, sizeof(cpm_fcb_t));
                     format_mask_to_fcb(input_buf, s_dir_fcb);
                     if (input_buf[1] == ':') {
                         char d = input_buf[0];
@@ -627,6 +662,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 }
                 strncpy(selected_filename, input_buf, max_len - 1);
                 selected_filename[max_len - 1] = '\0';
+                g_is_splash_screen = prev_splash;
                 return MODAL_RES_OK;
             } else if (selected_idx >= 0 && selected_idx < s_browser_count) {
                 if (mode == BROWSER_MODE_SAVE ||
@@ -640,6 +676,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                         s_browser_files[selected_idx].filename,
                         max_len - 1);
                 selected_filename[max_len - 1] = '\0';
+                g_is_splash_screen = prev_splash;
                 return MODAL_RES_OK;
             }
         } else if (k == KEY_CTRL_F) {
