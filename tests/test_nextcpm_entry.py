@@ -133,6 +133,8 @@ def test_nextcpm_keyboard():
     assert "0BFFEH" in kbd_src, "ULA port $BFFE check for 'K' required"
     assert "HKT_CHECK_CTRL_K" in kbd_src, "HKT_CHECK_CTRL_K required"
     assert "HKT_CHECK_TRUE_VID" in kbd_src, "HKT_CHECK_TRUE_VID required"
+    assert "HKT_CHECK_INV_VID" in kbd_src, "HKT_CHECK_INV_VID required"
+    assert "HKT_CHECK_GRAPH" in kbd_src, "HKT_CHECK_GRAPH required"
     assert "KEY_SEQ_BUF" in kbd_src, "KEY_SEQ_BUF declaration required"
     assert "KEY_SEQ_LEN" in kbd_src, "KEY_SEQ_LEN declaration required"
     assert "NEXT_KEY_EDIT" in kbd_src, "ESC return code required"

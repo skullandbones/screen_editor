@@ -1522,6 +1522,13 @@ or display notifications.
      `0x13` for `TRUE VIDEO`; `HAL_KEYBOARD_TRANSLATE` checks ULA Row 1
      (`port 0xFDFE`, bit 1 = `'S'`) to translate `TRUE VIDEO` into `Tab`
      (`0x09`) while preserving **`EXTEND + S`** (`Ctrl+S` Save File).
+   - Page Up & Page Down Keys (`INV VIDEO` = `PgUp`, `GRAPH` = `PgDn`):
+     Pressing the dedicated **`INV VIDEO`** key (`Caps Shift + 4`) or
+     **`EXTEND + U`** (`Ctrl+U`) performs **Page Up** (`0x15`). Pressing the
+     dedicated **`GRAPH`** key (`Caps Shift + 9`) or **`EXTEND + V`**
+     (`Ctrl+V`) performs **Page Down** (`0x16`). Original **`EXTEND + T`**
+     (`Ctrl+T` Top of File), **`EXTEND + G`** (`Ctrl+G` Bottom of File),
+     **`EXTEND + U`**, and **`EXTEND + V`** mappings remain intact.
    - Backspace vs. Forward Delete (`DELETE` vs. `EXTEND + D`):
      Pressing the dedicated **`DELETE`** key (or **`Caps Shift + 0`**) deletes
      the character to the left of the cursor (`Backspace` / `0x08` in NextCPM)
@@ -1561,6 +1568,8 @@ or display notifications.
    | `Down Arrow`    | `Down` (`Caps Shift + 6`)          | Cursor Down 1 row |
    | `Left Arrow`    | `Left` (`Caps Shift + 5`)          | Cursor Left 1 col |
    | `Right Arrow`   | `Right` (`Caps Shift + 8`)         | Cursor Right 1 col|
+   | `PgUp` (`^U`)   | `INV VIDEO` (`CS+4`) / `EXTEND+U`  | Page Up           |
+   | `PgDn` (`^V`)   | `GRAPH` (`CS+9`) / `EXTEND+V`      | Page Down         |
    | `ESC`           | `EDIT` (`Caps Shift + 1`)          | Splash / Cancel   |
    | `Enter`         | `Enter`                            | New line / Confirm|
    | `Backspace`     | `DELETE` (`Caps Shift + 0`) / `^H` | Delete char left  |
@@ -1584,8 +1593,8 @@ or display notifications.
    | `Ctrl+R`        | `EXTEND + R` (`CS + SS + R`)       | Search & Replace  |
    | `Ctrl+S`        | `EXTEND + S` (`CS + SS + S`)       | Save file to disk |
    | `Ctrl+T`        | `EXTEND + T` (`CS + SS + T`)       | Top of file (Row0)|
-   | `Ctrl+U` (`PgUp`)| `EXTEND + U` (`CS + SS + U`)      | Page Up           |
-   | `Ctrl+V` (`PgDn`)| `EXTEND + V` (`CS + SS + V`)      | Page Down         |
+   | `Ctrl+U` (`PgUp`)| `INV VIDEO` (`CS+4`) / `EXTEND+U` | Page Up           |
+   | `Ctrl+V` (`PgDn`)| `GRAPH` (`CS+9`) / `EXTEND+V`     | Page Down         |
    | `Ctrl+W`        | `EXTEND + W` (`Sym Shift + W`)     | Close to splash   |
    | `Ctrl+X`        | `EXTEND + X` (`Sym Shift + X`)     | Move marked block |
    | `Ctrl+Y`        | `EXTEND + Y` (`CS + SS + Y`)       | Beautify code     |

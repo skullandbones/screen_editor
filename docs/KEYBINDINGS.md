@@ -113,6 +113,10 @@ standard terminal control keys map to the Next's compound hardware keys:
   Inserts tab spaces in the editor or toggles Exact/Insensitive case in
   Find/Replace modals (`SE_NEXT.COM` disambiguates `TRUE VIDEO` `0x13` from
   `EXTEND + S` via ULA port `0xFDFE` bit 1).
+- **`INV VIDEO` (`Caps Shift + 4`) or `EXTEND + U` = `Page Up`**:
+  Scrolls the document viewport or directory browser up one page (`0x15`).
+- **`GRAPH` (`Caps Shift + 9`) or `EXTEND + V` = `Page Down`**:
+  Scrolls the document viewport or directory browser down one page (`0x16`).
 - **`DELETE` (`Caps Shift + 0`) = `Backspace` / `Delete`**:
   Deletes the character left of the cursor (`EXTEND + H` = `Backspace`,
   `EXTEND + D` = forward `Delete` or delete marked block).
@@ -127,6 +131,8 @@ standard terminal control keys map to the Next's compound hardware keys:
 | `Down Arrow`    | `Down` (`Caps Shift + 6`)          | Cursor Down 1 row |
 | `Left Arrow`    | `Left` (`Caps Shift + 5`)          | Cursor Left 1 col |
 | `Right Arrow`   | `Right` (`Caps Shift + 8`)         | Cursor Right 1 col|
+| `PgUp` (`^U`)   | `INV VIDEO` (`CS+4`) / `EXTEND+U`  | Page Up           |
+| `PgDn` (`^V`)   | `GRAPH` (`CS+9`) / `EXTEND+V`      | Page Down         |
 | `ESC`           | `EDIT` (`Caps Shift + 1`)          | Splash / Cancel   |
 | `Enter`         | `Enter`                            | New line / Confirm|
 | `Backspace`     | `DELETE` (`Caps Shift + 0`) / `^H` | Delete char left  |
@@ -150,8 +156,8 @@ standard terminal control keys map to the Next's compound hardware keys:
 | `Ctrl+R`        | `EXTEND + R` (`CS + SS + R`)       | Search & Replace  |
 | `Ctrl+S`        | `EXTEND + S` (`CS + SS + S`)       | Save file to disk |
 | `Ctrl+T`        | `EXTEND + T` (`CS + SS + T`)       | Top of file (Row0)|
-| `Ctrl+U` (`PgUp`)| `EXTEND + U` (`CS + SS + U`)      | Page Up           |
-| `Ctrl+V` (`PgDn`)| `EXTEND + V` (`CS + SS + V`)      | Page Down         |
+| `Ctrl+U` (`PgUp`)| `INV VIDEO` (`CS+4`) / `EXTEND+U` | Page Up           |
+| `Ctrl+V` (`PgDn`)| `GRAPH` (`CS+9`) / `EXTEND+V`     | Page Down         |
 | `Ctrl+W`        | `EXTEND + W` (`Sym Shift + W`)     | Close to splash   |
 | `Ctrl+X`        | `EXTEND + X` (`Sym Shift + X`)     | Move marked block |
 | `Ctrl+Y`        | `EXTEND + Y` (`CS + SS + Y`)       | Beautify code     |
