@@ -93,3 +93,63 @@ Examples:
 - `C>SE B:TEST.ASM:100` — Opens file on Drive B: at line 100.
 - `C>SE 1C:SOURCE.C` — Opens `SOURCE.C` on Drive C: in User Area 1.
 - `C>SE C1:SOURCE.C:42` — Opens `SOURCE.C` in User Area 1 on line 42.
+
+---
+
+## 7. Using the Non-Standard ZX Spectrum Next Keyboard
+
+When running `SE_NEXT.COM` under NextCPM or the native Next targets (`SE.NEX`
+and `.se`) on the ZX Spectrum Next's 58-key keyboard (or a classic 48K layout),
+standard terminal control keys map to the Next's compound hardware keys:
+
+- **`EXTEND` (`Extend Mode`) or `Caps Shift + Symbol Shift` = `Ctrl`**:
+  Hold **`EXTEND`** (or **`Caps Shift + Symbol Shift`**) with a letter key
+  (`A`–`Z`) to generate any `Ctrl+<Key>` command (`Ctrl+A` through `Ctrl+Z`).
+- **`EDIT` (`Caps Shift + 1`) = `ESC`**:
+  Returns to the Splash Screen or cancels active block selections and modals.
+- **`BREAK` (`Caps Shift + Space`) = `Ctrl+C`**:
+  Copies a marked block to the cursor position.
+- **`DELETE` (`Caps Shift + 0`) = `Backspace` / `Delete`**:
+  Deletes the character left of the cursor (`EXTEND + H` = `Backspace`,
+  `EXTEND + D` = forward `Delete` or delete marked block).
+- **Dedicated Arrow Keys (`Up`, `Down`, `Left`, `Right`)**:
+  Move the cursor in all four directions (`SE_NEXT.COM` polls ULA matrix port
+  `0x00FE` to disambiguate physical arrow keys from `Ctrl+F`, `Ctrl+A`,
+  `Ctrl+E`, and `Ctrl+X`).
+
+| Standard SE Key | ZX Spectrum Next SE Key            | Functional Action |
+| :---            | :---                               | :---              |
+| `Up Arrow`      | `Up` (`Caps Shift + 7`)            | Cursor Up 1 row   |
+| `Down Arrow`    | `Down` (`Caps Shift + 6`)          | Cursor Down 1 row |
+| `Left Arrow`    | `Left` (`Caps Shift + 5`)          | Cursor Left 1 col |
+| `Right Arrow`   | `Right` (`Caps Shift + 8`)         | Cursor Right 1 col|
+| `ESC`           | `EDIT` (`Caps Shift + 1`)          | Splash / Cancel   |
+| `Enter`         | `Enter`                            | New line / Confirm|
+| `Backspace`     | `DELETE` (`Caps Shift + 0`) / `^H` | Delete char left  |
+| `Delete` (`^D`) | `EXTEND + D` (`CS + SS + D`)       | Delete char/block |
+| `Tab` (`^I`)    | `EXTEND + I` (`Sym Shift + I`)     | Insert tab spaces |
+| `Ctrl+A` (`Home`)| `EXTEND + A` (`CS + SS + A`)      | Start of line     |
+| `Ctrl+B`        | `EXTEND + B` (`CS + SS + B`)       | Toggle block mode |
+| `Ctrl+C`        | `BREAK` (`CS + Space`) / `EXT + C` | Copy marked block |
+| `Ctrl+D`        | `EXTEND + D` (`CS + SS + D`)       | Delete char/block |
+| `Ctrl+E` (`End`)| `EXTEND + E` (`Sym Shift + E`)     | End of line (End) |
+| `Ctrl+F`        | `EXTEND + F` (`CS + SS + F`)       | Find text modal   |
+| `Ctrl+G`        | `EXTEND + G` (`CS + SS + G`)       | Bottom of file    |
+| `Ctrl+H`        | `EXTEND + H` (`CS + SS + H`)       | Backspace left    |
+| `Ctrl+I` (`Tab`)| `EXTEND + I` (`Sym Shift + I`)     | Tab / Toggle case |
+| `Ctrl+K`        | `EXTEND + K` (`CS + SS + K`)       | Help / Block menu |
+| `Ctrl+L`        | `EXTEND + L` (`CS + SS + L`)       | Goto line number  |
+| `Ctrl+N`        | `EXTEND + N` (`CS + SS + N`)       | Find next match   |
+| `Ctrl+O`        | `EXTEND + O` (`CS + SS + O`)       | Open file browser |
+| `Ctrl+P`        | `EXTEND + P` (`CS + SS + P`)       | Plugin palette    |
+| `Ctrl+Q`        | `EXTEND + Q` (`Sym Shift + Q`)     | Safe exit to OS   |
+| `Ctrl+R`        | `EXTEND + R` (`CS + SS + R`)       | Search & Replace  |
+| `Ctrl+S`        | `EXTEND + S` (`CS + SS + S`)       | Save file to disk |
+| `Ctrl+T`        | `EXTEND + T` (`CS + SS + T`)       | Top of file (Row0)|
+| `Ctrl+U` (`PgUp`)| `EXTEND + U` (`CS + SS + U`)      | Page Up           |
+| `Ctrl+V` (`PgDn`)| `EXTEND + V` (`CS + SS + V`)      | Page Down         |
+| `Ctrl+W`        | `EXTEND + W` (`Sym Shift + W`)     | Close to splash   |
+| `Ctrl+X`        | `EXTEND + X` (`Sym Shift + X`)     | Move marked block |
+| `Ctrl+Y`        | `EXTEND + Y` (`CS + SS + Y`)       | Beautify code     |
+| `Ctrl+Z`        | `EXTEND + Z` (`CS + SS + Z`)       | Plugin Manager    |
+

@@ -1494,6 +1494,95 @@ or display notifications.
      parameters) be leaked back into the console stream as regular typed
      keystrokes, as doing so corrupts document text buffers.
 
+4. Using the Non-Standard ZX Spectrum Next Keyboard:
+   Unlike standard PC or VT100 terminal keyboards that provide dedicated
+   `Ctrl`, `Esc`, `Tab`, `Home`, `End`, `PgUp`, `PgDn`, and separate
+   `Backspace` / `Delete` keys, the ZX Spectrum Next features a non-standard
+   58-key keyboard layout routed through the classic 8x5 Sinclair ULA hardware
+   matrix (`ports 0xFEFE..0x7FFE`). Dedicated Next keys (`EDIT`, `BREAK`,
+   `DELETE`, `EXTEND`, and the four directional arrow keys) are synthesized in
+   hardware as `Caps Shift` (`CS`) and `Symbol Shift` (`SS`) matrix chords.
+
+   - Control Key Modifier (`EXTEND` = `Ctrl`):
+     On the ZX Spectrum Next keyboard, holding the **`EXTEND`** (`Extend Mode`)
+     key—or holding **`Caps Shift + Symbol Shift`** simultaneously on a 48K
+     layout—acts as the universal **`Ctrl`** modifier for all ASCII control
+     commands `Ctrl+A` (`0x01`) through `Ctrl+Z` (`0x1A`).
+   - Escape Key (`EDIT` = `ESC`):
+     Pressing the dedicated **`EDIT`** key (or **`Caps Shift + 1`**) generates
+     `ESC` (`0x1B`), returning to the Splash Screen from the editor or
+     canceling active block selections and modal dialogs.
+   - Copy / Break Key (`BREAK` = `Ctrl+C`):
+     Pressing **`BREAK`** (or **`Caps Shift + Space`**) generates `Ctrl+C`
+     (`0x03`), copying a marked block in the editor.
+   - Backspace vs. Forward Delete (`DELETE` vs. `EXTEND + D`):
+     Pressing the dedicated **`DELETE`** key (or **`Caps Shift + 0`**) deletes
+     the character to the left of the cursor (`Backspace` / `0x08` in NextCPM)
+     or under the cursor. Pressing **`EXTEND + H`** (`Ctrl+H`) always performs
+     backward deletion (`Backspace`), and pressing **`EXTEND + D`** (`Ctrl+D`)
+     always performs forward character deletion or marked block deletion.
+   - Directional Cursor Keys & Hardware ULA Matrix Disambiguation:
+     The ZX Spectrum Next provides dedicated **`Up`**, **`Down`**, **`Left`**,
+     and **`Right`** arrow keys (mapped in the ULA matrix to `Caps Shift` +
+     `7`, `6`, `5`, and `8`). Under NextCPM (`SE_NEXT.COM`), the CP/M Plus
+     BIOS translates these arrow keys into single-byte control codes (`Right`
+     = `0x06`, `Left` = `0x01`/`0x08`, `Up` = `0x05`/`0x1F`/`0x0B`, `Down` =
+     `0x18`/`0x1E`/`0x0A`) that overlap with `Ctrl+F` (Find), `Ctrl+A` (Home),
+     `Ctrl+E` (End), and `Ctrl+X` (Move Block). To prevent command collisions,
+     `SE_NEXT.COM` (`hal_nextcpm_keyboard.asm`) samples the physical ULA
+     keyboard matrix (`port 0x00FE`) when these bytes arrive: if the letter
+     key (`F`, `A`, `E`, `X`) is not physically pressed, the input is decoded
+     as an ANSI arrow escape sequence (`\x1b[A`..`\x1b[D`); if the letter key
+     is physically held with `EXTEND`, the editor command executes normally.
+   - Native Target `Symbol Shift` Shortcuts (`SE.NEX` / `.se`):
+     In the standalone Next native targets (`SE.NEX` and `.se`), `Symbol Shift`
+     also provides single-modifier shortcuts for common control keys:
+     `Symbol Shift + Q` (`Ctrl+Q`), `Symbol Shift + W` (`Ctrl+W`),
+     `Symbol Shift + E` (`Ctrl+E`), `Symbol Shift + X` (`Ctrl+X`),
+     `Symbol Shift + C` (`Ctrl+C`), and `Symbol Shift + I` (`Tab`).
+   - External PS/2 Keyboard Support:
+     When an external PS/2 keyboard is attached to the ZX Spectrum Next,
+     standard `Ctrl+<Key>`, `Esc`, `Tab`, `Backspace`, `Delete`, and arrow
+     keys operate directly as labeled.
+
+   - Standard SE Keyboard Keys vs. ZX Spectrum Next SE Keys:
+
+   | Standard SE Key | ZX Spectrum Next SE Key            | Functional Action |
+   | :---            | :---                               | :---              |
+   | `Up Arrow`      | `Up` (`Caps Shift + 7`)            | Cursor Up 1 row   |
+   | `Down Arrow`    | `Down` (`Caps Shift + 6`)          | Cursor Down 1 row |
+   | `Left Arrow`    | `Left` (`Caps Shift + 5`)          | Cursor Left 1 col |
+   | `Right Arrow`   | `Right` (`Caps Shift + 8`)         | Cursor Right 1 col|
+   | `ESC`           | `EDIT` (`Caps Shift + 1`)          | Splash / Cancel   |
+   | `Enter`         | `Enter`                            | New line / Confirm|
+   | `Backspace`     | `DELETE` (`Caps Shift + 0`) / `^H` | Delete char left  |
+   | `Delete` (`^D`) | `EXTEND + D` (`CS + SS + D`)       | Delete char/block |
+   | `Tab` (`^I`)    | `EXTEND + I` (`Sym Shift + I`)     | Insert tab spaces |
+   | `Ctrl+A` (`Home`)| `EXTEND + A` (`CS + SS + A`)      | Start of line     |
+   | `Ctrl+B`        | `EXTEND + B` (`CS + SS + B`)       | Toggle block mode |
+   | `Ctrl+C`        | `BREAK` (`CS + Space`) / `EXT + C` | Copy marked block |
+   | `Ctrl+D`        | `EXTEND + D` (`CS + SS + D`)       | Delete char/block |
+   | `Ctrl+E` (`End`)| `EXTEND + E` (`Sym Shift + E`)     | End of line (End) |
+   | `Ctrl+F`        | `EXTEND + F` (`CS + SS + F`)       | Find text modal   |
+   | `Ctrl+G`        | `EXTEND + G` (`CS + SS + G`)       | Bottom of file    |
+   | `Ctrl+H`        | `EXTEND + H` (`CS + SS + H`)       | Backspace left    |
+   | `Ctrl+I` (`Tab`)| `EXTEND + I` (`Sym Shift + I`)     | Tab / Toggle case |
+   | `Ctrl+K`        | `EXTEND + K` (`CS + SS + K`)       | Help / Block menu |
+   | `Ctrl+L`        | `EXTEND + L` (`CS + SS + L`)       | Goto line number  |
+   | `Ctrl+N`        | `EXTEND + N` (`CS + SS + N`)       | Find next match   |
+   | `Ctrl+O`        | `EXTEND + O` (`CS + SS + O`)       | Open file browser |
+   | `Ctrl+P`        | `EXTEND + P` (`CS + SS + P`)       | Plugin palette    |
+   | `Ctrl+Q`        | `EXTEND + Q` (`Sym Shift + Q`)     | Safe exit to OS   |
+   | `Ctrl+R`        | `EXTEND + R` (`CS + SS + R`)       | Search & Replace  |
+   | `Ctrl+S`        | `EXTEND + S` (`CS + SS + S`)       | Save file to disk |
+   | `Ctrl+T`        | `EXTEND + T` (`CS + SS + T`)       | Top of file (Row0)|
+   | `Ctrl+U` (`PgUp`)| `EXTEND + U` (`CS + SS + U`)      | Page Up           |
+   | `Ctrl+V` (`PgDn`)| `EXTEND + V` (`CS + SS + V`)      | Page Down         |
+   | `Ctrl+W`        | `EXTEND + W` (`Sym Shift + W`)     | Close to splash   |
+   | `Ctrl+X`        | `EXTEND + X` (`Sym Shift + X`)     | Move marked block |
+   | `Ctrl+Y`        | `EXTEND + Y` (`CS + SS + Y`)       | Beautify code     |
+   | `Ctrl+Z`        | `EXTEND + Z` (`CS + SS + Z`)       | Plugin Manager    |
+
 11. The Ten UI/UX Anti-Patterns Checklist
 --------------------------------------------------------------------------------
 Port authors and maintainers must audit all visual routines against these
