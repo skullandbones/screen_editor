@@ -89,10 +89,18 @@ class PluginManager:
         if not os.path.isdir(plugins_dir):
             return
 
-        for fname in sorted(os.listdir(plugins_dir)):
-            if fname.endswith(".py") and not fname.startswith("__"):
-                plugin_path = os.path.join(plugins_dir, fname)
-                self.load_plugin_file(plugin_path)
+        canonical = ("rot13.py", "wordcnt.py", "beautify.py")
+        all_py = [
+            f
+            for f in os.listdir(plugins_dir)
+            if f.endswith(".py") and not f.startswith("__")
+        ]
+        ordered = [f for f in canonical if f in all_py] + sorted(
+            f for f in all_py if f not in canonical
+        )
+        for fname in ordered:
+            plugin_path = os.path.join(plugins_dir, fname)
+            self.load_plugin_file(plugin_path)
 
     def load_plugin_file(self, path: str) -> bool:
         """Load a plugin from a Python file path."""

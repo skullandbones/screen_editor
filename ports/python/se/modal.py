@@ -351,8 +351,7 @@ class ModalDialog:
         if not items:
             return None
 
-        max_item_len = max(len(f"{name} - {d}") for name, d in items)
-        width = min(self.term.cols - 4, max(52, max_item_len + 8))
+        width = 50
         height = len(items) + 6
         top, left = self.compute_popup_pos(width, height)
         selected_idx = 0

@@ -2634,6 +2634,35 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_75_plugin_palette_canonical_width_and_order(self):
+        """Step 58: Verify 50-col plugin palette and canonical slot order."""
+        print(
+            "[*] Step 58: Testing 50-col plugin palette & slot order...",
+            flush=True,
+        )
+        # 1. Verify built-in plugin slot ordering: ROT13, WORDCNT, BEAUTIFY
+        plugins = self.editor.plugin_mgr.list_plugins()
+        self.assertGreaterEqual(len(plugins), 3)
+        names = [p[0] for p in plugins[:3]]
+        self.assertEqual(names, ["ROT13", "WORDCNT", "BEAUTIFY"])
+
+        # 2. Verify Archetype D menu renders a 50-column frame
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.get_key = lambda timeout=None: KEY_ESC
+        res = self.editor.action_plugin_palette()
+        self.assertIsNone(res)
+        stream = "".join(written)
+        self.assertIn("+" + ("-" * 48) + "+", stream)
+        self.assertIn("> 1. ROT13", stream)
+        self.assertIn("2. WORDCNT", stream)
+        self.assertIn("3. BEAUTIFY", stream)
+
+        print(
+            "[+] Step 58: 50-col plugin palette & slot order verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

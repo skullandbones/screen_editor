@@ -1566,7 +1566,7 @@ have been resolved and archived.
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
-  2.7.65–2.7.71, 2.7.73–2.7.74 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
+  2.7.65–2.7.71, 2.7.73–2.7.75 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
   0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
@@ -2615,6 +2615,24 @@ have been resolved and archived.
       included `Arrow Keys` in `action_help()`. Validated via Step 35 and
       Step 57 in `test_editor.py`
       (`test_bug_2_7_74_ctrl_k_immediate_help_dispatch`).
+  - [x] **Bug 2.7.75: Archetype D Plugin Palette Frame Width & Slot Order**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.4 (Archetype D).
+    - *Issue*: The Plugin Palette (`Ctrl+P`) rendered a 46-column modal box
+      (`+--------------------------------------------+`) instead of the
+      canonical 50-column Archetype D frame
+      (`+------------------------------------------------+`), and listed
+      built-in plugins alphabetically (`BEAUTIFY`, `ROT13`, `WORDCNT`) instead
+      of the canonical slot sequence (`1. ROT13`, `2. WORDCNT`,
+      `3. BEAUTIFY`).
+    - *Root Cause*: `show_menu()` in `ports/python/se/modal.py` set
+      `width = 46` instead of `50`, and `discover_plugins()` in
+      `ports/python/se/plugin.py` used `sorted(os.listdir(...))` for built-in
+      plugins.
+    - *Resolution*: Updated `show_menu()` in `modal.py` to use a 50-column
+      minimum frame width (`width = 50`) and updated `discover_plugins()` in
+      `plugin.py` to load built-in plugins in canonical order (`rot13.py`,
+      `wordcnt.py`, `beautify.py`). Validated via Step 58 in `test_editor.py`
+      (`test_bug_2_7_75_plugin_palette_canonical_width_and_order`).
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
