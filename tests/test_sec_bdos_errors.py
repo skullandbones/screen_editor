@@ -30,7 +30,8 @@ def test_sec_bdos_errors():
     print("[+] Step 1: Verified uint8_t bdos cast in ui_browser.c.", flush=True)
 
     # Step 2: Verify file_io.c uint8_t casts
-    print("[*] Step 2: Verifying uint8_t bdos casts in file_io.c...", flush=True)
+    print("[*] Step 2: Verifying uint8_t bdos casts in file_io.c...",
+          flush=True)
     file_io_path = os.path.join(repo_root, "src", "core", "file_io.c")
     with open(file_io_path, "r") as f:
         file_io_text = f.read()

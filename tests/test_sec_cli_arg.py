@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Validation test for Step 19: CLI target filename preservation in SEC.COM.
 
-Verifies that target filenames provided via command-line arguments are stored
-in a preserved buffer rather than g_scratch_line_buf, ensuring that buffer_init()
-does not wipe the target filename before file_load() is invoked.
+Verifies that target filenames provided via command-line arguments are
+stored in a preserved buffer rather than g_scratch_line_buf, ensuring that
+buffer_init() does not wipe the target filename before file_load() is invoked.
 """
 
 import os
@@ -47,8 +47,8 @@ def test_sec_cli_arg():
         print(f"[-] Step 2: Compilation failed. "
               f"Buffer: {repr(res.stderr[-300:])}", flush=True)
         return False
-    print("[+] Step 2: SEC.COM compiled successfully with preserved CLI buffer.",
-          flush=True)
+    print("[+] Step 2: SEC.COM compiled successfully with preserved "
+          "CLI buffer.", flush=True)
 
     # Step 3: Verify stack buffer declaration in main()
     print("[*] Step 3: Verifying stack target_file buffer allocation in "

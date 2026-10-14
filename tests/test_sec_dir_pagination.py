@@ -47,8 +47,8 @@ def test_sec_dir_pagination():
           flush=True)
 
     # Step 3: Verify page format string is retained for multi-page mode
-    print("[*] Step 3: Verifying multi-page format string in compiled binary...",
-          flush=True)
+    print("[*] Step 3: Verifying multi-page format string in compiled "
+          "binary...", flush=True)
     sec_bin = os.path.join(repo_root, "SEC.COM")
     with open(sec_bin, "rb") as f:
         bin_data = f.read()
