@@ -4270,8 +4270,6 @@ STR_HIDE_CURSOR:	DB	27,"[?25l","$"
 
 STR_SHOW_CURSOR:	DB	27,"[?25h","$"
 
-STR_CRLF:	DB	13,10,"$"
-
 STR_SPLASH_TITLE_PAD:	DB	"           ", "$"
 STR_SPLASH_TITLE:	DB	"SE - Screen Editor", 13, 10, "$"
 
@@ -4403,8 +4401,6 @@ STR_MEM_TITLE_PAD:
 	DB "                      ","$"	; 22 spaces to center within 72 columns
 STR_MEM_INFO_TITLE:
 	DB "SE.COM - Extended Memory Map",13,10,"$"
-STR_MEM_INFO_BLANK:
-	DB "~",13,10,"$"
 STR_MEM_TABLE_HDR:
 	DB "Bank  Phys   Size   System / OS Role        SE.COM Usage",13,10,"$"
 STR_MEM_TABLE_DIV:
@@ -4465,9 +4461,6 @@ STR_MEM_SPACES_3:	DB	' '
 STR_MEM_SPACES_2:	DB	' ', ' ', '$'
 
 
-STR_STATUS_PREFIX:	DB	" SE v1.1.1 | ","$"
-
-
 STR_STATUS_120X40:	DB	"120x40 | ","$"
 
 STR_STATUS_80X24:	DB	" 80x24 | ","$"
@@ -4524,7 +4517,6 @@ STR_TITLE_PLUG_LOAD_PRE: DB	"LOAD PLUGIN (DIRECTORY - DRIVE ","$"
 STR_PLUG_LOAD_PROMPT_TXT: DB	"Load Plugin (.PRL/.OVL):","$"
 
 STR_PAGE_PREFIX_TXT:	DB	"[Page ","$"
-STR_PAGE_PREFIX:	DB	"~  [Page ","$"
 
 STR_PAGE_MID:		DB	"/","$"
 
@@ -4532,13 +4524,10 @@ STR_PAGE_SUFFIX:	DB	"]  <PgUp>/<PgDn>=Page",13,10,"$"
 
 STR_NO_FILES_FOUND_TXT:	DB	"[No files found on current drive]",13,10
 			DB "~",13,10,"$"
-STR_NO_FILES_FOUND:	DB	"~  [No files found on current drive]",13,10
-			DB "~",13,10,"$"
 
 DEFAULT_FCB_NAME:	DB	0,"OUTPUT  TXT",0,0,0,0
 
 STR_SAVE_FMT_PREFIX_TXT: DB	"Format: [","$"
-STR_SAVE_FMT_PREFIX:	DB	"~  Format: [","$"
 
 STR_SAVE_FMT_CPM:	DB	"CP/M","$"
 
@@ -4552,21 +4541,13 @@ STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 STR_ESC_CANCEL_TXT:
 	DB "[ESC]=Cancel  Enter [path][pattern] to list "
 	DB "(e.g. /dot/, *.TXT)",13,10,"$"
-STR_ESC_CANCEL:
-	DB "~  [ESC]=Cancel  Enter [path][pattern] to list "
-	DB "(e.g. /dot/, *.TXT)",13,10,"$"
 	ELSE
 STR_ESC_CANCEL_TXT:
 	DB "[ESC]=Cancel  Enter [d:][u:][pattern] to list "
 	DB "(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
-STR_ESC_CANCEL:
-	DB "~  [ESC]=Cancel  Enter [d:][u:][pattern] to list "
-	DB "(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 	ENDIF
 
-STR_TILDE_INDENT:	DB	"~  ","$"
 STR_TILDE_CRLF:		DB	"~",13,10,"$"
 
-STR_FILE_NOT_FOUND:	DB	13,10,"File not found.",13,10,"$"
 STR_FILE_NOT_FOUND_SUFFIX:	DB	" file not found",13,10,"$"
 
