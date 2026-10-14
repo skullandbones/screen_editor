@@ -295,8 +295,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 7 Open
-  (Bugs 2.2.2 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 0 Open (All 7 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10,
+  2.2.11, 2.2.12, 2.2.13 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
+  Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -345,7 +346,7 @@ have been resolved and archived.
       already implements the canonical 50x7 dimensions, and the explicit
       action footer `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
       (Bug 2.1.6 Rejected).
-  - [ ] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
+  - [x] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.1.
     - *Issue*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm:56-60`,
       `HAL_KEYBOARD_TRANSLATE` intercepts `NEXT_KEY_DELETE` (`0x7F`) and
@@ -357,7 +358,13 @@ have been resolved and archived.
     - *Required Fix*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm`, preserve
       `0x7F` (`KEY_DELETE`) so that the editor engine distinguishes forward
       deletion and block range deletion from destructive backward deletion.
-  - [ ] **Bug 2.2.8: Memory Screen Queries RomWBW HBIOS Under NextCPM**:
+    - *Resolution*: Preserved `0x7F` (`NEXT_KEY_DELETE` / `KEY_DEL`) in
+      `HAL_KEYBOARD_TRANSLATE` (`src/hal/next_cpm/hal_nextcpm_keyboard.asm`)
+      and hooked translation in `GET_KEY`
+      (`src/hal/next_cpm/hal_nextcpm_console.asm`), distinguishing forward
+      deletion and block deletion from Backspace.
+      Validated via `tests/test_bug_2_2_7.py`.
+  - [x] **Bug 2.2.8: Memory Screen Queries RomWBW HBIOS Under NextCPM**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next_cpm.asm:3480`, `SHOW_MEM_INFO_SCREEN` invokes
       `QUERY_MEM_SCREEN_INFO`, which queries RomWBW HBIOS function vectors
@@ -369,7 +376,11 @@ have been resolved and archived.
       `src/se_next_cpm.asm` that queries Next hardware memory capacity via
       NextReg `0x01` / `0x14` and reports active Next MMU Far RAM bank slots
       rather than invoking HBIOS discovery.
-  - [ ] **Bug 2.2.9: Escape Sequence Trailing Byte Leakage in Editor**:
+    - *Resolution*: Replaced RomWBW HBIOS memory queries with native Next
+      hardware queries via NextReg 0x01/0x14 and mapped 16 32KB Next MMU
+      Far RAM banks in `src/se_next_cpm.asm`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_2_8.py`.
+  - [x] **Bug 2.2.9: Escape Sequence Trailing Byte Leakage in Editor**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
       `HANDLE_CSI_2`, `HANDLE_CSI_LOOP`), when an unhandled or extended
@@ -381,7 +392,12 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
       to atomically drain unrecognized multi-byte sequences until a terminating
       character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
-  - [ ] **Bug 2.2.10: Predominant Language Indication on About Screen**:
+    - *Resolution*: Implemented `DRAIN_REMAINING_CSI` in `src/core/editor.asm`
+      under `TARGET_NEXT` to drain trailing sequence bytes until terminal byte
+      boundary (`0x40`..`0x7E`) or timeout, routing unhandled CSI branches to
+      it. Optimized NextCPM BSS overlay to preserve +2,048 B TPA headroom and
+      RomWBW CP/M binary invariance. Validated via `tests/test_bug_2_2_9.py`.
+  - [x] **Bug 2.2.10: Predominant Language Indication on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
@@ -390,7 +406,12 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
-  - [ ] **Bug 2.2.11: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Resolution*: Appended ` (Z80 Assembly)` to `STR_ABOUT_VERSION` under
+      `TARGET_NEXT` in `src/core/plugin_mgr.asm`, displaying
+      `version 1.1.0 (2026-10-09) (Z80 Assembly)` dynamically centered on
+      the About screen while preserving RomWBW CP/M binary invariance.
+      Validated via `tests/test_bug_2_2_10.py`.
+  - [x] **Bug 2.2.11: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
@@ -398,7 +419,12 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
-  - [ ] **Bug 2.2.12: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Resolution*: Updated `DO_DEL_JOIN_OK` in `src/core/editor.asm` under
+      `TARGET_NEXT` to invoke `CHECKOUT_ACTIVE_LINE` and `CALC_VISUAL_COL`
+      and update `(TARGET_COL),HL`, ensuring subsequent vertical navigation
+      adheres to the join column while preserving RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_2_11.py`.
+  - [x] **Bug 2.2.12: Modal Dialog Cancellation by Unexpected Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and
@@ -408,7 +434,13 @@ have been resolved and archived.
       active dialog. Modals must only dismiss on `Enter` or `ESC`.
     - *Required Fix*: In modal input loops, drain and discard unexpected escape
       sequences and non-input keys, preserving active dialog state.
-  - [ ] **Bug 2.2.13: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
+    - *Resolution*: Implemented `DRAIN_ESCAPE_SEQUENCE` in `src/core/editor.asm`
+      under `TARGET_NEXT` to drain and discard multi-byte escape sequences
+      (CSI, SS3) without moving document cursor or closing active dialogs.
+      Routed `GOTO_GOT_ESC_SEQ`, `FIND_GOT_ESC_SEQ`, and `REP_GOT_ESC_SEQ` to
+      it, gated `Ctrl+U`/`Ctrl+V` in Goto Line, and preserved input state.
+      Validated via `tests/test_bug_2_2_12.py`.
+  - [x] **Bug 2.2.13: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: In `src/se_next_cpm.asm:582-589` and `src/core/plugin_mgr.asm`,
       hotkey `1` selects 120x40 and `2` selects 80x24 (inverted per Section
@@ -417,6 +449,12 @@ have been resolved and archived.
       Triggering `1` causes horizontal column spill and corrupted wrapping.
     - *Required Fix*: In `src/se_next_cpm.asm`, assign `1` to 80x24 classic
       terminal mode and omit or disable 120x40 mode per Section 2.1 mandate.
+    - *Resolution*: Mapped hotkey '1' to 80x24 classic terminal mode, disabled
+      hotkey '2', and enforced 80x24 on 120x40 requests in
+      `src/se_next_cpm.asm`.
+      Updated `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm` under
+      `TARGET_NEXT` to display `type [1] set 80x24`.
+      Validated via `tests/test_bug_2_2_13.py`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
@@ -425,10 +463,11 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 8 Open Defects
-  (Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 0 Open Defects (ALL DEFECTS RESOLVED)
+  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9, 2.3.10, 2.3.11, 2.3.12 Resolved;
+  Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
+  - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
     - *Issue*: In `src/hal/next_native/hal_next_keyboard.asm:22-26, 309-313`,
       the Sinclair matrix keyboard decoder maps dedicated cursor keys to legacy
@@ -450,6 +489,11 @@ have been resolved and archived.
       `\x1b[D`) or direct editor movement codes (`KEY_UP`, `KEY_DOWN`,
       `KEY_LEFT`, `KEY_RIGHT`), and map Delete (Caps+0) to `0x7F`
       (`KEY_DELETE`).
+    - *Resolution*: Replaced legacy WordStar equates with ANSI VT100 escape
+      sequence generator for dedicated arrow keys (`\x1b[A`, `\x1b[B`,
+      `\x1b[C`, `\x1b[D`) and mapped Delete (Caps+0) to `0x7F` in
+      `src/hal/next_native/hal_next_keyboard.asm`. Preserved RomWBW CP/M
+      binary invariance. Validated via `tests/test_bug_2_3_1.py`.
   - [x] **Bug 2.3.2: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
@@ -459,7 +503,7 @@ have been resolved and archived.
       metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
       indicators belong in Field 4, while Field 5 is strictly reserved for
       fixed-width cursor coordinates (`Line <cur>/<tot> Col <col> |`).
-  - [ ] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
+  - [x] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next.asm:3523` (`SHOW_MEM_INFO_SCREEN`), the native
       Next application invokes `QUERY_MEM_SCREEN_INFO`, which executes RomWBW
@@ -471,7 +515,11 @@ have been resolved and archived.
       `src/se_next.asm` that queries Next hardware registers (NextReg `0x01`
       Machine ID, `0x14` Global RAM paging) and visualizes the 8KB MMU page
       allocations (pages 32..43) instead of invoking HBIOS discovery.
-  - [ ] **Bug 2.3.4: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
+    - *Resolution*: Replaced RomWBW HBIOS memory queries with native Next
+      hardware queries via NextReg 0x01/0x14 and mapped 16 32KB Next MMU
+      Far RAM banks in `src/se_next.asm`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_3_3.py`.
+  - [x] **Bug 2.3.4: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: In `src/se_next.asm:625-631` and `src/core/plugin_mgr.asm`,
       hotkey `1` selects 120x40 and `2` selects 80x24. ZX Spectrum Next
@@ -479,7 +527,11 @@ have been resolved and archived.
       `1` causes visual corruption and terminal column spill across the screen.
     - *Required Fix*: In `src/se_next.asm`, assign `1` to 80x24 classic
       terminal mode and omit or disable 120x40 mode per Section 2.1 mandate.
-  - [ ] **Bug 2.3.5: Predominant Language Indication on About Screen**:
+    - *Resolution*: Mapped hotkey '1' to 80x24 classic terminal mode, disabled
+      hotkey '2', and enforced 80x24 on 120x40 requests in `src/se_next.asm`.
+      Preserved RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_4.py`.
+  - [x] **Bug 2.3.5: Predominant Language Indication on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
@@ -488,6 +540,11 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
+    - *Resolution*: Displayed `version 1.1.0 (2026-10-09) (Z80 Assembly)` on
+      native Next `SE.NEX` and `.se` via `TARGET_NEXT` in
+      `src/core/plugin_mgr.asm`, centered dynamically on the About screen
+      while preserving RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_5.py`.
   - [x] **Bug 2.3.6: Tier 1 Help Screen Rules [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
@@ -514,7 +571,7 @@ have been resolved and archived.
       canonical 50x7 dimensions, and the explicit action footer
       `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
       (Bug 2.1.6 Rejected).
-  - [ ] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
+  - [x] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI` sub-handlers),
       when an unhandled or extended multi-byte escape sequence is received
@@ -525,7 +582,13 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
       to atomically drain unrecognized multi-byte sequences until a terminating
       character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
-  - [ ] **Bug 2.3.10: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Resolution*: Routed unhandled CSI branches (`CSI_DONE`, `HANDLE_CSI_*`)
+      to `DRAIN_REMAINING_CSI` in `src/core/editor.asm` under `TARGET_NEXT` to
+      atomically consume trailing sequence bytes until terminal boundary
+      (`0x40`..`0x7E`) or timeout, preventing stray bytes from leaking into
+      document text on native Next `SE.NEX` and `.se`. Preserved RomWBW CP/M
+      binary invariance. Validated via `tests/test_bug_2_3_9.py`.
+  - [x] **Bug 2.3.10: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
@@ -533,7 +596,13 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
-  - [ ] **Bug 2.3.11: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Resolution*: Updated `DO_DEL_JOIN_OK` in `src/core/editor.asm` under
+      `TARGET_NEXT` to invoke `CHECKOUT_ACTIVE_LINE` and `CALC_VISUAL_COL`
+      and update `(TARGET_COL),HL`, ensuring subsequent vertical navigation
+      adheres to the join column across native Next targets `SE.NEX` and `.se`
+      while preserving RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_10.py`.
+  - [x] **Bug 2.3.11: Modal Dialog Cancellation by Unexpected Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and
@@ -543,7 +612,13 @@ have been resolved and archived.
       active dialog. Modals must only dismiss on `Enter` or `ESC`.
     - *Required Fix*: In modal input loops, drain and discard unexpected escape
       sequences and non-input keys, preserving active dialog state.
-  - [ ] **Bug 2.3.12: File Browser Displays CP/M User Areas Under NextZXOS**:
+    - *Resolution*: Implemented `DRAIN_ESCAPE_SEQUENCE` under `TARGET_NEXT` in
+      `src/core/editor.asm` to absorb multi-byte escape sequences without
+      moving document cursor or dismissing active modals. Routed
+      `GOTO_GOT_ESC_SEQ`, `FIND_GOT_ESC_SEQ`, and `REP_GOT_ESC_SEQ` to it in
+      native Next targets `SE.NEX` and `.se`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_3_11.py`.
+  - [x] **Bug 2.3.12: File Browser Displays CP/M User Areas Under NextZXOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.6, 7.7.
     - *Issue*: In `src/core/ui_browser.asm`, the directory browser prompt line
       displays `[ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)`.
@@ -554,6 +629,12 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/ui_browser.asm`, adapt the directory browser
       prompt line under `TARGET_NEXT_NATIVE` to display native path syntax
       rather than CP/M drive/user area notation.
+    - *Resolution*: Updated `STR_ESC_CANCEL_TXT` and `STR_ESC_CANCEL` in
+      `src/core/plugin_mgr.asm` under `TARGET_NEXT_NATIVE` to display native
+      path syntax `[ESC]=Cancel  Enter [path][pattern] to list (e.g. /dot/,
+      *.TXT)` on `SE.NEX` and `.se`, while preserving CP/M user area notation
+      on `SE_NEXT.COM` and byte-for-byte binary invariance on `SE.COM`.
+      Validated via `tests/test_bug_2_3_12.py`.
 
 ### 2.4 Profile 4: Linux Native C Profile (`se-linux`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5

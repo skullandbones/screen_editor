@@ -4287,8 +4287,13 @@ STR_SPLASH_CMDS:
 	DB "  type   [P]              for plugins",13,10
 	DB "  type   [^P]             for context plugin menu",13,10
 	DB "  type   [C]              to configure",13,10
+	IFDEF TARGET_NEXT
+	DB "  type   [1]              set 80x24",13,10
+	DB 13,10
+	ELSE
 	DB "  type   [1]              set 80x24",13,10
 	DB "  type   [2]              set 120x40",13,10
+	ENDIF
 	DB "  type   [Q]  or  [^Q]    to exit",13,10
 	DB 0
 
@@ -4543,12 +4548,21 @@ STR_SAVE_FMT_SUFFIX:	DB	"]   [^F]=Toggle Format",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
 
+	IFDEF TARGET_NEXT_NATIVE
+STR_ESC_CANCEL_TXT:
+	DB "[ESC]=Cancel  Enter [path][pattern] to list "
+	DB "(e.g. /dot/, *.TXT)",13,10,"$"
+STR_ESC_CANCEL:
+	DB "~  [ESC]=Cancel  Enter [path][pattern] to list "
+	DB "(e.g. /dot/, *.TXT)",13,10,"$"
+	ELSE
 STR_ESC_CANCEL_TXT:
 	DB "[ESC]=Cancel  Enter [d:][u:][pattern] to list "
 	DB "(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
 STR_ESC_CANCEL:
 	DB "~  [ESC]=Cancel  Enter [d:][u:][pattern] to list "
 	DB "(e.g. B:, C1:, 1C:, *.TXT)",13,10,"$"
+	ENDIF
 
 STR_TILDE_INDENT:	DB	"~  ","$"
 STR_TILDE_CRLF:		DB	"~",13,10,"$"
