@@ -102,15 +102,44 @@ def audit_ccp_headroom(
 
     # Determine BSS start, BSS end, and stack top
     local_stack = symbols.get("LOCAL_STACK")
-    bss_start = symbols.get("BSS_START")
-    bss_end = symbols.get("BSS_END")
-    line_storage_size = symbols.get("LINE_STORAGE_SIZE", DEFAULT_BSS_SIZE)
+    bss_start = None
+    for sym in (
+        "BSS_START",
+        "_BSS_START",
+        "__BSS_START",
+        "_bss_start",
+        "__bss_start",
+        "__BSS_head",
+    ):
+        if sym in symbols:
+            bss_start = symbols[sym]
+            break
+
+    bss_end = None
+    for sym in (
+        "BSS_END",
+        "_BSS_END",
+        "__BSS_END",
+        "_bss_end",
+        "__bss_end",
+        "__BSS_END_tail",
+        "__BSS_END_head",
+        "__tail",
+    ):
+        if sym in symbols and symbols[sym] >= code_end:
+            bss_end = symbols[sym]
+            break
 
     # If symbols missing, infer page-aligned BSS layout
     if bss_start is None:
         bss_start = (code_end + 255) & ~255
     if bss_end is None:
+        line_storage_size = symbols.get("LINE_STORAGE_SIZE", DEFAULT_BSS_SIZE)
         bss_end = bss_start + line_storage_size
+    else:
+        line_storage_size = symbols.get(
+            "LINE_STORAGE_SIZE", bss_end - bss_start
+        )
 
     # Calculate page margin before next ALIGN 256 bump
     code_page_base = code_end & ~255

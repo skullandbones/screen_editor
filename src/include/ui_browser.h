@@ -41,10 +41,10 @@ typedef struct {
     char     filename[BROWSER_FILENAME_LEN];      /* Entry name */
 #ifndef __CPM__
     uint32_t size_bytes;        /* File size in bytes */
-#endif
-    uint8_t  is_dir;            /* 1 if directory / folder */
     uint8_t  drive;             /* Drive number (0=A, 1=B, etc.) */
     uint8_t  user;              /* User area (0..15) */
+#endif
+    uint8_t  is_dir;            /* 1 if directory / folder */
 } browser_entry_t;
 
 /* Browser Subsystem Function Entry Points */

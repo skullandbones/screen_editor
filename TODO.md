@@ -1566,7 +1566,8 @@ have been resolved and archived.
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
-  2.7.65–2.7.71 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; 0 Open).
+  2.7.65–2.7.71, 2.7.73–2.7.77 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
+  0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -2585,6 +2586,79 @@ have been resolved and archived.
       3. `ports/python/se/config.py` correctly defines `DEFAULT_TAB_WIDTH = 8`
          and fallback `8`. In addition, `ports/python/se/buffer.py` default
          parameter has been updated to 8 for full architectural parity.
+  - [x] **Bug 2.7.73: Status Bar Field 1 Overflow on Filenames >13 Characters**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3; `src/core/ui_render.c`.
+    - *Issue*: Section 4.3 defines Field 1 of the Universal Status Bar as a
+      fixed 18-character section (`| %-14.14s |`).
+    - *Root Cause*: In `ports/python/se/ui.py:53`, `name_field` was formatted
+      using `f"| {raw_name:<14} |"` without a maximum precision specifier.
+      When opening files with names exceeding 13 characters, Field 1 expanded
+      beyond 18 columns and pushed Field 5 (`Col N`, `[Pan +40]`, `[SEL]`,
+      `[BLK LOCK]`) past column 80, where `status_text = core[:cols]` clipped
+      the right side of the status bar.
+    - *Resolution*: Updated `name_field` in `render_status_bar()` in `ui.py` to
+      `f"| {raw_name:<14.14} |"`, strictly bounding Field 1 to 18 characters
+      and preserving Field 5 indicators across 80-column viewports. Validated
+      via Step 56 in `test_editor.py`
+      (`test_bug_2_7_73_status_bar_long_filename_truncation`).
+  - [x] **Bug 2.7.74: 1.0-Second Blocking Lag on Ctrl+K Help Screen Dispatch**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
+    - *Issue*: Pressing `Ctrl+K` with no active block freezes the editor UI for
+      1,000ms before rendering the Help screen, and swallows any dismissal key
+      pressed within that 1-second window. Furthermore, the Help screen lacked
+      the canonical `Arrow Keys` navigation label.
+    - *Root Cause*: In `ports/python/se/editor.py:185`, `dispatch_key()` polled
+      `self.terminal.is_key_ready(timeout=1.0)` waiting 1.0 second for legacy
+      WordStar `^K` two-key chords before invoking `action_help()`.
+    - *Resolution*: Reduced the `Ctrl+K` lookahead poll timeout in
+      `dispatch_key()` in `editor.py` from `1.0`s to `0.1`s (100ms) and
+      included `Arrow Keys` in `action_help()`. Validated via Step 35 and
+      Step 57 in `test_editor.py`
+      (`test_bug_2_7_74_ctrl_k_immediate_help_dispatch`).
+  - [x] **Bug 2.7.75: Archetype D Plugin Palette Frame Width & Slot Order**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.4 (Archetype D).
+    - *Issue*: The Plugin Palette (`Ctrl+P`) rendered a 46-column modal box
+      (`+--------------------------------------------+`) instead of the
+      canonical 50-column Archetype D frame
+      (`+------------------------------------------------+`), and listed
+      built-in plugins alphabetically (`BEAUTIFY`, `ROT13`, `WORDCNT`) instead
+      of the canonical slot sequence (`1. ROT13`, `2. WORDCNT`,
+      `3. BEAUTIFY`).
+    - *Root Cause*: `show_menu()` in `ports/python/se/modal.py` set
+      `width = 46` instead of `50`, and `discover_plugins()` in
+      `ports/python/se/plugin.py` used `sorted(os.listdir(...))` for built-in
+      plugins.
+    - *Resolution*: Updated `show_menu()` in `modal.py` to use a 50-column
+      minimum frame width (`width = 50`) and updated `discover_plugins()` in
+      `plugin.py` to load built-in plugins in canonical order (`rot13.py`,
+      `wordcnt.py`, `beautify.py`). Validated via Step 58 in `test_editor.py`
+      (`test_bug_2_7_75_plugin_palette_canonical_width_and_order`).
+  - [x] **Bug 2.7.76: Config Manager Option 5 Toggle Cycle & Save Flow**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 13.2.
+    - *Issue*: Pressing `5` in the Configuration Manager toggled Plugin Manager
+      directly from `Autoload` to `Disabled` (omitting `Demand`), and pressing
+      `S` opened a blocking modal pop-up instead of immediately saving to
+      `SE.CFG` and refreshing the `Config Status: Loaded from SE.CFG` header.
+    - *Root Cause*: `action_config_screen()` in `ports/python/se/editor.py`
+      only handled two states (`AUTOLOAD` and `DISABLED`) for `PLUGIN` and
+      invoked `self.modal.show_notification()` after
+      `self.config.save_config()`.
+    - *Resolution*: Updated `action_config_screen()` in `editor.py` to cycle
+      Option 5 through all three canonical states (`Autoload` -> `Demand` ->
+      `Disabled` -> `Autoload`) and save `SE.CFG` immediately on `S`/`s`
+      without a blocking modal. Validated via Step 51 and Step 59 in
+      `test_editor.py` (`test_bug_2_7_76_config_plugin_toggle_cycle_and_save`).
+  - [x] **Bug 2.7.77: Splash Screen 120x40 Active Screen Diagnostic Label**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2.
+    - *Issue*: Switching to `120x40` geometry on the Splash screen rendered
+      `Active Screen : [120x40 (Wide Console)]` instead of the canonical
+      `Active Screen : [120x40 (Modern Default)]` diagnostic string.
+    - *Root Cause*: `action_splash_screen()` in `ports/python/se/editor.py:783`
+      formatted `geom_tag` with `(Wide Console)`.
+    - *Resolution*: Updated `action_splash_screen()` in `editor.py` to format
+      120x40 mode as `120x40 (Modern Default)`. Validated via Step 60 in
+      `test_editor.py`
+      (`test_bug_2_7_77_splash_active_screen_diagnostic_labels`).
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,

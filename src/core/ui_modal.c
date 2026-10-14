@@ -155,7 +155,11 @@ int modal_alert(const char *title, const char *msg1, const char *msg2)
     }
     modal_draw_row_centered(top + 5, left, width, "Press any key to continue");
 
-    hal_console_getkey();
+    while (hal_console_getkey() <= 0) {
+#ifndef __CPM__
+        usleep(5000);
+#endif
+    }
     g_need_screen_render = 1;
     return MODAL_RES_OK;
 }
@@ -484,118 +488,24 @@ int modal_confirm_save_changes(void)
 
 int modal_confirm_overwrite(void)
 {
-    uint8_t width = MODAL_BOX_WIDTH;
-    uint8_t height = 7;
-    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
-    uint8_t selected = 0;
-
-    hal_console_hide_cursor();
-    modal_draw_frame(top, left, width, height, "Overwrite File");
-    modal_draw_row_centered(top + 3, left, width,
-                            "Existing file contents will be lost");
-    modal_draw_row_centered(top + 4, left, width,
-                            "File already exists. Overwrite?");
-
-    while (1) {
-        /* Render Options: [Y]es      [N]o      [ESC]=Cancel */
-        hal_console_locate(top + 5, left);
-#ifdef __CPM__
-        hal_console_puts("|        ");
-#else
-        hal_console_puts("|         ");
-#endif
-        if (selected == 0) hal_console_inverse_on();
-        hal_console_puts("[Y]es");
-        if (selected == 0) hal_console_inverse_off();
-
-        hal_console_puts("      ");
-        if (selected == 1) hal_console_inverse_on();
-        hal_console_puts("[N]o");
-        if (selected == 1) hal_console_inverse_off();
-
-#ifdef __CPM__
-        hal_console_puts("      [ESC]=Cancel       |");
-#else
-        hal_console_puts("      [ESC]=Cancel        |");
-#endif
-
-        /* Position cursor after Overwrite? (Col 40 relative to popup) */
-        hal_console_locate(top + 4, (uint8_t)(left + 40));
-        hal_console_show_cursor();
-
-        int k;
-        while ((k = hal_console_getkey()) <= 0) {
-#ifndef __CPM__
-            usleep(5000);
-#endif
-        }
-        if (k == 'y' || k == 'Y') {
-            hal_console_hide_cursor();
-            g_need_screen_render = 1;
-            return MODAL_RES_OK;
-        } else if (k == 'n' || k == 'N') {
-            hal_console_hide_cursor();
-            g_need_screen_render = 1;
-            return MODAL_RES_NO;
-        } else if (k == KEY_ESC) {
-            hal_console_hide_cursor();
-            g_need_screen_render = 1;
-            return MODAL_RES_CANCEL;
-        } else if (k == KEY_ENTER || k == ' ') {
-            hal_console_hide_cursor();
-            g_need_screen_render = 1;
-            return (selected == 0) ? MODAL_RES_OK : MODAL_RES_NO;
-        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT) {
-            selected = 1 - selected;
-        }
-    }
+    int res = modal_confirm("Overwrite File",
+                            "Existing file contents will be lost",
+                            "File already exists. Overwrite?",
+                            (const char *)1);
+    return (res == MODAL_RES_YES) ? MODAL_RES_OK : res;
 }
 
 void modal_show_notification(const char *title, const char *message)
 {
-    uint8_t width = 50;
-    uint8_t height = 7;
-    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
-
-    hal_console_hide_cursor();
-    modal_draw_frame(top, left, width, height, title);
-
-    if (message && *message) {
-        modal_draw_row_centered(top + 3, left, width, message);
-    }
-    modal_draw_row_centered(top + 5, left, width, "Press any key to continue");
-
-    while (hal_console_getkey() <= 0) {
-        /* Wait for user keystroke */
-    }
-    g_need_screen_render = 1;
+    modal_alert(title, message, NULL);
 }
 
 void modal_alert_file_not_found(const char *fname)
 {
-    uint8_t width = 50;
-    uint8_t height = 7;
-    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
-    char msg[64];
+    char msg[48];
 
     snprintf(msg, sizeof(msg), "'%s' was not found.",
              fname ? fname : "FILE");
-
-    hal_console_hide_cursor();
-    modal_draw_frame(top, left, width, height, "File Not Found");
-    modal_draw_row_centered(top + 3, left, width, msg);
-    modal_draw_row_centered(top + 4, left, width,
-                            "Specified file not found on disk.");
-    modal_draw_row_centered(top + 5, left, width,
-                            "Press any key to continue");
-
-    while (hal_console_getkey() <= 0) {
-#ifndef __CPM__
-        usleep(5000);
-#endif
-    }
-    g_need_screen_render = 1;
+    modal_alert("File Not Found", msg,
+                "Specified file not found on disk.");
 }
