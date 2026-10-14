@@ -295,9 +295,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 1 Open (`Bug 2.2.14` Open; Bugs 2.2.2, 2.2.7, 2.2.8,
-  2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4,
-  2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 0 Open (All 9 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10,
+  2.2.11, 2.2.12, 2.2.13, 2.2.14 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5,
+  2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -455,8 +455,8 @@ have been resolved and archived.
       Updated `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm` under
       `TARGET_NEXT` to display `type [1] set 80x24`.
       Validated via `tests/test_bug_2_2_13.py`.
-  - [ ] **Bug 2.2.14: `Ctrl+K` (`Extend + K`) Performs Cursor Up Instead of
-    Opening Help Key Overlay (`HELP.OVL`)**:
+  - [x] **Bug 2.2.14: `Ctrl+K` (`Extend + K`) Performs Cursor Up Instead of
+    Opening Help Key Overlay (`HELP.OVL`) [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10, 10.4.
     - *Issue*: In `SE_NEXT.COM` editor mode, pressing `Ctrl+K` (`EXTEND + K`
       on the ZX Spectrum Next keyboard, ASCII `0x0B` / `KEY_CTRL_K`) performs
@@ -475,6 +475,12 @@ have been resolved and archived.
       Row 4 port `0xEFFE` bit 3 is pressed) so that `EXTEND + K` (`Ctrl+K`)
       returns `0x0B` (`KEY_CTRL_K`) to open `HELP.OVL` (or the Block Menu),
       while the physical Up Arrow key continues to emit `\x1b[A`.
+    - *Resolution*: Added `HKT_CHECK_CTRL_K` in
+      `src/hal/next_cpm/hal_nextcpm_keyboard.asm` to poll ULA matrix Row 6
+      (`port 0xBFFE`, bit 2 = `'K'`) and Row 4 (`port 0xEFFE`, bit 3 = `'7'`),
+      returning `0x0B` (`KEY_CTRL_K`) for `Extend + K` / `Ctrl+K` and queuing
+      `\x1b[A` only when physical `'7'` (Up Arrow) is held. Validated via
+      `tests/test_nextcpm_entry.py`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and

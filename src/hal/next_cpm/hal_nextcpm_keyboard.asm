@@ -87,11 +87,13 @@ HAL_KEYBOARD_TRANSLATE:
 	CP 001H
 	JR Z,HKT_CHECK_LEFT
 
-	; Check Up Arrow: 0x1F (XBIOS) or 0x0B (Sinclair VT)
+	; Check Up Arrow (0x1F XBIOS)
 	CP 01FH
 	JR Z,HKT_SET_UP
+
+	; Check Ctrl+K / Up Arrow (0x0B)
 	CP 00BH
-	JR Z,HKT_SET_UP
+	JR Z,HKT_CHECK_CTRL_K
 
 	; Check Up Arrow / Ctrl+E (0x05)
 	CP 005H
@@ -139,6 +141,21 @@ HKT_SET_LEFT:
 	JR HKT_QUEUE_CSI
 HKT_IS_CTRL_A:
 	LD A,001H
+	JR HKT_DONE
+
+HKT_CHECK_CTRL_K:
+	; Is key 'K' physically pressed? Row 6 (port $BFFE), bit 2
+	LD BC,0BFFEH
+	IN A,(C)
+	BIT 2,A
+	JR Z,HKT_IS_CTRL_K		; 'K' pressed (bit 2 == 0) -> Ctrl+K
+	; Is key '7' (Up) physically pressed? Row 4 (port $EFFE), bit 3
+	LD BC,0EFFEH
+	IN A,(C)
+	BIT 3,A
+	JR Z,HKT_SET_UP			; '7' pressed (bit 3 == 0) -> Up Arrow
+HKT_IS_CTRL_K:
+	LD A,00BH			; Normal Ctrl+K (Help / Block Menu)
 	JR HKT_DONE
 
 HKT_CHECK_UP:

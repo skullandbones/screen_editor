@@ -127,9 +127,11 @@ def test_nextcpm_keyboard():
     with open(hal_con, "r", encoding="utf-8") as f:
         con_src = f.read()
 
-    # Verify ULA matrix port inspection for Right Arrow disambiguation
+    # Verify ULA matrix port inspection for Right Arrow and Ctrl+K
     assert "0FDFEH" in kbd_src, "ULA port $FDFE check for 'F' required"
     assert "BIT 3,A" in kbd_src, "BIT 3 check for key 'F' required"
+    assert "0BFFEH" in kbd_src, "ULA port $BFFE check for 'K' required"
+    assert "HKT_CHECK_CTRL_K" in kbd_src, "HKT_CHECK_CTRL_K required"
     assert "KEY_SEQ_BUF" in kbd_src, "KEY_SEQ_BUF declaration required"
     assert "KEY_SEQ_LEN" in kbd_src, "KEY_SEQ_LEN declaration required"
     assert "NEXT_KEY_EDIT" in kbd_src, "ESC return code required"
