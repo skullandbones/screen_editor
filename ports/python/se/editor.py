@@ -780,7 +780,7 @@ class Editor:
                 if getattr(self.config, "is_native_screen", False):
                     geom_tag = f"{screen_mode_label} (Native Terminal)"
                 elif self.terminal.cols >= 120:
-                    geom_tag = f"{screen_mode_label} (Wide Console)"
+                    geom_tag = f"{screen_mode_label} (Modern Default)"
                 else:
                     geom_tag = f"{screen_mode_label} (Classic Terminal)"
 

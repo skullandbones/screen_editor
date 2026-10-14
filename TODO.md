@@ -1566,7 +1566,7 @@ have been resolved and archived.
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
-  2.7.65–2.7.71, 2.7.73–2.7.76 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
+  2.7.65–2.7.71, 2.7.73–2.7.77 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
   0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
@@ -2647,6 +2647,17 @@ have been resolved and archived.
       `Disabled` -> `Autoload`) and save `SE.CFG` immediately on `S`/`s`
       without a blocking modal. Validated via Step 51 and Step 59 in
       `test_editor.py` (`test_bug_2_7_76_config_plugin_toggle_cycle_and_save`).
+  - [x] **Bug 2.7.77: Splash Screen 120x40 Active Screen Diagnostic Label**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2.
+    - *Issue*: Switching to `120x40` geometry on the Splash screen rendered
+      `Active Screen : [120x40 (Wide Console)]` instead of the canonical
+      `Active Screen : [120x40 (Modern Default)]` diagnostic string.
+    - *Root Cause*: `action_splash_screen()` in `ports/python/se/editor.py:783`
+      formatted `geom_tag` with `(Wide Console)`.
+    - *Resolution*: Updated `action_splash_screen()` in `editor.py` to format
+      120x40 mode as `120x40 (Modern Default)`. Validated via Step 60 in
+      `test_editor.py`
+      (`test_bug_2_7_77_splash_active_screen_diagnostic_labels`).
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,

@@ -2711,6 +2711,34 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_77_splash_active_screen_diagnostic_labels(self):
+        """Step 60: Verify canonical Active Screen labels on splash screen."""
+        print(
+            "[*] Step 60: Testing splash Active Screen diagnostic labels...",
+            flush=True,
+        )
+        captured = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": (
+                captured.append(list(lines))
+            )
+        )
+        # Switch 1 (80x24) -> 2 (120x40) -> e (exit)
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "2", "e"])
+        self.editor.action_splash_screen()
+        self.assertEqual(len(captured), 3)
+        self.assertEqual(
+            captured[1][17], "Active Screen : [80x24 (Classic Terminal)]"
+        )
+        self.assertEqual(
+            captured[2][17], "Active Screen : [120x40 (Modern Default)]"
+        )
+
+        print(
+            "[+] Step 60: Splash Active Screen diagnostic labels verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
