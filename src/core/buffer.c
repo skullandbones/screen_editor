@@ -185,8 +185,9 @@ void shift_line_slots_up(uint16_t start_idx, uint16_t count)
 
 void shift_line_slots_down(uint16_t start_idx, uint16_t count)
 {
-    int32_t i;
-    for (i = (int32_t)g_doc_total_lines - 1; i >= (int32_t)start_idx; i--) {
+    uint16_t i = g_doc_total_lines;
+    while (i > start_idx) {
+        i--;
         if (i + count < MAX_DOC_LINES) {
             s_line_slots[i + count] = s_line_slots[i];
         }

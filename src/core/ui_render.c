@@ -36,9 +36,9 @@ uint8_t g_need_screen_render = 1;
 uint8_t g_need_line_render = 0;
 uint8_t g_need_status_render = 1;
 #ifdef __CPM__
-char    g_status_msg[32] = {0};
+char    g_status_msg[32];
 #else
-char    g_status_msg[80] = {0};
+char    g_status_msg[80];
 #endif
 
 void ui_init(void)
@@ -151,127 +151,93 @@ void render_buffer_line(uint16_t row)
 #ifdef __CPM__
 void render_status_bar(void)
 {
-    char raw_name[32];
-    char field1[32];
-    char field2[16];
-    char field3[16];
-    char field4[32];
-    char field5[40];
-    const char *fname;
-    char core[128];
-    char full_bar[160];
-    size_t pad, right_pad;
-    size_t i, idx;
+    char raw_name[24];
+    char sbuf[20];
+    char core[84];
+    const char *f4 = "^K: Editor keys";
+    uint8_t pad, right_pad, i;
     uint16_t vis_col = 0;
 
-    fname = g_current_filename[0] ? g_current_filename : "(Untitled)";
-    char cpm_disp_name[64];
-    if (g_current_filename[0] != '\0' && g_current_filename[1] != ':') {
-        char drv = (char)('A' + bdos(25, 0));
-        snprintf(cpm_disp_name, sizeof(cpm_disp_name), "%c:%s",
-                 drv, g_current_filename);
-        fname = cpm_disp_name;
-    }
-    snprintf(raw_name, sizeof(raw_name), "%s%c", fname,
-             g_doc_modified ? '*' : ' ');
-    snprintf(field1, sizeof(field1), "| %-14.14s | ", raw_name);
-
-    if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
-        strcpy(field2, " 80x24 | ");
-    } else if (g_active_cols == SCREEN_COLS_120 &&
-               g_active_rows == SCREEN_ROWS_40) {
-        strcpy(field2, "120x40 | ");
+    if (!g_current_filename[0]) {
+        strcpy(raw_name, "(Untitled)");
+    } else if (g_current_filename[1] != ':') {
+        snprintf(raw_name, sizeof(raw_name), "%c:%s",
+                 (char)('A' + bdos(25, 0)), g_current_filename);
     } else {
-        snprintf(field2, sizeof(field2), "%3ux%-2u | ",
-                 (unsigned)g_active_cols, (unsigned)g_active_rows);
+        strncpy(raw_name, g_current_filename, sizeof(raw_name) - 2);
+        raw_name[sizeof(raw_name) - 2] = '\0';
     }
-
-    strcpy(field3, (g_file_format == FMT_CPM) ? "CP/M  | " : "Linux | ");
+    i = (uint8_t)strlen(raw_name);
+    if (i > 13) {
+        i = 13;
+    }
+    raw_name[i] = g_doc_modified ? '*' : ' ';
+    raw_name[i + 1] = '\0';
 
     if (g_is_splash_screen) {
         uint16_t free_kb = 320;
         if (g_doc_total_lines > 1) {
             uint16_t slots = (10 * 256 > g_doc_total_lines) ?
                              (10 * 256 - g_doc_total_lines) : 0;
-            free_kb = slots / 8;
+            free_kb = slots >> 3;
         }
-        snprintf(field4, sizeof(field4), "Free: %u KB    | ",
-                 (unsigned)free_kb);
-    } else if (g_block_mode == BLOCK_MODE_SELECTING) {
+        snprintf(sbuf, sizeof(sbuf), "Free: %u KB", (unsigned)free_kb);
+        f4 = sbuf;
+    } else if (g_block_mode == BLOCK_MODE_SELECTING ||
+               g_block_mode == BLOCK_MODE_SOLIDIFIED) {
+        const char *bpre = (g_block_mode == BLOCK_MODE_SELECTING) ?
+                           "Sel" : "Block";
         normalize_block_bounds();
         if (g_norm_start_row == g_norm_end_row) {
             uint16_t b_chars = (g_norm_end_col >= g_norm_start_col) ?
                 (g_norm_end_col - g_norm_start_col) : 0;
-            char sbuf[24];
-            snprintf(sbuf, sizeof(sbuf), "Sel: %u chars", (unsigned)b_chars);
-            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
+            snprintf(sbuf, sizeof(sbuf), "%s: %u chars",
+                     bpre, (unsigned)b_chars);
         } else {
             uint16_t b_lines = (g_norm_end_row >= g_norm_start_row) ?
                 (g_norm_end_row - g_norm_start_row + 1) : 1;
-            char sbuf[16];
-            snprintf(sbuf, sizeof(sbuf), "Sel: %u lines", (unsigned)b_lines);
-            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
+            snprintf(sbuf, sizeof(sbuf), "%s: %u lines",
+                     bpre, (unsigned)b_lines);
         }
-    } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
-        normalize_block_bounds();
-        if (g_norm_start_row == g_norm_end_row) {
-            uint16_t b_chars = (g_norm_end_col >= g_norm_start_col) ?
-                (g_norm_end_col - g_norm_start_col) : 0;
-            char sbuf[24];
-            snprintf(sbuf, sizeof(sbuf), "Block: %u chars", (unsigned)b_chars);
-            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
-        } else {
-            uint16_t b_lines = (g_norm_end_row >= g_norm_start_row) ?
-                (g_norm_end_row - g_norm_start_row + 1) : 1;
-            char sbuf[16];
-            snprintf(sbuf, sizeof(sbuf), "Block: %u lines", (unsigned)b_lines);
-            snprintf(field4, sizeof(field4), "%-15s | ", sbuf);
-        }
+        f4 = sbuf;
     } else if (g_status_msg[0] != '\0') {
-        snprintf(field4, sizeof(field4), "%-15s | ", g_status_msg);
+        f4 = g_status_msg;
     } else if (g_horiz_pan_offset > 0) {
-        char pbuf[16];
-        snprintf(pbuf, sizeof(pbuf), "[Pan +%u]", (unsigned)g_horiz_pan_offset);
-        snprintf(field4, sizeof(field4), "%-15s | ", pbuf);
+        snprintf(sbuf, sizeof(sbuf), "[Pan +%u]",
+                 (unsigned)g_horiz_pan_offset);
+        f4 = sbuf;
     } else if (!g_insert_mode) {
-        strcpy(field4, "Overwrite mode  | ");
-    } else {
-        strcpy(field4, "^K: Editor keys | ");
+        f4 = "Overwrite mode";
     }
 
     if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
         checkout_active_line(g_cur_doc_row);
         vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
     }
-    snprintf(field5, sizeof(field5), "Line %4u/%-4u Col %-3u |",
+
+    snprintf(core, sizeof(core),
+             "| %-14.14s | %s | %s | %-15.15s | Line %4u/%-4u Col %-3u |",
+             raw_name,
+             (g_active_cols == SCREEN_COLS_120) ? "120x40" : " 80x24",
+             (g_file_format == FMT_CPM) ? "CP/M " : "Linux",
+             f4,
              (unsigned)(g_cur_doc_row + 1),
              (unsigned)g_doc_total_lines,
              (unsigned)vis_col);
 
-    strcpy(core, field1);
-    strcat(core, field2);
-    strcat(core, field3);
-    strcat(core, field4);
-    strcat(core, field5);
-
-    pad = (g_active_cols > 78) ? (g_active_cols - 78) / 2 : 1;
-    right_pad = (g_active_cols > (78 + pad)) ? (g_active_cols - 78 - pad) : 1;
-
-    idx = 0;
-    for (i = 0; i < pad && idx + 1 < sizeof(full_bar); i++) {
-        full_bar[idx++] = ' ';
-    }
-    for (i = 0; i < 78 && core[i] != '\0' && idx + 1 < sizeof(full_bar); i++) {
-        full_bar[idx++] = core[i];
-    }
-    for (i = 0; i < right_pad && idx + 1 < sizeof(full_bar); i++) {
-        full_bar[idx++] = ' ';
-    }
-    full_bar[idx] = '\0';
+    pad = (g_active_cols > 78) ? (uint8_t)((g_active_cols - 78) / 2) : 1;
+    right_pad = (g_active_cols > (78 + pad)) ?
+                (uint8_t)(g_active_cols - 78 - pad) : 1;
 
     hal_console_locate(g_active_rows, 1);
     hal_console_inverse_on();
-    hal_console_puts(full_bar);
+    for (i = 0; i < pad; i++) {
+        hal_console_putc(' ');
+    }
+    hal_console_puts(core);
+    for (i = 0; i < right_pad; i++) {
+        hal_console_putc(' ');
+    }
     hal_console_inverse_off();
 }
 #else
@@ -428,13 +394,7 @@ static void render_tier1_workspace_screen(const char **lines,
 
 void show_splash_screen(void)
 {
-    char line_screen[64];
-    char line_ram[64];
-    char line_plug[64];
-    char line_lines[64];
     const char *splash_lines[21];
-    const char *ram_val;
-    const char *plug_val;
     int k;
     char dlg_fname[32];
     uint8_t need_render = 1;
@@ -443,66 +403,55 @@ void show_splash_screen(void)
     g_is_splash_screen = 1;
 
     while (1) {
-        if (g_config.screen_mode == MODE_120X40) {
-            snprintf(line_screen, sizeof(line_screen),
-                     "   Active Screen : %-31.31s",
-                     "[120x40 (Modern Default)]");
-        } else if (g_config.screen_mode == MODE_NATIVE) {
-            snprintf(line_screen, sizeof(line_screen),
-                     "   Active Screen : %-31.31s",
-                     "[Native (Dynamic Console)]");
-        } else {
-            snprintf(line_screen, sizeof(line_screen),
-                     "   Active Screen : %-31.31s",
-                     "[80x24 (Classic Terminal)]");
-        }
-
-        if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
-            ram_val = "[Overwritten (Max RAM)]";
-        } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
-            ram_val = "[Hibernated (Temp Image)]";
-        } else {
-            ram_val = "[Preserved (Active)]";
-        }
-        snprintf(line_ram, sizeof(line_ram),
-                 "   RAM Drive (A:): %-31.31s", ram_val);
-
-        if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
-            plug_val = "[Disabled]";
-        } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
-            plug_val = "[On Demand]";
-        } else {
-            plug_val = "[Operational]";
-        }
-        snprintf(line_plug, sizeof(line_plug),
-                 "   Plugin System : %-31.31s", plug_val);
-
-        snprintf(line_lines, sizeof(line_lines),
-                 "   Max Lines     : %-31.31s",
-                 (g_config.lines_mode == 1) ? "[32,768 lines]" :
-                                              "[16,384 lines]");
-
-        splash_lines[0]  = "                SE - Screen Editor                ";
-        splash_lines[1]  = "                                                  ";
-        splash_lines[2]  = "   type   [E]  or  [Enter] to edit                ";
-        splash_lines[3]  = "   type   [N]              to new file            ";
-        splash_lines[4]  = "   type   [O]              to open file           ";
-        splash_lines[5]  = "   type   [S]              to save file           ";
-        splash_lines[6]  = "   type   [W]  or  [^W]    to close file          ";
-        splash_lines[7]  = "   type   [L]  or  [^L]    to goto line           ";
-        splash_lines[8]  = "   type   [A]              for about              ";
-        splash_lines[9]  = "   type   [M]              for memory info        ";
-        splash_lines[10] = "   type   [P]              for plugins            ";
+        splash_lines[0]  = "                SE - Screen Editor";
+        splash_lines[1]  = "";
+        splash_lines[2]  = "   type   [E]  or  [Enter] to edit";
+        splash_lines[3]  = "   type   [N]              to new file";
+        splash_lines[4]  = "   type   [O]              to open file";
+        splash_lines[5]  = "   type   [S]              to save file";
+        splash_lines[6]  = "   type   [W]  or  [^W]    to close file";
+        splash_lines[7]  = "   type   [L]  or  [^L]    to goto line";
+        splash_lines[8]  = "   type   [A]              for about";
+        splash_lines[9]  = "   type   [M]              for memory info";
+        splash_lines[10] = "   type   [P]              for plugins";
         splash_lines[11] = "   type   [^P]             for context plugin menu";
-        splash_lines[12] = "   type   [C]              to configure           ";
-        splash_lines[13] = "   type   [1]              set 80x24              ";
-        splash_lines[14] = "   type   [2]              set 120x40             ";
-        splash_lines[15] = "   type   [Q]  or  [^Q]    to exit                ";
-        splash_lines[16] = "                                                  ";
-        splash_lines[17] = line_screen;
-        splash_lines[18] = line_ram;
-        splash_lines[19] = line_plug;
-        splash_lines[20] = line_lines;
+        splash_lines[12] = "   type   [C]              to configure";
+        splash_lines[13] = "   type   [1]              set 80x24";
+        splash_lines[14] = "   type   [2]              set 120x40";
+        splash_lines[15] = "   type   [Q]  or  [^Q]    to exit";
+        splash_lines[16] = "";
+        if (g_config.screen_mode == MODE_120X40) {
+            splash_lines[17] =
+                "   Active Screen : [120x40 (Modern Default)]";
+#ifndef __CPM__
+        } else if (g_config.screen_mode == MODE_NATIVE) {
+            splash_lines[17] =
+                "   Active Screen : [Native (Dynamic Console)]";
+#endif
+        } else {
+            splash_lines[17] =
+                "   Active Screen : [80x24 (Classic Terminal)]";
+        }
+        if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
+            splash_lines[18] =
+                "   RAM Drive (A:): [Overwritten (Max RAM)]";
+        } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
+            splash_lines[18] =
+                "   RAM Drive (A:): [Hibernated (Temp Image)]";
+        } else {
+            splash_lines[18] =
+                "   RAM Drive (A:): [Preserved (Active)]";
+        }
+        if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
+            splash_lines[19] = "   Plugin System : [Disabled]";
+        } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
+            splash_lines[19] = "   Plugin System : [On Demand]";
+        } else {
+            splash_lines[19] = "   Plugin System : [Operational]";
+        }
+        splash_lines[20] = (g_config.lines_mode == 1) ?
+            "   Max Lines     : [32,768 lines]" :
+            "   Max Lines     : [16,384 lines]";
 
         if (need_render) {
             render_tier1_workspace_screen(splash_lines, 21, 50);
@@ -550,10 +499,10 @@ void show_splash_screen(void)
             }
             need_render = 1;
         } else if (k == 'l' || k == 'L' || k == KEY_CTRL_L) {
-            char lbuf[16] = {0};
-            if (modal_goto_line(lbuf, sizeof(lbuf)) == MODAL_RES_OK &&
-                lbuf[0]) {
-                int line_num = atoi(lbuf);
+            dlg_fname[0] = '\0';
+            if (modal_goto_line(dlg_fname, 16) == MODAL_RES_OK &&
+                dlg_fname[0]) {
+                int line_num = atoi(dlg_fname);
                 if (line_num > 0) {
                     goto_line((uint16_t)line_num);
                     break;
@@ -613,29 +562,32 @@ void show_splash_screen(void)
     g_need_screen_render = 1;
 }
 
+static const char s_help_eq[] =
+  "==========================================================================";
+
 static const char *s_help_lines[22] = {
-  "==========================================================================",
-  "                               EDITOR MODE KEYS                           ",
-  "==========================================================================",
-  "  FILE & SYSTEM:                                                          ",
+  s_help_eq,
+  "                               EDITOR MODE KEYS",
+  s_help_eq,
+  "  FILE & SYSTEM:",
   "    Ctrl+O           Open file screen      Ctrl+S         Save file screen",
-  "    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M    ",
-  "    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up  ",
-  "  NAVIGATION & SEARCH:                                                    ",
-  "    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line   ",
-  "    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line     ",
-  "    Ctrl+V / PgDn   Page Down              Ctrl+T / ^Home Top of file     ",
-  "    Ctrl+L          Goto line number       Ctrl+G / ^End  Bottom of file  ",
-  "    Ctrl+F          Find text              Ctrl+N         Find next       ",
+  "    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M",
+  "    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up",
+  "  NAVIGATION & SEARCH:",
+  "    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line",
+  "    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line",
+  "    Ctrl+V / PgDn   Page Down              Ctrl+T / ^Home Top of file",
+  "    Ctrl+L          Goto line number       Ctrl+G / ^End  Bottom of file",
+  "    Ctrl+F          Find text              Ctrl+N         Find next",
   "    Ctrl+R          Search and Replace     Ctrl+I / Tab   Toggle find case",
-  "  EDITING & BLOCK:                                                        ",
-  "    Insert          Toggle Insert/Ovr      Enter          New line        ",
+  "  EDITING & BLOCK:",
+  "    Insert          Toggle Insert/Ovr      Enter          New line",
   "    ASCII 32..126   Insert/Overwrite text  Backspace      Delete left/join",
   "    Delete / Ctrl+D Delete char or block   Ctrl+B         Start/Toggle blk",
-  "    Ctrl+C          Copy solidified block  Ctrl+K         Solidify block  ",
-  "    Ctrl+X          Move solidified block  ESC            Clear block     ",
+  "    Ctrl+C          Copy solidified block  Ctrl+K         Solidify block",
+  "    Ctrl+X          Move solidified block  ESC            Clear block",
   "--------------------------------------------------------------------------",
-  "                          Press any key to continue                       "
+  "                          Press any key to continue"
 };
 
 void show_help_screen(void)
@@ -659,15 +611,15 @@ void show_help_screen(void)
 void show_about_screen(void)
 {
     static const char *s_about_lines[9] = {
-        "                  SE - Screen Editor                  ",
-        "            version 1.1.0 (2026-10-09) (C)            ",
-        "                   by Dean Jenkins                    ",
-        "                                                      ",
-        "  Google Antigravity 2.19.1 & Gemini FLASH 3.8 high   ",
-        "      Open source software under the MIT License      ",
-        "                                                      ",
-        "              Press any key to continue               ",
-        "                                                      "
+        "                  SE - Screen Editor",
+        "            version 1.1.0 (2026-10-09) (C)",
+        "                   by Dean Jenkins",
+        "",
+        "  Google Antigravity 2.19.1 & Gemini FLASH 3.8 high",
+        "      Open source software under the MIT License",
+        "",
+        "              Press any key to continue",
+        ""
     };
     int k;
     hal_console_hide_cursor();
@@ -689,72 +641,49 @@ void show_about_screen(void)
 
 void show_config_screen(void)
 {
-    char line_status[64];
-    char line_geom[64];
-    char line_ram[64];
-    char line_lines[64];
-    char line_tab[64];
-    char line_plugin[64];
     const char *cfg_lines[11];
-    const char *geom_str;
-    const char *ram_str;
-    const char *plugin_str;
     int k;
     uint8_t need_render = 1;
 
     hal_console_hide_cursor();
 
     while (1) {
+        cfg_lines[0] = "            SE - Configuration Manager";
+        cfg_lines[1] = "";
+        cfg_lines[2] = g_config_loaded ?
+            "         Config Status: Loaded from SE.CFG" :
+            "         Config Status: Defaults";
+        cfg_lines[3] = "";
         if (g_config.screen_mode == MODE_120X40) {
-            geom_str = "120x40 (Wide)";
+            cfg_lines[4] = "         1. Screen Geometry  : 120x40 (Wide)";
+#ifndef __CPM__
         } else if (g_config.screen_mode == MODE_NATIVE) {
-            geom_str = "Native";
+            cfg_lines[4] = "         1. Screen Geometry  : Native";
+#endif
         } else {
-            geom_str = "80x24 (Classic)";
+            cfg_lines[4] = "         1. Screen Geometry  : 80x24 (Classic)";
         }
-
         if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
-            ram_str = "Enabled";
+            cfg_lines[5] = "         2. RAM Drive Mode   : Enabled";
         } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
-            ram_str = "Hibernate";
+            cfg_lines[5] = "         2. RAM Drive Mode   : Hibernate";
         } else {
-            ram_str = "Protected";
+            cfg_lines[5] = "         2. RAM Drive Mode   : Protected";
         }
-
+        cfg_lines[6] = (g_config.lines_mode == 1) ?
+            "         3. Max Doc Lines    : 32K" :
+            "         3. Max Doc Lines    : 16K";
+        cfg_lines[7] = (g_config.tab_width == 8) ?
+            "         4. Tab Width        : 8" :
+            "         4. Tab Width        : 4";
         if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
-            plugin_str = "Demand";
+            cfg_lines[8] = "         5. Plugin Manager   : Demand";
         } else if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
-            plugin_str = "Disabled";
+            cfg_lines[8] = "         5. Plugin Manager   : Disabled";
         } else {
-            plugin_str = "Autoload";
+            cfg_lines[8] = "         5. Plugin Manager   : Autoload";
         }
-
-        snprintf(line_status, sizeof(line_status),
-                 "         Config Status: %-26.26s",
-                 g_config_loaded ? "Loaded from SE.CFG" : "Defaults");
-        snprintf(line_geom, sizeof(line_geom),
-                 "         1. Screen Geometry  : %-19.19s", geom_str);
-        snprintf(line_ram, sizeof(line_ram),
-                 "         2. RAM Drive Mode   : %-19.19s", ram_str);
-        snprintf(line_lines, sizeof(line_lines),
-                 "         3. Max Doc Lines    : %-19.19s",
-                 (g_config.lines_mode == 1) ? "32K" : "16K");
-        snprintf(line_tab, sizeof(line_tab),
-                 "         4. Tab Width        : %-19u",
-                 (unsigned)g_config.tab_width);
-        snprintf(line_plugin, sizeof(line_plugin),
-                 "         5. Plugin Manager   : %-19.19s", plugin_str);
-
-        cfg_lines[0]  = "            SE - Configuration Manager            ";
-        cfg_lines[1]  = "                                                  ";
-        cfg_lines[2]  = line_status;
-        cfg_lines[3]  = "                                                  ";
-        cfg_lines[4]  = line_geom;
-        cfg_lines[5]  = line_ram;
-        cfg_lines[6]  = line_lines;
-        cfg_lines[7]  = line_tab;
-        cfg_lines[8]  = line_plugin;
-        cfg_lines[9]  = "                                                  ";
+        cfg_lines[9] = "";
         cfg_lines[10] = "  [1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit";
 
         if (need_render) {
@@ -829,19 +758,19 @@ void show_config_screen(void)
 
 void show_mem_info_screen(void)
 {
-    char line1[64];
-    char line2[64];
+    char line1[44];
+    char line2[44];
     const char *mem_lines[5];
 
-    snprintf(line1, sizeof(line1), "      Free Virtual Slots: %-6u        ",
+    snprintf(line1, sizeof(line1), "      Free Virtual Slots: %u",
              (unsigned)mem_get_free_slots());
-    snprintf(line2, sizeof(line2), "      Free Document Buffer: %-4u KB    ",
+    snprintf(line2, sizeof(line2), "      Free Document Buffer: %u KB",
              (unsigned)mem_get_free_kb());
-    mem_lines[0] = "    === Virtual Memory & Banking Status ===   ";
-    mem_lines[1] = "                                              ";
+    mem_lines[0] = "    === Virtual Memory & Banking Status ===";
+    mem_lines[1] = "";
     mem_lines[2] = line1;
     mem_lines[3] = line2;
-    mem_lines[4] = "          Press any key to return...          ";
+    mem_lines[4] = "          Press any key to return...";
 
     render_tier1_workspace_screen(mem_lines, 5, 46);
     hal_console_getkey();

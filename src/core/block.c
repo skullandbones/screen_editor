@@ -432,37 +432,15 @@ int do_block_menu_popup(void)
     uint8_t height = 7;
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
-    char line4[52];
     char metrics[32];
+    char fname[64];
     const char *pre;
-    size_t mlen;
-    int pad;
     int key;
-    uint8_t c;
 
     normalize_block_bounds();
 
     hal_console_hide_cursor();
-
-    /* Line 1: Top border */
-    hal_console_locate(top, left);
-    hal_console_putc('+');
-    for (c = 1; c < width - 1; c++) {
-        hal_console_putc('-');
-    }
-    hal_console_putc('+');
-
-    /* Line 2: Title */
-    hal_console_locate(top + 1, left);
-    hal_console_puts("|                Block Operations                |");
-
-    /* Line 3: Separator border */
-    hal_console_locate(top + 2, left);
-    hal_console_putc('+');
-    for (c = 1; c < width - 1; c++) {
-        hal_console_putc('-');
-    }
-    hal_console_putc('+');
+    modal_draw_frame(top, left, width, height, "Block Operations");
 
     /* Line 4: Dynamic Selection / Block count */
     pre = (g_block_mode == BLOCK_MODE_SOLIDIFIED) ?
@@ -477,44 +455,21 @@ int do_block_menu_popup(void)
         snprintf(metrics, sizeof(metrics), "%s%u %s",
                  pre, (unsigned)lines, (lines == 1) ? "line" : "lines");
     }
-    mlen = strlen(metrics);
-    pad = (48 - (int)mlen) / 2;
-    if (pad < 0) {
-        pad = 0;
-    }
-    line4[0] = '|';
-    memset(line4 + 1, ' ', 48);
-    memcpy(line4 + 1 + pad, metrics, mlen);
-    line4[49] = '|';
-    line4[50] = '\0';
-    hal_console_locate(top + 3, left);
-    hal_console_puts(line4);
+    modal_draw_row_centered(top + 3, left, width, metrics);
 
     /* Line 5: Primary Actions (Dynamic vs Solidified) */
-    hal_console_locate(top + 4, left);
-    if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
-        hal_console_puts(
-            "|      [^C]=Copy Block      [^X]=Move Block      |"
-        );
-    } else {
-        hal_console_puts(
-            "|  [Enter]=Lock/Set    [^C]=Copy    [^X]=Move    |"
-        );
-    }
-
-    /* Line 6: Commands */
-    hal_console_locate(top + 5, left);
-    hal_console_puts(
-        "|  [^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close  |"
+    modal_draw_row_centered(
+        top + 4, left, width,
+        (g_block_mode == BLOCK_MODE_SOLIDIFIED) ?
+        "[^C]=Copy Block      [^X]=Move Block" :
+        "[Enter]=Lock/Set    [^C]=Copy    [^X]=Move"
     );
 
-    /* Line 7: Bottom border */
-    hal_console_locate(top + 6, left);
-    hal_console_putc('+');
-    for (c = 1; c < width - 1; c++) {
-        hal_console_putc('-');
-    }
-    hal_console_putc('+');
+    /* Line 6: Commands */
+    modal_draw_row_centered(
+        top + 5, left, width,
+        "[^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close"
+    );
 
     while (1) {
         key = hal_console_getkey();
@@ -541,7 +496,6 @@ int do_block_menu_popup(void)
             do_delete_block();
             break;
         } else if (key == KEY_CTRL_S || key == 's' || key == 'S') {
-            char fname[128];
             solidify_block();
             normalize_block_bounds();
             fname[0] = '\0';
@@ -552,7 +506,6 @@ int do_block_menu_popup(void)
             }
             break;
         } else if (key == KEY_CTRL_O || key == 'r' || key == 'R') {
-            char fname[128];
             solidify_block();
             fname[0] = '\0';
             if (ui_browser_insert_dialog(fname, sizeof(fname)) ==

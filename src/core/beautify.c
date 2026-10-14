@@ -176,21 +176,19 @@ void align_columns(char *dest, size_t max_len,
 
 static void beautify_line(uint16_t row)
 {
-    char src[MAX_ACTIVE_LINE_STRIDE];
-    char dst[MAX_ACTIVE_LINE_STRIDE];
-    char label[32], mnem[32], ops[64], comm[128];
+    char label[24], mnem[16], ops[48], comm[80];
     uint16_t len;
 
-    len = fetch_line_to_buffer(row, src, MAX_ACTIVE_PAYLOAD);
+    len = fetch_line_to_buffer(row, g_scratch_line_buf, MAX_ACTIVE_PAYLOAD);
     if (len == 0) return;
 
-    parse_asm_line(src, label, sizeof(label), mnem, sizeof(mnem),
-                   ops, sizeof(ops), comm, sizeof(comm));
-    align_columns(dst, sizeof(dst), label, mnem, ops, comm);
+    parse_asm_line(g_scratch_line_buf, label, sizeof(label),
+                   mnem, sizeof(mnem), ops, sizeof(ops),
+                   comm, sizeof(comm));
 
     checkout_active_line(row);
-    strncpy(g_active_line_buf, dst, sizeof(g_active_line_buf) - 1);
-    g_active_line_buf[sizeof(g_active_line_buf) - 1] = '\0';
+    align_columns(g_active_line_buf, sizeof(g_active_line_buf),
+                  label, mnem, ops, comm);
     g_active_line_len = (uint16_t)strlen(g_active_line_buf);
     commit_active_line();
 }

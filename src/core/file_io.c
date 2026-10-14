@@ -21,7 +21,7 @@
 #include "../include/ui_modal.h"
 
 /* Global File Filename and Format State */
-char    g_current_filename[32] = {0};
+char    g_current_filename[32];
 #ifdef __CPM__
 uint8_t g_file_format = FMT_CPM;
 #else
@@ -88,6 +88,21 @@ cpm_fcb_t g_cpm_fcb;
 #define s_cpm_sec_buf g_cpm_dma_buf
 #define s_cpm_io_fcb  g_cpm_fcb
 
+static void cpm_commit_loaded_line(uint16_t row, uint16_t col,
+                                   uint8_t is_insert)
+{
+    g_scratch_line_buf[col] = '\0';
+    if (!is_insert && row == 0) {
+        checkout_active_line(0);
+    } else {
+        insert_blank_line(row);
+        checkout_active_line(row);
+    }
+    memcpy(g_active_line_buf, g_scratch_line_buf, col + 1);
+    g_active_line_len = col;
+    commit_active_line();
+}
+
 static int file_read_op(const char *filename, uint8_t is_insert)
 {
     char *line_buf = g_scratch_line_buf;
@@ -132,16 +147,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
                 continue;
             }
             if (c == '\n') {
-                line_buf[col] = '\0';
-                if (!is_insert && row == 0) {
-                    checkout_active_line(0);
-                } else {
-                    insert_blank_line(row);
-                    checkout_active_line(row);
-                }
-                memcpy(g_active_line_buf, line_buf, col + 1);
-                g_active_line_len = col;
-                commit_active_line();
+                cpm_commit_loaded_line(row, col, is_insert);
                 row++;
                 col = 0;
                 continue;
@@ -153,16 +159,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     }
 
     if (col > 0 || (!is_insert && row == 0)) {
-        line_buf[col] = '\0';
-        if (!is_insert && row == 0) {
-            checkout_active_line(0);
-        } else {
-            insert_blank_line(row);
-            checkout_active_line(row);
-        }
-        memcpy(g_active_line_buf, line_buf, col + 1);
-        g_active_line_len = col;
-        commit_active_line();
+        cpm_commit_loaded_line(row, col, is_insert);
         row++;
     }
 
@@ -183,6 +180,22 @@ static int file_read_op(const char *filename, uint8_t is_insert)
 
     checkout_active_line(g_cur_doc_row);
     g_need_screen_render = 1;
+    return 0;
+}
+
+static int cpm_write_byte(uint8_t b, uint8_t *sec_pos, uint16_t *rec_num)
+{
+    s_cpm_sec_buf[(*sec_pos)++] = b;
+    if (*sec_pos == 128) {
+        s_cpm_io_fcb.random_r0 = (uint8_t)(*rec_num & 0xFF);
+        s_cpm_io_fcb.random_r1 = (uint8_t)((*rec_num >> 8) & 0xFF);
+        s_cpm_io_fcb.random_r2 = 0;
+        if (bdos(34, (int)&s_cpm_io_fcb) != 0) {
+            return -1;
+        }
+        (*rec_num)++;
+        *sec_pos = 0;
+    }
     return 0;
 }
 
@@ -212,61 +225,23 @@ static int file_write_op(const char *filename, uint16_t start_row,
     for (row = start_row; row <= end_row && row < g_doc_total_lines; row++) {
         len = fetch_line_to_buffer(row, line_buf, MAX_ACTIVE_PAYLOAD);
         for (i = 0; i < len; i++) {
-            s_cpm_sec_buf[sec_pos++] = (uint8_t)line_buf[i];
-            if (sec_pos == 128) {
-                s_cpm_io_fcb.random_r0 = (uint8_t)(rec_num & 0xFF);
-                s_cpm_io_fcb.random_r1 = (uint8_t)((rec_num >> 8) & 0xFF);
-                s_cpm_io_fcb.random_r2 = 0;
-                if (bdos(34, (int)&s_cpm_io_fcb) != 0) {
-                    bdos(16, (int)&s_cpm_io_fcb);
-                    bdos(26, DEFAULT_DMA);
-                    return -1;
-                }
-                rec_num++;
-                sec_pos = 0;
+            if (cpm_write_byte((uint8_t)line_buf[i], &sec_pos, &rec_num) != 0) {
+                goto write_err;
             }
         }
         if (format == FMT_CPM) {
-            s_cpm_sec_buf[sec_pos++] = '\r';
-            if (sec_pos == 128) {
-                s_cpm_io_fcb.random_r0 = (uint8_t)(rec_num & 0xFF);
-                s_cpm_io_fcb.random_r1 = (uint8_t)((rec_num >> 8) & 0xFF);
-                s_cpm_io_fcb.random_r2 = 0;
-                if (bdos(34, (int)&s_cpm_io_fcb) != 0) {
-                    bdos(16, (int)&s_cpm_io_fcb);
-                    bdos(26, DEFAULT_DMA);
-                    return -1;
-                }
-                rec_num++;
-                sec_pos = 0;
+            if (cpm_write_byte('\r', &sec_pos, &rec_num) != 0) {
+                goto write_err;
             }
         }
-        s_cpm_sec_buf[sec_pos++] = '\n';
-        if (sec_pos == 128) {
-            s_cpm_io_fcb.random_r0 = (uint8_t)(rec_num & 0xFF);
-            s_cpm_io_fcb.random_r1 = (uint8_t)((rec_num >> 8) & 0xFF);
-            s_cpm_io_fcb.random_r2 = 0;
-            if (bdos(34, (int)&s_cpm_io_fcb) != 0) {
-                bdos(16, (int)&s_cpm_io_fcb);
-                bdos(26, DEFAULT_DMA);
-                return -1;
-            }
-            rec_num++;
-            sec_pos = 0;
+        if (cpm_write_byte('\n', &sec_pos, &rec_num) != 0) {
+            goto write_err;
         }
     }
 
-    if (sec_pos > 0) {
-        while (sec_pos < 128) {
-            s_cpm_sec_buf[sec_pos++] = 0x1A;
-        }
-        s_cpm_io_fcb.random_r0 = (uint8_t)(rec_num & 0xFF);
-        s_cpm_io_fcb.random_r1 = (uint8_t)((rec_num >> 8) & 0xFF);
-        s_cpm_io_fcb.random_r2 = 0;
-        if (bdos(34, (int)&s_cpm_io_fcb) != 0) {
-            bdos(16, (int)&s_cpm_io_fcb);
-            bdos(26, DEFAULT_DMA);
-            return -1;
+    while (sec_pos != 0) {
+        if (cpm_write_byte(0x1A, &sec_pos, &rec_num) != 0) {
+            goto write_err;
         }
     }
 
@@ -276,6 +251,11 @@ static int file_write_op(const char *filename, uint16_t start_row,
     checkout_active_line(g_cur_doc_row);
     g_need_screen_render = 1;
     return 0;
+
+write_err:
+    bdos(16, (int)&s_cpm_io_fcb);
+    bdos(26, DEFAULT_DMA);
+    return -1;
 }
 #else
 static int file_read_op(const char *filename, uint8_t is_insert)
