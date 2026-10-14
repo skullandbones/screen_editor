@@ -75,7 +75,8 @@ CURRENT_DIR_IS_FAT:	DB	0		; 0=CP/M drive, 1=FAT volume
 CURRENT_DIR_FAT_UNIT:	DB	0FFH	; FAT browsing unit (0..7, 0xFF=default)
 CURRENT_DIR_FAT_PATH:	DS	64	; Active directory path (e.g. "/")
 BLOCK_INSERT_IS_FAT:	DB	0		; 1 during FAT block insertion
-FAT_INSERT_PATH:	DS	64	; Buffer for block insertion path
+; Buffer for block insertion path (64B overlaid on CFG_IO_BUF)
+FAT_INSERT_PATH		EQU	CFG_IO_BUF
 CMDLINE_IS_FAT:		DB	0	; 1 if startup argument was FAT file
 CMDLINE_FAT_UNIT:	DB	0FFH	; Unit from command line argument
 STR_SLASH:		DB	"/",0
@@ -94,7 +95,8 @@ VFS_REQ_BUFSIZE:	DW	0		; +8: Buffer capacity
 VFS_REQ_COUNT:		DW	0		; +10: Output count
 VFS_REQ_START_LINE:	DW	0		; +12: Start line for block save
 VFS_REQ_END_LINE:	DW	0		; +14: End line for block save
-FAT_CHUNK_BUF:		DS	128		; FAT stream buffer (Common RAM)
+; FAT stream buffer in Common RAM (128B overlaid on CFG_IO_BUF + 64)
+FAT_CHUNK_BUF		EQU	CFG_IO_BUF + 64
 
 ;==============================================================================
 ; Upper Memory Host API Trampoline & Vector Table
