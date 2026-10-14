@@ -72,6 +72,27 @@ void modal_draw_row_centered(uint8_t row, uint8_t left,
     hal_console_putc('|');
 }
 
+void modal_draw_row_left(uint8_t row, uint8_t left,
+                         uint8_t width, const char *str)
+{
+    size_t len = str ? strlen(str) : 0;
+    uint8_t interior_w = (width > 2) ? (width - 2) : 0;
+    size_t i;
+
+    if (len > interior_w) {
+        len = interior_w;
+    }
+    hal_console_locate(row, left);
+    hal_console_putc('|');
+    for (i = 0; i < len; i++) {
+        hal_console_putc(str[i]);
+    }
+    for (i = len; i < interior_w; i++) {
+        hal_console_putc(' ');
+    }
+    hal_console_putc('|');
+}
+
 void modal_draw_frame(uint8_t top, uint8_t left,
                       uint8_t width, uint8_t height,
                       const char *title)
@@ -321,12 +342,6 @@ int modal_prompt_text(const char *title, const char *prompt,
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_DOWN || k == KEY_UP ||
-                   k == KEY_PGDN || k == KEY_CTRL_V ||
-                   k == KEY_PGUP || k == KEY_CTRL_U) {
-            hal_console_hide_cursor();
-            g_need_screen_render = 1;
-            return k;
         } else if (k == KEY_LEFT) {
             if (cursor_pos > 0) {
                 cursor_pos--;
@@ -449,14 +464,14 @@ int modal_confirm_save_changes(void)
                 MODAL_RES_OK || !dlg_fname[0]) {
                 return MODAL_RES_CANCEL;
             }
-            if (file_save(dlg_fname, g_config.save_format) != 0) {
+            if (file_save(dlg_fname, g_file_format) != 0) {
                 return MODAL_RES_CANCEL;
             }
             strncpy(g_current_filename, dlg_fname,
                     sizeof(g_current_filename) - 1);
             g_current_filename[sizeof(g_current_filename) - 1] = '\0';
         } else {
-            if (file_save(NULL, g_config.save_format) != 0) {
+            if (file_save(NULL, g_file_format) != 0) {
                 return MODAL_RES_CANCEL;
             }
         }

@@ -16,6 +16,8 @@
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
 #include "../include/plugin.h"
+#include "../include/editor.h"
+#include "../include/beautify.h"
 #include "../include/hal.h"
 
 static plugin_entry_t s_plugin_registry[PLUGIN_MAX_SLOTS];
@@ -105,13 +107,150 @@ void plugin_manager_ui(void)
         hal_console_puts(buf);
     }
 
-    hal_console_locate(top + 13, left + 4);
-    hal_console_puts("Press Esc or Q to return to editor...");
+        hal_console_locate(top + 13, left + 4);
+        hal_console_puts("Press Esc or Q to return to editor...");
+        while (1) {
+            int k = hal_console_getkey();
+            if (k == KEY_ESC || k == 'q' || k == 'Q') {
+                break;
+            }
+        }
+        g_need_screen_render = 1;
+}
+
+static void exec_rot13(void)
+{
+    uint16_t i;
+    for (i = 0; i < g_active_line_len; i++) {
+        char c = g_active_line_buf[i];
+        if (c >= 'a' && c <= 'z') {
+            g_active_line_buf[i] = (char)('a' + (c - 'a' + 13) % 26);
+        } else if (c >= 'A' && c <= 'Z') {
+            g_active_line_buf[i] = (char)('A' + (c - 'A' + 13) % 26);
+        }
+    }
+    g_doc_modified = 1;
+}
+
+static void exec_wordcnt(void)
+{
+    uint16_t r;
+    uint32_t words = 0;
+    uint32_t chars = 0;
+    char lbuf[LINE_STORAGE_STRIDE + 2];
+    char msg1[48];
+    char msg2[48];
+
+    commit_active_line();
+    for (r = 0; r < g_doc_total_lines; r++) {
+        uint16_t len = fetch_line_to_buffer(r, lbuf, sizeof(lbuf));
+        const char *p = lbuf;
+        int in_word = 0;
+        chars += len;
+        while (*p) {
+            if ((unsigned char)*p > ' ') {
+                if (!in_word) {
+                    words++;
+                    in_word = 1;
+                }
+            } else {
+                in_word = 0;
+            }
+            p++;
+        }
+    }
+    snprintf(msg1, sizeof(msg1), "Lines: %u    Words: %u",
+             (unsigned)g_doc_total_lines, (unsigned)words);
+    snprintf(msg2, sizeof(msg2), "Characters: %u", (unsigned)chars);
+    modal_alert("Word Count", msg1, msg2);
+}
+
+void show_plugin_palette(void)
+{
+    typedef struct {
+        char name[12];
+        char desc[36];
+    } palette_item_t;
+
+    palette_item_t items[8];
+    uint8_t num_items = 0;
+    uint8_t selected = 0;
+    uint8_t width = 50;
+    uint8_t height;
+    uint8_t top, left;
+    uint8_t i;
+
+    strcpy(items[0].name, "ROT13");
+    strcpy(items[0].desc, "Rotate letters by 13");
+    strcpy(items[1].name, "WORDCNT");
+    strcpy(items[1].desc, "Document word, line, count");
+    strcpy(items[2].name, "BEAUTIFY");
+    strcpy(items[2].desc, "Align Z80 assembly labels");
+    num_items = 3;
+
+    height = (uint8_t)(num_items + 6);
+    top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+
+    hal_console_hide_cursor();
+
     while (1) {
-        int k = hal_console_getkey();
-        if (k == KEY_ESC || k == 'q' || k == 'Q') {
+        modal_draw_frame(top, left, width, height, "Plugin Palette");
+        modal_draw_row_centered(top + 3, left, width,
+                                "Select a plugin to execute:");
+
+        for (i = 0; i < num_items; i++) {
+            char line_buf[80];
+            snprintf(line_buf, sizeof(line_buf), "  %s%u. %-8.8s - %-.30s",
+                     (i == selected) ? "> " : "  ",
+                     (unsigned)(i + 1),
+                     items[i].name,
+                     items[i].desc);
+            modal_draw_row_left(top + 4 + i, left, width, line_buf);
+        }
+
+        modal_draw_row_centered(top + 4 + num_items, left, width,
+            "[Up/Down]=Select   [Enter]=Run   [ESC]=Cancel");
+
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
+            /* Wait for key */
+        }
+
+        if (k == KEY_ESC) {
+            break;
+        }
+        if (k == KEY_ENTER || k == '\r' || k == '\n') {
+            clear_screen();
+            g_need_screen_render = 1;
+            if (strcmp(items[selected].name, "ROT13") == 0) {
+                exec_rot13();
+            } else if (strcmp(items[selected].name, "WORDCNT") == 0) {
+                exec_wordcnt();
+            } else if (strcmp(items[selected].name, "BEAUTIFY") == 0) {
+                do_ctrl_y_beautify();
+            }
+            break;
+        }
+        if (k == KEY_UP || k == KEY_CTRL_E) {
+            selected = (selected == 0) ? (num_items - 1) : (selected - 1);
+        } else if (k == KEY_DOWN || k == KEY_CTRL_X) {
+            selected = (selected + 1) % num_items;
+        } else if (k >= '1' && k < '1' + num_items) {
+            selected = (uint8_t)(k - '1');
+            clear_screen();
+            g_need_screen_render = 1;
+            if (strcmp(items[selected].name, "ROT13") == 0) {
+                exec_rot13();
+            } else if (strcmp(items[selected].name, "WORDCNT") == 0) {
+                exec_wordcnt();
+            } else if (strcmp(items[selected].name, "BEAUTIFY") == 0) {
+                do_ctrl_y_beautify();
+            }
             break;
         }
     }
+
+    clear_screen();
     g_need_screen_render = 1;
 }

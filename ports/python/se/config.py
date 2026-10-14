@@ -13,7 +13,7 @@ class Config:
     Manages editor configuration settings compatible with SE.CFG.
     """
 
-    DEFAULT_SCREEN = "120X40"
+    DEFAULT_SCREEN = "80X24"
     DEFAULT_TAB_WIDTH = 8
     DEFAULT_FORMAT = "CPM"
     DEFAULT_MAX_LINES = "16K"

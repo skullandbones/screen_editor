@@ -183,6 +183,47 @@ class TestTerminal(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_68_drain_unrecognized_escape_sequences(self):
+        """Step 10: Verify anti-leakage draining of unrecognized escapes."""
+        print(
+            "[*] Step 10: Testing anti-leakage escape sequence draining...",
+            flush=True,
+        )
+        # 1. Unrecognized function key F5 (\x1b[15~) followed by 'X'
+        with patch("sys.stdin", io.StringIO("\x1b[15~X")):
+            with patch.object(self.term, "is_key_ready", return_value=True):
+                k1 = self.term.get_key(timeout=0.1)
+                self.assertIsNone(k1)
+                k2 = self.term.get_key(timeout=0.1)
+                self.assertEqual(k2, "X")
+
+        # 2. Unrecognized function key F12 (\x1b[24~) followed by 'Y'
+        with patch("sys.stdin", io.StringIO("\x1b[24~Y")):
+            with patch.object(self.term, "is_key_ready", return_value=True):
+                k1 = self.term.get_key(timeout=0.1)
+                self.assertIsNone(k1)
+                k2 = self.term.get_key(timeout=0.1)
+                self.assertEqual(k2, "Y")
+
+        # 3. Mouse reporting sequence (\x1b[<0;20;10M) followed by 'Z'
+        with patch("sys.stdin", io.StringIO("\x1b[<0;20;10MZ")):
+            with patch.object(self.term, "is_key_ready", return_value=True):
+                k1 = self.term.get_key(timeout=0.1)
+                self.assertIsNone(k1)
+                k2 = self.term.get_key(timeout=0.1)
+                self.assertEqual(k2, "Z")
+
+        # 4. Incomplete/truncated CSI (\x1b[)
+        with patch("sys.stdin", io.StringIO("\x1b[")):
+            with patch.object(self.term, "is_key_ready", return_value=True):
+                k = self.term.get_key(timeout=0.1)
+                self.assertIsNone(k)
+
+        print(
+            "[+] Step 10: Anti-leakage escape sequence draining verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     t0 = unittest.runner.time.time()

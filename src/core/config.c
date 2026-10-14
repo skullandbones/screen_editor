@@ -17,6 +17,7 @@
 
 /* Global Configuration Instance */
 editor_config_t g_config;
+uint8_t         g_config_loaded = 0;
 
 static char *trim_whitespace(char *str)
 {
@@ -38,12 +39,17 @@ static char *trim_whitespace(char *str)
 
 void config_init_defaults(void)
 {
-    g_config.tab_width = 8;
+    g_config_loaded = 0;
+    g_config.tab_width = 4;
     g_config.lines_mode = 0;             /* 16K lines */
-    g_config.screen_mode = MODE_120X40;  /* Canonical 120x40 (§13.2) */
+    g_config.screen_mode = MODE_80X24;  /* Canonical 80x24 (Section 13.2) */
     g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
     g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
+#ifdef __CPM__
     g_config.save_format = FMT_CPM;
+#else
+    g_config.save_format = FMT_LINUX;
+#endif
     g_config.auto_indent = 1;
     g_config.show_line_endings = 0;
 }
@@ -86,14 +92,6 @@ static void parse_config_line(char *line)
         int w = atoi(val);
         if (w == 4 || w == 8) {
             g_config.tab_width = (uint8_t)w;
-        }
-    } else if (strcasecmp(key, "FORMAT") == 0 ||
-               strcasecmp(key, "SAVE_FMT") == 0) {
-        if (strcasecmp(val, "LINUX") == 0 || strcasecmp(val, "LF") == 0) {
-            g_config.save_format = FMT_LINUX;
-        } else if (strcasecmp(val, "CPM") == 0 ||
-                   strcasecmp(val, "CRLF") == 0) {
-            g_config.save_format = FMT_CPM;
         }
     } else if (strcasecmp(key, "LINES") == 0 ||
                strcasecmp(key, "MAXLINES") == 0 ||
@@ -285,6 +283,7 @@ int config_load_file(const char *filename)
     }
 
     fclose(fp);
+    g_config_loaded = 1;
     return 0;
 }
 
@@ -331,6 +330,7 @@ int config_save_file(const char *filename)
     fprintf(fp, "AUTO_INDENT=%u\r\n", (unsigned)g_config.auto_indent);
 
     fclose(fp);
+    g_config_loaded = 1;
     return 0;
 }
 #endif

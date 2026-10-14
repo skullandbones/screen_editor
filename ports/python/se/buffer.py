@@ -9,7 +9,7 @@ from typing import List, Optional, Tuple
 MAX_LINE_CHARS = 1000
 MAX_INPUT_LINE_CHARS = 1000
 MAX_LINE_LENGTH = MAX_LINE_CHARS
-LINE_JOIN_LIMIT = 120
+LINE_JOIN_LIMIT = MAX_INPUT_LINE_CHARS
 
 
 def calc_visual_col(line: str, cur_col: int, tab_width: int = 8) -> int:
@@ -59,8 +59,6 @@ def adjust_col_to_target(
     while char_idx < len(line) and vis_acc < target_col:
         if line[char_idx] == "\t":
             spaces = tab_width - (vis_acc % tab_width)
-            if vis_acc + spaces > target_col:
-                break
             vis_acc += spaces
             char_idx += 1
         else:
@@ -87,7 +85,7 @@ class DocumentBuffer:
         self.pan_col: int = 0
         self.tab_width: int = tab_width
         self.modified: bool = False
-        self.format_cpm: bool = True  # True = CP/M CRLF, False = Linux LF
+        self.format_cpm: bool = False  # False = Linux LF, True = CP/M CRLF
         self.clipboard: str = ""
 
         # Block selection state: 0 = none, 1 = dynamic, 2 = solidified
@@ -367,6 +365,169 @@ class DocumentBuffer:
             parts.append(self.lines[r])
         parts.append(self.lines[r2][:c2])
         return "\n".join(parts)
+
+    def is_cursor_in_block(
+        self, row: Optional[int] = None, col: Optional[int] = None
+    ) -> bool:
+        """Check if given or current cursor position is inside active block."""
+        if self.block_active == 0:
+            return False
+        r = self.cursor_row if row is None else row
+        c = self.cursor_col if col is None else col
+        r1, c1, r2, c2 = self.get_normalized_block()
+        if r < r1 or r > r2:
+            return False
+        if r1 == r2:
+            return c1 <= c < c2
+        if r == r1:
+            return c >= c1
+        if r == r2:
+            return c < c2
+        return True
+
+    def copy_block_to_cursor(self) -> bool:
+        """
+        Direct in-place copy: copy marked block directly to cursor position.
+        Does not use an intermediary clipboard (UI_UX_DESIGN.md Section 9.3).
+        """
+        if self.block_active == 0:
+            return False
+        if self.block_active == 1:
+            self.solidify_block()
+
+        if self.is_cursor_in_block():
+            return False
+
+        text = self.get_selected_text()
+        if not text:
+            return False
+
+        orig_cur_row = self.cursor_row
+        orig_cur_col = self.cursor_col
+        r1, c1, r2, c2 = self.get_normalized_block()
+
+        parts = text.split("\n")
+        lines_added = len(parts) - 1
+
+        if lines_added == 0:
+            line = self.current_line
+            col = min(len(line), self.cursor_col)
+            rem = MAX_LINE_LENGTH - len(line)
+            to_insert = parts[0][:rem]
+            self.lines[self.cursor_row] = (
+                line[:col] + to_insert + line[col:]
+            )[:MAX_LINE_LENGTH]
+            self.cursor_col = col + len(to_insert)
+            self.target_col = self.get_visual_col()
+        else:
+            line = self.current_line
+            col = min(len(line), self.cursor_col)
+            prefix = line[:col]
+            suffix = line[col:]
+            self.lines[self.cursor_row] = (prefix + parts[0])[:MAX_LINE_LENGTH]
+            for i in range(1, len(parts) - 1):
+                self.lines.insert(
+                    self.cursor_row + i, parts[i][:MAX_LINE_LENGTH]
+                )
+            last_idx = self.cursor_row + len(parts) - 1
+            self.lines.insert(
+                last_idx, (parts[-1] + suffix)[:MAX_LINE_LENGTH]
+            )
+            self.cursor_row = last_idx
+            self.cursor_col = len(parts[-1])
+            self.target_col = self.get_visual_col()
+
+        # Adjust source block coordinates if copy was inserted before/on block
+        if orig_cur_row < r1:
+            if lines_added > 0:
+                self.block_start_row = r1 + lines_added
+                self.block_end_row = r2 + lines_added
+        elif orig_cur_row == r1 and orig_cur_col <= c1:
+            if lines_added > 0:
+                shift_col = len(parts[-1]) + (c1 - orig_cur_col)
+                self.block_start_row = r1 + lines_added
+                self.block_start_col = shift_col
+                self.block_end_row = r2 + lines_added
+                if r1 == r2:
+                    self.block_end_col = len(parts[-1]) + (c2 - orig_cur_col)
+            else:
+                span = len(parts[0])
+                self.block_start_row = r1
+                self.block_start_col = c1 + span
+                self.block_end_row = r2
+                self.block_end_col = c2 + span
+
+        self.modified = True
+        return True
+
+    def move_block_to_cursor(self) -> bool:
+        """
+        Direct in-place move: relocate marked block directly to cursor.
+        Does not use an intermediary clipboard (UI_UX_DESIGN.md Section 9.3).
+        """
+        if self.block_active == 0:
+            return False
+        if self.block_active == 1:
+            self.solidify_block()
+
+        if self.is_cursor_in_block():
+            return False
+
+        move_dest_row = self.cursor_row
+        move_dest_col = self.cursor_col
+        r1, c1, r2, c2 = self.get_normalized_block()
+
+        dest_is_before = (
+            move_dest_row < r1 or (move_dest_row == r1 and move_dest_col < c1)
+        )
+
+        # 1. Copy block to destination
+        if not self.copy_block_to_cursor():
+            return False
+
+        # 2. Delete original block
+        if dest_is_before:
+            # Source block coordinates were shifted by copy_block_to_cursor
+            self.delete_block()
+            self.cursor_row = move_dest_row
+            self.cursor_col = move_dest_col
+        else:
+            # Source block is before destination. Restore source bounds
+            self.block_start_row = r1
+            self.block_start_col = c1
+            self.block_end_row = r2
+            self.block_end_col = c2
+            self.block_active = 2
+            self.delete_block()
+
+            if r1 == r2:
+                if move_dest_row == r1:
+                    blk_len = c2 - c1
+                    self.cursor_row = move_dest_row
+                    self.cursor_col = max(0, move_dest_col - blk_len)
+                else:
+                    self.cursor_row = move_dest_row
+                    self.cursor_col = move_dest_col
+            else:
+                k = r2 - r1
+                self.cursor_row = max(0, move_dest_row - k)
+                self.cursor_col = move_dest_col
+
+        # 3. Restore solidified block around the moved text at destination
+        self.block_active = 2
+        self.block_start_row = self.cursor_row
+        self.block_start_col = self.cursor_col
+        if r1 == r2:
+            self.block_end_row = self.cursor_row
+            self.block_end_col = self.cursor_col + (c2 - c1)
+        else:
+            k = r2 - r1
+            self.block_end_row = self.cursor_row + k
+            self.block_end_col = c2
+
+        self.target_col = self.get_visual_col()
+        self.modified = True
+        return True
 
     def copy_block(self) -> str:
         """Copy selected block text into clipboard buffer."""

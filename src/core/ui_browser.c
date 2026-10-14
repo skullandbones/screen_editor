@@ -454,7 +454,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             hal_console_putc('~');
             if (mode == BROWSER_MODE_SAVE || mode == BROWSER_MODE_SAVE_BLOCK) {
                 hal_console_puts("  Format: [");
-                hal_console_puts((g_config.save_format == FMT_CPM)
+                hal_console_puts((g_file_format == FMT_CPM)
                                  ? "CP/M" : "Linux");
                 hal_console_puts("]   [^F]=Toggle Format");
             } else if (total_pages > 1) {
@@ -681,9 +681,8 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             }
         } else if (k == KEY_CTRL_F) {
             if (mode == BROWSER_MODE_SAVE || mode == BROWSER_MODE_SAVE_BLOCK) {
-                g_config.save_format = (g_config.save_format == FMT_CPM)
+                g_file_format = (g_file_format == FMT_CPM)
                     ? FMT_LINUX : FMT_CPM;
-                g_file_format = g_config.save_format;
                 need_full_render = 1;
             }
         } else if (k == KEY_PGUP || k == KEY_CTRL_R) {

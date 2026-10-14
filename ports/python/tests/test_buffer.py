@@ -356,8 +356,8 @@ class TestBuffer(unittest.TestCase):
         buf.target_col = 2
         buf.move_down()
         self.assertEqual(buf.cursor_row, 1)
-        # Target 2 falls inside the tab (0..3), so it must clamp to 0
-        self.assertEqual(buf.cursor_col, 0)
+        # Target 2 falls inside tab, snap-forward aligns to col 1 (after tab)
+        self.assertEqual(buf.cursor_col, 1)
         self.assertEqual(buf.target_col, 2)
 
         # Moving down restores cursor to col 2 on line without leading tabs
@@ -523,7 +523,7 @@ class TestBuffer(unittest.TestCase):
         )
         self.assertEqual(MAX_LINE_CHARS, 1000)
         self.assertEqual(MAX_INPUT_LINE_CHARS, 1000)
-        self.assertEqual(LINE_JOIN_LIMIT, 120)
+        self.assertEqual(LINE_JOIN_LIMIT, 1000)
 
         # 1. calc_visual_col clamps at 1,000 chars
         line_1000 = "A" * 1000
@@ -548,25 +548,150 @@ class TestBuffer(unittest.TestCase):
         buf.update_pan(view_cols=120)
         self.assertEqual(buf.pan_col, 80)
 
-        # 3. Line joining is preserved at LINE_JOIN_LIMIT (120 chars)
+        # 3. Line joining is preserved at LINE_JOIN_LIMIT (1,000 chars)
         join_buf = DocumentBuffer()
-        join_buf.lines = ["A" * 70, "B" * 60]  # 70 + 60 = 130 > 120
+        join_buf.lines = ["A" * 600, "B" * 500]  # 600 + 500 = 1100 > 1000
         join_buf.cursor_row = 0
-        join_buf.cursor_col = 70
+        join_buf.cursor_col = 600
         self.assertFalse(join_buf.delete_char())
         join_buf.cursor_row = 1
         join_buf.cursor_col = 0
         self.assertFalse(join_buf.backspace())
 
-        # Join when sum <= 120
-        join_buf.lines = ["A" * 60, "B" * 60]  # 60 + 60 = 120
+        # Join when sum <= 1000
+        join_buf.lines = ["A" * 500, "B" * 500]  # 500 + 500 = 1000
         join_buf.cursor_row = 0
-        join_buf.cursor_col = 60
+        join_buf.cursor_col = 500
         self.assertTrue(join_buf.delete_char())
-        self.assertEqual(len(join_buf.lines[0]), 120)
+        self.assertEqual(len(join_buf.lines[0]), 1000)
 
         print(
             "[+] Step 14: 1,000-char capacity and 120x40 pan verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_60_direct_in_place_block_ops(self):
+        """Step 15: Verify direct in-place copy and move block methods."""
+        print(
+            "[*] Step 15: Testing direct in-place block methods...",
+            flush=True,
+        )
+        buf = DocumentBuffer()
+        buf.lines = ["Line 1", "Line 2 - TARGET", "Line 3"]
+        buf.cursor_row = 1
+        buf.cursor_col = 9
+        buf.block_active = 2
+        buf.block_start_row = 1
+        buf.block_start_col = 9
+        buf.block_end_row = 1
+        buf.block_end_col = 15  # "TARGET"
+
+        # Check cursor inside block
+        self.assertTrue(buf.is_cursor_in_block(1, 10))
+        self.assertFalse(buf.is_cursor_in_block(1, 8))
+        self.assertFalse(buf.is_cursor_in_block(1, 15))
+
+        # Copy block to Line 0 Col 0
+        buf.cursor_row = 0
+        buf.cursor_col = 0
+        ok = buf.copy_block_to_cursor()
+        self.assertTrue(ok)
+        self.assertEqual(buf.lines[0], "TARGETLine 1")
+        # Source block shifted
+        self.assertEqual(buf.block_start_row, 1)
+
+        # Move block from Line 1 to Line 2 Col 0
+        buf.cursor_row = 2
+        buf.cursor_col = 0
+        ok = buf.move_block_to_cursor()
+        self.assertTrue(ok)
+        self.assertEqual(buf.lines[2], "TARGETLine 3")
+        self.assertEqual(buf.lines[1], "Line 2 - ")
+
+        print(
+            "[+] Step 15: Direct in-place block methods verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_65_snap_forward_tab_alignment(self):
+        """Step 16: Verify snap-forward vertical tab alignment clamping."""
+        print(
+            "[*] Step 16: Testing snap-forward tab alignment clamping...",
+            flush=True,
+        )
+        line = "\tindented"  # tab expands to columns 0..7
+        # Target column 0 stays at 0 (before tab)
+        self.assertEqual(adjust_col_to_target(line, 0, tab_width=8), 0)
+        # Target columns 1..7 fall within the tab, so cursor snaps forward
+        # to char_idx 1 (column 8, directly after tab)
+        for col in range(1, 8):
+            self.assertEqual(
+                adjust_col_to_target(line, col, tab_width=8),
+                1,
+                f"Failed for target col {col}",
+            )
+        # Target column 8 is at the boundary (char_idx 1)
+        self.assertEqual(adjust_col_to_target(line, 8, tab_width=8), 1)
+        # Target column 9 points to 'n' (char_idx 2)
+        self.assertEqual(adjust_col_to_target(line, 9, tab_width=8), 2)
+
+        # Also test on DocumentBuffer cursor vertical movement
+        buf = DocumentBuffer(tab_width=8)
+        buf.lines = ["12345678", "\tindented"]
+        buf.cursor_row = 0
+        buf.cursor_col = 4
+        buf.target_col = 4
+        buf.move_down()
+        # Should snap forward to char_idx 1 (after tab) rather than 0
+        self.assertEqual(buf.cursor_row, 1)
+        self.assertEqual(buf.cursor_col, 1)
+        # Target col remains sticky at 4
+        self.assertEqual(buf.target_col, 4)
+
+        print(
+            "[+] Step 16: Snap-forward tab alignment clamping verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_66_line_join_limit_1000_chars(self):
+        """Step 17: Verify line join barrier limit at 1,000 characters."""
+        print(
+            "[*] Step 17: Testing line join barrier limit at 1,000 chars...",
+            flush=True,
+        )
+        self.assertEqual(LINE_JOIN_LIMIT, 1000)
+        self.assertEqual(LINE_JOIN_LIMIT, MAX_INPUT_LINE_CHARS)
+
+        # Lines whose sum is 121 (previously blocked by 120 limit) now join
+        buf = DocumentBuffer()
+        buf.lines = ["A" * 60, "B" * 61]
+        buf.cursor_row = 0
+        buf.cursor_col = 60
+        self.assertTrue(buf.delete_char())
+        self.assertEqual(len(buf.lines[0]), 121)
+
+        # Backspace at col 0 joins up to 1000 chars
+        buf2 = DocumentBuffer()
+        buf2.lines = ["Hello " * 50, "World " * 50]  # 300 + 300 = 600
+        buf2.cursor_row = 1
+        buf2.cursor_col = 0
+        self.assertTrue(buf2.backspace())
+        self.assertEqual(len(buf2.lines[0]), 600)
+        self.assertEqual(buf2.cursor_row, 0)
+        self.assertEqual(buf2.cursor_col, 300)
+
+        # Combined length > 1,000 is rejected
+        buf3 = DocumentBuffer()
+        buf3.lines = ["A" * 700, "B" * 301]  # 700 + 301 = 1001 > 1000
+        buf3.cursor_row = 0
+        buf3.cursor_col = 700
+        self.assertFalse(buf3.delete_char())
+        buf3.cursor_row = 1
+        buf3.cursor_col = 0
+        self.assertFalse(buf3.backspace())
+
+        print(
+            "[+] Step 17: Line join barrier limit 1,000 chars verified.",
             flush=True,
         )
 

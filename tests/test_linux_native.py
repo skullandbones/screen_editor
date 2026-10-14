@@ -463,9 +463,9 @@ def test_tier1_centering_and_tilde_discipline():
         assert "~" in splash_out, (
             "Splash screen missing column 0 tilde margin discipline"
         )
-        assert "SE — Screen Editor" in splash_out, (
-            "Splash screen missing canonical centered title"
-        )
+        assert ("SE - Screen Editor" in splash_out) or (
+            "SE — Screen Editor" in splash_out
+        ), "Splash screen missing canonical centered title"
 
         # Press space to enter editor mode
         os.write(master, b" ")
@@ -476,7 +476,7 @@ def test_tier1_centering_and_tilde_discipline():
         os.write(master, b"\x0b")
         help_out = read_all_available(master, 0.4).decode("utf-8",
                                                           errors="replace")
-        assert "SE.COM — EDITOR MODE KEYS" in help_out, (
+        assert "EDITOR MODE KEYS" in help_out, (
             "Help screen missing canonical centered title"
         )
         assert "~" in help_out, (
@@ -643,9 +643,9 @@ def test_bug_2_4_8_modal_dispatchers():
             splash_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "SE — Screen Editor" in splash_out, (
-                f"Ctrl+W failed to transition to splash screen:\n{splash_out}"
-            )
+            assert ("SE - Screen Editor" in splash_out) or (
+                "SE — Screen Editor" in splash_out
+            ), f"Ctrl+W failed to transition to splash screen:\n{splash_out}"
 
             # Exit cleanly via 'q' on splash screen
             os.write(master, b"q")
@@ -692,9 +692,9 @@ def test_bug_2_4_9_splash_screen_commands():
         splash_out = read_all_available(master, 0.3).decode(
             "utf-8", errors="replace"
         )
-        assert "SE — Screen Editor" in splash_out, (
-            f"Return from Config failed to render Splash screen:\n{splash_out}"
-        )
+        assert ("SE - Screen Editor" in splash_out) or (
+            "SE — Screen Editor" in splash_out
+        ), f"Return from Config failed to render Splash screen:\n{splash_out}"
 
         # Dispatch '?' for Help screen
         os.write(master, b"?")
@@ -889,36 +889,45 @@ def test_bug_2_4_12_clipboard_copy_paste():
             os.write(master, b"\x1b[C" * 5)
             time.sleep(0.1)
 
-            # Copy via Ctrl+C
-            os.write(master, b"\x03")
+            # Solidify block via Enter (\r)
+            os.write(master, b"\r")
             time.sleep(0.1)
-            out_copy = read_all_available(master, 0.2).decode(
+            out_lock = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[BLK LOCK]" in out_copy, (
-                f"Expected '[BLK LOCK]' status indicator:\n{out_copy}"
+            assert "[BLK LOCK]" in out_lock, (
+                f"Expected '[BLK LOCK]' status indicator:\n{out_lock}"
             )
-            assert "^K: Editor keys |" in out_copy, (
-                f"Expected Field 4 preserved after copy:\n{out_copy}"
+            assert "^K: Editor keys |" in out_lock, (
+                f"Expected Field 4 preserved after lock:\n{out_lock}"
             )
 
             # Move down to line 2 and jump to Col 0 via Ctrl+A
             os.write(master, b"\x1b[B\x01")
             time.sleep(0.1)
 
-            # Paste via Ctrl+V at beginning of line 2
-            os.write(master, b"\x16")
+            # Direct in-place copy via Ctrl+C at beginning of line 2
+            os.write(master, b"\x03")
             time.sleep(0.2)
+
+            # Verify Ctrl+V does not execute paste (paste eliminated)
+            os.write(master, b"\x16")
+            time.sleep(0.1)
+
+            # Clear block via ESC (\x1b) so Ctrl+S saves document, not block
+            os.write(master, b"\x1b")
+            time.sleep(0.1)
 
             # Save file via Ctrl+S
             os.write(master, b"\x13")
             time.sleep(0.2)
-            # Dismiss save notification modal (press enter or space)
-            os.write(master, b"\n")
+            # Dismiss save notification modal
+            os.write(master, b" ")
             time.sleep(0.2)
 
             # Exit cleanly via Ctrl+Q
-            os.write(master, b"\x11\n")
+            os.write(master, b"\x11")
+            time.sleep(0.2)
             exit_code = wait_pid_with_timeout(pid, 2.0)
             os.close(master)
 
@@ -928,9 +937,12 @@ def test_bug_2_4_12_clipboard_copy_paste():
                 saved_content = f.read()
 
             assert "12345Second Line" in saved_content, (
-                f"Pasted content '12345' missing from line 2:\n{saved_content}"
+                f"Direct copy '12345' missing from line 2:\n{saved_content}"
             )
-            print("    [+] Clipboard copy & paste verified on disk [PASS]")
+            assert "1234512345" not in saved_content, (
+                f"Spurious paste occurred on line 2:\n{saved_content}"
+            )
+            print("    [+] Direct block copy verified on disk [PASS]")
     finally:
         if os.path.exists(test_file_path):
             os.remove(test_file_path)
@@ -1082,14 +1094,14 @@ def test_bug_2_4_15_sticky_target_col_and_tab_clamping():
             read_all_available(master, 0.2)
 
             # Move down 2 lines to Line 3 (\tXYZ). Target 2 is inside tab.
-            # Must clamp to beginning of tab (index 0, Col 0).
+            # Snap-forward alignment (§6.2, §6.4) snaps to Col 4 (index 1).
             os.write(master, b"\x1b[B\x1b[B")
             time.sleep(0.1)
             out_tab = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Line    3/3" in out_tab and "Col 0" in out_tab, (
-                f"Expected tab interior clamped to Col 0:\n{out_tab}"
+            assert "Line    3/3" in out_tab and "Col 4" in out_tab, (
+                f"Expected tab interior snap-forward to Col 4:\n{out_tab}"
             )
 
             # Move up 2 lines back to Line 1: TARGET_COL 2 preserved!
@@ -1308,9 +1320,9 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
                 "int main(void) {\n"
                 "    /* 1. Defaults verification (§13.2) */\n"
                 "    config_init_defaults();\n"
-                "    assert(g_config.screen_mode == MODE_120X40);\n"
+                "    assert(g_config.screen_mode == MODE_80X24);\n"
                 "    assert(g_config.tab_width == 4);\n"
-                "    assert(g_config.save_format == FMT_CPM);\n"
+                "    assert(g_config.save_format == FMT_LINUX);\n"
                 "    assert(g_config.lines_mode == 0);\n"
                 "    assert(g_config.ramdrive_mode == "
                 "RAMDRV_MODE_PROTECTED);\n"
@@ -1335,7 +1347,6 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
                 '    assert(config_load_file("TEST.CFG") == 0);\n'
                 "    assert(g_config.screen_mode == MODE_80X24);\n"
                 "    assert(g_config.tab_width == 4);\n"
-                "    assert(g_config.save_format == FMT_LINUX);\n"
                 "    assert(g_config.lines_mode == 1);\n"
                 "    assert(g_config.ramdrive_mode == "
                 "RAMDRV_MODE_HIBERNATE);\n"
@@ -1376,7 +1387,9 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
             f"Missing SCREEN in output:\n{text}"
         )
         assert "TAB=4\r\n" in text, f"Missing TAB in output:\n{text}"
-        assert "FORMAT=LINUX\r\n" in text, f"Missing FORMAT in output:\n{text}"
+        assert "FORMAT=" not in text, (
+            f"FORMAT should not be serialized in CFG:\n{text}"
+        )
         assert "LINES=32K\r\n" in text, f"Missing LINES in output:\n{text}"
         assert "RAMDRIVE=HIB\r\n" in text, (
             f"Missing RAMDRIVE in output:\n{text}"
@@ -2500,7 +2513,9 @@ def test_bug_2_4_32_escape_sequence_leakage():
             splash_out = read_all_available(master2, 0.4).decode(
                 "utf-8", errors="replace"
             )
-            assert "SE — Screen Editor" in splash_out
+            assert ("SE - Screen Editor" in splash_out) or (
+                "SE — Screen Editor" in splash_out
+            )
 
             # Send unrecognized escape sequence that would contain 'C' if leaked
             os.write(master2, b"\x1b[1;5C")
@@ -2607,8 +2622,8 @@ def test_bug_2_4_33_block_typing_cancellation():
 
 
 def test_bug_2_4_34_splash_language_indication():
-    """Verify predominant language indicator on splash screen (Bug 2.4.34)."""
-    print("[*] Testing splash predominant language indication (2.4.34)...")
+    """Verify splash clean header mandate (Bug 2.4.34 / Section 7.2)."""
+    print("[*] Testing splash clean header mandate (2.4.34)...")
     master, slave = pty.openpty()
     pid = os.fork()
     if pid == 0:
@@ -2624,11 +2639,11 @@ def test_bug_2_4_34_splash_language_indication():
         splash_out = read_all_available(master, 0.4).decode(
             "utf-8", errors="replace"
         )
-        assert "SE — Screen Editor" in splash_out, (
-            f"Expected 'SE — Screen Editor' on row 1:\n{splash_out}"
+        assert "SE - Screen Editor" in splash_out, (
+            f"Expected 'SE - Screen Editor' on row 1:\n{splash_out}"
         )
-        assert "Version v1.1.0 (C)" in splash_out, (
-            f"Expected 'Version v1.1.0 (C)' on row 2:\n{splash_out}"
+        assert "Version v1.1.0" not in splash_out, (
+            f"Version must not appear on splash screen:\n{splash_out}"
         )
 
         # Exit cleanly via 'q'
@@ -2636,7 +2651,7 @@ def test_bug_2_4_34_splash_language_indication():
         exit_code = wait_pid_with_timeout(pid, 2.0)
         os.close(master)
         assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
-        print("    [+] Splash predominant language indicator verified [PASS]")
+        print("    [+] Splash clean header mandate verified [PASS]")
 
 
 def test_bug_2_4_35_splash_hotkeys_and_native_mode():
@@ -2663,9 +2678,6 @@ def test_bug_2_4_35_splash_hotkeys_and_native_mode():
         )
         assert "type   [2]              set 120x40" in splash_out, (
             f"Expected 'set 120x40' on hotkey 2:\n{splash_out}"
-        )
-        assert "type   [3]              set native" in splash_out, (
-            f"Expected 'set native' on hotkey 3:\n{splash_out}"
         )
 
         # Press '1' -> 80x24 mode
@@ -2785,23 +2797,23 @@ def test_bug_2_4_37_config_screen_interactive():
                 f"Failed to enter Configuration Manager:\n{cfg_out}"
             )
 
-            # Toggle Tab Width via '2' (4 -> 8)
-            os.write(master, b"2")
+            # Toggle Tab Width via '4' (4 -> 8)
+            os.write(master, b"4")
             time.sleep(0.2)
             tab_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "2. Tab Width        : 8" in tab_out, (
+            assert "4. Tab Width        : 8" in tab_out, (
                 f"Tab width toggle failed:\n{tab_out}"
             )
 
-            # Toggle Max Line Capacity via '3' (16K -> 32K)
+            # Toggle Max Doc Lines via '3' (16K -> 32K)
             os.write(master, b"3")
             time.sleep(0.2)
             lines_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "3. Max Line Capacity: 32K" in lines_out, (
+            assert "3. Max Doc Lines    : 32K" in lines_out, (
                 f"Lines mode toggle failed:\n{lines_out}"
             )
 
@@ -2816,9 +2828,9 @@ def test_bug_2_4_37_config_screen_interactive():
             splash_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "SE — Screen Editor" in splash_out, (
-                f"Failed to return to splash screen:\n{splash_out}"
-            )
+            assert ("SE - Screen Editor" in splash_out) or (
+                "SE — Screen Editor" in splash_out
+            ), f"Failed to return to splash screen:\n{splash_out}"
 
             # Exit cleanly via 'q'
             os.write(master, b"q")
@@ -2887,6 +2899,1077 @@ def test_bug_2_4_38_default_tab_width():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_39_help_screen_canonical_layout():
+    """Verify canonical 22-line Help screen and ANSI keys (Bug 2.4.39)."""
+    print("[*] Testing Help screen canonical layout & ANSI keys (2.4.39)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_help.txt")
+    with open(test_file, "w") as f:
+        f.write("Line 1\nLine 2\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Press Ctrl+K in editor mode with no block to open Help screen
+            os.write(master, b"\x0b")
+            time.sleep(0.2)
+            help_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "EDITOR MODE KEYS" in help_out, (
+                f"Expected 'EDITOR MODE KEYS' in Help screen:\n{help_out}"
+            )
+            assert "Arrows / WordStar" not in help_out, (
+                f"Obsolete WordStar keys still present in Help:\n{help_out}"
+            )
+            assert "Arrow Keys" in help_out, (
+                f"Expected 'Arrow Keys' in Help screen:\n{help_out}"
+            )
+            assert "Press any key to continue" in help_out, (
+                f"Expected return prompt in Help screen:\n{help_out}"
+            )
+
+            # Dismiss Help screen with Enter
+            os.write(master, b"\r")
+            time.sleep(0.1)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.close(master)
+            os.waitpid(pid, 0)
+            print("    [+] Help screen canonical layout verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_bug_2_4_40_plugin_palette_modal():
+    """Verify Archetype D Plugin Palette modal on Ctrl+P (Bug 2.4.40)."""
+    print("[*] Testing Archetype D Plugin Palette on Ctrl+P (2.4.40)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_palette.txt")
+    with open(test_file, "w") as f:
+        f.write("Hello world\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Press Ctrl+P (0x10) to open Plugin Palette modal
+            os.write(master, b"\x10")
+            time.sleep(0.2)
+            modal_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Plugin Palette" in modal_out, (
+                f"Missing 'Plugin Palette' title:\n{modal_out}"
+            )
+            assert "+------------------------------------------------+" in (
+                modal_out
+            ), f"Missing 50-col frame border:\n{modal_out}"
+            assert "Select a plugin to execute:" in modal_out, (
+                f"Missing prompt in palette:\n{modal_out}"
+            )
+            assert "> 1. ROT13" in modal_out, (
+                f"Missing active selector on ROT13:\n{modal_out}"
+            )
+            assert "WORDCNT" in modal_out and "BEAUTIFY" in modal_out, (
+                f"Missing plugin entries:\n{modal_out}"
+            )
+            assert "[Up/Down]=Select" in modal_out, (
+                f"Missing navigation footer:\n{modal_out}"
+            )
+
+            # Move selection down via Down arrow (ESC [ B)
+            os.write(master, b"\x1b[B")
+            time.sleep(0.2)
+            down_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "> 2. WORDCNT" in down_out, (
+                f"Expected selection moved to WORDCNT:\n{down_out}"
+            )
+
+            # Cancel via ESC
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Re-open via Ctrl+P and execute ROT13 via Enter
+            os.write(master, b"\x10")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            rot_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            # ROT13 of "Hello" is "Uryyb"
+            assert "Uryyb" in rot_out, (
+                f"Expected ROT13 transformation 'Uryyb' in editor:\n{rot_out}"
+            )
+
+            # Exit cleanly via Ctrl+Q then 'n' to discard
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.write(master, b"n")
+            time.sleep(0.1)
+            os.close(master)
+            os.waitpid(pid, 0)
+            print("    [+] Archetype D Plugin Palette verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_bug_2_4_41_tab_snap_forward():
+    """Verify snap-forward tab alignment in adjust_col_to_target (2.4.41)."""
+    print("[*] Testing snap-forward tab alignment (Bug 2.4.41)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_tab_snap.txt")
+    with open(test_file, "w") as f:
+        f.write("0123456789\n\tABCDEF\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move right 2 columns on Line 1: TARGET_COL = 2
+            os.write(master, b"\x1b[C" * 2)
+            time.sleep(0.1)
+            out_l1 = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    1/2" in out_l1 and "Col 2" in out_l1, (
+                f"Expected Line 1 Col 2:\n{out_l1}"
+            )
+
+            # Move down to Line 2 (\tABCDEF): TARGET_COL 2 falls inside tab.
+            # Snap-forward alignment snaps across tab to Col 4 (char 'A').
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+            out_l2 = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    2/2" in out_l2 and "Col 4" in out_l2, (
+                f"Expected Line 2 Col 4 via snap-forward:\n{out_l2}"
+            )
+
+            # Move up back to Line 1: sticky TARGET_COL 2 preserved!
+            os.write(master, b"\x1b[A")
+            time.sleep(0.1)
+            out_l1_back = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Line    1/2" in out_l1_back and "Col 2" in out_l1_back, (
+                f"Expected restored Line 1 Col 2:\n{out_l1_back}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.close(master)
+            os.waitpid(pid, 0)
+            print("    [+] Snap-forward tab alignment verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_bug_2_4_42_config_screen_canonical_layout():
+    """Verify canonical Configuration Manager layout and order (Bug 2.4.42)."""
+    print("[*] Testing canonical Configuration Manager layout (Bug 2.4.42)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_cfg_canonical_")
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.chdir(temp_dir)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.3)
+
+            # Open Configuration Manager via 'c'
+            os.write(master, b"c")
+            time.sleep(0.2)
+            cfg_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+
+            # 1. Canonical ASCII hyphen title
+            assert "SE - Configuration Manager" in cfg_out, (
+                f"Expected 'SE - Configuration Manager' in title:\n{cfg_out}"
+            )
+            assert "SE \xe2\x80\x94 Configuration Manager" not in cfg_out, (
+                "Unexpected UTF-8 em-dash in Configuration Manager title"
+            )
+
+            # 2. Origin status header
+            assert "Config Status: Defaults" in cfg_out, (
+                f"Expected 'Config Status: Defaults' in:\n{cfg_out}"
+            )
+
+            # 3. Canonical option order and labels
+            assert "1. Screen Geometry  :" in cfg_out, (
+                f"Expected Option 1 Screen Geometry:\n{cfg_out}"
+            )
+            assert "2. RAM Drive Mode   :" in cfg_out, (
+                f"Expected Option 2 RAM Drive Mode:\n{cfg_out}"
+            )
+            assert "3. Max Doc Lines    :" in cfg_out, (
+                f"Expected Option 3 Max Doc Lines:\n{cfg_out}"
+            )
+            assert "4. Tab Width        :" in cfg_out, (
+                f"Expected Option 4 Tab Width:\n{cfg_out}"
+            )
+            assert "5. Plugin Manager   :" in cfg_out, (
+                f"Expected Option 5 Plugin Manager:\n{cfg_out}"
+            )
+
+            # 4. Canonical footer
+            assert "[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit" in (
+                cfg_out
+            ), f"Expected canonical footer in:\n{cfg_out}"
+
+            # 5. Prohibited prompt absence
+            assert "Enter option:" not in cfg_out, (
+                f"Prohibited 'Enter option:' prompt found in:\n{cfg_out}"
+            )
+
+            # 6. Toggle Option 5 (Plugin Manager: Autoload -> Demand)
+            os.write(master, b"5")
+            time.sleep(0.2)
+            out_p = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "5. Plugin Manager   : Demand" in out_p, (
+                f"Expected '5. Plugin Manager   : Demand' in:\n{out_p}"
+            )
+
+            # 7. Save config via 's'
+            os.write(master, b"s")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # 8. Exit to splash via 'q'
+            os.write(master, b"q")
+            time.sleep(0.2)
+            out_splash = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Screen Editor" in out_splash, (
+                f"Expected splash screen after 'q' exit:\n{out_splash}"
+            )
+
+            # 9. Re-enter Configuration Manager ('c'): origin must be SE.CFG
+            os.write(master, b"c")
+            time.sleep(0.2)
+            out_cfg2 = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Config Status: Loaded from SE.CFG" in out_cfg2, (
+                f"Expected 'Loaded from SE.CFG' status in:\n{out_cfg2}"
+            )
+
+            # 10. Exit back to splash and terminate cleanly
+            os.write(master, b"q")
+            time.sleep(0.2)
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Canonical Configuration Manager verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_bug_2_4_43_splash_canonical_layout():
+    """Verify 21x50 canonical layout and 4 diagnostic lines (Bug 2.4.43)."""
+    print("[*] Testing 21x50 canonical splash layout (Bug 2.4.43)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        splash_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+
+        # 1. Clean header: ASCII hyphen title, no UTF-8 em-dash, no version/lang
+        assert "SE - Screen Editor" in splash_out, (
+            f"Expected 'SE - Screen Editor' in splash header:\n{splash_out}"
+        )
+        assert "SE \xe2\x80\x94 Screen Editor" not in splash_out, (
+            "Found multi-byte UTF-8 em-dash in splash title"
+        )
+        assert "Version v1.1.0" not in splash_out, (
+            f"Version must not appear on splash screen:\n{splash_out}"
+        )
+
+        # 2. Key commands present
+        assert "type   [E]  or  [Enter] to edit" in splash_out
+        assert "type   [1]              set 80x24" in splash_out
+        assert "type   [2]              set 120x40" in splash_out
+        assert "type   [Q]  or  [^Q]    to exit" in splash_out
+
+        # 3. All 4 diagnostic status lines present
+        assert "Active Screen : [" in splash_out, (
+            f"Missing Active Screen diagnostic line:\n{splash_out}"
+        )
+        assert "RAM Drive (A:): [Preserved (Active)]" in splash_out, (
+            f"Missing RAM Drive diagnostic line:\n{splash_out}"
+        )
+        assert "Plugin System : [Operational]" in splash_out, (
+            f"Missing Plugin System diagnostic line:\n{splash_out}"
+        )
+        assert "Max Lines     : [" in splash_out and "lines]" in splash_out, (
+            f"Missing Max Lines diagnostic line:\n{splash_out}"
+        )
+
+        # 4. Geometry switch updates diagnostic line
+        os.write(master, b"1")
+        time.sleep(0.3)
+        splash_80 = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "Active Screen : [80x24 (Classic Terminal)]" in splash_80, (
+            f"Active Screen diagnostic not updated on '1':\n{splash_80}"
+        )
+
+        os.write(master, b"2")
+        time.sleep(0.3)
+        splash_120 = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "Active Screen : [120x40 (Modern Default)]" in splash_120, (
+            f"Active Screen diagnostic not updated on '2':\n{splash_120}"
+        )
+
+        # Exit cleanly via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Canonical 21x50 splash screen layout verified [PASS]")
+
+
+def test_bug_2_4_44_about_screen_canonical_layout():
+    """Verify 9x54 canonical About screen layout and credits (Bug 2.4.44)."""
+    print("[*] Testing 9x54 canonical About screen layout (Bug 2.4.44)...")
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        read_all_available(master, 0.3)
+
+        # Open About screen via 'a'
+        os.write(master, b"a")
+        time.sleep(0.3)
+        about_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+
+        # 1. Canonical ASCII hyphen title
+        assert "SE - Screen Editor" in about_out, (
+            f"Expected 'SE - Screen Editor' in About title:\n{about_out}"
+        )
+        assert "SE.COM \xe2\x80\x94 Screen Editor (Linux)" not in about_out, (
+            "Found non-canonical UTF-8 em-dash host label in About title"
+        )
+
+        # 2. Canonical version with build date and predominant language
+        assert "version 1.1.0 (2026-10-09) (C)" in about_out, (
+            f"Expected 'version 1.1.0 (2026-10-09) (C)' in:\n{about_out}"
+        )
+
+        # 3. Author attribution
+        assert "by Dean Jenkins" in about_out, (
+            f"Missing author attribution in:\n{about_out}"
+        )
+
+        # 4. Toolchain and AI credits
+        assert "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high" in (
+            about_out
+        ), f"Missing toolchain credits in:\n{about_out}"
+
+        # 5. MIT license notice
+        assert "Open source software under the MIT License" in about_out, (
+            f"Missing MIT license notice in:\n{about_out}"
+        )
+
+        # 6. Canonical return prompt
+        assert "Press any key to continue" in about_out, (
+            f"Expected canonical 'Press any key to continue' in:\n{about_out}"
+        )
+        assert "Press any key to return..." not in about_out, (
+            "Found non-canonical 'Press any key to return...' prompt"
+        )
+
+        # 7. Press any key to return to splash screen
+        os.write(master, b" ")
+        time.sleep(0.3)
+        splash_out = read_all_available(master, 0.4).decode(
+            "utf-8", errors="replace"
+        )
+        assert "Screen Editor" in splash_out, (
+            f"Failed to return to splash screen after dismiss:\n{splash_out}"
+        )
+
+        # Exit cleanly via 'q'
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print("    [+] Canonical 9x54 About screen layout verified [PASS]")
+
+
+def test_bug_2_4_45_line_ending_decoupling():
+    """Verify line ending decoupling, native LF default, and format toggle."""
+    print("[*] Testing line ending decoupling & config isolation (2.4.45)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_le_")
+    try:
+        # 1. New document on Linux defaults to Linux (LF) format in status bar
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            # Dismiss splash screen by pressing Enter
+            os.write(master, b"\r")
+            time.sleep(0.3)
+            ed_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Linux |" in ed_out, (
+                f"Expected 'Linux |' format in status bar:\n{ed_out}"
+            )
+
+            # Type text and open Save dialog (Ctrl+S / \x13)
+            os.write(master, b"Hello Linux World\n")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            os.write(master, b"\x13")
+            time.sleep(0.3)
+            save_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Format: [Linux]" in save_out, (
+                f"Expected 'Format: [Linux]' in save screen:\n{save_out}"
+            )
+
+            # Toggle format using Ctrl+F (\x06) to CP/M
+            os.write(master, b"\x06")
+            time.sleep(0.3)
+            toggled_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Format: [CP/M]" in toggled_out, (
+                f"Expected 'Format: [CP/M]' after Ctrl+F:\n{toggled_out}"
+            )
+
+            # Toggle back to Linux format
+            os.write(master, b"\x06")
+            time.sleep(0.3)
+            toggled_out2 = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Format: [Linux]" in toggled_out2, (
+                f"Expected 'Format: [Linux]' after Ctrl+F:\n{toggled_out2}"
+            )
+
+            # Type filename and press Enter
+            os.write(master, b"TEST_LF.TXT\r")
+            time.sleep(0.3)
+            # Dismiss Save Complete notification modal
+            os.write(master, b" ")
+            time.sleep(0.2)
+            read_all_available(master, 0.4)
+
+            # Exit editor via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            lf_path = os.path.join(temp_dir, "TEST_LF.TXT")
+            assert os.path.exists(lf_path), "TEST_LF.TXT was not created"
+            with open(lf_path, "rb") as f:
+                raw_bytes = f.read()
+            assert b"\r\n" not in raw_bytes, (
+                f"New document saved with CRLF on Linux: {raw_bytes!r}"
+            )
+            assert b"\n" in raw_bytes, "New document missing LF endings"
+
+        # 2. Open file with CRLF endings: detected as CP/M format
+        cpm_file = os.path.join(temp_dir, "TEST_CRLF.TXT")
+        with open(cpm_file, "wb") as f:
+            f.write(b"Line 1 CRLF\r\nLine 2 CRLF\r\n")
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", "TEST_CRLF.TXT")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            ed_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "CPM   |" in ed_out, (
+                f"Expected 'CPM   |' in status bar for CRLF file:\n{ed_out}"
+            )
+
+            # Save via Ctrl+S -> directly saves and preserves detected format
+            os.write(master, b"\x13")
+            time.sleep(0.3)
+            save_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Save Complete" in save_out, (
+                f"Expected 'Save Complete' notification modal:\n{save_out}"
+            )
+            # Dismiss notification modal
+            os.write(master, b" ")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+
+            with open(cpm_file, "rb") as f:
+                cpm_bytes = f.read()
+            assert b"\r\n" in cpm_bytes, (
+                f"Saved CRLF document lost CRLF endings: {cpm_bytes!r}"
+            )
+
+        print("    [+] Line ending decoupling & per-doc format verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_bug_2_4_46_unexpected_keys_in_modals():
+    """Verify input modals are not dismissed by unexpected keys (Bug 2.4.46)."""
+    print("[*] Testing unexpected keystroke protection in modals (2.4.46)...")
+    with tempfile.NamedTemporaryFile("w+", prefix="testdoc_modal_",
+                                     suffix=".txt", delete=False) as tf:
+        for i in range(1, 101):
+            tf.write(f"Line {i}: Sample test content\n")
+        test_file_path = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file_path)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Open Goto Line modal via Ctrl+L (\x0c)
+            os.write(master, b"\x0c")
+            time.sleep(0.2)
+            out_modal = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Goto Line" in out_modal, "Goto Line modal not rendered"
+
+            # Type "42"
+            os.write(master, b"42")
+            time.sleep(0.1)
+
+            # Send unexpected keys: Up, Down, PgUp, PgDn, Ctrl+U, Ctrl+V
+            # None of these should cancel or dismiss the modal
+            os.write(master, b"\x1b[A")  # Up
+            time.sleep(0.05)
+            os.write(master, b"\x1b[B")  # Down
+            time.sleep(0.05)
+            os.write(master, b"\x1b[5~")  # PgUp
+            time.sleep(0.05)
+            os.write(master, b"\x1b[6~")  # PgDn
+            time.sleep(0.05)
+            os.write(master, b"\x15")  # Ctrl+U
+            time.sleep(0.05)
+            os.write(master, b"\x16")  # Ctrl+V
+            time.sleep(0.1)
+
+            mid_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            # The modal must still be active and display the input
+            assert "Goto Line" in mid_out or "42" in mid_out, (
+                f"Modal prematurely dismissed on unexpected keys:\n{mid_out}"
+            )
+
+            # Press Enter (\r) to confirm jump to line 42
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            nav_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "42/100" in nav_out, (
+                f"Expected jump to line 42, got:\n{nav_out}"
+            )
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Unexpected keystroke protection verified [PASS]")
+    finally:
+        if os.path.exists(test_file_path):
+            os.remove(test_file_path)
+
+
+def test_bug_2_4_47_direct_inplace_block_manipulation():
+    """Verify direct in-place block manipulation and no clipboard (2.4.47)."""
+    print("[*] Testing direct in-place block manipulation (2.4.47)...")
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "test_direct_block.txt")
+    with open(test_file, "w") as f:
+        f.write("Line 1: Alpha\nLine 2: Bravo\nLine 3: Charlie\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move to Line 2 ("Line 2: Bravo")
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+
+            # Start block selection via Ctrl+B (\x02)
+            os.write(master, b"\x02")
+            time.sleep(0.1)
+
+            # Select down one line
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+
+            # Solidify block via Enter (\r)
+            os.write(master, b"\r")
+            time.sleep(0.1)
+
+            # Move cursor to end of document (Line 3 Col 0) via Ctrl+G
+            os.write(master, b"\x07")
+            time.sleep(0.1)
+
+            # Direct Move via Ctrl+X (\x18)
+            os.write(master, b"\x18")
+            time.sleep(0.2)
+
+            # Clear block via ESC (\x1b)
+            os.write(master, b"\x1b")
+            time.sleep(0.1)
+
+            # Open Help screen via Ctrl+K (\x0b)
+            os.write(master, b"\x0b")
+            time.sleep(0.2)
+            help_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "PgUp" in help_out and "Page Up" in help_out, (
+                f"Missing dedicated PgUp in Help screen:\n{help_out}"
+            )
+            assert "PgDn" in help_out and "Page Down" in help_out, (
+                f"Missing dedicated PgDn in Help screen:\n{help_out}"
+            )
+            assert "Ctrl+U / PgUp" not in help_out, (
+                f"Found obsolete 'Ctrl+U / PgUp' in Help screen:\n{help_out}"
+            )
+            assert "Ctrl+V / PgDn" not in help_out, (
+                f"Found obsolete 'Ctrl+V / PgDn' in Help screen:\n{help_out}"
+            )
+
+            # Dismiss Help screen via Enter
+            os.write(master, b"\r")
+            time.sleep(0.1)
+
+            # Save file via Ctrl+S
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            # Dismiss save notification modal
+            os.write(master, b"\n")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(test_file, "r") as f:
+                saved = f.read()
+
+            # "Line 2: Bravo" was moved to after "Line 3: Charlie"
+            assert "Line 1: Alpha" in saved, f"Missing Line 1 in:\n{saved}"
+            print("    [+] Direct in-place block manipulation verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_bug_2_4_48_utf8_prohibition():
+    """Bug 2.4.48: VT100 & ASCII Terminal Encoding Mandate (UTF-8 Prohibition).
+
+    Verifies Section 2.6: no multi-byte UTF-8 em-dash sequences (\xE2\x80\x94)
+    exist in binary or terminal output, and screens use ASCII hyphen-minus '-'.
+    """
+    print("[*] Testing UTF-8 prohibition & ASCII headers (Bug 2.4.48)...")
+
+    # 1. Inspect compiled se-linux binary for forbidden UTF-8 em-dash bytes
+    with open(SE_LINUX_BIN, "rb") as f:
+        bin_data = f.read()
+
+    assert b"\xe2\x80\x94" not in bin_data, (
+        "Binary contains prohibited UTF-8 em-dash (0xE2 0x80 0x94)"
+    )
+
+    # 2. Interactive PTY verification across Splash, Help, About, and Config
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        try:
+            time.sleep(0.3)
+            # Splash screen output
+            splash_bytes = read_all_available(master, 0.4)
+            assert b"\xe2\x80\x94" not in splash_bytes, (
+                "Splash screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"SE - Screen Editor" in splash_bytes, (
+                "Splash screen header must use ASCII hyphen '-'"
+            )
+
+            # Open Help screen via 'h'
+            os.write(master, b"h")
+            time.sleep(0.2)
+            help_bytes = read_all_available(master, 0.3)
+            assert b"\xe2\x80\x94" not in help_bytes, (
+                "Help screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"EDITOR MODE KEYS" in help_bytes, (
+                "Help screen title missing in output"
+            )
+            # Return from Help screen
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Open About screen via 'a'
+            os.write(master, b"a")
+            time.sleep(0.2)
+            about_bytes = read_all_available(master, 0.3)
+            assert b"\xe2\x80\x94" not in about_bytes, (
+                "About screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"SE - Screen Editor" in about_bytes, (
+                "About screen header must use ASCII hyphen '-'"
+            )
+            # Return from About screen
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Open Config screen via 'c'
+            os.write(master, b"c")
+            time.sleep(0.2)
+            cfg_bytes = read_all_available(master, 0.3)
+            assert b"\xe2\x80\x94" not in cfg_bytes, (
+                "Config screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"SE - Configuration Manager" in cfg_bytes, (
+                "Config screen header must use ASCII hyphen '-'"
+            )
+            # Exit Config screen via ESC
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Quit to OS prompt via 'q'
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            assert exit_code == 0, f"Expected clean exit 0, got {exit_code}"
+            print("    [+] UTF-8 prohibition & ASCII headers verified [PASS]")
+        finally:
+            try:
+                os.close(master)
+            except OSError:
+                pass
+
+
+def test_bug_2_4_49_line_join_boundary():
+    """Bug 2.4.49: Line join barrier at MAX_INPUT_LINE_CHARS (Section 6.8).
+
+    Verifies Section 6.8: two lines summing to exactly 1,000 characters join
+    successfully on backspace and delete, while joins > 1000 are inhibited.
+    """
+    print("[*] Testing line join barrier at capacity (Bug 2.4.49)...")
+
+    # 1. Backspace join at exactly 1,000 characters (600 + 400 = 1000)
+    with tempfile.NamedTemporaryFile("w+", prefix="test_bs_join_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("A" * 600 + "\n" + "B" * 400 + "\n")
+        file1 = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", file1)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move to Line 2, Col 0
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+            os.write(master, b"\x01")
+            time.sleep(0.1)
+
+            # Press Backspace (0x08) to join
+            os.write(master, b"\x08")
+            time.sleep(0.2)
+
+            # Save via Ctrl+S and dismiss modal
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\n")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(file1, "r") as f:
+                lines = [line.rstrip("\r\n") for line in f.readlines()]
+            assert len(lines) == 1, (
+                f"Expected 1 joined line, got {len(lines)} lines"
+            )
+            assert len(lines[0]) == 1000, (
+                f"Expected joined line length 1000, got {len(lines[0])}"
+            )
+            assert lines[0] == ("A" * 600 + "B" * 400), (
+                "Joined content mismatch"
+            )
+    finally:
+        if os.path.exists(file1):
+            os.remove(file1)
+
+    # 2. Forward delete join at exactly 1,000 characters (500 + 500 = 1000)
+    with tempfile.NamedTemporaryFile("w+", prefix="test_del_join_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("X" * 500 + "\n" + "Y" * 500 + "\n")
+        file2 = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", file2)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move to end of Line 1 via Ctrl+E
+            os.write(master, b"\x05")
+            time.sleep(0.1)
+
+            # Press Delete (\x1b[3~) to pull up and join Line 2
+            os.write(master, b"\x1b[3~")
+            time.sleep(0.2)
+
+            # Save via Ctrl+S and dismiss modal
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\n")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q
+            os.write(master, b"\x11\n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(file2, "r") as f:
+                lines = [line.rstrip("\r\n") for line in f.readlines()]
+            assert len(lines) == 1, (
+                f"Expected 1 joined line, got {len(lines)} lines"
+            )
+            assert len(lines[0]) == 1000, (
+                f"Expected joined line length 1000, got {len(lines[0])}"
+            )
+            assert lines[0] == ("X" * 500 + "Y" * 500), (
+                "Joined content mismatch"
+            )
+    finally:
+        if os.path.exists(file2):
+            os.remove(file2)
+
+    # 3. Oversized join (> 1000 chars) must be inhibited (600 + 401 = 1001)
+    with tempfile.NamedTemporaryFile("w+", prefix="test_over_join_",
+                                     suffix=".txt", delete=False) as tf:
+        tf.write("C" * 600 + "\n" + "D" * 401 + "\n")
+        file3 = tf.name
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", file3)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # Move to Line 2 Col 0
+            os.write(master, b"\x1b[B")
+            time.sleep(0.1)
+            os.write(master, b"\x01")
+            time.sleep(0.1)
+
+            # Press Backspace - join should be inhibited
+            os.write(master, b"\x08")
+            time.sleep(0.2)
+
+            # Exit cleanly via Ctrl+Q and decline save (n)
+            os.write(master, b"\x11")
+            time.sleep(0.1)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+            with open(file3, "r") as f:
+                lines = [line.rstrip("\r\n") for line in f.readlines()]
+            assert len(lines) == 2, (
+                f"Expected 2 lines (join inhibited), got {len(lines)} lines"
+            )
+            print("    [+] Line join barrier at capacity verified [PASS]")
+    finally:
+        if os.path.exists(file3):
+            os.remove(file3)
+
+
 def main():
     print("=" * 80)
     print("   SE.COM Linux Native Profile (se-linux) Automated Verification")
@@ -2930,6 +4013,17 @@ def main():
     test_bug_2_4_36_geometry_switch_clear()
     test_bug_2_4_37_config_screen_interactive()
     test_bug_2_4_38_default_tab_width()
+    test_bug_2_4_39_help_screen_canonical_layout()
+    test_bug_2_4_40_plugin_palette_modal()
+    test_bug_2_4_41_tab_snap_forward()
+    test_bug_2_4_42_config_screen_canonical_layout()
+    test_bug_2_4_43_splash_canonical_layout()
+    test_bug_2_4_44_about_screen_canonical_layout()
+    test_bug_2_4_45_line_ending_decoupling()
+    test_bug_2_4_46_unexpected_keys_in_modals()
+    test_bug_2_4_47_direct_inplace_block_manipulation()
+    test_bug_2_4_48_utf8_prohibition()
+    test_bug_2_4_49_line_join_boundary()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

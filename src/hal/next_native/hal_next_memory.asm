@@ -127,11 +127,11 @@ NEXT_SYSSETCPY:
 	RET
 
 ;------------------------------------------------------------------------------
-; NEXT_SYSBNKCPY: Copy memory between Local RAM and Next MMU Far RAM Slot 0
+; NEXT_SYSBNKCPY: Copy memory between Local RAM and Next MMU Far RAM Slot 1
 ;
 ; Purpose:
-;   Maps target Far RAM 8KB page into MMU Slot 0 ($0000-$1FFF) via NextReg 0x50,
-;   executes atomic LDIR with interrupts disabled, and restores original Slot 0.
+;   Maps target Far RAM 8KB page into MMU Slot 1 ($2000-$3FFF) via NextReg 0x51,
+;   executes atomic LDIR with interrupts disabled, and restores original Slot 1.
 ;
 ; Inputs:
 ;   HL = Source Address
@@ -163,9 +163,10 @@ NEXT_SYSBNKCPY:
 	ADD A,NEXT_FAR_RAM_BASE_PAGE	; A = Physical 8KB page
 	LD (NEXT_TARGET_FAR_PAGE),A
 
-	; Adjust Far Source Address to Slot 0 ($0000..$1FFF)
+	; Adjust Far Source Address to Slot 1 ($2000..$3FFF)
 	LD A,H
 	AND 01FH
+	OR 020H
 	LD H,A
 	JR NSB_DO_TRANSFER
 
@@ -192,33 +193,34 @@ NSB_SRC_IS_USER:
 	ADD A,NEXT_FAR_RAM_BASE_PAGE	; A = Physical 8KB page
 	LD (NEXT_TARGET_FAR_PAGE),A
 
-	; Adjust Far Destination Address to Slot 0 ($0000..$1FFF)
+	; Adjust Far Destination Address to Slot 1 ($2000..$3FFF)
 	LD A,D
 	AND 01FH
+	OR 020H
 	LD D,A
 
 NSB_DO_TRANSFER:
-	; Save current Slot 0 page and map Far Page into Slot 0
+	DI
+	; Save current Slot 1 page and map Far Page into Slot 1
 	LD BC,NEXT_PORT_REG_SELECT
-	LD A,050H			; NextReg 0x50 = MMU Slot 0
+	LD A,051H			; NextReg 0x51 = MMU Slot 1
 	OUT (C),A
 	LD BC,NEXT_PORT_REG_DATA
-	IN A,(C)			; Read current Slot 0 page
-	LD (NEXT_SAVED_SLOT0_PAGE),A
+	IN A,(C)			; Read current Slot 1 page
+	LD (NEXT_SAVED_SLOT1_PAGE),A
 	LD A,(NEXT_TARGET_FAR_PAGE)
-	OUT (C),A			; Map target page into Slot 0
+	OUT (C),A			; Map target page into Slot 1
 
 	; Perform atomic transfer
 	LD BC,(NEXT_CPY_LEN)
-	DI
 	LDIR
 
-	; Restore original Slot 0 page
+	; Restore original Slot 1 page
 	LD BC,NEXT_PORT_REG_SELECT
-	LD A,050H
+	LD A,051H
 	OUT (C),A
 	LD BC,NEXT_PORT_REG_DATA
-	LD A,(NEXT_SAVED_SLOT0_PAGE)
+	LD A,(NEXT_SAVED_SLOT1_PAGE)
 	OUT (C),A
 	EI
 	RET
@@ -250,7 +252,7 @@ HAL_MEM_SET_BANK:
 NEXT_CPY_DEST_BNK:	DB	0
 NEXT_CPY_SRC_BNK:	DB	0
 NEXT_CPY_LEN:		DW	0
-NEXT_SAVED_SLOT0_PAGE:	DB	0
+NEXT_SAVED_SLOT1_PAGE:	DB	0
 NEXT_TARGET_FAR_PAGE:	DB	0
 
 ; End of HAL_NEXT_MEMORY.ASM

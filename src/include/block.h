@@ -50,10 +50,6 @@ int  check_cursor_in_block(uint16_t row, uint16_t col);
 int  get_line_block_range(uint16_t row, uint16_t *start_col, uint16_t *end_col);
 void start_new_block_at_cursor(void);
 void update_block_selection(void);
-uint16_t    get_clipboard_len(void);
-const char *get_clipboard_buffer(void);
-int         do_paste_block(void);
-int         do_cut_block(void);
 
 #ifdef __cplusplus
 }
