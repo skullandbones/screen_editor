@@ -135,15 +135,15 @@ static void exec_rot13(void)
 static void exec_wordcnt(void)
 {
     uint16_t r;
-    uint32_t words = 0;
-    uint32_t chars = 0;
-    char lbuf[LINE_STORAGE_STRIDE + 2];
+    uint16_t words = 0;
+    uint16_t chars = 0;
+    char *lbuf = g_scratch_line_buf;
     char msg1[48];
     char msg2[48];
 
     commit_active_line();
     for (r = 0; r < g_doc_total_lines; r++) {
-        uint16_t len = fetch_line_to_buffer(r, lbuf, sizeof(lbuf));
+        uint16_t len = fetch_line_to_buffer(r, lbuf, MAX_ACTIVE_PAYLOAD);
         const char *p = lbuf;
         int in_word = 0;
         chars += len;
@@ -216,6 +216,10 @@ void show_plugin_palette(void)
         if (k == KEY_ESC) {
             break;
         }
+        if (k >= '1' && k <= '3') {
+            selected = (uint8_t)(k - '1');
+            k = KEY_ENTER;
+        }
         if (k == KEY_ENTER || k == '\r' || k == '\n') {
             clear_screen();
             g_need_screen_render = 1;
@@ -232,18 +236,6 @@ void show_plugin_palette(void)
             selected = (selected == 0) ? (num_items - 1) : (selected - 1);
         } else if (k == KEY_DOWN || k == KEY_CTRL_X) {
             selected = (selected + 1) % num_items;
-        } else if (k >= '1' && k <= '3') {
-            selected = (uint8_t)(k - '1');
-            clear_screen();
-            g_need_screen_render = 1;
-            if (selected == 0) {
-                exec_rot13();
-            } else if (selected == 1) {
-                exec_wordcnt();
-            } else if (selected == 2) {
-                do_ctrl_y_beautify();
-            }
-            break;
         }
     }
 

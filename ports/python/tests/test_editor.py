@@ -1678,13 +1678,13 @@ class TestEditor(unittest.TestCase):
         self.editor.action_quit = MagicMock()
         self.editor.action_help = MagicMock()
 
-        # 1. Verify timeout=1.0 is passed to is_key_ready
+        # 1. Verify timeout=0.1 is passed to is_key_ready
         self.editor.terminal.is_key_ready = MagicMock(return_value=False)
         self.editor.dispatch_key(KEY_CTRL_K)
-        self.editor.terminal.is_key_ready.assert_called_once_with(timeout=1.0)
+        self.editor.terminal.is_key_ready.assert_called_once_with(timeout=0.1)
         self.editor.action_help.assert_called_once()
 
-        # 2. Interactive chords with timeout=1.0
+        # 2. Interactive chords with timeout=0.1
         # a. Ctrl+K R / r -> action_insert_file
         for r_key in ("r", "R"):
             self.editor.action_insert_file.reset_mock()
@@ -2392,12 +2392,12 @@ class TestEditor(unittest.TestCase):
                 rendered.append(list(lines))
             )
         )
-        # Test toggling option 5 (Plugin Manager: AUTOLOAD -> DISABLED)
+        # Test toggling option 5 (Plugin Manager: AUTOLOAD -> DEMAND)
         self.editor.config.set("PLUGIN", "AUTOLOAD")
         self.editor.terminal.get_key = MagicMock(side_effect=["5", "q"])
         self.editor.action_config_screen()
 
-        self.assertEqual(self.editor.config.get("PLUGIN"), "DISABLED")
+        self.assertEqual(self.editor.config.get("PLUGIN"), "DEMAND")
         lines = rendered[0]
 
         # 1. ASCII hyphen title
@@ -2559,9 +2559,190 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_73_status_bar_long_filename_truncation(self):
+        """Step 56: Verify Field 1 truncation preserves Field 5 on 80x24."""
+        print(
+            "[*] Step 56: Testing status bar Field 1 14-char truncation...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+
+        self.editor.buffer.filename = "very_long_document_filename_test.txt"
+        self.editor.buffer.lines = ["Line 1", "Line 2"]
+        self.editor.buffer.cursor_row = 1
+        self.editor.buffer.cursor_col = 3
+
+        # 1. Standard mode: 14-char truncated filename and full Field 5
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        bar = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(bar), 80)
+        self.assertIn("| very_long_docu |", bar)
+        self.assertIn("Line    2/2    Col 3   |", bar)
+
+        # 2. With [Pan +40] and [SEL]: Field 5 never clipped
+        written.clear()
+        self.editor.buffer.pan_col = 40
+        self.editor.buffer.block_active = 1
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        bar_flags = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(bar_flags), 80)
+        self.assertIn("Line 2/2 Col 3 [Pan +40] [SEL] |", bar_flags)
+
+        print(
+            "[+] Step 56: Status bar Field 1 14-char truncation verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_74_ctrl_k_immediate_help_dispatch(self):
+        """Step 57: Verify Ctrl+K uses <=100ms timeout and Arrow Keys label."""
+        print(
+            "[*] Step 57: Testing immediate Ctrl+K Help dispatch...",
+            flush=True,
+        )
+        timeouts = []
+
+        def record_ready(timeout=0.0):
+            timeouts.append(timeout)
+            return False
+
+        self.editor.terminal.is_key_ready = record_ready
+        self.editor.terminal.get_key = lambda timeout=None: " "
+        rendered_lines = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines.extend(
+                lines
+            )
+        )
+        self.editor.buffer.block_active = 0
+        self.editor.dispatch_key(KEY_CTRL_K)
+
+        self.assertEqual(len(timeouts), 1)
+        self.assertLessEqual(timeouts[0], 0.1)
+        help_text = "\n".join(rendered_lines)
+        self.assertIn("Arrow Keys", help_text)
+        self.assertIn("EDITOR MODE KEYS", help_text)
+
+        print(
+            "[+] Step 57: Immediate Ctrl+K Help dispatch verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_75_plugin_palette_canonical_width_and_order(self):
+        """Step 58: Verify 50-col plugin palette and canonical slot order."""
+        print(
+            "[*] Step 58: Testing 50-col plugin palette & slot order...",
+            flush=True,
+        )
+        # 1. Verify built-in plugin slot ordering: ROT13, WORDCNT, BEAUTIFY
+        plugins = self.editor.plugin_mgr.list_plugins()
+        self.assertGreaterEqual(len(plugins), 3)
+        names = [p[0] for p in plugins[:3]]
+        self.assertEqual(names, ["ROT13", "WORDCNT", "BEAUTIFY"])
+
+        # 2. Verify Archetype D menu renders a 50-column frame
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.get_key = lambda timeout=None: KEY_ESC
+        res = self.editor.action_plugin_palette()
+        self.assertIsNone(res)
+        stream = "".join(written)
+        self.assertIn("+" + ("-" * 48) + "+", stream)
+        self.assertIn("> 1. ROT13", stream)
+        self.assertIn("2. WORDCNT", stream)
+        self.assertIn("3. BEAUTIFY", stream)
+
+        print(
+            "[+] Step 58: 50-col plugin palette & slot order verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_76_config_plugin_toggle_cycle_and_save(self):
+        """Step 59: Verify Option 5 3-state cycle and non-blocking save."""
+        print(
+            "[*] Step 59: Testing Option 5 3-state cycle & config save...",
+            flush=True,
+        )
+        rendered = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": (
+                rendered.append(list(lines))
+            )
+        )
+        self.editor.config.set("PLUGIN", "AUTOLOAD")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp_dir)
+                # Cycle: AUTOLOAD -> DEMAND -> DISABLED -> AUTOLOAD, then 's', 'q'
+                self.editor.terminal.get_key = MagicMock(
+                    side_effect=["5", "5", "5", "s", "q"]
+                )
+                self.editor.action_config_screen()
+                self.assertTrue(os.path.exists("SE.CFG"))
+            finally:
+                os.chdir(orig_cwd)
+
+        # Rendered frames: 0=Autoload, 1=Demand, 2=Disabled, 3=Autoload, 4=Saved
+        self.assertEqual(
+            rendered[0][8], "5. Plugin Manager   : Autoload"
+        )
+        self.assertEqual(
+            rendered[1][8], "5. Plugin Manager   : Demand"
+        )
+        self.assertEqual(
+            rendered[2][8], "5. Plugin Manager   : Disabled"
+        )
+        self.assertEqual(
+            rendered[3][8], "5. Plugin Manager   : Autoload"
+        )
+        self.assertEqual(
+            rendered[4][2], "Config Status: Loaded from SE.CFG"
+        )
+
+        print(
+            "[+] Step 59: Option 5 3-state cycle & config save verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_77_splash_active_screen_diagnostic_labels(self):
+        """Step 60: Verify canonical Active Screen labels on splash screen."""
+        print(
+            "[*] Step 60: Testing splash Active Screen diagnostic labels...",
+            flush=True,
+        )
+        captured = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": (
+                captured.append(list(lines))
+            )
+        )
+        # Switch 1 (80x24) -> 2 (120x40) -> e (exit)
+        self.editor.terminal.get_key = MagicMock(side_effect=["1", "2", "e"])
+        self.editor.action_splash_screen()
+        self.assertEqual(len(captured), 3)
+        self.assertEqual(
+            captured[1][17], "Active Screen : [80x24 (Classic Terminal)]"
+        )
+        self.assertEqual(
+            captured[2][17], "Active Screen : [120x40 (Modern Default)]"
+        )
+
+        print(
+            "[+] Step 60: Splash Active Screen diagnostic labels verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

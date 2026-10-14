@@ -47,10 +47,10 @@ class UIRenderer:
         cols = self.term.cols
         rows = self.term.rows
 
-        # Filename section (padded to 16 chars)
+        # Filename section (padded and truncated to 14 chars)
         mod_char = "*" if buf.modified else " "
         raw_name = buf.filename + mod_char
-        name_field = f"| {raw_name:<14} |"
+        name_field = f"| {raw_name:<14.14} |"
 
         # Geometry and format fields (8 chars each)
         geom_field = f" {geometry_str:>6} |"
@@ -93,6 +93,13 @@ class UIRenderer:
                 f"{name_field}{compact_geom}{fmt_field}"
                 f"{help_field}{compact_pos}"
             )
+            if len(compact_core) > cols:
+                max_n = max(4, 14 - (len(compact_core) - cols))
+                short_name = f"| {raw_name:<{max_n}.{max_n}} |"
+                compact_core = (
+                    f"{short_name}{compact_geom}{fmt_field}"
+                    f"{help_field}{compact_pos}"
+                )
             core = compact_core
 
         # Pad or center across terminal width

@@ -182,7 +182,7 @@ class Editor:
         elif key == KEY_CTRL_K:
             if self.buffer.block_active > 0:
                 self.action_block_popup()
-            elif self.terminal.is_key_ready(timeout=1.0):
+            elif self.terminal.is_key_ready(timeout=0.1):
                 next_k = self.terminal.get_key()
                 if next_k in ("r", "R"):
                     self.action_insert_file()
@@ -365,7 +365,8 @@ class Editor:
             "SE - EDITOR MODE KEYS".center(70),
             "",
             "  Cursor Navigation:".ljust(38) + "Block Operations:",
-            "    Arrows / ANSI VT100".ljust(38) + "Ctrl+B: Toggle Block",
+            "    Arrow Keys / Arrows / ANSI VT100".ljust(38)
+            + "Ctrl+B: Toggle Block",
             "    Ctrl+A / Ctrl+E: Home / End".ljust(38)
             + "Ctrl+C: Copy Block to Cursor",
             "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38)
@@ -779,7 +780,7 @@ class Editor:
                 if getattr(self.config, "is_native_screen", False):
                     geom_tag = f"{screen_mode_label} (Native Terminal)"
                 elif self.terminal.cols >= 120:
-                    geom_tag = f"{screen_mode_label} (Wide Console)"
+                    geom_tag = f"{screen_mode_label} (Modern Default)"
                 else:
                     geom_tag = f"{screen_mode_label} (Classic Terminal)"
 
@@ -940,9 +941,12 @@ class Editor:
                 )
 
                 cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
-                plugin_lbl = (
-                    "Autoload" if cur_plg != "DISABLED" else "Disabled"
-                )
+                if cur_plg in ("DEMAND", "ONDEMAND"):
+                    plugin_lbl = "Demand"
+                elif cur_plg in ("DISABLED", "OFF"):
+                    plugin_lbl = "Disabled"
+                else:
+                    plugin_lbl = "Autoload"
 
                 cfg_origin = (
                     "Loaded from SE.CFG"
@@ -1009,16 +1013,15 @@ class Editor:
                     self.config.set("TAB", new_tab)
                 elif ch == "5":
                     cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
-                    new_plg = (
-                        "DISABLED" if cur_plg != "DISABLED" else "AUTOLOAD"
-                    )
+                    if cur_plg in ("AUTOLOAD", "AUTO"):
+                        new_plg = "DEMAND"
+                    elif cur_plg in ("DEMAND", "ONDEMAND"):
+                        new_plg = "DISABLED"
+                    else:
+                        new_plg = "AUTOLOAD"
                     self.config.set("PLUGIN", new_plg)
                 elif ch == "s":
                     self.config.save_config()
-                    self.modal.show_notification(
-                        title="Config Saved",
-                        message="Configuration saved to SE.CFG.",
-                    )
         finally:
             self.terminal.show_cursor()
 
