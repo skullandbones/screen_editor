@@ -33,6 +33,7 @@ HAL_CONSOLE_LOCATE	EQU	LOCATE_RC
 ;------------------------------------------------------------------------------
 HAL_CONSOLE_INIT:
 TERM_INIT:
+	CALL HAL_KEYBOARD_INIT
 	CALL TERM_INVERSE_OFF
 	CALL TERM_SHOW_CURSOR
 	JP TERM_CLEAR_SCREEN
@@ -102,6 +103,9 @@ TERM_HOME:
 ; Purpose:
 ;   Queries CP/M BIOS warm boot vector at 0001H to compute base addresses
 ;   for direct BIOS console routines (CONST=+6, CONIN=+9, CONOUT=+12).
+;   Redirects BIOS_CONST_VEC and BIOS_CONIN_VEC through NEXTCPM_CONST and
+;   NEXTCPM_CONIN to support multi-byte escape sequence buffering for
+;   arrow keys.
 ;------------------------------------------------------------------------------
 INIT_BIOS_JUMPS:
 	LD HL,(0001H)			; HL = Address of BIOS WBOOT (+3)
@@ -110,15 +114,71 @@ INIT_BIOS_JUMPS:
 	DEC HL				; HL = BIOS Base (BOOT, +0)
 	LD DE,6
 	ADD HL,DE			; HL = BIOS CONST (+6)
-	LD (BIOS_CONST_VEC),HL
+	LD (REAL_BIOS_CONST_VEC),HL
 	INC HL
 	INC HL
 	INC HL				; HL = BIOS CONIN (+9)
-	LD (BIOS_CONIN_VEC),HL
+	LD (REAL_BIOS_CONIN_VEC),HL
 	INC HL
 	INC HL
 	INC HL				; HL = BIOS CONOUT (+12)
 	LD (BIOS_CONOUT_VEC),HL
+
+	; Redirect console input vectors through sequence buffer translator
+	LD HL,NEXTCPM_CONST
+	LD (BIOS_CONST_VEC),HL
+	LD HL,NEXTCPM_CONIN
+	LD (BIOS_CONIN_VEC),HL
+	RET
+
+;------------------------------------------------------------------------------
+; NEXTCPM_CONST: Check input readiness including pending sequence buffer
+;
+; Outputs:
+;   A = 0xFF, Z=0 if key available; A = 0x00, Z=1 if no key.
+;------------------------------------------------------------------------------
+NEXTCPM_CONST:
+	; Check if escape sequence buffer has pending bytes
+	LD A,(KEY_SEQ_LEN)
+	OR A
+	JR Z,NCC_CHECK_BIOS
+	LD A,0FFH
+	OR A
+	RET
+
+NCC_CHECK_BIOS:
+	LD HL,(REAL_BIOS_CONST_VEC)
+	CALL CALL_HL			; A = 0xFF if char ready, 0x00 if not
+	OR A
+	RET
+
+;------------------------------------------------------------------------------
+; NEXTCPM_CONIN: Read next character from sequence buffer or BIOS console
+;
+; Outputs:
+;   A = character / normalized keycode.
+;------------------------------------------------------------------------------
+NEXTCPM_CONIN:
+	; Check if escape sequence buffer has pending bytes
+	LD A,(KEY_SEQ_LEN)
+	OR A
+	JR Z,NCC_READ_BIOS
+
+	; Consume next pending escape sequence byte
+	PUSH HL
+	LD HL,(KEY_SEQ_PTR)
+	LD A,(HL)
+	INC HL
+	LD (KEY_SEQ_PTR),HL
+	LD HL,KEY_SEQ_LEN
+	DEC (HL)
+	POP HL
+	RET
+
+NCC_READ_BIOS:
+	LD HL,(REAL_BIOS_CONIN_VEC)
+	CALL CALL_HL			; Returns A = character
+	CALL HAL_KEYBOARD_TRANSLATE
 	RET
 
 ;------------------------------------------------------------------------------
@@ -163,6 +223,8 @@ PUTC:
 	POP AF
 	RET
 
+
+
 ;------------------------------------------------------------------------------
 ; HAL_CONSOLE_GETKEY / GET_KEY: Read single keystroke from NextCPM console
 ;------------------------------------------------------------------------------
@@ -171,8 +233,7 @@ GET_KEY:
 	PUSH BC
 	PUSH DE
 	PUSH HL
-	LD HL,(BIOS_CONIN_VEC)
-	CALL CALL_HL			; Returns A = character
+	CALL NEXTCPM_CONIN
 	POP HL
 	POP DE
 	POP BC
@@ -183,3 +244,9 @@ GET_KEY:
 ;------------------------------------------------------------------------------
 CALL_HL:
 	JP (HL)
+
+;------------------------------------------------------------------------------
+; Variables for Raw CP/M BIOS Vectors
+;------------------------------------------------------------------------------
+REAL_BIOS_CONST_VEC:	DW	0
+REAL_BIOS_CONIN_VEC:	DW	0

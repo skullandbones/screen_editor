@@ -131,7 +131,7 @@ class Editor:
             self.buffer.move_bottom()
         elif key == KEY_PGUP or key == KEY_CTRL_U:
             self.buffer.page_up(self.terminal.rows - 2)
-        elif key == KEY_PGDN:
+        elif key in (KEY_PGDN, KEY_CTRL_V):
             self.buffer.page_down(self.terminal.rows - 2)
 
         # 2. Text Editing & Layout
@@ -162,16 +162,13 @@ class Editor:
                     self.buffer.cancel_block()
                 self.buffer.insert_char("\t")
 
-        # 3. Block Selection & Clipboard
+        # 3. Block Selection & Manipulation
         elif key == KEY_CTRL_B:
             self.buffer.toggle_block()
         elif key == KEY_CTRL_C:
-            self.buffer.copy_block()
+            self.buffer.copy_block_to_cursor()
         elif key == KEY_CTRL_X:
-            self.buffer.cut_block()
-        elif key == KEY_CTRL_V:
-            if not self.buffer.paste_block():
-                self.buffer.page_down(self.terminal.rows - 2)
+            self.buffer.move_block_to_cursor()
 
         # 4. Modals and Workspaces
         elif key == KEY_CTRL_F:
@@ -365,14 +362,16 @@ class Editor:
     def action_help(self):
         """Display full-screen Help workspace (17 lines, 70 cols)."""
         lines = [
-            "SE.COM — EDITOR MODE KEYS".center(70),
+            "SE - EDITOR MODE KEYS".center(70),
             "",
             "  Cursor Navigation:".ljust(38) + "Block Operations:",
             "    Arrows / ANSI VT100".ljust(38) + "Ctrl+B: Toggle Block",
-            "    Ctrl+A / Ctrl+E: Home / End".ljust(38) + "Ctrl+C: Copy Block",
-            "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38) + "Ctrl+X: Cut Block",
-            "    Ctrl+U / Ctrl+V: Page Up / Down".ljust(38)
-            + "Ctrl+V: Paste Block",
+            "    Ctrl+A / Ctrl+E: Home / End".ljust(38)
+            + "Ctrl+C: Copy Block to Cursor",
+            "    Ctrl+T / Ctrl+G: Top / Bottom".ljust(38)
+            + "Ctrl+X: Move Block to Cursor",
+            "    PgUp / PgDn : Page Up / Down".ljust(38)
+            + "Ctrl+D: Delete Block",
             "",
             "  Search & Replace:".ljust(38) + "File & System:",
             "    Ctrl+F: Find Text".ljust(38) + "Ctrl+S: Save File",
@@ -439,34 +438,52 @@ class Editor:
         if geometry_str not in ("80x24", "120x40"):
             geometry_str = "80x24"
 
+        need_full_render = True
+        all_entries: List[str] = []
+        page_capacity = 60
+        grid_rows = 12
+
         while True:
             if self.terminal.resized:
                 self.terminal.update_geometry()
                 geometry_str = f"{self.terminal.cols}x{self.terminal.rows}"
                 if geometry_str not in ("80x24", "120x40"):
                     geometry_str = "80x24"
+                need_full_render = True
 
-            all_entries = self._get_dir_entries(current_dir, filter_pattern)
             num_cols = 7 if self.terminal.cols >= 120 else 5
             grid_rows = 28 if self.terminal.rows >= 40 else 12
             page_capacity = num_cols * grid_rows
-            page_count = max(
-                1, (len(all_entries) + page_capacity - 1) // page_capacity
-            )
-            page_idx = max(0, min(page_idx, page_count - 1))
 
-            self.renderer.render_directory_workspace(
-                mode=mode,
-                current_dir=current_dir,
-                files=all_entries,
-                page_idx=page_idx,
-                page_count=page_count,
-                input_text=input_text,
-                cursor_pos=cursor_pos,
-                buf=self.buffer,
-                format_cpm=fmt_cpm,
-                geometry_str=geometry_str,
-            )
+            if need_full_render:
+                all_entries = self._get_dir_entries(
+                    current_dir, filter_pattern
+                )
+                page_count = max(
+                    1, (len(all_entries) + page_capacity - 1) // page_capacity
+                )
+                page_idx = max(0, min(page_idx, page_count - 1))
+
+                self.renderer.render_directory_workspace(
+                    mode=mode,
+                    current_dir=current_dir,
+                    files=all_entries,
+                    page_idx=page_idx,
+                    page_count=page_count,
+                    input_text=input_text,
+                    cursor_pos=cursor_pos,
+                    buf=self.buffer,
+                    format_cpm=fmt_cpm,
+                    geometry_str=geometry_str,
+                )
+                need_full_render = False
+            else:
+                self.renderer.render_directory_prompt(
+                    mode=mode,
+                    input_text=input_text,
+                    cursor_pos=cursor_pos,
+                    grid_rows=grid_rows,
+                )
 
             key = self.terminal.get_key()
             if key is None:
@@ -483,6 +500,7 @@ class Editor:
                     input_text = ""
                     cursor_pos = 0
                     page_idx = 0
+                    need_full_render = True
                     continue
                 target = os.path.abspath(os.path.join(current_dir, cleaned))
                 if os.path.isdir(target):
@@ -490,18 +508,24 @@ class Editor:
                     input_text = ""
                     cursor_pos = 0
                     page_idx = 0
+                    need_full_render = True
                     continue
                 if mode in ("open", "insert") and not os.path.isfile(target):
                     self.modal.show_file_not_found(cleaned)
+                    need_full_render = True
                     continue
                 return (target, fmt_cpm)
             elif key == KEY_PGUP or key == KEY_CTRL_U:
-                page_idx = max(0, page_idx - 1)
+                if page_idx > 0:
+                    page_idx -= 1
+                    need_full_render = True
             elif key == KEY_PGDN or key == KEY_CTRL_V:
                 if (page_idx + 1) * page_capacity < len(all_entries):
                     page_idx += 1
+                    need_full_render = True
             elif key == KEY_CTRL_F and mode in ("save", "save_block"):
                 fmt_cpm = not fmt_cpm
+                need_full_render = True
             elif key == KEY_LEFT:
                 cursor_pos = max(0, cursor_pos - 1)
             elif key == KEY_RIGHT:
@@ -579,7 +603,6 @@ class Editor:
                 return False
 
         self.buffer.format_cpm = fmt_cpm
-        self.config.set("FORMAT", "CPM" if fmt_cpm else "LINUX")
         ok = self.buffer.save_file(target_name, format_cpm=fmt_cpm)
         if ok:
             self.modal.show_notification(
@@ -638,9 +661,9 @@ class Editor:
         elif action == "clear":
             self.buffer.cancel_block()
         elif action == "copy":
-            self.buffer.copy_block()
-        elif action == "cut":
-            self.buffer.cut_block()
+            self.buffer.copy_block_to_cursor()
+        elif action in ("cut", "move"):
+            self.buffer.move_block_to_cursor()
         elif action == "delete":
             self.buffer.delete_block()
         elif action == "save":
@@ -696,7 +719,7 @@ class Editor:
         """Display Tier 1 About screen workspace."""
         lines = [
             "SE - Screen Editor",
-            "version 1.1.0 (2026-10-09)",
+            "version 1.1.0 (2026-10-09) (Python)",
             "by Dean Jenkins",
             "",
             "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high",
@@ -750,25 +773,44 @@ class Editor:
         need_render = True
         while True:
             if need_render:
-                max_lines_lbl = f"{self.config.max_lines} Max"
-                mem_lines_str = (
-                    f"Free Memory: [Dynamic Heap]   Lines: [{max_lines_lbl}]"
+                screen_mode_label = (
+                    f"{self.terminal.cols}x{self.terminal.rows}"
                 )
+                if getattr(self.config, "is_native_screen", False):
+                    geom_tag = f"{screen_mode_label} (Native Terminal)"
+                elif self.terminal.cols >= 120:
+                    geom_tag = f"{screen_mode_label} (Wide Console)"
+                else:
+                    geom_tag = f"{screen_mode_label} (Classic Terminal)"
+
+                if self.config.max_lines == "16K":
+                    max_lines_str = "16,384 lines"
+                elif self.config.max_lines == "32K":
+                    max_lines_str = "32,768 lines"
+                else:
+                    max_lines_str = f"{self.config.max_lines} lines"
                 lines = [
                     "SE - Screen Editor",
-                    "Version 1.0.0 (Python)",
                     "",
-                    mem_lines_str,
+                    "type   [E]  or  [Enter] to edit",
+                    "type   [N]              to new file",
+                    "type   [O]              to open file",
+                    "type   [S]              to save file",
+                    "type   [W]  or  [^W]    to close file",
+                    "type   [L]  or  [^L]    to goto line",
+                    "type   [A]              for about",
+                    "type   [M]              for memory info",
+                    "type   [P]              for plugins",
+                    "type   [^P]             for context plugin menu",
+                    "type   [C]              to configure",
+                    "type   [1]              set 80x24",
+                    "type   [2]              set 120x40",
+                    "type   [Q]  or  [^Q]    to exit",
                     "",
-                    ":e to edit",
-                    ":o to open file",
-                    ":s to save file",
-                    ":c for config",
-                    ":p for plugins",
-                    ":? for help",
-                    ":q to quit",
-                    "",
-                    "Enter choice: ",
+                    f"Active Screen : [{geom_tag}]",
+                    "RAM Drive (A:): [Preserved (Active)]",
+                    "Plugin System : [Operational]",
+                    f"Max Lines     : [{max_lines_str}]",
                 ]
                 geom = f"{self.terminal.cols}x{self.terminal.rows}"
                 self.renderer.render_centered_workspace(
@@ -779,14 +821,9 @@ class Editor:
             k = self.terminal.get_key()
             if not k:
                 continue
-            if k == ":":
-                next_k = self.terminal.get_key()
-                if not next_k:
-                    continue
-                k = next_k
 
             ch = k.lower() if isinstance(k, str) else ""
-            if ch in ("e", "\r") or k in (KEY_ENTER, KEY_ESC):
+            if ch == "e" or k == KEY_ENTER or k == "\r":
                 return  # Return to editor
             elif ch == "n":
                 self.action_new_file()
@@ -846,7 +883,7 @@ class Editor:
                 self.action_quit()
                 return
             else:
-                # Non-entry key exclusion: silently ignore Space, arrows, etc.
+                # Non-entry key exclusion: silently ignore Space, ESC, arrows
                 continue
 
     def action_plugin_palette(self):
@@ -883,74 +920,105 @@ class Editor:
 
     def action_config_screen(self):
         """Display centered Configuration Screen workspace."""
-        while True:
-            cols = self.terminal.cols
-            rows = self.terminal.rows
-            ram = "Enabled" if self.config.ramdrive_enabled else "Disabled"
-            geom_lbl = (
-                f"{cols}x{rows} (Native)"
-                if self.config.is_native_screen
-                else f"{cols}x{rows}"
-            )
-            lines = [
-                "SE — Configuration Manager",
-                "",
-                f"1. Screen Geometry  : {geom_lbl}",
-                f"2. Tab Width        : {self.config.tab_width}",
-                f"3. Max Line Capacity: {self.config.max_lines}",
-                f"4. RAM Drive Mode   : {ram}",
-                "",
-                "[S] Save to SE.CFG    [ESC]/[Enter] Return",
-                "",
-                "Enter option: ",
-            ]
-            geom = f"{self.terminal.cols}x{self.terminal.rows}"
-            self.renderer.render_centered_workspace(
-                lines, self.buffer, geometry_str=geom
-            )
-
-            k = self.terminal.get_key()
-            if not k:
-                continue
-            ch = k.lower()
-            if ch in ("\r", "\x1b", "q"):
-                return
-            elif ch == "1":
-                self.terminal.term_init()
-                cur_screen = self.config.get("SCREEN", "120X40").upper()
-                if cur_screen == "80X24":
-                    self.config.set("SCREEN", "120x40")
-                    self.terminal.fixed_geometry = True
-                    self.terminal.default_cols = 120
-                    self.terminal.default_rows = 40
-                    self.terminal.cols = 120
-                    self.terminal.rows = 40
-                elif cur_screen == "120X40":
-                    self.config.set("SCREEN", "NATIVE")
-                    self.terminal.fixed_geometry = False
-                    self.terminal.update_geometry()
-                else:
-                    self.config.set("SCREEN", "80x24")
-                    self.terminal.fixed_geometry = True
-                    self.terminal.default_cols = 80
-                    self.terminal.default_rows = 24
-                    self.terminal.cols = 80
-                    self.terminal.rows = 24
-            elif ch == "2":
-                new_tab = "4" if self.config.tab_width == 8 else "8"
-                self.config.set("TAB", new_tab)
-            elif ch == "3":
-                cur_cap = self.config.max_lines
-                new_cap = "32K" if cur_cap == "16K" else "16K"
-                self.config.set("MAXLINES", new_cap)
-            elif ch == "4":
+        self.terminal.hide_cursor()
+        try:
+            while True:
+                cols = self.terminal.cols
+                rows = self.terminal.rows
                 cur_ram = self.config.get("RAMDRIVE", "PRESERVE").upper()
-                new_ram = "DISABLED" if cur_ram != "DISABLED" else "PRESERVE"
-                self.config.set("RAMDRIVE", new_ram)
-            elif ch == "s":
-                self.config.save_config()
-                self.modal.show_notification(
-                    title="Config Saved",
-                    message="Configuration saved to SE.CFG.",
+                if cur_ram == "PRESERVE":
+                    ram_lbl = "Protected"
+                elif cur_ram == "DISABLED":
+                    ram_lbl = "Disabled"
+                else:
+                    ram_lbl = cur_ram.capitalize()
+
+                geom_lbl = (
+                    f"{cols}x{rows} (Native)"
+                    if self.config.is_native_screen
+                    else f"{cols}x{rows}"
                 )
+
+                cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
+                plugin_lbl = (
+                    "Autoload" if cur_plg != "DISABLED" else "Disabled"
+                )
+
+                cfg_origin = (
+                    "Loaded from SE.CFG"
+                    if os.path.exists("SE.CFG")
+                    else "Defaults"
+                )
+
+                lines = [
+                    "SE - Configuration Manager",
+                    "",
+                    f"Config Status: {cfg_origin}",
+                    "",
+                    f"1. Screen Geometry  : {geom_lbl}",
+                    f"2. RAM Drive Mode   : {ram_lbl}",
+                    f"3. Max Doc Lines    : {self.config.max_lines}",
+                    f"4. Tab Width        : {self.config.tab_width}",
+                    f"5. Plugin Manager   : {plugin_lbl}",
+                    "",
+                    "[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit",
+                ]
+                geom = f"{self.terminal.cols}x{self.terminal.rows}"
+                self.renderer.render_centered_workspace(
+                    lines, self.buffer, geometry_str=geom
+                )
+
+                k = self.terminal.get_key()
+                if not k:
+                    continue
+                ch = k.lower() if isinstance(k, str) else ""
+                if k in (KEY_ESC, KEY_ENTER, "\r", "\x1b") or ch == "q":
+                    return
+                elif ch == "1":
+                    self.terminal.term_init()
+                    cur_screen = self.config.get("SCREEN", "120X40").upper()
+                    if cur_screen == "80X24":
+                        self.config.set("SCREEN", "120x40")
+                        self.terminal.fixed_geometry = True
+                        self.terminal.default_cols = 120
+                        self.terminal.default_rows = 40
+                        self.terminal.cols = 120
+                        self.terminal.rows = 40
+                    elif cur_screen == "120X40":
+                        self.config.set("SCREEN", "NATIVE")
+                        self.terminal.fixed_geometry = False
+                        self.terminal.update_geometry()
+                    else:
+                        self.config.set("SCREEN", "80x24")
+                        self.terminal.fixed_geometry = True
+                        self.terminal.default_cols = 80
+                        self.terminal.default_rows = 24
+                        self.terminal.cols = 80
+                        self.terminal.rows = 24
+                elif ch == "2":
+                    new_ram = (
+                        "DISABLED" if cur_ram != "DISABLED" else "PRESERVE"
+                    )
+                    self.config.set("RAMDRIVE", new_ram)
+                elif ch == "3":
+                    cur_cap = self.config.max_lines
+                    new_cap = "32K" if cur_cap == "16K" else "16K"
+                    self.config.set("MAXLINES", new_cap)
+                elif ch == "4":
+                    new_tab = "4" if self.config.tab_width == 8 else "8"
+                    self.config.set("TAB", new_tab)
+                elif ch == "5":
+                    cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
+                    new_plg = (
+                        "DISABLED" if cur_plg != "DISABLED" else "AUTOLOAD"
+                    )
+                    self.config.set("PLUGIN", new_plg)
+                elif ch == "s":
+                    self.config.save_config()
+                    self.modal.show_notification(
+                        title="Config Saved",
+                        message="Configuration saved to SE.CFG.",
+                    )
+        finally:
+            self.terminal.show_cursor()
 

@@ -254,7 +254,8 @@ int do_ctrl_f_find(void)
         }
         if (k == KEY_ENTER) {
             if (cur_len > 0) {
-                snprintf(g_search_buf, sizeof(g_search_buf), "%s", input);
+                strncpy(g_search_buf, input, sizeof(g_search_buf) - 1);
+                g_search_buf[sizeof(g_search_buf) - 1] = '\0';
                 g_search_len = (uint16_t)cur_len;
             } else if (g_search_len == 0) {
                 restore_editor_screen();
@@ -366,9 +367,11 @@ int do_ctrl_r_replace(void)
         return 0;
     }
 
-    snprintf(g_search_buf, sizeof(g_search_buf), "%s", find_input);
+    strncpy(g_search_buf, find_input, sizeof(g_search_buf) - 1);
+    g_search_buf[sizeof(g_search_buf) - 1] = '\0';
     g_search_len = (uint16_t)strlen(g_search_buf);
-    snprintf(g_replace_buf, sizeof(g_replace_buf), "%s", repl_input);
+    strncpy(g_replace_buf, repl_input, sizeof(g_replace_buf) - 1);
+    g_replace_buf[sizeof(g_replace_buf) - 1] = '\0';
     g_replace_len = (uint16_t)strlen(g_replace_buf);
 
     while (execute_find_forward() == 0) {

@@ -124,22 +124,26 @@ make
 # or
 make all
 
-# 2. Build plugins only (ROT13, WORDCNT, BEAUTIFY, FATFS, etc.):
+# 2. Build ZX Spectrum Next targets:
+make se-next-cpm       # NextCPM 80-column binary (SE_NEXT.COM)
+make se-next-native    # Native NextZXOS binaries (SE.NEX, .se)
+
+# 3. Build plugins only (ROT13, WORDCNT, BEAUTIFY, FATFS, etc.):
 make plugins
 
-# 3. Create CP/M disk image and inject SE.COM and plugins:
+# 4. Create CP/M disk image and inject SE.COM and plugins:
 make image
 
-# 4. Check binary footprints and ABI conformance:
+# 5. Check binary footprints and ABI conformance:
 make check-tpa
 make check-plugins
 make check-lines
 
-# 5. Run test suites:
+# 6. Run test suites:
 make test          # Fast sanity integration test
 make test-conformity  # Full regression suite
 
-# 6. Clean build artifacts:
+# 7. Clean build artifacts:
 make clean
 ```
 
@@ -322,6 +326,80 @@ make run
    .venv/bin/python tests/send_xmodem.py SE.COM /dev/ttyUSB0
    ```
 3. Re-open Minicom and run `J>SE`.
+
+---
+
+## Deploying & Running on ZX Spectrum Next
+
+The editor supports two operating environments on the ZX Spectrum Next:
+1. **NextCPM**: Full CP/M 2.2 with 80-column ANSI console (`SE_NEXT.COM`).
+2. **Native NextZXOS**: Standalone executable (`SE.NEX`) and dot command
+   (`.se` / `SE`).
+
+### 1. Host Emulator Dependencies (ZEsarUX)
+
+The bundled ZEsarUX emulator (`$TOOLS_DIR/zesarux/zesarux`) requires the
+SDL 1.2 compatibility runtime and audio libraries on the host Linux system.
+
+Install the prerequisites on your host distribution:
+
+* **Ubuntu / Debian / Linux Mint**:
+  ```bash
+  sudo apt update
+  sudo apt install -y libsdl1.2debian libsndfile1 libpulse0
+  ```
+
+* **Fedora / RHEL**:
+  ```bash
+  sudo dnf install -y sdl12-compat libsndfile pulseaudio-libs
+  ```
+
+* **Arch Linux / Manjaro**:
+  ```bash
+  sudo pacman -S --needed sdl12-compat libsndfile libpulse
+  ```
+
+### 2. Running Next CP/M in ZEsarUX (Interactive Emulation)
+
+From the project repository directory:
+
+```bash
+# Launch ZEsarUX in TBBlue Next mode with DivMMC and the MMC card image:
+$TOOLS_DIR/zesarux/zesarux --machine TBBlue --enable-mmc --enable-divmmc \
+    --mmc-file disks/tbblue.mmc
+```
+
+*(Note: append `--vo curses` to run inside a text terminal window).*
+
+Once the emulator boots:
+1. At the Sinclair BASIC prompt, type `.cpm` and press <kbd>Enter</kbd>.
+2. The 80-column ANSI terminal initializes at the CP/M `A>` prompt.
+3. Launch the editor (`SE_NEXT.COM` is pre-installed on `disks/tbblue.mmc`):
+   ```text
+   A>SE_NEXT
+   ```
+4. Press <kbd>E</kbd> or <kbd>Enter</kbd> to edit, <kbd>A</kbd> for About,
+   <kbd>M</kbd> for Memory Map, <kbd>1</kbd> for 80x24 mode, or
+   <kbd>Ctrl+Q</kbd> to return to CP/M.
+
+### 3. Automated Demo Harness
+
+To run automated headless verification and demos via ZEsarUX:
+
+```bash
+# Demo NextCPM variant:
+PATH="../../tools/zesarux:$PATH" python3 tools/demo_next.py --target cpm
+
+# Demo all Next variants (SE.NEX, .se, and SE_NEXT.COM):
+PATH="../../tools/zesarux:$PATH" python3 tools/demo_next.py --target all
+```
+
+### 4. Running on Real ZX Spectrum Next Hardware
+
+1. Copy `SE_NEXT.COM` (optionally renamed to `SE.COM`) to your SD card.
+2. Boot your ZX Spectrum Next into NextZXOS.
+3. Run `.cpm` to start NextCPM.
+4. Execute `SE_NEXT` at the `A>` prompt.
 
 ---
 

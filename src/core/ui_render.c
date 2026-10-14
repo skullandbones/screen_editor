@@ -177,20 +177,26 @@ void render_status_bar(void)
     snprintf(field1, sizeof(field1), "| %-14.14s | ", raw_name);
 
     if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
-        snprintf(field2, sizeof(field2), " 80x24 | ");
+        strcpy(field2, " 80x24 | ");
     } else if (g_active_cols == SCREEN_COLS_120 &&
                g_active_rows == SCREEN_ROWS_40) {
-        snprintf(field2, sizeof(field2), "120x40 | ");
+        strcpy(field2, "120x40 | ");
     } else {
         snprintf(field2, sizeof(field2), "%3ux%-2u | ",
                  (unsigned)g_active_cols, (unsigned)g_active_rows);
     }
 
-    snprintf(field3, sizeof(field3), "%s | ",
-             (g_file_format == FMT_CPM) ? "CP/M " : "Linux");
+    strcpy(field3, (g_file_format == FMT_CPM) ? "CP/M  | " : "Linux | ");
 
     if (g_is_splash_screen) {
-        snprintf(field4, sizeof(field4), "Free: 48 KB     | ");
+        uint16_t free_kb = 320;
+        if (g_doc_total_lines > 1) {
+            uint16_t slots = (10 * 256 > g_doc_total_lines) ?
+                             (10 * 256 - g_doc_total_lines) : 0;
+            free_kb = slots / 8;
+        }
+        snprintf(field4, sizeof(field4), "Free: %u KB    | ",
+                 (unsigned)free_kb);
     } else if (g_block_mode == BLOCK_MODE_SELECTING) {
         normalize_block_bounds();
         if (g_norm_start_row == g_norm_end_row) {
@@ -228,9 +234,9 @@ void render_status_bar(void)
         snprintf(pbuf, sizeof(pbuf), "[Pan +%u]", (unsigned)g_horiz_pan_offset);
         snprintf(field4, sizeof(field4), "%-15s | ", pbuf);
     } else if (!g_insert_mode) {
-        snprintf(field4, sizeof(field4), "Overwrite mode  | ");
+        strcpy(field4, "Overwrite mode  | ");
     } else {
-        snprintf(field4, sizeof(field4), "^K: Editor keys | ");
+        strcpy(field4, "^K: Editor keys | ");
     }
 
     if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
@@ -242,8 +248,11 @@ void render_status_bar(void)
              (unsigned)g_doc_total_lines,
              (unsigned)vis_col);
 
-    snprintf(core, sizeof(core), "%s%s%s%s%s",
-             field1, field2, field3, field4, field5);
+    strcpy(core, field1);
+    strcat(core, field2);
+    strcat(core, field3);
+    strcat(core, field4);
+    strcat(core, field5);
 
     pad = (g_active_cols > 78) ? (g_active_cols - 78) / 2 : 1;
     right_pad = (g_active_cols > (78 + pad)) ? (g_active_cols - 78 - pad) : 1;
@@ -542,8 +551,7 @@ void show_splash_screen(void)
             need_render = 1;
         } else if (k == 'l' || k == 'L' || k == KEY_CTRL_L) {
             char lbuf[16] = {0};
-            if (modal_prompt_text("Goto Line", "Enter destination line:",
-                                  lbuf, sizeof(lbuf)) == MODAL_RES_OK &&
+            if (modal_goto_line(lbuf, sizeof(lbuf)) == MODAL_RES_OK &&
                 lbuf[0]) {
                 int line_num = atoi(lbuf);
                 if (line_num > 0) {
@@ -582,6 +590,7 @@ void show_splash_screen(void)
             g_active_cols = SCREEN_COLS_120;
             g_active_rows = SCREEN_ROWS_40;
             need_render = 1;
+#ifndef __CPM__
         } else if (k == '3') {
             uint8_t ncols = 0, nrows = 0;
             clear_screen();
@@ -595,6 +604,7 @@ void show_splash_screen(void)
                 g_active_rows = SCREEN_ROWS_24;
             }
             need_render = 1;
+#endif
         }
     }
     clear_screen();
@@ -604,52 +614,35 @@ void show_splash_screen(void)
 }
 
 static const char *s_help_lines[22] = {
-    "========================================"
-    "======================================",
-    "                               EDITOR MODE KEYS",
-    "========================================"
-    "======================================",
-    "  FILE & SYSTEM:",
-    "    Ctrl+O          Open file screen       "
-    "Ctrl+S         Save file screen",
-    "    Ctrl+W          Close file to splash   "
-    "Ctrl+Q         Quit to CP/M",
-    "    Ctrl+K          Help / Solidify block  "
-    "Ctrl+P         Plugins pop-up",
-    "  NAVIGATION & SEARCH:",
-    "    Arrow Keys      Move cursor            "
-    "Ctrl+A / Home  Start of line",
-    "    PgUp            Page Up                "
-    "Ctrl+E / End   End of line",
-    "    PgDn            Page Down              "
-    "Ctrl+T / ^Home Top of file",
-    "    Ctrl+L          Goto line number       "
-    "Ctrl+G / ^End  Bottom of file",
-    "    Ctrl+F          Find text              "
-    "Ctrl+N         Find next",
-    "    Ctrl+R          Search and Replace     "
-    "Ctrl+I / Tab   Toggle find case",
-    "  EDITING & BLOCK:",
-    "    Insert          Toggle Insert/Ovr      "
-    "Enter          New line",
-    "    ASCII 32..126   Insert/Overwrite text  "
-    "Backspace      Delete left/join",
-    "    Delete / Ctrl+D Delete char or block   "
-    "Ctrl+B         Start/Toggle blk",
-    "    Ctrl+C          Copy solidified block  "
-    "Ctrl+K         Solidify block",
-    "    Ctrl+X          Move solidified block  "
-    "ESC            Clear block",
-    "----------------------------------------"
-    "--------------------------------------",
-    "                          Press any key to continue"
+  "==========================================================================",
+  "                               EDITOR MODE KEYS                           ",
+  "==========================================================================",
+  "  FILE & SYSTEM:                                                          ",
+  "    Ctrl+O           Open file screen      Ctrl+S         Save file screen",
+  "    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M    ",
+  "    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up  ",
+  "  NAVIGATION & SEARCH:                                                    ",
+  "    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line   ",
+  "    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line     ",
+  "    Ctrl+V / PgDn   Page Down              Ctrl+T / ^Home Top of file     ",
+  "    Ctrl+L          Goto line number       Ctrl+G / ^End  Bottom of file  ",
+  "    Ctrl+F          Find text              Ctrl+N         Find next       ",
+  "    Ctrl+R          Search and Replace     Ctrl+I / Tab   Toggle find case",
+  "  EDITING & BLOCK:                                                        ",
+  "    Insert          Toggle Insert/Ovr      Enter          New line        ",
+  "    ASCII 32..126   Insert/Overwrite text  Backspace      Delete left/join",
+  "    Delete / Ctrl+D Delete char or block   Ctrl+B         Start/Toggle blk",
+  "    Ctrl+C          Copy solidified block  Ctrl+K         Solidify block  ",
+  "    Ctrl+X          Move solidified block  ESC            Clear block     ",
+  "--------------------------------------------------------------------------",
+  "                          Press any key to continue                       "
 };
 
 void show_help_screen(void)
 {
     int k;
     while (1) {
-        render_tier1_workspace_screen(s_help_lines, 22, 78);
+        render_tier1_workspace_screen(s_help_lines, 22, 74);
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }
@@ -713,11 +706,11 @@ void show_config_screen(void)
 
     while (1) {
         if (g_config.screen_mode == MODE_120X40) {
-            geom_str = "120x40";
+            geom_str = "120x40 (Wide)";
         } else if (g_config.screen_mode == MODE_NATIVE) {
             geom_str = "Native";
         } else {
-            geom_str = "80x24";
+            geom_str = "80x24 (Classic)";
         }
 
         if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
@@ -781,6 +774,7 @@ void show_config_screen(void)
                 g_config.screen_mode = MODE_120X40;
                 g_active_cols = SCREEN_COLS_120;
                 g_active_rows = SCREEN_ROWS_40;
+#ifndef __CPM__
             } else if (g_config.screen_mode == MODE_120X40) {
                 uint8_t ncols = 0, nrows = 0;
                 g_config.screen_mode = MODE_NATIVE;
@@ -792,6 +786,7 @@ void show_config_screen(void)
                     g_active_cols = SCREEN_COLS_80;
                     g_active_rows = SCREEN_ROWS_24;
                 }
+#endif
             } else {
                 g_config.screen_mode = MODE_80X24;
                 g_active_cols = SCREEN_COLS_80;

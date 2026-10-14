@@ -189,7 +189,8 @@ static void beautify_line(uint16_t row)
     align_columns(dst, sizeof(dst), label, mnem, ops, comm);
 
     checkout_active_line(row);
-    snprintf(g_active_line_buf, sizeof(g_active_line_buf), "%s", dst);
+    strncpy(g_active_line_buf, dst, sizeof(g_active_line_buf) - 1);
+    g_active_line_buf[sizeof(g_active_line_buf) - 1] = '\0';
     g_active_line_len = (uint16_t)strlen(g_active_line_buf);
     commit_active_line();
 }

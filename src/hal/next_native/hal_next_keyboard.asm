@@ -18,13 +18,18 @@
 SYSVAR_LAST_K		EQU	05C08H	; Spectrum sysvar: last pressed key
 KEY_PORT_ULA		EQU	000FEH	; ULA keyboard row port
 
-; Editor Key Definitions (matching WordStar control conventions)
-KEY_WORDSTAR_UP		EQU	005H	; Ctrl+E (Cursor Up)
-KEY_WORDSTAR_DOWN	EQU	018H	; Ctrl+X (Cursor Down)
-KEY_WORDSTAR_LEFT	EQU	013H	; Ctrl+S (Cursor Left)
-KEY_WORDSTAR_RIGHT	EQU	004H	; Ctrl+D (Cursor Right)
-KEY_WORDSTAR_DEL	EQU	007H	; Ctrl+G (Delete character under cursor)
+; Dedicated Navigation & Control Key Equates
 KEY_ESCAPE		EQU	01BH	; ESC (ASCII 27)
+KEY_DELETE		EQU	07FH	; Delete under cursor (ASCII 127)
+KEY_CODE_LEFT		EQU	081H	; Internal token for Arrow Left
+KEY_CODE_RIGHT		EQU	082H	; Internal token for Arrow Right
+KEY_CODE_UP		EQU	083H	; Internal token for Arrow Up
+KEY_CODE_DOWN		EQU	084H	; Internal token for Arrow Down
+
+; Escape sequence generator buffer for dedicated arrow keys
+KEY_SEQ_BUF:		DB	0, 0
+KEY_SEQ_LEN:		DB	0
+KEY_SEQ_PTR:		DW	KEY_SEQ_BUF
 
 ;------------------------------------------------------------------------------
 ; HAL_KEYBOARD_INIT: Initialize native keyboard subsystem
@@ -38,8 +43,9 @@ KEY_ESCAPE		EQU	01BH	; ESC (ASCII 27)
 HAL_KEYBOARD_INIT:
 	XOR A
 	LD (SYSVAR_LAST_K),A
+	LD (KEY_SEQ_LEN),A
 HKI_WAIT_RELEASE:
-	CALL HAL_KEYBOARD_POLL
+	CALL HKP_POLL_HARDWARE
 	JR NZ,HKI_WAIT_RELEASE
 	RET
 
@@ -58,6 +64,15 @@ HKI_WAIT_RELEASE:
 ;   Preserves BC, DE, HL; modifies AF.
 ;------------------------------------------------------------------------------
 HAL_KEYBOARD_POLL:
+	; Check if escape sequence buffer has pending bytes
+	LD A,(KEY_SEQ_LEN)
+	OR A
+	JR Z,HKP_POLL_HARDWARE
+	LD A,0FFH
+	OR A
+	RET
+
+HKP_POLL_HARDWARE:
 	XOR A
 	IN A,(KEY_PORT_ULA)		; Select all 8 rows simultaneously
 	CPL
@@ -141,12 +156,29 @@ HKP_KEY_READY:
 ;   Preserves BC, DE, HL; clobbers AF.
 ;------------------------------------------------------------------------------
 HAL_KEYBOARD_GETKEY:
+	; Check if escape sequence buffer has pending bytes
+	LD A,(KEY_SEQ_LEN)
+	OR A
+	JR Z,HKG_READ_HARDWARE
+
+	; Consume next pending escape sequence byte
+	PUSH HL
+	LD HL,(KEY_SEQ_PTR)
+	LD A,(HL)
+	INC HL
+	LD (KEY_SEQ_PTR),HL
+	LD HL,KEY_SEQ_LEN
+	DEC (HL)
+	POP HL
+	RET
+
+HKG_READ_HARDWARE:
 	PUSH BC
 	PUSH DE
 	PUSH HL
 
 HKG_WAIT_LOOP:
-	CALL HAL_KEYBOARD_POLL
+	CALL HKP_POLL_HARDWARE
 	JR Z,HKG_WAIT_LOOP
 
 	; Check Caps Shift (Row 0, bit 0 == 0)
@@ -244,12 +276,47 @@ HKG_LOOKUP:
 	ADD HL,BC
 	LD A,(HL)			; A = decoded keycode
 
+	; Check if decoded key is an arrow key to map to ANSI VT100 sequence
+	CP KEY_CODE_LEFT
+	JR Z,HKG_SET_SEQ_LEFT
+	CP KEY_CODE_RIGHT
+	JR Z,HKG_SET_SEQ_RIGHT
+	CP KEY_CODE_UP
+	JR Z,HKG_SET_SEQ_UP
+	CP KEY_CODE_DOWN
+	JR Z,HKG_SET_SEQ_DOWN
+	JR HKG_RETURN_KEY
+
+HKG_SET_SEQ_LEFT:
+	LD A,'D'
+	JR HKG_QUEUE_CSI
+HKG_SET_SEQ_RIGHT:
+	LD A,'C'
+	JR HKG_QUEUE_CSI
+HKG_SET_SEQ_UP:
+	LD A,'A'
+	JR HKG_QUEUE_CSI
+HKG_SET_SEQ_DOWN:
+	LD A,'B'
+
+HKG_QUEUE_CSI:
+	; Queue '[' and final char in sequence buffer
+	LD (KEY_SEQ_BUF+1),A
+	LD A,'['
+	LD (KEY_SEQ_BUF),A
+	LD A,2
+	LD (KEY_SEQ_LEN),A
+	LD HL,KEY_SEQ_BUF
+	LD (KEY_SEQ_PTR),HL
+	LD A,KEY_ESCAPE
+
+HKG_RETURN_KEY:
 	; Save decoded key in stack temp
 	PUSH AF
 
-	; Wait for key release (debounce)
+	; Wait for physical key release (debounce)
 HKG_RELEASE_WAIT:
-	CALL HAL_KEYBOARD_POLL
+	CALL HKP_POLL_HARDWARE
 	JR NZ,HKG_RELEASE_WAIT
 
 	POP AF
@@ -306,11 +373,11 @@ KEY_TABLE_CAPS:
 	DB	'A', 'S', 'D', 'F', 'G'
 	; Row 2: Q, W, E, R, T
 	DB	'Q', 'W', 'E', 'R', 'T'
-	; Row 3: Edit(ESC), CapsLock, TrueVid, InvVid, Left(WordStar Left)
-	DB	KEY_ESCAPE, '2', '3', '4', KEY_WORDSTAR_LEFT
+	; Row 3: Edit(ESC), CapsLock, TrueVid, InvVid, Left(Arrow Left)
+	DB	KEY_ESCAPE, '2', '3', '4', KEY_CODE_LEFT
 	; Row 4: Delete(Del), Graph, Right, Up, Down
-	DB	KEY_WORDSTAR_DEL, '9', KEY_WORDSTAR_RIGHT
-	DB	KEY_WORDSTAR_UP, KEY_WORDSTAR_DOWN
+	DB	KEY_DELETE, '9', KEY_CODE_RIGHT
+	DB	KEY_CODE_UP, KEY_CODE_DOWN
 	; Row 5: P, O, I, U, Y
 	DB	'P', 'O', 'I', 'U', 'Y'
 	; Row 6: Enter, L, K, J, H
@@ -321,11 +388,11 @@ KEY_TABLE_CAPS:
 ; Symbol Shifted table (40 bytes)
 KEY_TABLE_SYMBOL:
 	; Row 0: Caps, :, Ctrl+X, Ctrl+C, /
-	DB	0, ':', KEY_WORDSTAR_DOWN, KEY_CTRL_C, '/'
+	DB	0, ':', KEY_CTRL_X, KEY_CTRL_C, '/'
 	; Row 1: ~, |, \, {, }
 	DB	'~', '|', '\\', '{', '}'
 	; Row 2: Ctrl+Q, Ctrl+W, Ctrl+E, <, >
-	DB	KEY_CTRL_Q, KEY_CTRL_W, KEY_WORDSTAR_UP, '<', '>'
+	DB	KEY_CTRL_Q, KEY_CTRL_W, KEY_CTRL_E, '<', '>'
 	; Row 3: !, @, #, $, %
 	DB	'!', '@', '#', '$', '%'
 	; Row 4: _, ), (, 39, '&'

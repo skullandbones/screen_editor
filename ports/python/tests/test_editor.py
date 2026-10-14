@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock
 
+from se.buffer import DocumentBuffer
 from se.editor import Editor
 from se.modal import ModalDialog
 from se.terminal import (
@@ -73,33 +74,18 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
-    def test_ctrl_v_pastes_clipboard(self):
-        """Step 2: Verify Ctrl+V dispatches paste_block (Bug 2.7.3)."""
+    def test_ctrl_v_pages_down_not_paste(self):
+        """Step 2: Verify Ctrl+V dispatches page_down (Bug 2.7.60)."""
         print(
-            "[*] Step 2: Testing Ctrl+V dispatches paste_block...",
+            "[*] Step 2: Testing Ctrl+V dispatches page_down...",
             flush=True,
         )
-        self.editor.buffer.lines = ["Hello World"]
-        self.editor.buffer.cursor_row = 0
-        self.editor.buffer.cursor_col = 5
-        self.editor.buffer.clipboard = " Beautiful"
-
-        # Dispatch Ctrl+V
-        self.editor.dispatch_key(KEY_CTRL_V)
-
-        self.assertEqual(
-            self.editor.buffer.current_line, "Hello Beautiful World"
-        )
-        self.assertEqual(self.editor.buffer.cursor_col, 15)
-
-        # Verify empty clipboard falls back to page_down
-        self.editor.buffer.clipboard = ""
         self.editor.buffer.page_down = MagicMock()
         self.editor.dispatch_key(KEY_CTRL_V)
         self.editor.buffer.page_down.assert_called_once()
 
         print(
-            "[+] Step 2: Ctrl+V paste dispatch verified successfully.",
+            "[+] Step 2: Ctrl+V page down dispatch verified.",
             flush=True,
         )
 
@@ -243,8 +229,8 @@ class TestEditor(unittest.TestCase):
         )
         self.editor.renderer.render_centered_workspace = MagicMock()
 
-        # Press '3' (toggle max lines), '4' (toggle ramdrive), and Enter (exit)
-        keys = ["3", "4", "\r"]
+        # Press '2' (toggle ramdrive), '3' (toggle max lines), and Enter (exit)
+        keys = ["2", "3", "\r"]
         key_iter = iter(keys)
         self.editor.terminal.get_key = lambda: next(key_iter)
 
@@ -256,7 +242,7 @@ class TestEditor(unittest.TestCase):
 
         # Option 3 toggles 16K -> 32K
         self.assertEqual(self.editor.config.max_lines, "32K")
-        # Option 4 toggles PRESERVE -> DISABLED
+        # Option 2 toggles PRESERVE -> DISABLED
         self.assertFalse(self.editor.config.ramdrive_enabled)
 
         print(
@@ -320,11 +306,11 @@ class TestEditor(unittest.TestCase):
         self.editor.dispatch_key(KEY_ESC)
         self.editor.action_splash_screen.assert_called_once()
 
-        # Case C: On splash screen, KEY_ESC exits back to editor
+        # Case C: On splash screen, KEY_ESC is ignored; 'e' or Enter exits
         del self.editor.action_splash_screen  # restore real method
         self.editor.renderer.render_centered_workspace = MagicMock()
-        self.editor.terminal.get_key = MagicMock(return_value=KEY_ESC)
-        self.editor.action_splash_screen()  # Must return cleanly on KEY_ESC
+        self.editor.terminal.get_key = MagicMock(side_effect=[KEY_ESC, "e"])
+        self.editor.action_splash_screen()
 
         print(
             "[+] Step 9: ESC block cancel and splash dual-exit verified.",
@@ -528,20 +514,20 @@ class TestEditor(unittest.TestCase):
 
         # Verify canonical commands
         expected_commands = [
-            ":e to edit",
-            ":o to open file",
-            ":s to save file",
-            ":c for config",
-            ":p for plugins",
-            ":? for help",
-            ":q to quit",
+            "type   [E]  or  [Enter] to edit",
+            "type   [O]              to open file",
+            "type   [S]              to save file",
+            "type   [C]              to configure",
+            "type   [P]              for plugins",
+            "type   [Q]  or  [^Q]    to exit",
         ]
         for cmd in expected_commands:
             self.assertIn(cmd, splash_text)
 
         # Verify status info
-        self.assertIn("Free Memory: [Dynamic Heap]", splash_text)
-        self.assertIn("Lines: [", splash_text)
+        self.assertIn("Active Screen : [", splash_text)
+        self.assertIn("Plugin System : [Operational]", splash_text)
+        self.assertIn("Max Lines     : [", splash_text)
 
         # Verify geometry switching: initial 80x24 -> 120x40 -> 80x24
         self.assertEqual(self.editor.terminal.cols, 80)
@@ -595,6 +581,7 @@ class TestEditor(unittest.TestCase):
         self.editor.action_about()
         about_text = "\n".join(rendered_lines)
         self.assertIn("SE - Screen Editor", about_text)
+        self.assertIn("version 1.1.0 (2026-10-09) (Python)", about_text)
         self.assertIn("by Dean Jenkins", about_text)
         self.assertIn("MIT License", about_text)
         self.assertIn("Press any key to continue", about_text)
@@ -1160,12 +1147,12 @@ class TestEditor(unittest.TestCase):
             "[*] Step 28: Testing Editor startup SE.CFG discovery...",
             flush=True,
         )
-        # Default Editor instance defaults to 120x40 canonical geometry
+        # Default Editor instance defaults to 80x24 canonical geometry
         ed_default = Editor()
-        self.assertEqual(ed_default.config.DEFAULT_SCREEN, "120X40")
-        self.assertEqual(ed_default.config.screen_geometry, (120, 40))
-        self.assertEqual(ed_default.terminal.cols, 120)
-        self.assertEqual(ed_default.terminal.rows, 40)
+        self.assertEqual(ed_default.config.DEFAULT_SCREEN, "80X24")
+        self.assertEqual(ed_default.config.screen_geometry, (80, 24))
+        self.assertEqual(ed_default.terminal.cols, 80)
+        self.assertEqual(ed_default.terminal.rows, 24)
         self.assertEqual(ed_default.buffer.tab_width, 8)
 
         # Editor with custom config path overrides geometry and tab width
@@ -1175,14 +1162,14 @@ class TestEditor(unittest.TestCase):
             tmp_path = tmp_file.name
         try:
             with open(tmp_path, "wb") as f:
-                f.write(b"SCREEN=80x24\r\nTAB=4\r\n")
+                f.write(b"SCREEN=120x40\r\nTAB=4\r\n")
 
             ed_custom = Editor(config_path=tmp_path)
             self.assertEqual(
                 ed_custom.loaded_config_path, os.path.abspath(tmp_path)
             )
-            self.assertEqual(ed_custom.terminal.cols, 80)
-            self.assertEqual(ed_custom.terminal.rows, 24)
+            self.assertEqual(ed_custom.terminal.cols, 120)
+            self.assertEqual(ed_custom.terminal.rows, 40)
             self.assertEqual(ed_custom.buffer.tab_width, 4)
         finally:
             if os.path.exists(tmp_path):
@@ -1606,26 +1593,36 @@ class TestEditor(unittest.TestCase):
         self.editor.action_block_popup()
         self.assertEqual(self.editor.buffer.block_active, 0)
 
-        # c. Copy copies text and keeps solidified
+        # c. Copy copies text to cursor in-place and keeps solidified
+        self.editor.buffer.lines = ["Alpha Line Text"]
         self.editor.buffer.block_active = 2
         self.editor.buffer.block_start_row = 0
         self.editor.buffer.block_start_col = 0
         self.editor.buffer.block_end_row = 0
         self.editor.buffer.block_end_col = 5
-        self.editor.buffer.clipboard = ""
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 15
         self.editor.terminal.get_key = MagicMock(return_value="c")
         self.editor.action_block_popup()
-        self.assertEqual(self.editor.buffer.clipboard, "Alpha")
+        self.assertEqual(self.editor.buffer.lines[0], "Alpha Line TextAlpha")
         self.assertEqual(self.editor.buffer.block_active, 2)
 
-        # d. Cut cuts text, clears block, modifies document
+        # d. Move moves text to cursor in-place and keeps solidified at dest
+        self.editor.buffer.lines = ["Alpha Line Text"]
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 5
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 15
         self.editor.terminal.get_key = MagicMock(return_value="x")
         self.editor.action_block_popup()
-        self.assertEqual(self.editor.buffer.clipboard, "Alpha")
-        self.assertEqual(self.editor.buffer.block_active, 0)
-        self.assertEqual(self.editor.buffer.lines[0], " Line Text")
+        self.assertEqual(self.editor.buffer.lines[0], " Line TextAlpha")
+        self.assertEqual(self.editor.buffer.block_active, 2)
 
         # e. Delete deletes text without modifying clipboard
+        self.editor.buffer.lines = [" Line Text"]
         self.editor.buffer.block_active = 2
         self.editor.buffer.block_start_row = 0
         self.editor.buffer.block_start_col = 0
@@ -1973,22 +1970,22 @@ class TestEditor(unittest.TestCase):
     def test_bug_2_7_53_splash_screen_dimensions_and_colon_commands(self):
         """Step 42: Verify splash 14x50 geometry & colon cmds (Bug 2.7.53)."""
         print(
-            "[*] Step 42: Testing splash 14x50 geometry & colon commands...",
+            "[*] Step 42: Testing splash 21x50 geometry & hotkeys...",
             flush=True,
         )
         rendered_lines_list = []
         self.editor.renderer.render_centered_workspace = (
-            lambda lines, buf, geometry_str="80x24": rendered_lines_list.append(
-                list(lines)
+            lambda lines, buf, geometry_str="80x24": (
+                rendered_lines_list.append(list(lines))
             )
         )
 
-        # 1. Verify 14 lines and <= 50 column width
+        # 1. Verify 21 lines and <= 50 column width
         self.editor.terminal.get_key = MagicMock(return_value="e")
         self.editor.action_splash_screen()
         self.assertEqual(len(rendered_lines_list), 1)
         lines = rendered_lines_list[0]
-        self.assertEqual(len(lines), 14)
+        self.assertEqual(len(lines), 21)
         for idx, line in enumerate(lines):
             self.assertLessEqual(
                 len(line),
@@ -1996,63 +1993,55 @@ class TestEditor(unittest.TestCase):
                 f"Line {idx} exceeds 50 columns: {line}",
             )
 
-        # Verify mathematical centering yields top_row == 5 on 80x24
+        # Verify mathematical centering yields top_row == 2 on 80x24
         from se.ui import compute_centering
         content_w = max(len(ln) for ln in lines)
-        top_row, left_col = compute_centering(80, 24, content_w, 14)
-        self.assertEqual(top_row, 5)
-        self.assertTrue(18 <= left_col <= 20)
+        top_row, left_col = compute_centering(80, 24, content_w, 21)
+        self.assertEqual(top_row, 2)
+        self.assertTrue(16 <= left_col <= 22)
 
-        # 2. Verify colon commands dispatch
-        # :e returns to editor
-        self.editor.terminal.get_key = MagicMock(side_effect=[":", "e"])
+        # 2. Verify single hotkey dispatch
+        # e returns to editor
+        self.editor.terminal.get_key = MagicMock(return_value="e")
         self.editor.action_splash_screen()
 
-        # :o calls action_open_file
+        # o calls action_open_file
         self.editor.action_open_file = MagicMock(return_value=True)
-        self.editor.terminal.get_key = MagicMock(side_effect=[":", "o"])
+        self.editor.terminal.get_key = MagicMock(return_value="o")
         self.editor.action_splash_screen()
         self.editor.action_open_file.assert_called_once()
 
-        # :s calls action_save_file
+        # s calls action_save_file
         self.editor.action_save_file = MagicMock(return_value=True)
-        self.editor.terminal.get_key = MagicMock(
-            side_effect=[":", "s", ":", "e"]
-        )
+        self.editor.terminal.get_key = MagicMock(side_effect=["s", "e"])
         self.editor.action_splash_screen()
         self.editor.action_save_file.assert_called_once()
 
-        # :c calls action_config_screen
+        # c calls action_config_screen
         self.editor.action_config_screen = MagicMock()
-        self.editor.terminal.get_key = MagicMock(
-            side_effect=[":", "c", ":", "e"]
-        )
+        self.editor.terminal.get_key = MagicMock(side_effect=["c", "e"])
         self.editor.action_splash_screen()
         self.editor.action_config_screen.assert_called_once()
 
-        # :p calls action_plugin_palette
+        # p calls action_plugin_palette
         self.editor.action_plugin_palette = MagicMock()
-        self.editor.terminal.get_key = MagicMock(
-            side_effect=[":", "p", ":", "e"]
-        )
+        self.editor.terminal.get_key = MagicMock(side_effect=["p", "e"])
         self.editor.action_splash_screen()
         self.editor.action_plugin_palette.assert_called_once()
 
-        # :? calls action_help
+        # ? calls action_help
         self.editor.action_help = MagicMock()
-        self.editor.terminal.get_key = MagicMock(
-            side_effect=[":", "?", ":", "e"]
-        )
+        self.editor.terminal.get_key = MagicMock(side_effect=["?", "e"])
         self.editor.action_splash_screen()
         self.editor.action_help.assert_called_once()
 
-        # :q calls action_quit
+        # q calls action_quit
         self.editor.action_quit = MagicMock()
-        self.editor.terminal.get_key = MagicMock(side_effect=[":", "q"])
+        self.editor.terminal.get_key = MagicMock(return_value="q")
         self.editor.action_splash_screen()
         self.editor.action_quit.assert_called_once()
 
-        # 3. Verify silent rejection: space bar, arrow keys, unassigned
+        # 3. Verify silent rejection: space bar, arrow keys, unassigned, ESC
         render_mock = MagicMock()
         self.editor.renderer.render_centered_workspace = render_mock
         non_entry_keys = [
@@ -2061,8 +2050,8 @@ class TestEditor(unittest.TestCase):
             KEY_DOWN,
             KEY_LEFT,
             KEY_RIGHT,
+            KEY_ESC,
             "z",
-            ":",
             "e",
         ]
         self.editor.terminal.get_key = MagicMock(side_effect=non_entry_keys)
@@ -2071,7 +2060,7 @@ class TestEditor(unittest.TestCase):
         self.assertEqual(render_mock.call_count, 1)
 
         print(
-            "[+] Step 42: Splash 14x50 geometry & colon commands verified.",
+            "[+] Step 42: Splash 21x50 geometry & hotkeys verified.",
             flush=True,
         )
 
@@ -2266,6 +2255,307 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 47: Startup fixed geometry emulation verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_60_direct_in_place_block_ops(self):
+        """Step 48: Direct in-place block copy/move without clipboard."""
+        print(
+            "[*] Step 48: Testing direct in-place block copy and move...",
+            flush=True,
+        )
+        # 1. Direct copy block to cursor
+        self.editor.buffer.lines = ["FIRST LINE", "SECOND LINE", "THIRD LINE"]
+        self.editor.buffer.cursor_row = 1
+        self.editor.buffer.cursor_col = 0
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 1
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 1
+        self.editor.buffer.block_end_col = 6  # "SECOND"
+
+        # Position cursor at top of third line
+        self.editor.buffer.cursor_row = 2
+        self.editor.buffer.cursor_col = 0
+
+        # Dispatch Ctrl+C (in-place copy)
+        self.editor.dispatch_key(KEY_CTRL_C)
+        self.assertEqual(self.editor.buffer.get_line(2), "SECONDTHIRD LINE")
+
+        # 2. Direct move block to cursor
+        self.editor.buffer.lines = ["HEADER", "TARGET", "FOOTER"]
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 1
+        self.editor.buffer.block_start_col = 0
+        self.editor.buffer.block_end_row = 1
+        self.editor.buffer.block_end_col = 6  # "TARGET"
+
+        # Position cursor at line 0 col 0 (before block)
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 0
+
+        # Dispatch Ctrl+X (in-place move)
+        self.editor.dispatch_key(KEY_CTRL_X)
+        self.assertEqual(self.editor.buffer.get_line(0), "TARGETHEADER")
+        self.assertEqual(self.editor.buffer.get_line(1), "")
+
+        # 3. Cannot move block into itself
+        self.editor.buffer.lines = ["ALPHA BETA GAMMA"]
+        self.editor.buffer.block_active = 2
+        self.editor.buffer.block_start_row = 0
+        self.editor.buffer.block_start_col = 6
+        self.editor.buffer.block_end_row = 0
+        self.editor.buffer.block_end_col = 10  # "BETA"
+        self.editor.buffer.cursor_row = 0
+        self.editor.buffer.cursor_col = 8  # Inside "BETA"
+        res = self.editor.buffer.move_block_to_cursor()
+        self.assertFalse(res)
+        self.assertEqual(self.editor.buffer.lines, ["ALPHA BETA GAMMA"])
+
+        print(
+            "[+] Step 48: Direct in-place block operations verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_61_canonical_21_line_splash_template(self):
+        """Step 49: Canonical 21-line splash template and no prompt."""
+        print(
+            "[*] Step 49: Testing canonical 21-line splash template...",
+            flush=True,
+        )
+        captured = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": (
+                captured.append(list(lines))
+            )
+        )
+        # Verify ESC does not exit splash to editor (silently ignored)
+        self.editor.terminal.get_key = MagicMock(
+            side_effect=[KEY_ESC, " ", KEY_UP, "e"]
+        )
+        self.editor.action_splash_screen()
+        self.assertEqual(len(captured), 1)
+        lines = captured[0]
+
+        # 1. Height is exactly 21 lines
+        self.assertEqual(len(lines), 21)
+
+        # 2. Clean header mandate: Row 0 has title, no version/language
+        self.assertEqual(lines[0], "SE - Screen Editor")
+        self.assertEqual(lines[1], "")
+        for line in lines:
+            self.assertNotIn("Version", line)
+            self.assertNotIn("Python", line)
+            self.assertNotIn("Enter choice:", line)
+            self.assertNotIn("Enter option:", line)
+
+        # 3. 4 diagnostic status lines at bottom
+        self.assertTrue(lines[17].startswith("Active Screen : ["))
+        self.assertEqual(lines[18], "RAM Drive (A:): [Preserved (Active)]")
+        self.assertEqual(lines[19], "Plugin System : [Operational]")
+        self.assertTrue(lines[20].startswith("Max Lines     : ["))
+
+        print(
+            "[+] Step 49: Canonical 21-line splash template verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_62_about_screen_predominant_language(self):
+        """Step 50: Verify About screen displays predominant language."""
+        print(
+            "[*] Step 50: Testing About screen predominant language...",
+            flush=True,
+        )
+        rendered = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered.extend(lines)
+        )
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_about()
+        about_str = "\n".join(rendered)
+        self.assertIn("version 1.1.0 (2026-10-09) (Python)", about_str)
+        self.assertNotIn("(Linux)", about_str)
+        print(
+            "[+] Step 50: About screen predominant language verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_63_canonical_5_option_config_screen(self):
+        """Step 51: Verify canonical 5-option config manager workspace."""
+        print(
+            "[*] Step 51: Testing canonical 5-option config screen...",
+            flush=True,
+        )
+        rendered = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": (
+                rendered.append(list(lines))
+            )
+        )
+        # Test toggling option 5 (Plugin Manager: AUTOLOAD -> DISABLED)
+        self.editor.config.set("PLUGIN", "AUTOLOAD")
+        self.editor.terminal.get_key = MagicMock(side_effect=["5", "q"])
+        self.editor.action_config_screen()
+
+        self.assertEqual(self.editor.config.get("PLUGIN"), "DISABLED")
+        lines = rendered[0]
+
+        # 1. ASCII hyphen title
+        self.assertEqual(lines[0], "SE - Configuration Manager")
+        self.assertNotIn("—", lines[0])
+
+        # 2. Config Status header present
+        self.assertTrue(lines[2].startswith("Config Status: "))
+
+        # 3. Canonical 5 options in order
+        self.assertTrue(lines[4].startswith("1. Screen Geometry  :"))
+        self.assertTrue(lines[5].startswith("2. RAM Drive Mode   :"))
+        self.assertTrue(lines[6].startswith("3. Max Doc Lines    :"))
+        self.assertTrue(lines[7].startswith("4. Tab Width        :"))
+        self.assertTrue(lines[8].startswith("5. Plugin Manager   :"))
+
+        # 4. Canonical footer without Enter option prompt
+        self.assertEqual(
+            lines[10], "[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit"
+        )
+        for line in lines:
+            self.assertNotIn("Enter option:", line)
+
+        print(
+            "[+] Step 51: Canonical 5-option config screen verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_67_default_lf_and_decouple_config_save(self):
+        """Step 52: Verify default LF format and decoupling from SE.CFG."""
+        print(
+            "[*] Step 52: Testing default LF format & SE.CFG decoupling...",
+            flush=True,
+        )
+        new_buf = DocumentBuffer()
+        self.assertFalse(new_buf.format_cpm)
+
+        orig_fmt = self.editor.config.get("FORMAT")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "test_lf.txt")
+            key_seq = list(save_path) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=key_seq)
+            self.editor.buffer.lines = ["Line 1", "Line 2"]
+            self.assertFalse(self.editor.buffer.format_cpm)
+
+            ok = self.editor.action_save_file()
+            self.assertTrue(ok)
+            self.assertTrue(os.path.isfile(save_path))
+            with open(save_path, "rb") as f:
+                content = f.read()
+            self.assertEqual(content, b"Line 1\nLine 2\n")
+            # Config FORMAT setting was NOT mutated
+            self.assertEqual(self.editor.config.get("FORMAT"), orig_fmt)
+
+        print(
+            "[+] Step 52: Default LF format & SE.CFG decoupling verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_69_directory_browser_in_place_prompt_echoing(self):
+        """Step 53: Verify in-place prompt echoing in directory browser."""
+        print(
+            "[*] Step 53: Testing in-place prompt echoing in directory...",
+            flush=True,
+        )
+        full_renders = []
+        prompt_renders = []
+
+        orig_full = self.editor.renderer.render_directory_workspace
+        orig_prompt = self.editor.renderer.render_directory_prompt
+
+        def mock_full(*args, **kwargs):
+            full_renders.append((args, kwargs))
+            return orig_full(*args, **kwargs)
+
+        def mock_prompt(*args, **kwargs):
+            prompt_renders.append((args, kwargs))
+            return orig_prompt(*args, **kwargs)
+
+        self.editor.renderer.render_directory_workspace = mock_full
+        self.editor.renderer.render_directory_prompt = mock_prompt
+
+        # Sequence of 5 keystrokes: 'a', 'b', KEY_BACKSPACE, KEY_LEFT, KEY_ESC
+        keystrokes = ["a", "b", KEY_BACKSPACE, KEY_LEFT, KEY_ESC]
+        self.editor.terminal.get_key = MagicMock(side_effect=keystrokes)
+
+        result = self.editor.action_directory_browser(mode="open")
+        self.assertIsNone(result)
+
+        # Full workspace render called exactly once on entry
+        self.assertEqual(len(full_renders), 1)
+
+        # In-place prompt row render called for 'a', 'b', backspace, left
+        self.assertEqual(len(prompt_renders), 4)
+
+        print(
+            "[+] Step 53: In-place prompt echoing in directory verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_70_canonical_help_screen_keys(self):
+        """Step 54: Verify canonical Help screen keys and ASCII title."""
+        print(
+            "[*] Step 54: Testing canonical Help screen keys & title...",
+            flush=True,
+        )
+        rendered_lines = []
+        self.editor.renderer.render_centered_workspace = (
+            lambda lines, buf, geometry_str="80x24": rendered_lines.extend(
+                lines
+            )
+        )
+        self.editor.terminal.get_key = lambda timeout=None: " "
+        self.editor.action_help()
+
+        # 1. Height and width
+        self.assertEqual(len(rendered_lines), 17)
+        self.assertEqual(max(len(ln) for ln in rendered_lines), 70)
+
+        help_text = "\n".join(rendered_lines)
+
+        # 2. ASCII title without Unicode em-dash
+        self.assertIn("SE - EDITOR MODE KEYS", help_text)
+        self.assertNotIn("—", help_text)
+
+        # 3. Canonical block operations
+        self.assertIn("Ctrl+C: Copy Block to Cursor", help_text)
+        self.assertIn("Ctrl+X: Move Block to Cursor", help_text)
+        self.assertIn("Ctrl+D: Delete Block", help_text)
+
+        # 4. Canonical navigation
+        self.assertIn("PgUp / PgDn : Page Up / Down", help_text)
+
+        # 5. Obsolete references removed
+        self.assertNotIn("Paste Block", help_text)
+        self.assertNotIn("Cut Block", help_text)
+        self.assertNotIn("Ctrl+U / Ctrl+V", help_text)
+
+        print(
+            "[+] Step 54: Canonical Help screen keys & title verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_71_startup_screen_geometry_defaults(self):
+        """Step 55: Verify startup screen geometry defaults to 80x24."""
+        print(
+            "[*] Step 55: Testing startup screen geometry default 80x24...",
+            flush=True,
+        )
+        ed = Editor()
+        self.assertEqual(ed.config.DEFAULT_SCREEN, "80X24")
+        self.assertEqual(ed.config.screen_geometry, (80, 24))
+        self.assertEqual(ed.terminal.cols, 80)
+        self.assertEqual(ed.terminal.rows, 24)
+        self.assertTrue(ed.terminal.fixed_geometry)
+
+        print(
+            "[+] Step 55: Startup screen geometry default 80x24 verified.",
             flush=True,
         )
 

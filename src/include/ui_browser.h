@@ -22,7 +22,7 @@ extern "C" {
 
 /* Maximum Browser Entries & Layout */
 #ifdef __CPM__
-#define MAX_BROWSER_FILES       64
+#define MAX_BROWSER_FILES       32
 #define BROWSER_FILENAME_LEN    13
 #else
 #define MAX_BROWSER_FILES       256

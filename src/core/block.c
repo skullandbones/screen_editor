@@ -185,10 +185,17 @@ int do_copy_block(void)
         return 0;
     }
 
+    uint16_t max_buf_size;
+#ifdef __CPM__
+    block_text = g_scratch_line_buf;
+    max_buf_size = sizeof(g_scratch_line_buf);
+#else
     block_text = (char *)malloc(MAX_DOC_LINES_32K);
     if (!block_text) {
         return -1;
     }
+    max_buf_size = MAX_DOC_LINES_32K;
+#endif
 
     for (row = g_norm_start_row; row <= g_norm_end_row; row++) {
         uint16_t len = fetch_line_to_buffer(row, line_buf, MAX_ACTIVE_PAYLOAD);
@@ -206,19 +213,21 @@ int do_copy_block(void)
 
         if (c_end > c_start) {
             uint16_t span = c_end - c_start;
-            if (block_len + span + 2 < MAX_DOC_LINES_32K) {
+            if (block_len + span + 2 < max_buf_size) {
                 memcpy(block_text + block_len, line_buf + c_start, span);
                 block_len += span;
             }
         }
-        if (row < g_norm_end_row && block_len + 1 < MAX_DOC_LINES_32K) {
+        if (row < g_norm_end_row && block_len + 1 < max_buf_size) {
             block_text[block_len++] = '\n';
         }
     }
     block_text[block_len] = '\0';
 
     if (block_len == 0) {
+#ifndef __CPM__
         free(block_text);
+#endif
         return 0;
     }
 
@@ -257,7 +266,9 @@ int do_copy_block(void)
         }
     }
 
+#ifndef __CPM__
     free(block_text);
+#endif
 
     g_doc_modified = 1;
     g_need_screen_render = 1;

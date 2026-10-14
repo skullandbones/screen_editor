@@ -25,8 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 7 Open
-  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected).
+- **Status**: Complete / 0 Open
+  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
+  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -42,7 +43,7 @@ have been resolved and archived.
       cause line wrapping (> 78 cols). Furthermore, Field 3 `CP/M  |` is the
       canonical format string in Section 4.3, and Field 2 uses 1 leading space
       (` 80x24 | `) matching `120x40 | ` width.
-  - [ ] **Bug 2.1.2: Startup Screen Geometry Inversion (Defaults to 120x40)**:
+  - [x] **Bug 2.1.2: Startup Screen Geometry Inversion [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1.
     - *Issue*: `START` in `src/se.asm` executes `CALL SET_MODE_120X40` by
       default. On standard CP/M terminals and serial consoles (VT100 / ANSI,
@@ -175,7 +176,7 @@ have been resolved and archived.
       hardware. The requirement to harmonize splash screen hotkeys across all
       variants (`1` = 80x24 default, `2` = 120x40 if supported) has been
       split out and tracked as a discrete enhancement in Bug 2.1.18.
-  - [ ] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage in Editor**:
+  - [x] **Bug 2.1.13: Escape Sequence Trailing Byte Leakage [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
       `HANDLE_CSI_2`, and `HANDLE_CSI_LOOP`), when an unhandled or extended
@@ -194,7 +195,7 @@ have been resolved and archived.
       until a terminating character (e.g. `'~'`, `'A'..'Z'`, `'a'..'z'`) or
       timeout, preventing trailing escape sequence bytes from leaking into the
       editor document buffer.
-  - [ ] **Bug 2.1.14: Predominant Language Indication on About Screen**:
+  - [x] **Bug 2.1.14: Predominant Language on About Screen [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
@@ -223,7 +224,7 @@ have been resolved and archived.
       `PLUGIN`), which has no format option. `docs/UI_UX_DESIGN.md` has been
       updated to remove `FORMAT` from `SE.CFG` and detail per-document line
       ending handling in Section 7.7.
-  - [ ] **Bug 2.1.16: Forward Deletion Line Join Sticky Target Column Update**:
+  - [x] **Bug 2.1.16: Forward Deletion Line Join Target Column [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
@@ -231,7 +232,7 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
-  - [ ] **Bug 2.1.17: Modal Dialog Cancellation by Unexpected Keystrokes**:
+  - [x] **Bug 2.1.17: Modal Cancellation by Unexpected Keys [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and
@@ -248,7 +249,7 @@ have been resolved and archived.
     - *Required Fix*: In `DO_GOTO_LINE_UI`, `DO_FIND_UI`, and `DO_REPLACE_UI`,
       drain and discard unexpected escape sequences and unassigned keys,
       preserving the active modal dialog and retaining input buffer state.
-  - [ ] **Bug 2.1.18: Splash Screen Geometry Hotkeys (1=80x24, 2=120x40)**:
+  - [x] **Bug 2.1.18: Splash Screen Geometry Hotkeys [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: Splash screen geometry hotkeys are standardized across all SE
       variants so that `1` selects 80x24 (universal baseline and default)
@@ -261,7 +262,7 @@ have been resolved and archived.
       `STR_SPLASH_CMDS` to display `type [1] set 80x24` and `type [2] set
       120x40`. In `src/se.asm:578-584`, update `SPLASH_LOOP` to dispatch
       `'1'` to `DO_SET_80X24` and `'2'` to `DO_SET_120X40`.
-  - [ ] **Bug 2.1.19: Search & Replace 120-Character Line Length Barrier**:
+  - [x] **Bug 2.1.19: Search & Replace Line Length Barrier [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.6.
     - *Issue*: In `src/core/search.asm:2386-2400` (`DO_REPLACE_CURRENT`), after
       computing replacement line length `L' = C - B + E`, the code executes
@@ -294,8 +295,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 7 Open
-  (Bugs 2.2.2 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 0 Open (All 7 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10,
+  2.2.11, 2.2.12, 2.2.13 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
+  Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -344,7 +346,7 @@ have been resolved and archived.
       already implements the canonical 50x7 dimensions, and the explicit
       action footer `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
       (Bug 2.1.6 Rejected).
-  - [ ] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
+  - [x] **Bug 2.2.7: Dedicated Next Delete Key Normalized to Backspace**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.1.
     - *Issue*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm:56-60`,
       `HAL_KEYBOARD_TRANSLATE` intercepts `NEXT_KEY_DELETE` (`0x7F`) and
@@ -356,7 +358,13 @@ have been resolved and archived.
     - *Required Fix*: In `src/hal/next_cpm/hal_nextcpm_keyboard.asm`, preserve
       `0x7F` (`KEY_DELETE`) so that the editor engine distinguishes forward
       deletion and block range deletion from destructive backward deletion.
-  - [ ] **Bug 2.2.8: Memory Screen Queries RomWBW HBIOS Under NextCPM**:
+    - *Resolution*: Preserved `0x7F` (`NEXT_KEY_DELETE` / `KEY_DEL`) in
+      `HAL_KEYBOARD_TRANSLATE` (`src/hal/next_cpm/hal_nextcpm_keyboard.asm`)
+      and hooked translation in `GET_KEY`
+      (`src/hal/next_cpm/hal_nextcpm_console.asm`), distinguishing forward
+      deletion and block deletion from Backspace.
+      Validated via `tests/test_bug_2_2_7.py`.
+  - [x] **Bug 2.2.8: Memory Screen Queries RomWBW HBIOS Under NextCPM**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next_cpm.asm:3480`, `SHOW_MEM_INFO_SCREEN` invokes
       `QUERY_MEM_SCREEN_INFO`, which queries RomWBW HBIOS function vectors
@@ -368,7 +376,11 @@ have been resolved and archived.
       `src/se_next_cpm.asm` that queries Next hardware memory capacity via
       NextReg `0x01` / `0x14` and reports active Next MMU Far RAM bank slots
       rather than invoking HBIOS discovery.
-  - [ ] **Bug 2.2.9: Escape Sequence Trailing Byte Leakage in Editor**:
+    - *Resolution*: Replaced RomWBW HBIOS memory queries with native Next
+      hardware queries via NextReg 0x01/0x14 and mapped 16 32KB Next MMU
+      Far RAM banks in `src/se_next_cpm.asm`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_2_8.py`.
+  - [x] **Bug 2.2.9: Escape Sequence Trailing Byte Leakage in Editor**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI`, `HANDLE_CSI_1`,
       `HANDLE_CSI_2`, `HANDLE_CSI_LOOP`), when an unhandled or extended
@@ -380,7 +392,12 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
       to atomically drain unrecognized multi-byte sequences until a terminating
       character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
-  - [ ] **Bug 2.2.10: Predominant Language Indication on About Screen**:
+    - *Resolution*: Implemented `DRAIN_REMAINING_CSI` in `src/core/editor.asm`
+      under `TARGET_NEXT` to drain trailing sequence bytes until terminal byte
+      boundary (`0x40`..`0x7E`) or timeout, routing unhandled CSI branches to
+      it. Optimized NextCPM BSS overlay to preserve +2,048 B TPA headroom and
+      RomWBW CP/M binary invariance. Validated via `tests/test_bug_2_2_9.py`.
+  - [x] **Bug 2.2.10: Predominant Language Indication on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
@@ -389,7 +406,12 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
-  - [ ] **Bug 2.2.11: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Resolution*: Appended ` (Z80 Assembly)` to `STR_ABOUT_VERSION` under
+      `TARGET_NEXT` in `src/core/plugin_mgr.asm`, displaying
+      `version 1.1.0 (2026-10-09) (Z80 Assembly)` dynamically centered on
+      the About screen while preserving RomWBW CP/M binary invariance.
+      Validated via `tests/test_bug_2_2_10.py`.
+  - [x] **Bug 2.2.11: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
@@ -397,7 +419,12 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
-  - [ ] **Bug 2.2.12: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Resolution*: Updated `DO_DEL_JOIN_OK` in `src/core/editor.asm` under
+      `TARGET_NEXT` to invoke `CHECKOUT_ACTIVE_LINE` and `CALC_VISUAL_COL`
+      and update `(TARGET_COL),HL`, ensuring subsequent vertical navigation
+      adheres to the join column while preserving RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_2_11.py`.
+  - [x] **Bug 2.2.12: Modal Dialog Cancellation by Unexpected Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and
@@ -407,7 +434,13 @@ have been resolved and archived.
       active dialog. Modals must only dismiss on `Enter` or `ESC`.
     - *Required Fix*: In modal input loops, drain and discard unexpected escape
       sequences and non-input keys, preserving active dialog state.
-  - [ ] **Bug 2.2.13: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
+    - *Resolution*: Implemented `DRAIN_ESCAPE_SEQUENCE` in `src/core/editor.asm`
+      under `TARGET_NEXT` to drain and discard multi-byte escape sequences
+      (CSI, SS3) without moving document cursor or closing active dialogs.
+      Routed `GOTO_GOT_ESC_SEQ`, `FIND_GOT_ESC_SEQ`, and `REP_GOT_ESC_SEQ` to
+      it, gated `Ctrl+U`/`Ctrl+V` in Goto Line, and preserved input state.
+      Validated via `tests/test_bug_2_2_12.py`.
+  - [x] **Bug 2.2.13: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: In `src/se_next_cpm.asm:582-589` and `src/core/plugin_mgr.asm`,
       hotkey `1` selects 120x40 and `2` selects 80x24 (inverted per Section
@@ -416,6 +449,12 @@ have been resolved and archived.
       Triggering `1` causes horizontal column spill and corrupted wrapping.
     - *Required Fix*: In `src/se_next_cpm.asm`, assign `1` to 80x24 classic
       terminal mode and omit or disable 120x40 mode per Section 2.1 mandate.
+    - *Resolution*: Mapped hotkey '1' to 80x24 classic terminal mode, disabled
+      hotkey '2', and enforced 80x24 on 120x40 requests in
+      `src/se_next_cpm.asm`.
+      Updated `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm` under
+      `TARGET_NEXT` to display `type [1] set 80x24`.
+      Validated via `tests/test_bug_2_2_13.py`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
@@ -424,10 +463,11 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 8 Open Defects
-  (Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 0 Open Defects (ALL DEFECTS RESOLVED)
+  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9, 2.3.10, 2.3.11, 2.3.12 Resolved;
+  Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
-  - [ ] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
+  - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
     - *Issue*: In `src/hal/next_native/hal_next_keyboard.asm:22-26, 309-313`,
       the Sinclair matrix keyboard decoder maps dedicated cursor keys to legacy
@@ -449,6 +489,11 @@ have been resolved and archived.
       `\x1b[D`) or direct editor movement codes (`KEY_UP`, `KEY_DOWN`,
       `KEY_LEFT`, `KEY_RIGHT`), and map Delete (Caps+0) to `0x7F`
       (`KEY_DELETE`).
+    - *Resolution*: Replaced legacy WordStar equates with ANSI VT100 escape
+      sequence generator for dedicated arrow keys (`\x1b[A`, `\x1b[B`,
+      `\x1b[C`, `\x1b[D`) and mapped Delete (Caps+0) to `0x7F` in
+      `src/hal/next_native/hal_next_keyboard.asm`. Preserved RomWBW CP/M
+      binary invariance. Validated via `tests/test_bug_2_3_1.py`.
   - [x] **Bug 2.3.2: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
@@ -458,7 +503,7 @@ have been resolved and archived.
       metrics, Pan offset, Overwrite mode, or default Help Key Hint). Mode
       indicators belong in Field 4, while Field 5 is strictly reserved for
       fixed-width cursor coordinates (`Line <cur>/<tot> Col <col> |`).
-  - [ ] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
+  - [x] **Bug 2.3.3: Extended Memory Map Screen Queries RomWBW HBIOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 3, 11.2.
     - *Issue*: In `src/se_next.asm:3523` (`SHOW_MEM_INFO_SCREEN`), the native
       Next application invokes `QUERY_MEM_SCREEN_INFO`, which executes RomWBW
@@ -470,7 +515,11 @@ have been resolved and archived.
       `src/se_next.asm` that queries Next hardware registers (NextReg `0x01`
       Machine ID, `0x14` Global RAM paging) and visualizes the 8KB MMU page
       allocations (pages 32..43) instead of invoking HBIOS discovery.
-  - [ ] **Bug 2.3.4: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
+    - *Resolution*: Replaced RomWBW HBIOS memory queries with native Next
+      hardware queries via NextReg 0x01/0x14 and mapped 16 32KB Next MMU
+      Far RAM banks in `src/se_next.asm`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_3_3.py`.
+  - [x] **Bug 2.3.4: Splash Screen Geometry Hotkeys & Unsupported 120x40**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: In `src/se_next.asm:625-631` and `src/core/plugin_mgr.asm`,
       hotkey `1` selects 120x40 and `2` selects 80x24. ZX Spectrum Next
@@ -478,7 +527,11 @@ have been resolved and archived.
       `1` causes visual corruption and terminal column spill across the screen.
     - *Required Fix*: In `src/se_next.asm`, assign `1` to 80x24 classic
       terminal mode and omit or disable 120x40 mode per Section 2.1 mandate.
-  - [ ] **Bug 2.3.5: Predominant Language Indication on About Screen**:
+    - *Resolution*: Mapped hotkey '1' to 80x24 classic terminal mode, disabled
+      hotkey '2', and enforced 80x24 on 120x40 requests in `src/se_next.asm`.
+      Preserved RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_4.py`.
+  - [x] **Bug 2.3.5: Predominant Language Indication on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: In `src/core/plugin_mgr.asm:4384`, `STR_ABOUT_VERSION` displays
       `version 1.1.0 (2026-10-09)`, omitting the predominant programming
@@ -487,6 +540,11 @@ have been resolved and archived.
     - *Required Fix*: Update `STR_ABOUT_VERSION` in `src/core/plugin_mgr.asm`
       to append ` (Z80 Assembly)`, ensuring clean centering in
       `SHOW_ABOUT_SCREEN` across all 80x24 screens.
+    - *Resolution*: Displayed `version 1.1.0 (2026-10-09) (Z80 Assembly)` on
+      native Next `SE.NEX` and `.se` via `TARGET_NEXT` in
+      `src/core/plugin_mgr.asm`, centered dynamically on the About screen
+      while preserving RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_5.py`.
   - [x] **Bug 2.3.6: Tier 1 Help Screen Rules [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 7.1, 7.3.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
@@ -513,7 +571,7 @@ have been resolved and archived.
       canonical 50x7 dimensions, and the explicit action footer
       `[Enter]=Goto Line [ESC]=Cancel` is codified in Section 8.3
       (Bug 2.1.6 Rejected).
-  - [ ] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
+  - [x] **Bug 2.3.9: Escape Sequence Trailing Byte Leakage in Native Next**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3.
     - *Issue*: In `src/core/editor.asm:217-383` (`HANDLE_CSI` sub-handlers),
       when an unhandled or extended multi-byte escape sequence is received
@@ -524,7 +582,13 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/editor.asm`, update `HANDLE_CSI` sub-handlers
       to atomically drain unrecognized multi-byte sequences until a terminating
       character (`'~'`, `'A'..'Z'`, `'a'..'z'`) or timeout occurs.
-  - [ ] **Bug 2.3.10: Forward Deletion Line Join Sticky Target Column Update**:
+    - *Resolution*: Routed unhandled CSI branches (`CSI_DONE`, `HANDLE_CSI_*`)
+      to `DRAIN_REMAINING_CSI` in `src/core/editor.asm` under `TARGET_NEXT` to
+      atomically consume trailing sequence bytes until terminal boundary
+      (`0x40`..`0x7E`) or timeout, preventing stray bytes from leaking into
+      document text on native Next `SE.NEX` and `.se`. Preserved RomWBW CP/M
+      binary invariance. Validated via `tests/test_bug_2_3_9.py`.
+  - [x] **Bug 2.3.10: Forward Deletion Line Join Sticky Target Column Update**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8.
     - *Issue*: In `src/core/editor.asm:1874-1883` (`DO_DEL_FWD_JOIN_NEXT`),
       when the current line and next line are joined on Delete at EOL,
@@ -532,7 +596,13 @@ have been resolved and archived.
       update `TARGET_COL = CALC_VISUAL_COL(CUR_COL)`.
     - *Required Fix*: In `DO_DEL_JOIN_OK`, call `CALC_VISUAL_COL` and update
       `(TARGET_COL),HL`.
-  - [ ] **Bug 2.3.11: Modal Dialog Cancellation by Unexpected Keystrokes**:
+    - *Resolution*: Updated `DO_DEL_JOIN_OK` in `src/core/editor.asm` under
+      `TARGET_NEXT` to invoke `CHECKOUT_ACTIVE_LINE` and `CALC_VISUAL_COL`
+      and update `(TARGET_COL),HL`, ensuring subsequent vertical navigation
+      adheres to the join column across native Next targets `SE.NEX` and `.se`
+      while preserving RomWBW CP/M binary invariance. Validated via
+      `tests/test_bug_2_3_10.py`.
+  - [x] **Bug 2.3.11: Modal Dialog Cancellation by Unexpected Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3, 11.
     - *Issue*: In `src/core/editor.asm:1420-1440` (`DO_GOTO_LINE_UI`),
       `src/core/search.asm:214-233` (`DO_FIND_UI`), and
@@ -542,7 +612,13 @@ have been resolved and archived.
       active dialog. Modals must only dismiss on `Enter` or `ESC`.
     - *Required Fix*: In modal input loops, drain and discard unexpected escape
       sequences and non-input keys, preserving active dialog state.
-  - [ ] **Bug 2.3.12: File Browser Displays CP/M User Areas Under NextZXOS**:
+    - *Resolution*: Implemented `DRAIN_ESCAPE_SEQUENCE` under `TARGET_NEXT` in
+      `src/core/editor.asm` to absorb multi-byte escape sequences without
+      moving document cursor or dismissing active modals. Routed
+      `GOTO_GOT_ESC_SEQ`, `FIND_GOT_ESC_SEQ`, and `REP_GOT_ESC_SEQ` to it in
+      native Next targets `SE.NEX` and `.se`. Preserved RomWBW CP/M binary
+      invariance. Validated via `tests/test_bug_2_3_11.py`.
+  - [x] **Bug 2.3.12: File Browser Displays CP/M User Areas Under NextZXOS**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.6, 7.7.
     - *Issue*: In `src/core/ui_browser.asm`, the directory browser prompt line
       displays `[ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)`.
@@ -553,6 +629,12 @@ have been resolved and archived.
     - *Required Fix*: In `src/core/ui_browser.asm`, adapt the directory browser
       prompt line under `TARGET_NEXT_NATIVE` to display native path syntax
       rather than CP/M drive/user area notation.
+    - *Resolution*: Updated `STR_ESC_CANCEL_TXT` and `STR_ESC_CANCEL` in
+      `src/core/plugin_mgr.asm` under `TARGET_NEXT_NATIVE` to display native
+      path syntax `[ESC]=Cancel  Enter [path][pattern] to list (e.g. /dot/,
+      *.TXT)` on `SE.NEX` and `.se`, while preserving CP/M user area notation
+      on `SE_NEXT.COM` and byte-for-byte binary invariance on `SE.COM`.
+      Validated via `tests/test_bug_2_3_12.py`.
 
 ### 2.4 Profile 4: Linux Native C Profile (`se-linux`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
@@ -1483,9 +1565,8 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: In Progress / Open Defects (Bugs 2.7.1–2.7.44, 2.7.46–2.7.59
-  Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; Bugs 2.7.60–2.7.63,
-  2.7.65–2.7.71 Open).
+- **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
+  2.7.65–2.7.71 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; 0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -2285,7 +2366,7 @@ have been resolved and archived.
       configured fixed dimensions (`80x24` or `120x40`) when `fixed_geometry`
       is active. Validated via Step 47 in `test_editor.py`
       (`test_bug_2_7_59_startup_geometry_emulation_preserved`).
-  - [ ] **Bug 2.7.60: Intermediary Clipboard & Missing In-Place Block Ops**:
+  - [x] **Bug 2.7.60: Intermediary Clipboard & Missing In-Place Block Ops**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.3, Section 10.
     - *Issue*: Section 9.3 mandates Direct In-Place Block Manipulation across
       all SE implementations and strictly prohibits intermediary clipboard
@@ -2299,11 +2380,15 @@ have been resolved and archived.
       copy to this detached buffer, `paste_block()` pastes from it, and
       `ports/python/se/editor.py:168-175` binds `Ctrl+C`, `Ctrl+X`, and
       `Ctrl+V` to clipboard primitives.
-    - *Action Required*: Eliminate `self.clipboard` from `DocumentBuffer`.
-      Implement direct in-place copy and move operations to current cursor
-      position in `buffer.py` and `editor.py`. Remove `KEY_CTRL_V` paste
-      handling.
-  - [ ] **Bug 2.7.61: Non-Canonical Splash Template & Prohibited Prompt**:
+    - *Resolution*: Implemented `is_cursor_in_block()`,
+      `copy_block_to_cursor()`, and `move_block_to_cursor()` on
+      `DocumentBuffer` in `buffer.py`. Updated `editor.py` to route
+      `KEY_CTRL_C` to `copy_block_to_cursor()` and `KEY_CTRL_X` to
+      `move_block_to_cursor()`, mapped `KEY_CTRL_V` to `page_down()`, and
+      updated `action_block_popup()` to invoke in-place manipulation. Validated
+      via Step 15 in `test_buffer.py` and Step 2 and Step 48 in `test_editor.py`
+      (`test_bug_2_7_60_direct_in_place_block_ops`).
+  - [x] **Bug 2.7.61: Non-Canonical Splash Template & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.7, 7.2.
     - *Issue*: Section 7.2 mandates the 21-line canonical `SE.COM` splash
       screen template (`type [E] or [Enter] to edit`, etc.) with instant
@@ -2315,10 +2400,13 @@ have been resolved and archived.
       command syntax (`:e to edit`, etc.) and displays prohibited prompt
       `"Enter choice: "` on line 771. Furthermore, line 789 improperly allows
       `KEY_ESC` to enter the editor workspace.
-    - *Action Required*: Update `action_splash_screen()` in `editor.py` to
-      render the canonical 21-line `SE.COM` template without interactive
-      prompt strings, and silently ignore unassigned keystrokes.
-  - [ ] **Bug 2.7.62: Missing Predominant Language on About Screen**:
+    - *Resolution*: Updated `action_splash_screen()` in `editor.py` to render
+      the canonical 21-line `SE.COM` template without prompt strings, removed
+      colon command parsing in favor of instant single-keystroke dispatch, and
+      silently ignored unassigned keystrokes (including `KEY_ESC`). Validated
+      via Step 14, Step 42, and Step 49 in `test_editor.py`
+      (`test_bug_2_7_61_canonical_21_line_splash_template`).
+  - [x] **Bug 2.7.62: Missing Predominant Language on About Screen**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6; `TODO.md`
       Bug 2.1.14.
     - *Issue*: Section 7.12 and 14.6 mandate that all SE variants display the
@@ -2327,9 +2415,11 @@ have been resolved and archived.
       screen: `version 1.1.0 (2026-10-09) (Python)`.
     - *Root Cause*: In `ports/python/se/editor.py:699`, `action_about()`
       displays `version 1.1.0 (2026-10-09)` without ` (Python)`.
-    - *Action Required*: In `ports/python/se/editor.py:699`, update the version
-      line to `version 1.1.0 (2026-10-09) (Python)`.
-  - [ ] **Bug 2.7.63: Config Manager Inverted Layout & Prohibited Prompt**:
+    - *Resolution*: Updated the version string in `action_about()` in
+      `editor.py` to `version 1.1.0 (2026-10-09) (Python)`. Validated via
+      Step 16 and Step 50 in `test_editor.py`
+      (`test_bug_2_7_62_about_screen_predominant_language`).
+  - [x] **Bug 2.7.63: Config Manager Inverted Layout & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.4.
     - *Issue*: Section 7.4 mandates a canonical 5-option hotkey layout:
       1. Screen Geometry, 2. RAM Drive Mode, 3. Max Doc Lines, 4. Tab Width,
@@ -2342,9 +2432,12 @@ have been resolved and archived.
       Plugin Manager is missing), uses Unicode em-dash in title
       (`SE — Configuration Manager`), displays prohibited `"Enter option: "`,
       and shows non-standard navigation options.
-    - *Action Required*: Reorganize `action_config_screen()` in `editor.py`
-      to match the canonical 5-option layout, remove `Enter option:`, add
-      option 5, and conform title to ASCII encoding.
+    - *Resolution*: Reorganized `action_config_screen()` in `editor.py` to
+      match the canonical 5-option layout, removed `Enter option:`, added
+      option 5 Plugin Manager toggle, conformed title to ASCII hyphen
+      (`SE - Configuration Manager`), and added canonical status/footer.
+      Validated via Step 7 and Step 51 in `test_editor.py`
+      (`test_bug_2_7_63_canonical_5_option_config_screen`).
   - [x] **Bug 2.7.64: Field 4 Status Bar Placement [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4.
     - *Disposition*: **REJECTED / WONTFIX** per architectural decision.
@@ -2356,7 +2449,7 @@ have been resolved and archived.
       coordinates. `ports/python/se/ui.py` already conforms 100% to Section 4.3;
       routing mode indicators into Field 4 would clobber Field 4 and violate
       Anti-Pattern #1 (Status Bar Squatting / Context Clobber).
-  - [ ] **Bug 2.7.65: Sticky Column Clamping Retreats on Expanded Tabs**:
+  - [x] **Bug 2.7.65: Sticky Column Clamping Retreats on Expanded Tabs**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
     - *Issue*: Section 6.2 and 6.4 mandate snap-forward vertical alignment
       clamping (`ADJUST_COL_TO_TARGET`): if sticky `TARGET_COL` falls across
@@ -2368,10 +2461,12 @@ have been resolved and archived.
       (`adjust_col_to_target`), the loop executes
       `if vis_acc + spaces > target_col: break`, halting alignment before the
       tab and retreating the cursor to the margin.
-    - *Action Required*: In `ports/python/se/buffer.py`, update
-      `adjust_col_to_target` to advance `vis_acc += spaces` and
-      `char_idx += 1` through the tab when `vis_acc + spaces > target_col`.
-  - [ ] **Bug 2.7.66: Premature Line Join Inhibition at 120 Columns**:
+    - *Resolution*: Updated `adjust_col_to_target()` in `buffer.py` to advance
+      `vis_acc += spaces` and `char_idx += 1` through the tab when
+      `vis_acc < target_col` per Section 6.4, snapping forward to the character
+      directly following the tab. Validated via Step 10 and Step 16 in
+      `test_buffer.py` (`test_bug_2_7_65_snap_forward_tab_alignment`).
+  - [x] **Bug 2.7.66: Premature Line Join Inhibition at 120 Columns**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.5, 6.6, 10.
     - *Issue*: Section 6.5, 6.6, and Section 10 specify that Backspace
       (at col 0) and Delete (at end of line) line joins are permitted up to
@@ -2380,9 +2475,12 @@ have been resolved and archived.
       `LINE_JOIN_LIMIT = 120`. Joins are prematurely blocked when combined
       length exceeds 120 columns even though line buffer capacity supports up
       to 1,000 characters (`MAX_LINE_CHARS = 1000`).
-    - *Action Required*: In `ports/python/se/buffer.py`, update
-      `LINE_JOIN_LIMIT = MAX_INPUT_LINE_CHARS` (1,000).
-  - [ ] **Bug 2.7.67: Inverted Default File Format & SE.CFG Persistence**:
+    - *Resolution*: Updated `LINE_JOIN_LIMIT = MAX_INPUT_LINE_CHARS` (1,000)
+      in `buffer.py`, allowing line joins via Backspace and Delete up to the
+      mandated 1,000-character line capacity limit. Validated via Step 14
+      and Step 17 in `test_buffer.py`
+      (`test_bug_2_7_66_line_join_limit_1000_chars`).
+  - [x] **Bug 2.7.67: Inverted Default File Format & SE.CFG Persistence**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2; `TODO.md`
       Bug 2.1.15.
     - *Issue*: Section 7.7 specifies that new documents created on Linux/POSIX
@@ -2394,11 +2492,12 @@ have been resolved and archived.
       defaults `self.format_cpm: bool = True` (`CRLF`). In
       `ports/python/se/editor.py:582`, `action_save_file()` persists
       `self.config.set("FORMAT", ...)` to `SE.CFG`.
-    - *Action Required*: In `ports/python/se/buffer.py:90`, default `format_cpm`
-      to `False` on Linux native Python. In `ports/python/se/editor.py:582`,
-      remove `self.config.set("FORMAT", ...)` so format is not written to
-      `SE.CFG`.
-  - [ ] **Bug 2.7.68: Trailing Byte Leakage on Unrecognized Escape Sequences**:
+    - *Resolution*: Defaulted `format_cpm = False` (Linux native LF) in
+      `DocumentBuffer.__init__` in `buffer.py`. Removed
+      `self.config.set("FORMAT", ...)` in `editor.py` so line ending format is
+      not persisted to `SE.CFG`. Validated via Step 52 in `test_editor.py`
+      (`test_bug_2_7_67_default_lf_and_decouple_config_save`).
+  - [x] **Bug 2.7.68: Trailing Byte Leakage on Unrecognized Escape Sequences**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 10; `TODO.md` Bug 2.1.13,
       Bug 2.4.32.
     - *Issue*: Section 10 Anti-Leakage Invariant dictates that if an incomplete
@@ -2412,10 +2511,12 @@ have been resolved and archived.
       `c3` is `'5'`. Because `c3 != '~'`, `get_key()` immediately returns
       `KEY_ESC`, leaving trailing `~` in stdin, which leaks as a normal typed
       character on the next keystroke and corrupts the document buffer.
-    - *Action Required*: In `ports/python/se/terminal.py`, update `get_key()`
-      to drain and discard remaining sequence characters until a valid
-      terminator (`~`, `A`–`Z`, `a`–`z`) or timeout occurs.
-  - [ ] **Bug 2.7.69: Full-Screen Workspace Redraw on Typing Keystrokes**:
+    - *Resolution*: Implemented `_drain_csi()` in `terminal.py` draining all
+      intermediate parameter bytes and sequence terminators (0x40..0x7E) upon
+      unrecognized or extended CSI escape sequences, preventing trailing byte
+      leakage into console input. Validated via Step 10 in `test_terminal.py`
+      (`test_bug_2_7_68_drain_unrecognized_escape_sequences`).
+  - [x] **Bug 2.7.69: Full-Screen Workspace Redraw on Typing Keystrokes**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
       `TODO.md` Bug 2.8.1.
     - *Issue*: Section 7.10 strictly prohibits full-screen re-rendering
@@ -2428,11 +2529,13 @@ have been resolved and archived.
       (`action_directory_browser`), every single keystroke triggers
       `self.renderer.render_directory_workspace(...)`, redrawing the entire
       screen, file grid, and status bar on every character entered.
-    - *Action Required*: In `ports/python/se/editor.py`, update
-      `action_directory_browser` to perform in-place prompt row redraws on
-      typing and inline deletions, restricting full workspace rendering to
-      initial display and pagination.
-  - [ ] **Bug 2.7.70: Obsolete Help Screen Key Mappings & Unicode Em-Dash**:
+    - *Resolution*: Implemented `render_directory_prompt()` in `ui.py` and
+      updated `action_directory_browser()` in `editor.py` to redraw only the
+      prompt row during typing, character deletions, and cursor navigation,
+      restricting full workspace redraws to initial entry, pagination,
+      and pattern updates. Validated via Step 53 in `test_editor.py`
+      (`test_bug_2_7_69_directory_browser_in_place_prompt_echoing`).
+  - [x] **Bug 2.7.70: Obsolete Help Screen Key Mappings & Unicode Em-Dash**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.3, 10; `TODO.md`
       Bug 2.4.39.
     - *Issue*: Section 7.3 specifies the canonical Help Screen layout:
@@ -2444,10 +2547,14 @@ have been resolved and archived.
       `Ctrl+V: Paste Block`, `Ctrl+C: Copy Block` (without target),
       `Ctrl+X: Cut Block`, and uses Unicode em-dash in header:
       `"SE.COM — EDITOR MODE KEYS"`.
-    - *Action Required*: In `ports/python/se/editor.py:368-384`, update
-      `action_help` to canonical Help layout adhering to direct block operation
-      semantics and ASCII hyphen encoding.
-  - [ ] **Bug 2.7.71: Startup Screen Geometry Inversion in Config Defaults**:
+    - *Resolution*: Updated `action_help()` in `editor.py` to canonical Help
+      Screen key mappings (`PgUp / PgDn : Page Up / Down`,
+      `Ctrl+C: Copy Block to Cursor`, `Ctrl+X: Move Block to Cursor`,
+      `Ctrl+D: Delete Block`), removed obsolete paste/cut mappings, and
+      conformed title to ASCII hyphen (`SE - EDITOR MODE KEYS`). Validated
+      via Step 19 and Step 54 in `test_editor.py`
+      (`test_bug_2_7_70_canonical_help_screen_keys`).
+  - [x] **Bug 2.7.71: Startup Screen Geometry Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 13.2; `TODO.md`
       Bug 2.1.2.
     - *Issue*: Section 2.1 and Section 13.2 mandate `80x24` as the universal
@@ -2456,8 +2563,11 @@ have been resolved and archived.
     - *Root Cause*: In `ports/python/se/config.py:16`,
       `DEFAULT_SCREEN = "120X40"`, causing editor instances without `SE.CFG`
       to default to 120x40 wide console mode rather than canonical 80x24.
-    - *Action Required*: In `ports/python/se/config.py:16`, set
-      `DEFAULT_SCREEN = "80X24"`.
+    - *Resolution*: Updated `DEFAULT_SCREEN = "80X24"` in `config.py`,
+      conforming default startup console geometry to canonical 80x24 across
+      unconfigured instances. Validated via Step 1, Step 4, and Step 6 in
+      `test_config.py` and Step 28 and Step 55 in `test_editor.py`
+      (`test_bug_2_7_71_startup_screen_geometry_defaults`).
   - [x] **Bug 2.7.72: Default Tab Width Inversion in Config Defaults**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4, 13.2; `TODO.md`
       Bug 2.4.38; `src/se.asm:4620`.
@@ -2482,8 +2592,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 8 Defects Open (Bug 2.8.1 Resolved; Bug 2.8.7 Rejected;
-  Bugs 2.8.2–2.8.6, 2.8.8–2.8.10 Open).
+- **Status**: Active / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.10
+  Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -2525,7 +2635,7 @@ have been resolved and archived.
       4. Fixed `workspace_root` resolution in `test_editor_headless.py` and
          consolidated Step 17 save prompt capture buffer.
       5. Verified 100% pass across Steps 17–24 in headless test suite.
-  - [ ] **Bug 2.8.2: TPA Memory Overflow Overwriting BDOS and CCP (BAD LOAD)**:
+  - [x] **Bug 2.8.2: TPA Memory Overflow Overwriting BDOS and CCP (BAD LOAD)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.4, 14.5; `TODO.md`
       Section 7.1; `check_tpa.py SEC.COM`.
     - *Issue*: When running `SEC.COM` on RomWBW RC2014 CP/M, CCP reports
@@ -2543,7 +2653,21 @@ have been resolved and archived.
       eliminate redundant `snprintf` formatters on CP/M, trim string literals,
       configure z88dk pragmas to trim unused CRT/stdio features, and restore
       positive TPA headroom below `0xD800`.
-  - [ ] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
+    - *Resolution*:
+      1. Replaced POSIX stdio file operations with native BDOS sector I/O calls
+         (Calls 15, 16, 19, 20, 21, 22, 26, 34).
+      2. Set `-pragma-define:CLIB_OPEN_MAX=0` in `Makefile` to eliminate CRT
+         file descriptors, FILE structs, and stdio buffer allocations.
+      3. Unified 128-byte sector DMA buffers and FCBs across `file_io.c`,
+         `config.c`, and `ui_browser.c` into a single shared `g_cpm_dma_buf`
+         and `g_cpm_fcb`.
+      4. Right-sized CP/M browser capacity to 32 entries and implemented
+         insertion sort to eliminate CRT `qsort`.
+      5. Replaced `snprintf` formatters with `strncpy` in `search.c` and
+         `beautify.c`.
+      6. Verified positive headroom (+890 bytes below BDOS `0xD800`) via
+         automated test `tests/test_sec_tpa_headroom.py`.
+  - [x] **Bug 2.8.3: UTF-8 Character Emission Violating 7-Bit ASCII Mandate**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 7.3, 7.4, 7.12,
       11.10.
     - *Issue*: Multi-byte UTF-8 em-dash characters (`—` / `\xe2\x80\x94`) are
@@ -2556,7 +2680,11 @@ have been resolved and archived.
     - *Remedy*: Replace all multi-byte UTF-8 em-dash characters in
       `src/core/ui_render.c` and shared UI routines with standard 7-bit ASCII
       hyphens (`-`) in strict conformance with Section 2.6.
-  - [ ] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
+    - *Resolution*: Replaced all 4 multi-byte UTF-8 em-dash characters in
+      `src/core/ui_render.c` with standard 7-bit ASCII hyphens (`-`). Added
+      automated test suite `tests/test_sec_utf8_ascii.py` verifying zero UTF-8
+      em-dash sequences across all C source files and compiled `SEC.COM`.
+  - [x] **Bug 2.8.4: Non-Conforming Splash Options & Missing System Metadata**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2.
     - *Issue*: The splash screen in `SEC.COM` displays unsupported Option 3
       (`type [3] set native`), includes redundant `Version v1.1.0 (C)` on Row 2,
@@ -2570,7 +2698,12 @@ have been resolved and archived.
       remove version/language from Row 2, and dynamically render the four
       canonical system status fields from `g_config` matching canonical
       `SE.COM`.
-  - [ ] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
+    - *Resolution*: Conditionally omitted Option 3 on CP/M via
+      `#ifndef __CPM__`, enforced clean header mandate by removing version
+      info from Row 2, and added dynamic rendering of Active Screen, RAM Drive,
+      Plugin System, and Max Lines fields from `g_config`. Verified with
+      `tests/test_sec_splash_metadata.py`.
+  - [x] **Bug 2.8.5: Non-Conforming Config Workspace & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 11.1, 13.2.
     - *Issue*: Configuration Manager in `SEC.COM` renders a prohibited
       `Enter option: _` input prompt line (violating anti-pattern 1), uses
@@ -2585,7 +2718,12 @@ have been resolved and archived.
       5 Plugins), remove `Enter option: _`, format canonical footer
       `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`, and remove `FORMAT`
       parameter serialization from `config_save_file()`.
-  - [ ] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
+    - *Resolution*: Harmonized `show_config_screen()` in `src/core/ui_render.c`
+      to canonical 5-option hotkey layout with proper parameter toggling,
+      eliminated `Enter option: _` input prompt, rendered canonical footer, and
+      removed `FORMAT=` serialization from `src/core/config.c`. Verified with
+      `tests/test_sec_config_layout.py`.
+  - [x] **Bug 2.8.6: Non-Conforming About Screen Displaying (Linux) on CP/M**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6.
     - *Issue*: About screen in `SEC.COM` displays `SE.COM — Screen Editor
       (Linux)` when executed on CP/M hardware or RomWBW emulator, uses an
@@ -2597,6 +2735,11 @@ have been resolved and archived.
       adopt the canonical 9-line centered layout from Section 7.12, format
       `version 1.1.0 (2026-10-09) (C)` in Row 2, and include author and
       Antigravity/Gemini open-source credits.
+    - *Resolution*: Refactored `show_about_screen()` in `src/core/ui_render.c`
+      to canonical 9-line centered layout (54 cols width), eliminated the
+      `(Linux)` tag, added canonical `version 1.1.0 (2026-10-09) (C)`, and
+      included full author and open-source credits. Verified with
+      `tests/test_sec_about_screen.py`.
   - [x] **Bug 2.8.7: Status Bar Field 4 Context Clobber [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 6.6, 11.1.
     - *Disposition*: **REJECTED / WONTFIX** per canonical specification.
@@ -2608,7 +2751,7 @@ have been resolved and archived.
       4.3's Jitter-Free Mandate ("Field 5 MUST NOT contain variable-length
       tags, mode indicators, or pan offsets... All mode and contextual
       indicators belong strictly in Field 4").
-  - [ ] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
+  - [x] **Bug 2.8.8: Help Screen Key Discrepancy & Duplicate Ctrl+V Alias**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.
     - *Issue*: Help screen (`Ctrl+K`) displays `Ctrl+U / Ctrl+V: Page Up / Down`
       alongside `Ctrl+V: Paste Block` (duplicating `Ctrl+V` on the same line),
@@ -2620,7 +2763,12 @@ have been resolved and archived.
       `PgUp / PgDn : Page Up / Down` and `Ctrl+D: Delete Block`, and standardize
       block descriptions to `Copy Block to Cursor` and `Move Block to Cursor`
       matching Section 7.3.
-  - [ ] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
+    - *Resolution*: Harmonized `s_help_lines` in `src/core/ui_render.c` to the
+      canonical 22-line layout matching `plugins/help.asm` and Section 7.3,
+      eliminating duplicate `Ctrl+V: Paste Block` and non-canonical `Cut Block`,
+      and displaying `Delete / Ctrl+D` and `Copy/Move solidified block`.
+      Verified with `tests/test_sec_help_screen.py`.
+  - [x] **Bug 2.8.9: Goto Line Modal Height & Redraw Inefficiency**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype C), 7.10.
     - *Issue*: Goto Line modal dialog renders with 8 rows instead of canonical
       7 rows, lacks canonical `Goto line: [ ... ]` query framing, and repaints
@@ -2632,7 +2780,13 @@ have been resolved and archived.
       `modal_goto_line()`) to canonical 7-row framing (`50 cols x 7 rows`)
       adhering to Archetype C, and implement in-place prompt character echoing
       per Section 7.10.
-  - [ ] **Bug 2.8.10: Unsaved Document Close Loss on Untitled Buffer (Ctrl+W)**:
+    - *Resolution*: Implemented `modal_goto_line()` in `src/core/ui_modal.c`
+      with canonical 50x7 dimensions, `Goto line: [     ]` query framing, and
+      explicit `[Enter]=Goto Line     [ESC]=Cancel` action footer. Replaced full
+      frame redraws with in-place character echoing and visual backspacing.
+      Standardized `modal_prompt_text()` to 7 rows. Verified with
+      `tests/test_sec_goto_line.py`.
+  - [x] **Bug 2.8.10: Unsaved Document Close Loss on Untitled Buffer (Ctrl+W)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11.
     - *Issue*: Closing an untitled modified document via `Ctrl+W` prompts "Save
       changes?", but selecting `[Y]es` fails silently and discards edits because
@@ -2644,6 +2798,12 @@ have been resolved and archived.
       `g_current_filename[0] == '\0'`, redirect `[Y]es` to
       `ui_browser_save_dialog()` so the user can enter a destination filename
       before closing to the splash screen.
+    - *Resolution*: Updated `modal_confirm_save_changes()` in
+      `src/core/ui_modal.c` to check `if (!g_current_filename[0])`. When
+      untitled, selecting `[Y]es` redirects to `ui_browser_save_dialog()`. If
+      the user cancels the file browser dialog, it returns `MODAL_RES_CANCEL`
+      to prevent discarding unsaved changes. Verified with
+      `tests/test_sec_untitled_close.py`.
 
 ---
 

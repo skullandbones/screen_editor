@@ -213,7 +213,12 @@ DFP_BOX_CLOSE:
 
 FIND_UI_CHECK_ESC:
 	; Check if escape sequence
+	IFDEF TARGET_NEXT
 	LD BC,ESC_TIMEOUT_LOOPS
+	ELSE
+	PUSH BC
+	LD BC,ESC_TIMEOUT_LOOPS
+	ENDIF
 FIND_WAIT_ESC:
 	CALL CHECK_KEY_READY
 	JR NZ,FIND_GOT_ESC_SEQ
@@ -221,20 +226,23 @@ FIND_WAIT_ESC:
 	LD A,B
 	OR C
 	JR NZ,FIND_WAIT_ESC
+	IFNDEF TARGET_NEXT
+	POP BC
+	ENDIF
 	JR FIND_UI_CANCEL
 
 FIND_GOT_ESC_SEQ:
-	CALL GOT_ESC_BYTE
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	SCF
-	RET
+	IFDEF TARGET_NEXT
+	CALL DRAIN_ESCAPE_SEQUENCE
+	JP FIND_UI_KEY_LOOP
+	ELSE
+	CALL DRAIN_ESC_SEQUENCE
+	POP BC
+	JP FIND_UI_KEY_LOOP
+	ENDIF
 
 FIND_UI_CANCEL:
 	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
 	SCF
 	RET
 
@@ -267,7 +275,6 @@ FIND_CHECK_PREV:
 FIND_EXEC_SEARCH:
 	; Erase find popup dialog before running search so screen is clean
 	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
 	CALL FIND_STRING_FORWARD
 	RET
 
@@ -1936,7 +1943,12 @@ REPLACE_INPUT_BS:
 	JR REPLACE_INPUT_LOOP
 
 REPLACE_INPUT_CHECK_ESC:
+	IFDEF TARGET_NEXT
 	LD BC,ESC_TIMEOUT_LOOPS
+	ELSE
+	PUSH BC
+	LD BC,ESC_TIMEOUT_LOOPS
+	ENDIF
 REP_WAIT_ESC:
 	CALL CHECK_KEY_READY
 	JR NZ,REP_GOT_ESC_SEQ
@@ -1944,20 +1956,23 @@ REP_WAIT_ESC:
 	LD A,B
 	OR C
 	JR NZ,REP_WAIT_ESC
+	IFNDEF TARGET_NEXT
+	POP BC
+	ENDIF
 	JR REPLACE_INPUT_CANCEL
 
 REP_GOT_ESC_SEQ:
-	CALL GOT_ESC_BYTE
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
+	IFDEF TARGET_NEXT
+	CALL DRAIN_ESCAPE_SEQUENCE
+	JP REPLACE_INPUT_LOOP
+	ELSE
+	CALL DRAIN_ESC_SEQUENCE
+	POP BC
+	JP REPLACE_INPUT_LOOP
+	ENDIF
 
 REPLACE_INPUT_CANCEL:
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
+	JP RENDER_SCREEN
 
 REPLACE_INPUT_CONFIRM:
 	LD A,B
@@ -1965,8 +1980,6 @@ REPLACE_INPUT_CONFIRM:
 
 	; Clear replace popup by restoring base screen
 	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
 
 	; 3. Initialize replace execution
 	XOR A
@@ -2332,17 +2345,14 @@ REPLACE_SUMMARY:
 	LD A,1
 	LD (NEED_SCREEN_RENDER),A
 	CALL FLUSH_DEFERRED_RENDER
-	CALL RENDER_SCREEN
-	CALL RENDER_STATUS_BAR
-	CALL LOCATE_CURSOR
-	RET
+	JP RENDER_SCREEN
 
 ;------------------------------------------------------------------------------
 ; APPLY_LINE_REPLACE: Substitute pattern with replacement string in active line
 ;
 ; Purpose:
 ;   Replaces matched pattern substring in ACTIVE_LINE_BUF with replacement
-;   string. Checks that resulting line length does not exceed 120 characters.
+;   string. Checks that resulting line length does not exceed 1000 characters.
 ;
 ; Call Usage / Protocol:
 ;   Called via CALL when user confirms replacement in DO_REPLACE_UI.
@@ -2351,79 +2361,85 @@ REPLACE_SUMMARY:
 ;   CUR_COL, SEARCH_LEN, REPLACE_LEN, ACTIVE_LINE_BUF.
 ;
 ; Outputs:
-;   Carry = 0 on success; Carry = 1 if line would exceed 120 chars.
+;   Carry = 0 on success; Carry = 1 if line would exceed 1000 chars.
 ;
 ; Preserves / Modifies:
 ;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
 APPLY_LINE_REPLACE:
-	LD BC,(CUR_DOC_ROW)
-	CALL ENSURE_CACHE_WINDOW	; HL = line_start in LINE_STORAGE
+	CALL CHECKOUT_ACTIVE_LINE	; HL = ACTIVE_LINE_BUF
 
-	; 1. Calculate line length L
+	; 1. Calculate line length L (16-bit)
 	PUSH HL
-	LD C,0
+	LD BC,0
 ALR_CALC_LEN:
 	LD A,(HL)
 	OR A
 	JR Z,ALR_CALC_LEN_DONE
 	INC HL
-	INC C
-	LD A,C
-	CP MAX_LINE_STRIDE-2
-	JR C,ALR_CALC_LEN
+	INC BC
+	JR ALR_CALC_LEN
 ALR_CALC_LEN_DONE:
-	POP HL				; HL = line_start
-	; C = L (current line length in bytes)
+	POP HL				; HL = ACTIVE_LINE_BUF
+	; BC = L (current line length in bytes)
 
 	; 2. Check resulting line length: L' = L - S + R
 	; S = SEARCH_LEN, R = REPLACE_LEN
+	LD H,B
+	LD L,C				; HL = L
 	LD A,(SEARCH_LEN)
-	LD B,A				; B = S
+	LD E,A
+	LD D,0
+	OR A
+	SBC HL,DE			; HL = L - S
 	LD A,(REPLACE_LEN)
-	LD E,A				; E = R
+	LD E,A
+	LD D,0
+	ADD HL,DE			; HL = L' = L - S + R
 
-	; L' = C - B + E
-	LD A,C
-	SUB B
-	ADD A,E				; A = L'
-	CP MAX_LINE_STRIDE-7		; 121 (max 120 chars)
+	; 16-bit comparison against MAX_INPUT_LINE_CHARS (1000)
+	LD DE,MAX_INPUT_LINE_CHARS	; 1000
+	LD A,L
+	SUB E
+	LD A,H
+	SBC A,D
 	JR C,ALR_LENGTH_OK
+	JR Z,ALR_LENGTH_OK
 
-	; Line would exceed 120 chars: display warning modal and skip
+	; Line would exceed 1000 chars: display warning modal and skip
 	CALL SHOW_POPUP_LINE_TOO_LONG
 
 	; Advance past match start
-	LD A,(CUR_COL)
-	INC A
-	LD (CUR_COL),A
+	LD HL,(CUR_COL)
+	INC HL
+	LD (CUR_COL),HL
 	RET
 
 ALR_LENGTH_OK:
 	; 3. Perform substitution
-	; PTR = line_start + CUR_COL
-	PUSH HL				; Save line_start
-	LD A,(CUR_COL)
-	LD E,A
-	LD D,0
+	; PTR = ACTIVE_LINE_BUF + CUR_COL
+	LD HL,ACTIVE_LINE_BUF
+	LD DE,(CUR_COL)
 	ADD HL,DE
 	LD (REPLACE_PTR_TEMP),HL	; Pointer to match start in line
-	POP HL				; Restore line_start
 
-	; Calculate TAIL_LEN in C:
-	; L is in C. TAIL_LEN = L - (CUR_COL + S)
-	LD A,(CUR_COL)
-	LD E,A
+	; Calculate TAIL_LEN in BC:
+	; L is in BC. TAIL_LEN = L - (CUR_COL + S)
+	LD DE,(CUR_COL)
 	LD A,(SEARCH_LEN)
-	ADD A,E				; A = CUR_COL + S
-	LD E,A				; E = CUR_COL + S
-	LD A,C				; A = L
-	SUB E				; A = TAIL_LEN
-	LD C,A				; C = TAIL_LEN
+	LD L,A
+	LD H,0
+	ADD HL,DE			; HL = CUR_COL + S
+	; BC - HL:
+	LD A,C
+	SUB L
+	LD C,A
+	LD A,B
+	SBC A,H
+	LD B,A				; BC = TAIL_LEN
 
 	; Number of bytes to move = TAIL_LEN + 1 (includes null terminator)
-	INC C				; C = BYTES_TO_MOVE (tail + null)
-	LD B,0			; BC = count of tail bytes including null
+	INC BC				; BC = tail bytes including null
 
 	; Compare S and R:
 	LD A,(SEARCH_LEN)
@@ -2515,8 +2531,11 @@ ALR_COPY_REPLACE_STR:
 	RET
 
 ALR_SUBST_DONE:
-	; Mark cache dirty
-	CALL MARK_CURRENT_LINE_DIRTY
+	; Mark active line dirty and commit to Far RAM + cache sync
+	LD A,1
+	LD (ACTIVE_LINE_DIRTY),A
+	LD (DOC_MODIFIED),A
+	CALL COMMIT_ACTIVE_LINE
 
 	; Increment REPLACE_COUNT
 	LD HL,(REPLACE_COUNT)
@@ -2524,9 +2543,11 @@ ALR_SUBST_DONE:
 	LD (REPLACE_COUNT),HL
 
 	; Update CUR_COL = CUR_COL + R
-	LD A,(CUR_COL)
-	LD HL,REPLACE_LEN
-	ADD A,(HL)
-	LD (CUR_COL),A
+	LD HL,(CUR_COL)
+	LD A,(REPLACE_LEN)
+	LD E,A
+	LD D,0
+	ADD HL,DE
+	LD (CUR_COL),HL
 	RET
 
