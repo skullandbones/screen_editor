@@ -4375,7 +4375,7 @@ STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 ;------------------------------------------------------------------------------
 STR_ABOUT_TITLE:	DB	"SE - Screen Editor", "$"
 STR_ABOUT_VERSION:
-	DB	"version 1.1.1 (2026-10-13) (Z80 Assembly)", "$"
+	DB	"version 1.1.2 (2026-10-14) (Z80 Assembly)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
 
 STR_ABOUT_AI:
