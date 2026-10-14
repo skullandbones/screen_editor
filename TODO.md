@@ -1555,7 +1555,7 @@ have been resolved and archived.
   buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
 - **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
   via `make test-rust`).
-- **Status**: Complete / Production Ready (Bugs 2.6.1–2.6.3 Resolved; 0 Open).
+- **Status**: Complete / Production Ready (Bugs 2.6.1–2.6.4 Resolved; 0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.6.1: Line Feed (`\n`, `0x0A`) Not Accepted as Enter in Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, Section 8.3.
@@ -1593,6 +1593,20 @@ have been resolved and archived.
     - *Resolution*: Computed `left_pad` as `((active_cols - 80) / 2)` when
       `active_cols > 80` and `0` on 80-column displays in
       `ports/rust/src/ui_browser.rs`.
+  - [x] **Bug 2.6.4: Missing Dynamic 120x40 Geometry Adaptation on Wide PTY**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.1.
+    - *Issue*: Launching `se-rs` on a `120x40` PTY without `SE.CFG`
+      (`test_bug_2_4_19_panning_edge_trigger_and_geometry`) retained `80x24`
+      instead of adapting to `120x40`.
+    - *Root Cause*: `hal_console_get_size()` in `ports/rust/src/hal_linux.rs`
+      returned `(ROWS_24, COLS_80)` unconditionally whenever
+      `cfg.screen_mode == MODE_80X24` instead of querying `TIOCGWINSZ` at
+      startup and on `SIGWINCH`.
+    - *Resolution*: Added `editor_apply_winch()` in `ports/rust/src/editor.rs`
+      and invoked it in `editor_init()` and on `SIGWINCH` in
+      `ports/rust/src/main.rs` to adapt to `120x40` when `TIOCGWINSZ` reports
+      `cols >= 120 && rows >= 40`. Validated via
+      `test_bug_2_4_19_panning_edge_trigger_and_geometry`.
 
 ### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5

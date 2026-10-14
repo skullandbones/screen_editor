@@ -84,7 +84,7 @@ fn main() {
         if get_resize_pending() {
             set_resize_pending(false);
             clear_screen();
-            editor_sync_geometry();
+            editor_apply_winch();
             if get_is_splash_screen() != 0 {
                 show_splash_screen();
             } else {

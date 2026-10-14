@@ -24,8 +24,24 @@ pub fn editor_sync_geometry() {
     set_active_dims(r, c);
 }
 
+pub fn editor_apply_winch() {
+    let cfg = get_config();
+    let (nr, nc) = hal_console_get_native_size();
+    if cfg.screen_mode == MODE_NATIVE {
+        let r = if nr >= ROWS_24 { nr } else { ROWS_24 };
+        let c = if nc >= COLS_80 { nc } else { COLS_80 };
+        set_active_dims(r, c);
+    } else if nc >= COLS_120 && nr >= ROWS_40 {
+        set_active_dims(ROWS_40, COLS_120);
+    } else if cfg.screen_mode == MODE_120X40 {
+        set_active_dims(ROWS_40, COLS_120);
+    } else {
+        set_active_dims(ROWS_24, COLS_80);
+    }
+}
+
 pub fn editor_init() {
-    editor_sync_geometry();
+    editor_apply_winch();
     set_is_splash_screen(1);
     set_exit_flag(0);
     set_block_bounds(BLOCK_MODE_OFF, 0, 0, 0, 0);
