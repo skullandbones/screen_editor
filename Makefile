@@ -93,6 +93,8 @@ $(TARGET_SEC): $(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
 		-pragma-define:CLIB_OPEN_MAX=0 \
 		-Isrc/include -o $(TARGET_SEC) \
 		$(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
+	@echo "==> Auditing $(TARGET_SEC) CCP preservation..."
+	python3 check_ccp.py $(TARGET_SEC)
 
 $(TARGET_LINUX): $(LINUX_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_LINUX_SRCS)
 	@echo "==> Compiling $(TARGET_LINUX) with $(CC)..."
@@ -125,9 +127,10 @@ $(TARGET_NEXT_DOT): $(ASM_SRC_NEXT)
 	cp -f dot_se.bin $(TARGET_NEXT_DOT)
 	cp -f dot_se.bin SE
 
-check-ccp: $(TARGET)
+check-ccp:
 	@echo "==> Auditing CCP preservation and page alignment margin..."
 	python3 check_ccp.py $(TARGET)
+	python3 check_ccp.py $(TARGET_SEC)
 
 check-tpa: $(TARGET)
 	@echo "==> Checking $(TARGET) memory footprint against TPA..."
