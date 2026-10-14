@@ -213,9 +213,8 @@ fn ui_browser_workspace(mode: u8) -> Option<String> {
         } else {
             1
         };
-        let avail_cols = active_cols.saturating_sub(1) as usize;
-        let left_pad = if avail_cols > GRID_WIDTH {
-            (avail_cols - GRID_WIDTH) / 2
+        let left_pad = if active_cols > 80 {
+            ((active_cols - 80) / 2) as usize
         } else {
             0
         };

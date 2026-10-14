@@ -1555,7 +1555,7 @@ have been resolved and archived.
   buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
 - **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
   via `make test-rust`).
-- **Status**: Complete / Production Ready (Bugs 2.6.1–2.6.2 Resolved; 0 Open).
+- **Status**: Complete / Production Ready (Bugs 2.6.1–2.6.3 Resolved; 0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.6.1: Line Feed (`\n`, `0x0A`) Not Accepted as Enter in Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, Section 8.3.
@@ -1581,6 +1581,18 @@ have been resolved and archived.
       `hal_console_locate(screen_row, 1)` for rows beyond EOF in
       `ports/rust/src/ui_render.rs`. Validated via
       `test_bug_2_4_14_viewport_col1_alignment`.
+  - [x] **Bug 2.6.3: Spurious 4-Space Padding Before File Browser Rules**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5.
+    - *Issue*: `ui_browser_workspace()` in `ports/rust/src/ui_browser.rs`
+      rendered `~    ====...` on an `80x24` terminal instead of `~====...`
+      (`test_bug_2_4_17_tier1_file_workspaces_and_directory_scan`).
+    - *Root Cause*: `left_pad` was computed from `GRID_WIDTH` (`70`) instead
+      of `80` (adding 4 spaces on an 80-column display), whereas
+      `src/core/ui_browser.c` starts the rule immediately after `~` on an
+      80-column display.
+    - *Resolution*: Computed `left_pad` as `((active_cols - 80) / 2)` when
+      `active_cols > 80` and `0` on 80-column displays in
+      `ports/rust/src/ui_browser.rs`.
 
 ### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
