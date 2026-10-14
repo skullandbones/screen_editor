@@ -109,13 +109,17 @@ standard terminal control keys map to the Next's compound hardware keys:
   Returns to the Splash Screen or cancels active block selections and modals.
 - **`BREAK` (`Caps Shift + Space`) = `Ctrl+C`**:
   Copies a marked block to the cursor position.
+- **`TRUE VIDEO` (`Caps Shift + 3`) or `EXTEND + I` = `Tab`**:
+  Inserts tab spaces in the editor or toggles Exact/Insensitive case in
+  Find/Replace modals (`SE_NEXT.COM` disambiguates `TRUE VIDEO` `0x13` from
+  `EXTEND + S` via ULA port `0xFDFE` bit 1).
 - **`DELETE` (`Caps Shift + 0`) = `Backspace` / `Delete`**:
   Deletes the character left of the cursor (`EXTEND + H` = `Backspace`,
   `EXTEND + D` = forward `Delete` or delete marked block).
 - **Dedicated Arrow Keys (`Up`, `Down`, `Left`, `Right`)**:
   Move the cursor in all four directions (`SE_NEXT.COM` polls ULA matrix port
   `0x00FE` to disambiguate physical arrow keys from `Ctrl+F`, `Ctrl+A`,
-  `Ctrl+E`, and `Ctrl+X`).
+  `Ctrl+E`, `Ctrl+K`, and `Ctrl+X`).
 
 | Standard SE Key | ZX Spectrum Next SE Key            | Functional Action |
 | :---            | :---                               | :---              |
@@ -127,7 +131,7 @@ standard terminal control keys map to the Next's compound hardware keys:
 | `Enter`         | `Enter`                            | New line / Confirm|
 | `Backspace`     | `DELETE` (`Caps Shift + 0`) / `^H` | Delete char left  |
 | `Delete` (`^D`) | `EXTEND + D` (`CS + SS + D`)       | Delete char/block |
-| `Tab` (`^I`)    | `EXTEND + I` (`Sym Shift + I`)     | Insert tab spaces |
+| `Tab` (`^I`)    | `TRUE VIDEO` (`CS+3`) / `EXTEND+I` | Insert tab spaces |
 | `Ctrl+A` (`Home`)| `EXTEND + A` (`CS + SS + A`)      | Start of line     |
 | `Ctrl+B`        | `EXTEND + B` (`CS + SS + B`)       | Toggle block mode |
 | `Ctrl+C`        | `BREAK` (`CS + Space`) / `EXT + C` | Copy marked block |
@@ -136,7 +140,7 @@ standard terminal control keys map to the Next's compound hardware keys:
 | `Ctrl+F`        | `EXTEND + F` (`CS + SS + F`)       | Find text modal   |
 | `Ctrl+G`        | `EXTEND + G` (`CS + SS + G`)       | Bottom of file    |
 | `Ctrl+H`        | `EXTEND + H` (`CS + SS + H`)       | Backspace left    |
-| `Ctrl+I` (`Tab`)| `EXTEND + I` (`Sym Shift + I`)     | Tab / Toggle case |
+| `Ctrl+I` (`Tab`)| `TRUE VIDEO` (`CS+3`) / `EXTEND+I` | Tab / Toggle case |
 | `Ctrl+K`        | `EXTEND + K` (`CS + SS + K`)       | Help / Block menu |
 | `Ctrl+L`        | `EXTEND + L` (`CS + SS + L`)       | Goto line number  |
 | `Ctrl+N`        | `EXTEND + N` (`CS + SS + N`)       | Find next match   |

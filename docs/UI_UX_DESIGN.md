@@ -1515,6 +1515,13 @@ or display notifications.
    - Copy / Break Key (`BREAK` = `Ctrl+C`):
      Pressing **`BREAK`** (or **`Caps Shift + Space`**) generates `Ctrl+C`
      (`0x03`), copying a marked block in the editor.
+   - Tab Key (`TRUE VIDEO` / `EXTEND + I` = `Tab`):
+     Pressing the dedicated **`TRUE VIDEO`** key (`Caps Shift + 3`),
+     **`EXTEND + I`** (`Ctrl+I`), or **`Symbol Shift + I`** (in native mode)
+     generates `Tab` (`0x09`). Under NextCPM (`SE_NEXT.COM`), the BIOS emits
+     `0x13` for `TRUE VIDEO`; `HAL_KEYBOARD_TRANSLATE` checks ULA Row 1
+     (`port 0xFDFE`, bit 1 = `'S'`) to translate `TRUE VIDEO` into `Tab`
+     (`0x09`) while preserving **`EXTEND + S`** (`Ctrl+S` Save File).
    - Backspace vs. Forward Delete (`DELETE` vs. `EXTEND + D`):
      Pressing the dedicated **`DELETE`** key (or **`Caps Shift + 0`**) deletes
      the character to the left of the cursor (`Backspace` / `0x08` in NextCPM)
@@ -1528,12 +1535,13 @@ or display notifications.
      BIOS translates these arrow keys into single-byte control codes (`Right`
      = `0x06`, `Left` = `0x01`/`0x08`, `Up` = `0x05`/`0x1F`/`0x0B`, `Down` =
      `0x18`/`0x1E`/`0x0A`) that overlap with `Ctrl+F` (Find), `Ctrl+A` (Home),
-     `Ctrl+E` (End), and `Ctrl+X` (Move Block). To prevent command collisions,
-     `SE_NEXT.COM` (`hal_nextcpm_keyboard.asm`) samples the physical ULA
-     keyboard matrix (`port 0x00FE`) when these bytes arrive: if the letter
-     key (`F`, `A`, `E`, `X`) is not physically pressed, the input is decoded
-     as an ANSI arrow escape sequence (`\x1b[A`..`\x1b[D`); if the letter key
-     is physically held with `EXTEND`, the editor command executes normally.
+     `Ctrl+E` (End), `Ctrl+K` (Help), and `Ctrl+X` (Move Block). To prevent
+     command collisions, `SE_NEXT.COM` (`hal_nextcpm_keyboard.asm`) samples the
+     physical ULA keyboard matrix (`port 0x00FE`) when these bytes arrive: if
+     the letter key (`F`, `A`, `E`, `K`, `X`) is not physically pressed, the
+     input is decoded as an ANSI arrow escape sequence (`\x1b[A`..`\x1b[D`); if
+     the letter key is physically held with `EXTEND`, the editor command
+     executes normally.
    - Native Target `Symbol Shift` Shortcuts (`SE.NEX` / `.se`):
      In the standalone Next native targets (`SE.NEX` and `.se`), `Symbol Shift`
      also provides single-modifier shortcuts for common control keys:
@@ -1557,7 +1565,7 @@ or display notifications.
    | `Enter`         | `Enter`                            | New line / Confirm|
    | `Backspace`     | `DELETE` (`Caps Shift + 0`) / `^H` | Delete char left  |
    | `Delete` (`^D`) | `EXTEND + D` (`CS + SS + D`)       | Delete char/block |
-   | `Tab` (`^I`)    | `EXTEND + I` (`Sym Shift + I`)     | Insert tab spaces |
+   | `Tab` (`^I`)    | `TRUE VIDEO` (`CS+3`) / `EXTEND+I` | Insert tab spaces |
    | `Ctrl+A` (`Home`)| `EXTEND + A` (`CS + SS + A`)      | Start of line     |
    | `Ctrl+B`        | `EXTEND + B` (`CS + SS + B`)       | Toggle block mode |
    | `Ctrl+C`        | `BREAK` (`CS + Space`) / `EXT + C` | Copy marked block |
@@ -1566,7 +1574,7 @@ or display notifications.
    | `Ctrl+F`        | `EXTEND + F` (`CS + SS + F`)       | Find text modal   |
    | `Ctrl+G`        | `EXTEND + G` (`CS + SS + G`)       | Bottom of file    |
    | `Ctrl+H`        | `EXTEND + H` (`CS + SS + H`)       | Backspace left    |
-   | `Ctrl+I` (`Tab`)| `EXTEND + I` (`Sym Shift + I`)     | Tab / Toggle case |
+   | `Ctrl+I` (`Tab`)| `TRUE VIDEO` (`CS+3`) / `EXTEND+I` | Tab / Toggle case |
    | `Ctrl+K`        | `EXTEND + K` (`CS + SS + K`)       | Help / Block menu |
    | `Ctrl+L`        | `EXTEND + L` (`CS + SS + L`)       | Goto line number  |
    | `Ctrl+N`        | `EXTEND + N` (`CS + SS + N`)       | Find next match   |

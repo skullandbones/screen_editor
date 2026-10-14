@@ -77,7 +77,7 @@ HAL_KEYBOARD_TRANSLATE:
 
 	; Preserve 0x7F (Delete) for forward and block deletion
 	CP NEXT_KEY_DELETE
-	JP Z,HKT_DONE
+	JR Z,HKT_DONE
 
 	; Check Right Arrow / Ctrl+F (0x06)
 	CP 006H
@@ -115,7 +115,11 @@ HAL_KEYBOARD_TRANSLATE:
 	CP 008H
 	JR Z,HKT_CHECK_BS
 
-	JP HKT_DONE
+	; Check True Video (Tab) / Ctrl+S (0x13)
+	CP 013H
+	JR Z,HKT_CHECK_TRUE_VID
+
+	JR HKT_DONE
 
 HKT_CHECK_RIGHT:
 	; Is key 'F' physically pressed? Row 1 (port $FDFE), bit 3
@@ -169,7 +173,12 @@ HKT_SET_UP:
 	JR HKT_QUEUE_CSI
 HKT_IS_CTRL_E:
 	LD A,005H
-	JR HKT_DONE
+
+HKT_DONE:
+	POP HL
+	POP DE
+	POP BC
+	RET
 
 HKT_CHECK_DOWN:
 	; Is key 'X' physically pressed? Row 0 (port $FEFE), bit 2
@@ -202,6 +211,18 @@ HKT_CHECK_BS:
 	LD A,008H			; Normal Backspace
 	JR HKT_DONE
 
+HKT_CHECK_TRUE_VID:
+	; Is key 'S' physically pressed? Row 1 (port $FDFE), bit 1
+	LD BC,0FDFEH
+	IN A,(C)
+	BIT 1,A
+	JR Z,HKT_IS_CTRL_S		; 'S' pressed (bit 1 == 0) -> Ctrl+S
+	LD A,009H			; True Video -> Tab (0x09)
+	JR HKT_DONE
+HKT_IS_CTRL_S:
+	LD A,013H			; Normal Ctrl+S (Save File)
+	JR HKT_DONE
+
 HKT_QUEUE_CSI:
 	; Queue '[' and directional character in sequence buffer
 	LD (KEY_SEQ_BUF+1),A
@@ -212,9 +233,5 @@ HKT_QUEUE_CSI:
 	LD HL,KEY_SEQ_BUF
 	LD (KEY_SEQ_PTR),HL
 	LD A,NEXT_KEY_EDIT		; Return ESC (0x1B)
+	JR HKT_DONE
 
-HKT_DONE:
-	POP HL
-	POP DE
-	POP BC
-	RET
