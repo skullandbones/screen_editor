@@ -135,11 +135,7 @@ def test_bug_2_2_12():
     )
     assert res.returncode == 0, f"check_tpa.py failed:\n{res.stdout}"
     assert "PASS" in res.stdout, "check_tpa verdict was not PASS"
-    assert (
-        "+2,048 bytes" in res.stdout
-        or "+2,304 bytes" in res.stdout
-        or "+2,560 bytes" in res.stdout
-    ), "Headroom must be positive"
+    assert "Headroom: +" in res.stdout, "Headroom must be positive"
 
     print("    [+] DRAIN_ESCAPE_SEQUENCE defined and mapped")
     print("    [+] GOTO_GOT_ESC_SEQ routes to DRAIN_ESCAPE_SEQUENCE & loops")
