@@ -284,6 +284,7 @@ static void render_browser_prompt(uint8_t prompt_row, const char *prompt_lbl,
 static int ui_browser_workspace(int mode, char *selected_filename,
                                 size_t max_len)
 {
+    uint8_t prev_splash = g_is_splash_screen;
 #ifdef __CPM__
 #define input_buf s_browser_input
 #define title_buf s_browser_title
@@ -305,6 +306,8 @@ static int ui_browser_workspace(int mode, char *selected_filename,
     int content_width;
     uint8_t prompt_row;
     int need_full_render = 1;
+
+    g_is_splash_screen = 1;
 
 #ifdef __CPM__
     s_browser_drive = (char)('A' + bdos(25, 0));
@@ -507,6 +510,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
         }
         if (k == KEY_ESC) {
             g_need_screen_render = 1;
+            g_is_splash_screen = prev_splash;
             return MODAL_RES_CANCEL;
         } else if (k == KEY_ENTER || k == '\n' || k == '\r') {
             g_need_screen_render = 1;
@@ -658,6 +662,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 }
                 strncpy(selected_filename, input_buf, max_len - 1);
                 selected_filename[max_len - 1] = '\0';
+                g_is_splash_screen = prev_splash;
                 return MODAL_RES_OK;
             } else if (selected_idx >= 0 && selected_idx < s_browser_count) {
                 if (mode == BROWSER_MODE_SAVE ||
@@ -671,6 +676,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                         s_browser_files[selected_idx].filename,
                         max_len - 1);
                 selected_filename[max_len - 1] = '\0';
+                g_is_splash_screen = prev_splash;
                 return MODAL_RES_OK;
             }
         } else if (k == KEY_CTRL_F) {
