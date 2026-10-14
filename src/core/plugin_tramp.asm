@@ -18,7 +18,6 @@ LOAD_FAR_BANK:		DB	0
 LOAD_BASE_PAGE:		DB	0
 LOAD_SIZE_CLASS:	DB	0
 LOAD_PAGE_COUNT:	DB	0
-ALLOC_SIZE_CLASS:	DB	0
 ALLOC_PAGE_COUNT:	DB	0
 ALLOC_SUBALLOC_FLAG:	DB	0
 ALLOC_TEMP_BANK:	DB	0
@@ -68,9 +67,6 @@ DOC_IS_FAT:		DB	0		; 1 if active doc is FAT file
 FAT_DOC_UNIT:		DB	0FFH		; HBIOS unit (0..7, 0xFF=def)
 FAT_DOC_PATH:		DS	128		; Full null-terminated DOS path
 FAT_DOC_FNAME:		DS	13		; Base 8.3 fname + null
-FAT_ACTIVE_UNIT:	DB	0FFH		; Active browsing unit
-FAT_ACTIVE_DIR:		DS	128		; Active directory path
-FAT_INPUT_MATCHED:	DB	0		; Match flag during input check
 CURRENT_DIR_IS_FAT:	DB	0		; 0=CP/M drive, 1=FAT volume
 CURRENT_DIR_FAT_UNIT:	DB	0FFH	; FAT browsing unit (0..7, 0xFF=default)
 CURRENT_DIR_FAT_PATH:	DS	64	; Active directory path (e.g. "/")
