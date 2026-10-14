@@ -2464,41 +2464,6 @@ FCLN_IS_DRIVE:
 	RET
 
 ;------------------------------------------------------------------------------
-; IS_ALPHA_CHAR: Test if character in A is alphabetic ('A'..'Z' or 'a'..'z')
-;
-; Purpose:
-;   Validates whether ASCII byte in register A is an uppercase or lowercase
-;   alphabetic character.
-;
-; Call Usage / Protocol:
-;   Called via CALL from command line and FCB parsers.
-;
-; Inputs:
-;   A = Character byte to test.
-;
-; Outputs:
-;   Carry = 1 if alphabetic ('A'..'Z' or 'a'..'z'); Carry = 0 otherwise.
-;
-; Preserves / Modifies:
-;   Preserves BC, DE, HL; modifies AF (flags).
-;------------------------------------------------------------------------------
-IS_ALPHA_CHAR:
-	CP 'A'
-	JR C,NOT_ALPHA
-	CP 'Z'+1
-	JR C,IS_ALPHA
-	CP 'a'
-	JR C,NOT_ALPHA
-	CP 'z'+1
-	JR NC,NOT_ALPHA
-IS_ALPHA:
-	SCF
-	RET
-NOT_ALPHA:
-	OR A
-	RET
-
-;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ; Dynamically centered both horizontally and vertically for active screen
 ; geometry.
@@ -4314,7 +4279,6 @@ BIOS_CONST_VEC:	DW	0
 BIOS_CONIN_VEC:	DW	0
 BIOS_CONOUT_VEC:	DW	0
 CPM_USER_BANK:	DB	0
-TARGET_RAM_BANK:	DB	0
 RAM_BANK_COUNT:	DB	0
 ROM_BANK_COUNT:	DB	0
 HBIOS_PRESENT:		DB	0
@@ -4370,7 +4334,6 @@ SEARCH_START_ROW:	DW	0
 SEARCH_START_COL:	DW	0
 SEARCH_WRAPPED:		DB	0
 SEARCH_FIRST_LINE:	DB	0
-SEARCH_INPUT_BUF:	DS	65
 REPLACE_PTR_TEMP:	DW	0
 REPLACE_DELTA_TEMP:	DB	0
 IN_EDITOR_MODE:	DB	0
@@ -4401,9 +4364,6 @@ INSERT_LINE_HAD_CHARS:	DB	0
 ; 1 if currently in Save Changes Exit Prompt
 IS_EXIT_PROMPT:		DB	0
 REPLACE_ACTIVE:		DB	0	; 1 during active Search & Replace loop
-; 50-col Msg2 buffer for Replace Done popup
-REPLACE_DONE_POPUP_MSG2: DS	51
-BLOCK_POPUP_LINE4_BUF:	DS	51	; 50-col Line 4 buffer for Block modal
 INSERT_FCB:		DS	36	; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0	; Streaming insert current line length
 INSERT_NEW_CUR_COL:	DW	0	; Cursor column position after insert
@@ -4423,9 +4383,6 @@ COPY_SRC_ROW:	DW	0
 COPY_BLK_LEN:	DW	0
 COPY_TAIL_LEN:	DB	0
 DEST_LINE_LEN:	DW	0
-COPY_BLK_BUF:	DS	1024
-COPY_TAIL_BUF:	DS	256
-COPY_SLOTS_BUF:	DS	256
 MOVE_DEST_ROW:		DW	0
 MOVE_DEST_COL:		DW	0
 MOVE_SRC_START_ROW:	DW	0
@@ -4519,7 +4476,6 @@ SWAP_PAGE_NEW:		DB	0		; Fetched virtual page number
 
 FAR_SRC_LINE_PTR:	DW	0
 FAR_DEST_LINE_PTR:	DW	0
-FAR_HEAD_SLOT:		DW	0
 FAR_CUR_SLOT:		DW	0
 FAR_OLD_NEXT_SLOT:	DW	0
 FAR_NEW_NEXT_SLOT:	DW	0
@@ -4535,16 +4491,11 @@ FLC_COUNT:		DB	0
 ACTIVE_LINE_ROW:	DW	0FFFFH
 ; 1 if ACTIVE_LINE_BUF has unsaved modifications
 ACTIVE_LINE_DIRTY:	DB	0
-REND_LINE_PTR:		DW	0
-REND_VIS_COL:		DW	0
-REND_CHAR_IDX:		DW	0
 REND_TAB_SPACES:	DB	0
 ACT_VIS_ACC:		DW	0
 
 ; 128-byte scratch buffer for physical Far RAM transfers
 FAR_IO_BUF:		DS	128
-; 256-byte scratch line for local operations
-LOAD_LINE_TEMP:		DS	256
 SPLIT_LINE_TEMP:	DS	1024	; 1024-byte scratch line for line splits
 ; 16-bit byte length of line in ACTIVE_LINE_BUF
 ACTIVE_LINE_LEN:	DW	0
@@ -4592,7 +4543,6 @@ DIR_TEMP_ENTRY:		DS	16
 INPUT_BUF_LEN:		DB	0
 INPUT_CURSOR_POS:	DB	0
 INPUT_CHAR_TEMP:	DB	0
-INLINE_MSG_LEN:		DB	16
 INPUT_FILENAME_BUF:	DS	32
 ; 11-byte FCB wildcard pattern (8 name + 3 ext)
 DIR_FILTER_FCB:		DB	"???????????"
@@ -4650,6 +4600,14 @@ PLUGIN_TPA_SLOT	EQU	LINE_STORAGE
 CFG_IO_BUF		EQU	LINE_STORAGE + 4096
 RAW_SECTOR_BUF		EQU	LINE_STORAGE + 4096 + 256
 
+; 65-byte transient input buffer for Find modal (DO_FIND_UI)
+; Overlaid on base of SPLIT_LINE_TEMP (+0..64)
+SEARCH_INPUT_BUF	EQU	SPLIT_LINE_TEMP
+
+; 256-byte scratch line for local block/directory operations
+; Overlaid on second 256-byte page of SPLIT_LINE_TEMP (+256..511)
+LOAD_LINE_TEMP	EQU	SPLIT_LINE_TEMP + 256
+
 ; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
 ; Overlaid on upper half of SPLIT_LINE_TEMP to keep BSS strictly below CCP
 LINE_SHIFT_BUF_SIZE EQU	256
@@ -4665,5 +4623,13 @@ SWAP_IO_BUF	EQU	SPLIT_LINE_TEMP + 768
 PROGRESS_FILENAME_STR	EQU	SPLIT_LINE_TEMP + 896
 STR_POPUP_PROGRESS_FILE	EQU	SPLIT_LINE_TEMP + 928
 FNF_POPUP_MSG1		EQU	SPLIT_LINE_TEMP + 928
+REPLACE_DONE_POPUP_MSG2	EQU	SPLIT_LINE_TEMP + 928
+BLOCK_POPUP_LINE4_BUF	EQU	SPLIT_LINE_TEMP + 928
+
+; Block copy scratch buffers overlaid onto ACTIVE_LINE_BUF (1,024 bytes)
+; Safe because DO_COPY_BLOCK invalidates ACTIVE_LINE_BUF on entry and exit
+COPY_BLK_BUF		EQU	ACTIVE_LINE_BUF
+COPY_TAIL_BUF		EQU	ACTIVE_LINE_BUF + 512
+COPY_SLOTS_BUF		EQU	ACTIVE_LINE_BUF + 768
 
 BSS_END		EQU	LINE_STORAGE + LINE_STORAGE_SIZE

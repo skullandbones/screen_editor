@@ -18,7 +18,6 @@ LOAD_FAR_BANK:		DB	0
 LOAD_BASE_PAGE:		DB	0
 LOAD_SIZE_CLASS:	DB	0
 LOAD_PAGE_COUNT:	DB	0
-ALLOC_SIZE_CLASS:	DB	0
 ALLOC_PAGE_COUNT:	DB	0
 ALLOC_SUBALLOC_FLAG:	DB	0
 ALLOC_TEMP_BANK:	DB	0
@@ -34,7 +33,7 @@ PLUGIN_ACTION_INDEX:	DB	0
 PLUGIN_IS_FAR_EXEC:	DB	0
 PLUGIN_RET_CODE:	DB	0
 PLUGIN_STATUS_MSG_PTR:	DW	0
-PLUGIN_POPUP_MSG_BUF:	DS	52
+PLUGIN_POPUP_MSG_BUF	EQU	FNF_POPUP_MSG1
 PLUGIN_ORIG_USER:	DB	0
 PLUGIN_USER_AREA:	DB	0
 PLUGIN_FCB:		DS	36
@@ -68,14 +67,12 @@ DOC_IS_FAT:		DB	0		; 1 if active doc is FAT file
 FAT_DOC_UNIT:		DB	0FFH		; HBIOS unit (0..7, 0xFF=def)
 FAT_DOC_PATH:		DS	128		; Full null-terminated DOS path
 FAT_DOC_FNAME:		DS	13		; Base 8.3 fname + null
-FAT_ACTIVE_UNIT:	DB	0FFH		; Active browsing unit
-FAT_ACTIVE_DIR:		DS	128		; Active directory path
-FAT_INPUT_MATCHED:	DB	0		; Match flag during input check
 CURRENT_DIR_IS_FAT:	DB	0		; 0=CP/M drive, 1=FAT volume
 CURRENT_DIR_FAT_UNIT:	DB	0FFH	; FAT browsing unit (0..7, 0xFF=default)
 CURRENT_DIR_FAT_PATH:	DS	64	; Active directory path (e.g. "/")
 BLOCK_INSERT_IS_FAT:	DB	0		; 1 during FAT block insertion
-FAT_INSERT_PATH:	DS	64	; Buffer for block insertion path
+; Buffer for block insertion path (64B overlaid on CFG_IO_BUF)
+FAT_INSERT_PATH		EQU	CFG_IO_BUF
 CMDLINE_IS_FAT:		DB	0	; 1 if startup argument was FAT file
 CMDLINE_FAT_UNIT:	DB	0FFH	; Unit from command line argument
 STR_SLASH:		DB	"/",0
@@ -94,7 +91,8 @@ VFS_REQ_BUFSIZE:	DW	0		; +8: Buffer capacity
 VFS_REQ_COUNT:		DW	0		; +10: Output count
 VFS_REQ_START_LINE:	DW	0		; +12: Start line for block save
 VFS_REQ_END_LINE:	DW	0		; +14: End line for block save
-FAT_CHUNK_BUF:		DS	128		; FAT stream buffer (Common RAM)
+; FAT stream buffer in Common RAM (128B overlaid on CFG_IO_BUF + 64)
+FAT_CHUNK_BUF		EQU	CFG_IO_BUF + 64
 
 ;==============================================================================
 ; Upper Memory Host API Trampoline & Vector Table
@@ -104,7 +102,7 @@ FAT_CHUNK_BUF:		DS	128		; FAT stream buffer (Common RAM)
 ALIGN 4
 PLUGIN_HOST_API:
 	DB "SE"				; +0:  Magic
-	DW 0111H			; +2:  Host version (v1.1.1)
+	DW 0112H			; +2:  Host version (v1.1.2)
 	DW ACTIVE_LINE_BUF		; +4:  Pointer to ACTIVE_LINE_BUF
 
 	DW ACTIVE_LINE_LEN		; +6:  Pointer to ACTIVE_LINE_LEN
