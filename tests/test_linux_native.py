@@ -1253,8 +1253,8 @@ def test_bug_2_4_17_tier1_file_workspaces_and_directory_scan():
         assert "Enter filename to open:" in open_out, (
             f"Expected filename prompt in open workspace:\n{open_out}"
         )
-        assert "<PgUp>/<PgDn>=Page" in open_out, (
-            f"Expected page controls in open workspace:\n{open_out}"
+        assert "<PgUp>/<PgDn>=Page" not in open_out, (
+            f"Single-page directory must suppress page controls:\n{open_out}"
         )
         # Directory scanning verification: Makefile or TODO.md in grid
         assert "Makefile" in open_out or "TODO.md" in open_out, (

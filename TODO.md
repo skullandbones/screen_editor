@@ -643,7 +643,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: All 49 Defects Resolved (100% Conformance).
+- **Status**: All 50 Defects Resolved (100% Conformance).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1536,6 +1536,19 @@ have been resolved and archived.
       (`file_read_op`), enabling successful joins and loading up to exactly
       `MAX_INPUT_LINE_CHARS` (1,000 characters per Section 6.8). Validated via
       `test_bug_2_4_49_line_join_boundary` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.50: Single-Page Pagination Check in `test_bug_2_4_17`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5 (Single-Page Invariant).
+    - *Issue*: `test_bug_2_4_17_tier1_file_workspaces_and_directory_scan` in
+      `tests/test_linux_native.py:1256` asserted
+      `"<PgUp>/<PgDn>=Page" in open_out` when scanning the repository directory
+      (`< 60` entries, `total_pages == 1`), causing `make test-linux` to fail
+      after `src/core/ui_browser.c:412` was updated to enforce the Single-Page
+      Invariant (`if (total_pages > 1)`).
+    - *Required Fix*: Update `test_bug_2_4_17` in `tests/test_linux_native.py`
+      to assert that `<PgUp>/<PgDn>=Page` is suppressed when `total_pages == 1`.
+    - *Resolution*: Updated `test_bug_2_4_17` in `tests/test_linux_native.py`
+      to verify that `<PgUp>/<PgDn>=Page` is suppressed on single-page
+      directories per Section 7.5.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
