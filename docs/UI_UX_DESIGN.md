@@ -203,7 +203,9 @@ The status bar is the sole fixed screen anchor in SE.
    - Field 1 (Filename, 17 chars: 14 chars name + ` | ` separator):
      - `{name}`: Active filename (e.g. `README.TXT`, `C:MAIN.C`, `(Untitled)`).
      - `{mod}`: `*` if document has unsaved modifications; space otherwise.
-     - Filename content is padded with spaces to exactly 14 characters.
+     - Filename content (`{name}{mod}`) is padded with spaces or truncated to
+       strictly 14 characters (`%-14.14s`) so long filenames on host OS
+       targets never expand Field 1 or push Field 5 off an 80-column screen.
      - Followed by field separator: ` | ` (3 chars). Total: 17 characters.
 
    - Field 2 (Geometry, 9 chars): ` {geom} | `
@@ -649,6 +651,23 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Dynamic Diagnostic Status Line Strings (Rows 18..21):
+     - `Active Screen`:
+       - `80x24` mode: `Active Screen : [80x24 (Classic Terminal)]`
+       - `120x40` mode: `Active Screen : [120x40 (Modern Default)]`
+       - `Native` mode: `Active Screen : [Native (Dynamic Console)]` (or
+         `[<Cols>x<Rows> (Native Terminal)]`)
+     - `RAM Drive (A:)`:
+       - Protected / Preserve: `RAM Drive (A:): [Preserved (Active)]`
+       - Enabled / Overwrite: `RAM Drive (A:): [Overwritten (Max RAM)]`
+       - Hibernate: `RAM Drive (A:): [Hibernated (Temp Image)]`
+     - `Plugin System`:
+       - Autoload: `Plugin System : [Operational]`
+       - Demand: `Plugin System : [On Demand]`
+       - Disabled: `Plugin System : [Disabled]`
+     - `Max Lines`:
+       - `16K` mode: `Max Lines     : [16,384 lines]`
+       - `32K` mode: `Max Lines     : [32,768 lines]`
    - Instant Single-Keystroke Protocol & "Enter Option" Exclusion:
      - The splash screen dispatches commands immediately on a single keystroke.
      - The hardware terminal cursor must remain hidden (`\x1b[?25l`).
@@ -803,7 +822,7 @@ content blocks rather than top-aligned text.
      toggling:
      ```text
      ~
-     ~                      SE — Configuration Manager
+     ~                      SE - Configuration Manager
      ~
      ~                   Config Status: Loaded from A:SE.CFG
      ~
@@ -817,10 +836,27 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Option Display Labels & Toggle Cycles:
+     - `Config Status`: `Defaults` (when no `SE.CFG` was loaded) or
+       `Loaded from SE.CFG` / `Loaded from A:SE.CFG` (once loaded or saved).
+     - `1. Screen Geometry`: Cycles `80x24` / `80x24 (Classic)` ->
+       `120x40` / `120x40 (Wide)` -> `Native` (on platforms supporting
+       dynamic host sizing) -> `80x24`. Clears screen (`TERM_INIT`) prior to
+       switching geometry.
+     - `2. RAM Drive Mode`: Cycles `Protected` (`PRESERVE`) -> `Enabled` (`ON`)
+       -> `Hibernate` (`HIB`) -> `Protected` (or `Protected` <-> `Disabled` on
+       host ports without banked RAM).
+     - `3. Max Doc Lines`: Toggles `16K` <-> `32K`.
+     - `4. Tab Width`: Toggles `4` <-> `8`.
+     - `5. Plugin Manager`: Cycles `Autoload` (`AUTO` / `AUTOLOAD`) ->
+       `Demand` (`DEMAND` / `ONDEMAND`) -> `Disabled` (`OFF` / `DISABLED`) ->
+       `Autoload`.
    - Instant Keystroke Dispatch Protocol:
      - Keys `1` through `5` immediately toggle the corresponding configuration
        parameter and redraw the workspace.
-     - Key `S` / `s` immediately saves active settings to `SE.CFG`.
+     - Key `S` / `s` immediately saves active settings to `SE.CFG` and updates
+       `Config Status` to `Loaded from SE.CFG` in-place without opening a
+       blocking confirmation or notification modal pop-up.
      - `ESC`, `Q` / `q`, or `Enter` immediately exits back to the Splash
        screen.
      - The workspace operates as a non-buffered, instant-response hotkey menu.
@@ -1248,21 +1284,24 @@ or display notifications.
        Pressing `<Enter>` with an empty buffer or pressing `<ESC>` cancels and
        dismisses the modal cleanly without moving the document cursor.
 
-   Archetype D: Selection Menu (`show_menu` / Plugin Palette)
-     Used for choosing from dynamic list (Plugin Palette, Directory list).
-     Numbered items with active selection indicator (`> `).
-     Navigation with Up/Down arrows or direct digit key selection.
+   Archetype D: Selection Menu (`show_menu` / Plugin Palette, 50 cols)
+     Used for choosing from a dynamic list (Plugin Palette).
+     Exact Width: 50 columns (`+` + 48 `-` + `+`), height `len(items) + 6`.
+     Numbered items (`1..N`) with active selection indicator (`> `).
+     Built-in plugins are listed in canonical slot order:
+     Slot 1 `ROT13`, Slot 2 `WORDCNT`, Slot 3 `BEAUTIFY`.
+     Navigation with Up/Down arrows, Enter to run, or direct digit key (`1..9`).
      ```text
-     +--------------------------------------------------+
-     |                  Plugin Palette                  |
-     +--------------------------------------------------+
-     |           Select a plugin to execute:            |
-     |  > 1. ROT13    - Rotate letters by 13            |
-     |    2. WORDCNT  - Document word, line, count      |
-     |    3. BEAUTIFY - Align Z80 assembly labels       |
-     |                                                  |
-     |   [Up/Down]=Select   [Enter]=Run   [ESC]=Cancel  |
-     +--------------------------------------------------+
+     +------------------------------------------------+
+     |                 Plugin Palette                 |
+     +------------------------------------------------+
+     |          Select a plugin to execute:           |
+     |  > 1. ROT13    - Rotate letters by 13          |
+     |    2. WORDCNT  - Document word, line, count    |
+     |    3. BEAUTIFY - Align Z80 assembly labels     |
+     |                                                |
+     |  [Up/Down]=Select   [Enter]=Run   [ESC]=Cancel |
+     +------------------------------------------------+
      ```
 
 4. Child Pop-up Isolation Protocol:
