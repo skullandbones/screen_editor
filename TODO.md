@@ -1566,7 +1566,8 @@ have been resolved and archived.
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
-  2.7.65–2.7.71 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected; 0 Open).
+  2.7.65–2.7.71, 2.7.73 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
+  0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -2585,6 +2586,21 @@ have been resolved and archived.
       3. `ports/python/se/config.py` correctly defines `DEFAULT_TAB_WIDTH = 8`
          and fallback `8`. In addition, `ports/python/se/buffer.py` default
          parameter has been updated to 8 for full architectural parity.
+  - [x] **Bug 2.7.73: Status Bar Field 1 Overflow on Filenames >13 Characters**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3; `src/core/ui_render.c`.
+    - *Issue*: Section 4.3 defines Field 1 of the Universal Status Bar as a
+      fixed 18-character section (`| %-14.14s |`).
+    - *Root Cause*: In `ports/python/se/ui.py:53`, `name_field` was formatted
+      using `f"| {raw_name:<14} |"` without a maximum precision specifier.
+      When opening files with names exceeding 13 characters, Field 1 expanded
+      beyond 18 columns and pushed Field 5 (`Col N`, `[Pan +40]`, `[SEL]`,
+      `[BLK LOCK]`) past column 80, where `status_text = core[:cols]` clipped
+      the right side of the status bar.
+    - *Resolution*: Updated `name_field` in `render_status_bar()` in `ui.py` to
+      `f"| {raw_name:<14.14} |"`, strictly bounding Field 1 to 18 characters
+      and preserving Field 5 indicators across 80-column viewports. Validated
+      via Step 56 in `test_editor.py`
+      (`test_bug_2_7_73_status_bar_long_filename_truncation`).
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,

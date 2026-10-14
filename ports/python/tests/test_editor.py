@@ -2559,9 +2559,51 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_73_status_bar_long_filename_truncation(self):
+        """Step 56: Verify Field 1 truncation preserves Field 5 on 80x24."""
+        print(
+            "[*] Step 56: Testing status bar Field 1 14-char truncation...",
+            flush=True,
+        )
+        written = []
+        self.editor.terminal.write = lambda s: written.append(s)
+        self.editor.terminal.cols = 80
+        self.editor.terminal.rows = 24
+
+        self.editor.buffer.filename = "very_long_document_filename_test.txt"
+        self.editor.buffer.lines = ["Line 1", "Line 2"]
+        self.editor.buffer.cursor_row = 1
+        self.editor.buffer.cursor_col = 3
+
+        # 1. Standard mode: 14-char truncated filename and full Field 5
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        bar = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(bar), 80)
+        self.assertIn("| very_long_docu |", bar)
+        self.assertIn("Line    2/2    Col 3   |", bar)
+
+        # 2. With [Pan +40] and [SEL]: Field 5 never clipped
+        written.clear()
+        self.editor.buffer.pan_col = 40
+        self.editor.buffer.block_active = 1
+        self.editor.renderer.render_status_bar(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        bar_flags = [w for w in written if not w.startswith("\x1b")][0]
+        self.assertEqual(len(bar_flags), 80)
+        self.assertIn("Line 2/2 Col 3 [Pan +40] [SEL] |", bar_flags)
+
+        print(
+            "[+] Step 56: Status bar Field 1 14-char truncation verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 
