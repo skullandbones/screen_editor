@@ -22,7 +22,11 @@
 
 /* Global File Filename and Format State */
 char    g_current_filename[32] = {0};
+#ifdef __CPM__
 uint8_t g_file_format = FMT_CPM;
+#else
+uint8_t g_file_format = FMT_LINUX;
+#endif
 
 void file_populate_fcb(const char *path, cpm_fcb_t *fcb)
 {
@@ -126,7 +130,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
             col = 0;
             continue;
         }
-        if (col + 1 < MAX_INPUT_LINE_CHARS) {
+        if (col < MAX_INPUT_LINE_CHARS) {
             line_buf[col++] = (char)c;
         }
     }

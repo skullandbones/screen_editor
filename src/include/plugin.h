@@ -68,6 +68,7 @@ int  plugin_load_by_name(const char *filename);
 void plugin_unload_slot(uint8_t slot);
 int  plugin_exec_slot(uint8_t slot, uint8_t action);
 void plugin_manager_ui(void);
+void show_plugin_palette(void);
 const plugin_entry_t *plugin_get_entry(uint8_t slot);
 
 #ifdef __cplusplus

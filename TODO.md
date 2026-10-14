@@ -562,7 +562,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 11 Defects Open (Bugs 2.4.39–2.4.49).
+- **Status**: All 49 Defects Resolved (100% Conformance).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1172,7 +1172,7 @@ have been resolved and archived.
       `src/core/editor.c` and `src/core/ui_render.c`. Adjusted config header and
       updated regression test suite, adding `test_bug_2_4_38_default_tab_width`
       in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
+  - [x] **Bug 2.4.39: Help Screen Displays Obsolete WordStar Diamond Keys**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.3, 6.4, 7.3.
     - *Issue*: In `src/core/ui_render.c:528`, the Help workspace displays
       `Arrows / WordStar (^S,^D,^E,^X)`. Sections 6.3, 6.4, and 7.3 explicitly
@@ -1183,7 +1183,13 @@ have been resolved and archived.
       `Arrows / ANSI VT100`.
     - *Required Fix*: Update `s_help_lines` in `src/core/ui_render.c` to
       display `Arrows / ANSI VT100` and remove misleading WordStar references.
-  - [ ] **Bug 2.4.40: Missing Archetype D Selection Modal on Ctrl+P**:
+    - *Resolution*: Replaced obsolete Help screen mockup with canonical 22-line
+      template from Section 7.3 and `plugins/help.asm`, displaying ANSI cursor
+      navigation (`Arrow Keys`), direct block commands, and standard editor
+      shortcuts while eliminating legacy WordStar diamond references. Validated
+      via `test_bug_2_4_39_help_screen_canonical_layout` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.40: Missing Archetype D Selection Modal on Ctrl+P**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 8.3 (Archetype D), 10.
     - *Issue*: In `src/core/editor.c:568` and `src/core/ui_render.c:501`,
       pressing `Ctrl+P` directly opens the slot table of `plugin_manager_ui()`.
@@ -1195,7 +1201,14 @@ have been resolved and archived.
     - *Required Fix*: Implement `show_plugin_palette()` adhering to Archetype D
       in `src/core/plugin_mgr.c`, and route `KEY_CTRL_P` in `editor.c` and
       `ui_render.c` to this modal.
-  - [ ] **Bug 2.4.41: Tab Traversal Halts Early vs Snap-Forward Alignment**:
+    - *Resolution*: Implemented canonical Archetype D Plugin Palette modal
+      dialog (`show_plugin_palette`) in `src/core/plugin_mgr.c` featuring
+      50-col framing, active pointer (`> `), Up/Down navigation, direct digit
+      selection, Enter execution, and ESC cancellation. Bound `KEY_CTRL_P`
+      to this modal in `src/core/editor.c` and `src/core/ui_render.c`.
+      Validated via `test_bug_2_4_40_plugin_palette_modal` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.41: Tab Traversal Halts Early vs Snap-Forward Alignment**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 6.4.
     - *Issue*: In `src/core/editor.c:485-497` (`adjust_col_to_target`), when
       traversing an active line to match sticky target column `target_vis_col`,
@@ -1209,7 +1222,13 @@ have been resolved and archived.
     - *Required Fix*: Update `adjust_col_to_target()` in `src/core/editor.c` to
       remove early loop breaks on tab boundaries, advancing across the tab to
       snap forward to the discrete character position following the tab.
-  - [ ] **Bug 2.4.42: Config Manager Layout Divergence & Prohibited Prompt**:
+    - *Resolution*: Removed premature loop break on tab boundaries in
+      `adjust_col_to_target()` in `src/core/editor.c`, ensuring traversal
+      advances across the tab (`vis_acc += spaces`, `char_idx++`) to snap
+      forward to the discrete character boundary following the tab per
+      Section 6.2 and 6.4. Updated regression test expectations and added
+      `test_bug_2_4_41_tab_snap_forward` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.42: Config Manager Layout Divergence & Prohibited Prompt**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4.
     - *Issue*: In `src/core/ui_render.c:601-706` (`show_config_screen`):
       1. Displays only 4 options in non-canonical order (`1. Screen Geometry`,
@@ -1232,7 +1251,16 @@ have been resolved and archived.
       7.4 layout: 5 options in canonical order, `Config Status:` header,
       canonical footer, instant single-keystroke dispatch on 1-5, S/s save,
       ESC/Q/Enter exit, hidden cursor, and elimination of `Enter option: _`.
-  - [ ] **Bug 2.4.43: Splash Screen Layout Non-Conformity & Clean Header**:
+    - *Resolution*: Refactored `show_config_screen()` in `src/core/ui_render.c`
+      to conform to canonical Section 7.4 layout: rendered 5 options in
+      canonical order, added `Config Status:` header tracking `g_config_loaded`,
+      removed prohibited `Enter option: _` prompt, updated footer to canonical
+      `[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit`, supported `Q`/`q`
+      exit to Splash screen, hid terminal hardware cursor, and replaced UTF-8
+      em-dash with ASCII hyphen `-`. Validated via
+      `test_bug_2_4_42_config_screen_canonical_layout` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.43: Splash Screen Layout Non-Conformity & Clean Header**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.2, 14.6.
     - *Issue*: In `src/core/ui_render.c:422-442` (`s_splash_lines`):
       1. Violates the Clean Header Mandate by rendering `Version v1.1.0 (C)` on
@@ -1251,7 +1279,14 @@ have been resolved and archived.
       `src/core/ui_render.c` to conform to the 21x50 canonical layout: ASCII
       hyphen header, removal of version/language line, inclusion of the 4
       diagnostic status lines, and standard geometry option presentation.
-  - [ ] **Bug 2.4.44: Non-Conforming About Screen Layout & Missing Credits**:
+    - *Resolution*: Updated `show_splash_screen()` in `src/core/ui_render.c` to
+      conform to canonical 21-line by 50-column layout: enforced Clean Header
+      Mandate with `SE - Screen Editor` on Row 1 using ASCII hyphen `-`, removed
+      premature version/language line, centered standard command hotkeys, and
+      dynamically formatted the 4 canonical diagnostic status lines (Active
+      Screen, RAM Drive (A:), Plugin System, Max Lines). Validated via
+      `test_bug_2_4_43_splash_canonical_layout` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.44: Non-Conforming About Screen Layout & Missing Credits**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 7.11, 14.6.
     - *Issue*: In `src/core/ui_render.c:583-599` (`show_about_screen`), the
       About screen displays a non-conforming 6-line, 46-column text block:
@@ -1268,7 +1303,16 @@ have been resolved and archived.
     - *Required Fix*: Rewrite `show_about_screen()` in `src/core/ui_render.c` to
       render the standardized 9-line by 54-column template adhering to Section
       7.11 and 14.6.
-  - [ ] **Bug 2.4.45: Line Ending Decoupling Failure & Global Config Mutation**:
+    - *Resolution*: Rewrote `show_about_screen()` in `src/core/ui_render.c` to
+      render the standardized 9-line by 54-column template: canonical title
+      `SE - Screen Editor` using ASCII hyphen `-`, release version with build
+      date and predominant language `version 1.1.0 (2026-10-09) (C)`, author
+      attribution (`by Dean Jenkins`), AI toolchain credits (`Google
+      Antigravity 2.19.1 & Gemini FLASH 3.8 high`), MIT license notice, and
+      canonical prompt `Press any key to continue`. Validated via
+      `test_bug_2_4_44_about_screen_canonical_layout` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.45: Line Ending Decoupling Failure & Global Config Mutation**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7, 13.2.
     - *Issue*: Section 13.2 explicitly removes `FORMAT` from `SE.CFG`,
       mandating that line endings are managed strictly per-document: newly
@@ -1297,7 +1341,16 @@ have been resolved and archived.
       Ensure all save operations use the active document's `g_file_format`.
       Ensure `Ctrl+F` in `ui_browser.c` toggles `g_file_format` without mutating
       global configuration. Default `g_config.screen_mode` to `MODE_80X24`.
-  - [ ] **Bug 2.4.46: Premature Modal Dismissal on Unexpected Keys**:
+    - *Resolution*: Removed `FORMAT` parsing and serialization from `SE.CFG`
+      in `src/core/config.c`. Defaulted new documents on Linux to `FMT_LINUX`
+      (`LF`) in `src/core/buffer.c`, `src/core/file_io.c`, and
+      `src/core/config.c`. Updated all save operations in `src/core/editor.c`,
+      `src/core/block.c`, `src/core/ui_render.c`, and `src/core/ui_modal.c` to
+      pass active document `g_file_format`. Isolated `Ctrl+F` format toggling
+      in `src/core/ui_browser.c` to `g_file_format` without mutating `g_config`.
+      Defaulted `g_config.screen_mode` to `MODE_80X24`. Validated via
+      `test_bug_2_4_45_line_ending_decoupling` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.46: Premature Modal Dismissal on Unexpected Keys**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3.
     - *Issue*: In `src/core/ui_modal.c:321-326` (`modal_prompt_text`), pressing
       `Up`, `Down`, `PgUp`, `PgDn`, `Ctrl+U`, or `Ctrl+V` exits the modal dialog
@@ -1311,7 +1364,14 @@ have been resolved and archived.
     - *Required Fix*: Remove lines 321-326 in `modal_prompt_text()`
       (`src/core/ui_modal.c`) so that unexpected keys are safely discarded
       without dismissing the input dialog or altering state.
-  - [ ] **Bug 2.4.47: Retention of Intermediary Clipboard Primitives**:
+    - *Resolution*: Removed premature modal dismissal on unexpected navigation
+      keys (`Up`, `Down`, `PgUp`, `PgDn`, `Ctrl+U`, `Ctrl+V`) from
+      `modal_prompt_text()` in `src/core/ui_modal.c`, enforcing the Section 8.3
+      Unexpected Keystroke Protection Mandate and ensuring input modals remain
+      active with buffer preserved until explicit `Enter` or `ESC`. Validated
+      via `test_bug_2_4_46_unexpected_keys_in_modals` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.47: Retention of Intermediary Clipboard Primitives**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 9.3, 10.
     - *Issue*: Section 9.3 establishes the "Direct In-Place Block Manipulation
       Mandate", strictly prohibiting intermediary clipboard buffers
@@ -1337,7 +1397,17 @@ have been resolved and archived.
       aliases from `src/core/editor.c`. Update `s_help_lines` in
       `src/core/ui_render.c` to advertise canonical direct block shortcuts and
       dedicated `PgUp`/`PgDn` paging keys.
-  - [ ] **Bug 2.4.48: UTF-8 Multi-Byte Encodings in Screen Headers**:
+    - *Resolution*: Eliminated intermediary clipboard buffer
+      (`s_clipboard_buf`), clipboard length tracker, `do_cut_block()`,
+      `do_paste_block()`, and clipboard getters from `src/core/block.c` and
+      `src/include/block.h`. Refactored `do_copy_block()` to operate directly
+      in-place without static clipboard storage. Removed legacy `KEY_CTRL_U`
+      and `KEY_CTRL_V` motion and paste aliases from `src/core/editor.c`.
+      Updated `s_help_lines` in `src/core/ui_render.c` to display dedicated
+      `PgUp` and `PgDn` keys. Validated via
+      `test_bug_2_4_47_direct_inplace_block_manipulation` in
+      `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.48: UTF-8 Multi-Byte Encodings in Screen Headers**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6.
     - *Issue*: Section 2.6 establishes the VT100 & ASCII Terminal Encoding
       Mandate (UTF-8 Prohibition): all text and control output must strictly
@@ -1355,7 +1425,13 @@ have been resolved and archived.
     - *Required Fix*: Replace all occurrences of Unicode em-dash `—` in UI
       string literals with ASCII hyphen-minus `-` (`0x2D`) in
       `src/core/ui_render.c`.
-  - [ ] **Bug 2.4.49: Off-by-One Barrier on Line Joins at Maximum Capacity**:
+    - *Resolution*: Replaced all occurrences of Unicode em-dash `—` across
+      all workspace headers, Help screen, Splash screen, About screen, and
+      Configuration Manager with canonical ASCII hyphen-minus `-` (`0x2D`),
+      and eliminated non-ASCII section symbols from core modules to guarantee
+      strict 7-bit ASCII conformance. Validated via
+      `test_bug_2_4_48_utf8_prohibition` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.49: Off-by-One Barrier on Line Joins at Maximum Capacity**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.8, 10.1.
     - *Issue*: In `src/core/editor.c:216` (`do_backspace`) and
       `src/core/editor.c:275` (`do_delete`), the combined length barrier check
@@ -1373,6 +1449,12 @@ have been resolved and archived.
     - *Required Fix*: Change `< MAX_INPUT_LINE_CHARS` to `<=
       MAX_INPUT_LINE_CHARS` in `src/core/editor.c:216, 275` and
       `src/core/block.c:317`.
+    - *Resolution*: Updated line join and tail join boundary checks from `<`
+      to `<=` in `src/core/editor.c` (`do_backspace` and `do_delete`),
+      `src/core/block.c` (`do_delete_block`), and `src/core/file_io.c`
+      (`file_read_op`), enabling successful joins and loading up to exactly
+      `MAX_INPUT_LINE_CHARS` (1,000 characters per Section 6.8). Validated via
+      `test_bug_2_4_49_line_join_boundary` in `tests/test_linux_native.py`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.

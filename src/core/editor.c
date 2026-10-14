@@ -77,7 +77,7 @@ void update_horizontal_pan(void)
     vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
     view_right = g_horiz_pan_offset + view_width;
 
-    /* Canonical lookahead edge trigger per §6.6:
+    /* Canonical lookahead edge trigger per Section 6.6:
      * When vis_col == VIEW_RIGHT_COL - 1 and active line continues beyond
      * CUR_COL (character at CUR_COL and next character are non-null),
      * pan viewport right by 40 columns.
@@ -213,7 +213,7 @@ void do_backspace(void)
                                                  MAX_ACTIVE_PAYLOAD);
         uint16_t join_col = prev_len;
 
-        if (prev_len + g_active_line_len < MAX_INPUT_LINE_CHARS) {
+        if (prev_len + g_active_line_len <= MAX_INPUT_LINE_CHARS) {
             memcpy(prev_buf + prev_len, g_active_line_buf, g_active_line_len);
             prev_len += g_active_line_len;
             prev_buf[prev_len] = '\0';
@@ -272,7 +272,7 @@ void do_delete(void)
                                                  next_buf,
                                                  MAX_ACTIVE_PAYLOAD);
 
-        if (g_active_line_len + next_len < MAX_INPUT_LINE_CHARS) {
+        if (g_active_line_len + next_len <= MAX_INPUT_LINE_CHARS) {
             memcpy(g_active_line_buf + g_active_line_len, next_buf, next_len);
             g_active_line_len += next_len;
             g_active_line_buf[g_active_line_len] = '\0';
@@ -485,9 +485,6 @@ void adjust_col_to_target(uint16_t target_vis_col)
     while (char_idx < g_active_line_len && vis_acc < target_vis_col) {
         if (g_active_line_buf[char_idx] == '\t') {
             uint16_t spaces = (uint16_t)(tab_w - (vis_acc % tab_w));
-            if (vis_acc + spaces > target_vis_col) {
-                break;
-            }
             vis_acc += spaces;
             char_idx++;
         } else {
@@ -538,14 +535,6 @@ int editor_handle_key(int key)
     case KEY_CTRL_T: jump_file_top(); break;
     case KEY_BACKSPACE: do_backspace(); break;
     case KEY_ENTER: do_enter(); break;
-    case KEY_CTRL_U: page_up(); break;
-    case KEY_CTRL_V:
-        if (get_clipboard_len() > 0) {
-            do_paste_block();
-        } else {
-            page_down();
-        }
-        break;
     case KEY_CTRL_B: toggle_block_mode(); break;
     case KEY_CTRL_C:
         if (g_block_mode != BLOCK_MODE_OFF) {
@@ -565,7 +554,7 @@ int editor_handle_key(int key)
                                              sizeof(s_editor_fname)) ==
                 MODAL_RES_OK && s_editor_fname[0]) {
                 file_save_block(s_editor_fname, g_norm_start_row,
-                                g_norm_end_row, g_config.save_format);
+                                g_norm_end_row, g_file_format);
             }
             g_need_screen_render = 1;
             break;
@@ -577,7 +566,7 @@ int editor_handle_key(int key)
         if (ui_browser_save_dialog(s_editor_fname,
                                    sizeof(s_editor_fname)) ==
             MODAL_RES_OK && s_editor_fname[0]) {
-            file_save(s_editor_fname, g_config.save_format);
+            file_save(s_editor_fname, g_file_format);
         }
 #else
         if (g_current_filename[0] == '\0') {
@@ -585,10 +574,10 @@ int editor_handle_key(int key)
             if (ui_browser_save_dialog(s_editor_fname,
                                        sizeof(s_editor_fname)) ==
                 MODAL_RES_OK && s_editor_fname[0]) {
-                file_save(s_editor_fname, g_config.save_format);
+                file_save(s_editor_fname, g_file_format);
             }
         } else {
-            file_save(NULL, g_config.save_format);
+            file_save(NULL, g_file_format);
         }
 #endif
         g_need_screen_render = 1;
@@ -631,7 +620,7 @@ int editor_handle_key(int key)
         }
         break;
     }
-    case KEY_CTRL_P: plugin_manager_ui(); break;
+    case KEY_CTRL_P: show_plugin_palette(); break;
     case KEY_CTRL_W:
         if (modal_confirm_save_changes() == MODAL_RES_OK) {
             init_empty_document();
