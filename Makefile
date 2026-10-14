@@ -117,6 +117,8 @@ $(TARGET): $(ASM_SRC)
 $(TARGET_NEXT_CPM): $(ASM_SRC_NEXT_CPM)
 	@echo "==> Assembling $(TARGET_NEXT_CPM) with z88dk-z80asm..."
 	$(Z80ASM) -b -m -s -o=$(TARGET_NEXT_CPM) $(ASM_SRC_NEXT_CPM)
+	@echo "==> Auditing $(TARGET_NEXT_CPM) CCP preservation and margin..."
+	python3 check_ccp.py $(TARGET_NEXT_CPM)
 
 $(TARGET_NEXT_NEX): $(ASM_SRC_NEXT)
 	@echo "==> Assembling $(TARGET_NEXT_NEX) with z88dk-z80asm..."
@@ -133,6 +135,7 @@ $(TARGET_NEXT_DOT): $(ASM_SRC_NEXT)
 check-ccp:
 	@echo "==> Auditing CCP preservation and page alignment margin..."
 	python3 check_ccp.py $(TARGET)
+	python3 check_ccp.py $(TARGET_NEXT_CPM)
 	python3 check_ccp.py $(TARGET_SEC)
 
 check-tpa: $(TARGET)

@@ -21,7 +21,7 @@ PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 
 
 def test_next_cpm():
-    """Verify SE_NEXT.COM binary integrity and TPA headroom margin."""
+    """Verify SE_NEXT.COM binary integrity, TPA and CCP headroom margins."""
     print("[*] Validating SE_NEXT.COM (NextCPM target)...")
     path = os.path.join(PROJECT_DIR, "SE_NEXT.COM")
     assert os.path.exists(path), f"Missing {path}"
@@ -43,9 +43,36 @@ def test_next_cpm():
     assert res.returncode == 0, f"check_tpa.py failed:\n{res.stdout}"
     assert "PASS" in res.stdout, "check_tpa.py verdict was not PASS"
     assert "Headroom: +" in res.stdout, "Expected positive TPA headroom margin"
+
+    # Run check_ccp.py to verify CCP preservation (<= 0xD000)
+    ccp_script = os.path.join(PROJECT_DIR, "check_ccp.py")
+    cmd_ccp = [sys.executable, ccp_script, path]
+    res_ccp = subprocess.run(
+        cmd_ccp, capture_output=True, text=True, cwd=PROJECT_DIR
+    )
+    assert res_ccp.returncode == 0, f"check_ccp.py failed:\n{res_ccp.stdout}"
+    assert "CCP 100% PRESERVED" in res_ccp.stdout, (
+        "Expected CCP 100% PRESERVED in check_ccp.py output"
+    )
+    assert "VERDICT: [ PASS ]" in res_ccp.stdout, (
+        "Expected PASS verdict from check_ccp.py"
+    )
+
+    # Verify check_ccp.py fails with non-zero exit code when CCP headroom
+    # is insufficient (e.g. simulated lower CCP base at 0xC000)
+    cmd_fail = [sys.executable, ccp_script, "--ccp-base", "0xC000", path]
+    res_fail = subprocess.run(
+        cmd_fail, capture_output=True, text=True, cwd=PROJECT_DIR
+    )
+    assert res_fail.returncode != 0, (
+        "check_ccp.py must fail when runtime memory penetrates CCP"
+    )
+    assert "VERDICT: [ FAIL ]" in res_fail.stdout, (
+        "Expected FAIL verdict when CCP headroom is insufficient"
+    )
     print(
         f"    [+] SE_NEXT.COM: {size} B, JP START at 0x0100, "
-        "positive TPA headroom margin [PASS]"
+        "TPA & CCP headroom preserved [PASS]"
     )
 
 

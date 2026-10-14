@@ -2,12 +2,13 @@
 """
 check_ccp.py - CP/M CCP (Console Command Processor) Headroom & Integrity Auditor
 
-Audits CP/M .COM binaries (specifically SE.COM) to verify that runtime memory
-and BSS buffers do not penetrate or corrupt the Console Command Processor (CCP).
+Audits CP/M .COM binaries (SE.COM, SEC.COM, SE_NEXT.COM) to verify that runtime
+memory and BSS buffers do not penetrate or corrupt the Console Command
+Processor (CCP).
 
-Unlike programs that warm-boot on exit via BIOS WBOOT (JP 0x0000), SE.COM
-exits via direct RET to the CCP (LD SP,(SAVED_SP) / RET) for instant sub-
-millisecond return to the CP/M command line. Corrupting the CCP causes an
+Unlike programs that warm-boot on exit via BIOS WBOOT (JP 0x0000), SE.COM and
+SE_NEXT.COM exit via direct RET to the CCP (LD SP,(SAVED_SP) / RET) for instant
+sub-millisecond return to the CP/M command line. Corrupting the CCP causes an
 immediate exit hang.
 
 Standard TPA checks test against the BDOS entry point (e.g. 0xD800 on RomWBW),
@@ -42,6 +43,10 @@ def find_companion_file(com_path, extension):
         os.path.join(base_dir, "src", f"{stem}.{extension}"),
         os.path.join(base_dir, "src", f"{stem.lower()}.{extension}"),
     ]
+    if stem.upper() == "SE_NEXT":
+        candidates.append(
+            os.path.join(base_dir, "src", f"se_next_cpm.{extension}")
+        )
     for path in candidates:
         if os.path.isfile(path):
             return path
