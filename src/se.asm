@@ -4540,8 +4540,6 @@ ACT_VIS_ACC:		DW	0
 
 ; 128-byte scratch buffer for physical Far RAM transfers
 FAR_IO_BUF:		DS	128
-; 256-byte scratch line for local operations
-LOAD_LINE_TEMP:		DS	256
 SPLIT_LINE_TEMP:	DS	1024	; 1024-byte scratch line for line splits
 ; 16-bit byte length of line in ACTIVE_LINE_BUF
 ACTIVE_LINE_LEN:	DW	0
@@ -4646,6 +4644,10 @@ PLUGIN_TPA_SLOT	EQU	LINE_STORAGE
 ; Overlay transient config and sector buffers onto LINE_STORAGE beyond plugin
 CFG_IO_BUF		EQU	LINE_STORAGE + 4096
 RAW_SECTOR_BUF		EQU	LINE_STORAGE + 4096 + 256
+
+; 256-byte scratch line for local block/directory operations
+; Overlaid on second 256-byte page of SPLIT_LINE_TEMP (+256..511)
+LOAD_LINE_TEMP	EQU	SPLIT_LINE_TEMP + 256
 
 ; Bounce buffer for Far RAM Line Table block shifts (256 bytes)
 ; Overlaid on upper half of SPLIT_LINE_TEMP to keep BSS strictly below CCP
