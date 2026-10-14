@@ -4400,9 +4400,6 @@ INSERT_LINE_HAD_CHARS:	DB	0
 ; 1 if currently in Save Changes Exit Prompt
 IS_EXIT_PROMPT:		DB	0
 REPLACE_ACTIVE:		DB	0	; 1 during active Search & Replace loop
-; 50-col Msg2 buffer for Replace Done popup
-REPLACE_DONE_POPUP_MSG2: DS	51
-BLOCK_POPUP_LINE4_BUF:	DS	51	; 50-col Line 4 buffer for Block modal
 INSERT_FCB:		DS	36	; Dedicated FCB for block insert file
 INSERT_CUR_LEN:		DW	0	; Streaming insert current line length
 INSERT_NEW_CUR_COL:	DW	0	; Cursor column position after insert
@@ -4667,6 +4664,8 @@ SWAP_IO_BUF	EQU	SPLIT_LINE_TEMP + 768
 PROGRESS_FILENAME_STR	EQU	SPLIT_LINE_TEMP + 896
 STR_POPUP_PROGRESS_FILE	EQU	SPLIT_LINE_TEMP + 928
 FNF_POPUP_MSG1		EQU	SPLIT_LINE_TEMP + 928
+REPLACE_DONE_POPUP_MSG2	EQU	SPLIT_LINE_TEMP + 928
+BLOCK_POPUP_LINE4_BUF	EQU	SPLIT_LINE_TEMP + 928
 
 ; Block copy scratch buffers overlaid onto ACTIVE_LINE_BUF (1,024 bytes)
 ; Safe because DO_COPY_BLOCK invalidates ACTIVE_LINE_BUF on entry and exit
