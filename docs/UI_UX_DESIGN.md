@@ -219,9 +219,13 @@ The status bar is the sole fixed screen anchor in SE.
      Field 4 is a dedicated 15-character contextual slot followed by separator
      ` | ` (18 characters total). It operates under a strict priority hierarchy
      applicable across all SE variants:
-     1. Splash Screen & Far Plugin Execution:
+     1. Splash Screen, Directory Browsers & Far Plugin Execution:
         Displays free document memory in whole KB: `Free: <N> KB` padded with
         spaces to 15 characters, followed by ` | ` (e.g. `Free: 48 KB    | `).
+        Tier 1 Directory Browser Workspaces (Open File, File Insert, Save File,
+        and Block Save) operate as overlay surfaces displaying free memory (or
+        blank per the fallback rule), strictly prohibiting editor mode cues
+        (`^K: Editor keys`).
         - Variant Free Memory Reading Fallback Rule:
           If a port, target platform, or variant does not support a free memory
           reading method (or dynamic TPA/heap query), the free memory status on
@@ -850,6 +854,13 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during Open File
+     directory browser execution. On variants lacking dynamic memory reading,
+     Field 4 is left blank (`               | `), conforming strictly to
+     Section 4.3.
 
 6. File Insert Workspace (`Ctrl+O` with Active Block / `Ctrl+K R`):
    - Invoked when block selection is active or via `Ctrl+K R` shortcut.
@@ -871,6 +882,13 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during File Insert
+     directory browser execution. On variants lacking dynamic memory reading,
+     Field 4 is left blank (`               | `), conforming strictly to
+     Section 4.3.
 
 7. Save File Workspace (`Ctrl+S` / `:s` from Splash):
    - Full-screen Tier 1 save workspace displaying directory contents, target
@@ -911,6 +929,13 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during Save File
+     directory browser execution. On variants lacking dynamic memory reading,
+     Field 4 is left blank (`               | `), conforming strictly to
+     Section 4.3.
 
 8. Block Save Workspace (`Ctrl+S` with Active Block / `Ctrl+K S`):
    - Invoked when block selection is active or via `Ctrl+K S` shortcut.
@@ -932,6 +957,13 @@ content blocks rather than top-aligned text.
      ~
      [STATUS BAR AT ROW 24]
      ```
+   - Universal Status Bar Presence:
+     The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
+     variants supporting dynamic memory queries (such as `SE.COM`), Field 4
+     displays free document memory (`Free: <N> KB | `) during Block Save
+     directory browser execution. On variants lacking dynamic memory reading,
+     Field 4 is left blank (`               | `), conforming strictly to
+     Section 4.3.
 
 9. Directory Screen Filename Input Line Editing:
    The filename input fields across all directory workspaces (Open File,
@@ -1433,8 +1465,11 @@ ten anti-patterns:
    - Remedy: Move prompts and alerts into Tier 2 centered modal boxes.
 
 2. Blind / Static Footers:
-   - Emitting static command options that do not apply to current screen state.
-   - Remedy: Ensure footers dynamically reflect active context.
+   - Emitting static command options or mode cues (such as `^K: Editor keys`
+     on status bar Field 4) during overlay workspaces (like Directory
+     Browsers) where editor keystrokes do not apply.
+   - Remedy: Ensure footers and status bar contextual slots dynamically
+     reflect active context (e.g. Free Memory during overlays).
 
 3. Terminal Column Spill:
    - Emitting strings or line data exceeding terminal column bounds, inducing
