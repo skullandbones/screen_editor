@@ -73,7 +73,7 @@ CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
 
 .PHONY: all sec-cpm se-py test-py test-linux se-next-cpm se-next-native \
 	test-next demo-next plugins image next-image init-image clean-image \
-	check-tpa check-plugins check-lines test test-sec \
+	check-tpa check-ccp check-plugins check-lines test test-sec \
 	test-sanity test-conformity test-paging test-config test-32k \
 	test-cpm3 test-plugins test-beautifier test-popup test-slots \
 	test-plugin-cfg test-fatfs test-fatfs-slot test-fatfs-vfs \
@@ -88,6 +88,9 @@ sec-cpm: $(TARGET_SEC)
 $(TARGET_SEC): $(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
 	@echo "==> Compiling $(TARGET_SEC) with zcc +cpm..."
 	$(ZCC) +cpm -O3 -create-app -m -pragma-define:CRT_TRIM_BSS=1 \
+		-pragma-define:CRT_ENABLE_COMMANDLINE=0 \
+		-pragma-define:CRT_COMMANDLINE_REDIRECTION=0 \
+		-pragma-define:CLIB_OPEN_MAX=0 \
 		-Isrc/include -o $(TARGET_SEC) \
 		$(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
 
@@ -103,6 +106,8 @@ se-next-native: $(TARGET_NEXT_NEX) $(TARGET_NEXT_DOT)
 $(TARGET): $(ASM_SRC)
 	@echo "==> Assembling $(TARGET) with z88dk-z80asm..."
 	$(Z80ASM) -b -m -s -o=$(TARGET) $(ASM_SRC)
+	@echo "==> Auditing CCP preservation and page alignment margin..."
+	python3 check_ccp.py $(TARGET)
 
 $(TARGET_NEXT_CPM): $(ASM_SRC_NEXT_CPM)
 	@echo "==> Assembling $(TARGET_NEXT_CPM) with z88dk-z80asm..."
@@ -119,6 +124,10 @@ $(TARGET_NEXT_DOT): $(ASM_SRC_NEXT)
 	$(Z80ASM) -DNEXT_DOT_COMMAND -b -m -s -o=dot_se.bin $(ASM_SRC_NEXT)
 	cp -f dot_se.bin $(TARGET_NEXT_DOT)
 	cp -f dot_se.bin SE
+
+check-ccp: $(TARGET)
+	@echo "==> Auditing CCP preservation and page alignment margin..."
+	python3 check_ccp.py $(TARGET)
 
 check-tpa: $(TARGET)
 	@echo "==> Checking $(TARGET) memory footprint against TPA..."

@@ -60,7 +60,11 @@ void init_empty_document(void)
     g_active_line_len = 0;
     g_active_line_buf[0] = '\0';
     g_doc_modified = 0;
-    g_file_format = g_config.save_format;
+#ifdef __CPM__
+    g_file_format = FMT_CPM;
+#else
+    g_file_format = FMT_LINUX;
+#endif
 }
 
 uint16_t get_line_slot(uint16_t line_idx, int *err)

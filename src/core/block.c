@@ -11,6 +11,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "../include/config.h"
 #include "../include/buffer.h"
 #include "../include/editor.h"
@@ -31,13 +32,6 @@ uint16_t g_norm_start_row = 0;
 uint16_t g_norm_start_col = 0;
 uint16_t g_norm_end_row = 0;
 uint16_t g_norm_end_col = 0;
-
-/* Clipboard Storage */
-#ifndef CLIPBOARD_MAX_CHARS
-#define CLIPBOARD_MAX_CHARS 32768
-#endif
-static char     s_clipboard_buf[CLIPBOARD_MAX_CHARS];
-static uint16_t s_clipboard_len = 0;
 
 void start_new_block_at_cursor(void)
 {
@@ -167,16 +161,41 @@ int get_line_block_range(uint16_t row, uint16_t *start_col, uint16_t *end_col)
     return 1;
 }
 
-static int copy_block_to_clipboard(void)
+int do_copy_block(void)
 {
+    uint16_t orig_cur_row;
+    uint16_t orig_cur_col;
+    uint16_t lines_added = 0;
+    uint16_t i;
+    char *block_text;
+    uint16_t block_len = 0;
     uint16_t row;
     char line_buf[MAX_ACTIVE_LINE_STRIDE];
 
     if (g_block_mode == BLOCK_MODE_OFF) {
         return -1;
     }
+    if (g_block_mode == BLOCK_MODE_SELECTING) {
+        solidify_block();
+    }
     normalize_block_bounds();
-    s_clipboard_len = 0;
+
+    /* If cursor is inside block: ignore copy! */
+    if (check_cursor_in_block(g_cur_doc_row, g_cur_col)) {
+        return 0;
+    }
+
+    uint16_t max_buf_size;
+#ifdef __CPM__
+    block_text = g_scratch_line_buf;
+    max_buf_size = sizeof(g_scratch_line_buf);
+#else
+    block_text = (char *)malloc(MAX_DOC_LINES_32K);
+    if (!block_text) {
+        return -1;
+    }
+    max_buf_size = MAX_DOC_LINES_32K;
+#endif
 
     for (row = g_norm_start_row; row <= g_norm_end_row; row++) {
         uint16_t len = fetch_line_to_buffer(row, line_buf, MAX_ACTIVE_PAYLOAD);
@@ -194,47 +213,26 @@ static int copy_block_to_clipboard(void)
 
         if (c_end > c_start) {
             uint16_t span = c_end - c_start;
-            if (s_clipboard_len + span + 2 < CLIPBOARD_MAX_CHARS) {
-                memcpy(s_clipboard_buf + s_clipboard_len,
-                       line_buf + c_start, span);
-                s_clipboard_len += span;
+            if (block_len + span + 2 < max_buf_size) {
+                memcpy(block_text + block_len, line_buf + c_start, span);
+                block_len += span;
             }
         }
-        if (row < g_norm_end_row &&
-            s_clipboard_len + 1 < CLIPBOARD_MAX_CHARS) {
-            s_clipboard_buf[s_clipboard_len++] = '\n';
+        if (row < g_norm_end_row && block_len + 1 < max_buf_size) {
+            block_text[block_len++] = '\n';
         }
     }
-    s_clipboard_buf[s_clipboard_len] = '\0';
-    return 0;
-}
+    block_text[block_len] = '\0';
 
-int do_copy_block(void)
-{
-    uint16_t orig_cur_row;
-    uint16_t orig_cur_col;
-    uint16_t lines_added = 0;
-    uint16_t i;
-
-    if (g_block_mode == BLOCK_MODE_OFF) {
-        return -1;
-    }
-    if (g_block_mode == BLOCK_MODE_SELECTING) {
-        solidify_block();
-    }
-    normalize_block_bounds();
-
-    /* If cursor is inside block: ignore copy! */
-    if (check_cursor_in_block(g_cur_doc_row, g_cur_col)) {
+    if (block_len == 0) {
+#ifndef __CPM__
+        free(block_text);
+#endif
         return 0;
     }
 
-    if (copy_block_to_clipboard() != 0 || s_clipboard_len == 0) {
-        return 0;
-    }
-
-    for (i = 0; i < s_clipboard_len; i++) {
-        if (s_clipboard_buf[i] == '\n') {
+    for (i = 0; i < block_len; i++) {
+        if (block_text[i] == '\n') {
             lines_added++;
         }
     }
@@ -242,12 +240,12 @@ int do_copy_block(void)
     orig_cur_row = g_cur_doc_row;
     orig_cur_col = g_cur_col;
 
-    /* Paste the extracted block at current cursor */
-    for (i = 0; i < s_clipboard_len; i++) {
-        if (s_clipboard_buf[i] == '\n') {
+    /* Insert the extracted block text directly at current cursor */
+    for (i = 0; i < block_len; i++) {
+        if (block_text[i] == '\n') {
             do_enter();
         } else {
-            do_char_insert(s_clipboard_buf[i]);
+            do_char_insert(block_text[i]);
         }
     }
 
@@ -262,11 +260,15 @@ int do_copy_block(void)
         /* Single-line block */
         if (orig_cur_row == g_norm_start_row &&
             orig_cur_col <= g_norm_start_col) {
-            g_block_anchor_col += s_clipboard_len;
-            g_block_active_col += s_clipboard_len;
+            g_block_anchor_col += block_len;
+            g_block_active_col += block_len;
             normalize_block_bounds();
         }
     }
+
+#ifndef __CPM__
+    free(block_text);
+#endif
 
     g_doc_modified = 1;
     g_need_screen_render = 1;
@@ -314,7 +316,7 @@ int do_delete_block(void)
         }
         if (tail_len > tail_start) {
             uint16_t copy_cnt = tail_len - tail_start;
-            if (g_active_line_len + copy_cnt < MAX_INPUT_LINE_CHARS) {
+            if (g_active_line_len + copy_cnt <= MAX_INPUT_LINE_CHARS) {
                 memcpy(g_active_line_buf + g_active_line_len,
                        tail_buf + tail_start, copy_cnt);
                 g_active_line_len += copy_cnt;
@@ -331,45 +333,6 @@ int do_delete_block(void)
     g_need_screen_render = 1;
     g_need_status_render = 1;
     return 0;
-}
-
-uint16_t get_clipboard_len(void)
-{
-    return s_clipboard_len;
-}
-
-const char *get_clipboard_buffer(void)
-{
-    return s_clipboard_buf;
-}
-
-int do_paste_block(void)
-{
-    uint16_t i;
-
-    if (s_clipboard_len == 0) {
-        return 0;
-    }
-    cancel_block();
-    for (i = 0; i < s_clipboard_len; i++) {
-        if (s_clipboard_buf[i] == '\n') {
-            do_enter();
-        } else {
-            do_char_insert(s_clipboard_buf[i]);
-        }
-    }
-    g_doc_modified = 1;
-    g_need_screen_render = 1;
-    g_need_status_render = 1;
-    return 0;
-}
-
-int do_cut_block(void)
-{
-    if (copy_block_to_clipboard() < 0) {
-        return -1;
-    }
-    return do_delete_block();
 }
 
 int do_move_block(void)
@@ -585,7 +548,7 @@ int do_block_menu_popup(void)
             if (ui_browser_save_block_dialog(fname, sizeof(fname)) ==
                 MODAL_RES_OK && fname[0]) {
                 file_save_block(fname, g_norm_start_row,
-                                g_norm_end_row, g_config.save_format);
+                                g_norm_end_row, g_file_format);
             }
             break;
         } else if (key == KEY_CTRL_O || key == 'r' || key == 'R') {

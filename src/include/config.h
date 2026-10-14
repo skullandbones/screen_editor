@@ -149,6 +149,7 @@ typedef struct {
 
 /* Global Configuration Instance */
 extern editor_config_t g_config;
+extern uint8_t         g_config_loaded;
 
 /* Function Declarations */
 void config_init_defaults(void);

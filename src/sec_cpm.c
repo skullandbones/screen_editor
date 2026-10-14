@@ -20,23 +20,24 @@
 #include "include/file_io.h"
 #include "include/hal.h"
 
-extern char g_scratch_line_buf[MAX_ACTIVE_LINE_STRIDE];
-
-static const char *parse_target_filename(int argc, char **argv)
+static int parse_target_filename(char *out_buf, size_t max_len,
+                                 int argc, char **argv)
 {
     uint8_t cpm_cmd_len;
     const char *tail;
     uint8_t i = 0;
     uint8_t out_idx = 0;
-    char *cmd_buf = g_scratch_line_buf;
 
+    out_buf[0] = '\0';
     if (argc > 1 && argv[1][0] != '\0') {
-        return argv[1];
+        strncpy(out_buf, argv[1], max_len - 1);
+        out_buf[max_len - 1] = '\0';
+        return 1;
     }
 
     cpm_cmd_len = *(const uint8_t *)CMD_LEN;
     if (cpm_cmd_len == 0) {
-        return NULL;
+        return 0;
     }
 
     tail = (const char *)CMD_TAIL;
@@ -44,23 +45,25 @@ static const char *parse_target_filename(int argc, char **argv)
         i++;
     }
     while (i < cpm_cmd_len && tail[i] > ' ' &&
-           out_idx + 1 < 64) {
-        cmd_buf[out_idx++] = tail[i++];
+           out_idx + 1 < max_len) {
+        out_buf[out_idx++] = tail[i++];
     }
-    cmd_buf[out_idx] = '\0';
+    out_buf[out_idx] = '\0';
 
-    return (out_idx > 0) ? cmd_buf : NULL;
+    return (out_idx > 0) ? 1 : 0;
 }
 
 int main(int argc, char **argv)
 {
-    const char *target_file = parse_target_filename(argc, argv);
+    char target_file[32];
+    int has_target = parse_target_filename(target_file, sizeof(target_file),
+                                           argc, argv);
 
-    if (target_file) {
+    if (has_target) {
         if (strcmp(target_file, "-h") == 0 ||
             strcmp(target_file, "--help") == 0) {
-            puts("Usage: SEC [filename]");
-            puts("SE Screen Editor - CP/M C Profile (v1.1.0)");
+            hal_console_puts("Usage: SEC [filename]\r\n");
+            hal_console_puts("SE Screen Editor - CP/M C Profile (v1.1.0)\r\n");
             return 0;
         }
     }
@@ -72,7 +75,7 @@ int main(int argc, char **argv)
     ui_init();
     editor_init();
 
-    if (target_file && target_file[0] != '\0') {
+    if (has_target) {
         if (file_load(target_file) != 0) {
             /* Create new document under this name */
             init_empty_document();
