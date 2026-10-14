@@ -11,6 +11,7 @@ import signal
 import sys
 import termios
 import tty
+from typing import Optional
 
 # Key Code Constants
 KEY_CTRL_A = "\x01"
@@ -240,6 +241,18 @@ class Terminal:
         ch = sys.stdin.read(1)
         return ch if ch else None
 
+    def _drain_csi(self, last_b: Optional[str] = None):
+        """
+        Drain and discard trailing escape sequence bytes until a terminator
+        byte (0x40..0x7E: ~, A-Z, a-z) or timeout occurs per Section 10.
+        """
+        b = last_b
+        while b is not None:
+            code = ord(b)
+            if 0x40 <= code <= 0x7E:
+                break
+            b = self.get_char(timeout=0.05)
+
     def get_key(self, timeout=None):
         """
         Read a keypress or decode multi-byte escape sequence.
@@ -263,7 +276,7 @@ class Terminal:
             if seq == "[":
                 c2 = self.get_char(timeout=0.05)
                 if c2 is None:
-                    return KEY_ESC
+                    return None
                 if c2 == "A":
                     return KEY_UP
                 if c2 == "B":
@@ -276,22 +289,49 @@ class Terminal:
                     return KEY_HOME
                 if c2 == "F":
                     return KEY_END
-                if c2 in ("1", "4", "5", "6", "3"):
-                    # Check for trailing tilde '~'
-                    c3 = self.get_char(timeout=0.05)
-                    if c3 == "~":
-                        if c2 == "1":
-                            return KEY_HOME
-                        if c2 == "4":
-                            return KEY_END
-                        if c2 == "5":
-                            return KEY_PGUP
-                        if c2 == "6":
-                            return KEY_PGDN
-                        if c2 == "3":
-                            return KEY_DELETE
-                    return KEY_ESC
-                return KEY_ESC
+
+                prefix = 0
+                modifier = 0
+                in_modifier = False
+                b = c2
+
+                # Parse parameter bytes: 0-9 and ;
+                while b is not None and (b == ";" or b.isdigit()):
+                    if b == ";":
+                        in_modifier = True
+                    elif not in_modifier:
+                        prefix = prefix * 10 + int(b)
+                    else:
+                        modifier = modifier * 10 + int(b)
+                    b = self.get_char(timeout=0.05)
+
+                if b == "A":
+                    return KEY_UP
+                if b == "B":
+                    return KEY_DOWN
+                if b == "C":
+                    return KEY_RIGHT
+                if b == "D":
+                    return KEY_LEFT
+                if b == "H":
+                    return KEY_HOME
+                if b == "F":
+                    return KEY_END
+                if b == "~":
+                    if prefix in (1, 7):
+                        return KEY_HOME
+                    if prefix == 3:
+                        return KEY_DELETE
+                    if prefix in (4, 8):
+                        return KEY_END
+                    if prefix == 5:
+                        return KEY_PGUP
+                    if prefix == 6:
+                        return KEY_PGDN
+
+                # Drain remaining bytes of unrecognized or extended sequence
+                self._drain_csi(b)
+                return None
 
             # SS3 sequence: ESC O ...
             if seq == "O":
@@ -308,7 +348,7 @@ class Terminal:
                     return KEY_HOME
                 if c2 == "F":
                     return KEY_END
-                return KEY_ESC
+                return None
 
             # Two-key shortcuts: ESC < (Jump Top), ESC > (Jump Bottom)
             if seq in ("<", "t"):
