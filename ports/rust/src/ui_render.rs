@@ -119,14 +119,14 @@ pub fn render_line(doc_row: usize) {
         return;
     }
     let screen_row = (rel + 1) as u8;
-    hal_console_locate(screen_row, 1);
-
     if doc_row >= tot_lines {
         hal_console_set_attr(ATTR_NORMAL);
+        hal_console_locate(screen_row, 1);
         hal_console_putc(b'~');
         hal_console_clear_eol();
         return;
     }
+    hal_console_locate(screen_row, 1);
 
     let text = get_line_bytes(doc_row);
     let len = text.len();

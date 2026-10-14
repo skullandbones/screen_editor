@@ -1555,7 +1555,7 @@ have been resolved and archived.
   buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
 - **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
   via `make test-rust`).
-- **Status**: Complete / Production Ready (Bug 2.6.1 Resolved; 0 Open).
+- **Status**: Complete / Production Ready (Bugs 2.6.1–2.6.2 Resolved; 0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.6.1: Line Feed (`\n`, `0x0A`) Not Accepted as Enter in Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, Section 8.3.
@@ -1569,6 +1569,18 @@ have been resolved and archived.
     - *Resolution*: Normalized `KEY_LF` (`0x0A`) to `KEY_ENTER` (`0x0D`) in
       `hal_keyboard_get_key()` in `ports/rust/src/hal_linux.rs`. Validated via
       `test_bug_2_4_8_modal_dispatchers` in `tests/test_linux_native.py --rust`.
+  - [x] **Bug 2.6.2: Attribute Reset Ordering Before Tilde on Empty Rows**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.1, Section 6.5.
+    - *Issue*: Empty rows beyond EOF emitted `\x1b[2;1H\x1b[0m~\x1b[K` instead
+      of `\x1b[0m\x1b[2;1H~\x1b[K`, breaking callers expecting `\x1b[2;1H~`
+      at column 1 (`test_bug_2_4_14_viewport_col1_alignment`).
+    - *Root Cause*: `render_line()` in `ports/rust/src/ui_render.rs` called
+      `hal_console_set_attr(ATTR_NORMAL)` after `hal_console_locate(row, 1)`
+      when rendering rows beyond EOF.
+    - *Resolution*: Moved `hal_console_set_attr(ATTR_NORMAL)` before
+      `hal_console_locate(screen_row, 1)` for rows beyond EOF in
+      `ports/rust/src/ui_render.rs`. Validated via
+      `test_bug_2_4_14_viewport_col1_alignment`.
 
 ### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
