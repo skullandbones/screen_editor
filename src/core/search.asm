@@ -503,74 +503,6 @@ DFN_DO_SEARCH:
 	RET
 
 ;------------------------------------------------------------------------------
-; DO_FIND_PREV: Search backward for previous occurrence of pattern (Shift+F3)
-;
-; Purpose:
-;   Steps cursor back one character and searches backward through document
-;   lines for SEARCH_INPUT_BUF, wrapping around top if necessary.
-;
-; Call Usage / Protocol:
-;   Called via CALL from MAIN_LOOP on Shift+F3.
-;
-; Inputs:
-;   SEARCH_INPUT_BUF, CUR_DOC_ROW, CUR_COL.
-;
-; Outputs:
-;   Cursor moved to match and highlighted; status pop-up if not found.
-;
-; Preserves / Modifies:
-;   Clobbers all working registers.
-;------------------------------------------------------------------------------
-DO_FIND_PREV:
-	LD A,(SEARCH_LEN)
-	OR A
-	JP Z,DO_FIND_UI			; If no search pattern set, open Find UI
-
-	; Save current position in case search fails
-	LD HL,(CUR_DOC_ROW)
-	LD (PREV_START_ROW_TEMP),HL
-	LD A,(CUR_COL)
-	LD (PREV_START_COL_TEMP),A
-
-	; Check if active block is solidified (state 2)
-	LD A,(BLOCK_ACTIVE)
-	CP 2
-	JR NZ,DFP_NORMAL_START
-
-	; Solidified block match: wrap limit is BLOCK_START_ROW, BLOCK_START_COL
-	LD HL,(BLOCK_START_ROW)
-	LD (SEARCH_START_ROW),HL
-	LD A,(BLOCK_START_COL)
-	LD (SEARCH_START_COL),A
-
-	; Step backward from BLOCK_START_COL
-	LD (CUR_COL),A
-	CALL STEP_BACK_ONE_CHAR
-	JR DFP_DO_SEARCH
-
-DFP_NORMAL_START:
-	LD HL,(CUR_DOC_ROW)
-	LD (SEARCH_START_ROW),HL
-	LD A,(CUR_COL)
-	LD (SEARCH_START_COL),A
-	CALL STEP_BACK_ONE_CHAR
-
-DFP_DO_SEARCH:
-	XOR A
-	LD (SEARCH_WRAPPED),A
-	CALL FIND_STRING_BACKWARD_CONT
-	RET NC				; Match found
-
-	; Failed / completed: restore original position
-	LD HL,(PREV_START_ROW_TEMP)
-	LD (CUR_DOC_ROW),HL
-	LD A,(PREV_START_COL_TEMP)
-	LD (CUR_COL),A
-	LD (TARGET_COL),A
-	CALL LOCATE_CURSOR
-	RET
-
-;------------------------------------------------------------------------------
 ; STEP_BACK_ONE_CHAR: Move cursor back one character or wrap to preceding row
 ;
 ; Purpose:
@@ -899,20 +831,6 @@ CHECK_WRAP_LIMIT:
 ; Preserves / Modifies:
 ;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
-FIND_STRING_BACKWARD:
-	LD A,(SEARCH_LEN)
-	OR A
-	SCF
-	RET Z				; Cannot search empty string
-
-	; Record starting position for wrap limit detection
-	LD HL,(CUR_DOC_ROW)
-	LD (SEARCH_START_ROW),HL
-	LD A,(CUR_COL)
-	LD (SEARCH_START_COL),A
-	XOR A
-	LD (SEARCH_WRAPPED),A
-
 FIND_STRING_BACKWARD_CONT:
 	LD A,1
 	LD (SEARCH_FIRST_LINE),A

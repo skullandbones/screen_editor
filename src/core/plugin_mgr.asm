@@ -413,16 +413,6 @@ AFPS_FAIL:
 	SCF				; Carry = 1
 	RET
 
-CALC_FAR_SLOT_ADDR:
-	LD B,A
-	CALL GET_REGISTRY_ENTRY_PTR
-	LD DE,25
-	ADD HL,DE
-	LD A,(HL)
-	LD H,A
-	LD L,0
-	RET
-
 ;------------------------------------------------------------------------------
 ; GET_REGISTRY_ENTRY_PTR: Compute pointer to 32-byte plugin registry descriptor
 ;

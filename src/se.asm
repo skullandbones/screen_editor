@@ -2464,41 +2464,6 @@ FCLN_IS_DRIVE:
 	RET
 
 ;------------------------------------------------------------------------------
-; IS_ALPHA_CHAR: Test if character in A is alphabetic ('A'..'Z' or 'a'..'z')
-;
-; Purpose:
-;   Validates whether ASCII byte in register A is an uppercase or lowercase
-;   alphabetic character.
-;
-; Call Usage / Protocol:
-;   Called via CALL from command line and FCB parsers.
-;
-; Inputs:
-;   A = Character byte to test.
-;
-; Outputs:
-;   Carry = 1 if alphabetic ('A'..'Z' or 'a'..'z'); Carry = 0 otherwise.
-;
-; Preserves / Modifies:
-;   Preserves BC, DE, HL; modifies AF (flags).
-;------------------------------------------------------------------------------
-IS_ALPHA_CHAR:
-	CP 'A'
-	JR C,NOT_ALPHA
-	CP 'Z'+1
-	JR C,IS_ALPHA
-	CP 'a'
-	JR C,NOT_ALPHA
-	CP 'z'+1
-	JR NC,NOT_ALPHA
-IS_ALPHA:
-	SCF
-	RET
-NOT_ALPHA:
-	OR A
-	RET
-
-;------------------------------------------------------------------------------
 ; Splash Screen Renderer (Vim Style)
 ; Dynamically centered both horizontally and vertically for active screen
 ; geometry.

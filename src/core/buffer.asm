@@ -1640,32 +1640,6 @@ MLBD_DONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; MARK_CURRENT_LINE_DIRTY: Mark active document row dirty in cache
-;
-; Purpose:
-;   Loads CUR_DOC_ROW into BC and invokes MARK_LINE_BC_DIRTY to flag the
-;   current line as modified.
-;
-; Call Usage / Protocol:
-;   Called via CALL during character insertions, deletions, and replacements.
-;
-; Inputs:
-;   CUR_DOC_ROW.
-;
-; Outputs:
-;   Current line flagged dirty in cache.
-;
-; Preserves / Modifies:
-;   Preserves all registers: AF, BC, DE, HL.
-;------------------------------------------------------------------------------
-MARK_CURRENT_LINE_DIRTY:
-	PUSH BC
-	LD BC,(CUR_DOC_ROW)
-	CALL MARK_LINE_BC_DIRTY
-	POP BC
-	RET
-
-;------------------------------------------------------------------------------
 ; FLUSH_DIRTY_CACHE: Write modified lines in local cache back to Far RAM banks
 ;
 ; Purpose:
