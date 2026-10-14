@@ -165,30 +165,26 @@ static void exec_wordcnt(void)
     modal_alert("Word Count", msg1, msg2);
 }
 
+typedef struct {
+    const char *name;
+    const char *desc;
+} palette_item_t;
+
+static const palette_item_t s_palette_items[3] = {
+    {"ROT13", "Rotate letters by 13"},
+    {"WORDCNT", "Document word, line, count"},
+    {"BEAUTIFY", "Align Z80 assembly labels"}
+};
+
 void show_plugin_palette(void)
 {
-    typedef struct {
-        char name[12];
-        char desc[36];
-    } palette_item_t;
-
-    palette_item_t items[8];
-    uint8_t num_items = 0;
+    uint8_t num_items = 3;
     uint8_t selected = 0;
     uint8_t width = 50;
-    uint8_t height;
+    uint8_t height = 9;
     uint8_t top, left;
     uint8_t i;
 
-    strcpy(items[0].name, "ROT13");
-    strcpy(items[0].desc, "Rotate letters by 13");
-    strcpy(items[1].name, "WORDCNT");
-    strcpy(items[1].desc, "Document word, line, count");
-    strcpy(items[2].name, "BEAUTIFY");
-    strcpy(items[2].desc, "Align Z80 assembly labels");
-    num_items = 3;
-
-    height = (uint8_t)(num_items + 6);
     top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     left = (uint8_t)(((g_active_cols - width) / 2) + 1);
 
@@ -200,12 +196,12 @@ void show_plugin_palette(void)
                                 "Select a plugin to execute:");
 
         for (i = 0; i < num_items; i++) {
-            char line_buf[80];
-            snprintf(line_buf, sizeof(line_buf), "  %s%u. %-8.8s - %-.30s",
+            char line_buf[60];
+            snprintf(line_buf, sizeof(line_buf), "  %s%u. %-8s - %s",
                      (i == selected) ? "> " : "  ",
                      (unsigned)(i + 1),
-                     items[i].name,
-                     items[i].desc);
+                     s_palette_items[i].name,
+                     s_palette_items[i].desc);
             modal_draw_row_left(top + 4 + i, left, width, line_buf);
         }
 
@@ -223,11 +219,11 @@ void show_plugin_palette(void)
         if (k == KEY_ENTER || k == '\r' || k == '\n') {
             clear_screen();
             g_need_screen_render = 1;
-            if (strcmp(items[selected].name, "ROT13") == 0) {
+            if (selected == 0) {
                 exec_rot13();
-            } else if (strcmp(items[selected].name, "WORDCNT") == 0) {
+            } else if (selected == 1) {
                 exec_wordcnt();
-            } else if (strcmp(items[selected].name, "BEAUTIFY") == 0) {
+            } else if (selected == 2) {
                 do_ctrl_y_beautify();
             }
             break;
@@ -236,15 +232,15 @@ void show_plugin_palette(void)
             selected = (selected == 0) ? (num_items - 1) : (selected - 1);
         } else if (k == KEY_DOWN || k == KEY_CTRL_X) {
             selected = (selected + 1) % num_items;
-        } else if (k >= '1' && k < '1' + num_items) {
+        } else if (k >= '1' && k <= '3') {
             selected = (uint8_t)(k - '1');
             clear_screen();
             g_need_screen_render = 1;
-            if (strcmp(items[selected].name, "ROT13") == 0) {
+            if (selected == 0) {
                 exec_rot13();
-            } else if (strcmp(items[selected].name, "WORDCNT") == 0) {
+            } else if (selected == 1) {
                 exec_wordcnt();
-            } else if (strcmp(items[selected].name, "BEAUTIFY") == 0) {
+            } else if (selected == 2) {
                 do_ctrl_y_beautify();
             }
             break;
