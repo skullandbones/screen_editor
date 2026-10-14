@@ -386,6 +386,9 @@ pub fn hal_keyboard_get_key() -> u8 {
     if c == KEY_BS_ALT {
         return KEY_BS;
     }
+    if c == b'\n' {
+        return KEY_ENTER;
+    }
     if c != KEY_ESC {
         return c;
     }

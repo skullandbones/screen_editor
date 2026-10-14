@@ -1555,9 +1555,20 @@ have been resolved and archived.
   buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
 - **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
   via `make test-rust`).
-- **Status**: Complete / Production Ready.
+- **Status**: Complete / Production Ready (Bug 2.6.1 Resolved; 0 Open).
 - **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open).*
+  - [x] **Bug 2.6.1: Line Feed (`\n`, `0x0A`) Not Accepted as Enter in Modals**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, Section 8.3.
+    - *Issue*: Sending `4\n` (`0x0A`) in the `Goto Line` modal or File Browser
+      failed to submit the input field because `hal_keyboard_get_key()` did not
+      translate `KEY_LF` (`0x0A`) to `KEY_ENTER` (`0x0D`).
+    - *Root Cause*: Raw `termios` disables `ICRNL`, so PTY callers sending `\n`
+      deliver `KEY_LF` (`0x0A`), which `hal_keyboard_get_key()` in
+      `ports/rust/src/hal_linux.rs` returned raw instead of normalizing to
+      `KEY_ENTER` (`0x0D`).
+    - *Resolution*: Normalized `KEY_LF` (`0x0A`) to `KEY_ENTER` (`0x0D`) in
+      `hal_keyboard_get_key()` in `ports/rust/src/hal_linux.rs`. Validated via
+      `test_bug_2_4_8_modal_dispatchers` in `tests/test_linux_native.py --rust`.
 
 ### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
