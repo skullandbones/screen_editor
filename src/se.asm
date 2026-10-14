@@ -4370,7 +4370,6 @@ SEARCH_START_ROW:	DW	0
 SEARCH_START_COL:	DW	0
 SEARCH_WRAPPED:		DB	0
 SEARCH_FIRST_LINE:	DB	0
-SEARCH_INPUT_BUF:	DS	65
 REPLACE_PTR_TEMP:	DW	0
 REPLACE_DELTA_TEMP:	DB	0
 IN_EDITOR_MODE:	DB	0
@@ -4644,6 +4643,10 @@ PLUGIN_TPA_SLOT	EQU	LINE_STORAGE
 ; Overlay transient config and sector buffers onto LINE_STORAGE beyond plugin
 CFG_IO_BUF		EQU	LINE_STORAGE + 4096
 RAW_SECTOR_BUF		EQU	LINE_STORAGE + 4096 + 256
+
+; 65-byte transient input buffer for Find modal (DO_FIND_UI)
+; Overlaid on base of SPLIT_LINE_TEMP (+0..64)
+SEARCH_INPUT_BUF	EQU	SPLIT_LINE_TEMP
 
 ; 256-byte scratch line for local block/directory operations
 ; Overlaid on second 256-byte page of SPLIT_LINE_TEMP (+256..511)
