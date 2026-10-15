@@ -293,6 +293,12 @@ def test_se_execution(use_sec=False, use_python=False):
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:sec.com"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE_NEXT.COM"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:se_next.com"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS1.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:INS2.TXT"],
@@ -333,11 +339,14 @@ def test_se_execution(use_sec=False, use_python=False):
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, cfg_tmp, "0:SE.CFG"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if os.path.isfile(se_bin):
-            subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file, se_bin,
-                            target_cpm],
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
+        for cpm_var in ("SE.COM", "SEC.COM", "SE_NEXT.COM"):
+            var_bin = os.path.join(repo_root, cpm_var)
+            if os.path.isfile(var_bin):
+                subprocess.run(
+                    [cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                     var_bin, f"0:{cpm_var}"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL)
         ins1_tmp = "/tmp/INS1.TXT"
         with open(ins1_tmp, "wb") as f:
             f.write(b"INSERTED")
@@ -6278,9 +6287,15 @@ def test_se_execution(use_sec=False, use_python=False):
 
     finally:
         two_txt_host = os.path.join(repo_root, "2.TXT")
-        if os.path.isfile(two_txt_host) and os.path.isfile(cpmcp_bin) and os.path.isfile(cpmrm_bin):
-            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:2.TXT"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if (os.path.isfile(two_txt_host) and os.path.isfile(cpmcp_bin) and
+                os.path.isfile(cpmrm_bin)):
+            subprocess.run(
+                [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:2.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                [cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                 two_txt_host, "0:2.TXT"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         thirty_txt_host = os.path.join(repo_root, "30.TXT")
         if (os.path.isfile(thirty_txt_host) and os.path.isfile(cpmcp_bin) and
                 os.path.isfile(cpmrm_bin)):
