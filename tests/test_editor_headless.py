@@ -148,25 +148,43 @@ def drain_all(transport_or_fd, quiet_time=0.2):
     PY_PENDING = b""
     return normalize_py_output(data)
 
-def find_workspace_root(start_dir):
+def find_tools_dir(start_dir):
+    env_tools = os.environ.get("TOOLS_DIR") or os.environ.get("TOOL_DIR")
+    if env_tools:
+        cand = os.path.abspath(os.path.expanduser(env_tools))
+        if os.path.isdir(os.path.join(cand, "romwbw_src")):
+            return cand
+        if os.path.isdir(os.path.join(cand, "tools", "romwbw_src")):
+            return os.path.join(cand, "tools")
+        up2 = os.path.abspath(os.path.join(cand, "..", ".."))
+        if os.path.isdir(os.path.join(up2, "romwbw_src")):
+            return up2
     curr = os.path.abspath(start_dir)
     while curr != os.path.dirname(curr):
-        if os.path.isdir(os.path.join(curr, "tools", "romwbw_src")):
-            return curr
+        cand = os.path.join(curr, "tools")
+        if os.path.isdir(os.path.join(cand, "romwbw_src")):
+            return cand
         curr = os.path.dirname(curr)
-    raise RuntimeError("Could not locate tools/romwbw_src")
+    raise RuntimeError(
+        "Could not locate tools/romwbw_src (set TOOLS_DIR to override)"
+    )
+
+
+def find_workspace_root(start_dir):
+    return os.path.dirname(find_tools_dir(start_dir))
+
 
 def find_paths(use_sec=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
-    workspace_root = find_workspace_root(repo_root)
+    tools_dir = find_tools_dir(repo_root)
 
-    emu_bin = os.path.join(workspace_root, "tools", "rc2014_emu", "rc2014")
+    emu_bin = os.path.join(tools_dir, "rc2014_emu", "rc2014")
     rom_file = os.path.join(
-        workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
+        tools_dir, "romwbw_src", "Binary", "RC2014_std.rom"
     )
     golden_img = os.path.join(
-        workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
+        tools_dir, "romwbw_src", "Binary", "hd1k_combo.img"
     )
     img_dir = os.path.join(repo_root, "disks")
     img_file = os.path.join(img_dir, "hd1k_combo.img")
@@ -180,7 +198,7 @@ def find_paths(use_sec=False):
         repo_root, "SEC.COM" if use_sec else "SE.COM"
     )
     diskdefs_path = os.path.join(
-        workspace_root, "tools", "romwbw_src", "Tools", "cpmtools", "diskdefs"
+        tools_dir, "romwbw_src", "Tools", "cpmtools", "diskdefs"
     )
     if os.path.isfile(diskdefs_path) and "DISKDEFS" not in os.environ:
         os.environ["DISKDEFS"] = diskdefs_path
@@ -247,11 +265,16 @@ def test_se_execution(use_sec=False, use_python=False):
         f.write("SCREEN=120x40\r\nRAMDRIVE=ON\r\n")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
-    workspace_root = find_workspace_root(repo_root)
-    cpmrm_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmrm")
-    cpmcp_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools", "Linux", "cpmcp")
     if use_python:
         cpmrm_bin = cpmcp_bin = ""
+    else:
+        tools_dir = find_tools_dir(repo_root)
+        cpmrm_bin = os.path.join(
+            tools_dir, "romwbw_src", "Tools", "Linux", "cpmrm"
+        )
+        cpmcp_bin = os.path.join(
+            tools_dir, "romwbw_src", "Tools", "Linux", "cpmcp"
+        )
     if os.path.isfile(cpmrm_bin):
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:BIG.TXT"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
