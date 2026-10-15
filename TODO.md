@@ -295,9 +295,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 0 Open (All 9 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10,
-  2.2.11, 2.2.12, 2.2.13, 2.2.14 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5,
-  2.2.6 Rejected).
+- **Status**: Active / 1 Open (Bug 2.2.15 Open; 9 Bugs 2.2.2, 2.2.7, 2.2.8,
+  2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14 Resolved; Bugs 2.2.1, 2.2.3,
+  2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -481,6 +481,34 @@ have been resolved and archived.
       returning `0x0B` (`KEY_CTRL_K`) for `Extend + K` / `Ctrl+K` and queuing
       `\x1b[A` only when physical `'7'` (Up Arrow) is held. Validated via
       `tests/test_nextcpm_entry.py`.
+  - [ ] **Bug 2.2.15: Visible Cursor on Splash, Memory, Configure, and Modal
+    Pop-up Screens**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 7.11, 8.
+    - *Issue*: In `SE_NEXT.COM`, on the Splash screen (`RENDER_SPLASH`), the
+      cursor is shown highlighted at the top-left screen position (`1, 1`).
+      The cursor should not be visible on the Splash screen, Memory Info
+      screen (`SHOW_MEM_INFO_SCREEN`), or Configure screen
+      (`SHOW_CONFIG_SCREEN`). Additionally, when `M` (or a plugin action
+      requiring the Plugin Manager) triggers the missing Plugin Manager
+      pop-up (`SHOW_POPUP_NEED_PLUGIN_MGR`), the cursor remains visible at the
+      bottom-right corner of the pop-up box where the border finishes drawing,
+      whereas the cursor should be hidden.
+    - *Root Cause*: `TERM_HIDE_CURSOR` in
+      `src/hal/next_cpm/hal_nextcpm_console.asm` emits `STR_HIDE_CURSOR`
+      (`\x1b[?25l`, DEC private mode cursor hide), which is ignored by the
+      Spectrum +3 / NextCPM VT52-based console driver (which uses `ESC f` /
+      `\x1bf` to hide the cursor and `ESC e` / `\x1be` to show the cursor).
+      Consequently, `CALL TERM_HOME` followed by `CALL TERM_HIDE_CURSOR` at
+      the end of `RENDER_SPLASH`, `SHOW_MEM_INFO_SCREEN`,
+      `SHOW_CONFIG_SCREEN`, and `SHOW_ABOUT_SCREEN` leaves the cursor visible
+      at `(1, 1)`, and `CALL TERM_HIDE_CURSOR` before drawing Tier 2 modal
+      pop-ups leaves the cursor visible at the bottom-right corner of the
+      pop-up border.
+    - *Required Fix*: Update `TERM_HIDE_CURSOR` and `TERM_SHOW_CURSOR` in
+      `src/hal/next_cpm/hal_nextcpm_console.asm` (or `STR_HIDE_CURSOR` /
+      `STR_SHOW_CURSOR` under `TARGET_NEXT`) to also emit the Spectrum +3 /
+      NextCPM VT52 cursor visibility sequences (`\x1bf` to hide, `\x1be` to
+      show) so the cursor is hidden on all non-input screens and modal pop-ups.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
