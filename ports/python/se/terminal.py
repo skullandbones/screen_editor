@@ -57,6 +57,7 @@ KEY_END = "KEY_END"
 KEY_PGUP = "KEY_PGUP"
 KEY_PGDN = "KEY_PGDN"
 KEY_DELETE = "KEY_DELETE"
+KEY_INSERT = "KEY_INSERT"
 
 # VT100 ANSI Escape Sequences
 ANSI_CLEAR_SCREEN = "\x1b[2J\x1b[H"
@@ -289,6 +290,8 @@ class Terminal:
                     return KEY_HOME
                 if c2 == "F":
                     return KEY_END
+                if c2 in ("L", "@"):
+                    return KEY_INSERT
 
                 prefix = 0
                 modifier = 0
@@ -306,20 +309,22 @@ class Terminal:
                     b = self.get_char(timeout=0.05)
 
                 if b == "A":
-                    return KEY_UP
+                    return "SHIFT_UP" if modifier == 2 else KEY_UP
                 if b == "B":
-                    return KEY_DOWN
+                    return "SHIFT_DOWN" if modifier == 2 else KEY_DOWN
                 if b == "C":
-                    return KEY_RIGHT
+                    return "SHIFT_RIGHT" if modifier == 2 else KEY_RIGHT
                 if b == "D":
-                    return KEY_LEFT
+                    return "SHIFT_LEFT" if modifier == 2 else KEY_LEFT
                 if b == "H":
-                    return KEY_HOME
+                    return "JUMP_TOP" if modifier == 5 else KEY_HOME
                 if b == "F":
-                    return KEY_END
+                    return "JUMP_BOTTOM" if modifier == 5 else KEY_END
                 if b == "~":
                     if prefix in (1, 7):
                         return KEY_HOME
+                    if prefix == 2:
+                        return KEY_INSERT
                     if prefix == 3:
                         return KEY_DELETE
                     if prefix in (4, 8):

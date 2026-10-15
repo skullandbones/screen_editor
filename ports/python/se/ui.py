@@ -58,7 +58,10 @@ class UIRenderer:
         fmt_field = f" {fmt_str} |"
 
         # Field 4 (Help Hint / Context, 18 chars)
-        help_field = " ^K: Editor keys |"
+        if getattr(buf, "overwrite_mode", False):
+            help_field = " Overwrite mode  |"
+        else:
+            help_field = " ^K: Editor keys |"
 
         # Cursor, pan position, and block mode field (Field 5)
         cur_line = buf.cursor_row + 1
@@ -171,6 +174,14 @@ class UIRenderer:
                         )
                     else:
                         self.term.write(visible)
+                elif (
+                    len(vis_line) > buf.pan_col + cols
+                    and len(visible) == cols
+                ):
+                    self.term.write(visible[:-1])
+                    self.term.inverse_on()
+                    self.term.write(visible[-1])
+                    self.term.inverse_off()
                 else:
                     self.term.write(visible)
 
@@ -192,6 +203,7 @@ class UIRenderer:
         sc_r = max(1, min(body_rows, sc_r))
         sc_c = max(1, min(cols, sc_c))
         self.term.locate(sc_r, sc_c)
+        self.term.show_cursor()
         self.term.flush()
 
     def _render_highlighted_line(
@@ -280,6 +292,9 @@ class UIRenderer:
         # Reposition cursor adjacent to prompt if present (Bug 2.7.9)
         if prompt_row is not None and prompt_col is not None:
             self.term.locate(prompt_row, prompt_col)
+            self.term.show_cursor()
+        else:
+            self.term.hide_cursor()
 
         self.term.flush()
 
@@ -402,6 +417,7 @@ class UIRenderer:
 
         self.render_status_bar(buf, geometry_str=geometry_str)
         self.term.locate(prompt_screen_row, prompt_cursor_col)
+        self.term.show_cursor()
         self.term.flush()
 
     def render_directory_prompt(
