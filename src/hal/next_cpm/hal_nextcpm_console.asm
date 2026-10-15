@@ -60,19 +60,30 @@ TERM_INVERSE_OFF:
 
 ;------------------------------------------------------------------------------
 ; HAL_CONSOLE_HIDE_CURSOR / TERM_HIDE_CURSOR: Hide hardware terminal cursor
+;
+; The NextCPM console emulates a Zenith Z-19 terminal plus the Locomotive
+; Spectrum +3 extensions. It does NOT implement the DEC private mode
+; sequence ESC [ ? 25 l, so the +3 sequence ESC f (disable cursor blob) is
+; used instead (Bug 2.2.15).
 ;------------------------------------------------------------------------------
 HAL_CONSOLE_HIDE_CURSOR:
 TERM_HIDE_CURSOR:
-	LD DE,STR_HIDE_CURSOR
+	LD DE,STR_NEXTCPM_HIDE_CURSOR
 	JP PRINT_STR
 
 ;------------------------------------------------------------------------------
 ; HAL_CONSOLE_SHOW_CURSOR / TERM_SHOW_CURSOR: Show hardware terminal cursor
+;
+; Uses the Spectrum +3 sequence ESC e (enable cursor blob) supported by the
+; NextCPM console instead of the unsupported ESC [ ? 25 h (Bug 2.2.15).
 ;------------------------------------------------------------------------------
 HAL_CONSOLE_SHOW_CURSOR:
 TERM_SHOW_CURSOR:
-	LD DE,STR_SHOW_CURSOR
+	LD DE,STR_NEXTCPM_SHOW_CURSOR
 	JP PRINT_STR
+
+STR_NEXTCPM_HIDE_CURSOR:	DB	27,"f","$"
+STR_NEXTCPM_SHOW_CURSOR:	DB	27,"e","$"
 
 ;------------------------------------------------------------------------------
 ; HAL_CONSOLE_CLEAR / TERM_CLEAR_SCREEN: Erase entire display
