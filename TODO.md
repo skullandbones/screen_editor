@@ -295,9 +295,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 0 Open (All 10 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9,
-  2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15 Resolved; Bugs 2.2.1, 2.2.3,
-  2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 1 Open (Bug 2.2.16 Open; 10 Bugs 2.2.2, 2.2.7, 2.2.8,
+  2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15 Resolved; Bugs 2.2.1,
+  2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -513,10 +513,33 @@ have been resolved and archived.
       `STR_SHOW_CURSOR` are untouched, so `SE.COM` stays byte-identical and
       `SE.NEX` / `.se` keep their native ANSI parser path. Validated via
       `tests/test_bug_2_2_15.py`.
-    - *Follow-up (not in scope)*: `HELP.OVL` (`plugins/help.asm`) and
-      `PLUGIN.PRL` (`plugins/plugin.asm`) emit `\x1b[?25l` directly from
-      their own string tables rather than via the host HAL, so the cursor
-      may still be visible while those overlays are displayed on NextCPM.
+    - *Follow-up*: Hardcoded `\x1b[?25l` in `HELP.OVL` and `PLUGIN.PRL` is
+      tracked separately as Bug 2.2.16.
+  - [ ] **Bug 2.2.16: Cursor Visible While `HELP.OVL` / `PLUGIN.PRL`
+    Overlays Are Displayed**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 8; Bug 2.2.15.
+    - *Issue*: In `SE_NEXT.COM`, the terminal cursor may remain visible
+      while the Help screen (`HELP.OVL`, opened via `Ctrl+K` / `EXTEND + K`)
+      or Plugin Manager / plugin screens (`PLUGIN.PRL`) are displayed,
+      whereas the cursor should be hidden on these non-input screens.
+    - *Root Cause*: `plugins/help.asm` (lines 145, 197) and
+      `plugins/plugin.asm` (lines 596, 1016, 1074, 1092, 1098, 1236, 1802,
+      1863, 1935) emit their own local `STR_HIDE_CURSOR` /
+      `STR_SHOW_CURSOR` strings (`\x1b[?25l` / `\x1b[?25h`) through the
+      host `PRINT_STR` vector rather than calling the host HAL
+      `TERM_HIDE_CURSOR` / `TERM_SHOW_CURSOR` routines. The NextCPM console
+      (Zenith Z-19 + Spectrum +3 extensions) does not support
+      `ESC [ ? 25 l/h`; it requires `ESC f` / `ESC e` (see Bug 2.2.15).
+      The plugin host API (`PLUGIN_HOST_API` in
+      `src/core/plugin_tramp.asm`) currently exposes no hide/show cursor
+      entry points, so overlays cannot request the target-correct sequence.
+    - *Required Fix*: Append `TERM_HIDE_CURSOR` and `TERM_SHOW_CURSOR`
+      trampolines to `PLUGIN_HOST_API` (new vectors after `+73`, bumping the
+      host API version), and update `plugins/help.asm` and
+      `plugins/plugin.asm` to call those vectors instead of printing
+      hardcoded DEC sequences. Overlays must fall back to the existing
+      `\x1b[?25l/h` strings when loaded by an older host (version check),
+      and `SE.COM` must continue to emit `\x1b[?25l/h` on RomWBW.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
