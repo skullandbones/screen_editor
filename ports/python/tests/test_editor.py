@@ -2739,10 +2739,129 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_92_screen_transition_and_popup_debris_cleanup(self):
+        """Step 61: Verify screen/modal debris cleanup (Bug 2.7.92)."""
+        print(
+            "[*] Step 61: Testing screen transition & pop-up debris cleanup...",
+            flush=True,
+        )
+        cols, rows = 80, 24
+        self.editor.terminal.cols = cols
+        self.editor.terminal.rows = rows
+        grid = [[" " for _ in range(cols)] for _ in range(rows)]
+        cur = [1, 1]
+
+        def sim_locate(r, c):
+            cur[0] = max(1, min(rows, r))
+            cur[1] = max(1, min(cols, c))
+
+        def sim_write(text):
+            # Ignore raw ANSI attribute escape sequences in character grid
+            if text.startswith("\x1b"):
+                if text == "\x1b[K":
+                    r_idx = cur[0] - 1
+                    for c_idx in range(cur[1] - 1, cols):
+                        grid[r_idx][c_idx] = " "
+                elif "\x1b[2J" in text:
+                    for r_idx in range(rows):
+                        for c_idx in range(cols):
+                            grid[r_idx][c_idx] = " "
+                    cur[0], cur[1] = 1, 1
+                return
+            r_idx = cur[0] - 1
+            for ch in text:
+                c_idx = cur[1] - 1
+                if 0 <= r_idx < rows and 0 <= c_idx < cols:
+                    grid[r_idx][c_idx] = ch
+                cur[1] = min(cols + 1, cur[1] + 1)
+
+        def sim_clear_eol():
+            r_idx = cur[0] - 1
+            if 0 <= r_idx < rows:
+                for c_idx in range(cur[1] - 1, cols):
+                    grid[r_idx][c_idx] = " "
+
+        self.editor.terminal.locate = sim_locate
+        self.editor.terminal.write = sim_write
+        self.editor.terminal.clear_eol = sim_clear_eol
+        self.editor.terminal.flush = MagicMock()
+
+        # 1. Fill editor with 23 lines of 78 'X' chars and render editor
+        self.editor.buffer.lines = ["X" * 78 for _ in range(23)]
+        self.editor.renderer.render_editor(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        self.assertEqual(grid[5][3], "X")
+
+        # Transition from full editor to narrower About screen (54 cols)
+        # and verify columns 2..left_col-1 have zero leftover 'X' debris
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_about()
+        for r_idx in range(rows - 1):
+            row_str = "".join(grid[r_idx])
+            self.assertEqual(row_str[0], "~")
+            self.assertNotIn(
+                "X",
+                row_str,
+                f"Leftover editor debris on row {r_idx + 1}: {row_str!r}",
+            )
+
+        # 2. Transition from wide Help screen (70 cols) to Splash (50 cols)
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_help()
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        for r_idx in range(rows - 1):
+            row_str = "".join(grid[r_idx])
+            # Splash content starts at left_col >= 16; cols 1..14 (0-indexed)
+            # must be blank spaces free of Help screen text
+            self.assertEqual(row_str[0], "~")
+            self.assertEqual(
+                row_str[1:15].strip(),
+                "",
+                f"Leftover Help debris on Splash row {r_idx + 1}: {row_str!r}",
+            )
+
+        # 3. Sequential pop-ups in action_replace(): 8-row input modal
+        # followed by 7-row notification must not leave row 16 border debris
+        self.editor.buffer.lines = ["alpha beta", "second line"]
+        self.editor.renderer.render_editor(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        rep_keys = (
+            list("alpha")
+            + [KEY_ENTER]
+            + list("gamma")
+            + [KEY_ENTER, KEY_ENTER]
+        )
+        self.editor.terminal.get_key = MagicMock(side_effect=rep_keys)
+        self.editor.action_replace()
+        # While Replace Complete (7 rows: rows 9..15, 0-indexed 8..14) is up,
+        # row 16 (0-indexed 15) must be clean tilde row, not '+---...---+'
+        row_16 = "".join(grid[15]).rstrip()
+        self.assertEqual(
+            row_16,
+            "~",
+            f"Stale 8-row input modal border left on row 16: {row_16!r}",
+        )
+
+        # 4. Save File workspace -> Save Complete notification must redraw
+        # editor first so Directory Browser headers do not remain as debris
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "clean_save.txt")
+            save_keys = list(save_path) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=save_keys)
+            self.editor.action_save_file()
+            screen_dump = "\n".join("".join(r) for r in grid[:-1])
+            self.assertIn("Save Complete", screen_dump)
+            self.assertNotIn("SAVE FILE (DIRECTORY", screen_dump)
+            self.assertIn("gamma beta", screen_dump)
+
+        print(
+            "[+] Step 61: Screen transition & pop-up debris cleanup verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
-

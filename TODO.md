@@ -1655,8 +1655,8 @@ have been resolved and archived.
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
 - **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
-  2.7.65–2.7.71, 2.7.73–2.7.77 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72 Rejected;
-  0 Open).
+  2.7.65–2.7.71, 2.7.73–2.7.87, 2.7.92 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72
+  Rejected; 4 Open: 2.7.88–2.7.91).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -2854,6 +2854,29 @@ have been resolved and archived.
        (see the `--python` summary).
      - *Action*: Decide whether the native tests or the Python profile is
        canonical, then update one side.
+   - [x] **Bug 2.7.92: Screen Transition and Modal Pop-up Display Debris**:
+     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.2, 8.1, 8.4.
+     - *Issue*: Changing screens or displaying sequential modal pop-ups leaves
+       debris characters from the previous screen or taller pop-up on the
+       terminal display instead of refreshing the whole display.
+     - *Root Cause*:
+       1. In `ports/python/se/ui.py:270-288` (`render_centered_workspace`),
+          each row wrote `"~"` at column 1, jumped directly to `left_col` via
+          `locate(screen_r, left_col)` to write `line_str`, and only called
+          `clear_eol()` afterward, leaving columns `2 .. left_col - 1`
+          un-cleared when transitioning from wider screens or editor text.
+       2. In `ports/python/se/editor.py`, sequential pop-ups and workspace-to-
+          modal transitions (`action_find`, `action_replace`,
+          `action_insert_file`, `action_save_file`, `action_block_save`)
+          drew child notifications (`52x7`) directly over taller input modals
+          (`52x8`) or over the Tier 1 Directory Browser without redrawing the
+          underlying editor screen first.
+     - *Resolution*: Called `clear_eol()` immediately after writing the
+       column 0 tilde in `render_centered_workspace()` in `ui.py`, and added
+       `_refresh_editor_screen()` in `editor.py` before chained modal pop-ups
+       and post-browser notifications. Validated via Step 61 in
+       `test_editor.py`
+       (`test_bug_2_7_92_screen_transition_and_popup_debris_cleanup`).
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,

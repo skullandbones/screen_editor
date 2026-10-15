@@ -277,6 +277,11 @@ class Editor:
                     self.buffer.cancel_block()
                 self.buffer.insert_char(key)
 
+    def _refresh_editor_screen(self):
+        """Redraw active editor viewport to clear prior screen/modal debris."""
+        geom = f"{self.terminal.cols}x{self.terminal.rows}"
+        self.renderer.render_editor(self.buffer, geometry_str=geom)
+
     def action_quit(self):
         """Prompt to save changes if modified, then exit cleanly."""
         if self.buffer.modified:
@@ -341,6 +346,7 @@ class Editor:
         )
         self.case_sensitive = case_sens
         if query:
+            self._refresh_editor_screen()
             self.search_query = query
             self._find_from_current = True
             self._search_had_match = False
@@ -421,6 +427,7 @@ class Editor:
         if not find_q:
             return
         self.search_query = find_q
+        self._refresh_editor_screen()
 
         rep_q = self.modal.show_input(
             title="Replace Text",
@@ -442,6 +449,9 @@ class Editor:
                 self.buffer.set_line(r, new_line)
                 replacements += line.count(find_q)
 
+        # Redraw editor before 7-row notification so 8-row input box leaves
+        # no bottom-border debris (Bug 2.7.92)
+        self._refresh_editor_screen()
         self.modal.show_notification(
             title="Replace Complete",
             message=f"Replace done: {replacements} replacement(s).",
@@ -707,6 +717,7 @@ class Editor:
             return
 
         ok = self.buffer.insert_file(filename)
+        self._refresh_editor_screen()
         if ok:
             self.modal.show_notification(
                 title="Insert Complete",
@@ -736,6 +747,7 @@ class Editor:
 
         self.buffer.format_cpm = fmt_cpm
         ok = self.buffer.save_file(target_name, format_cpm=fmt_cpm)
+        self._refresh_editor_screen()
         if ok:
             self.modal.show_notification(
                 title="Save Complete",
@@ -767,6 +779,7 @@ class Editor:
                 return False
 
         ok = self.buffer.save_block(target_name, format_cpm=fmt_cpm)
+        self._refresh_editor_screen()
         if ok:
             self.modal.show_notification(
                 title="Save Complete",

@@ -269,8 +269,10 @@ class UIRenderer:
 
         for screen_r in range(1, body_rows + 1):
             self.term.locate(screen_r, 1)
-            # Column 0 tilde on all workspace rows
+            # Column 0 tilde on all workspace rows; clear full row first
+            # so columns 2..left_col-1 retain no debris (Bug 2.7.92)
             self.term.write("~")
+            self.term.clear_eol()
 
             # Check if this row is within content block
             content_idx = screen_r - top_row
@@ -283,8 +285,7 @@ class UIRenderer:
                 ):
                     prompt_row = screen_r
                     prompt_col = left_col + len(line_str)
-
-            self.term.clear_eol()
+                self.term.clear_eol()
 
         # Bottom row status bar
         self.render_status_bar(buf, geometry_str=geometry_str)
