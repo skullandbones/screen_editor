@@ -669,7 +669,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: All 49 Defects Resolved (100% Conformance).
+- **Status**: All 50 Defects Resolved (100% Conformance).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1562,6 +1562,19 @@ have been resolved and archived.
       (`file_read_op`), enabling successful joins and loading up to exactly
       `MAX_INPUT_LINE_CHARS` (1,000 characters per Section 6.8). Validated via
       `test_bug_2_4_49_line_join_boundary` in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.50: Single-Page Pagination Check in `test_bug_2_4_17`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5 (Single-Page Invariant).
+    - *Issue*: `test_bug_2_4_17_tier1_file_workspaces_and_directory_scan` in
+      `tests/test_linux_native.py:1256` asserted
+      `"<PgUp>/<PgDn>=Page" in open_out` when scanning the repository directory
+      (`< 60` entries, `total_pages == 1`), causing `make test-linux` to fail
+      after `src/core/ui_browser.c:412` was updated to enforce the Single-Page
+      Invariant (`if (total_pages > 1)`).
+    - *Required Fix*: Update `test_bug_2_4_17` in `tests/test_linux_native.py`
+      to assert that `<PgUp>/<PgDn>=Page` is suppressed when `total_pages == 1`.
+    - *Resolution*: Updated `test_bug_2_4_17` in `tests/test_linux_native.py`
+      to verify that `<PgUp>/<PgDn>=Page` is suppressed on single-page
+      directories per Section 7.5.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
@@ -1577,12 +1590,62 @@ have been resolved and archived.
 - **Target Platform**: Linux PC / Workstation (`x86_64-unknown-linux-gnu`) and
   Raspberry Pi 4/5 (`aarch64-unknown-linux-gnu`).
 - **Core Technology**: Idiomatic Rust implementation (`ports/rust/`),
-  terminal engine (`crossterm` / raw `termios`), piece table or line-slot
-  cache buffer, WordStar / SE keybindings, `SE.CFG` parser.
-- **Build Target**: `cargo build --release` (or `make se-rust`).
-- **Status**: Implementation Pending (Roadmap Item 7.4).
+  raw `termios` / `libc` terminal engine, line-slot `Vec<Vec<u8>>` document
+  buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
+- **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
+  via `make test-rust`).
+- **Status**: Complete / Production Ready (Bugs 2.6.1–2.6.4 Resolved; 0 Open).
 - **Active Defects & Issue Tracking**:
-  - [ ] *(No active bugs open; implementation pending).*
+  - [x] **Bug 2.6.1: Line Feed (`\n`, `0x0A`) Not Accepted as Enter in Modals**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, Section 8.3.
+    - *Issue*: Sending `4\n` (`0x0A`) in the `Goto Line` modal or File Browser
+      failed to submit the input field because `hal_keyboard_get_key()` did not
+      translate `KEY_LF` (`0x0A`) to `KEY_ENTER` (`0x0D`).
+    - *Root Cause*: Raw `termios` disables `ICRNL`, so PTY callers sending `\n`
+      deliver `KEY_LF` (`0x0A`), which `hal_keyboard_get_key()` in
+      `ports/rust/src/hal_linux.rs` returned raw instead of normalizing to
+      `KEY_ENTER` (`0x0D`).
+    - *Resolution*: Normalized `KEY_LF` (`0x0A`) to `KEY_ENTER` (`0x0D`) in
+      `hal_keyboard_get_key()` in `ports/rust/src/hal_linux.rs`. Validated via
+      `test_bug_2_4_8_modal_dispatchers` in `tests/test_linux_native.py --rust`.
+  - [x] **Bug 2.6.2: Attribute Reset Ordering Before Tilde on Empty Rows**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.1, Section 6.5.
+    - *Issue*: Empty rows beyond EOF emitted `\x1b[2;1H\x1b[0m~\x1b[K` instead
+      of `\x1b[0m\x1b[2;1H~\x1b[K`, breaking callers expecting `\x1b[2;1H~`
+      at column 1 (`test_bug_2_4_14_viewport_col1_alignment`).
+    - *Root Cause*: `render_line()` in `ports/rust/src/ui_render.rs` called
+      `hal_console_set_attr(ATTR_NORMAL)` after `hal_console_locate(row, 1)`
+      when rendering rows beyond EOF.
+    - *Resolution*: Moved `hal_console_set_attr(ATTR_NORMAL)` before
+      `hal_console_locate(screen_row, 1)` for rows beyond EOF in
+      `ports/rust/src/ui_render.rs`. Validated via
+      `test_bug_2_4_14_viewport_col1_alignment`.
+  - [x] **Bug 2.6.3: Spurious 4-Space Padding Before File Browser Rules**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5.
+    - *Issue*: `ui_browser_workspace()` in `ports/rust/src/ui_browser.rs`
+      rendered `~    ====...` on an `80x24` terminal instead of `~====...`
+      (`test_bug_2_4_17_tier1_file_workspaces_and_directory_scan`).
+    - *Root Cause*: `left_pad` was computed from `GRID_WIDTH` (`70`) instead
+      of `80` (adding 4 spaces on an 80-column display), whereas
+      `src/core/ui_browser.c` starts the rule immediately after `~` on an
+      80-column display.
+    - *Resolution*: Computed `left_pad` as `((active_cols - 80) / 2)` when
+      `active_cols > 80` and `0` on 80-column displays in
+      `ports/rust/src/ui_browser.rs`.
+  - [x] **Bug 2.6.4: Missing Dynamic 120x40 Geometry Adaptation on Wide PTY**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 14.1.
+    - *Issue*: Launching `se-rs` on a `120x40` PTY without `SE.CFG`
+      (`test_bug_2_4_19_panning_edge_trigger_and_geometry`) retained `80x24`
+      instead of adapting to `120x40`.
+    - *Root Cause*: `hal_console_get_size()` in `ports/rust/src/hal_linux.rs`
+      returned `(ROWS_24, COLS_80)` unconditionally whenever
+      `cfg.screen_mode == MODE_80X24` instead of querying `TIOCGWINSZ` at
+      startup and on `SIGWINCH`.
+    - *Resolution*: Added `editor_apply_winch()` in `ports/rust/src/editor.rs`
+      and invoked it in `editor_init()` and on `SIGWINCH` in
+      `ports/rust/src/main.rs` to adapt to `120x40` when `TIOCGWINSZ` reports
+      `cols >= 120 && rows >= 40`. Validated via
+      `test_bug_2_4_19_panning_edge_trigger_and_geometry`.
 
 ### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
@@ -2667,7 +2730,8 @@ have been resolved and archived.
       `SE.CFG` and refreshing the `Config Status: Loaded from SE.CFG` header.
     - *Root Cause*: `action_config_screen()` in `ports/python/se/editor.py`
       only handled two states (`AUTOLOAD` and `DISABLED`) for `PLUGIN` and
-      invoked `self.modal.show_notification()` after `self.config.save_config()`.
+      invoked `self.modal.show_notification()` after
+      `self.config.save_config()`.
     - *Resolution*: Updated `action_config_screen()` in `editor.py` to cycle
       Option 5 through all three canonical states (`Autoload` -> `Demand` ->
       `Disabled` -> `Autoload`) and save `SE.CFG` immediately on `S`/`s`
@@ -3176,19 +3240,21 @@ platform hardware abstraction, targeting three primary operating profiles:
 - [ ] Add `se-cpm86` build target in `Makefile` producing `SE.CMD`.
 
 ### 7.4 Rust Native Implementation for Linux
-- [ ] Construct a native SE editor implementation in Rust for Linux.
-- [ ] Implement idiomatic Rust architecture mirroring SE UI/UX specification:
-  - Terminal engine using `crossterm`, `termion`, or raw `termios`.
-  - Tier 1 full-screen workspaces, Tier 2 centered modal pop-up dialogs,
+- [x] Construct a native SE editor implementation in Rust for Linux (`se-rs`).
+- [x] Implement idiomatic Rust architecture mirroring SE UI/UX specification:
+  - [x] Terminal engine using raw `termios` (`libc`) and non-blocking ESC
+    timing.
+  - [x] Tier 1 full-screen workspaces, Tier 2 centered modal pop-up dialogs,
     and Tier 3 persistent status bar strictly matching `docs/UI_UX_DESIGN.md`.
-  - High-performance text buffer engine (piece table or line-slot cache).
-  - WordStar / SE keybindings (`Ctrl+K`, `Ctrl+Q`, `Ctrl+F`, `Ctrl+R`).
-  - Compatible `SE.CFG` configuration parsing and serialization.
-- [ ] Target platforms:
+  - [x] High-performance line-slot text buffer engine
+    (`ports/rust/src/buffer.rs`).
+  - [x] WordStar / SE keybindings (`Ctrl+K`, `Ctrl+Q`, `Ctrl+F`, `Ctrl+R`).
+  - [x] Compatible `SE.CFG` configuration parsing and serialization.
+- [x] Target platforms:
   - PC: `x86_64-unknown-linux-gnu`.
   - Raspberry Pi: `aarch64-unknown-linux-gnu` (RPi 4 / RPi 5).
-- [ ] Add Cargo workspace / package configuration under `ports/rust/` or
-  `src/rust/`.
+- [x] Add Cargo package configuration under `ports/rust/` and `--rust` flag to
+  `tests/test_linux_native.py` and `tests/compare_cpm_linux.py`.
 
 ### 7.5 Python Native Implementation for Linux
 - [x] Construct a native SE editor implementation in Python 3 for Linux.

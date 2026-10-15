@@ -135,7 +135,7 @@ class VirtualTerminal:
         return "\n".join("".join(row) for row in self.grid)
 
 
-def find_paths():
+def find_paths(use_rust=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -145,7 +145,8 @@ def find_paths():
         workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
     )
     img_file = os.path.join(repo_root, "disks", "hd1k_combo.img")
-    se_linux_bin = os.path.join(repo_root, "se-linux")
+    lin_name = "se-rs" if use_rust else "se-linux"
+    se_linux_bin = os.path.join(repo_root, lin_name)
 
     return emu_bin, rom_file, img_file, se_linux_bin
 
@@ -186,10 +187,11 @@ def drain(fd, quiet_time=0.1, max_wait=2.0):
     return b"".join(chunks)
 
 
-def run_comparison(use_sec=False):
+def run_comparison(use_sec=False, use_rust=False):
     target_name = "SEC.COM" if use_sec else "SE.COM"
     cmd_name = b"sec" if use_sec else b"se"
-    emu_bin, rom_file, img_file, se_linux_bin = find_paths()
+    lin_label = "se-rs" if use_rust else "se-linux"
+    emu_bin, rom_file, img_file, se_linux_bin = find_paths(use_rust=use_rust)
 
     print("[*] Launching CP/M RC2014 emulator...", flush=True)
     cpm_master, cpm_slave = os.openpty()
@@ -221,7 +223,7 @@ def run_comparison(use_sec=False):
         drain(cpm_master, quiet_time=0.1, max_wait=1.0)
         print("[+] CP/M prompt C> ready.", flush=True)
 
-        print("[*] Launching se-linux native PTY...", flush=True)
+        print(f"[*] Launching {lin_label} native PTY...", flush=True)
         lin_master, lin_slave = pty.openpty()
         tty.setraw(lin_slave)
         os.set_blocking(lin_master, False)
@@ -233,7 +235,7 @@ def run_comparison(use_sec=False):
         )
         os.close(lin_slave)
         lin_slave = None
-        print("[+] se-linux native process started.", flush=True)
+        print(f"[+] {lin_label} native process started.", flush=True)
 
         vt_cpm = VirtualTerminal(rows=24, cols=80)
         vt_lin = VirtualTerminal(rows=24, cols=80)
@@ -484,4 +486,5 @@ def run_comparison(use_sec=False):
 
 if __name__ == "__main__":
     use_sec_arg = "--sec" in sys.argv
-    run_comparison(use_sec=use_sec_arg)
+    use_rust_arg = "--rust" in sys.argv
+    run_comparison(use_sec=use_sec_arg, use_rust=use_rust_arg)

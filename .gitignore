@@ -16,6 +16,9 @@
 .se
 SE
 se-linux
+se-rs
+ports/rust/target/
+ports/rust/Cargo.lock
 *.PRL
 *.OVL
 *.prl

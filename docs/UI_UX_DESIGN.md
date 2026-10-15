@@ -1005,10 +1005,10 @@ content blocks rather than top-aligned text.
    The filename input fields across all directory workspaces (Open File,
    File Insert, Save File, and Block Save) support full in-field cursor
    navigation and editing identically across all SE variants:
-   - Left and Right cursor keys: `<Left>` and `<Right>` arrow keys (or
-     `<Ctrl+S>` and `<Ctrl+D>`) move the insertion cursor horizontally within
-     the input box without erasing characters.
-   - Delete key: `<Del>` (or `<Ctrl+G>`) deletes the character directly under
+   - Left and Right cursor keys: `<Left>` and `<Right>` arrow keys move the
+     insertion cursor horizontally within the input box without erasing
+     characters.
+   - Delete key: `<Del>` (or `<Ctrl+D>`) deletes the character directly under
      the cursor, shifting following characters leftward.
    - Backspace key: `<BS>` (`0x08`, `0x7F`) deletes the character immediately
      to the left of the cursor, shifting following characters leftward.

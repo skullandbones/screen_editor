@@ -160,19 +160,11 @@ How:
    * All changes must maintain compatibility with the RomWBW RC2014 emulator
      and SC131 real hardware (Z80 / Z180).
 6. **UI/UX Design System Conformance (MANDATORY)**:
-   * All visual surfaces, modal prompts, and command footers must adhere
-     strictly to `docs/UI_UX_DESIGN.md`.
-   * Agents must proactively audit screens against the **6 UI/UX
-     Anti-Patterns** detailed in `docs/UI_UX_DESIGN.md`:
-     1. *Status Bar Squatting* (drawing text input loops directly on Row 24).
-     2. *Blind / Static Footers* (displaying static keys that do not match
-        active item capabilities).
-     3. *Terminal Column Spill* (emitting strings > 78 chars causing wraps).
-     4. *Inverted Hierarchy* (asking questions before warning context).
-     5. *Missing Dual-Exit* (supporting ESC but ignoring Q/q).
-     6. *Buffer Pointer Clobber* (overwriting DE during string formatting).
-   * When touching legacy UI routines, agents must remediate existing
-     anti-patterns rather than perpetuating them.
+   * [`docs/UI_UX_DESIGN.md`](docs/UI_UX_DESIGN.md) is the single authoritative
+     specification for all SE functionality, visual surfaces, modal prompts,
+     keybindings, and UI/UX anti-patterns.
+   * When touching legacy UI routines, agents must proactively audit against
+     `docs/UI_UX_DESIGN.md` and remediate any non-conformance.
 7. **Prohibition of "python -c" & Mandatory Script Files (MANDATORY)**:
    * **Absolute Prohibition**: Invoking inline Python code via `python -c` or
      `python3 -c` (whether single-line or multi-line) is strictly prohibited
@@ -519,36 +511,9 @@ Never attempt `git push --force` or `git push --delete` on these branches.
 All AI agents and developers implementing, maintaining, or extending ported
 variants of the Screen Editor (such as the Linux C profile `se-linux`, Python
 port `se-py`, Rust native `se-rs`, CP/M-86 `SE.CMD`, or ZX Spectrum Next
-targets) must conform strictly to the canonical Look and Feel specification:
+targets) must conform strictly to the canonical Look and Feel, functional
+behavior, keybinding matrix, and testing requirements defined in:
 
 - **Authoritative Specification Document**:
   [`docs/UI_UX_DESIGN.md`](docs/UI_UX_DESIGN.md).
-
-### Mandatory Porting Invariance Rules:
-1. **Universal Status Bar (Row 24 / Row 40)**:
-   - Must appear on the bottom row of 100% of screens (Editor, Splash, Open,
-     Save, Help, Config, and background of pop-up dialogs).
-   - Rendered in inverse video (`\x1b[7m ... \x1b[0m`).
-   - Column 0 on the status bar row never displays a tilde.
-   - Status events (e.g. Save Confirmations, File Errors, Search Results) must
-     NEVER be printed on the status bar; they must be Tier 2 pop-ups.
-2. **Strict Column 0 Tilde (`~`) Discipline**:
-   - Every unallocated body row below EOF in the editor workspace, and all
-     margin rows in centered workspaces and pop-up backgrounds, must display a
-     tilde (`~`) in column 0.
-3. **Dedicated Surface Hierarchy (The 3 Tiers)**:
-   - Tier 1: Mathematically centered full-screen workspaces (Splash, Help,
-     Config, File Pickers) using the centering equations in the spec.
-   - Tier 2: Mathematically centered boxed modal dialogs with ASCII frames
-     (`+---+`, `|   |`) for all confirmations, inputs, and status events.
-   - Tier 3: Universal status bar on the bottom row.
-4. **Horizontal Panning (`Pan +40`) & Line Boundary**:
-   - Strict 120-column physical line length ceiling (`MAX_LINE = 120`).
-   - 40-column horizontal panning quantum (`[Pan +40]`, `[Pan +80]`).
-5. **WordStar Keybinding Fidelity**:
-   - 100% compliance with the canonical WordStar cursor diamond (`^S`, `^D`,
-     `^E`, `^X`), navigation shortcuts, and action keys in the spec table.
-6. **Automated Headless Conformance Testing**:
-   - Every port must include automated headless PTY integration tests
-     (validating boot, status bar presence, tildes, modals, and clean exit).
 
