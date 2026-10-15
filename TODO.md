@@ -2748,6 +2748,112 @@ have been resolved and archived.
       120x40 mode as `120x40 (Modern Default)`. Validated via Step 60 in
       `test_editor.py`
       (`test_bug_2_7_77_splash_active_screen_diagnostic_labels`).
+   - [x] **Bug 2.7.78: Insert Key Not Decoded; Overwrite Mode Missing**:
+     - *Reference*: `docs/KEYBINDINGS.md`, `docs/UI_UX_DESIGN.md` Section 4.3.
+     - *Issue*: `Insert` (`ESC [ 2 ~`, `ESC [ 2 ; 5 ~`, `ESC [ L`, `ESC [ @`)
+       was ignored, so Overwrite mode could not be entered and Field 4 never
+       showed ` Overwrite mode  |`.
+     - *Root Cause*: `terminal.py` had no `KEY_INSERT`, and
+       `DocumentBuffer` had no overwrite state.
+     - *Resolution*: Added `KEY_INSERT` decoding in `terminal.py`,
+       `overwrite_mode` and in-place replacement in `buffer.insert_char()`,
+       and the Field 4 label in `render_status_bar()`. Validated via Step 60
+       of `tests/test_editor_headless.py --python`.
+   - [x] **Bug 2.7.79: Shift+Arrow and Ctrl+Home/End Not Decoded**:
+     - *Reference*: `docs/KEYBINDINGS.md`.
+     - *Issue*: `ESC [ 1 ; 2 A/B/C/D` did not start or extend a selection and
+       `ESC [ 1 ; 5 H/F` did not jump to the top or bottom of the document.
+     - *Root Cause*: `terminal.py` only decoded unmodified CSI arrows and
+       Home/End.
+     - *Resolution*: Decoded modifier 2 arrows as `SHIFT_*` keys and modifier
+       5 Home/End as `JUMP_TOP`/`JUMP_BOTTOM`; handled in `dispatch_key()`.
+       Validated via Steps 24 and 39 of the headless `--python` run.
+   - [x] **Bug 2.7.80: Block Copy Rejected at Block Start**:
+     - *Reference*: `docs/UI_UX_DESIGN.md` Section 9 (Block Operations).
+     - *Issue*: `Ctrl+C` with the cursor exactly at the block start column
+       was ignored instead of inserting a copy before the block.
+     - *Root Cause*: `copy_block_to_cursor()` treated the block start as
+       inside the half-open range.
+     - *Resolution*: Allowed the copy when the cursor equals `(r1, c1)` and
+       shifted the block bounds. Validated via Step 38.
+   - [x] **Bug 2.7.81: Redundant Redraw on No-Op Ctrl+C / Ctrl+X**:
+     - *Issue*: `Ctrl+C` or `Ctrl+X` with no active block, or with the cursor
+       inside the block, repainted the whole screen.
+     - *Resolution*: `dispatch_key()` now sets `_skip_render` for these
+       no-ops. Validated via Steps 36 and 40.
+   - [x] **Bug 2.7.82: Find / Find Next Start Position and Wrap**:
+     - *Reference*: `docs/UI_UX_DESIGN.md` Section 11.
+     - *Issue*: The first `Ctrl+F` search skipped a match under the cursor
+       and did not wrap; `Ctrl+N` after the last match did not report
+       `Search completed.`.
+     - *Resolution*: `action_find()` searches from the cursor and wraps;
+       `action_find_next()` searches from the next column and reports
+       `Search completed.` once a match has been found. Validated via
+       Steps 48-50 and Step 45.
+   - [x] **Bug 2.7.83: Failed Find Kept Query, Block and Moved Cursor**:
+     - *Reference*: `src/core/search.asm` (`CHECK_START_FROM_BLOCK`).
+     - *Issue*: After `Pattern not found.`, the next Find prompt was
+       pre-filled with the failed query, a stale locked block survived, and
+       the cursor stayed at the old block start.
+     - *Resolution*: A never-matched Find clears the query, cancels the
+       block and restores the cursor; a locked block the cursor has left is
+       cancelled before the prompt opens. Validated via Steps 45 and 46.
+   - [x] **Bug 2.7.84: Open / Close Unsaved-Changes Handling**:
+     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2.
+     - *Issue*: `Ctrl+O` and Splash `o` discarded edits without prompting,
+       and ESC from the Splash `w` / `o` prompts did not return to the
+       editor.
+     - *Resolution*: `action_open_file()` prompts when modified; Splash `o`
+       and `w` route cancel correctly. Validated via Steps 26, 53 and 54.
+   - [x] **Bug 2.7.85: `file:line` and Drive-Prefixed Filenames**:
+     - *Issue*: `se C:2.TXT`, `2.TXT:15` and mixed-case names were not
+       resolved on a case-sensitive host.
+     - *Resolution*: `parse_filename_and_line()` strips CP/M drive prefixes
+       and `Editor._resolve_existing_file()` matches case-insensitively.
+       Validated via Steps 3, 30 and 55.
+   - [x] **Bug 2.7.86: 80-Column Continuation Highlight and Geometry Clamp**:
+     - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.
+     - *Issue*: Lines wider than the viewport lacked the inverse-video
+       right-edge marker, and switching 120x40 to 80x24 left the cursor
+       below the new status bar.
+     - *Resolution*: `render_editor()` highlights the last visible column
+       (suppressed during block mode) and Splash `1` clamps `cursor_row` to
+       `top_row + 22`. Validated via Steps 59 and 62.
+   - [x] **Bug 2.7.87: Cursor Visibility on Tier 1 Workspaces**:
+     - *Issue*: The cursor stayed visible on Splash, About and directory
+       screens and was not restored on entering the editor.
+     - *Resolution*: Added `hide_cursor()` / `show_cursor()` discipline to
+       the workspace renderers. Validated via Step 64.
+   - [ ] **Bug 2.7.88: Default Tab Width Is 8 (Native C Profile Uses 4)**:
+     - *Reference*: Bug 2.4.38, Bug 2.4.41.
+     - *Issue*: `tests/test_linux_native.py --python` fails
+       `test_bug_2_4_38_default_tab_width` and `..._41_tab_snap_forward`:
+       a Tab on an empty line reaches visual `Col 8`, not `Col 4`.
+     - *Root Cause*: `Config.DEFAULT_TAB_WIDTH = 8` in
+       `ports/python/se/config.py`.
+     - *Action*: Decide whether the Python profile should follow the
+       canonical default of 4; if so change the default and update
+       `test_editor.py` expectations.
+   - [ ] **Bug 2.7.89: Help Screen Lacks Dedicated PgUp / PgDn Lines**:
+     - *Reference*: Bug 2.4.47 (`test_bug_2_4_47_...`).
+     - *Issue*: `action_help()` lists `PgUp / PgDn : Page Up / Down` on one
+       line; the canonical Help screen documents `PgDn` separately.
+     - *Action*: Align the Help text with `docs/UI_UX_DESIGN.md` Section 7.3.
+   - [ ] **Bug 2.7.90: Tier 1 Header Shows Host Path, Not Drive Label**:
+     - *Reference*: Bug 2.4.17, 2.4.27, 2.4.28, 2.4.29.
+     - *Issue*: Open/Save/Insert/Block-Save workspaces render
+       `(DIRECTORY - <host path>/)`; the native suite expects
+       `(DIRECTORY)` and the CP/M suite `(DIRECTORY - DRIVE C:)`.
+     - *Action*: Clarify the canonical Linux header in
+       `docs/UI_UX_DESIGN.md` and align `ports/python/se/ui.py`.
+   - [ ] **Bug 2.7.91: CRLF Status Label and Save-Flow Differences vs Native**:
+     - *Reference*: Bug 2.4.45; `tests/test_linux_native.py --python`.
+     - *Issue*: The native suite expects `CPM   |` for CRLF files and a
+       single-key `Ctrl+S` save, whereas Python SE shows `CP/M  |` and opens
+       the Save workspace. Eight native tests fail on these differences
+       (see the `--python` summary).
+     - *Action*: Decide whether the native tests or the Python profile is
+       canonical, then update one side.
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
