@@ -79,14 +79,15 @@ CFLAGS ?= -Wall -Wextra -Werror -O2 -Isrc/include
 .PHONY: all sec-cpm se-py test-py test-linux se-rust test-rust \
 	se-next-cpm se-next-native test-next demo-next plugins image \
 	next-image init-image clean-image check-tpa check-ccp check-plugins \
-	check-lines test test-sec test-sanity test-conformity test-paging \
+	check-lines test test-sec test-sanity test-conformity \
+	test_editor_headless.py tests/test_editor_headless.py test-paging \
 	test-config test-32k test-cpm3 test-plugins test-beautifier \
 	test-popup test-slots test-plugin-cfg test-fatfs test-fatfs-slot \
 	test-fatfs-vfs test-fatfs-hook test-full clean
 
 
 
-all: $(TARGET) $(TARGET_SEC) plugins
+all: $(TARGET) $(TARGET_SEC) $(TARGET_NEXT_CPM) plugins image
 
 sec-cpm: $(TARGET_SEC)
 
@@ -182,12 +183,15 @@ init-image: $(IMAGE)
 clean-image:
 	rm -rf $(IMAGE_DIR)
 
-image: $(IMAGE) $(TARGET) $(TARGET_SEC) plugins
+image: $(IMAGE) $(TARGET) $(TARGET_SEC) $(TARGET_NEXT_CPM) plugins
 	@echo "==> Injecting binaries & plugins into hd1k image (0 & 3)..."
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE.COM 0:se.com 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET) 0:SE.COM
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SEC.COM 0:sec.com 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET_SEC) 0:SEC.COM
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:SE_NEXT.COM 0:se_next.com \
+		2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) $(TARGET_NEXT_CPM) 0:SE_NEXT.COM
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:PLUGIN.CFG 2>/dev/null || true
@@ -220,6 +224,9 @@ image: $(IMAGE) $(TARGET) $(TARGET_SEC) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET) 0:SE.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SEC.COM 0:sec.com 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET_SEC) 0:SEC.COM
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE_NEXT.COM 0:se_next.com \
+		2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) $(TARGET_NEXT_CPM) 0:SE_NEXT.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/PLUGIN.PRL 0:PLUGIN.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:PLUGIN.CFG 2>/dev/null || true
@@ -263,9 +270,11 @@ test-sec: image
 	@echo "==> Running fast SEC.COM sanity test suite..."
 	python3 tests/test_sanity.py --sec
 
-test-conformity: image
+test_editor_headless.py tests/test_editor_headless.py: image
 	@echo "==> Running full SE.COM conformity regression test suite..."
-	python3 tests/test_editor_headless.py
+	python3 tests/test_editor_headless.py $(ARGS)
+
+test-conformity: test_editor_headless.py
 
 test-paging: image
 	@echo "==> Running SE.COM large file paging test suite (3,400 lines)..."
