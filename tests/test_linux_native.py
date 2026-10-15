@@ -26,8 +26,13 @@ import time
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 USE_RUST = "--rust" in sys.argv
+PY_MODE = "--python" in sys.argv
 TARGET_NAME = "se-rs" if USE_RUST else "se-linux"
 SE_LINUX_BIN = os.path.join(PROJECT_DIR, TARGET_NAME)
+if PY_MODE:
+    # Run the same PTY suite against the native Python SE port
+    SE_LINUX_BIN = os.path.join(PROJECT_DIR, "ports", "python", "bin", "se")
+    os.environ["PYTHONPATH"] = os.path.join(PROJECT_DIR, "ports", "python")
 
 
 def read_all_available(fd, timeout_sec=0.5):
@@ -70,6 +75,9 @@ def wait_pid_with_timeout(pid, timeout_sec=3.0):
 def test_build_and_help():
     """Verify build target and CLI help invocation."""
     print("[*] Testing build and CLI help interface...")
+    if PY_MODE:
+        print("    [~] Skipped under --python (no C build step)")
+        return
     cmd = ["make", TARGET_NAME]
     res = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_DIR)
     assert res.returncode == 0, f"make {TARGET_NAME} failed:\n{res.stderr}"
@@ -4040,5 +4048,31 @@ def main():
     return 0
 
 
+def run_python_mode():
+    """Run each test independently against the Python SE port.
+
+    Several native-C tests assert C-specific UI flows, so failures are
+    collected and summarised instead of aborting at the first one.
+    """
+    tests = [
+        (n, f) for n, f in list(globals().items())
+        if n.startswith("test_") and callable(f)
+    ]
+    failed = []
+    for name, func in tests:
+        try:
+            func()
+        except Exception as exc:  # noqa: BLE001
+            failed.append((name, f"{type(exc).__name__}: {exc}"))
+            print(f"    [-] {name} FAILED: {exc}", flush=True)
+    print("=" * 80)
+    print(f"Python SE: {len(tests) - len(failed)}/{len(tests)} passed")
+    for name, why in failed:
+        print(f"  FAIL {name}: {why[:100]}")
+    return 1 if failed else 0
+
+
 if __name__ == "__main__":
+    if PY_MODE:
+        sys.exit(run_python_mode())
     sys.exit(main())
