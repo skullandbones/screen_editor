@@ -14,26 +14,15 @@ communicating over **Minicom** or any standard VT100/ANSI terminal emulator.
   vectors for Far RAM bank discovery, fast memory copying, and RAM drive
   protection. See
   [docs/HARDWARE_COMPATIBILITY.md](docs/HARDWARE_COMPATIBILITY.md).
-* **Vim-Style Splash Screen**: Clean startup landing screen with keyboard
-  navigation, memory info, and direct editor entry.
 * **512KB Extended Memory Buffer**: Breaks the classic 64KB CP/M memory ceiling
   by utilizing RomWBW HBIOS bank switching (`RST 08H`) to allocate and edit
   large files (such as multi-thousand line Z80 assembly source files) in upper
   RAM banks.
-* **Interactive File Open & Save Screens**: Sorted multi-column directory
-  browser with automatic pagination, filename pre-filling, and overwrite
-  confirmation warnings.
-* **Format Detection & Toggling**: Seamlessly loads and saves both classic CP/M
-  (`CRLF`) and Linux/Unix (`LF`) text files with live toggle in the save screen.
-* **ANSI / VT100 Terminal Interface**: Full-screen editing with cursor
-  navigation, scrolling, inverse video status bar, and dialog popups tailored
-  for Minicom.
-* **Z80 ASM Tab Handling**: Configurable tab stops (default 8 columns or 4
-  columns) with visual alignment for assembly labels, opcodes, operands, and
-  comments.
-* **Multi-Line Block Highlighting**: Live visual block selection (toggle with
-  `Ctrl+B`) supporting dynamic expansion/contraction across lines in reverse
-  video, with status bar line-count reporting.
+* **Canonical Full-Screen UI/UX & Terminal Interface**: Mathematically centered
+  workspaces, boxed modal dialogs, universal status bar, direct in-place block
+  manipulation, and VT100/ANSI keybindings across all SE variants. See
+  [docs/UI_UX_DESIGN.md](docs/UI_UX_DESIGN.md) for the authoritative UI/UX
+  specification.
 * **Pure Z80 Assembly Implementation**: Self-contained assembly codebase
   (`src/se.asm`) assembled into `SE.COM` via `z88dk-z80asm`.
 
@@ -176,49 +165,7 @@ pip install -r requirements.txt
 
 ## Using `SE.COM` (Screen Editor)
 
-### 1. Splash Screen
-Launching `SE` without arguments displays the Vim-style splash screen:
-
-```text
-~
-~                               SE - Screen Editor              
-~
-~                         type   [E]  or  [Enter]  to edit       
-~                         type   [N]              to new file   
-~                         type   [O]              to open file  
-~                         type   [S]              to save file  
-~                         type   [W]  or  [^W]    to close file 
-~                         type   [L]  or  [^L]    to goto line  
-~                         type   [A]              for about     
-~                         type   [M]              for memory info
-~                         type   [P]              for plugins   
-~                         type   [^P]             for context plugin menu
-~                         type   [C]              to configure  
-~                         type   [1]              set 120x40    
-~                         type   [2]              set 80x24     
-~                         type   [Q]  or  [^Q]    to exit       
-~
-~                     Active Screen : [120x40 (Modern Default)]          
-~
- | (Untitled)    | 120x40 | CP/M  | Free: 416 KB    | Line    1/1   Col 0   | 
-```
-
-* Press **`e`**, **`E`**, or <kbd>Enter</kbd> to enter/resume full-screen
-  editing mode.
-* Press **`n`** or **`N`** to start editing a new blank file (`(Untitled)`).
-* Press **`w`**, **`W`**, or <kbd>Ctrl+W</kbd> to close current file to splash.
-* Press **`o`** or **`O`** to open the interactive **Open File** directory
-  browser.
-* Press **`s`** or **`S`** to open the interactive **Save File** screen.
-* Press **`a`** or **`A`** to view the **About** screen (version, author,
-  tools, license).
-* Press **`m`** or **`M`** to view the interactive **Memory Info** table.
-* Press **`c`** or **`C`** to open the interactive **Configuration** screen.
-* Press **`1`** to set modern **120 columns x 40 rows** mode (Default).
-* Press **`2`** to set classic **80 columns x 24 rows** terminal mode.
-* Press **`q`**, **`Q`**, or <kbd>Ctrl+Q</kbd> to return cleanly to CP/M.
-
-### 2. Command-Line Launch & Goto Line
+### 1. Command-Line Launch & Goto Line
 
 `SE.COM` can be launched directly from the CP/M command line with an optional
 target filename and line number:
@@ -233,52 +180,17 @@ Examples:
 * `C>SE 1C:SOURCE.C` — Opens `SOURCE.C` on Drive C: in User Area 1.
 * `C>SE C1:SOURCE.C:42` — Opens `SOURCE.C` in User Area 1 on Line 42.
 
-### 3. Editor Mode Keybindings & Hybrid Block Highlighting
+### 2. UI/UX Design, Workspaces, Modals & Keybindings
 
-* <kbd>Ctrl+F</kbd>: Find text (forward search with document wrap; highlights
-  match as solidified block; pre-fills from active block).
-* <kbd>Ctrl+N</kbd>: Find Next (repeats search forward without re-prompting;
-  reports "Search completed." on wrap loop completion).
-* <kbd>Ctrl+P</kbd>: Find Previous (repeats search backward with document wrap;
-  reports "Search completed." on wrap loop completion).
-* <kbd>Ctrl+R</kbd>: Search and Replace (prompts for find & replace strings;
-  pre-fills from active block; interactive confirmation: `y`=yes, `n`=no,
-  `a`=all, `q`=quit, `r`/`p`=reverse direction).
-* <kbd>Ctrl+I</kbd> / <kbd>Tab</kbd>: Toggle case sensitivity in Find/Replace
-  prompt between `[Exact]` (session default) and `[Insens]`.
-* <kbd>Ctrl+L</kbd>: Goto line number (prompts on status line; centers viewport
-  on target line).
-* <kbd>Ctrl+B</kbd>: Start / toggle block selection mode (anchors at cursor row
-  and character column).
-* <kbd>Ctrl+K</kbd>: Solidify (lock/freeze) active block selection, or show
-  Editor Keys Reference Screen if no block active.
-* <kbd>Ctrl+C</kbd>: Copy solidified block to current cursor position (or
-  solidify dynamic block).
-* <kbd>Ctrl+X</kbd>: Move solidified block to current cursor position (or
-  solidify dynamic block).
-* <kbd>Ctrl+D</kbd> / <kbd>Delete</kbd>: Forward delete character under cursor
-  (or delete selected/solidified block).
-* <kbd>Insert</kbd>: Toggle between Insert mode (default) and Overwrite mode
-  (status bar displays `Overwrite mode  | `).
-* <kbd>ESC</kbd>: Dismiss active or solidified block highlight (or return to
-  splash screen if no block active).
-* <kbd>Arrow Keys</kbd> / <kbd>Home</kbd> / <kbd>End</kbd> / <kbd>PgUp</kbd> /
-  <kbd>PgDn</kbd>: Move cursor and dynamically expand or contract block
-  highlight (partial lines, single lines, or multi-lines).
-* <kbd>Ctrl+O</kbd>: Open interactive file browser.
-* <kbd>Ctrl+S</kbd>: Open save file screen.
-* <kbd>Ctrl+W</kbd>: Close file and return to splash screen (prompts to save
-  if modified).
-* <kbd>Ctrl+Q</kbd>: Clean exit to CP/M (prompts to save if modified).
+All interactive user interface surfaces, screen geometries (`80x24` baseline
+default, `120x40` extended console, and `NATIVE` host mode), Tier 1 full-screen
+workspaces (Splash, Help, Configuration Manager, Directory Browser, About,
+Memory Info, Plugin Manager), Tier 2 modal dialogs, status bar layout, block
+manipulation, and keybindings across all SE variants are governed by a single
+authoritative specification:
 
-### 4. Screen Size Configurations
-
-`SE.COM` supports both modern widescreen and retro terminal geometries:
-* **Modern Mode (120x40 - Default)**: Uses 120 columns by 40 rows, ideal for
-  modern terminal emulators (e.g. Minicom, GNOME Terminal, Windows Terminal,
-  xterm) giving 39 lines of visible text buffer and footer on row 40.
-* **Classic Mode (80x24)**: Uses 80 columns by 24 rows, ideal for classic VT100
-  hardware terminals or 80x24 serial windows.
+* **[`docs/UI_UX_DESIGN.md`](docs/UI_UX_DESIGN.md)** — Canonical Look and Feel,
+  functional behavior, keybinding matrix, and configuration specification.
 
 
 ---
@@ -378,9 +290,8 @@ Once the emulator boots:
    ```text
    A>SE_NEXT
    ```
-4. Press <kbd>E</kbd> or <kbd>Enter</kbd> to edit, <kbd>A</kbd> for About,
-   <kbd>M</kbd> for Memory Map, <kbd>1</kbd> for 80x24 mode, or
-   <kbd>Ctrl+Q</kbd> to return to CP/M.
+4. Use the splash screen and editor controls as specified in
+   [docs/UI_UX_DESIGN.md](docs/UI_UX_DESIGN.md).
 
 ### 3. Automated Demo Harness
 
@@ -427,7 +338,7 @@ screen_editor/
 │   ├── USER_GUIDE.md       # Complete user guide and manual
 │   ├── TROUBLESHOOTING.md  # Diagnostic & troubleshooting guide
 │   ├── HARDWARE_COMPATIBILITY.md # Hardware & RomWBW requirements
-│   ├── UI_UX_DESIGN.md     # Visual hierarchy and screen design rules
+│   ├── UI_UX_DESIGN.md     # Authoritative UI/UX & keybinding specification
 │   └── KEYBINDINGS.md      # Complete editor and splash key reference
 └── tests/                  # Automated integration and regression suites
     ├── README.md           # Test suite documentation
