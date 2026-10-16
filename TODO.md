@@ -25,8 +25,8 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Complete / 0 Open
-  (Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
+- **Status**: Active / 1 Open (Bug 2.1.21 Open;
+  Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
   Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
@@ -288,6 +288,16 @@ have been resolved and archived.
       from `SE.COM` would break terminal accessibility and contradict Section
       7.3. Section 10 has been updated to include `Ctrl+U` and `Ctrl+V` as
       paging aliases while reaffirming the prohibition of clipboard paste.
+  - [ ] **Bug 2.1.21: Help Screen Omits `Ctrl+Y` and `Ctrl+Z`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10;
+      `docs/KEYBINDINGS.md`.
+    - *Issue*: The editor handles `Ctrl+Y` (Beautify block / whole file,
+      `CHECK_CTRL_Y`) and `Ctrl+Z` (Plugin Manager screen, `CHECK_CTRL_Z`),
+      but `STR_HELP_BODY` in `plugins/help.asm` (`HELP.OVL`) does not list
+      either key, so they are undiscoverable from the Help screen.
+    - *Required Fix*: Add `Ctrl+Y` and `Ctrl+Z` to the Help screen within the
+      canonical 22-line Tier 1 layout (80x24 fit), update Section 7.3, and
+      apply the same change to `HELPNEXT.OVL` (Bug 2.2.17).
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
@@ -295,9 +305,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 1 Open (Bug 2.2.16 Open; 10 Bugs 2.2.2, 2.2.7, 2.2.8,
-  2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15 Resolved; Bugs 2.2.1,
-  2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 5 Open (Bugs 2.2.16, 2.2.17, 2.2.18, 2.2.19, 2.2.20
+  Open; 10 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13,
+  2.2.14, 2.2.15 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -540,6 +550,93 @@ have been resolved and archived.
       hardcoded DEC sequences. Overlays must fall back to the existing
       `\x1b[?25l/h` strings when loaded by an older host (version check),
       and `SE.COM` must continue to emit `\x1b[?25l/h` on RomWBW.
+  - [ ] **Bug 2.2.17: Help Screen Shows PC/Terminal Keys Instead of ZX
+    Spectrum Next Keys (Create `HELPNEXT.OVL`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.4;
+      `docs/KEYBINDINGS.md` Section 7.
+    - *Issue*: `SE_NEXT.COM` loads the shared `HELP.OVL`
+      (`plugins/help.asm`), which has no Next-specific content and
+      describes PC / serial-terminal keys. On the Next keyboard this is
+      confusing:
+      - `Ctrl+<key>` is used throughout, but `EXTEND` (or `Caps Shift +
+        Symbol Shift`) acting as `Ctrl` is never explained.
+      - `PgUp`, `PgDn`, `Home`, `End`, `^Home`, `^End`, `Insert`, `Tab`,
+        `Backspace`, `Delete` and `ESC` are listed, but the Next has no
+        such keys.
+      - Keys that `SE_NEXT.COM` deliberately redefines away from the
+        standard Next CP/M mappings are not shown: `TRUE VIDEO` = `Tab`
+        (standard: `Ctrl+S`), `INV VIDEO` = Page Up (standard: `Ctrl+I`
+        / Tab), `GRAPH` = Page Down (standard: `Ctrl+G`).
+      - The Next `DELETE` key (`Caps Shift + 0`) and `EXTEND + D` (forward
+        delete) are not shown.
+      - `Ctrl+Y` (Beautify) and `Ctrl+Z` (Plugin Manager) are missing
+        (see also Bug 2.1.21).
+    - *Required Fix*: Create a Next-specific overlay `HELPNEXT.OVL`
+      (e.g. `plugins/helpnext.asm`, or `plugins/help.asm` assembled with a
+      Next define) rather than adding Next text to the shared `HELP.OVL`,
+      to avoid confusing either audience:
+      - Use Next key names (`EXTEND + K`, `INV VIDEO`, `GRAPH`,
+        `TRUE VIDEO`, `DELETE`, `EDIT`, `BREAK`, arrow keys) and include a
+        one-line note that `EXTEND` = `Ctrl`.
+      - Clearly mark keys whose `SE_NEXT.COM` behaviour differs from the
+        standard Next CP/M mapping.
+      - Fit the canonical 22-line Tier 1 layout on the 80x24 Next display.
+      - Under `SE_NEXT.COM`, load `HELPNEXT OVL` instead of `HELP    OVL`
+        (`src/core/ui_browser.asm:166`) and update the "help missing"
+        pop-up text accordingly; `SE.COM` must remain byte-identical.
+      - Add a build target and deploy `HELPNEXT.OVL` with `SE_NEXT.COM`
+        (see Bug 2.2.20).
+  - [ ] **Bug 2.2.18: Insert/Overwrite Mode Cannot Be Toggled From the Next
+    Keyboard**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 10, 10.4.
+    - *Issue*: Insert/Overwrite is toggled only by terminal Insert-key
+      sequences (`ESC [ 2 ~`, `ESC [ L`, `ESC [ @`, handled by
+      `TOGGLE_INSERT_MODE` in `src/core/editor.asm`). No key on the ZX
+      Spectrum Next keyboard produces any of these sequences under NextCPM,
+      so Overwrite mode is unreachable in `SE_NEXT.COM`.
+    - *Required Fix*: Assign a Next key in
+      `src/hal/next_cpm/hal_nextcpm_keyboard.asm` that toggles
+      Insert/Overwrite (e.g. remap the `EDIT` key, `Caps Shift + 1`, via
+      ULA matrix disambiguation, queuing `ESC [ 2 ~`), keeping existing
+      `EXTEND` mappings intact. Document the key in `HELPNEXT.OVL`
+      (Bug 2.2.17), `docs/UI_UX_DESIGN.md` Section 10.4 and
+      `docs/KEYBINDINGS.md` Section 7.
+  - [ ] **Bug 2.2.19: Next Key Mapping Documentation Disagrees With Standard
+    Next CP/M Mappings (`EDIT` / `BREAK`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.4;
+      `docs/KEYBINDINGS.md` Section 7; NextZXOS CP/M terminal docs.
+    - *Issue*: The NextZXOS CP/M terminal documentation (on the NextZXOS SD
+      image, `disks/tbblue.mmc`) defines the standard Next CP/M key codes:
+      `BREAK` = `ESC`, `EDIT` = `Ctrl+W`, `TRUE VIDEO` = `Ctrl+S`,
+      `INV VIDEO` = `Ctrl+I` (Tab), `GRAPH` = `Ctrl+G`, `DELETE` =
+      `Ctrl+H`, `Ctrl+DELETE` = `DEL` (0x7F), cursor keys = `Ctrl+A/F/E/X`.
+      `SE_NEXT.COM` intentionally redefines `TRUE VIDEO`, `INV VIDEO`,
+      `GRAPH` and the cursor keys via ULA matrix disambiguation in
+      `HAL_KEYBOARD_TRANSLATE`, but does not remap `EDIT` or `BREAK`.
+      However, `docs/KEYBINDINGS.md` Section 7 and `docs/UI_UX_DESIGN.md`
+      Section 10.4 state `EDIT` = `ESC` and `BREAK` = `Ctrl+C`. If the
+      standard mapping applies, pressing `EDIT` in the editor sends
+      `Ctrl+W` (Close file to splash) and `BREAK` is the only `ESC` key.
+    - *Required Fix*: Verify `EDIT` / `BREAK` behaviour on real Next
+      hardware. Then either remap them in `HAL_KEYBOARD_TRANSLATE` (note
+      Bug 2.2.18 may claim `EDIT`) or correct the documentation. Update the
+      Section 10.4 / Section 7 tables to show three columns: standard SE
+      key, standard Next CP/M key code, and `SE_NEXT.COM` behaviour, so
+      every key that `SE_NEXT.COM` redefines is explicit.
+  - [ ] **Bug 2.2.20: `HELP` Overlay and `PLUGIN.PRL` Not Deployed to the
+    Next Disk Image**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3; `Makefile`
+      `next-image` target.
+    - *Issue*: `make next-image` runs `tools/populate_next_disk.py`, which
+      injects only `dot_se.bin`, `SE.NEX` and `SE_NEXT.COM` into
+      `tbblue.mmc`. Unlike the RomWBW `image` target, the help overlay and
+      `PLUGIN.PRL` are not copied, so `Ctrl+K` (`EXTEND + K`) in
+      `SE_NEXT.COM` may display the "help missing" pop-up and plugin
+      features are unavailable on the Next image.
+    - *Required Fix*: Extend `tools/populate_next_disk.py` (and the
+      `next-image` dependencies) to build and inject `HELPNEXT.OVL`
+      (Bug 2.2.17) and `PLUGIN.PRL` alongside `SE_NEXT.COM`, and add a
+      check to `tests/test_next_targets.py`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
