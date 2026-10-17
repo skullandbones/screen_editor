@@ -52,8 +52,8 @@ displays the centered startup landing screen:
 ~
 ~                     type   [E]  or  [Enter] to edit
 ~                     type   [N]              to new file
-~                     type   [O]              to open file
-~                     type   [S]              to save file
+~                     type   [O]  or  [^O]    to open file
+~                     type   [S]  or  [^S]    to save file
 ~                     type   [W]  or  [^W]    to close file
 ~                     type   [L]  or  [^L]    to goto line
 ~                     type   [A]              for about
@@ -65,12 +65,12 @@ displays the centered startup landing screen:
 ~                     type   [2]              set 120x40
 ~                     type   [Q]  or  [^Q]    to exit
 ~
-~                     Active Screen : [80x24 (Classic Terminal)]
-~                     RAM Drive (A:): [Preserved (Active)]
-~                     Plugin System : [Operational]
-~                     Max Lines     : [16,384 lines]
+~                   Active Screen : [80x24 (Classic Terminal)] 
+~                   RAM Drive (B:): [Preserved (Active)]
+~                   Plugin System : [Operational]
+~                   Max Lines     : [16,384 lines]
 ~
-| (Untitled)     |  80x24 | CP/M  | Free: 28,416 B  | Line    1/1   Col 0   |
+ | (Untitled)     |  80x24 | CP/M  | Free: 64 KB     | Line    1/1    Col 0   | 
 ```
 
 ### 2.1 Splash Menu Shortcuts
@@ -78,8 +78,9 @@ displays the centered startup landing screen:
 * **`[E]` / `[Enter]`**: Enter the editor buffer (resumes current document or
   starts an untitled buffer).
 * **`[N]`**: Start editing a clean blank document (`(Untitled)`).
-* **`[O]`**: Open the interactive File Open directory browser.
-* **`[S]`**: Open the interactive File Save screen.
+* **`[O]` / `[^O]` (`Ctrl+O`)**: Open the interactive File Open directory
+  browser.
+* **`[S]` / `[^S]` (`Ctrl+S`)**: Open the interactive File Save screen.
 * **`[W]` / `[^W]` (`Ctrl+W`)**: Close the current file and reset buffer.
 * **`[L]` / `[^L]` (`Ctrl+L`)**: Prompt for a line number and jump directly to
   that line in the editor.

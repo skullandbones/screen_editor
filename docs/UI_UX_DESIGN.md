@@ -624,50 +624,55 @@ content blocks rather than top-aligned text.
      - `Option 3`: Native host terminal mode (if supported). Hotkey `3`
        (`DO_SET_NATIVE`). Added to the splash screen only when dynamic host
        terminal sizing is supported (e.g. on native Linux/POSIX ports).
-   - Visual Structure (Canonical SE.COM Template):
-     ```text
-     ~
-     ~                 SE - Screen Editor
-     ~
-     ~         type   [E]  or  [Enter] to edit
-     ~         type   [N]              to new file
-     ~         type   [O]  or  [^O]    to open file
-     ~         type   [S]  or  [^S]    to save file
-     ~         type   [W]  or  [^W]    to close file
-     ~         type   [L]  or  [^L]    to goto line
-     ~         type   [A]              for about
-     ~         type   [M]              for memory info
-     ~         type   [P]              for plugins
-     ~         type   [^P]             for context plugin menu
-     ~         type   [C]              to configure
-     ~         type   [1]              set 80x24
-     ~         type   [2]              set 120x40
-     ~         type   [Q]  or  [^Q]    to exit
-     ~
-     ~         Active Screen : [80x24 (Classic Terminal)]
-     ~         RAM Drive (A:): [Preserved (Active)]
-     ~         Plugin System : [Operational]
-     ~         Max Lines     : [32,768 lines]
-     ~
-     [STATUS BAR AT ROW 24]
-     ```
-   - Dynamic Diagnostic Status Line Strings (Rows 18..21):
+   - Visual Structure (Canonical SE.COM v1.1.3 80x24 Template — see Section 15.1
+     for full 1:1 grid and profile adaptation rules):
+```text
+~
+~                              SE - Screen Editor
+~
+~                     type   [E]  or  [Enter] to edit
+~                     type   [N]              to new file
+~                     type   [O]  or  [^O]    to open file
+~                     type   [S]  or  [^S]    to save file
+~                     type   [W]  or  [^W]    to close file
+~                     type   [L]  or  [^L]    to goto line
+~                     type   [A]              for about
+~                     type   [M]              for memory info
+~                     type   [P]              for plugins
+~                     type   [^P]             for context plugin menu
+~                     type   [C]              to configure
+~                     type   [1]              set 80x24
+~                     type   [2]              set 120x40
+~                     type   [Q]  or  [^Q]    to exit
+~
+~                   Active Screen : [80x24 (Classic Terminal)] 
+~                   RAM Drive (B:): [Preserved (Active)]
+~                   Plugin System : [Operational]
+~                   Max Lines     : [16,384 lines]
+~
+ | (Untitled)     |  80x24 | CP/M  | Free: 64 KB     | Line    1/1    Col 0   | 
+```
+   - Dynamic Diagnostic Status Line Strings (Screen Rows 19..22 in 80x24; see
+     Section 15.1.5 for profile-specific adaptations and omissions):
      - `Active Screen`:
-       - `80x24` mode: `Active Screen : [80x24 (Classic Terminal)]`
+       - `80x24` mode: `Active Screen : [80x24 (Classic Terminal)] `
        - `120x40` mode: `Active Screen : [120x40 (Modern Default)]`
        - `Native` mode: `Active Screen : [Native (Dynamic Console)]` (or
          `[<Cols>x<Rows> (Native Terminal)]`)
-     - `RAM Drive (A:)`:
-       - Protected / Preserve: `RAM Drive (A:): [Preserved (Active)]`
-       - Enabled / Overwrite: `RAM Drive (A:): [Overwritten (Max RAM)]`
-       - Hibernate: `RAM Drive (A:): [Hibernated (Temp Image)]`
+     - `RAM Drive (<drv>:)` (where `<drv>` is detected RAM drive, e.g. `A:` or
+       `B:`):
+       - Protected / Preserve: `RAM Drive (B:): [Preserved (Active)]`
+       - Enabled / Overwrite: `RAM Drive (B:): [Overwritten (Max RAM)]`
+       - Hibernate: `RAM Drive (B:): [Hibernated (Temp Image)]`
+       - None detected: `RAM Drive     : [None Detected]`
      - `Plugin System`:
-       - Autoload: `Plugin System : [Operational]`
+       - Autoload (Resident): `Plugin System : [Operational]`
        - Demand: `Plugin System : [On Demand]`
        - Disabled: `Plugin System : [Disabled]`
      - `Max Lines`:
-       - `16K` mode: `Max Lines     : [16,384 lines]`
+       - `16K` mode (default): `Max Lines     : [16,384 lines]`
        - `32K` mode: `Max Lines     : [32,768 lines]`
+       - Conventional RAM fallback: `Max Lines     : [256 lines (RAM)]`
    - Instant Single-Keystroke Protocol & "Enter Option" Exclusion:
      - The splash screen dispatches commands immediately on a single keystroke.
      - The hardware terminal cursor must remain hidden (`\x1b[?25l`).
@@ -1081,41 +1086,59 @@ content blocks rather than top-aligned text.
         the active editor workspace with document state intact.
 
 12. About Screen Layout (`[A]` from Splash):
-    - Content Height: 9 lines, Content Width: 54 columns.
-    - All rows above `TopRow` and below `TopRow + 9` (up to Row 23) display `~`.
-    - Visual Structure:
-      ```text
-      ~
-      ~                 SE - Screen Editor
-      ~       version 1.1.0 (2026-10-09) (Z80 Assembly)
-      ~                  by Dean Jenkins
-      ~
-      ~ Google Antigravity 2.23.0 & Gemini 4 Argon Medium
-      ~     Open source software under the MIT License
-      ~
-      ~             Press any key to continue
-      ~
-      [STATUS BAR AT ROW 24]
-      ```
+    - Content Height: 9 lines (`ABOUT_MENU_LINES = 9`), max line width: 49
+      columns (`PRINT_ABOUT_LINE` centers each line individually via
+      `LeftPad = (ACTIVE_COLS - 1 - len(str)) / 2`).
+    - All rows above `TopRow` (Rows 1..7 in 80x24) and below `TopRow + 9`
+      (Rows 17..23 in 80x24) display `~`.
+    - Visual Structure (Canonical SE.COM v1.1.3 80x24 Template — see
+      Section 15.2 for full 1:1 24-row grid):
+```text
+~
+~
+~
+~
+~
+~
+~
+~                              SE - Screen Editor
+~                   version 1.1.3 (2026-10-17) (Z80 Assembly)
+~                                by Dean Jenkins
+~
+~               Google Antigravity 2.23.0 & Gemini 4 Argon Medium
+~
+~                  Open source software under the MIT License
+~
+~                           Press any key to continue
+~
+~
+~
+~
+~
+~
+~
+ | (Untitled)     |  80x24 | CP/M  | Free: 64 KB     | Line    1/1    Col 0   | 
+```
     - Predominant Programming Language Display Mandate:
-      Row 2 of the About screen displays the release version number, build date,
-      and the predominant programming language used to create that specific SE
-      port or binary, formatted as `version <version> (<date>) (<Language>)`:
+      Content Row 2 (Screen Row 9 in 80x24) of the About screen displays the
+      release version number, build date, and the predominant programming
+      language used to create that specific SE port or binary, formatted as
+      `version <version> (<date>) (<Language>)`:
       - 8-bit CP/M (`SE.COM`):
-        `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+        `version 1.1.3 (2026-10-17) (Z80 Assembly)`
       - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
-        `version 1.1.0 (2026-10-09) (Z80 Assembly)`
-      - Linux Native C port (`se-linux` / `SEC.COM`):
-        `version 1.1.0 (2026-10-09) (C)`
+        `version 1.1.3 (2026-10-17) (Z80 Assembly)`
+      - Linux Native C / CP/M C port (`se-linux` / `SEC.COM`):
+        `version 1.1.3 (2026-10-17) (C)`
       - Linux Native Python port (`se-py`):
-        `version 1.1.0 (2026-10-09) (Python)`
+        `version 1.1.3 (2026-10-17) (Python)`
       - Future Rust port (`se-rs`):
-        `version 1.1.0 (2026-10-09) (Rust)`
+        `version 1.1.3 (2026-10-17) (Rust)`
       Generic host OS labels (such as `(Linux)`) must not be used; each
       binary shall clearly state its predominant programming language on the
       About screen.
     - Version Harmonization: All SE variants share the exact same release
-      version number as canonical `SE.COM` (e.g. `v1.1.0`).
+      version number as canonical `SE.COM` (e.g. `v1.1.3`).
     - Dismissal: Any key press dismisses the About screen and returns to the
       Splash Screen.
 
@@ -1904,14 +1927,241 @@ specific architectural adaptations.
    version number and build date line on the Tier 1 About screen
    (Section 7.12). For example:
    - `SE.COM` / `SE_NEXT.COM`:
-     `version 1.1.0 (2026-10-09) (Z80 Assembly)`
+     `version 1.1.3 (2026-10-17) (Z80 Assembly)`
    - `se-linux` / `SEC.COM`:
-     `version 1.1.0 (2026-10-09) (C)`
+     `version 1.1.3 (2026-10-17) (C)`
    - `se-py`:
-     `version 1.1.0 (2026-10-09) (Python)`
+     `version 1.1.3 (2026-10-17) (Python)`
    - `se-rs`:
-     `version 1.1.0 (2026-10-09) (Rust)`
+     `version 1.1.3 (2026-10-17) (Rust)`
    All SE variants shall share the identical version number as canonical
-   `SE.COM` (e.g. `v1.1.0`). Generic host OS labels (such as `(Linux)`) must
+   `SE.COM` (e.g. `v1.1.3`). Generic host OS labels (such as `(Linux)`) must
    not be used; each binary shall clearly state its predominant programming
    language on the About screen.
+
+15. Canonical Screen Layouts (SE.COM & Target Profiles)
+--------------------------------------------------------------------------------
+This section records the exact, row-by-row and column-by-column terminal screen
+layouts rendered by canonical CP/M-80 `SE.COM` (`src/se.asm` and `src/core/`)
+and its target profiles.
+
+15.1 CP/M-80 `SE.COM` — Startup Splash Screen Layout (`RENDER_SPLASH`)
+--------------------------------------------------------------------------------
+1. Source Reference:
+   - Renderer: `RENDER_SPLASH` (`src/se.asm:2558-2748`)
+   - String Constants: `STR_SPLASH_*` (`src/core/plugin_mgr.asm:4263-4306`)
+   - Menu Line Count: `SPLASH_MENU_LINES = 21` (`src/include/ui.inc:30`)
+
+2. Vertical & Horizontal Geometry Metrics:
+   - Available Workspace Rows: `AvailRows = ACTIVE_ROWS - 1` (`23` in `80x24`,
+     `39` in `120x40`).
+   - Top Padding (`SPLASH_TOP_PAD_COUNT = (AvailRows - 21) / 2`):
+     - `80x24` mode: `1` row (Screen Row 1 displays `~`).
+     - `120x40` mode: `9` rows (Screen Rows 1..9 display `~`).
+   - Content Block Rows (`21` rows total):
+     - `80x24` mode: Screen Rows `2..22`.
+     - `120x40` mode: Screen Rows `10..30`.
+   - Bottom Padding (`AvailRows - SPLASH_TOP_PAD_COUNT - 21`):
+     - `80x24` mode: `1` row (Screen Row 23 displays `~`).
+     - `120x40` mode: `9` rows (Screen Rows 31..39 display `~`).
+   - Universal Status Bar:
+     - Rendered in ANSI inverse video (`\x1b[7m`) on Screen Row `24` (`80x24`)
+       or Screen Row `40` (`120x40`), with `1` leading/trailing margin space in
+       `80x24` or `21` leading/trailing margin spaces in `120x40` around the
+       78-column enclosed status bar (`STATUS_ENCLOSED_WIDTH = 78`).
+   - Horizontal Left Padding (`PRINT_SPLASH_PREFIX`):
+     - Column 1 of every workspace row (`1..AvailRows`) is `~`.
+     - `PRINT_SPLASH_PREFIX` emits `~` followed by `19` spaces in `80x24` mode
+       (1-based Column 21) or `39` spaces in `120x40` mode (1-based Column 41).
+     - Title row (`STR_SPLASH_TITLE_PAD`) adds `11` further spaces before
+       `SE - Screen Editor` (`30` spaces after `~` in `80x24`; `50` spaces
+       after `~` in `120x40`).
+     - Command rows (`STR_SPLASH_CMDS`) include `2` leading spaces before
+       `type` (`21` spaces after `~` in `80x24`; `41` spaces after `~` in
+       `120x40`).
+     - Diagnostic status rows (`Rows 19..22` in `80x24`) begin directly after
+       `PRINT_SPLASH_PREFIX` (`19` spaces after `~` in `80x24`; `39` spaces
+       after `~` in `120x40`).
+
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.3):
+```text
+~
+~                              SE - Screen Editor
+~
+~                     type   [E]  or  [Enter] to edit
+~                     type   [N]              to new file
+~                     type   [O]  or  [^O]    to open file
+~                     type   [S]  or  [^S]    to save file
+~                     type   [W]  or  [^W]    to close file
+~                     type   [L]  or  [^L]    to goto line
+~                     type   [A]              for about
+~                     type   [M]              for memory info
+~                     type   [P]              for plugins
+~                     type   [^P]             for context plugin menu
+~                     type   [C]              to configure
+~                     type   [1]              set 80x24
+~                     type   [2]              set 120x40
+~                     type   [Q]  or  [^Q]    to exit
+~
+~                   Active Screen : [80x24 (Classic Terminal)] 
+~                   RAM Drive (B:): [Preserved (Active)]
+~                   Plugin System : [Operational]
+~                   Max Lines     : [16,384 lines]
+~
+ | (Untitled)     |  80x24 | CP/M  | Free: 64 KB     | Line    1/1    Col 0   | 
+```
+
+4. Dynamic Diagnostic Row Permutations (`SE.COM`, Screen Rows 19..22 in 80x24):
+   - Screen Row 19 (`Active Screen`):
+     - `80x24` mode: `Active Screen : [80x24 (Classic Terminal)] `
+     - `120x40` mode: `Active Screen : [120x40 (Modern Default)]`
+   - Screen Row 20 (`RAM Drive`, where `<drv>` is detected RAM drive letter,
+     e.g. `B:` or `A:`):
+     - Protected (default): `RAM Drive (B:): [Preserved (Active)]`
+     - Hibernated: `RAM Drive (B:): [Hibernated (Temp Image)]`
+     - Overwritten: `RAM Drive (B:): [Overwritten (Max RAM)]`
+     - No RAM drive detected: `RAM Drive     : [None Detected]`
+   - Screen Row 21 (`Plugin System`):
+     - Resident (`PLUGIN_MGR_LOADED == 1`): `Plugin System : [Operational]`
+     - On-Demand (`EXT_BANK_COUNT >= 2`, not resident):
+       `Plugin System : [On Demand]`
+     - Disabled or `< 2` Far RAM banks: `Plugin System : [Disabled]`
+   - Screen Row 22 (`Max Lines`):
+     - 16K mode (`EXT_BANK_COUNT >= 2`, default):
+       `Max Lines     : [16,384 lines]`
+     - 32K mode (`EXT_BANK_COUNT >= 2`, `MAX_DOC_LINES_LIMIT == 32768`):
+       `Max Lines     : [32,768 lines]`
+     - Conventional RAM fallback (`EXT_BANK_COUNT < 2`):
+       `Max Lines     : [256 lines (RAM)]`
+
+5. Notes for Other Profiles:
+   While canonical CP/M-80 `SE.COM` defines the baseline Splash Screen layout,
+   alternative SE profiles adapt specific menu and diagnostic rows to match
+   underlying hardware, memory, and OS capabilities:
+   - Supported Screen Geometries (`80x24`, `120x40`, and `Native`):
+     - `[1] set 80x24` is the universal baseline default present across all
+       profiles.
+     - `[2] set 120x40` is displayed only on targets that support 120x40 wide
+       console geometry. On fixed-geometry hardware such as ZX Spectrum Next
+       (`SE_NEXT.COM`, `SE.NEX`, `.se`, where the hardware console is fixed at
+       80x24 via `IFDEF TARGET_NEXT`), Option `[2]` is omitted.
+     - `[3] set native` (or dynamic host terminal sizing) is supported on
+       native host OS profiles (`se-linux`, `se-py`, `se-rs`) capable of
+       querying live terminal dimensions (`ioctl(TIOCGWINSZ)` or
+       `os.get_terminal_size()`). When active, `Active Screen` reflects the
+       native console geometry (e.g. `[Native (Dynamic Console)]` or
+       `[<Cols>x<Rows> (Native Terminal)]`).
+   - RAM Drive Support (`RAM Drive`):
+     - RomWBW RAM drive management (`Preserve`, `Hibernate`, `Overwrite`) is
+       specific to RomWBW HBIOS CP/M-80 systems where upper 32KB RAM banks are
+       shared between RAM disk `A:` and editor Far RAM.
+     - On profiles where a hardware/firmware RAM drive is not applicable (such
+       as native Linux ports `se-linux`, `se-py`, `se-rs`, generic CP/M C
+       `SEC.COM`, or ZX Spectrum Next native modes), RAM drive support is not
+       applicable; the `RAM Drive` diagnostic line either reports
+       `[None Detected]` or is omitted.
+   - Plugin Manager & Plugin Subsystem (`Plugin System`):
+     - On CP/M-80 `SE.COM`, the Plugin Manager (`PLUGIN.PRL`) and plugins
+       (`.PRL` / `.OVL`) are dynamically loaded disk overlays.
+     - On other profiles, the plugin manager and standard plugins (`ROT13`,
+       `WORDCNT`, `BEAUTIFY`) may be built-in (statically compiled into the
+       binary, as in `se-linux` and `se-py`) or not supported on memory-
+       constrained profiles (such as `SEC.COM`), and the splash menu/status
+       adapts accordingly.
+   - Maximum Document Lines (`Max Lines`):
+     - On 8-bit banked and non-banked systems (`SE.COM`, `SE_NEXT.COM`,
+       `SE.NEX`, `.se`, `SEC.COM`), document line capacity is bounded by
+       physical RAM/bank tables (`16,384`, `32,768`, or `256` lines).
+     - On large-memory host machines (`se-linux`, `se-py`, `se-rs`), a fixed
+       maximum line limit is hypothetical (bounded only by host virtual memory),
+       so the `Max Lines` diagnostic line may be omitted.
+   - Status Bar Free Memory Indication (Field 4):
+     - On CP/M-80 `SE.COM` and memory-constrained targets, Status Bar Field 4
+       on the Splash Screen displays free document memory (`Free: <N> KB`).
+     - On large-memory host machines (or profiles without a bounded document
+       memory pool), the free memory indication in Status Bar Field 4 may be
+       omitted (rendered as a blank 15-character field `               | ` per
+       Section 4.3).
+
+15.2 CP/M-80 `SE.COM` — About Screen Layout (`SHOW_ABOUT_SCREEN`)
+--------------------------------------------------------------------------------
+1. Source Reference:
+   - Renderer: `SHOW_ABOUT_SCREEN` & `PRINT_ABOUT_LINE`
+     (`src/se.asm:2777-2922`)
+   - String Constants: `STR_ABOUT_*` (`src/core/plugin_mgr.asm:4376-4386`)
+   - Content Line Count: `ABOUT_MENU_LINES = 9` (`src/include/ui.inc:31`)
+
+2. Vertical & Horizontal Geometry Metrics:
+   - Available Workspace Rows: `AvailRows = ACTIVE_ROWS - 1` (`23` in `80x24`,
+     `39` in `120x40`).
+   - Top Padding (`ABOUT_TOP_PAD_COUNT = (AvailRows - 9) / 2`):
+     - `80x24` mode: `7` rows (Screen Rows `1..7` display `~`).
+     - `120x40` mode: `15` rows (Screen Rows `1..15` display `~`).
+   - Content Block Rows (`9` rows total):
+     - `80x24` mode: Screen Rows `8..16`.
+     - `120x40` mode: Screen Rows `16..24`.
+   - Bottom Padding (`AvailRows - ABOUT_TOP_PAD_COUNT - 9`):
+     - `80x24` mode: `7` rows (Screen Rows `17..23` display `~`).
+     - `120x40` mode: `15` rows (Screen Rows `25..39` display `~`).
+   - Per-Line Symmetrical Centering (`PRINT_ABOUT_LINE`):
+     - Each text line begins with `~` in Column 1, followed by
+       `LeftPad = (ACTIVE_COLS - 1 - len(str)) / 2` spaces:
+       - Screen Row 8 (`"SE - Screen Editor"`, 18 chars): `30` spaces (`80x24`)
+         or `50` spaces (`120x40`).
+       - Screen Row 9 (`"version 1.1.3 (2026-10-17) (Z80 Assembly)"`, 41 chars):
+         `19` spaces (`80x24`) or `39` spaces (`120x40`).
+       - Screen Row 10 (`"by Dean Jenkins"`, 15 chars): `32` spaces (`80x24`)
+         or `52` spaces (`120x40`).
+       - Screen Row 11: `~` (blank line).
+       - Screen Row 12 (`"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`,
+         49 chars): `15` spaces (`80x24`) or `35` spaces (`120x40`).
+       - Screen Row 13: `~` (blank line).
+       - Screen Row 14 (`"Open source software under the MIT License"`, 42
+         chars): `18` spaces (`80x24`) or `38` spaces (`120x40`).
+       - Screen Row 15: `~` (blank line).
+       - Screen Row 16 (`"Press any key to continue"`, 25 chars): `27` spaces
+         (`80x24`) or `47` spaces (`120x40`).
+   - Universal Status Bar:
+     - Rendered on Screen Row `24` (`80x24`) or Screen Row `40` (`120x40`).
+
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.3):
+```text
+~
+~
+~
+~
+~
+~
+~
+~                              SE - Screen Editor
+~                   version 1.1.3 (2026-10-17) (Z80 Assembly)
+~                                by Dean Jenkins
+~
+~               Google Antigravity 2.23.0 & Gemini 4 Argon Medium
+~
+~                  Open source software under the MIT License
+~
+~                           Press any key to continue
+~
+~
+~
+~
+~
+~
+~
+ | (Untitled)     |  80x24 | CP/M  | Free: 64 KB     | Line    1/1    Col 0   | 
+```
+
+4. Notes for Other Profiles:
+   - Predominant Programming Language Tag (Content Row 2 / Screen Row 9):
+     All SE variants share the identical release version number and date as
+     canonical `SE.COM` (e.g. `version 1.1.3 (2026-10-17)`), appending their
+     predominant implementation language in parentheses:
+     - `SE.COM`, `SE_NEXT.COM`, `SE.NEX`, `.se`: `(Z80 Assembly)`
+     - `se-linux`, `SEC.COM`: `(C)`
+     - `se-py`: `(Python)`
+     - `se-rs`: `(Rust)`
+   - Status Bar Free Memory Indication (Field 4):
+     As on the Splash Screen (Section 15.1.5), large-memory host profiles may
+     omit `Free: <N> KB` in Status Bar Field 4 (rendering a blank 15-character
+     field `               | `).
