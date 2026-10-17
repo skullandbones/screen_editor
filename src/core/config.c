@@ -103,17 +103,23 @@ static void parse_config_line(char *line)
         }
     } else if (strcasecmp(key, "RAMDRIVE") == 0 ||
                strcasecmp(key, "RAMDISK") == 0) {
-        if (strcasecmp(val, "PRESERVE") == 0 || strcmp(val, "0") == 0) {
+        if (strcasecmp(val, "PRESERVE") == 0 ||
+            strcasecmp(val, "OFF") == 0 ||
+            strcmp(val, "0") == 0) {
             g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
-        } else if (strcasecmp(val, "ON") == 0 || strcmp(val, "1") == 0) {
+        } else if (strcasecmp(val, "ON") == 0 ||
+                   strcasecmp(val, "OVERWRITE") == 0 ||
+                   strcasecmp(val, "ENABLED") == 0 ||
+                   strcmp(val, "1") == 0) {
             g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
         } else if (strcasecmp(val, "HIB") == 0 ||
                    strcasecmp(val, "HIBERNATE") == 0 ||
                    strcmp(val, "2") == 0) {
             g_config.ramdrive_mode = RAMDRV_MODE_HIBERNATE;
-        } else if (strcasecmp(val, "OFF") == 0 ||
-                   strcasecmp(val, "DISABLED") == 0) {
-            g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
+        } else if (strcasecmp(val, "DISABLED") == 0 ||
+                   strcasecmp(val, "NONE") == 0 ||
+                   strcmp(val, "3") == 0) {
+            g_config.ramdrive_mode = RAMDRV_MODE_DISABLED;
         }
     } else if (strcasecmp(key, "PLUGIN") == 0 ||
                strcasecmp(key, "PLUGINS") == 0 ||

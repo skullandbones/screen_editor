@@ -131,9 +131,9 @@ def test_interactive_pty_startup():
         assert b"80x24 |" in captured or b"120x40 |" in captured, (
             "Splash screen missing universal status bar geometry anchor"
         )
-        assert (b"^K: Editor keys |" in captured or
+        assert (b"|                 |" in captured or
                 b"Free:" in captured), (
-            "Splash screen missing universal status bar help anchor"
+            "Splash screen missing universal status bar Field 4"
         )
         print("    [+] Interactive PTY startup & clean exit verified [PASS]")
 
@@ -227,8 +227,8 @@ def test_status_bar_canonical_layout():
             assert "80x24 |" in out_str or "120x40 |" in out_str, (
                 "Status bar missing '80x24 |' or '120x40 |' geometry field"
             )
-            assert "Linux |" in out_str or "CPM   |" in out_str, (
-                "Status bar missing format indicator ('Linux |' or 'CPM   |')"
+            assert "Linux |" in out_str or "CP/M  |" in out_str, (
+                "Status bar missing format indicator ('Linux |' or 'CP/M  |')"
             )
             assert "^K: Editor keys |" in out_str, (
                 "Status bar missing '^K: Editor keys |' help field"
@@ -3553,8 +3553,8 @@ def test_bug_2_4_45_line_ending_decoupling():
             ed_out = read_all_available(master, 0.4).decode(
                 "utf-8", errors="replace"
             )
-            assert "CPM   |" in ed_out, (
-                f"Expected 'CPM   |' in status bar for CRLF file:\n{ed_out}"
+            assert "CP/M  |" in ed_out, (
+                f"Expected 'CP/M  |' in status bar for CRLF file:\n{ed_out}"
             )
 
             # Save via Ctrl+S -> directly saves and preserves detected format
@@ -4036,6 +4036,124 @@ def test_bug_2_4_49_line_join_boundary():
             os.remove(file3)
 
 
+def test_bug_2_4_51_splash_labels_alignment_and_status_bar():
+    """Bug 2.4.51: Splash labels, alignment, diagnostics & status bar."""
+    print("[*] Testing Splash labels, alignment & status bar (Bug 2.4.51)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_2451_")
+    try:
+        # 1. Default 80x24 Splash screen layout, labels, alignment & Field 4
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            splash_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+
+            # Verify [^O], [^S], and [3] set native menu options
+            assert "  type   [O]  or  [^O]    to open file" in splash_out, (
+                f"Missing '[O]  or  [^O]' in splash:\n{splash_out}"
+            )
+            assert "  type   [S]  or  [^S]    to save file" in splash_out, (
+                f"Missing '[S]  or  [^S]' in splash:\n{splash_out}"
+            )
+            assert "  type   [3]              set native" in splash_out, (
+                f"Missing '[3] set native' in splash:\n{splash_out}"
+            )
+
+            # Verify horizontal column alignment in 80x24 (left_col = 21)
+            assert "\x1b[1;21H           SE - Screen Editor" in splash_out, (
+                f"Title not aligned at Row 1 Col 21:\n{splash_out!r}"
+            )
+            assert (
+                "\x1b[5;21H  type   [O]  or  [^O]    to open file"
+                in splash_out
+            ), f"Open command not aligned at Row 5 Col 21:\n{splash_out!r}"
+            assert (
+                "\x1b[19;21HActive Screen : [80x24 (Classic Terminal)]"
+                in splash_out
+            ), f"Active Screen not aligned at Row 19 Col 21:\n{splash_out!r}"
+
+            # Verify Status Bar Field 4 is blank on Splash (not ^K hint)
+            assert "^K: Editor keys" not in splash_out, (
+                f"Field 4 '^K: Editor keys' must not appear on Splash:\n"
+                f"{splash_out}"
+            )
+            assert "|                 | Line" in splash_out, (
+                f"Expected blank 15-char Field 4 on Splash:\n{splash_out}"
+            )
+
+            # Verify About screen also keeps Field 4 blank
+            os.write(master, b"a")
+            time.sleep(0.2)
+            about_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "^K: Editor keys" not in about_out, (
+                f"Field 4 '^K: Editor keys' must not appear on About:\n"
+                f"{about_out}"
+            )
+            assert "|                 | Line" in about_out, (
+                f"Expected blank 15-char Field 4 on About:\n{about_out}"
+            )
+            os.write(master, b" ")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Verify ':' does not block single-keystroke dispatch
+            os.write(master, b":")
+            time.sleep(0.1)
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        # 2. Verify dynamic Plugin System and RAM Drive diagnostics from SE.CFG
+        cfg_path = os.path.join(temp_dir, "SE.CFG")
+        with open(cfg_path, "w") as f:
+            f.write("PLUGIN=DEMAND\r\nRAMDRIVE=DISABLED\r\n")
+
+        master2, slave2 = pty.openpty()
+        pid2 = os.fork()
+        if pid2 == 0:
+            os.chdir(temp_dir)
+            os.close(master2)
+            os.dup2(slave2, 0)
+            os.dup2(slave2, 1)
+            os.dup2(slave2, 2)
+            os.close(slave2)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave2)
+            time.sleep(0.3)
+            out2 = read_all_available(master2, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Plugin System : [On Demand]" in out2, (
+                f"Expected 'Plugin System : [On Demand]' in:\n{out2}"
+            )
+            assert "RAM Drive     : [None Detected]" in out2, (
+                f"Expected 'RAM Drive     : [None Detected]' in:\n{out2}"
+            )
+            os.write(master2, b"q")
+            exit_code2 = wait_pid_with_timeout(pid2, 2.0)
+            os.close(master2)
+            assert exit_code2 == 0, f"Expected exit code 0, got {exit_code2}"
+
+        print("    [+] Splash labels, alignment & status bar verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print(
@@ -4093,6 +4211,7 @@ def main():
     test_bug_2_4_47_direct_inplace_block_manipulation()
     test_bug_2_4_48_utf8_prohibition()
     test_bug_2_4_49_line_join_boundary()
+    test_bug_2_4_51_splash_labels_alignment_and_status_bar()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

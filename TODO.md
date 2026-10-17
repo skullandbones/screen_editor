@@ -1806,7 +1806,7 @@ have been resolved and archived.
     - *Resolution*: Updated `test_bug_2_4_17` in `tests/test_linux_native.py`
       to verify that `<PgUp>/<PgDn>=Page` is suppressed on single-page
       directories per Section 7.5.
-  - [ ] **Bug 2.4.51: Splash Screen Layout, Menu Text, Alignment & Status Bar
+  - [x] **Bug 2.4.51: Splash Screen Layout, Menu Text, Alignment & Status Bar
     Non-Conformities**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.2, 11.2, 14.1, 15.1.
     - *Issue*: In `src/core/ui_render.c:244-354` (`render_status_bar`) and
@@ -1854,6 +1854,17 @@ have been resolved and archived.
       horizontal padding with Section 15.1.2, remove the `':'` prefix
       intercept, adapt Linux diagnostic lines per Section 15.1.5, and blank
       Field 4 (or show `Free: <N> KB`) when `g_is_splash_screen` is active.
+    - *Resolution*: Updated `show_splash_screen()`, `show_about_screen()`, and
+      `render_status_bar()` in `src/core/ui_render.c` (with
+      `RAMDRV_MODE_DISABLED` support in `src/include/config.h` and
+      `src/core/config.c`) to display `or  [^O]`, `or  [^S]`, and
+      `"  type   [3]              set native"` under `#ifndef __CPM__`, align
+      horizontal columns at `content_width = 40` (`left_col = 21` in `80x24`),
+      remove the blocking `':'` prefix intercept, support `[None Detected]`
+      when `RAMDRIVE=DISABLED`/`NONE`, format Field 3 as `"CP/M "`, and blank
+      Field 4 (`"                 |"`) when `g_is_splash_screen` is active.
+      Validated via `test_bug_2_4_51_splash_labels_alignment_and_status_bar`
+      in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.52: About Screen Version, AI Attribution, Blank Row &
     Centering Non-Conformities**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.
