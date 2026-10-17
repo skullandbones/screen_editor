@@ -25,7 +25,7 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 1 Open (Bug 2.1.21 Open;
+- **Status**: Active / 2 Open (Bugs 2.1.21, 2.1.22 Open;
   Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
   Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
@@ -298,6 +298,21 @@ have been resolved and archived.
     - *Required Fix*: Add `Ctrl+Y` and `Ctrl+Z` to the Help screen within the
       canonical 22-line Tier 1 layout (80x24 fit), update Section 7.3, and
       apply the same change to `HELPNEXT.OVL` (Bug 2.2.17).
+  - [ ] **Bug 2.1.22: Splash Screen Missing `Ctrl+O` / `Ctrl+S` Support**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 10.
+    - *Issue*: On the Splash Screen, Close (`[W]  or  [^W]`), Goto Line
+      (`[L]  or  [^L]`), and Exit (`[Q]  or  [^Q]`) support and display
+      both plain letter keys and their editor-mode `Ctrl` equivalents.
+      However, for Open File and Save File, `SPLASH_LOOP` in
+      `src/se.asm:540-545` does not handle `Ctrl+S` (`KEY_CTRL_S`) to
+      enter the Save File screen, and `STR_SPLASH_CMDS` in
+      `src/core/plugin_mgr.asm:4277-4278` only displays `[O]` and `[S]`
+      without `or  [^O]` and `or  [^S]`.
+    - *Required Fix*: In `src/se.asm` (`SPLASH_LOOP`), dispatch
+      `KEY_CTRL_S` (`^S`) to `DO_SPLASH_SAVE` alongside `'s'`/`'S'`
+      (matching `KEY_CTRL_O` -> `HANDLE_SPLASH_OPEN`). In
+      `src/core/plugin_mgr.asm` (`STR_SPLASH_CMDS`), update the Open and
+      Save menu lines to display `[O]  or  [^O]` and `[S]  or  [^S]`.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.
