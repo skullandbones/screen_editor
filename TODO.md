@@ -320,9 +320,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 5 Open (Bugs 2.2.16, 2.2.17, 2.2.18, 2.2.19, 2.2.20
-  Open; 10 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13,
-  2.2.14, 2.2.15 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 7 Open (Bugs 2.2.16–2.2.22 Open; 10 Bugs 2.2.2, 2.2.7,
+  2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15 Resolved;
+  Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -652,6 +652,36 @@ have been resolved and archived.
       `next-image` dependencies) to build and inject `HELPNEXT.OVL`
       (Bug 2.2.17) and `PLUGIN.PRL` alongside `SE_NEXT.COM`, and add a
       check to `tests/test_next_targets.py`.
+  - [ ] **Bug 2.2.21: Splash Screen `Ctrl+S` (`^S`) Not Dispatched in
+    `SPLASH_LOOP`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 10, 15.1; Bug 2.1.22.
+    - *Issue*: `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm:4270` displays
+      `type   [S]  or  [^S]    to save file` on the Splash Screen, and
+      Section 7.2 / 15.1 mandate that `S`, `s`, or `Ctrl+S` (`KEY_CTRL_S`)
+      invokes `DO_SPLASH_SAVE`. However, `SPLASH_LOOP` in
+      `src/se_next_cpm.asm:545-550` only checks `'s'` and `'S'` and lacks
+      `CP KEY_CTRL_S` / `JP Z,DO_SPLASH_SAVE`, so pressing `Ctrl+S`
+      (`EXTEND + S`) on the Splash Screen is silently ignored.
+    - *Required Fix*: In `src/se_next_cpm.asm:545-550` (`SPLASH_LOOP`), add
+      `CP KEY_CTRL_S` and `JP Z,DO_SPLASH_SAVE` alongside `'s'` and `'S'`
+      (matching `src/se.asm:545-546`).
+  - [ ] **Bug 2.2.22: Splash Screen Blank Gap Row Replacing Omitted
+    `[2] set 120x40`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.1, 15.1.5.
+    - *Issue*: Under `IFDEF TARGET_NEXT` in `src/core/plugin_mgr.asm:4278-4281`,
+      `STR_SPLASH_CMDS` omits `type   [2]              set 120x40` by replacing
+      it with `DB 13,10`. During `RENDER_SPLASH` (`src/se_next_cpm.asm:2631`),
+      `PRINT_SPLASH_PREFIX` outputs `~` plus 19 spaces before `DB 13,10`,
+      creating an empty gap row inside the command list between
+      `type   [1]              set 80x24` and
+      `type   [Q]  or  [^Q]    to exit`. Per Section 7.2 and Section 15.1.5,
+      Option `[2]` must be omitted cleanly without leaving an empty row gap
+      inside the command block.
+    - *Required Fix*: Remove the `DB 13,10` placeholder under
+      `IFDEF TARGET_NEXT` in `src/core/plugin_mgr.asm:4280` and define
+      `SPLASH_MENU_LINES EQU 20` under `IFDEF TARGET_NEXT` in
+      `src/include/ui.inc` so the 20-line Splash Screen block centers cleanly
+      on 80x24 without a gap row between `[1]` and `[Q]`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
@@ -660,9 +690,9 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 0 Open Defects (ALL DEFECTS RESOLVED)
-  (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9, 2.3.10, 2.3.11, 2.3.12 Resolved;
-  Bugs 2.3.2, 2.3.6, 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 2 Open (Bugs 2.3.13, 2.3.14 Open; Bugs 2.3.1, 2.3.3,
+  2.3.4, 2.3.5, 2.3.9, 2.3.10, 2.3.11, 2.3.12 Resolved; Bugs 2.3.2, 2.3.6,
+  2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -832,6 +862,35 @@ have been resolved and archived.
       *.TXT)` on `SE.NEX` and `.se`, while preserving CP/M user area notation
       on `SE_NEXT.COM` and byte-for-byte binary invariance on `SE.COM`.
       Validated via `tests/test_bug_2_3_12.py`.
+  - [ ] **Bug 2.3.13: Splash Screen `Ctrl+S` (`^S`) Not Dispatched in
+    `SPLASH_LOOP`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 10, 15.1; Bug 2.1.22.
+    - *Issue*: `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm:4270` displays
+      `type   [S]  or  [^S]    to save file` on the Splash Screen, and
+      Section 7.2 / 15.1 mandate that `S`, `s`, or `Ctrl+S` (`KEY_CTRL_S`)
+      invokes `DO_SPLASH_SAVE`. However, `SPLASH_LOOP` in
+      `src/se_next.asm:588-593` only checks `'s'` and `'S'` and lacks
+      `CP KEY_CTRL_S` / `JP Z,DO_SPLASH_SAVE`, so pressing `Ctrl+S`
+      (`EXTEND + S`) on the Splash Screen in `SE.NEX` and `.se` is silently
+      ignored.
+    - *Required Fix*: In `src/se_next.asm:588-593` (`SPLASH_LOOP`), add
+      `CP KEY_CTRL_S` and `JP Z,DO_SPLASH_SAVE` alongside `'s'` and `'S'`
+      (matching `src/se.asm:545-546`).
+  - [ ] **Bug 2.3.14: Splash Screen Blank Gap Row Replacing Omitted
+    `[2] set 120x40`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.1, 15.1.5.
+    - *Issue*: Under `IFDEF TARGET_NEXT` in `src/core/plugin_mgr.asm:4278-4281`,
+      `STR_SPLASH_CMDS` replaces the omitted `[2] set 120x40` line with
+      `DB 13,10`. In `RENDER_SPLASH` (`src/se_next.asm:2663`),
+      `PRINT_SPLASH_PREFIX` outputs `~` plus 19 spaces before `DB 13,10`,
+      creating a blank gap row inside the command list between
+      `type   [1]              set 80x24` and
+      `type   [Q]  or  [^Q]    to exit`.
+    - *Required Fix*: Remove the `DB 13,10` placeholder under
+      `IFDEF TARGET_NEXT` in `src/core/plugin_mgr.asm:4280` and define
+      `SPLASH_MENU_LINES EQU 20` under `IFDEF TARGET_NEXT` in
+      `src/include/ui.inc` so the 20-line Splash Screen block centers cleanly
+      on 80x24 without a gap row between `[1]` and `[Q]`.
 
 ### 2.4 Profile 4: Linux Native C Profile (`se-linux`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
@@ -840,7 +899,8 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: All 50 Defects Resolved (100% Conformance).
+- **Status**: Active / 2 Open (Bugs 2.4.51, 2.4.52 Open; Bugs 2.4.1–2.4.50
+  Resolved).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1746,6 +1806,93 @@ have been resolved and archived.
     - *Resolution*: Updated `test_bug_2_4_17` in `tests/test_linux_native.py`
       to verify that `<PgUp>/<PgDn>=Page` is suppressed on single-page
       directories per Section 7.5.
+  - [ ] **Bug 2.4.51: Splash Screen Layout, Menu Text, Alignment & Status Bar
+    Non-Conformities**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.2, 11.2, 14.1, 15.1.
+    - *Issue*: In `src/core/ui_render.c:244-354` (`render_status_bar`) and
+      `src/core/ui_render.c:395-563` (`show_splash_screen`), the `se-linux`
+      Splash Screen exhibits multiple non-conformities with Section 7.2 and
+      Section 15.1:
+      1. *Missing `[^O]` and `[^S]` Labels*: `splash_lines[4]` and
+         `splash_lines[5]` (lines 410–411) display
+         `"   type   [O]              to open file"` and
+         `"   type   [S]              to save file"`, omitting `or  [^O]` and
+         `or  [^S]` mandated by Section 7.2 and Section 15.1.3.
+      2. *Missing `[3] set native` Menu Option*: Although key `'3'` is handled
+         in the event loop (lines 543–556) to activate `MODE_NATIVE`,
+         `splash_lines` (lines 419–421) omits
+         `type   [3]              set native` from the displayed menu
+         (violating Section 7.2, 14.1, and 15.1.5).
+      3. *Horizontal Column Alignment Discrepancy*:
+         `render_tier1_workspace_screen(splash_lines, 21, 50)` sets
+         `left_col = 16` (`14` spaces after `~` on `80x24`). With 3 leading
+         spaces in `splash_lines[2..15]` and `splash_lines[17..20]`, both
+         command lines (`type ...`) and diagnostic lines (`Active Screen ...`)
+         start at 1-based Column 19 (`17` spaces after `~`), whereas canonical
+         `SE.COM` (Section 15.1.2–15.1.3) places command lines at Column 23
+         (`21` spaces after `~`) and diagnostic lines at Column 21 (`19` spaces
+         after `~`, outdented 2 spaces left of `type`).
+      4. *Prohibited Colon-Prefix Intercept & Undocumented Help Keys*:
+         Lines 463–469 intercept `':'` and block waiting for a second keystroke
+         (violating the Section 7.2 Instant Single-Keystroke Protocol), and
+         line 527 dispatches undocumented `?`/`h`/`H`/`Ctrl+K` keys from the
+         Splash Screen.
+      5. *Inapplicable CP/M `RAM Drive (A:)` & `Max Lines` Diagnostics*:
+         Lines 435–444 and 452–454 display CP/M `RAM Drive (A:)` and bounded
+         `Max Lines` on Linux where hardware RAM drives and 16-bit bank limits
+         do not apply (Section 15.1.5).
+      6. *Status Bar Field 4 Static `^K: Editor keys` & `CPM  ` Format Label*:
+         Under `#ifndef __CPM__`, `render_status_bar()` (line 277)
+         unconditionally renders `" ^K: Editor keys |"` in Field 4 on the
+         Splash Screen (violating Anti-Pattern #2 and Section 15.1.5, which
+         require Field 4 on Splash/About to be blank `               | ` or
+         show `Free: <N> KB`), and line 274 formats Field 3 as `"CPM  "`
+         instead of canonical `"CP/M "`.
+    - *Required Fix*: Update `show_splash_screen()` and `render_status_bar()`
+      in `src/core/ui_render.c` to display `or  [^O]` and `or  [^S]`, include
+      `type   [3]              set native` under `#ifndef __CPM__`, align
+      horizontal padding with Section 15.1.2, remove the `':'` prefix
+      intercept, adapt Linux diagnostic lines per Section 15.1.5, and blank
+      Field 4 (or show `Free: <N> KB`) when `g_is_splash_screen` is active.
+  - [ ] **Bug 2.4.52: About Screen Version, AI Attribution, Blank Row &
+    Centering Non-Conformities**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.
+    - *Issue*: In `src/core/ui_render.c:611-640` (`show_about_screen`) and
+      `src/se_linux.c:29`:
+      1. *Outdated Version & Date*: `s_about_lines[1]` displays
+         `"version 1.1.0 (2026-10-09) (C)"` (and `se_linux.c:29` prints
+         `v1.1.0`) instead of canonical `"version 1.1.3 (2026-10-17) (C)"`
+         mandated by Sections 7.12, 14.6, and 15.2.4.
+      2. *Outdated AI Attribution*: `s_about_lines[4]` displays
+         `"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"` instead of
+         canonical `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`
+         (Sections 7.12 & 15.2.3).
+      3. *Missing Blank Row Between AI Attribution and MIT License*:
+         `s_about_lines[5]` places `"Open source software under the MIT
+         License"` immediately below the AI attribution line with no
+         intervening blank `~` line, and places a trailing `""` at
+         `s_about_lines[8]`. Per Section 7.12 and Section 15.2.2–15.2.3,
+         Content Row 6 (Screen Row 13 in `80x24`) must be a blank `~` line,
+         Content Row 7 is the MIT License, Content Row 8 is a blank `~` line,
+         and Content Row 9 is `"Press any key to continue"`.
+      4. *Off-by-One Per-Line Horizontal Centering*:
+         `render_tier1_workspace_screen(s_about_lines, 9, 54)` (`left_col = 14`,
+         12 spaces after `~`) combined with hardcoded leading spaces places
+         `"by Dean Jenkins"` after 31 spaces (instead of canonical 32) and
+         `"Press any key to continue"` after 26 spaces (instead of canonical
+         27).
+      5. *Status Bar & Cursor State*: `show_about_screen()` does not set
+         `g_is_splash_screen = 1` and unconditionally calls
+         `hal_console_show_cursor()` on exit before returning to the Splash
+         Screen.
+    - *Required Fix*: Update `s_about_lines` and `show_about_screen()` in
+      `src/core/ui_render.c` (and version string in `src/se_linux.c`) to
+      `"version 1.1.3 (2026-10-17) (C)"` and
+      `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, insert the blank
+      line at index 5 (removing the trailing blank line at index 8), center
+      each line using `(g_active_cols - 1 - strlen(line)) / 2` spaces after
+      `~`, and keep `g_is_splash_screen = 1` with cursor hidden on return to
+      Splash.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
@@ -1765,7 +1912,8 @@ have been resolved and archived.
   buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
 - **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
   via `make test-rust`).
-- **Status**: Complete / Production Ready (Bugs 2.6.1–2.6.4 Resolved; 0 Open).
+- **Status**: Active / 2 Open (Bugs 2.6.5, 2.6.6 Open; Bugs 2.6.1–2.6.4
+  Resolved).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.6.1: Line Feed (`\n`, `0x0A`) Not Accepted as Enter in Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, Section 8.3.
@@ -1817,6 +1965,89 @@ have been resolved and archived.
       `ports/rust/src/main.rs` to adapt to `120x40` when `TIOCGWINSZ` reports
       `cols >= 120 && rows >= 40`. Validated via
       `test_bug_2_4_19_panning_edge_trigger_and_geometry`.
+  - [ ] **Bug 2.6.5: Non-Canonical Splash Screen Menu, Missing Commands (`[N]`,
+    `[W]`, `[L]`, `[M]`) & Alignment**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.1, 15.1.
+    - *Issue*: In `ports/rust/src/ui_render.rs:387-564` (`show_splash_screen`)
+      and `ports/rust/src/editor.rs:597-603`:
+      1. *Spurious License Line on Splash Screen*: `splash_lines[2]` (line 439)
+         renders `"SE is freely distributable under the MIT License"` and an
+         extra blank row below the title, which is non-canonical on the Splash
+         Screen (belongs on the About Screen).
+      2. *Missing `[N]`, `[W]`, and `[L]` Commands & Handlers*: `splash_lines`
+         and the `show_splash_screen()` event loop completely omit
+         `type   [N]              to new file`,
+         `type   [W]  or  [^W]    to close file`, and
+         `type   [L]  or  [^L]    to goto line`.
+      3. *Wrong Memory Info Hotkey (`[U]` Instead of `[M]`)*: Line 444 displays
+         `"  type   [U]              for memory usage"` and line 512 dispatches
+         `'u'`/`'U'` instead of canonical
+         `type   [M]              for memory info` on `'m'`/`'M'`.
+      4. *Merged `[P]` / `[^P]` Line, Extra `[H]` Line, and Non-Canonical
+         Wording/Order*: Line 446 merges `[P]` and `[^P]` into
+         `"  type   [P]  or  [^P]    for plugins"` instead of two separate
+         lines (`[P] for plugins` and `[^P] for context plugin menu`),
+         lines 442–445 use `"to open a file"`, `"to save a file"`, and
+         `"for configuration"` instead of `"to open file"`, `"to save file"`,
+         and `"to configure"`, line 450 adds a non-canonical
+         `"  type   [H]  or  [?]     for help"` row, and `[A] for about` is
+         placed out of order below `[1]`/`[2]`/`[3]`.
+      5. *Horizontal Padding Discrepancy*:
+         `render_centered_text_block(&splash_lines, 50)` sets
+         `left_pad = (79 - 50) / 2 = 14` spaces after `~`. Both command lines
+         (`"  type ..."`) and diagnostic lines (`"  Active Screen ..."`) start
+         after `16` spaces (`Column 18`) instead of canonical `21` spaces
+         (`Column 23`) for commands and `19` spaces (`Column 21`) for
+         diagnostics (Section 15.1.2).
+      6. *Non-Canonical Diagnostic Labels & Colon Intercept*: Lines 414–427 use
+         non-canonical `RAM Drive (A:)` strings (`"Overwrite (Scratch)"`,
+         `"Hibernate (Backed)"`, `"Disabled (TPA Only)"`) and omit
+         `"On Demand"` for `Plugin System`; lines 468–474 block on `':'` prefix
+         input; and `editor_handle_key()` in `ports/rust/src/editor.rs:597-603`
+         has a fallback that exits splash mode on any key (including `Space`).
+    - *Required Fix*: Update `show_splash_screen()` in
+      `ports/rust/src/ui_render.rs` and `ports/rust/src/editor.rs` to render
+      the canonical menu items and order (`E`, `N`, `O`/`^O`, `S`/`^S`,
+      `W`/`^W`, `L`/`^L`, `A`, `M`, `P`, `^P`, `C`, `1`, `2`, `3`, `Q`),
+      implement dispatch handlers for `N`, `W`/`^W`, `L`/`^L`, and `M`, align
+      horizontal padding with Section 15.1.2, remove the `':'` intercept and
+      spurious license/help lines, and adapt diagnostic rows per
+      Section 15.1.4–15.1.5.
+  - [ ] **Bug 2.6.6: About Screen Version, AI Attribution, Spurious
+    `"created the code"` Row & Centering**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.
+    - *Issue*: In `ports/rust/src/ui_render.rs:615-638` (`ABOUT_LINES` and
+      `show_about_screen`) and `ports/rust/src/config.rs` (`SE_VERSION_STR`):
+      1. *Outdated Version & Date*: `ABOUT_LINES[1]` displays
+         `"version 1.1.0 (2026-10-09) (Rust)"` (and `SE_VERSION_STR` is
+         `"v1.1.0"`) instead of canonical
+         `"version 1.1.3 (2026-10-17) (Rust)"` (Sections 7.12, 14.6, 15.2.4).
+      2. *Outdated AI Attribution*: `ABOUT_LINES[4]` displays
+         `"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"` instead of
+         canonical `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`
+         (Sections 7.12 & 15.2.3).
+      3. *Spurious `"created the code"` Line on Content Row 6*:
+         `ABOUT_LINES[5]` (Screen Row 13 in `80x24`) renders
+         `"                  created the code                    "` instead of
+         a blank `~` line separating the AI attribution from
+         `Open source software under the MIT License` (Section 7.12 &
+         Section 15.2.2–15.2.3).
+      4. *Fixed-Width Block Padding Instead of Per-Line Centering*:
+         `ABOUT_LINES` uses 54-char strings with trailing spaces rendered at
+         `left_pad = 12`, placing `"by Dean Jenkins"` after 31 spaces (instead
+         of 32) and `"Press any key to continue"` after 26 spaces (instead of
+         27) and emitting trailing spaces before `\x1b[K`.
+      5. *Cursor Shown on Return to Splash*: `show_about_screen()` calls
+         `hal_console_set_cursor_vis(1)` on line 634 even when returning to the
+         Splash Screen (`prev_splash == 1`).
+    - *Required Fix*: Update `ABOUT_LINES` and `show_about_screen()` in
+      `ports/rust/src/ui_render.rs` (and `SE_VERSION_STR` in
+      `ports/rust/src/config.rs`) to display
+      `"version 1.1.3 (2026-10-17) (Rust)"` and
+      `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, replace
+      `ABOUT_LINES[5]` (`"created the code"`) with an empty string `""`, center
+      each line individually using `(active_cols - 1 - line.len()) / 2` spaces
+      after `~`, and only restore cursor visibility when `prev_splash == 0`.
 
 ### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
@@ -1825,9 +2056,9 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Complete / Production Ready (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
+- **Status**: Active / 6 Open (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
   2.7.65–2.7.71, 2.7.73–2.7.87, 2.7.92 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72
-  Rejected; 4 Open: 2.7.88–2.7.91).
+  Rejected; 6 Open: 2.7.88–2.7.91, 2.7.93, 2.7.94).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -3048,6 +3279,79 @@ have been resolved and archived.
        and post-browser notifications. Validated via Step 61 in
        `test_editor.py`
        (`test_bug_2_7_92_screen_transition_and_popup_debris_cleanup`).
+  - [ ] **Bug 2.7.93: Splash Screen Missing `[^O]`/`[^S]`/`[3]` Labels,
+    Flush-Left Title/Menu Alignment & Hardcoded Diagnostics**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.2, 11.2, 14.1, 15.1.
+    - *Issue*: In `ports/python/se/editor.py:913-1040` (`action_splash_screen`)
+      and `ports/python/se/ui.py:37-122, 247-300` (`render_status_bar`,
+      `render_centered_workspace`):
+      1. *Missing `or  [^O]` and `or  [^S]` Menu Text*: Lines 942–943 display
+         `"type   [O]              to open file"` and
+         `"type   [S]              to save file"`, omitting `or  [^O]` and
+         `or  [^S]` required by Section 7.2 and Section 15.1.3.
+      2. *Missing `type   [3]              set native` Menu Line*: Although
+         hotkey `'3'` is handled in `action_splash_screen()` (lines 1028–1033)
+         to set `SCREEN=NATIVE`, the displayed `lines` list (lines 951–952)
+         omits `type   [3]              set native` (Section 7.2, 14.1, 15.1.5).
+      3. *Flush-Left Title, Menu, and Diagnostic Alignment*: All strings in
+         `lines` (lines 937–959) lack relative leading indentation and are
+         rendered by `render_centered_workspace()` at a single
+         `left_col = (80 - 47) // 2 + 1 = 17` (`15` spaces after `~` in
+         `80x24`). Consequently, the title `"SE - Screen Editor"` is flush-left
+         at Column 17 instead of centered at Column 32 (`30` spaces after `~`),
+         command lines start at Column 17 (`15` spaces after `~`) instead of
+         Column 23 (`21` spaces after `~`), and diagnostic lines start at
+         Column 17 (`15` spaces after `~`) instead of Column 21 (`19` spaces
+         after `~`, outdented 2 spaces left of `type`) per
+         Section 15.1.2–15.1.3.
+      4. *Hardcoded Static `RAM Drive (A:)` & `Plugin System` Status Lines*:
+         Lines 956–957 hardcode `"RAM Drive (A:): [Preserved (Active)]"` and
+         `"Plugin System : [Operational]"` instead of reflecting `self.config`
+         (`On Demand` / `Disabled`) or adapting inapplicable CP/M
+         `RAM Drive (A:)` / `Max Lines` on Linux per Section 15.1.5.
+      5. *Status Bar Field 4 Static `^K: Editor keys` on Splash/About*:
+         `render_status_bar()` (`ports/python/se/ui.py:60-64`) renders
+         `" ^K: Editor keys |"` in Field 4 on the Splash and About screens
+         instead of a blank 15-character field (`               | `) or
+         `Free: <N> KB` (Section 4.3, 11.2, 15.1.5, 15.2.4).
+    - *Required Fix*: Update `action_splash_screen()` in
+      `ports/python/se/editor.py` and `ports/python/se/ui.py` to include
+      `or  [^O]`, `or  [^S]`, and `type   [3]              set native`, apply
+      canonical relative indentation (`11` spaces before title, `2` spaces
+      before `type`, `0` spaces before diagnostics within a 41-col/50-col block
+      so `~` padding matches Section 15.1.2), dynamically format
+      `Plugin System` from `self.config` (and adapt `RAM Drive`/`Max Lines` per
+      Section 15.1.5), and blank Field 4 (or show `Free: <N> KB`) on non-editor
+      screens.
+  - [ ] **Bug 2.7.94: About Screen Outdated Version/AI Attribution &
+    Flush-Left Line Alignment**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.
+    - *Issue*: In `ports/python/se/editor.py:863-881` (`action_about`),
+      `ports/python/se/__init__.py:5`, and `ports/python/se/ui.py:247-300`
+      (`render_centered_workspace`):
+      1. *Outdated Version & Date*: Line 867 displays
+         `"version 1.1.0 (2026-10-09) (Python)"` (and `__version__ = "1.1.0"`
+         in `__init__.py`) instead of canonical
+         `"version 1.1.3 (2026-10-17) (Python)"` (Sections 7.12, 14.6, 15.2.4).
+      2. *Outdated AI Attribution*: Line 870 displays
+         `"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"` instead of
+         canonical `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`
+         (Sections 7.12 & 15.2.3).
+      3. *Flush-Left Line Alignment Instead of Per-Line Horizontal Centering*:
+         `action_about()` passes unpadded strings to
+         `render_centered_workspace()`, which computes a single `left_col` from
+         the longest line (`49` chars -> `left_col = 16`, `14` spaces after `~`
+         in `80x24`) and renders every line flush-left at Column 16. Per
+         Section 7.12 and Section 15.2.2–15.2.3, each of the 9 lines on the
+         About Screen must be individually centered horizontally
+         (`LeftPad = (ACTIVE_COLS - 1 - len(str)) // 2` spaces after Column 1
+         `~`).
+    - *Required Fix*: Update `action_about()` in `ports/python/se/editor.py`
+      (and `__version__` in `ports/python/se/__init__.py`) to
+      `"version 1.1.3 (2026-10-17) (Python)"` and
+      `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, and center each
+      line individually per Section 15.2.2
+      (`LeftPad = (cols - 1 - len(line)) // 2` spaces after `~`).
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,
@@ -3055,8 +3359,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.10
-  Resolved; Bug 2.8.7 Rejected).
+- **Status**: Active / 2 Defects Open (Bugs 2.8.11, 2.8.12 Open; Bugs
+  2.8.1–2.8.6, 2.8.8–2.8.10 Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -3267,6 +3571,66 @@ have been resolved and archived.
       the user cancels the file browser dialog, it returns `MODAL_RES_CANCEL`
       to prevent discarding unsaved changes. Verified with
       `tests/test_sec_untitled_close.py`.
+  - [ ] **Bug 2.8.11: Splash Screen Missing `[^O]`/`[^S]` Labels, Horizontal
+    Padding Offset & Hardcoded `RAM Drive (A:)`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 15.1; `TODO.md`
+      Section 7.1.
+    - *Issue*: In `src/core/ui_render.c:395-563` (`show_splash_screen`, shared
+      with `SEC.COM` under `__CPM__`):
+      1. *Missing `or  [^O]` and `or  [^S]` Menu Text*: `splash_lines[4]` and
+         `splash_lines[5]` (lines 410–411) display
+         `"   type   [O]              to open file"` and
+         `"   type   [S]              to save file"`, omitting `or  [^O]` and
+         `or  [^S]` required by Section 7.2 and Section 15.1.3.
+      2. *Horizontal Column Alignment Discrepancy*:
+         `render_tier1_workspace_screen(splash_lines, 21, 50)` sets
+         `left_col = 16` (`14` spaces after `~` in `80x24`). With 3 leading
+         spaces in `splash_lines[2..15]` and `splash_lines[17..20]`, both
+         command rows (`type ...`) and diagnostic rows (`Active Screen ...`)
+         start at Column 19 (`17` spaces after `~`), whereas canonical `SE.COM`
+         (Section 15.1.2–15.1.3) places command rows at Column 23 (`21` spaces
+         after `~`) and diagnostic rows at Column 21 (`19` spaces after `~`).
+      3. *Hardcoded `RAM Drive (A:)` Label*: Lines 435–444 hardcode
+         `RAM Drive (A:)` instead of reporting the detected RAM drive or
+         `RAM Drive     : [None Detected]` when no RAM drive is present
+         (Section 15.1.4–15.1.5).
+      4. *Prohibited Colon-Prefix Intercept*: Lines 463–469 intercept `':'`
+         and block waiting for a second keystroke, violating Section 7.2's
+         Instant Single-Keystroke Protocol.
+    - *Required Fix*: Update `show_splash_screen()` in `src/core/ui_render.c`
+      to display `or  [^O]` and `or  [^S]`, match `SE.COM`'s exact horizontal
+      column offsets (`21` spaces after `~` for commands, `19` spaces after `~`
+      for diagnostics in `80x24`), report `RAM Drive     : [None Detected]`
+      when applicable on `SEC.COM`, and remove the `':'` prefix intercept.
+  - [ ] **Bug 2.8.12: About Screen Outdated Version/AI Attribution, Missing
+    Blank Row & Off-by-One Centering**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2; `TODO.md`
+      Section 7.1.
+    - *Issue*: In `src/core/ui_render.c:611-640` (`show_about_screen`) and
+      `src/sec_cpm.c:66`:
+      1. *Outdated Version & Date*: `s_about_lines[1]` displays
+         `"version 1.1.0 (2026-10-09) (C)"` (and `src/sec_cpm.c:66` prints
+         `v1.1.0`) instead of canonical `"version 1.1.3 (2026-10-17) (C)"`
+         (Sections 7.12, 14.6, 15.2.4).
+      2. *Outdated AI Attribution*: `s_about_lines[4]` displays
+         `"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"` instead of
+         canonical `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`
+         (Sections 7.12 & 15.2.3).
+      3. *Missing Blank Row Between AI Attribution and MIT License*:
+         `s_about_lines[5]` places `"Open source software under the MIT
+         License"` directly after `s_about_lines[4]` with no blank `~` line on
+         Content Row 6 (Screen Row 13 in `80x24`), and places an extra trailing
+         `""` at `s_about_lines[8]` (Section 15.2.2–15.2.3).
+      4. *Off-by-One Horizontal Centering*: `"by Dean Jenkins"` is rendered
+         with 31 leading spaces after `~` (instead of 32) and
+         `"Press any key to continue"` with 26 leading spaces after `~`
+         (instead of 27).
+    - *Required Fix*: Update `s_about_lines` and `show_about_screen()` in
+      `src/core/ui_render.c` (and version string in `src/sec_cpm.c`) to
+      `"version 1.1.3 (2026-10-17) (C)"` and
+      `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, insert the blank
+      line at index 5 (removing the trailing blank line at index 8), and center
+      each line per Section 15.2.2.
 
 ---
 
