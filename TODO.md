@@ -3359,8 +3359,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 1 Defect Open (Bug 2.8.12 Open; Bugs 2.8.1–2.8.6,
-  2.8.8–2.8.11 Resolved; Bug 2.8.7 Rejected).
+- **Status**: Active / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.12
+  Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -3612,7 +3612,7 @@ have been resolved and archived.
       `src/hal/cpm/hal_cpm_memory.c` (falling back to
       `RAM Drive     : [None Detected]`). Verified with
       `tests/test_sec_splash_metadata.py`.
-  - [ ] **Bug 2.8.12: About Screen Outdated Version/AI Attribution, Missing
+  - [x] **Bug 2.8.12: About Screen Outdated Version/AI Attribution, Missing
     Blank Row & Off-by-One Centering**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2; `TODO.md`
       Section 7.1.
@@ -3641,6 +3641,15 @@ have been resolved and archived.
       `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, insert the blank
       line at index 5 (removing the trailing blank line at index 8), and center
       each line per Section 15.2.2.
+    - *Resolution*: Updated `s_about_lines` and `show_about_screen()` in
+      `src/core/ui_render.c` (and version string in `src/sec_cpm.c`) to display
+      `"version 1.1.3 (2026-10-17) (C)"` and
+      `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, inserted the blank
+      row at index 5 (`s_about_lines[5] = ""`), passed `content_width = 48` to
+      `render_tier1_workspace_screen` (`left_col = 17` in `80x24` / `37` in
+      `120x40`) with exact per-line leading spaces (`15`, `9`, `17`, `0`, `3`,
+      `12`) matching Section 15.2.2, and skipped redundant cursor locates on
+      blank `~` rows. Verified with `tests/test_sec_about_screen.py`.
 
 ---
 

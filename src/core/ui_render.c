@@ -382,8 +382,10 @@ static void render_tier1_workspace_screen(const char **lines,
         hal_console_putc('~');
         if (r >= top_row && r < top_row + count) {
             line_idx = r - top_row;
-            hal_console_locate(r, left_col);
-            hal_console_puts(lines[line_idx]);
+            if (lines[line_idx][0] != '\0') {
+                hal_console_locate(r, left_col);
+                hal_console_puts(lines[line_idx]);
+            }
         }
         hal_console_clear_eol();
     }
@@ -619,20 +621,20 @@ void show_help_screen(void)
 void show_about_screen(void)
 {
     static const char *s_about_lines[9] = {
-        "                  SE - Screen Editor",
-        "            version 1.1.0 (2026-10-09) (C)",
-        "                   by Dean Jenkins",
+        "               SE - Screen Editor",
+        "         version 1.1.3 (2026-10-17) (C)",
+        "                 by Dean Jenkins",
         "",
-        "  Google Antigravity 2.19.1 & Gemini FLASH 3.8 high",
-        "      Open source software under the MIT License",
+        "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
         "",
-        "              Press any key to continue",
-        ""
+        "   Open source software under the MIT License",
+        "",
+        "            Press any key to continue"
     };
     int k;
     hal_console_hide_cursor();
     while (1) {
-        render_tier1_workspace_screen(s_about_lines, 9, 54);
+        render_tier1_workspace_screen(s_about_lines, 9, 48);
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }
@@ -643,7 +645,9 @@ void show_about_screen(void)
         break;
     }
     clear_screen();
-    hal_console_show_cursor();
+    if (!g_is_splash_screen) {
+        hal_console_show_cursor();
+    }
     g_need_screen_render = 1;
 }
 
