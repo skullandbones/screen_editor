@@ -736,15 +736,14 @@ def run_step_65(master):
         return False, f"Return prompt not found on About screen: {out_about}"
     if b"SE - Screen Editor" not in out_about:
         return False, f"'SE - Screen Editor' title not found: {out_about}"
-    if b"version 1.1.2" not in out_about:
-
+    if b"version 1.1.3" not in out_about:
         return False, f"Version details not found on About screen: {out_about}"
     if b"by Dean Jenkins" not in out_about:
         return False, f"Author attribution not found on About: {out_about}"
-    if b"Google Antigravity 2.19.1" not in out_about:
-        return False, f"Antigravity 2.19.1 not found on About: {out_about}"
-    if b"Gemini FLASH 3.8 high" not in out_about:
-        return False, f"Gemini FLASH 3.8 high not found on About: {out_about}"
+    if b"Google Antigravity 2.23.0" not in out_about:
+        return False, f"Antigravity 2.23.0 not found on About: {out_about}"
+    if b"Gemini 4 Argon Medium" not in out_about:
+        return False, f"Gemini 4 Argon Medium not found on About: {out_about}"
     if b"MIT License" not in out_about:
         return False, f"MIT License not found on About screen: {out_about}"
 

@@ -4375,11 +4375,11 @@ STR_VAL_PLUG_DIS:	DB	"DISABLED",13,10,0
 ;------------------------------------------------------------------------------
 STR_ABOUT_TITLE:	DB	"SE - Screen Editor", "$"
 STR_ABOUT_VERSION:
-	DB	"version 1.1.2 (2026-10-14) (Z80 Assembly)", "$"
+	DB	"version 1.1.3 (2026-10-17) (Z80 Assembly)", "$"
 STR_ABOUT_AUTHOR:	DB	"by Dean Jenkins", "$"
 
 STR_ABOUT_AI:
-	DB	"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high", "$"
+	DB	"Google Antigravity 2.23.0 & Gemini 4 Argon Medium", "$"
 STR_ABOUT_LICENSE:
 	DB	"Open source software under the MIT License", "$"
 STR_ABOUT_RETURN:	DB	"Press any key to continue", "$"

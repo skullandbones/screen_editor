@@ -8,7 +8,7 @@ Verifies:
   2. Launch SE.COM from CP/M prompt and reach splash screen.
   3. Enter About screen by pressing 'a' from splash screen.
   4. Assert that About screen renders:
-     "version 1.1.2 (2026-10-14) (Z80 Assembly)"
+     "version 1.1.3 (2026-10-17) (Z80 Assembly)"
   5. Press space to return to splash screen.
   6. Exit cleanly to CP/M with 'q'.
 """
@@ -166,7 +166,7 @@ def test_bug_2_14():
         time.sleep(0.2)
         out_about += drain_all(master)
 
-        expected_version = b"version 1.1.2 (2026-10-14) (Z80 Assembly)"
+        expected_version = b"version 1.1.3 (2026-10-17) (Z80 Assembly)"
         if expected_version not in out_about:
             buf_str = repr(out_about[-300:])
             print(f"[-] Step 5: About language missing. Buffer: {buf_str}",

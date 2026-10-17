@@ -102,7 +102,7 @@ FAT_CHUNK_BUF		EQU	CFG_IO_BUF + 64
 ALIGN 4
 PLUGIN_HOST_API:
 	DB "SE"				; +0:  Magic
-	DW 0112H			; +2:  Host version (v1.1.2)
+	DW 0113H			; +2:  Host version (v1.1.3)
 	DW ACTIVE_LINE_BUF		; +4:  Pointer to ACTIVE_LINE_BUF
 
 	DW ACTIVE_LINE_LEN		; +6:  Pointer to ACTIVE_LINE_LEN

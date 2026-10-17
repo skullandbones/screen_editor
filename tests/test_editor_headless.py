@@ -4276,10 +4276,9 @@ def test_se_execution(use_sec=False, use_python=False):
         if b"SE - Screen Editor" not in out_s65_about:
             print(f"[-] Step 65 failed: 'SE - Screen Editor' title not found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        version_anchor = (b"version 1.1.0" if PY_MODE
-                          else b"version 1.1.2")
+        version_anchor = (b"version 1.1.0" if (PY_MODE or use_sec)
+                          else b"version 1.1.3")
         if version_anchor not in out_s65_about:
-
             print(f"[-] Step 65 failed: Version details not found on About "
                   f"screen: {repr(out_s65_about)}", flush=True)
             return False
@@ -4287,12 +4286,16 @@ def test_se_execution(use_sec=False, use_python=False):
             print(f"[-] Step 65 failed: Author attribution not found on About "
                   f"screen: {repr(out_s65_about)}", flush=True)
             return False
-        if b"Google Antigravity 2.19.1" not in out_s65_about:
-            print(f"[-] Step 65 failed: Antigravity 2.19.1 attribution not "
+        expected_agy = (b"Google Antigravity 2.19.1" if (PY_MODE or use_sec)
+                        else b"Google Antigravity 2.23.0")
+        if expected_agy not in out_s65_about:
+            print(f"[-] Step 65 failed: Antigravity 2.23.0 attribution not "
                   f"found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        if b"Gemini FLASH 3.8 high" not in out_s65_about:
-            print(f"[-] Step 65 failed: Gemini FLASH 3.8 high attribution not "
+        expected_gem = (b"Gemini FLASH 3.8 high" if (PY_MODE or use_sec)
+                        else b"Gemini 4 Argon Medium")
+        if expected_gem not in out_s65_about:
+            print(f"[-] Step 65 failed: Gemini 4 Argon Medium attribution not "
                   f"found on About screen: {repr(out_s65_about)}", flush=True)
             return False
         if b"MIT License" not in out_s65_about:
@@ -4308,7 +4311,7 @@ def test_se_execution(use_sec=False, use_python=False):
                   f"screen: {repr(out_s65_about)}", flush=True)
             return False
         print("[+] Verified About screen contents: essential details, "
-              "Antigravity 2.19.1, Gemini FLASH 3.8, MIT License, and "
+              "Antigravity 2.23.0, Gemini 4 Argon Medium, MIT License, and "
               "Return prompt.", flush=True)
 
         # 3. Press Enter to return to splash screen

@@ -1090,7 +1090,7 @@ content blocks rather than top-aligned text.
       ~       version 1.1.0 (2026-10-09) (Z80 Assembly)
       ~                  by Dean Jenkins
       ~
-      ~ Google Antigravity 2.19.1 & Gemini FLASH 3.8 high
+      ~ Google Antigravity 2.23.0 & Gemini 4 Argon Medium
       ~     Open source software under the MIT License
       ~
       ~             Press any key to continue
