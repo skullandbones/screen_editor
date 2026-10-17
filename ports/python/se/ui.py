@@ -129,6 +129,7 @@ class UIRenderer:
         geometry_str: str = "80x24",
         status_msg: Optional[str] = None,
         tab_width: Optional[int] = None,
+        is_editor: bool = True,
     ):
         """
         Render active document editor workspace with column 0 tildes.
@@ -196,7 +197,10 @@ class UIRenderer:
 
         # Render status bar on row HOST_ROWS
         self.render_status_bar(
-            buf, geometry_str=geometry_str, status_msg=status_msg
+            buf,
+            geometry_str=geometry_str,
+            status_msg=status_msg,
+            is_editor=is_editor,
         )
 
         # Reposition terminal cursor at active document character
@@ -263,6 +267,7 @@ class UIRenderer:
 
         content_h = len(lines)
         is_splash = any("Active Screen :" in ln for ln in lines)
+        is_about = any("by Dean Jenkins" in ln for ln in lines)
         if is_splash:
             content_w = 40
         else:
@@ -285,13 +290,20 @@ class UIRenderer:
             content_idx = screen_r - top_row
             if 0 <= content_idx < content_h:
                 line_str = lines[content_idx]
-                self.term.locate(screen_r, left_col)
-                self.term.write(line_str)
-                if any(
-                    p in line_str for p in ("Enter choice:", "Enter option:")
-                ):
-                    prompt_row = screen_r
-                    prompt_col = left_col + len(line_str)
+                if line_str:
+                    if is_about:
+                        left_pad = max(0, (cols - 1 - len(line_str)) // 2)
+                        line_col = 2 + left_pad
+                    else:
+                        line_col = left_col
+                    self.term.locate(screen_r, line_col)
+                    self.term.write(line_str)
+                    if any(
+                        p in line_str
+                        for p in ("Enter choice:", "Enter option:")
+                    ):
+                        prompt_row = screen_r
+                        prompt_col = line_col + len(line_str)
                 self.term.clear_eol()
 
         # Bottom row status bar (blank Field 4 on non-editor screens)

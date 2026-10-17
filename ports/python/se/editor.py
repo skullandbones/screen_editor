@@ -280,7 +280,9 @@ class Editor:
     def _refresh_editor_screen(self):
         """Redraw active editor viewport to clear prior screen/modal debris."""
         geom = f"{self.terminal.cols}x{self.terminal.rows}"
-        self.renderer.render_editor(self.buffer, geometry_str=geom)
+        self.renderer.render_editor(
+            self.buffer, geometry_str=geom, is_editor=False
+        )
 
     def action_quit(self):
         """Prompt to save changes if modified, then exit cleanly."""
@@ -864,10 +866,10 @@ class Editor:
         """Display Tier 1 About screen workspace."""
         lines = [
             "SE - Screen Editor",
-            "version 1.1.0 (2026-10-09) (Python)",
+            "version 1.1.3 (2026-10-17) (Python)",
             "by Dean Jenkins",
             "",
-            "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high",
+            "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
             "",
             "Open source software under the MIT License",
             "",

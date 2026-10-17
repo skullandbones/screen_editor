@@ -4276,8 +4276,7 @@ def test_se_execution(use_sec=False, use_python=False):
         if b"SE - Screen Editor" not in out_s65_about:
             print(f"[-] Step 65 failed: 'SE - Screen Editor' title not found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        version_anchor = (b"version 1.1.0" if PY_MODE
-                          else b"version 1.1.3")
+        version_anchor = b"version 1.1.3"
         if version_anchor not in out_s65_about:
             print(f"[-] Step 65 failed: Version details not found on About "
                   f"screen: {repr(out_s65_about)}", flush=True)
@@ -4286,14 +4285,12 @@ def test_se_execution(use_sec=False, use_python=False):
             print(f"[-] Step 65 failed: Author attribution not found on About "
                   f"screen: {repr(out_s65_about)}", flush=True)
             return False
-        expected_agy = (b"Google Antigravity 2.19.1" if PY_MODE
-                        else b"Google Antigravity 2.23.0")
+        expected_agy = b"Google Antigravity 2.23.0"
         if expected_agy not in out_s65_about:
             print(f"[-] Step 65 failed: Antigravity 2.23.0 attribution not "
                   f"found on About screen: {repr(out_s65_about)}", flush=True)
             return False
-        expected_gem = (b"Gemini FLASH 3.8 high" if PY_MODE
-                        else b"Gemini 4 Argon Medium")
+        expected_gem = b"Gemini 4 Argon Medium"
         if expected_gem not in out_s65_about:
             print(f"[-] Step 65 failed: Gemini 4 Argon Medium attribution not "
                   f"found on About screen: {repr(out_s65_about)}", flush=True)

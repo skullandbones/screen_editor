@@ -2056,9 +2056,9 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 5 Open (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
-  2.7.65–2.7.71, 2.7.73–2.7.87, 2.7.92–2.7.93 Resolved; Bugs 2.7.45, 2.7.64,
-  2.7.72 Rejected; 5 Open: 2.7.88–2.7.91, 2.7.94).
+- **Status**: Active / 4 Open (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
+  2.7.65–2.7.71, 2.7.73–2.7.87, 2.7.92–2.7.94 Resolved; Bugs 2.7.45, 2.7.64,
+  2.7.72 Rejected; 4 Open: 2.7.88–2.7.91).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -3340,7 +3340,7 @@ have been resolved and archived.
          (`"                 |"`) on non-editor screens.
       3. Verified via Step 62 in `ports/python/tests/test_editor.py`
          (`test_bug_2_7_93_splash_screen_labels_alignment_and_diagnostics`).
-  - [ ] **Bug 2.7.94: About Screen Outdated Version/AI Attribution &
+  - [x] **Bug 2.7.94: About Screen Outdated Version/AI Attribution &
     Flush-Left Line Alignment**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.
     - *Issue*: In `ports/python/se/editor.py:863-881` (`action_about`),
@@ -3369,6 +3369,18 @@ have been resolved and archived.
       `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, and center each
       line individually per Section 15.2.2
       (`LeftPad = (cols - 1 - len(line)) // 2` spaces after `~`).
+    - *Resolution*:
+      1. Updated `__version__ = "1.1.3"` in `ports/python/se/__init__.py` and
+         updated `action_about()` in `ports/python/se/editor.py` to display
+         `"version 1.1.3 (2026-10-17) (Python)"` and
+         `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`.
+      2. Updated `render_centered_workspace()` in `ports/python/se/ui.py` to
+         center each non-empty About Screen line individually at column
+         `2 + (cols - 1 - len(line_str)) // 2` (`LeftPad` spaces after Column 1
+         `~`) while leaving empty separator lines as bare `~`.
+      3. Verified via Step 63 in `ports/python/tests/test_editor.py`
+         (`test_bug_2_7_94_about_screen_version_attribution_and_centering`) and
+         Step 65 in `tests/test_editor_headless.py --python`.
 
 ### 2.8 Profile 8: CP/M C Semantic Equivalent Profile (`SEC.COM`)
 - **Target Platform**: Standard CP/M 2.2 / 3.0 (RomWBW v3.6.0+, RC2014, SC131,

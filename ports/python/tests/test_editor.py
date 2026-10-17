@@ -582,7 +582,7 @@ class TestEditor(unittest.TestCase):
         self.editor.action_about()
         about_text = "\n".join(rendered_lines)
         self.assertIn("SE - Screen Editor", about_text)
-        self.assertIn("version 1.1.0 (2026-10-09) (Python)", about_text)
+        self.assertIn("version 1.1.3 (2026-10-17) (Python)", about_text)
         self.assertIn("by Dean Jenkins", about_text)
         self.assertIn("MIT License", about_text)
         self.assertIn("Press any key to continue", about_text)
@@ -2374,7 +2374,7 @@ class TestEditor(unittest.TestCase):
         self.editor.terminal.get_key = MagicMock(return_value=" ")
         self.editor.action_about()
         about_str = "\n".join(rendered)
-        self.assertIn("version 1.1.0 (2026-10-09) (Python)", about_str)
+        self.assertIn("version 1.1.3 (2026-10-17) (Python)", about_str)
         self.assertNotIn("(Linux)", about_str)
         print(
             "[+] Step 50: About screen predominant language verified.",
@@ -2966,6 +2966,84 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 62: Splash labels, alignment & diagnostics verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_94_about_screen_version_attribution_and_centering(self):
+        """Step 63: Verify About version, attribution & centering (2.7.94)."""
+        print(
+            "[*] Step 63: Testing About version, attribution & centering...",
+            flush=True,
+        )
+        import se
+
+        self.assertEqual(se.__version__, "1.1.3")
+
+        cols, rows = 80, 24
+        self.editor.terminal.cols = cols
+        self.editor.terminal.rows = rows
+        grid = [[" " for _ in range(cols)] for _ in range(rows)]
+        cur = [1, 1]
+
+        def sim_locate(r, c):
+            cur[0] = max(1, min(rows, r))
+            cur[1] = max(1, min(cols, c))
+
+        def sim_write(text):
+            if text.startswith("\x1b"):
+                if text == "\x1b[K":
+                    r_idx = cur[0] - 1
+                    for c_idx in range(cur[1] - 1, cols):
+                        grid[r_idx][c_idx] = " "
+                return
+            r_idx = cur[0] - 1
+            for ch in text:
+                c_idx = cur[1] - 1
+                if 0 <= r_idx < rows and 0 <= c_idx < cols:
+                    grid[r_idx][c_idx] = ch
+                cur[1] = min(cols + 1, cur[1] + 1)
+
+        def sim_clear_eol():
+            r_idx = cur[0] - 1
+            if 0 <= r_idx < rows:
+                for c_idx in range(cur[1] - 1, cols):
+                    grid[r_idx][c_idx] = " "
+
+        self.editor.terminal.locate = sim_locate
+        self.editor.terminal.write = sim_write
+        self.editor.terminal.clear_eol = sim_clear_eol
+        self.editor.terminal.flush = MagicMock()
+
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_about()
+        body_rows = ["".join(r).rstrip() for r in grid[:-1]]
+
+        # Content block is 9 rows on Screen Rows 8..16 (0-indexed 7..15)
+        expected_lines = [
+            "SE - Screen Editor",
+            "version 1.1.3 (2026-10-17) (Python)",
+            "by Dean Jenkins",
+            "",
+            "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
+            "",
+            "Open source software under the MIT License",
+            "",
+            "Press any key to continue",
+        ]
+        for idx, text in enumerate(expected_lines):
+            row_str = body_rows[7 + idx]
+            if text:
+                left_pad = (cols - 1 - len(text)) // 2
+                self.assertEqual(
+                    row_str,
+                    "~" + (" " * left_pad) + text,
+                    f"About row {idx} miscentered: {row_str!r}",
+                )
+            else:
+                self.assertEqual(row_str, "~")
+
+        print(
+            "[+] Step 63: About version, attribution & centering verified.",
             flush=True,
         )
 
