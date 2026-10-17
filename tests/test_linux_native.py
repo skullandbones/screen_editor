@@ -131,9 +131,9 @@ def test_interactive_pty_startup():
         assert b"80x24 |" in captured or b"120x40 |" in captured, (
             "Splash screen missing universal status bar geometry anchor"
         )
-        assert (b"^K: Editor keys |" in captured or
+        assert (b"|                 |" in captured or
                 b"Free:" in captured), (
-            "Splash screen missing universal status bar help anchor"
+            "Splash screen missing universal status bar Field 4"
         )
         print("    [+] Interactive PTY startup & clean exit verified [PASS]")
 
@@ -227,8 +227,8 @@ def test_status_bar_canonical_layout():
             assert "80x24 |" in out_str or "120x40 |" in out_str, (
                 "Status bar missing '80x24 |' or '120x40 |' geometry field"
             )
-            assert "Linux |" in out_str or "CPM   |" in out_str, (
-                "Status bar missing format indicator ('Linux |' or 'CPM   |')"
+            assert "Linux |" in out_str or "CP/M  |" in out_str, (
+                "Status bar missing format indicator ('Linux |' or 'CP/M  |')"
             )
             assert "^K: Editor keys |" in out_str, (
                 "Status bar missing '^K: Editor keys |' help field"
@@ -1261,6 +1261,7 @@ def test_bug_2_4_17_tier1_file_workspaces_and_directory_scan():
         assert "Enter filename to open:" in open_out, (
             f"Expected filename prompt in open workspace:\n{open_out}"
         )
+        # Single-page directory suppresses pagination controls (Section 7.5)
         assert "<PgUp>/<PgDn>=Page" not in open_out, (
             f"Single-page directory must suppress page controls:\n{open_out}"
         )
@@ -1311,6 +1312,48 @@ def test_bug_2_4_17_tier1_file_workspaces_and_directory_scan():
         os.close(master)
 
         assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        # Multi-page directory displays pagination controls (Section 7.5)
+        multi_dir = tempfile.mkdtemp()
+        try:
+            for i in range(65):
+                fpath = os.path.join(multi_dir, f"file_{i:02d}.txt")
+                with open(fpath, "w") as f:
+                    f.write("test\n")
+            m_master, m_slave = pty.openpty()
+            m_pid = os.fork()
+            if m_pid == 0:
+                os.chdir(multi_dir)
+                os.close(m_master)
+                os.dup2(m_slave, 0)
+                os.dup2(m_slave, 1)
+                os.dup2(m_slave, 2)
+                os.close(m_slave)
+                os.execl(SE_LINUX_BIN, "se-linux")
+            else:
+                os.close(m_slave)
+                time.sleep(0.3)
+                read_all_available(m_master, 0.2)
+                os.write(m_master, b"o")
+                time.sleep(0.3)
+                multi_out = read_all_available(m_master, 0.4).decode(
+                    "utf-8", errors="replace"
+                )
+                assert "<PgUp>/<PgDn>=Page" in multi_out, (
+                    "Expected page controls in multi-page workspace:\n"
+                    f"{multi_out}"
+                )
+                assert "[Page 1/2]" in multi_out, (
+                    f"Expected [Page 1/2] in multi-page workspace:\n{multi_out}"
+                )
+                os.write(m_master, b"\x1b")
+                time.sleep(0.2)
+                os.write(m_master, b"q")
+                wait_pid_with_timeout(m_pid, 2.0)
+                os.close(m_master)
+        finally:
+            shutil.rmtree(multi_dir, ignore_errors=True)
+
         print("    [+] Tier 1 file workspaces & dir scanning verified [PASS]")
 
 
@@ -3347,8 +3390,17 @@ def test_bug_2_4_44_about_screen_canonical_layout():
         )
 
         # 2. Canonical version with build date and predominant language
-        lang_tag = "(Rust)" if USE_RUST else "(C)"
-        expected_ver = f"version 1.1.0 (2026-10-09) {lang_tag}"
+        if USE_RUST:
+            expected_ver = "version 1.1.0 (2026-10-09) (Rust)"
+            expected_credits = (
+                "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"
+            )
+        else:
+            lang_tag = "(Python)" if PY_MODE else "(C)"
+            expected_ver = f"version 1.1.3 (2026-10-17) {lang_tag}"
+            expected_credits = (
+                "Google Antigravity 2.23.0 & Gemini 4 Argon Medium"
+            )
         assert expected_ver in about_out, (
             f"Expected '{expected_ver}' in:\n{about_out}"
         )
@@ -3359,9 +3411,9 @@ def test_bug_2_4_44_about_screen_canonical_layout():
         )
 
         # 4. Toolchain and AI credits
-        assert "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high" in (
-            about_out
-        ), f"Missing toolchain credits in:\n{about_out}"
+        assert expected_credits in about_out, (
+            f"Missing toolchain credits '{expected_credits}' in:\n{about_out}"
+        )
 
         # 5. MIT license notice
         assert "Open source software under the MIT License" in about_out, (
@@ -3501,8 +3553,8 @@ def test_bug_2_4_45_line_ending_decoupling():
             ed_out = read_all_available(master, 0.4).decode(
                 "utf-8", errors="replace"
             )
-            assert "CPM   |" in ed_out, (
-                f"Expected 'CPM   |' in status bar for CRLF file:\n{ed_out}"
+            assert "CP/M  |" in ed_out, (
+                f"Expected 'CP/M  |' in status bar for CRLF file:\n{ed_out}"
             )
 
             # Save via Ctrl+S -> directly saves and preserves detected format
@@ -3682,11 +3734,11 @@ def test_bug_2_4_47_direct_inplace_block_manipulation():
             assert "PgDn" in help_out and "Page Down" in help_out, (
                 f"Missing dedicated PgDn in Help screen:\n{help_out}"
             )
-            assert "Ctrl+U / PgUp" not in help_out, (
-                f"Found obsolete 'Ctrl+U / PgUp' in Help screen:\n{help_out}"
+            assert "Paste Block" not in help_out, (
+                f"Found prohibited 'Paste Block' in Help screen:\n{help_out}"
             )
-            assert "Ctrl+V / PgDn" not in help_out, (
-                f"Found obsolete 'Ctrl+V / PgDn' in Help screen:\n{help_out}"
+            assert "Cut Block" not in help_out, (
+                f"Found non-canonical 'Cut Block' in Help screen:\n{help_out}"
             )
 
             # Dismiss Help screen via Enter
@@ -3984,6 +4036,206 @@ def test_bug_2_4_49_line_join_boundary():
             os.remove(file3)
 
 
+def test_bug_2_4_51_splash_labels_alignment_and_status_bar():
+    """Bug 2.4.51: Splash labels, alignment, diagnostics & status bar."""
+    print("[*] Testing Splash labels, alignment & status bar (Bug 2.4.51)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_2451_")
+    try:
+        # 1. Default 80x24 Splash screen layout, labels, alignment & Field 4
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            splash_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+
+            # Verify [^O], [^S], and [3] set native menu options
+            assert "  type   [O]  or  [^O]    to open file" in splash_out, (
+                f"Missing '[O]  or  [^O]' in splash:\n{splash_out}"
+            )
+            assert "  type   [S]  or  [^S]    to save file" in splash_out, (
+                f"Missing '[S]  or  [^S]' in splash:\n{splash_out}"
+            )
+            assert "  type   [3]              set native" in splash_out, (
+                f"Missing '[3] set native' in splash:\n{splash_out}"
+            )
+
+            # Verify horizontal column alignment in 80x24 (left_col = 21)
+            assert "\x1b[1;21H           SE - Screen Editor" in splash_out, (
+                f"Title not aligned at Row 1 Col 21:\n{splash_out!r}"
+            )
+            assert (
+                "\x1b[5;21H  type   [O]  or  [^O]    to open file"
+                in splash_out
+            ), f"Open command not aligned at Row 5 Col 21:\n{splash_out!r}"
+            assert (
+                "\x1b[19;21HActive Screen : [80x24 (Classic Terminal)]"
+                in splash_out
+            ), f"Active Screen not aligned at Row 19 Col 21:\n{splash_out!r}"
+
+            # Verify Status Bar Field 4 is blank on Splash (not ^K hint)
+            assert "^K: Editor keys" not in splash_out, (
+                f"Field 4 '^K: Editor keys' must not appear on Splash:\n"
+                f"{splash_out}"
+            )
+            assert "|                 | Line" in splash_out, (
+                f"Expected blank 15-char Field 4 on Splash:\n{splash_out}"
+            )
+
+            # Verify About screen also keeps Field 4 blank
+            os.write(master, b"a")
+            time.sleep(0.2)
+            about_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "^K: Editor keys" not in about_out, (
+                f"Field 4 '^K: Editor keys' must not appear on About:\n"
+                f"{about_out}"
+            )
+            assert "|                 | Line" in about_out, (
+                f"Expected blank 15-char Field 4 on About:\n{about_out}"
+            )
+            os.write(master, b" ")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Verify ':' does not block single-keystroke dispatch
+            os.write(master, b":")
+            time.sleep(0.1)
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        # 2. Verify dynamic Plugin System and RAM Drive diagnostics from SE.CFG
+        cfg_path = os.path.join(temp_dir, "SE.CFG")
+        with open(cfg_path, "w") as f:
+            f.write("PLUGIN=DEMAND\r\nRAMDRIVE=DISABLED\r\n")
+
+        master2, slave2 = pty.openpty()
+        pid2 = os.fork()
+        if pid2 == 0:
+            os.chdir(temp_dir)
+            os.close(master2)
+            os.dup2(slave2, 0)
+            os.dup2(slave2, 1)
+            os.dup2(slave2, 2)
+            os.close(slave2)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave2)
+            time.sleep(0.3)
+            out2 = read_all_available(master2, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Plugin System : [On Demand]" in out2, (
+                f"Expected 'Plugin System : [On Demand]' in:\n{out2}"
+            )
+            assert "RAM Drive     : [None Detected]" in out2, (
+                f"Expected 'RAM Drive     : [None Detected]' in:\n{out2}"
+            )
+            os.write(master2, b"q")
+            exit_code2 = wait_pid_with_timeout(pid2, 2.0)
+            os.close(master2)
+            assert exit_code2 == 0, f"Expected exit code 0, got {exit_code2}"
+
+        print("    [+] Splash labels, alignment & status bar verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_bug_2_4_52_about_screen_version_attribution_and_centering():
+    """Bug 2.4.52: About screen version, attribution, blank row & centering."""
+    print(
+        "[*] Testing About version, attribution & centering (Bug 2.4.52)..."
+    )
+
+    # 1. Verify CLI --help version banner is updated to v1.1.3
+    if not PY_MODE and not USE_RUST:
+        res = subprocess.run(
+            [SE_LINUX_BIN, "--help"],
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_DIR,
+        )
+        assert res.returncode == 0, f"--help failed: {res.returncode}"
+        assert "(v1.1.3)" in res.stdout, (
+            f"Expected '(v1.1.3)' in --help output:\n{res.stdout}"
+        )
+
+    # 2. Verify live About screen layout, blank rows, and per-line centering
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        read_all_available(master, 0.3)
+
+        os.write(master, b"a")
+        time.sleep(0.3)
+        about_raw = read_all_available(master, 0.4)
+        about_out = about_raw.decode("utf-8", errors="replace")
+
+        expected_rows = [
+            "\x1b[8;17H               SE - Screen Editor",
+            "\x1b[9;17H         version 1.1.3 (2026-10-17) (C)",
+            "\x1b[10;17H                 by Dean Jenkins",
+            "\x1b[11;1H~\x1b[K",
+            "\x1b[12;17HGoogle Antigravity 2.23.0 & Gemini 4 Argon Medium",
+            "\x1b[13;1H~\x1b[K",
+            "\x1b[14;17H   Open source software under the MIT License",
+            "\x1b[15;1H~\x1b[K",
+            "\x1b[16;17H            Press any key to continue",
+        ]
+        for exp in expected_rows:
+            assert exp in about_out, (
+                f"Missing expected About row {exp!r} in:\n{about_out!r}"
+            )
+
+        # Verify status bar Field 4 is blank on About screen
+        assert "^K: Editor keys" not in about_out, (
+            f"Unexpected '^K: Editor keys' on About screen:\n{about_out}"
+        )
+        assert "|                 | Line" in about_out, (
+            f"Expected blank Field 4 on About screen:\n{about_out}"
+        )
+
+        # Dismiss About screen and verify cursor remains hidden on Splash
+        os.write(master, b" ")
+        time.sleep(0.3)
+        back_out = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert "\x1b[?25h" not in back_out, (
+            f"Cursor should remain hidden on return to Splash:\n{back_out!r}"
+        )
+
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print(
+            "    [+] About version, attribution & centering verified [PASS]"
+        )
+
+
 def main():
     print("=" * 80)
     print(
@@ -4041,6 +4293,8 @@ def main():
     test_bug_2_4_47_direct_inplace_block_manipulation()
     test_bug_2_4_48_utf8_prohibition()
     test_bug_2_4_49_line_join_boundary()
+    test_bug_2_4_51_splash_labels_alignment_and_status_bar()
+    test_bug_2_4_52_about_screen_version_attribution_and_centering()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

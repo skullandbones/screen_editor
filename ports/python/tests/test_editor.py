@@ -2681,7 +2681,8 @@ class TestEditor(unittest.TestCase):
             orig_cwd = os.getcwd()
             try:
                 os.chdir(tmp_dir)
-                # Cycle: AUTOLOAD -> DEMAND -> DISABLED -> AUTOLOAD, then 's', 'q'
+                # Cycle: AUTOLOAD -> DEMAND -> DISABLED -> AUTOLOAD,
+                # then 's', 'q'
                 self.editor.terminal.get_key = MagicMock(
                     side_effect=["5", "5", "5", "s", "q"]
                 )

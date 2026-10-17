@@ -127,6 +127,7 @@ extern "C" {
 #define RAMDRV_MODE_PROTECTED   0   /* Preserve RAM disk (81h..88h safe) */
 #define RAMDRV_MODE_ENABLED     1   /* Overwrite for max RAM buffer */
 #define RAMDRV_MODE_HIBERNATE   2   /* Auto-dump to RAMDRV.IMG on disk */
+#define RAMDRV_MODE_DISABLED    3   /* RAM drive disabled / none */
 #define RAMDRV_START_BANK       0x81
 #define RAMDRV_END_BANK         0x88
 

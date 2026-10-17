@@ -899,8 +899,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 2 Open (Bugs 2.4.51, 2.4.52 Open; Bugs 2.4.1–2.4.50
-  Resolved).
+- **Status**: Active / 0 Open (Bugs 2.4.1–2.4.52 Resolved).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1806,7 +1805,7 @@ have been resolved and archived.
     - *Resolution*: Updated `test_bug_2_4_17` in `tests/test_linux_native.py`
       to verify that `<PgUp>/<PgDn>=Page` is suppressed on single-page
       directories per Section 7.5.
-  - [ ] **Bug 2.4.51: Splash Screen Layout, Menu Text, Alignment & Status Bar
+  - [x] **Bug 2.4.51: Splash Screen Layout, Menu Text, Alignment & Status Bar
     Non-Conformities**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.2, 11.2, 14.1, 15.1.
     - *Issue*: In `src/core/ui_render.c:244-354` (`render_status_bar`) and
@@ -1854,7 +1853,18 @@ have been resolved and archived.
       horizontal padding with Section 15.1.2, remove the `':'` prefix
       intercept, adapt Linux diagnostic lines per Section 15.1.5, and blank
       Field 4 (or show `Free: <N> KB`) when `g_is_splash_screen` is active.
-  - [ ] **Bug 2.4.52: About Screen Version, AI Attribution, Blank Row &
+    - *Resolution*: Updated `show_splash_screen()`, `show_about_screen()`, and
+      `render_status_bar()` in `src/core/ui_render.c` (with
+      `RAMDRV_MODE_DISABLED` support in `src/include/config.h` and
+      `src/core/config.c`) to display `or  [^O]`, `or  [^S]`, and
+      `"  type   [3]              set native"` under `#ifndef __CPM__`, align
+      horizontal columns at `content_width = 40` (`left_col = 21` in `80x24`),
+      remove the blocking `':'` prefix intercept, support `[None Detected]`
+      when `RAMDRIVE=DISABLED`/`NONE`, format Field 3 as `"CP/M "`, and blank
+      Field 4 (`"                 |"`) when `g_is_splash_screen` is active.
+      Validated via `test_bug_2_4_51_splash_labels_alignment_and_status_bar`
+      in `tests/test_linux_native.py`.
+  - [x] **Bug 2.4.52: About Screen Version, AI Attribution, Blank Row &
     Centering Non-Conformities**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.
     - *Issue*: In `src/core/ui_render.c:611-640` (`show_about_screen`) and
@@ -1893,6 +1903,17 @@ have been resolved and archived.
       each line using `(g_active_cols - 1 - strlen(line)) / 2` spaces after
       `~`, and keep `g_is_splash_screen = 1` with cursor hidden on return to
       Splash.
+    - *Resolution*: Updated `s_about_lines` and `show_about_screen()` in
+      `src/core/ui_render.c` and the `--help` version banner in `src/se_linux.c`
+      to `"version 1.1.3 (2026-10-17) (C)"` / `(v1.1.3)` and
+      `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, inserted the blank
+      row at `s_about_lines[5]`, centered all 9 rows at `content_width = 48`
+      (`left_col = 17` in `80x24`) with exact per-line leading spaces (`15`,
+      `9`, `17`, `0`, `3`, `12`) matching Section 15.2.2, and preserved
+      `g_is_splash_screen = 1` with cursor hidden on return to Splash.
+      Validated via
+      `test_bug_2_4_52_about_screen_version_attribution_and_centering` in
+      `tests/test_linux_native.py`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
