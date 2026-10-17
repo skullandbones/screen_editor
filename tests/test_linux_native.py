@@ -4154,6 +4154,88 @@ def test_bug_2_4_51_splash_labels_alignment_and_status_bar():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_52_about_screen_version_attribution_and_centering():
+    """Bug 2.4.52: About screen version, attribution, blank row & centering."""
+    print(
+        "[*] Testing About version, attribution & centering (Bug 2.4.52)..."
+    )
+
+    # 1. Verify CLI --help version banner is updated to v1.1.3
+    if not PY_MODE and not USE_RUST:
+        res = subprocess.run(
+            [SE_LINUX_BIN, "--help"],
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_DIR,
+        )
+        assert res.returncode == 0, f"--help failed: {res.returncode}"
+        assert "(v1.1.3)" in res.stdout, (
+            f"Expected '(v1.1.3)' in --help output:\n{res.stdout}"
+        )
+
+    # 2. Verify live About screen layout, blank rows, and per-line centering
+    master, slave = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        os.dup2(slave, 0)
+        os.dup2(slave, 1)
+        os.dup2(slave, 2)
+        os.close(slave)
+        os.execl(SE_LINUX_BIN, "se-linux")
+    else:
+        os.close(slave)
+        time.sleep(0.3)
+        read_all_available(master, 0.3)
+
+        os.write(master, b"a")
+        time.sleep(0.3)
+        about_raw = read_all_available(master, 0.4)
+        about_out = about_raw.decode("utf-8", errors="replace")
+
+        expected_rows = [
+            "\x1b[8;17H               SE - Screen Editor",
+            "\x1b[9;17H         version 1.1.3 (2026-10-17) (C)",
+            "\x1b[10;17H                 by Dean Jenkins",
+            "\x1b[11;1H~\x1b[K",
+            "\x1b[12;17HGoogle Antigravity 2.23.0 & Gemini 4 Argon Medium",
+            "\x1b[13;1H~\x1b[K",
+            "\x1b[14;17H   Open source software under the MIT License",
+            "\x1b[15;1H~\x1b[K",
+            "\x1b[16;17H            Press any key to continue",
+        ]
+        for exp in expected_rows:
+            assert exp in about_out, (
+                f"Missing expected About row {exp!r} in:\n{about_out!r}"
+            )
+
+        # Verify status bar Field 4 is blank on About screen
+        assert "^K: Editor keys" not in about_out, (
+            f"Unexpected '^K: Editor keys' on About screen:\n{about_out}"
+        )
+        assert "|                 | Line" in about_out, (
+            f"Expected blank Field 4 on About screen:\n{about_out}"
+        )
+
+        # Dismiss About screen and verify cursor remains hidden on Splash
+        os.write(master, b" ")
+        time.sleep(0.3)
+        back_out = read_all_available(master, 0.3).decode(
+            "utf-8", errors="replace"
+        )
+        assert "\x1b[?25h" not in back_out, (
+            f"Cursor should remain hidden on return to Splash:\n{back_out!r}"
+        )
+
+        os.write(master, b"q")
+        exit_code = wait_pid_with_timeout(pid, 2.0)
+        os.close(master)
+        assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+        print(
+            "    [+] About version, attribution & centering verified [PASS]"
+        )
+
+
 def main():
     print("=" * 80)
     print(
@@ -4212,6 +4294,7 @@ def main():
     test_bug_2_4_48_utf8_prohibition()
     test_bug_2_4_49_line_join_boundary()
     test_bug_2_4_51_splash_labels_alignment_and_status_bar()
+    test_bug_2_4_52_about_screen_version_attribution_and_centering()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

@@ -899,8 +899,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 2 Open (Bugs 2.4.51, 2.4.52 Open; Bugs 2.4.1–2.4.50
-  Resolved).
+- **Status**: Active / 0 Open (Bugs 2.4.1–2.4.52 Resolved).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -1865,7 +1864,7 @@ have been resolved and archived.
       Field 4 (`"                 |"`) when `g_is_splash_screen` is active.
       Validated via `test_bug_2_4_51_splash_labels_alignment_and_status_bar`
       in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.52: About Screen Version, AI Attribution, Blank Row &
+  - [x] **Bug 2.4.52: About Screen Version, AI Attribution, Blank Row &
     Centering Non-Conformities**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.
     - *Issue*: In `src/core/ui_render.c:611-640` (`show_about_screen`) and
@@ -1904,6 +1903,17 @@ have been resolved and archived.
       each line using `(g_active_cols - 1 - strlen(line)) / 2` spaces after
       `~`, and keep `g_is_splash_screen = 1` with cursor hidden on return to
       Splash.
+    - *Resolution*: Updated `s_about_lines` and `show_about_screen()` in
+      `src/core/ui_render.c` and the `--help` version banner in `src/se_linux.c`
+      to `"version 1.1.3 (2026-10-17) (C)"` / `(v1.1.3)` and
+      `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, inserted the blank
+      row at `s_about_lines[5]`, centered all 9 rows at `content_width = 48`
+      (`left_col = 17` in `80x24`) with exact per-line leading spaces (`15`,
+      `9`, `17`, `0`, `3`, `12`) matching Section 15.2.2, and preserved
+      `g_is_splash_screen = 1` with cursor hidden on return to Splash.
+      Validated via
+      `test_bug_2_4_52_about_screen_version_attribution_and_centering` in
+      `tests/test_linux_native.py`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
