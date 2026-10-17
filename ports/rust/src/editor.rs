@@ -594,13 +594,6 @@ pub fn editor_handle_key(k: u8) {
     if k == 0 {
         return;
     }
-    if get_is_splash_screen() != 0 {
-        set_is_splash_screen(0);
-        render_all_lines();
-        if k == KEY_ENTER || k == b' ' {
-            return;
-        }
-    }
 
     match k {
         KEY_UP => move_up(),
@@ -662,7 +655,9 @@ pub fn editor_handle_key(k: u8) {
         KEY_CTRL_N => do_ctrl_n_next(),
         KEY_CTRL_R => do_ctrl_r_replace(),
         KEY_CTRL_P => show_plugin_palette(),
-        KEY_CTRL_L => modal_goto_line(),
+        KEY_CTRL_L => {
+            let _ = modal_goto_line();
+        }
         KEY_CTRL_O => {
             if get_block_mode() != BLOCK_MODE_OFF {
                 if get_block_mode() == BLOCK_MODE_SELECTING {

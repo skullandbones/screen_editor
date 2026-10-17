@@ -176,6 +176,7 @@ pub fn config_load_file(path: &str) -> i32 {
                         cfg.ramdrive_mode = RAMDRV_MODE_HIBERNATE;
                     } else if val == "DISABLE"
                         || val == "DISABLED"
+                        || val == "NONE"
                         || val == "OFF"
                         || val == "3"
                     {

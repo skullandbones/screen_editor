@@ -1933,7 +1933,7 @@ have been resolved and archived.
   buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
 - **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
   via `make test-rust`).
-- **Status**: Active / 2 Open (Bugs 2.6.5, 2.6.6 Open; Bugs 2.6.1–2.6.4
+- **Status**: Active / 1 Open (Bug 2.6.6 Open; Bugs 2.6.1–2.6.5
   Resolved).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.6.1: Line Feed (`\n`, `0x0A`) Not Accepted as Enter in Modals**:
@@ -1986,7 +1986,7 @@ have been resolved and archived.
       `ports/rust/src/main.rs` to adapt to `120x40` when `TIOCGWINSZ` reports
       `cols >= 120 && rows >= 40`. Validated via
       `test_bug_2_4_19_panning_edge_trigger_and_geometry`.
-  - [ ] **Bug 2.6.5: Non-Canonical Splash Screen Menu, Missing Commands (`[N]`,
+  - [x] **Bug 2.6.5: Non-Canonical Splash Screen Menu, Missing Commands (`[N]`,
     `[W]`, `[L]`, `[M]`) & Alignment**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.1, 15.1.
     - *Issue*: In `ports/rust/src/ui_render.rs:387-564` (`show_splash_screen`)
@@ -2034,6 +2034,17 @@ have been resolved and archived.
       horizontal padding with Section 15.1.2, remove the `':'` intercept and
       spurious license/help lines, and adapt diagnostic rows per
       Section 15.1.4–15.1.5.
+    - *Resolution*: Updated `show_splash_screen()`,
+      `render_centered_text_block()`, and `render_status_bar()` in
+      `ports/rust/src/ui_render.rs`, `modal_goto_line()` in
+      `ports/rust/src/ui_modal.rs`, `editor_handle_key()` in
+      `ports/rust/src/editor.rs`, and `config_load_file()` in
+      `ports/rust/src/config.rs` to render the canonical 22-line, 40-column
+      Splash Screen menu at `left_col = 21` (`80x24`), blank Field 4 on the
+      Splash status bar, implement `[N]`, `[W]`/`[^W]`, `[L]`/`[^L]`, and `[M]`
+      command dispatchers, remove the blocking `':'` prefix intercept and
+      spurious splash fallback, and format canonical diagnostic labels.
+      Validated via `test_bug_2_4_51_splash_labels_alignment_and_status_bar`.
   - [ ] **Bug 2.6.6: About Screen Version, AI Attribution, Spurious
     `"created the code"` Row & Centering**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.

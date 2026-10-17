@@ -504,7 +504,7 @@ pub fn modal_prompt_text(
     }
 }
 
-pub fn modal_goto_line() {
+pub fn modal_goto_line() -> bool {
     let (active_rows, active_cols) = get_active_dims();
     let width = MODAL_BOX_WIDTH;
     let height: u8 = 7;
@@ -543,8 +543,10 @@ pub fn modal_goto_line() {
             continue;
         }
         if k == KEY_ESC {
-            render_all_lines();
-            return;
+            if get_is_splash_screen() == 0 {
+                render_all_lines();
+            }
+            return false;
         }
         if k == KEY_ENTER {
             break;
@@ -623,6 +625,7 @@ pub fn modal_goto_line() {
         }
     }
 
+    let mut jumped = false;
     let s = String::from_utf8_lossy(&buf);
     if let Ok(target) = s.trim().parse::<usize>() {
         if target > 0 {
@@ -649,9 +652,13 @@ pub fn modal_goto_line() {
             }
             unpack_line(new_row);
             update_horizontal_pan();
+            jumped = true;
         }
     }
-    render_all_lines();
+    if get_is_splash_screen() == 0 {
+        render_all_lines();
+    }
+    jumped
 }
 
 pub fn modal_confirm_save_changes() -> u8 {

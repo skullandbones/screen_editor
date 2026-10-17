@@ -200,7 +200,6 @@ pub fn render_all_lines() {
 
 pub fn render_status_bar() {
     let (active_rows, active_cols) = get_active_dims();
-    let cfg = get_config();
 
     let (
         cur_name,
@@ -241,9 +240,9 @@ pub fn render_status_bar() {
         raw_name.truncate(14);
     }
 
-    let geom_str = if cfg.screen_mode == MODE_120X40 {
+    let geom_str = if active_cols == COLS_120 && active_rows == ROWS_40 {
         String::from("120x40")
-    } else if cfg.screen_mode == MODE_80X24 {
+    } else if active_cols == COLS_80 && active_rows == ROWS_24 {
         String::from(" 80x24")
     } else {
         format!("{:>3}x{:<2}", active_cols, active_rows)
@@ -259,7 +258,7 @@ pub fn render_status_bar() {
 
     let blk_mode = get_block_mode();
     let field4 = if get_is_splash_screen() != 0 {
-        format!("Free: {} KB", hal_storage_get_free_kb())
+        String::new()
     } else if blk_mode == BLOCK_MODE_SELECTING {
         let (sr, sc, er, ec) = get_norm_bounds();
         if sr == er {
@@ -351,31 +350,33 @@ pub fn render_status_bar() {
 
 pub fn render_centered_text_block(lines: &[&str], block_width: u8) {
     let (active_rows, active_cols) = get_active_dims();
-    let avail_rows = active_rows.saturating_sub(1) as usize;
+    let avail_rows = if active_rows > 1 {
+        (active_rows - 1) as usize
+    } else {
+        23
+    };
     let line_count = lines.len();
     let top_row = if avail_rows > line_count {
         ((avail_rows - line_count) / 2) + 1
     } else {
         1
     };
-    let avail_cols = active_cols.saturating_sub(1) as usize;
     let bw = block_width as usize;
-    let left_pad = if avail_cols > bw {
-        (avail_cols - bw) / 2
+    let left_col = if (active_cols as usize) > bw {
+        (((active_cols as usize) - bw) / 2) + 1
     } else {
-        0
-    };
+        2
+    }
+    .max(2);
 
-    hal_console_set_attr(ATTR_NORMAL);
-    for r in 1..active_rows as usize {
+    clear_screen();
+    for r in 1..=avail_rows {
         hal_console_locate(r as u8, 1);
         hal_console_putc(b'~');
         if r >= top_row && r < top_row + line_count {
             let line = lines[r - top_row];
             if !line.is_empty() {
-                for _ in 0..left_pad {
-                    hal_console_putc(b' ');
-                }
+                hal_console_locate(r as u8, left_col as u8);
                 hal_console_puts(line);
             }
         }
@@ -393,105 +394,122 @@ pub fn show_splash_screen() {
         if get_resize_pending() {
             set_resize_pending(false);
             clear_screen();
-            editor_sync_geometry();
+            editor_apply_winch();
             need_render = true;
         }
 
         if need_render {
             let cfg = get_config();
-            let (active_rows, active_cols) = get_active_dims();
-            let screen_line = if cfg.screen_mode == MODE_80X24 {
-                String::from("  Active Screen : [80x24 (Classic Terminal)]")
-            } else if cfg.screen_mode == MODE_120X40 {
-                String::from("  Active Screen : [120x40 (Modern Default)]")
+            let screen_line = if cfg.screen_mode == MODE_120X40 {
+                "Active Screen : [120x40 (Modern Default)]"
+            } else if cfg.screen_mode == MODE_NATIVE {
+                "Active Screen : [Native (Dynamic Console)]"
             } else {
-                format!(
-                    "  Active Screen : [{}x{} (Native Terminal)]",
-                    active_cols, active_rows
-                )
+                "Active Screen : [80x24 (Classic Terminal)]"
             };
 
-            let ram_val = match cfg.ramdrive_mode {
-                RAMDRV_MODE_OVERWRITE => "Overwrite (Scratch)",
-                RAMDRV_MODE_HIBERNATE => "Hibernate (Backed)",
-                RAMDRV_MODE_DISABLED => "Disabled (TPA Only)",
-                _ => "Preserved (Active)",
+            let ram_line = match cfg.ramdrive_mode {
+                RAMDRV_MODE_DISABLED => "RAM Drive     : [None Detected]",
+                RAMDRV_MODE_OVERWRITE => {
+                    "RAM Drive (A:): [Overwritten (Max RAM)]"
+                }
+                RAMDRV_MODE_HIBERNATE => {
+                    "RAM Drive (A:): [Hibernated (Temp Image)]"
+                }
+                _ => "RAM Drive (A:): [Preserved (Active)]",
             };
-            let ram_line = format!("  RAM Drive (A:): [{}]", ram_val);
 
-            let plug_val = if cfg.plugin_mode == PLUGIN_MODE_DISABLED {
-                "Disabled"
+            let plug_line = match cfg.plugin_mode {
+                PLUGIN_MODE_DISABLED => "Plugin System : [Disabled]",
+                PLUGIN_MODE_ONDEMAND => "Plugin System : [On Demand]",
+                _ => "Plugin System : [Operational]",
+            };
+
+            let lines_line = if cfg.lines_mode != 0 {
+                "Max Lines     : [32,768 lines]"
             } else {
-                "Operational"
+                "Max Lines     : [16,384 lines]"
             };
-            let plug_line = format!("  Plugin System : [{}]", plug_val);
 
-            let max_val = if cfg.lines_mode != 0 {
-                "32,768 lines"
-            } else {
-                "16,384 lines"
-            };
-            let lines_line = format!("  Max Lines     : [{}]", max_val);
-
-            let splash_lines: [&str; 21] = [
-                "                SE - Screen Editor                ",
-                "",
-                "SE is freely distributable under the MIT License",
+            let splash_lines: [&str; 22] = [
+                "           SE - Screen Editor",
                 "",
                 "  type   [E]  or  [Enter] to edit",
-                "  type   [O]  or  [^O]    to open a file",
-                "  type   [S]  or  [^S]    to save a file",
-                "  type   [U]              for memory usage",
-                "  type   [C]              for configuration",
-                "  type   [P]  or  [^P]    for plugins",
+                "  type   [N]              to new file",
+                "  type   [O]  or  [^O]    to open file",
+                "  type   [S]  or  [^S]    to save file",
+                "  type   [W]  or  [^W]    to close file",
+                "  type   [L]  or  [^L]    to goto line",
+                "  type   [A]              for about",
+                "  type   [M]              for memory info",
+                "  type   [P]              for plugins",
+                "  type   [^P]             for context plugin menu",
+                "  type   [C]              to configure",
                 "  type   [1]              set 80x24",
                 "  type   [2]              set 120x40",
                 "  type   [3]              set native",
-                "  type   [H]  or  [?]     for help",
-                "  type   [A]              for about",
                 "  type   [Q]  or  [^Q]    to exit",
                 "",
-                &screen_line,
-                &ram_line,
-                &plug_line,
-                &lines_line,
+                screen_line,
+                ram_line,
+                plug_line,
+                lines_line,
             ];
 
-            render_centered_text_block(&splash_lines, 50);
+            render_centered_text_block(&splash_lines, 40);
             need_render = false;
         }
 
-        let mut k = hal_keyboard_get_key();
+        let k = hal_keyboard_get_key();
         if k == 0 {
             continue;
         }
-        if k == b':' {
-            let mut k2 = hal_keyboard_get_key();
-            while k2 == 0 {
-                k2 = hal_keyboard_get_key();
-            }
-            k = k2;
-        }
 
         if k == b'e' || k == b'E' || k == KEY_ENTER {
-            set_is_splash_screen(0);
+            clear_screen();
             hal_console_set_cursor_vis(1);
+            set_is_splash_screen(0);
             render_all_lines();
             return;
+        } else if k == b'n' || k == b'N' {
+            buffer_reset_empty();
+            clear_screen();
+            hal_console_set_cursor_vis(1);
+            set_is_splash_screen(0);
+            render_all_lines();
+            return;
+        } else if k == b'w' || k == b'W' || k == KEY_CTRL_W {
+            if modal_confirm_save_changes() != MODAL_RES_CANCEL {
+                buffer_reset_empty();
+            }
+            set_is_splash_screen(1);
+            hal_console_set_cursor_vis(0);
+            need_render = true;
+        } else if k == b'l' || k == b'L' || k == KEY_CTRL_L {
+            if modal_goto_line() {
+                clear_screen();
+                hal_console_set_cursor_vis(1);
+                set_is_splash_screen(0);
+                render_all_lines();
+                return;
+            }
+            set_is_splash_screen(1);
+            hal_console_set_cursor_vis(0);
+            need_render = true;
         } else if k == b'1' {
             clear_screen();
             set_config(|c| c.screen_mode = MODE_80X24);
-            editor_sync_geometry();
+            set_active_dims(ROWS_24, COLS_80);
             need_render = true;
         } else if k == b'2' {
             clear_screen();
             set_config(|c| c.screen_mode = MODE_120X40);
-            editor_sync_geometry();
+            set_active_dims(ROWS_40, COLS_120);
             need_render = true;
         } else if k == b'3' {
             clear_screen();
             set_config(|c| c.screen_mode = MODE_NATIVE);
-            editor_sync_geometry();
+            editor_apply_winch();
             need_render = true;
         } else if k == b'q' || k == b'Q' || k == KEY_CTRL_Q {
             let res = modal_confirm_save_changes();
@@ -509,7 +527,7 @@ pub fn show_splash_screen() {
             set_is_splash_screen(1);
             hal_console_set_cursor_vis(0);
             need_render = true;
-        } else if k == b'u' || k == b'U' {
+        } else if k == b'm' || k == b'M' {
             show_mem_info_screen();
             set_is_splash_screen(1);
             hal_console_set_cursor_vis(0);
@@ -539,6 +557,7 @@ pub fn show_splash_screen() {
             if res != MODAL_RES_CANCEL {
                 if let Some(fname) = ui_browser_open_dialog() {
                     if file_load(&fname) == 0 {
+                        clear_screen();
                         set_is_splash_screen(0);
                         hal_console_set_cursor_vis(1);
                         render_all_lines();
