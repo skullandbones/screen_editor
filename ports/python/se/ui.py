@@ -39,6 +39,7 @@ class UIRenderer:
         buf: DocumentBuffer,
         geometry_str: str = "80x24",
         status_msg: Optional[str] = None,
+        is_editor: bool = True,
     ):
         """
         Render universal status bar on bottom row (HOST_ROWS).
@@ -58,7 +59,9 @@ class UIRenderer:
         fmt_field = f" {fmt_str} |"
 
         # Field 4 (Help Hint / Context, 18 chars)
-        if getattr(buf, "overwrite_mode", False):
+        if not is_editor:
+            help_field = "                 |"
+        elif getattr(buf, "overwrite_mode", False):
             help_field = " Overwrite mode  |"
         else:
             help_field = " ^K: Editor keys |"
@@ -259,7 +262,11 @@ class UIRenderer:
         body_rows = rows - 1
 
         content_h = len(lines)
-        content_w = max((len(ln) for ln in lines), default=0)
+        is_splash = any("Active Screen :" in ln for ln in lines)
+        if is_splash:
+            content_w = 40
+        else:
+            content_w = max((len(ln) for ln in lines), default=0)
         top_row, left_col = compute_centering(
             cols, rows, content_w, content_h
         )
@@ -287,8 +294,10 @@ class UIRenderer:
                     prompt_col = left_col + len(line_str)
                 self.term.clear_eol()
 
-        # Bottom row status bar
-        self.render_status_bar(buf, geometry_str=geometry_str)
+        # Bottom row status bar (blank Field 4 on non-editor screens)
+        self.render_status_bar(
+            buf, geometry_str=geometry_str, is_editor=False
+        )
 
         # Reposition cursor adjacent to prompt if present (Bug 2.7.9)
         if prompt_row is not None and prompt_col is not None:
@@ -416,7 +425,9 @@ class UIRenderer:
                     self.term.write(ln)
             self.term.clear_eol()
 
-        self.render_status_bar(buf, geometry_str=geometry_str)
+        self.render_status_bar(
+            buf, geometry_str=geometry_str, is_editor=False
+        )
         self.term.locate(prompt_screen_row, prompt_cursor_col)
         self.term.show_cursor()
         self.term.flush()

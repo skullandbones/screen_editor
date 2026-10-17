@@ -2056,9 +2056,9 @@ have been resolved and archived.
   `termios` / `tty` raw terminal driver, object-based line buffer paging,
   `SE.CFG` reader/writer, modular Python plugins.
 - **Build Target**: `make se-py` (verified via `make test-py`).
-- **Status**: Active / 6 Open (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
-  2.7.65–2.7.71, 2.7.73–2.7.87, 2.7.92 Resolved; Bugs 2.7.45, 2.7.64, 2.7.72
-  Rejected; 6 Open: 2.7.88–2.7.91, 2.7.93, 2.7.94).
+- **Status**: Active / 5 Open (Bugs 2.7.1–2.7.44, 2.7.46–2.7.63,
+  2.7.65–2.7.71, 2.7.73–2.7.87, 2.7.92–2.7.93 Resolved; Bugs 2.7.45, 2.7.64,
+  2.7.72 Rejected; 5 Open: 2.7.88–2.7.91, 2.7.94).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.7.1: Unreachable File Save (Ctrl+S) Due to Dispatch Collision**:
     - *Symptom*: Pressing `Ctrl+S` moves cursor left instead of saving file.
@@ -3279,7 +3279,7 @@ have been resolved and archived.
        and post-browser notifications. Validated via Step 61 in
        `test_editor.py`
        (`test_bug_2_7_92_screen_transition_and_popup_debris_cleanup`).
-  - [ ] **Bug 2.7.93: Splash Screen Missing `[^O]`/`[^S]`/`[3]` Labels,
+  - [x] **Bug 2.7.93: Splash Screen Missing `[^O]`/`[^S]`/`[3]` Labels,
     Flush-Left Title/Menu Alignment & Hardcoded Diagnostics**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.2, 11.2, 14.1, 15.1.
     - *Issue*: In `ports/python/se/editor.py:913-1040` (`action_splash_screen`)
@@ -3323,6 +3323,23 @@ have been resolved and archived.
       `Plugin System` from `self.config` (and adapt `RAM Drive`/`Max Lines` per
       Section 15.1.5), and blank Field 4 (or show `Free: <N> KB`) on non-editor
       screens.
+    - *Resolution*:
+      1. Updated `action_splash_screen()` in `ports/python/se/editor.py` to
+         include `or  [^O]`, `or  [^S]`, and
+         `"  type   [3]              set native"`, apply canonical relative
+         indentation (`11` leading spaces on `"           SE - Screen Editor"`,
+         `2` leading spaces on `"  type   ..."` rows, and `0` leading spaces on
+         diagnostic rows), and dynamically format `Plugin System`
+         (`[Operational]`, `[On Demand]`, `[Disabled]`) and `RAM Drive`
+         (`[Preserved (Active)]`, `[Overwritten (Max RAM)]`,
+         `[Hibernated (Temp Image)]`, `[None Detected]`) from `self.config`.
+      2. Updated `render_centered_workspace()`, `render_directory_workspace()`,
+         and `render_status_bar()` in `ports/python/se/ui.py` to center the
+         Splash Screen block at width `40` (`left_col = 21` in `80x24`, `41` in
+         `120x40`) and render a blank 15-character Field 4
+         (`"                 |"`) on non-editor screens.
+      3. Verified via Step 62 in `ports/python/tests/test_editor.py`
+         (`test_bug_2_7_93_splash_screen_labels_alignment_and_diagnostics`).
   - [ ] **Bug 2.7.94: About Screen Outdated Version/AI Attribution &
     Flush-Left Line Alignment**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.

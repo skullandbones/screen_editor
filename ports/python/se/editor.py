@@ -934,27 +934,46 @@ class Editor:
                     max_lines_str = "32,768 lines"
                 else:
                     max_lines_str = f"{self.config.max_lines} lines"
+                cur_ram = self.config.get("RAMDRIVE", "PRESERVE").upper()
+                if cur_ram in ("DISABLED", "NONE", "OFF"):
+                    ram_line = "RAM Drive     : [None Detected]"
+                elif cur_ram in ("OVERWRITE", "ENABLED"):
+                    ram_line = "RAM Drive (A:): [Overwritten (Max RAM)]"
+                elif cur_ram == "HIBERNATE":
+                    ram_line = "RAM Drive (A:): [Hibernated (Temp Image)]"
+                else:
+                    ram_line = "RAM Drive (A:): [Preserved (Active)]"
+
+                cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
+                if cur_plg in ("DISABLED", "OFF"):
+                    plg_line = "Plugin System : [Disabled]"
+                elif cur_plg in ("DEMAND", "ONDEMAND"):
+                    plg_line = "Plugin System : [On Demand]"
+                else:
+                    plg_line = "Plugin System : [Operational]"
+
                 lines = [
-                    "SE - Screen Editor",
+                    "           SE - Screen Editor",
                     "",
-                    "type   [E]  or  [Enter] to edit",
-                    "type   [N]              to new file",
-                    "type   [O]              to open file",
-                    "type   [S]              to save file",
-                    "type   [W]  or  [^W]    to close file",
-                    "type   [L]  or  [^L]    to goto line",
-                    "type   [A]              for about",
-                    "type   [M]              for memory info",
-                    "type   [P]              for plugins",
-                    "type   [^P]             for context plugin menu",
-                    "type   [C]              to configure",
-                    "type   [1]              set 80x24",
-                    "type   [2]              set 120x40",
-                    "type   [Q]  or  [^Q]    to exit",
+                    "  type   [E]  or  [Enter] to edit",
+                    "  type   [N]              to new file",
+                    "  type   [O]  or  [^O]    to open file",
+                    "  type   [S]  or  [^S]    to save file",
+                    "  type   [W]  or  [^W]    to close file",
+                    "  type   [L]  or  [^L]    to goto line",
+                    "  type   [A]              for about",
+                    "  type   [M]              for memory info",
+                    "  type   [P]              for plugins",
+                    "  type   [^P]             for context plugin menu",
+                    "  type   [C]              to configure",
+                    "  type   [1]              set 80x24",
+                    "  type   [2]              set 120x40",
+                    "  type   [3]              set native",
+                    "  type   [Q]  or  [^Q]    to exit",
                     "",
                     f"Active Screen : [{geom_tag}]",
-                    "RAM Drive (A:): [Preserved (Active)]",
-                    "Plugin System : [Operational]",
+                    ram_line,
+                    plg_line,
                     f"Max Lines     : [{max_lines_str}]",
                 ]
                 geom = f"{self.terminal.cols}x{self.terminal.rows}"

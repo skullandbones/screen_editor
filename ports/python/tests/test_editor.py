@@ -514,12 +514,13 @@ class TestEditor(unittest.TestCase):
 
         # Verify canonical commands
         expected_commands = [
-            "type   [E]  or  [Enter] to edit",
-            "type   [O]              to open file",
-            "type   [S]              to save file",
-            "type   [C]              to configure",
-            "type   [P]              for plugins",
-            "type   [Q]  or  [^Q]    to exit",
+            "  type   [E]  or  [Enter] to edit",
+            "  type   [O]  or  [^O]    to open file",
+            "  type   [S]  or  [^S]    to save file",
+            "  type   [C]              to configure",
+            "  type   [P]              for plugins",
+            "  type   [3]              set native",
+            "  type   [Q]  or  [^Q]    to exit",
         ]
         for cmd in expected_commands:
             self.assertIn(cmd, splash_text)
@@ -1980,12 +1981,12 @@ class TestEditor(unittest.TestCase):
             )
         )
 
-        # 1. Verify 21 lines and <= 50 column width
+        # 1. Verify 22 lines (21 baseline + [3] set native) and <= 50 cols
         self.editor.terminal.get_key = MagicMock(return_value="e")
         self.editor.action_splash_screen()
         self.assertEqual(len(rendered_lines_list), 1)
         lines = rendered_lines_list[0]
-        self.assertEqual(len(lines), 21)
+        self.assertEqual(len(lines), 22)
         for idx, line in enumerate(lines):
             self.assertLessEqual(
                 len(line),
@@ -2337,11 +2338,11 @@ class TestEditor(unittest.TestCase):
         self.assertEqual(len(captured), 1)
         lines = captured[0]
 
-        # 1. Height is exactly 21 lines
-        self.assertEqual(len(lines), 21)
+        # 1. Height is 22 lines (21 baseline + [3] set native on Linux)
+        self.assertEqual(len(lines), 22)
 
         # 2. Clean header mandate: Row 0 has title, no version/language
-        self.assertEqual(lines[0], "SE - Screen Editor")
+        self.assertEqual(lines[0], "           SE - Screen Editor")
         self.assertEqual(lines[1], "")
         for line in lines:
             self.assertNotIn("Version", line)
@@ -2350,10 +2351,10 @@ class TestEditor(unittest.TestCase):
             self.assertNotIn("Enter option:", line)
 
         # 3. 4 diagnostic status lines at bottom
-        self.assertTrue(lines[17].startswith("Active Screen : ["))
-        self.assertEqual(lines[18], "RAM Drive (A:): [Preserved (Active)]")
-        self.assertEqual(lines[19], "Plugin System : [Operational]")
-        self.assertTrue(lines[20].startswith("Max Lines     : ["))
+        self.assertTrue(lines[-4].startswith("Active Screen : ["))
+        self.assertEqual(lines[-3], "RAM Drive (A:): [Preserved (Active)]")
+        self.assertEqual(lines[-2], "Plugin System : [Operational]")
+        self.assertTrue(lines[-1].startswith("Max Lines     : ["))
 
         print(
             "[+] Step 49: Canonical 21-line splash template verified.",
@@ -2728,10 +2729,10 @@ class TestEditor(unittest.TestCase):
         self.editor.action_splash_screen()
         self.assertEqual(len(captured), 3)
         self.assertEqual(
-            captured[1][17], "Active Screen : [80x24 (Classic Terminal)]"
+            captured[1][-4], "Active Screen : [80x24 (Classic Terminal)]"
         )
         self.assertEqual(
-            captured[2][17], "Active Screen : [120x40 (Modern Default)]"
+            captured[2][-4], "Active Screen : [120x40 (Modern Default)]"
         )
 
         print(
@@ -2859,6 +2860,112 @@ class TestEditor(unittest.TestCase):
 
         print(
             "[+] Step 61: Screen transition & pop-up debris cleanup verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_93_splash_screen_labels_alignment_and_diagnostics(self):
+        """Step 62: Verify Splash labels, alignment & diagnostics (2.7.93)."""
+        print(
+            "[*] Step 62: Testing Splash labels, alignment & diagnostics...",
+            flush=True,
+        )
+        cols, rows = 80, 24
+        self.editor.terminal.cols = cols
+        self.editor.terminal.rows = rows
+        grid = [[" " for _ in range(cols)] for _ in range(rows)]
+        cur = [1, 1]
+
+        def sim_locate(r, c):
+            cur[0] = max(1, min(rows, r))
+            cur[1] = max(1, min(cols, c))
+
+        def sim_write(text):
+            if text.startswith("\x1b"):
+                if text == "\x1b[K":
+                    r_idx = cur[0] - 1
+                    for c_idx in range(cur[1] - 1, cols):
+                        grid[r_idx][c_idx] = " "
+                return
+            r_idx = cur[0] - 1
+            for ch in text:
+                c_idx = cur[1] - 1
+                if 0 <= r_idx < rows and 0 <= c_idx < cols:
+                    grid[r_idx][c_idx] = ch
+                cur[1] = min(cols + 1, cur[1] + 1)
+
+        def sim_clear_eol():
+            r_idx = cur[0] - 1
+            if 0 <= r_idx < rows:
+                for c_idx in range(cur[1] - 1, cols):
+                    grid[r_idx][c_idx] = " "
+
+        self.editor.terminal.locate = sim_locate
+        self.editor.terminal.write = sim_write
+        self.editor.terminal.clear_eol = sim_clear_eol
+        self.editor.terminal.flush = MagicMock()
+
+        # 1. Render Splash in 80x24 and verify labels, indentation & Field 4
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        body_rows = ["".join(r).rstrip() for r in grid[:-1]]
+        status_row = "".join(grid[-1])
+
+        title_rows = [r for r in body_rows if "SE - Screen Editor" in r]
+        self.assertEqual(len(title_rows), 1)
+        # Title at Col 32 (30 spaces after column 1 '~')
+        self.assertEqual(
+            title_rows[0], "~" + (" " * 30) + "SE - Screen Editor"
+        )
+
+        open_rows = [r for r in body_rows if "to open file" in r]
+        save_rows = [r for r in body_rows if "to save file" in r]
+        native_rows = [r for r in body_rows if "set native" in r]
+        self.assertEqual(
+            open_rows[0],
+            "~" + (" " * 21) + "type   [O]  or  [^O]    to open file",
+        )
+        self.assertEqual(
+            save_rows[0],
+            "~" + (" " * 21) + "type   [S]  or  [^S]    to save file",
+        )
+        self.assertEqual(
+            native_rows[0],
+            "~" + (" " * 21) + "type   [3]              set native",
+        )
+
+        # Diagnostics at Col 21 (19 spaces after column 1 '~')
+        act_rows = [r for r in body_rows if "Active Screen :" in r]
+        self.assertTrue(act_rows[0].startswith("~" + (" " * 19) + "Active"))
+
+        # Status Bar Field 4 on Splash and About must be blank (not ^K hint)
+        self.assertNotIn("^K: Editor keys", status_row)
+        self.assertIn("|                 | Line", status_row)
+
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_about()
+        about_status = "".join(grid[-1])
+        self.assertNotIn("^K: Editor keys", about_status)
+        self.assertIn("|                 | Line", about_status)
+
+        # 2. Verify dynamic Plugin System and RAM Drive diagnostics
+        self.editor.config.set("PLUGIN", "DEMAND")
+        self.editor.config.set("RAMDRIVE", "DISABLED")
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        dump_demand = "\n".join("".join(r) for r in grid[:-1])
+        self.assertIn("Plugin System : [On Demand]", dump_demand)
+        self.assertIn("RAM Drive     : [None Detected]", dump_demand)
+
+        self.editor.config.set("PLUGIN", "DISABLED")
+        self.editor.config.set("RAMDRIVE", "OVERWRITE")
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        dump_disabled = "\n".join("".join(r) for r in grid[:-1])
+        self.assertIn("Plugin System : [Disabled]", dump_disabled)
+        self.assertIn("RAM Drive (A:): [Overwritten (Max RAM)]", dump_disabled)
+
+        print(
+            "[+] Step 62: Splash labels, alignment & diagnostics verified.",
             flush=True,
         )
 
