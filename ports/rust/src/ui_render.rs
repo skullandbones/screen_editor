@@ -632,26 +632,37 @@ pub fn show_help_screen() {
 }
 
 const ABOUT_LINES: [&str; 9] = [
-    "                  SE - Screen Editor                  ",
-    "            version 1.1.0 (2026-10-09) (Rust)         ",
-    "                   by Dean Jenkins                    ",
+    "               SE - Screen Editor",
+    "        version 1.1.3 (2026-10-17) (Rust)",
+    "                 by Dean Jenkins",
     "",
-    "   Google Antigravity 2.19.1 & Gemini FLASH 3.8 high  ",
-    "                  created the code                    ",
-    "      Open source software under the MIT License      ",
+    "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
     "",
-    "              Press any key to continue               ",
+    "   Open source software under the MIT License",
+    "",
+    "            Press any key to continue",
 ];
 
 pub fn show_about_screen() {
     let prev_splash = get_is_splash_screen();
     set_is_splash_screen(1);
     hal_console_set_cursor_vis(0);
-    render_centered_text_block(&ABOUT_LINES, 54);
-    while hal_keyboard_get_key() == 0 {}
+    loop {
+        render_centered_text_block(&ABOUT_LINES, 48);
+        let mut k = hal_keyboard_get_key();
+        while k == 0 {
+            k = hal_keyboard_get_key();
+        }
+        if k == KEY_CTRL_P {
+            show_plugin_palette();
+            continue;
+        }
+        break;
+    }
+    clear_screen();
     set_is_splash_screen(prev_splash);
-    hal_console_set_cursor_vis(1);
     if prev_splash == 0 {
+        hal_console_set_cursor_vis(1);
         render_all_lines();
     }
 }

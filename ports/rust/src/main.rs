@@ -28,7 +28,7 @@ use std::env;
 
 fn print_usage(prog: &str) {
     println!(
-        "SE.COM {} - Screen Editor (Linux Native Profile)",
+        "SE.COM ({}) - Screen Editor (Linux Native Profile)",
         SE_VERSION_STR
     );
     println!("Usage: {} [options] [filename]", prog);

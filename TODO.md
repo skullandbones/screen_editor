@@ -1933,8 +1933,7 @@ have been resolved and archived.
   buffer, WordStar / SE keybindings, `SE.CFG` parser, dynamic plugin discovery.
 - **Build Target**: `make se-rs` / `make se-rust` (produces `se-rs`, verified
   via `make test-rust`).
-- **Status**: Active / 1 Open (Bug 2.6.6 Open; Bugs 2.6.1–2.6.5
-  Resolved).
+- **Status**: Complete / Production Ready (Bugs 2.6.1–2.6.6 Resolved; 0 Open).
 - **Active Defects & Issue Tracking**:
   - [x] **Bug 2.6.1: Line Feed (`\n`, `0x0A`) Not Accepted as Enter in Modals**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, Section 8.3.
@@ -2045,7 +2044,7 @@ have been resolved and archived.
       command dispatchers, remove the blocking `':'` prefix intercept and
       spurious splash fallback, and format canonical diagnostic labels.
       Validated via `test_bug_2_4_51_splash_labels_alignment_and_status_bar`.
-  - [ ] **Bug 2.6.6: About Screen Version, AI Attribution, Spurious
+  - [x] **Bug 2.6.6: About Screen Version, AI Attribution, Spurious
     `"created the code"` Row & Centering**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2.
     - *Issue*: In `ports/rust/src/ui_render.rs:615-638` (`ABOUT_LINES` and
@@ -2080,6 +2079,17 @@ have been resolved and archived.
       `ABOUT_LINES[5]` (`"created the code"`) with an empty string `""`, center
       each line individually using `(active_cols - 1 - line.len()) / 2` spaces
       after `~`, and only restore cursor visibility when `prev_splash == 0`.
+    - *Resolution*: Updated `ABOUT_LINES` and `show_about_screen()` in
+      `ports/rust/src/ui_render.rs`, `SE_VERSION_STR` in
+      `ports/rust/src/config.rs`, `print_usage()` in `ports/rust/src/main.rs`,
+      and `ports/rust/Cargo.toml` to `v1.1.3` (`2026-10-17`), updated AI
+      attribution to `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`,
+      replaced the spurious `"created the code"` row with a blank `~` line,
+      aligned all lines to canonical per-line centered offsets at width 48
+      without trailing spaces, added `Ctrl+P` plugin palette support, and kept
+      the cursor hidden when returning to Splash. Validated via
+      `test_bug_2_4_44_about_screen_canonical_layout` and
+      `test_bug_2_4_52_about_screen_version_attribution_and_centering`.
 
 ### 2.7 Profile 7: Linux Native Python Profile (`ports/python/`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5

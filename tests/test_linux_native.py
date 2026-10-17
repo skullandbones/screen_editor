@@ -3390,17 +3390,13 @@ def test_bug_2_4_44_about_screen_canonical_layout():
         )
 
         # 2. Canonical version with build date and predominant language
-        if USE_RUST:
-            expected_ver = "version 1.1.0 (2026-10-09) (Rust)"
-            expected_credits = (
-                "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"
-            )
-        else:
-            lang_tag = "(Python)" if PY_MODE else "(C)"
-            expected_ver = f"version 1.1.3 (2026-10-17) {lang_tag}"
-            expected_credits = (
-                "Google Antigravity 2.23.0 & Gemini 4 Argon Medium"
-            )
+        lang_tag = (
+            "(Rust)" if USE_RUST else ("(Python)" if PY_MODE else "(C)")
+        )
+        expected_ver = f"version 1.1.3 (2026-10-17) {lang_tag}"
+        expected_credits = (
+            "Google Antigravity 2.23.0 & Gemini 4 Argon Medium"
+        )
         assert expected_ver in about_out, (
             f"Expected '{expected_ver}' in:\n{about_out}"
         )
@@ -4161,7 +4157,7 @@ def test_bug_2_4_52_about_screen_version_attribution_and_centering():
     )
 
     # 1. Verify CLI --help version banner is updated to v1.1.3
-    if not PY_MODE and not USE_RUST:
+    if not PY_MODE:
         res = subprocess.run(
             [SE_LINUX_BIN, "--help"],
             capture_output=True,
@@ -4193,9 +4189,14 @@ def test_bug_2_4_52_about_screen_version_attribution_and_centering():
         about_raw = read_all_available(master, 0.4)
         about_out = about_raw.decode("utf-8", errors="replace")
 
+        ver_row = (
+            "\x1b[9;17H        version 1.1.3 (2026-10-17) (Rust)"
+            if USE_RUST
+            else "\x1b[9;17H         version 1.1.3 (2026-10-17) (C)"
+        )
         expected_rows = [
             "\x1b[8;17H               SE - Screen Editor",
-            "\x1b[9;17H         version 1.1.3 (2026-10-17) (C)",
+            ver_row,
             "\x1b[10;17H                 by Dean Jenkins",
             "\x1b[11;1H~\x1b[K",
             "\x1b[12;17HGoogle Antigravity 2.23.0 & Gemini 4 Argon Medium",
