@@ -67,12 +67,16 @@ def progress_callback(total_packets, success_count, error_count):
     sys.stdout.flush()
 
 
+# Binaries targeting non-RomWBW platforms (e.g. ZX Spectrum Next CP/M)
+EXCLUDED_BINARIES = {"SE_NEXT.COM"}
+
+
 def discover_binaries(base_dir, com_only=False):
     """
     Discovers all *.COM files and binary plugins (.OVL and .PRL)
-    across the git repository (excluding .git and .venv).
-    Only considers uppercase binaries that comply with CP/M 8:3 naming conventions.
-    Deduplicates by filename so each binary is transferred once.
+    across the git repository (excluding .git, .venv, and EXCLUDED_BINARIES).
+    Only considers uppercase binaries that comply with CP/M 8:3 naming
+    conventions. Deduplicates by filename so each binary is transferred once.
     """
     excluded_dirs = {".git", ".venv", "__pycache__"}
     target_exts = {".COM"} if com_only else {".COM", ".OVL", ".PRL"}
@@ -84,6 +88,8 @@ def discover_binaries(base_dir, com_only=False):
         dirs[:] = [d for d in dirs if d not in excluded_dirs]
 
         for fname in files:
+            if fname.upper() in EXCLUDED_BINARIES:
+                continue
             _, ext = os.path.splitext(fname)
             # Only consider uppercase target extensions (case-sensitive)
             if ext not in target_exts:
@@ -437,8 +443,14 @@ def main():
         target_files = []
         for f in raw_files:
             bname = os.path.basename(f)
-            if not is_cpm_83_compliant(bname):
-                print(f"[-] Refusing non-compliant CP/M 8:3 file: {bname} ({f})")
+            if bname.upper() in EXCLUDED_BINARIES:
+                print(
+                    f"[-] Skipping {bname}: incompatible with RomWBW CP/M"
+                )
+            elif not is_cpm_83_compliant(bname):
+                print(
+                    f"[-] Refusing non-compliant CP/M 8:3 file: {bname} ({f})"
+                )
             else:
                 target_files.append(f)
     else:

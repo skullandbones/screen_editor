@@ -514,12 +514,13 @@ class TestEditor(unittest.TestCase):
 
         # Verify canonical commands
         expected_commands = [
-            "type   [E]  or  [Enter] to edit",
-            "type   [O]              to open file",
-            "type   [S]              to save file",
-            "type   [C]              to configure",
-            "type   [P]              for plugins",
-            "type   [Q]  or  [^Q]    to exit",
+            "  type   [E]  or  [Enter] to edit",
+            "  type   [O]  or  [^O]    to open file",
+            "  type   [S]  or  [^S]    to save file",
+            "  type   [C]              to configure",
+            "  type   [P]              for plugins",
+            "  type   [3]              set native",
+            "  type   [Q]  or  [^Q]    to exit",
         ]
         for cmd in expected_commands:
             self.assertIn(cmd, splash_text)
@@ -581,7 +582,7 @@ class TestEditor(unittest.TestCase):
         self.editor.action_about()
         about_text = "\n".join(rendered_lines)
         self.assertIn("SE - Screen Editor", about_text)
-        self.assertIn("version 1.1.0 (2026-10-09) (Python)", about_text)
+        self.assertIn("version 1.1.3 (2026-10-17) (Python)", about_text)
         self.assertIn("by Dean Jenkins", about_text)
         self.assertIn("MIT License", about_text)
         self.assertIn("Press any key to continue", about_text)
@@ -1980,12 +1981,12 @@ class TestEditor(unittest.TestCase):
             )
         )
 
-        # 1. Verify 21 lines and <= 50 column width
+        # 1. Verify 22 lines (21 baseline + [3] set native) and <= 50 cols
         self.editor.terminal.get_key = MagicMock(return_value="e")
         self.editor.action_splash_screen()
         self.assertEqual(len(rendered_lines_list), 1)
         lines = rendered_lines_list[0]
-        self.assertEqual(len(lines), 21)
+        self.assertEqual(len(lines), 22)
         for idx, line in enumerate(lines):
             self.assertLessEqual(
                 len(line),
@@ -2337,11 +2338,11 @@ class TestEditor(unittest.TestCase):
         self.assertEqual(len(captured), 1)
         lines = captured[0]
 
-        # 1. Height is exactly 21 lines
-        self.assertEqual(len(lines), 21)
+        # 1. Height is 22 lines (21 baseline + [3] set native on Linux)
+        self.assertEqual(len(lines), 22)
 
         # 2. Clean header mandate: Row 0 has title, no version/language
-        self.assertEqual(lines[0], "SE - Screen Editor")
+        self.assertEqual(lines[0], "           SE - Screen Editor")
         self.assertEqual(lines[1], "")
         for line in lines:
             self.assertNotIn("Version", line)
@@ -2350,10 +2351,10 @@ class TestEditor(unittest.TestCase):
             self.assertNotIn("Enter option:", line)
 
         # 3. 4 diagnostic status lines at bottom
-        self.assertTrue(lines[17].startswith("Active Screen : ["))
-        self.assertEqual(lines[18], "RAM Drive (A:): [Preserved (Active)]")
-        self.assertEqual(lines[19], "Plugin System : [Operational]")
-        self.assertTrue(lines[20].startswith("Max Lines     : ["))
+        self.assertTrue(lines[-4].startswith("Active Screen : ["))
+        self.assertEqual(lines[-3], "RAM Drive (A:): [Preserved (Active)]")
+        self.assertEqual(lines[-2], "Plugin System : [Operational]")
+        self.assertTrue(lines[-1].startswith("Max Lines     : ["))
 
         print(
             "[+] Step 49: Canonical 21-line splash template verified.",
@@ -2373,7 +2374,7 @@ class TestEditor(unittest.TestCase):
         self.editor.terminal.get_key = MagicMock(return_value=" ")
         self.editor.action_about()
         about_str = "\n".join(rendered)
-        self.assertIn("version 1.1.0 (2026-10-09) (Python)", about_str)
+        self.assertIn("version 1.1.3 (2026-10-17) (Python)", about_str)
         self.assertNotIn("(Linux)", about_str)
         print(
             "[+] Step 50: About screen predominant language verified.",
@@ -2729,10 +2730,10 @@ class TestEditor(unittest.TestCase):
         self.editor.action_splash_screen()
         self.assertEqual(len(captured), 3)
         self.assertEqual(
-            captured[1][17], "Active Screen : [80x24 (Classic Terminal)]"
+            captured[1][-4], "Active Screen : [80x24 (Classic Terminal)]"
         )
         self.assertEqual(
-            captured[2][17], "Active Screen : [120x40 (Modern Default)]"
+            captured[2][-4], "Active Screen : [120x40 (Modern Default)]"
         )
 
         print(
@@ -2740,10 +2741,313 @@ class TestEditor(unittest.TestCase):
             flush=True,
         )
 
+    def test_bug_2_7_92_screen_transition_and_popup_debris_cleanup(self):
+        """Step 61: Verify screen/modal debris cleanup (Bug 2.7.92)."""
+        print(
+            "[*] Step 61: Testing screen transition & pop-up debris cleanup...",
+            flush=True,
+        )
+        cols, rows = 80, 24
+        self.editor.terminal.cols = cols
+        self.editor.terminal.rows = rows
+        grid = [[" " for _ in range(cols)] for _ in range(rows)]
+        cur = [1, 1]
+
+        def sim_locate(r, c):
+            cur[0] = max(1, min(rows, r))
+            cur[1] = max(1, min(cols, c))
+
+        def sim_write(text):
+            # Ignore raw ANSI attribute escape sequences in character grid
+            if text.startswith("\x1b"):
+                if text == "\x1b[K":
+                    r_idx = cur[0] - 1
+                    for c_idx in range(cur[1] - 1, cols):
+                        grid[r_idx][c_idx] = " "
+                elif "\x1b[2J" in text:
+                    for r_idx in range(rows):
+                        for c_idx in range(cols):
+                            grid[r_idx][c_idx] = " "
+                    cur[0], cur[1] = 1, 1
+                return
+            r_idx = cur[0] - 1
+            for ch in text:
+                c_idx = cur[1] - 1
+                if 0 <= r_idx < rows and 0 <= c_idx < cols:
+                    grid[r_idx][c_idx] = ch
+                cur[1] = min(cols + 1, cur[1] + 1)
+
+        def sim_clear_eol():
+            r_idx = cur[0] - 1
+            if 0 <= r_idx < rows:
+                for c_idx in range(cur[1] - 1, cols):
+                    grid[r_idx][c_idx] = " "
+
+        self.editor.terminal.locate = sim_locate
+        self.editor.terminal.write = sim_write
+        self.editor.terminal.clear_eol = sim_clear_eol
+        self.editor.terminal.flush = MagicMock()
+
+        # 1. Fill editor with 23 lines of 78 'X' chars and render editor
+        self.editor.buffer.lines = ["X" * 78 for _ in range(23)]
+        self.editor.renderer.render_editor(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        self.assertEqual(grid[5][3], "X")
+
+        # Transition from full editor to narrower About screen (54 cols)
+        # and verify columns 2..left_col-1 have zero leftover 'X' debris
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_about()
+        for r_idx in range(rows - 1):
+            row_str = "".join(grid[r_idx])
+            self.assertEqual(row_str[0], "~")
+            self.assertNotIn(
+                "X",
+                row_str,
+                f"Leftover editor debris on row {r_idx + 1}: {row_str!r}",
+            )
+
+        # 2. Transition from wide Help screen (70 cols) to Splash (50 cols)
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_help()
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        for r_idx in range(rows - 1):
+            row_str = "".join(grid[r_idx])
+            # Splash content starts at left_col >= 16; cols 1..14 (0-indexed)
+            # must be blank spaces free of Help screen text
+            self.assertEqual(row_str[0], "~")
+            self.assertEqual(
+                row_str[1:15].strip(),
+                "",
+                f"Leftover Help debris on Splash row {r_idx + 1}: {row_str!r}",
+            )
+
+        # 3. Sequential pop-ups in action_replace(): 8-row input modal
+        # followed by 7-row notification must not leave row 16 border debris
+        self.editor.buffer.lines = ["alpha beta", "second line"]
+        self.editor.renderer.render_editor(
+            self.editor.buffer, geometry_str="80x24"
+        )
+        rep_keys = (
+            list("alpha")
+            + [KEY_ENTER]
+            + list("gamma")
+            + [KEY_ENTER, KEY_ENTER]
+        )
+        self.editor.terminal.get_key = MagicMock(side_effect=rep_keys)
+        self.editor.action_replace()
+        # While Replace Complete (7 rows: rows 9..15, 0-indexed 8..14) is up,
+        # row 16 (0-indexed 15) must be clean tilde row, not '+---...---+'
+        row_16 = "".join(grid[15]).rstrip()
+        self.assertEqual(
+            row_16,
+            "~",
+            f"Stale 8-row input modal border left on row 16: {row_16!r}",
+        )
+
+        # 4. Save File workspace -> Save Complete notification must redraw
+        # editor first so Directory Browser headers do not remain as debris
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "clean_save.txt")
+            save_keys = list(save_path) + [KEY_ENTER, KEY_ENTER]
+            self.editor.terminal.get_key = MagicMock(side_effect=save_keys)
+            self.editor.action_save_file()
+            screen_dump = "\n".join("".join(r) for r in grid[:-1])
+            self.assertIn("Save Complete", screen_dump)
+            self.assertNotIn("SAVE FILE (DIRECTORY", screen_dump)
+            self.assertIn("gamma beta", screen_dump)
+
+        print(
+            "[+] Step 61: Screen transition & pop-up debris cleanup verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_93_splash_screen_labels_alignment_and_diagnostics(self):
+        """Step 62: Verify Splash labels, alignment & diagnostics (2.7.93)."""
+        print(
+            "[*] Step 62: Testing Splash labels, alignment & diagnostics...",
+            flush=True,
+        )
+        cols, rows = 80, 24
+        self.editor.terminal.cols = cols
+        self.editor.terminal.rows = rows
+        grid = [[" " for _ in range(cols)] for _ in range(rows)]
+        cur = [1, 1]
+
+        def sim_locate(r, c):
+            cur[0] = max(1, min(rows, r))
+            cur[1] = max(1, min(cols, c))
+
+        def sim_write(text):
+            if text.startswith("\x1b"):
+                if text == "\x1b[K":
+                    r_idx = cur[0] - 1
+                    for c_idx in range(cur[1] - 1, cols):
+                        grid[r_idx][c_idx] = " "
+                return
+            r_idx = cur[0] - 1
+            for ch in text:
+                c_idx = cur[1] - 1
+                if 0 <= r_idx < rows and 0 <= c_idx < cols:
+                    grid[r_idx][c_idx] = ch
+                cur[1] = min(cols + 1, cur[1] + 1)
+
+        def sim_clear_eol():
+            r_idx = cur[0] - 1
+            if 0 <= r_idx < rows:
+                for c_idx in range(cur[1] - 1, cols):
+                    grid[r_idx][c_idx] = " "
+
+        self.editor.terminal.locate = sim_locate
+        self.editor.terminal.write = sim_write
+        self.editor.terminal.clear_eol = sim_clear_eol
+        self.editor.terminal.flush = MagicMock()
+
+        # 1. Render Splash in 80x24 and verify labels, indentation & Field 4
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        body_rows = ["".join(r).rstrip() for r in grid[:-1]]
+        status_row = "".join(grid[-1])
+
+        title_rows = [r for r in body_rows if "SE - Screen Editor" in r]
+        self.assertEqual(len(title_rows), 1)
+        # Title at Col 32 (30 spaces after column 1 '~')
+        self.assertEqual(
+            title_rows[0], "~" + (" " * 30) + "SE - Screen Editor"
+        )
+
+        open_rows = [r for r in body_rows if "to open file" in r]
+        save_rows = [r for r in body_rows if "to save file" in r]
+        native_rows = [r for r in body_rows if "set native" in r]
+        self.assertEqual(
+            open_rows[0],
+            "~" + (" " * 21) + "type   [O]  or  [^O]    to open file",
+        )
+        self.assertEqual(
+            save_rows[0],
+            "~" + (" " * 21) + "type   [S]  or  [^S]    to save file",
+        )
+        self.assertEqual(
+            native_rows[0],
+            "~" + (" " * 21) + "type   [3]              set native",
+        )
+
+        # Diagnostics at Col 21 (19 spaces after column 1 '~')
+        act_rows = [r for r in body_rows if "Active Screen :" in r]
+        self.assertTrue(act_rows[0].startswith("~" + (" " * 19) + "Active"))
+
+        # Status Bar Field 4 on Splash and About must be blank (not ^K hint)
+        self.assertNotIn("^K: Editor keys", status_row)
+        self.assertIn("|                 | Line", status_row)
+
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_about()
+        about_status = "".join(grid[-1])
+        self.assertNotIn("^K: Editor keys", about_status)
+        self.assertIn("|                 | Line", about_status)
+
+        # 2. Verify dynamic Plugin System and RAM Drive diagnostics
+        self.editor.config.set("PLUGIN", "DEMAND")
+        self.editor.config.set("RAMDRIVE", "DISABLED")
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        dump_demand = "\n".join("".join(r) for r in grid[:-1])
+        self.assertIn("Plugin System : [On Demand]", dump_demand)
+        self.assertIn("RAM Drive     : [None Detected]", dump_demand)
+
+        self.editor.config.set("PLUGIN", "DISABLED")
+        self.editor.config.set("RAMDRIVE", "OVERWRITE")
+        self.editor.terminal.get_key = MagicMock(return_value="e")
+        self.editor.action_splash_screen()
+        dump_disabled = "\n".join("".join(r) for r in grid[:-1])
+        self.assertIn("Plugin System : [Disabled]", dump_disabled)
+        self.assertIn("RAM Drive (A:): [Overwritten (Max RAM)]", dump_disabled)
+
+        print(
+            "[+] Step 62: Splash labels, alignment & diagnostics verified.",
+            flush=True,
+        )
+
+    def test_bug_2_7_94_about_screen_version_attribution_and_centering(self):
+        """Step 63: Verify About version, attribution & centering (2.7.94)."""
+        print(
+            "[*] Step 63: Testing About version, attribution & centering...",
+            flush=True,
+        )
+        import se
+
+        self.assertEqual(se.__version__, "1.1.3")
+
+        cols, rows = 80, 24
+        self.editor.terminal.cols = cols
+        self.editor.terminal.rows = rows
+        grid = [[" " for _ in range(cols)] for _ in range(rows)]
+        cur = [1, 1]
+
+        def sim_locate(r, c):
+            cur[0] = max(1, min(rows, r))
+            cur[1] = max(1, min(cols, c))
+
+        def sim_write(text):
+            if text.startswith("\x1b"):
+                if text == "\x1b[K":
+                    r_idx = cur[0] - 1
+                    for c_idx in range(cur[1] - 1, cols):
+                        grid[r_idx][c_idx] = " "
+                return
+            r_idx = cur[0] - 1
+            for ch in text:
+                c_idx = cur[1] - 1
+                if 0 <= r_idx < rows and 0 <= c_idx < cols:
+                    grid[r_idx][c_idx] = ch
+                cur[1] = min(cols + 1, cur[1] + 1)
+
+        def sim_clear_eol():
+            r_idx = cur[0] - 1
+            if 0 <= r_idx < rows:
+                for c_idx in range(cur[1] - 1, cols):
+                    grid[r_idx][c_idx] = " "
+
+        self.editor.terminal.locate = sim_locate
+        self.editor.terminal.write = sim_write
+        self.editor.terminal.clear_eol = sim_clear_eol
+        self.editor.terminal.flush = MagicMock()
+
+        self.editor.terminal.get_key = MagicMock(return_value=" ")
+        self.editor.action_about()
+        body_rows = ["".join(r).rstrip() for r in grid[:-1]]
+
+        # Content block is 9 rows on Screen Rows 8..16 (0-indexed 7..15)
+        expected_lines = [
+            "SE - Screen Editor",
+            "version 1.1.3 (2026-10-17) (Python)",
+            "by Dean Jenkins",
+            "",
+            "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
+            "",
+            "Open source software under the MIT License",
+            "",
+            "Press any key to continue",
+        ]
+        for idx, text in enumerate(expected_lines):
+            row_str = body_rows[7 + idx]
+            if text:
+                left_pad = (cols - 1 - len(text)) // 2
+                self.assertEqual(
+                    row_str,
+                    "~" + (" " * left_pad) + text,
+                    f"About row {idx} miscentered: {row_str!r}",
+                )
+            else:
+                self.assertEqual(row_str, "~")
+
+        print(
+            "[+] Step 63: About version, attribution & centering verified.",
+            flush=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
-

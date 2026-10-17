@@ -373,10 +373,10 @@ KEY_TABLE_CAPS:
 	DB	'A', 'S', 'D', 'F', 'G'
 	; Row 2: Q, W, E, R, T
 	DB	'Q', 'W', 'E', 'R', 'T'
-	; Row 3: Edit(ESC), CapsLock, TrueVid, InvVid, Left(Arrow Left)
-	DB	KEY_ESCAPE, '2', '3', '4', KEY_CODE_LEFT
-	; Row 4: Delete(Del), Graph, Right, Up, Down
-	DB	KEY_DELETE, '9', KEY_CODE_RIGHT
+	; Row 3: Edit(ESC), CapsLock, TrueVid(Tab), InvVid(PgUp), Left(Arrow)
+	DB	KEY_ESCAPE, '2', KEY_TAB, KEY_CTRL_U, KEY_CODE_LEFT
+	; Row 4: Delete(Del), Graph(PgDn), Right, Up, Down
+	DB	KEY_DELETE, KEY_CTRL_V, KEY_CODE_RIGHT
 	DB	KEY_CODE_UP, KEY_CODE_DOWN
 	; Row 5: P, O, I, U, Y
 	DB	'P', 'O', 'I', 'U', 'Y'

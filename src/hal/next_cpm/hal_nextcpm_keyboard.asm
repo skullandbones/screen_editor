@@ -74,10 +74,55 @@ HAL_KEYBOARD_TRANSLATE:
 	PUSH BC
 	PUSH DE
 	PUSH HL
+	LD D,A				; Save raw BIOS keycode in D
+
+	; Check if Symbol Shift (EXTEND) is held: Row 7 (port $7FFE), bit 1
+	; If Symbol Shift is NOT held (bit 1 == 1), check dedicated Caps Shift
+	; keys: True Video (CS+3 -> Tab), Inv Video (CS+4 -> PgUp), and
+	; Graph (CS+9 -> PgDn).
+	LD BC,07FFEH
+	IN A,(C)
+	BIT 1,A
+	JR Z,HKT_DISPATCH_RAW		; Symbol Shift held (EXTEND) -> skip CS
+
+	; Check if Caps Shift is held: Row 0 (port $FEFE), bit 0
+	LD BC,0FEFEH
+	IN A,(C)
+	BIT 0,A
+	JR NZ,HKT_DISPATCH_RAW		; Caps Shift not held -> normal dispatch
+
+	; Caps Shift held without Symbol Shift: check Row 3 ($F7FE) for '3'/'4'
+	LD BC,0F7FEH
+	IN A,(C)
+	BIT 2,A
+	JR Z,HKT_RET_TAB		; CS + '3' (True Video) -> Tab (0x09)
+	BIT 3,A
+	JR Z,HKT_RET_PGUP		; CS + '4' (Inv Video) -> PgUp (0x15)
+
+	; Check Row 4 ($EFFE) for '9' (Graph)
+	LD BC,0EFFEH
+	IN A,(C)
+	BIT 1,A
+	JR Z,HKT_RET_PGDN		; CS + '9' (Graph) -> PgDn (0x16)
+
+HKT_DISPATCH_RAW:
+	LD A,D				; Restore raw BIOS keycode
 
 	; Preserve 0x7F (Delete) for forward and block deletion
 	CP NEXT_KEY_DELETE
-	JP Z,HKT_DONE
+	JR Z,HKT_DONE_EARLY
+
+	; Check True Video (Tab) / Ctrl+S (0x13)
+	CP 013H
+	JR Z,HKT_CHECK_TRUE_VID
+
+	; Check Inv Video (PgUp) / Ctrl+T (0x14)
+	CP 014H
+	JR Z,HKT_CHECK_INV_VID
+
+	; Check Graph (PgDn) / Ctrl+G (0x07)
+	CP 007H
+	JR Z,HKT_CHECK_GRAPH
 
 	; Check Right Arrow / Ctrl+F (0x06)
 	CP 006H
@@ -87,33 +132,75 @@ HAL_KEYBOARD_TRANSLATE:
 	CP 001H
 	JR Z,HKT_CHECK_LEFT
 
-	; Check Up Arrow: 0x1F (XBIOS) or 0x0B (Sinclair VT)
-	CP 01FH
-	JR Z,HKT_SET_UP
-	CP 00BH
-	JR Z,HKT_SET_UP
-
-	; Check Up Arrow / Ctrl+E (0x05)
-	CP 005H
-	JR Z,HKT_CHECK_UP
-
-	; Check Down Arrow: 0x1E (XBIOS)
-	CP 01EH
-	JR Z,HKT_SET_DOWN
-
-	; Check Down Arrow / Ctrl+X (0x18)
-	CP 018H
-	JR Z,HKT_CHECK_DOWN
-
-	; Check Down Arrow / Line Feed (0x0A)
-	CP 00AH
-	JR Z,HKT_CHECK_LF
-
 	; Check Left Arrow / Backspace (0x08)
 	CP 008H
 	JR Z,HKT_CHECK_BS
 
-	JP HKT_DONE
+	; Check Up Arrow (0x1F XBIOS)
+	CP 01FH
+	JP Z,HKT_SET_UP
+
+	; Check Up Arrow / Ctrl+E (0x05)
+	CP 005H
+	JP Z,HKT_CHECK_UP
+
+	; Check Ctrl+K / Up Arrow (0x0B)
+	CP 00BH
+	JP Z,HKT_CHECK_CTRL_K
+
+	; Check Down Arrow: 0x1E (XBIOS)
+	CP 01EH
+	JP Z,HKT_SET_DOWN
+
+	; Check Down Arrow / Ctrl+X (0x18)
+	CP 018H
+	JP Z,HKT_CHECK_DOWN
+
+	; Check Down Arrow / Line Feed (0x0A)
+	CP 00AH
+	JP Z,HKT_CHECK_LF
+
+HKT_DONE_EARLY:
+	JR HKT_DONE
+
+HKT_CHECK_TRUE_VID:
+	; Is key 'S' physically pressed? Row 1 (port $FDFE), bit 1
+	LD BC,0FDFEH
+	IN A,(C)
+	BIT 1,A
+	JR Z,HKT_IS_CTRL_S		; 'S' pressed (bit 1 == 0) -> Ctrl+S
+HKT_RET_TAB:
+	LD A,009H			; True Video -> Tab (0x09)
+	JR HKT_DONE
+HKT_IS_CTRL_S:
+	LD A,013H			; Normal Ctrl+S (Save File)
+	JR HKT_DONE
+
+HKT_CHECK_INV_VID:
+	; Is key 'T' physically pressed? Row 2 (port $FBFE), bit 4
+	LD BC,0FBFEH
+	IN A,(C)
+	BIT 4,A
+	JR Z,HKT_IS_CTRL_T		; 'T' pressed (bit 4 == 0) -> Ctrl+T
+HKT_RET_PGUP:
+	LD A,KEY_CTRL_U			; Inv Video -> Page Up (0x15)
+	JR HKT_DONE
+HKT_IS_CTRL_T:
+	LD A,014H			; Normal Ctrl+T (Top of File)
+	JR HKT_DONE
+
+HKT_CHECK_GRAPH:
+	; Is key 'G' physically pressed? Row 1 (port $FDFE), bit 4
+	LD BC,0FDFEH
+	IN A,(C)
+	BIT 4,A
+	JR Z,HKT_IS_CTRL_G		; 'G' pressed (bit 4 == 0) -> Ctrl+G
+HKT_RET_PGDN:
+	LD A,KEY_CTRL_V			; Graph -> Page Down (0x16)
+	JR HKT_DONE
+HKT_IS_CTRL_G:
+	LD A,007H			; Normal Ctrl+G (Bottom of File)
+	JR HKT_DONE
 
 HKT_CHECK_RIGHT:
 	; Is key 'F' physically pressed? Row 1 (port $FDFE), bit 3
@@ -141,6 +228,15 @@ HKT_IS_CTRL_A:
 	LD A,001H
 	JR HKT_DONE
 
+HKT_CHECK_BS:
+	; Is key '5' physically pressed? Row 3 (port $F7FE), bit 4
+	LD BC,0F7FEH
+	IN A,(C)
+	BIT 4,A
+	JR Z,HKT_SET_LEFT		; '5' pressed (bit 4 == 0) -> Left Arrow
+	LD A,008H			; Normal Backspace
+	JR HKT_DONE
+
 HKT_CHECK_UP:
 	; Is key 'E' physically pressed? Row 2 (port $FBFE), bit 2
 	LD BC,0FBFEH
@@ -152,6 +248,38 @@ HKT_SET_UP:
 	JR HKT_QUEUE_CSI
 HKT_IS_CTRL_E:
 	LD A,005H
+
+HKT_DONE:
+	POP HL
+	POP DE
+	POP BC
+	RET
+
+HKT_QUEUE_CSI:
+	; Queue '[' and directional character in sequence buffer
+	LD (KEY_SEQ_BUF+1),A
+	LD A,'['
+	LD (KEY_SEQ_BUF),A
+	LD A,2
+	LD (KEY_SEQ_LEN),A
+	LD HL,KEY_SEQ_BUF
+	LD (KEY_SEQ_PTR),HL
+	LD A,NEXT_KEY_EDIT		; Return ESC (0x1B)
+	JR HKT_DONE
+
+HKT_CHECK_CTRL_K:
+	; Is key 'K' physically pressed? Row 6 (port $BFFE), bit 2
+	LD BC,0BFFEH
+	IN A,(C)
+	BIT 2,A
+	JR Z,HKT_IS_CTRL_K		; 'K' pressed (bit 2 == 0) -> Ctrl+K
+	; Is key '7' (Up) physically pressed? Row 4 (port $EFFE), bit 3
+	LD BC,0EFFEH
+	IN A,(C)
+	BIT 3,A
+	JR Z,HKT_SET_UP			; '7' pressed (bit 3 == 0) -> Up Arrow
+HKT_IS_CTRL_K:
+	LD A,00BH			; Normal Ctrl+K (Help / Block Menu)
 	JR HKT_DONE
 
 HKT_CHECK_DOWN:
@@ -176,28 +304,5 @@ HKT_CHECK_LF:
 	LD A,00AH			; Normal Line Feed
 	JR HKT_DONE
 
-HKT_CHECK_BS:
-	; Is key '5' physically pressed? Row 3 (port $F7FE), bit 4
-	LD BC,0F7FEH
-	IN A,(C)
-	BIT 4,A
-	JR Z,HKT_SET_LEFT		; '5' pressed (bit 4 == 0) -> Left Arrow
-	LD A,008H			; Normal Backspace
-	JR HKT_DONE
 
-HKT_QUEUE_CSI:
-	; Queue '[' and directional character in sequence buffer
-	LD (KEY_SEQ_BUF+1),A
-	LD A,'['
-	LD (KEY_SEQ_BUF),A
-	LD A,2
-	LD (KEY_SEQ_LEN),A
-	LD HL,KEY_SEQ_BUF
-	LD (KEY_SEQ_PTR),HL
-	LD A,NEXT_KEY_EDIT		; Return ESC (0x1B)
 
-HKT_DONE:
-	POP HL
-	POP DE
-	POP BC
-	RET

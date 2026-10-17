@@ -16,8 +16,10 @@ import os
 import pty
 import re
 import select
+import shutil
 import socket
 import subprocess
+import sys
 import time
 import tty
 
@@ -505,3 +507,134 @@ def drain_all(
         except (BlockingIOError, OSError):
             break
     return buf
+
+
+def stage_headless_fixtures(work_dir: str, repo_root: str) -> None:
+    """Stage standard CP/M test fixture files into a working directory."""
+    for fname in ("2.TXT", "30.TXT"):
+        src = os.path.join(repo_root, fname)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(work_dir, fname))
+
+    with open(os.path.join(work_dir, "BIG.TXT"), "w") as f:
+        for i in range(1, 3073):
+            f.write(f"Line {i:04d}\r\n")
+    with open(os.path.join(work_dir, "BIG300.TXT"), "w") as f:
+        for i in range(1, 301):
+            f.write(f"Line {i:04d} of 300\r\n")
+    with open(os.path.join(work_dir, "SE.COM"), "wb") as f:
+        f.write(b"\x00" * 1024)
+    with open(os.path.join(work_dir, "SE.CFG"), "w") as f:
+        f.write("SCREEN=120x40\r\nRAMDRIVE=ON\r\n")
+    with open(os.path.join(work_dir, "INS1.TXT"), "wb") as f:
+        f.write(b"INSERTED")
+    with open(os.path.join(work_dir, "INS2.TXT"), "wb") as f:
+        f.write(b"FIRST LINE\r\nSECOND LINE")
+    with open(os.path.join(work_dir, "U1FILE.TXT"), "w") as f:
+        f.write("Hello from User 1 area!\r\nSecond line of user 1 file.\r\n")
+    with open(os.path.join(work_dir, "CPM1.TXT"), "wb") as f:
+        for i in range(1, 301):
+            f.write(f"CPM1 Line {i:04d} content CRLF\r\n".encode("ascii"))
+    with open(os.path.join(work_dir, "LIN1.TXT"), "wb") as f:
+        for i in range(1, 301):
+            f.write(f"LIN1 Line {i:04d} content LF\n".encode("ascii"))
+    with open(os.path.join(work_dir, "CPM2.TXT"), "wb") as f:
+        for i in range(1, 301):
+            f.write(f"CPM2 Line {i:04d} content CRLF\r\n".encode("ascii"))
+
+
+def _resolve_ci(name: str) -> str:
+    """Resolve filename case-insensitively in current directory."""
+    if ":" in name:
+        name = name.split(":", 1)[1]
+    if os.path.exists(name):
+        return name
+    low = name.lower()
+    for entry in os.listdir("."):
+        if entry.lower() == low:
+            return entry
+    return name
+
+
+def run_ccp_shim(se_bin_path: str) -> None:
+    """Minimal CP/M CCP shell shim for running Python SE in headless tests."""
+    tty.setraw(sys.stdin.fileno())
+    out = sys.stdout.buffer
+    out.write(b"Boot [H=Help]: ")
+    out.flush()
+
+    state = "BOOT"
+    drive = "B"
+    line_buf = bytearray()
+
+    while True:
+        ch = os.read(sys.stdin.fileno(), 1)
+        if not ch:
+            break
+        b = ch[0]
+        if b in (13, 10):
+            out.write(b"\r\n")
+            out.flush()
+            cmd_line = line_buf.decode("latin1", errors="ignore").strip()
+            line_buf.clear()
+
+            if state == "BOOT":
+                if cmd_line.lower().startswith("c"):
+                    state = "CCP"
+                    drive = "B"
+                    out.write(f"{drive}>".encode("latin1"))
+                    out.flush()
+                else:
+                    out.write(b"Boot [H=Help]: ")
+                    out.flush()
+                continue
+
+            low = cmd_line.lower()
+            if low in ("b:", "c:", "a:", "d:"):
+                drive = low[0].upper()
+            elif low.startswith("user "):
+                pass
+            elif low.startswith("era "):
+                arg = cmd_line[4:].strip()
+                path = _resolve_ci(arg)
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+            elif low.startswith("type "):
+                arg = cmd_line[5:].strip()
+                path = _resolve_ci(arg)
+                if os.path.exists(path):
+                    with open(path, "rb") as f:
+                        data = f.read()
+                    if b"\x1a" in data:
+                        data = data.split(b"\x1a", 1)[0]
+                    data = data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+                    out.write(data)
+                    if not data.endswith(b"\r\n"):
+                        out.write(b"\r\n")
+            elif low == "se" or low.startswith("se ") or low == "sec" or (
+                low.startswith("sec ")
+            ):
+                parts = cmd_line.split()
+                subprocess.run([sys.executable, se_bin_path] + parts[1:])
+                tty.setraw(sys.stdin.fileno())
+
+            out.write(f"\r\n{drive}>".encode("latin1"))
+            out.flush()
+        elif b in (8, 127):
+            if line_buf:
+                line_buf.pop()
+                out.write(b"\b \b")
+                out.flush()
+        else:
+            line_buf.append(b)
+            out.write(ch)
+            out.flush()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) >= 3 and sys.argv[1] == "--ccp-shim":
+        run_ccp_shim(sys.argv[2])
+

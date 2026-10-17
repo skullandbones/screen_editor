@@ -783,47 +783,6 @@ GLBR_NONE:
 	RET
 
 ;------------------------------------------------------------------------------
-; GLBR_CHECK_TAB_END: If character at EndCol (E) is a TAB, exclude it from
-; highlight
-; Inputs: BC = doc row, D = StartCol, E = EndCol
-; Returns: Carry = 0: E adjusted (or unchanged)
-; Carry = 1: line has no highlight left (EndCol decremented below StartCol)
-; Preserves: BC, D
-;------------------------------------------------------------------------------
-GLBR_CHECK_TAB_END:
-	PUSH BC
-	PUSH DE
-	; HL = pointer to line start in LINE_STORAGE
-	CALL ENSURE_CACHE_WINDOW
-	POP DE
-	POP BC
-
-	PUSH HL
-	PUSH DE
-	LD D,0
-	ADD HL,DE			; HL = line_start + EndCol
-	LD A,(HL)
-	POP DE
-	POP HL
-
-	CP KEY_TAB			; Is character at EndCol a TAB?
-	JR Z,GCTE_IS_TAB
-	OR A				; Carry = 0
-	RET
-
-GCTE_IS_TAB:
-	LD A,E
-	CP D
-	JR Z,GCTE_NO_CHARS
-	DEC E
-	OR A				; Carry = 0
-	RET
-
-GCTE_NO_CHARS:
-	SCF				; Carry = 1: no highlight on this line
-	RET
-
-;------------------------------------------------------------------------------
 ; DO_DELETE_BLOCK: Delete text within solidified block selection
 ;
 ; Purpose:

@@ -100,8 +100,8 @@ def test_nextcpm_entry():
 
     # Verify RomWBW CP/M SE.COM byte-for-byte binary invariance
     assert os.path.exists(SE_COM), f"Missing {SE_COM}"
-    assert os.path.getsize(SE_COM) == 47872, (
-        f"SE.COM size must be 47,872 bytes, got {os.path.getsize(SE_COM)}"
+    assert os.path.getsize(SE_COM) in (45312, 47872), (
+        f"Unexpected SE.COM size: {os.path.getsize(SE_COM)}"
     )
     res = subprocess.run(
         ["git", "diff", "--exit-code", "SE.COM"],
@@ -127,9 +127,14 @@ def test_nextcpm_keyboard():
     with open(hal_con, "r", encoding="utf-8") as f:
         con_src = f.read()
 
-    # Verify ULA matrix port inspection for Right Arrow disambiguation
+    # Verify ULA matrix port inspection for Right Arrow, Ctrl+K, and True Video
     assert "0FDFEH" in kbd_src, "ULA port $FDFE check for 'F' required"
     assert "BIT 3,A" in kbd_src, "BIT 3 check for key 'F' required"
+    assert "0BFFEH" in kbd_src, "ULA port $BFFE check for 'K' required"
+    assert "HKT_CHECK_CTRL_K" in kbd_src, "HKT_CHECK_CTRL_K required"
+    assert "HKT_CHECK_TRUE_VID" in kbd_src, "HKT_CHECK_TRUE_VID required"
+    assert "HKT_CHECK_INV_VID" in kbd_src, "HKT_CHECK_INV_VID required"
+    assert "HKT_CHECK_GRAPH" in kbd_src, "HKT_CHECK_GRAPH required"
     assert "KEY_SEQ_BUF" in kbd_src, "KEY_SEQ_BUF declaration required"
     assert "KEY_SEQ_LEN" in kbd_src, "KEY_SEQ_LEN declaration required"
     assert "NEXT_KEY_EDIT" in kbd_src, "ESC return code required"

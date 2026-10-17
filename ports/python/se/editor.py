@@ -21,6 +21,7 @@ from se.terminal import (
     KEY_PGUP,
     KEY_PGDN,
     KEY_DELETE,
+    KEY_INSERT,
     KEY_ESC,
     KEY_ENTER,
     KEY_TAB,
@@ -69,6 +70,8 @@ class Editor:
         )
         self.renderer = UIRenderer(self.terminal)
         self.modal = ModalDialog(self.terminal)
+        if filename:
+            filename = self._resolve_existing_file(filename)
         self.buffer = DocumentBuffer(
             filename=filename, tab_width=self.config.tab_width
         )
@@ -82,6 +85,27 @@ class Editor:
         if filename and os.path.isfile(filename):
             self.buffer.load_file(filename)
 
+    @staticmethod
+    def _resolve_existing_file(path: str) -> str:
+        """Resolve existing file path with case-insensitive fallback."""
+        if os.path.exists(path):
+            return path
+        parent = os.path.dirname(path) or "."
+        base = os.path.basename(path)
+        try:
+            for name in os.listdir(parent):
+                if name.lower() == base.lower():
+                    cand = (
+                        name
+                        if parent == "." and not os.path.dirname(path)
+                        else os.path.join(parent, name)
+                    )
+                    if os.path.isfile(cand):
+                        return cand
+        except OSError:
+            pass
+        return path
+
     def run(self):
         """Run the main interactive editor event loop."""
         self.terminal.enter_raw_mode()
@@ -92,14 +116,17 @@ class Editor:
             self.action_splash_screen()
 
         try:
+            self._skip_render = False
             while self.running:
-                geom_str = f"{self.terminal.cols}x{self.terminal.rows}"
-                self.renderer.render_editor(
-                    self.buffer,
-                    geometry_str=geom_str,
-                    status_msg=self.status_msg,
-                )
-                self.status_msg = None
+                if not self._skip_render:
+                    geom_str = f"{self.terminal.cols}x{self.terminal.rows}"
+                    self.renderer.render_editor(
+                        self.buffer,
+                        geometry_str=geom_str,
+                        status_msg=self.status_msg,
+                    )
+                    self.status_msg = None
+                self._skip_render = False
 
                 key = self.terminal.get_key()
                 if key is None:
@@ -133,8 +160,25 @@ class Editor:
             self.buffer.page_up(self.terminal.rows - 2)
         elif key in (KEY_PGDN, KEY_CTRL_V):
             self.buffer.page_down(self.terminal.rows - 2)
+        elif key in ("SHIFT_LEFT", "SHIFT_RIGHT", "SHIFT_UP", "SHIFT_DOWN"):
+            if self.buffer.block_active != 1:
+                self.buffer.block_active = 1
+                self.buffer.block_start_row = self.buffer.cursor_row
+                self.buffer.block_start_col = self.buffer.cursor_col
+                self.buffer.block_end_row = self.buffer.cursor_row
+                self.buffer.block_end_col = self.buffer.cursor_col
+            if key == "SHIFT_LEFT":
+                self.buffer.move_left()
+            elif key == "SHIFT_RIGHT":
+                self.buffer.move_right()
+            elif key == "SHIFT_UP":
+                self.buffer.move_up()
+            elif key == "SHIFT_DOWN":
+                self.buffer.move_down()
 
         # 2. Text Editing & Layout
+        elif key == KEY_INSERT:
+            self.buffer.overwrite_mode = not self.buffer.overwrite_mode
         elif key == KEY_ENTER:
             if self.buffer.block_active == 1:
                 self.buffer.solidify_block()
@@ -166,9 +210,13 @@ class Editor:
         elif key == KEY_CTRL_B:
             self.buffer.toggle_block()
         elif key == KEY_CTRL_C:
-            self.buffer.copy_block_to_cursor()
+            prev_active = self.buffer.block_active
+            if not self.buffer.copy_block_to_cursor() and prev_active != 1:
+                self._skip_render = True
         elif key == KEY_CTRL_X:
-            self.buffer.move_block_to_cursor()
+            prev_active = self.buffer.block_active
+            if not self.buffer.move_block_to_cursor() and prev_active != 1:
+                self._skip_render = True
 
         # 4. Modals and Workspaces
         elif key == KEY_CTRL_F:
@@ -229,6 +277,13 @@ class Editor:
                     self.buffer.cancel_block()
                 self.buffer.insert_char(key)
 
+    def _refresh_editor_screen(self):
+        """Redraw active editor viewport to clear prior screen/modal debris."""
+        geom = f"{self.terminal.cols}x{self.terminal.rows}"
+        self.renderer.render_editor(
+            self.buffer, geometry_str=geom, is_editor=False
+        )
+
     def action_quit(self):
         """Prompt to save changes if modified, then exit cleanly."""
         if self.buffer.modified:
@@ -265,11 +320,27 @@ class Editor:
 
     def action_find(self):
         """Prompt for search text with Tab case toggle and search forward."""
+        orig_pos = (self.buffer.cursor_row, self.buffer.cursor_col)
         initial = self.search_query
+        if self.buffer.block_active == 2:
+            # SE.COM: if the cursor has left a locked block, cancel it
+            # and start Find with an empty prompt
+            r1, c1, r2, c2 = self.buffer.get_normalized_block()
+            row, col = orig_pos
+            if (
+                row < r1
+                or row > r2
+                or (r1 == r2 and (col < c1 or col > c2))
+            ):
+                self.buffer.cancel_block()
+                initial = ""
         if self.buffer.block_active > 0:
             selected = self.buffer.get_selected_text()
             if selected:
                 initial = selected.split("\n")[0]
+                self.buffer.cursor_row, self.buffer.cursor_col, _, _ = (
+                    self.buffer.get_normalized_block()
+                )
 
         query, case_sens = self.modal.show_find_dialog(
             initial_text=initial,
@@ -277,30 +348,48 @@ class Editor:
         )
         self.case_sensitive = case_sens
         if query:
+            self._refresh_editor_screen()
             self.search_query = query
+            self._find_from_current = True
+            self._search_had_match = False
+            self._last_find_found = False
             self.action_find_next()
+            if not self._last_find_found:
+                # SE.COM: a never-matched Find cancels the block and
+                # leaves the cursor where it was before the prompt
+                self.buffer.cancel_block()
+                self.buffer.cursor_row, self.buffer.cursor_col = orig_pos
 
     def action_find_next(self):
         """Find next occurrence of search_query."""
         if not self.search_query:
             return
 
+        from_current = getattr(self, "_find_from_current", False)
+        self._find_from_current = False
+
         query = self.search_query
         target = query if self.case_sensitive else query.lower()
 
-        # Search starting from next character position
         start_row = self.buffer.cursor_row
         start_col = self.buffer.cursor_col
 
         found = False
         tot = self.buffer.total_lines
 
-        for offset in range(tot):
-            r = (start_row + offset) % tot
+        if from_current:
+            search_rows = [(start_row + offset) % tot for offset in range(tot)]
+        else:
+            search_rows = list(range(start_row, tot))
+
+        for i, r in enumerate(search_rows):
             line = self.buffer.get_line(r)
             comp_line = line if self.case_sensitive else line.lower()
 
-            c_from = (start_col + 1) if offset == 0 else 0
+            if i == 0:
+                c_from = start_col if from_current else (start_col + 1)
+            else:
+                c_from = 0
             idx = comp_line.find(target, c_from)
             if idx != -1:
                 self.buffer.cursor_row = r
@@ -314,13 +403,20 @@ class Editor:
                 self.buffer.block_end_row = r
                 self.buffer.block_end_col = idx + len(query)
 
+                self._search_had_match = True
                 found = True
                 break
 
+        self._last_find_found = found
         if not found:
-            self.modal.show_notification(
-                title="Search Result", message="Pattern not found."
-            )
+            if not from_current and getattr(self, "_search_had_match", False):
+                msg = "Search completed."
+            else:
+                msg = "Pattern not found."
+                # SE.COM does not retain a never-matched query as the
+                # pre-fill for the next Find prompt
+                self.search_query = ""
+            self.modal.show_notification(title="Search Result", message=msg)
 
     def action_replace(self):
         """Search and replace prompt workflow."""
@@ -333,6 +429,7 @@ class Editor:
         if not find_q:
             return
         self.search_query = find_q
+        self._refresh_editor_screen()
 
         rep_q = self.modal.show_input(
             title="Replace Text",
@@ -354,6 +451,9 @@ class Editor:
                 self.buffer.set_line(r, new_line)
                 replacements += line.count(find_q)
 
+        # Redraw editor before 7-row notification so 8-row input box leaves
+        # no bottom-border debris (Bug 2.7.92)
+        self._refresh_editor_screen()
         self.modal.show_notification(
             title="Replace Complete",
             message=f"Replace done: {replacements} replacement(s).",
@@ -496,6 +596,24 @@ class Editor:
                 cleaned = input_text.strip()
                 if not cleaned:
                     continue
+                self._open_target_line = None
+                if mode == "open" and ":" in cleaned:
+                    base_part, line_part = cleaned.rsplit(":", 1)
+                    if base_part and line_part.isdigit():
+                        cleaned = base_part
+                        self._open_target_line = int(line_part)
+                if (
+                    len(cleaned) >= 2
+                    and cleaned[0].isalpha()
+                    and cleaned[1] == ":"
+                    and not os.path.exists(os.path.join(current_dir, cleaned))
+                ):
+                    cleaned = cleaned[2:]
+                    if not cleaned:
+                        input_text = ""
+                        cursor_pos = 0
+                        need_full_render = True
+                        continue
                 if any(ch in cleaned for ch in ("*", "?")):
                     filter_pattern = cleaned
                     input_text = ""
@@ -503,7 +621,9 @@ class Editor:
                     page_idx = 0
                     need_full_render = True
                     continue
-                target = os.path.abspath(os.path.join(current_dir, cleaned))
+                target = self._resolve_existing_file(
+                    os.path.abspath(os.path.join(current_dir, cleaned))
+                )
                 if os.path.isdir(target):
                     current_dir = target
                     input_text = ""
@@ -554,14 +674,37 @@ class Editor:
 
         return None
 
-    def action_open_file(self):
+    def action_open_file(self) -> bool:
         """Display Tier 1 Directory Browser and open selected file."""
+        if self.buffer.modified:
+            ans = self.modal.show_confirm(
+                title="Unsaved Modifications",
+                desc="Any unsaved edits will be lost if discarded.",
+                query="Save changes?",
+                options_text="[Y]es      [N]o      [ESC]=Cancel",
+            )
+            if ans is None:
+                return False
+            if ans == "y":
+                if not self.action_save_file():
+                    return False
+            else:
+                self.buffer.modified = False
+        self._open_target_line = None
         target = self.action_directory_browser(mode="open")
         if not target:
-            return
+            return False
         filename, _fmt = target
         if os.path.isfile(filename):
             self.buffer.load_file(filename)
+            target_line = getattr(self, "_open_target_line", None)
+            if target_line is not None:
+                self.buffer.cursor_row = max(
+                    0, min(self.buffer.total_lines - 1, target_line - 1)
+                )
+                self._open_target_line = None
+            return True
+        return False
 
     def action_insert_file(self):
         """Insert disk file contents into document buffer at cursor."""
@@ -576,6 +719,7 @@ class Editor:
             return
 
         ok = self.buffer.insert_file(filename)
+        self._refresh_editor_screen()
         if ok:
             self.modal.show_notification(
                 title="Insert Complete",
@@ -605,6 +749,7 @@ class Editor:
 
         self.buffer.format_cpm = fmt_cpm
         ok = self.buffer.save_file(target_name, format_cpm=fmt_cpm)
+        self._refresh_editor_screen()
         if ok:
             self.modal.show_notification(
                 title="Save Complete",
@@ -636,6 +781,7 @@ class Editor:
                 return False
 
         ok = self.buffer.save_block(target_name, format_cpm=fmt_cpm)
+        self._refresh_editor_screen()
         if ok:
             self.modal.show_notification(
                 title="Save Complete",
@@ -720,10 +866,10 @@ class Editor:
         """Display Tier 1 About screen workspace."""
         lines = [
             "SE - Screen Editor",
-            "version 1.1.0 (2026-10-09) (Python)",
+            "version 1.1.3 (2026-10-17) (Python)",
             "by Dean Jenkins",
             "",
-            "Google Antigravity 2.19.1 & Gemini FLASH 3.8 high",
+            "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
             "",
             "Open source software under the MIT License",
             "",
@@ -790,27 +936,46 @@ class Editor:
                     max_lines_str = "32,768 lines"
                 else:
                     max_lines_str = f"{self.config.max_lines} lines"
+                cur_ram = self.config.get("RAMDRIVE", "PRESERVE").upper()
+                if cur_ram in ("DISABLED", "NONE", "OFF"):
+                    ram_line = "RAM Drive     : [None Detected]"
+                elif cur_ram in ("OVERWRITE", "ENABLED"):
+                    ram_line = "RAM Drive (A:): [Overwritten (Max RAM)]"
+                elif cur_ram == "HIBERNATE":
+                    ram_line = "RAM Drive (A:): [Hibernated (Temp Image)]"
+                else:
+                    ram_line = "RAM Drive (A:): [Preserved (Active)]"
+
+                cur_plg = self.config.get("PLUGIN", "AUTOLOAD").upper()
+                if cur_plg in ("DISABLED", "OFF"):
+                    plg_line = "Plugin System : [Disabled]"
+                elif cur_plg in ("DEMAND", "ONDEMAND"):
+                    plg_line = "Plugin System : [On Demand]"
+                else:
+                    plg_line = "Plugin System : [Operational]"
+
                 lines = [
-                    "SE - Screen Editor",
+                    "           SE - Screen Editor",
                     "",
-                    "type   [E]  or  [Enter] to edit",
-                    "type   [N]              to new file",
-                    "type   [O]              to open file",
-                    "type   [S]              to save file",
-                    "type   [W]  or  [^W]    to close file",
-                    "type   [L]  or  [^L]    to goto line",
-                    "type   [A]              for about",
-                    "type   [M]              for memory info",
-                    "type   [P]              for plugins",
-                    "type   [^P]             for context plugin menu",
-                    "type   [C]              to configure",
-                    "type   [1]              set 80x24",
-                    "type   [2]              set 120x40",
-                    "type   [Q]  or  [^Q]    to exit",
+                    "  type   [E]  or  [Enter] to edit",
+                    "  type   [N]              to new file",
+                    "  type   [O]  or  [^O]    to open file",
+                    "  type   [S]  or  [^S]    to save file",
+                    "  type   [W]  or  [^W]    to close file",
+                    "  type   [L]  or  [^L]    to goto line",
+                    "  type   [A]              for about",
+                    "  type   [M]              for memory info",
+                    "  type   [P]              for plugins",
+                    "  type   [^P]             for context plugin menu",
+                    "  type   [C]              to configure",
+                    "  type   [1]              set 80x24",
+                    "  type   [2]              set 120x40",
+                    "  type   [3]              set native",
+                    "  type   [Q]  or  [^Q]    to exit",
                     "",
                     f"Active Screen : [{geom_tag}]",
-                    "RAM Drive (A:): [Preserved (Active)]",
-                    "Plugin System : [Operational]",
+                    ram_line,
+                    plg_line,
                     f"Max Lines     : [{max_lines_str}]",
                 ]
                 geom = f"{self.terminal.cols}x{self.terminal.rows}"
@@ -830,13 +995,18 @@ class Editor:
                 self.action_new_file()
                 return
             elif ch == "o" or k == KEY_CTRL_O:
-                self.action_open_file()
-                return
+                was_modified = self.buffer.modified
+                opened = self.action_open_file()
+                if opened or was_modified:
+                    return
+                need_render = True
             elif ch == "s" or k == KEY_CTRL_S:
                 self.action_save_file()
                 need_render = True
             elif ch == "w" or k == KEY_CTRL_W:
-                self.action_close_file(to_splash=False)
+                if not self.action_close_file(to_splash=False):
+                    if ch == "w":
+                        return
                 need_render = True
             elif ch == "l" or k == KEY_CTRL_L:
                 self.action_goto_line()
@@ -864,6 +1034,8 @@ class Editor:
                 self.terminal.default_rows = 24
                 self.terminal.cols = 80
                 self.terminal.rows = 24
+                if self.buffer.cursor_row >= self.buffer.top_row + 23:
+                    self.buffer.cursor_row = max(0, self.buffer.top_row + 22)
                 need_render = True
             elif ch == "2":
                 self.terminal.term_init()

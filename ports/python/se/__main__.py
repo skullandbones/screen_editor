@@ -4,6 +4,7 @@ Supports syntax: se [filename[:line]] [-l line] [--config path]
 """
 
 import argparse
+import os
 import sys
 from se import __version__
 from se.editor import Editor
@@ -11,11 +12,20 @@ from se.editor import Editor
 
 def parse_filename_and_line(arg: str):
     """Parse 'filename:line' syntax if present."""
+    target_line = None
     if ":" in arg:
         parts = arg.rsplit(":", 1)
         if parts[1].isdigit():
-            return parts[0], int(parts[1])
-    return arg, None
+            arg = parts[0]
+            target_line = int(parts[1])
+    if (
+        len(arg) >= 2
+        and arg[0].isalpha()
+        and arg[1] == ":"
+        and not os.path.exists(arg)
+    ):
+        arg = arg[2:]
+    return arg, target_line
 
 
 def main():

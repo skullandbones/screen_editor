@@ -39,6 +39,7 @@ class UIRenderer:
         buf: DocumentBuffer,
         geometry_str: str = "80x24",
         status_msg: Optional[str] = None,
+        is_editor: bool = True,
     ):
         """
         Render universal status bar on bottom row (HOST_ROWS).
@@ -58,7 +59,12 @@ class UIRenderer:
         fmt_field = f" {fmt_str} |"
 
         # Field 4 (Help Hint / Context, 18 chars)
-        help_field = " ^K: Editor keys |"
+        if not is_editor:
+            help_field = "                 |"
+        elif getattr(buf, "overwrite_mode", False):
+            help_field = " Overwrite mode  |"
+        else:
+            help_field = " ^K: Editor keys |"
 
         # Cursor, pan position, and block mode field (Field 5)
         cur_line = buf.cursor_row + 1
@@ -123,6 +129,7 @@ class UIRenderer:
         geometry_str: str = "80x24",
         status_msg: Optional[str] = None,
         tab_width: Optional[int] = None,
+        is_editor: bool = True,
     ):
         """
         Render active document editor workspace with column 0 tildes.
@@ -171,6 +178,14 @@ class UIRenderer:
                         )
                     else:
                         self.term.write(visible)
+                elif (
+                    len(vis_line) > buf.pan_col + cols
+                    and len(visible) == cols
+                ):
+                    self.term.write(visible[:-1])
+                    self.term.inverse_on()
+                    self.term.write(visible[-1])
+                    self.term.inverse_off()
                 else:
                     self.term.write(visible)
 
@@ -182,7 +197,10 @@ class UIRenderer:
 
         # Render status bar on row HOST_ROWS
         self.render_status_bar(
-            buf, geometry_str=geometry_str, status_msg=status_msg
+            buf,
+            geometry_str=geometry_str,
+            status_msg=status_msg,
+            is_editor=is_editor,
         )
 
         # Reposition terminal cursor at active document character
@@ -192,6 +210,7 @@ class UIRenderer:
         sc_r = max(1, min(body_rows, sc_r))
         sc_c = max(1, min(cols, sc_c))
         self.term.locate(sc_r, sc_c)
+        self.term.show_cursor()
         self.term.flush()
 
     def _render_highlighted_line(
@@ -247,7 +266,12 @@ class UIRenderer:
         body_rows = rows - 1
 
         content_h = len(lines)
-        content_w = max((len(ln) for ln in lines), default=0)
+        is_splash = any("Active Screen :" in ln for ln in lines)
+        is_about = any("by Dean Jenkins" in ln for ln in lines)
+        if is_splash:
+            content_w = 40
+        else:
+            content_w = max((len(ln) for ln in lines), default=0)
         top_row, left_col = compute_centering(
             cols, rows, content_w, content_h
         )
@@ -257,29 +281,42 @@ class UIRenderer:
 
         for screen_r in range(1, body_rows + 1):
             self.term.locate(screen_r, 1)
-            # Column 0 tilde on all workspace rows
+            # Column 0 tilde on all workspace rows; clear full row first
+            # so columns 2..left_col-1 retain no debris (Bug 2.7.92)
             self.term.write("~")
+            self.term.clear_eol()
 
             # Check if this row is within content block
             content_idx = screen_r - top_row
             if 0 <= content_idx < content_h:
                 line_str = lines[content_idx]
-                self.term.locate(screen_r, left_col)
-                self.term.write(line_str)
-                if any(
-                    p in line_str for p in ("Enter choice:", "Enter option:")
-                ):
-                    prompt_row = screen_r
-                    prompt_col = left_col + len(line_str)
+                if line_str:
+                    if is_about:
+                        left_pad = max(0, (cols - 1 - len(line_str)) // 2)
+                        line_col = 2 + left_pad
+                    else:
+                        line_col = left_col
+                    self.term.locate(screen_r, line_col)
+                    self.term.write(line_str)
+                    if any(
+                        p in line_str
+                        for p in ("Enter choice:", "Enter option:")
+                    ):
+                        prompt_row = screen_r
+                        prompt_col = line_col + len(line_str)
+                self.term.clear_eol()
 
-            self.term.clear_eol()
-
-        # Bottom row status bar
-        self.render_status_bar(buf, geometry_str=geometry_str)
+        # Bottom row status bar (blank Field 4 on non-editor screens)
+        self.render_status_bar(
+            buf, geometry_str=geometry_str, is_editor=False
+        )
 
         # Reposition cursor adjacent to prompt if present (Bug 2.7.9)
         if prompt_row is not None and prompt_col is not None:
             self.term.locate(prompt_row, prompt_col)
+            self.term.show_cursor()
+        else:
+            self.term.hide_cursor()
 
         self.term.flush()
 
@@ -400,8 +437,11 @@ class UIRenderer:
                     self.term.write(ln)
             self.term.clear_eol()
 
-        self.render_status_bar(buf, geometry_str=geometry_str)
+        self.render_status_bar(
+            buf, geometry_str=geometry_str, is_editor=False
+        )
         self.term.locate(prompt_screen_row, prompt_cursor_col)
+        self.term.show_cursor()
         self.term.flush()
 
     def render_directory_prompt(

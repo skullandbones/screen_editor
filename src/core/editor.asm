@@ -906,9 +906,6 @@ CR_NO_SCROLL_BLOCK_CHECK:
 	LD (NEED_SCREEN_RENDER),A
 	RET
 
-CR_WRAP_FAIL:
-	RET
-
 ;------------------------------------------------------------------------------
 ; PAGE_UP: Scroll viewport and cursor up by one screen page
 ;

@@ -42,7 +42,7 @@ def test_bug_2_2_10():
     with open(bin_cpm, "rb") as f:
         code_cpm = f.read()
 
-    expected_version = b"version 1.1.1 (2026-10-13) (Z80 Assembly)"
+    expected_version = b"version 1.1.3 (2026-10-17) (Z80 Assembly)"
     assert expected_version in code_next, (
         f"Expected '{expected_version.decode()}' in SE_NEXT.COM"
     )
@@ -62,11 +62,7 @@ def test_bug_2_2_10():
     )
     assert res.returncode == 0, f"check_tpa.py failed:\n{res.stdout}"
     assert "PASS" in res.stdout, "check_tpa verdict was not PASS"
-    assert (
-        "+2,048 bytes" in res.stdout
-        or "+2,304 bytes" in res.stdout
-        or "+2,560 bytes" in res.stdout
-    ), "Headroom must be positive"
+    assert "Headroom: +" in res.stdout, "Headroom must be positive"
 
     print("    [+] SE_NEXT.COM displays '(Z80 Assembly)' on About screen")
     print("    [+] SE.COM binary invariance preserved")

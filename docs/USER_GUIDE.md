@@ -1,5 +1,12 @@
 # SE.COM User Guide
 
+> [!WARNING]
+> **AI Agents shall not use this document as an authoritive reference
+> document.** For AI agents, developers, and automated validation harnesses,
+> [`docs/UI_UX_DESIGN.md`](UI_UX_DESIGN.md) is the single authoritative
+> specification for all SE UI/UX behavior, screen layouts, modal dialogs, and
+> keybindings.
+
 **`SE.COM`** is a high-performance full-screen text editor written in 100% Z80
 assembly language for CP/M 2.2 and CP/M 3.0 systems running the **RomWBW**
 firmware platform (specifically **RomWBW v3.6.0 or later** on RC2014, SC126,
@@ -40,30 +47,30 @@ When started without arguments or when closing an active file, `SE.COM`
 displays the centered startup landing screen:
 
 ```text
-~                      SE - Screen Editor
-~                  version 1.1.0 (2026-10-09)
 ~
-
-~        type   [E]  or  [Enter] to edit
-~        type   [N]              to create a new file
-~        type   [O]              to open a file
-~        type   [S]              to save current file
-~        type   [W]              to close file to splash
-~        type   [C]              for configuration
-~        type   [P]              for plugins
-~        type   [^P]             for context plugin menu
-~        type   [M]              for memory info
-~        type   [A]              for about
-~        type   [1]              for 120x40 screen mode
-~        type   [2]              for 80x24 screen mode
-~        type   [Q]              to exit to CP/M
+~                              SE - Screen Editor
 ~
-~        Active Screen : [120x40 (Widescreen)]
-~        RAM Drive (A:): [Preserved (Active)]
-~        Plugin System : [Autoload (Ready)]
-~        Max Lines     : [16,384 lines]
+~                     type   [E]  or  [Enter] to edit
+~                     type   [N]              to new file
+~                     type   [O]  or  [^O]    to open file
+~                     type   [S]  or  [^S]    to save file
+~                     type   [W]  or  [^W]    to close file
+~                     type   [L]  or  [^L]    to goto line
+~                     type   [A]              for about
+~                     type   [M]              for memory info
+~                     type   [P]              for plugins
+~                     type   [^P]             for context plugin menu
+~                     type   [C]              to configure
+~                     type   [1]              set 80x24
+~                     type   [2]              set 120x40
+~                     type   [Q]  or  [^Q]    to exit
 ~
-| (Untitled)     | 120x40 | CP/M  | Free: 48 KB     | Line    1/1    Col 0   |
+~                   Active Screen : [80x24 (Classic Terminal)] 
+~                   RAM Drive (B:): [Preserved (Active)]
+~                   Plugin System : [Operational]
+~                   Max Lines     : [16,384 lines]
+~
+ | (Untitled)     |  80x24 | CP/M  | Free: 64 KB     | Line    1/1    Col 0   | 
 ```
 
 ### 2.1 Splash Menu Shortcuts
@@ -71,17 +78,22 @@ displays the centered startup landing screen:
 * **`[E]` / `[Enter]`**: Enter the editor buffer (resumes current document or
   starts an untitled buffer).
 * **`[N]`**: Start editing a clean blank document (`(Untitled)`).
-* **`[O]`**: Open the interactive File Open directory browser.
-* **`[S]`**: Open the interactive File Save screen.
-* **`[W]`**: Close the current file and reset buffer.
-* **`[C]`**: Open the Configuration Manager (`SE.CFG`).
+* **`[O]` / `[^O]` (`Ctrl+O`)**: Open the interactive File Open directory
+  browser.
+* **`[S]` / `[^S]` (`Ctrl+S`)**: Open the interactive File Save screen.
+* **`[W]` / `[^W]` (`Ctrl+W`)**: Close the current file and reset buffer.
+* **`[L]` / `[^L]` (`Ctrl+L`)**: Prompt for a line number and jump directly to
+  that line in the editor.
+* **`[A]`**: Display version, implementation details, authorship, and licensing
+  info.
+* **`[M]`**: View Far RAM bank allocation and memory diagnostics.
 * **`[P]`**: Open the Plugin Manager screen.
 * **`[^P]` (`Ctrl+P`)**: Open the Context-Aware Plugin pop-up palette.
-* **`[M]`**: View Far RAM bank allocation and memory diagnostics.
-* **`[A]`**: Display version, authorship, and licensing info.
-* **`[1]`**: Select modern 120x40 widescreen terminal mode.
-* **`[2]`**: Select classic 80x24 VT100 terminal mode.
-* **`[Q]` / `Ctrl+Q`**: Exit cleanly to CP/M.
+* **`[C]`**: Open the Configuration Manager (`SE.CFG`).
+* **`[1]`**: Select classic `80x24` VT100 terminal mode (default).
+* **`[2]`**: Select extended `120x40` widescreen terminal mode.
+* **`[Q]` / `[^Q]` (`Ctrl+Q`)**: Exit cleanly to CP/M (prompts if unsaved
+  changes exist).
 
 ---
 
@@ -90,91 +102,113 @@ displays the centered startup landing screen:
 ### 3.1 Text Input & Modes
 
 * **Typing**: Characters type directly at the cursor. Lines expand dynamically
-  up to 120 characters.
+  up to **1,000 characters**.
 * **Insert vs Overwrite**: Press <kbd>Insert</kbd> to toggle between Insert mode
   and Overwrite mode. In Overwrite mode, existing characters are replaced under
   the cursor without shifting text, and Field 4 of the status bar displays
-  `Overwrite mode  | `.
+  `Overwrite       | `.
 * **Backspace & Delete**:
   - <kbd>Backspace</kbd> (`0x08` / `^H`): Deletes character left of cursor. At
-    column 0, joins current line to preceding line.
-  - <kbd>Del</kbd> (`0x7F` / `\x1b[3~`): Deletes character under cursor.
-* **Tab Key**: Pressing <kbd>Tab</kbd> inserts spaces to advance to the next
-  tab stop (default 8 columns, or 4 columns if configured).
+    column 0, joins the current line to the preceding line (if combined length
+    is $\le 1,000$ characters).
+  - <kbd>Del</kbd> (`0x7F` / `\x1b[3~`) or <kbd>Ctrl+D</kbd> (`0x04`): Deletes
+    character under cursor. At the end of a line, joins the next line onto the
+    current line.
+* **Tab Key**: Pressing <kbd>Tab</kbd> (`Ctrl+I`) inserts spaces to advance to
+  the next tab stop (default 8 columns, or 4 columns if configured).
 
 ### 3.2 Cursor Movement & Navigation
 
-`SE.COM` supports both standard ANSI arrow keys and classic WordStar diamond
-control shortcuts:
+`SE.COM` uses standard ANSI VT100 cursor keys and dedicated control shortcuts:
 
-| Action | Primary Key | WordStar Shortcut |
+| Action | Primary Key | Control / Alternate Shortcut |
 | :--- | :--- | :--- |
-| Move Cursor Up | <kbd>Up Arrow</kbd> | <kbd>Ctrl+E</kbd> |
-| Move Cursor Down | <kbd>Down Arrow</kbd> | <kbd>Ctrl+X</kbd> |
-| Move Cursor Left | <kbd>Left Arrow</kbd> | <kbd>Ctrl+S</kbd> |
-| Move Cursor Right | <kbd>Right Arrow</kbd> | <kbd>Ctrl+D</kbd> |
+| Move Cursor Up | <kbd>Up Arrow</kbd> | ANSI `\x1b[A` |
+| Move Cursor Down | <kbd>Down Arrow</kbd> | ANSI `\x1b[B` |
+| Move Cursor Left | <kbd>Left Arrow</kbd> | ANSI `\x1b[D` |
+| Move Cursor Right | <kbd>Right Arrow</kbd> | ANSI `\x1b[C` |
 | Start of Line | <kbd>Home</kbd> | <kbd>Ctrl+A</kbd> |
-| End of Line | <kbd>End</kbd> | <kbd>Ctrl+F</kbd> |
-| Page Up | <kbd>PgUp</kbd> | <kbd>Ctrl+R</kbd> |
-| Page Down | <kbd>PgDn</kbd> | <kbd>Ctrl+C</kbd> |
-| Jump to Line | <kbd>Ctrl+L</kbd> | <kbd>Ctrl+L</kbd> |
+| End of Line | <kbd>End</kbd> | <kbd>Ctrl+E</kbd> |
+| Page Up | <kbd>PgUp</kbd> | <kbd>Ctrl+U</kbd> |
+| Page Down | <kbd>PgDn</kbd> | <kbd>Ctrl+V</kbd> |
+| Top of File (Row 0) | <kbd>^Home</kbd> | <kbd>Ctrl+T</kbd> |
+| Bottom of File (EOF) | <kbd>^End</kbd> | <kbd>Ctrl+G</kbd> |
+| Goto Line Number | <kbd>Ctrl+L</kbd> | `[L]` / `[^L]` on Splash |
+| Editor Help Screen | <kbd>Ctrl+K</kbd> | Full-screen `EDITOR MODE KEYS` |
+| Return to Splash | <kbd>ESC</kbd> | Returns to Splash Screen |
 
-### 3.3 Horizontal Viewport Scrolling (80x24 Mode)
+### 3.3 Horizontal Viewport Scrolling
 
-In 80x24 retro geometry, moving past column 79 automatically scrolls the
-viewport horizontally. A continuation indicator (`$`) appears in column 79,
-and the status bar shows horizontal pan offset (e.g. `[Pan +20]`).
+Both `80x24` and `120x40` screen geometries support lines up to 1,000
+characters. When the cursor moves past the right edge of the active viewport,
+the viewport pans horizontally in **40-column increments**, and Field 4 of the
+status bar displays the active horizontal pan offset (e.g. `[Pan +40]`,
+`[Pan +80]`).
 
 ---
 
 ## 4. Visual Block Selection & Manipulation
 
-`SE.COM` features a visual block highlight engine with dedicated modal
-controls.
+`SE.COM` features a visual block highlight engine with direct in-place block
+manipulation (no intermediary clipboard is used) and a dedicated modal menu.
 
 ### 4.1 Block Selection Workflow
 
-1. **Start Selection**: Position cursor at start of desired text and press
+1. **Start Selection**: Position cursor at the start of desired text and press
    <kbd>Ctrl+B</kbd>. Selection mode activates in reverse video, and the status
    bar displays `Sel: 0 chars`.
-2. **Expand Selection**: Move the cursor with arrow keys. The highlight expands
-   dynamically across characters and lines. Status displays:
+2. **Expand Selection**: Move the cursor with arrow keys or navigation keys. The
+   highlight expands dynamically across characters and lines. Status displays:
    - Single-line: `Sel: <N> char(s)`
    - Multi-line: `Sel: <N> line(s)`
 3. **Lock / Solidify Block**:
    - Press <kbd>Enter</kbd> while dynamic selection is active.
    - The selection is now locked/solidified (`Block: <N> char(s)` or
      `Block: <N> line(s)`).
-   - Once solidified, you can move the cursor freely through the file without
-     altering the block boundaries.
-4. **Cancel / Clear Selection**:
-   - Press <kbd>Ctrl+B</kbd> at any time. <kbd>Ctrl+B</kbd> acts as a toggle:
-     when active, it clears the selection immediately.
+   - Once solidified, you can move the cursor freely through the file to choose
+     a target destination without altering the block boundaries.
+4. **Direct Block Shortcuts**:
+   - <kbd>Ctrl+C</kbd>: Copy marked block directly to the cursor position.
+   - <kbd>Ctrl+X</kbd>: Move marked block directly to the cursor position.
+   - <kbd>Ctrl+D</kbd> / <kbd>Del</kbd>: Delete the marked block range.
+   - <kbd>Ctrl+S</kbd>: Save the marked block to a disk file.
+   - <kbd>Ctrl+O</kbd>: Insert an external disk file at the cursor position.
+   - <kbd>Ctrl+Y</kbd>: Run the `BEAUTIFY` formatter restricted to the block.
+5. **Cancel / Clear Selection**:
+   - Press <kbd>Ctrl+B</kbd> or <kbd>ESC</kbd> at any time to clear the block
+     selection and return to normal editing.
 
 ### 4.2 Block Operations Modal (`Ctrl+K`)
 
-When a block is active or solidified, press <kbd>Ctrl+K</kbd> to summon the
-centered 50x7 Block Operations Modal dialog:
+When a block is active or solidified, pressing <kbd>Ctrl+K</kbd> summons the
+centered 50x7 **Block Operations** modal dialog instead of the standard Help
+screen:
 
 ```text
-+----------------- Block Mode -------------------+
-|                                                |
-|  Marked Block: 2 lines (78 bytes)              |
-|                                                |
-| [Enter]=Lock   [^C]=Copy   [^X]=Cut   [^D]=Del |
-| [^S]=Save      [^B]=Clear  [ESC]=Close         |
++------------------------------------------------+
+|                Block Operations                |
++------------------------------------------------+
+|              Selection: 2 lines                |
+|  [Enter]=Lock/Set    [^C]=Copy    [^X]=Move    |
+|  [^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close  |
 +------------------------------------------------+
 ```
 
 Modal Commands:
-* **`[Enter]=Lock`**: Solidifies a dynamic selection and dismisses the modal.
-* **`[^C]=Copy`**: Duplicates the marked block to the current cursor position.
-* **`[^X]=Cut`**: Moves the marked block to the current cursor position.
-* **`[^D]=Del`**: Deletes the marked block from the document.
-* **`[^S]=Save`**: Opens Save Block dialog to write block to a disk file.
-* **`[^B]=Clear`**: Cancels block selection and returns to regular editing.
-* **`[ESC]=Close`**: Safe non-destructive NOP. Dismisses the modal while leaving
-  the active block selection 100% intact.
+* **`[Enter]=Lock/Set`**: Solidifies a dynamic selection and dismisses the
+  modal so you can position the cursor at the target location.
+* **`[^C]=Copy`** (or **`C`**): Copies the marked block directly to the current
+  cursor position.
+* **`[^X]=Move`** (or **`X`**): Moves the marked block directly to the current
+  cursor position.
+* **`[^D]=Del`** (or **`D`** / <kbd>Del</kbd>): Deletes the marked block from
+  the document.
+* **`[^S]=Save`** (or **`S`**): Opens the Save Block dialog to write the marked
+  block to a disk file.
+* **`[^B]=Clear`** (or **`B`**): Cancels block selection and returns to regular
+  editing.
+* **`[ESC]=Close`**: Safe non-destructive close. Dismisses the modal while
+  leaving the active block selection intact.
 
 ---
 
@@ -184,9 +218,10 @@ Modal Commands:
 
 Summons the full-screen sorted directory browser:
 * **Directory Navigation**: Use arrow keys or <kbd>PgUp</kbd> / <kbd>PgDn</kbd>
-  to page through directory listings.
+  to navigate through directory listings.
 * **In-Line Filename Editing**: Type a filename directly into the bracketed edit
-  box. Supports WordStar navigation, backspace, and cursor movement.
+  box using <kbd>Left</kbd>/<kbd>Right</kbd> arrow keys, <kbd>Backspace</kbd>,
+  and <kbd>Del</kbd> (<kbd>Ctrl+D</kbd>).
 * **Directory Wildcard Filtering**: Type a filter pattern (e.g. `*.TXT`,
   `*.ASM`, `1C:*.C`) and press <kbd>Enter</kbd> to filter the directory view.
 * **User Areas**: Switch user areas directly in the edit box (e.g. `1:` or
@@ -199,8 +234,8 @@ Summons the full-screen sorted directory browser:
   between classic CP/M `[CP/M]` (`CRLF`) and Unix/Linux `[Linux]` (`LF`) line
   endings.
 * **Overwrite Guard**: If the target filename already exists on disk, `SE.COM`
-  presents a centered Tier 2 confirmation pop-up:
-  `[Y]es   [N]o   [ESC]=Cancel`.
+  presents a centered 50x7 confirmation pop-up:
+  `[Y]es      [N]o      [ESC]=Cancel`.
 
 ### 5.3 Progress Indicators
 
@@ -286,14 +321,16 @@ In the Save File screen (<kbd>Ctrl+S</kbd> in editor, or **`[S]`** on splash):
 
 ### 6.5 Transferring Text Blocks Across User Areas
 
-The visual block manager (<kbd>Ctrl+K</kbd>) fully supports user area prefixes
-for inter-project code sharing:
+The visual block manager (<kbd>Ctrl+B</kbd> / <kbd>Ctrl+K</kbd>) fully supports
+user area prefixes for inter-project code sharing:
 
-* **Block Save**: Marking a block and choosing Save (<kbd>Ctrl+S</kbd> from the
-  Block Menu) allows specifying a destination user area (e.g. `1C:SNIPPET.LIB`).
-* **Block Insert**: Choosing Insert File (<kbd>Ctrl+I</kbd>) allows specifying a
-  source user area (e.g. `1C:HEADER.H`) to splice text directly into the active
-  editor buffer at the current cursor position.
+* **Block Save**: Marking a block and pressing <kbd>Ctrl+S</kbd> (either
+  directly in the editor or from the Block Operations modal) allows specifying
+  a destination user area (e.g. `1C:SNIPPET.LIB`).
+* **Block Insert**: While a block is active, pressing <kbd>Ctrl+O</kbd> opens
+  the Insert File browser, allowing you to specify a source user area (e.g.
+  `1C:HEADER.H`) to splice text directly into the active editor buffer at the
+  current cursor position.
 
 ### 6.6 Status Bar Indication
 
@@ -317,16 +354,19 @@ preventing unintentional disorientation in your CP/M shell session.
 
 ## 7. Search and Replace
 
-* **Find Text (<kbd>Ctrl+F</kbd>)**: Opens centered Find modal dialog.
-  - Type search pattern and press <kbd>Enter</kbd>.
-  - Press <kbd>Tab</kbd> to toggle case sensitivity (`Case Sensitive` vs
-    `Case Insensitive`).
-  - Search automatically wraps from end of file to beginning.
-* **Find Next (<kbd>Ctrl+N</kbd>)**: Repeats last search forward without
-  re-opening the dialog.
-* **Search & Replace (<kbd>Ctrl+R</kbd>)**: Opens Replace modal dialog.
-  - Prompts for search pattern and replacement string.
-  - On each match, prompts: `[Y]es   [N]o   [A]ll   [ESC]=Cancel`.
+* **Find Text (<kbd>Ctrl+F</kbd>)**: Opens the centered 50x7 Find Text modal
+  dialog.
+  - Type a search pattern and press <kbd>Enter</kbd> (`[Enter]=Find`).
+  - Press <kbd>Tab</kbd> (`Ctrl+I`) to toggle case sensitivity in place
+    between `[Case Sensitive  ]` and `[Case Insensitive]`.
+  - Search automatically wraps from the end of the file to the beginning.
+* **Find Next (<kbd>Ctrl+N</kbd>)**: Repeats the last search forward without
+  re-opening the dialog (or opens Find Text if no search pattern is set).
+* **Search & Replace (<kbd>Ctrl+R</kbd>)**: Opens the Find Text modal followed
+  by the 50x7 Replace Text modal dialog.
+  - Prompts for the search pattern and the replacement string.
+  - On each match, displays the 50x7 Replace Confirmation modal:
+    `[Y]es  [N]o  [A]ll  [R]everse   [ESC]=Cancel`.
 
 ---
 
@@ -334,14 +374,18 @@ preventing unintentional disorientation in your CP/M shell session.
 
 ### 8.1 Configuration Screen (`[C]` from Splash)
 
-* **[1] Screen Geometry**: Toggle between `120x40 (Widescreen)` and `80x24`.
+The Configuration Manager uses instant single-keystroke hotkeys (`[1-5]=Toggle
+Option  [S]=Save Config  [ESC]=Exit`):
+
+* **[1] Screen Geometry**: Toggle between `80x24 (Classic Terminal)` (default)
+  and `120x40 (Modern Default)`.
 * **[2] RAM Drive**:
   - `Preserve`: Keeps RAM disk `A:` intact and limits editor Far RAM.
   - `Hibernate`: Backs up RAM disk to temporary swap file during editing.
   - `Overwrite`: Overwrites RAM disk for maximum Far RAM capacity.
 * **[3] Max Document Lines**: Toggle between `16,384 lines` and `32,768 lines`.
-* **[4] Tab Width**: Toggle between `8 columns` and `4 columns`.
-* **[5] Plugin System**: Toggle plugin autoloading on or off.
+* **[4] Tab Width**: Toggle between `8 columns` (default) and `4 columns`.
+* **[5] Plugin System**: Cycle between `Autoload`, `On-Demand`, and `Disabled`.
 * **`[S]`**: Save configuration permanently to `SE.CFG`.
 
 ### 8.2 Memory Map Screen (`[M]` from Splash)
@@ -373,8 +417,11 @@ running directly from the NextZXOS SD card.
   ```
 * **Display & Keyboard**:
   - Automatically utilizes the NextCPM 80-column ANSI terminal driver.
-  - Supports standard Sinclair cursor keys mapped to WordStar navigation:
-    <kbd>Ctrl+E</kbd>, <kbd>Ctrl+X</kbd>, <kbd>Ctrl+S</kbd>, <kbd>Ctrl+D</kbd>.
+  - Translates Sinclair cursor keys (<kbd>Caps+5</kbd>, <kbd>6</kbd>,
+    <kbd>7</kbd>, <kbd>8</kbd>) directly into standard ANSI VT100 directional
+    arrow keys, and <kbd>Caps+0</kbd> into <kbd>Delete</kbd> (`0x7F`),
+    preserving all standard `Ctrl` shortcuts (`Ctrl+S` Save, `Ctrl+D` Delete,
+    `Ctrl+E` End, `Ctrl+X` Move Block).
 
 
 ### 9.2 NextZXOS Standalone Application (`SE.NEX`)
@@ -460,10 +507,10 @@ that can be invoked directly from the Sinclair Basic command prompt.
 
 ### 11.3 Garbled Pop-ups or Screen Wrapping at 80 Columns
 
-* **Cause**: Terminal emulator is set to standard 80x24, while `SE.COM` defaults
-  to 120x40 widescreen mode.
-* **Solution**: Press **`2`** on the splash screen to select `80x24 (Classic
-  Mode)`, then press **`c`** and **`s`** to save.
+* **Cause**: Terminal emulator is set to standard 80x24, while `SE.COM` was
+  switched to or configured for `120x40` widescreen mode in `SE.CFG`.
+* **Solution**: Press **`1`** on the splash screen to select `80x24 (Classic
+  Terminal)`, then press **`c`** and **`s`** to save to `SE.CFG`.
 
 ### 11.4 Serial Communications & Flow Control (115200 bps)
 

@@ -94,6 +94,7 @@ class DocumentBuffer:
         self.block_start_col: int = 0
         self.block_end_row: int = 0
         self.block_end_col: int = 0
+        self.overwrite_mode: bool = False
 
     @property
     def total_lines(self) -> int:
@@ -170,11 +171,13 @@ class DocumentBuffer:
         Enforces 1,000-character maximum line capacity limit.
         """
         line = self.current_line
-        if len(line) >= MAX_LINE_CHARS:
-            return False
-
         col = min(len(line), self.cursor_col)
-        new_line = line[:col] + ch + line[col:]
+        if self.overwrite_mode and ch != "\t" and col < len(line):
+            new_line = line[:col] + ch + line[col + 1 :]
+        else:
+            if len(line) >= MAX_LINE_CHARS:
+                return False
+            new_line = line[:col] + ch + line[col:]
         self.lines[self.cursor_row] = new_line
         self.cursor_col = col + 1
         self.target_col = self.get_visual_col()
@@ -395,7 +398,11 @@ class DocumentBuffer:
         if self.block_active == 1:
             self.solidify_block()
 
-        if self.is_cursor_in_block():
+        r1, c1, r2, c2 = self.get_normalized_block()
+        if self.is_cursor_in_block() and (self.cursor_row, self.cursor_col) != (
+            r1,
+            c1,
+        ):
             return False
 
         text = self.get_selected_text()
@@ -404,7 +411,6 @@ class DocumentBuffer:
 
         orig_cur_row = self.cursor_row
         orig_cur_col = self.cursor_col
-        r1, c1, r2, c2 = self.get_normalized_block()
 
         parts = text.split("\n")
         lines_added = len(parts) - 1

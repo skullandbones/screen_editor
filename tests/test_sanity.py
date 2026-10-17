@@ -20,17 +20,37 @@ import tty
 import select
 import subprocess
 
+def find_tools_dir(start_dir):
+    env_tools = os.environ.get("TOOLS_DIR") or os.environ.get("TOOL_DIR")
+    if env_tools:
+        cand = os.path.abspath(os.path.expanduser(env_tools))
+        if os.path.isdir(os.path.join(cand, "romwbw_src")):
+            return cand
+        if os.path.isdir(os.path.join(cand, "tools", "romwbw_src")):
+            return os.path.join(cand, "tools")
+        up2 = os.path.abspath(os.path.join(cand, "..", ".."))
+        if os.path.isdir(os.path.join(up2, "romwbw_src")):
+            return up2
+    curr = os.path.abspath(start_dir)
+    while curr != os.path.dirname(curr):
+        cand = os.path.join(curr, "tools")
+        if os.path.isdir(os.path.join(cand, "romwbw_src")):
+            return cand
+        curr = os.path.dirname(curr)
+    return os.path.abspath(os.path.join(start_dir, "..", "..", "tools"))
+
+
 def find_paths():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
-    workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
+    tools_dir = find_tools_dir(repo_root)
 
-    emu_bin = os.path.join(workspace_root, "tools", "rc2014_emu", "rc2014")
+    emu_bin = os.path.join(tools_dir, "rc2014_emu", "rc2014")
     rom_file = os.path.join(
-        workspace_root, "tools", "romwbw_src", "Binary", "RC2014_std.rom"
+        tools_dir, "romwbw_src", "Binary", "RC2014_std.rom"
     )
     golden_img = os.path.join(
-        workspace_root, "tools", "romwbw_src", "Binary", "hd1k_combo.img"
+        tools_dir, "romwbw_src", "Binary", "hd1k_combo.img"
     )
     img_dir = os.path.join(repo_root, "disks")
     img_file = os.path.join(img_dir, "hd1k_combo.img")
@@ -41,8 +61,9 @@ def find_paths():
         )
         os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
-    cpmrm_bin = os.path.join(workspace_root, "tools", "romwbw_src", "Tools",
-                             "Linux", "cpmrm")
+    cpmrm_bin = os.path.join(
+        tools_dir, "romwbw_src", "Tools", "Linux", "cpmrm"
+    )
 
     return emu_bin, rom_file, img_file, se_bin, cpmrm_bin
 

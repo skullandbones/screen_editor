@@ -4712,37 +4712,6 @@ PRINT_SAVE_FMT_END:
 	RET
 
 ;------------------------------------------------------------------------------
-; DELAY_BRIEF: Busy-wait delay (~0.5s) for transient status messages
-;
-; Purpose:
-;   Executes nested software delay loops (~0.5 seconds at 4-10 MHz Z80 clocks)
-;   to keep transient error/status messages readable on screen.
-;
-; Call Usage / Protocol:
-;   Called via CALL after printing brief notification messages.
-;
-; Inputs:
-;   None.
-;
-; Outputs:
-;   None.
-;
-; Preserves / Modifies:
-;   Preserves AF, DE, HL; clobbers BC (saved/restored internally).
-;------------------------------------------------------------------------------
-DELAY_BRIEF:
-	PUSH BC
-	LD B,0
-DELAY_OUTER:
-	LD C,0
-DELAY_INNER:
-	DEC C
-	JR NZ,DELAY_INNER
-	DJNZ DELAY_OUTER
-	POP BC
-	RET
-
-;------------------------------------------------------------------------------
 ; COLLECT_DIR_ENTRIES: Query directory entries via BDOS and populate buffer
 ;
 ; Purpose:
@@ -5738,38 +5707,6 @@ LRC_COL_OK:
 	RET
 
 ;------------------------------------------------------------------------------
-; READ_FILENAME_INPUT: Interactive line editor for filename input box
-;
-; Purpose:
-;   Handles interactive text entry into INPUT_FILENAME_BUF supporting typing,
-;   cursor navigation (Left, Right, Home, End), deletion (Backspace, Delete),
-;   pagination (PgUp, PgDn), submission (Enter), and cancellation (Esc).
-;
-; Call Usage / Protocol:
-;   Called via CALL from DO_OPEN_FILE_UI and DO_SAVE_FILE_UI.
-;
-; Inputs:
-;   INPUT_FILENAME_BUF (empty or prefilled).
-;
-; Outputs:
-;   Carry = 0 on Enter (buffer accepted); Carry = 1 on Esc (cancelled).
-;
-; Preserves / Modifies:
-;   Clobbers all working registers.
-;------------------------------------------------------------------------------
-READ_FILENAME_INPUT:
-	XOR A
-	LD (INPUT_BUF_LEN),A
-	LD (INPUT_CURSOR_POS),A
-	LD (SHOWING_FNF_MSG),A
-	LD HL,INPUT_FILENAME_BUF
-	LD (HL),0
-	JR INPUT_CHAR_LOOP
-
-RESUME_FILENAME_INPUT:
-	JR INPUT_CHAR_LOOP
-
-;------------------------------------------------------------------------------
 ; READ_FILENAME_INPUT_PREFILLED: Interactive entry with prefilled filename
 ;
 ; Purpose:
@@ -6638,39 +6575,6 @@ TO_UPPER:
 	CP 'z'+1
 	RET NC
 	SUB 020H
-	RET
-
-;------------------------------------------------------------------------------
-; CLEAR_LOAD_TEMP: Clear temporary buffers and state before file load
-;
-; Purpose:
-;   Zeros temporary line accumulation buffers, reset read record counters,
-;   and clears out-of-memory flags prior to reading a file from disk.
-;
-; Call Usage / Protocol:
-;   Called via CALL at commencement of LOAD_FILE.
-;
-; Inputs:
-;   None.
-;
-; Outputs:
-;   Temporary staging buffers cleared.
-;
-; Preserves / Modifies:
-;   Clobbers AF, BC, DE, HL.
-;------------------------------------------------------------------------------
-CLEAR_LOAD_TEMP:
-	PUSH BC
-	PUSH DE
-	PUSH HL
-	LD HL,LOAD_LINE_TEMP
-	LD DE,LOAD_LINE_TEMP+1
-	LD BC,127
-	LD (HL),0
-	LDIR
-	POP HL
-	POP DE
-	POP BC
 	RET
 
 ;------------------------------------------------------------------------------
