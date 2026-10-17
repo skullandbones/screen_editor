@@ -18,6 +18,7 @@
 #define CPM_LOCAL_SLOTS 2
 
 extern char     g_scratch_line_buf[MAX_ACTIVE_LINE_STRIDE];
+char            g_ramdrive_char = 0;
 static uint8_t  s_hbios_present = 0;
 static uint8_t  s_user_bank = 0;
 static uint8_t  s_first_app_bank = 0;
@@ -26,6 +27,69 @@ static uint8_t  s_hbios_src_bank = 0;
 static uint8_t  s_hbios_dst_bank = 0;
 static uint16_t s_hbios_src_addr = 0;
 static uint16_t s_hbios_dst_addr = 0;
+
+static void hbios_detect_ramdrive(void)
+{
+#asm
+    push ix
+    push iy
+    ld hl, 0040h
+    ld a, (hl)
+    cp 'W'
+    jr nz, no_ramdrv
+    inc hl
+    ld a, (hl)
+    cp 0A8h
+    jr nz, no_ramdrv
+    ld hl, (0044h)
+    inc hl
+    inc hl
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    ld a, d
+    or e
+    jr z, no_ramdrv
+    ex de, hl
+    dec hl
+    ld a, (hl)
+    inc hl
+    or a
+    jr z, no_ramdrv
+    cp 17
+    jr nc, no_ramdrv
+    ld b, a
+    ld c, 0
+ramdrv_loop:
+    ld a, (hl)
+    inc hl
+    inc hl
+    inc hl
+    inc hl
+    cp 0FFh
+    jr z, ramdrv_next
+    push bc
+    push hl
+    ld c, a
+    ld b, 17h
+    rst 08h
+    ld a, d
+    or e
+    pop hl
+    pop bc
+    jr nz, ramdrv_next
+    ld a, c
+    add a, 'A'
+    ld (_g_ramdrive_char), a
+    jr no_ramdrv
+ramdrv_next:
+    inc c
+    djnz ramdrv_loop
+no_ramdrv:
+    pop iy
+    pop ix
+#endasm
+}
 
 static int hbios_detect(void)
 {
@@ -101,6 +165,7 @@ static void hbios_do_copy_128(void)
 
 int hal_mem_init(void)
 {
+    g_ramdrive_char = 0;
     s_hbios_present = (uint8_t)hbios_detect();
     if (s_hbios_present) {
         s_user_bank = hbios_get_user_bank();
@@ -108,6 +173,7 @@ int hal_mem_init(void)
         if (s_first_app_bank == 0) {
             s_first_app_bank = 0x89;
         }
+        hbios_detect_ramdrive();
         return 12;
     }
     memset(g_scratch_line_buf, 0, CPM_LOCAL_SLOTS * FAR_SLOT_SIZE);

@@ -392,6 +392,10 @@ static void render_tier1_workspace_screen(const char **lines,
     render_status_bar();
 }
 
+#ifdef __CPM__
+extern char g_ramdrive_char;
+#endif
+
 void show_splash_screen(void)
 {
     const char *splash_lines[21];
@@ -403,69 +407,73 @@ void show_splash_screen(void)
     g_is_splash_screen = 1;
 
     while (1) {
-        splash_lines[0]  = "                SE - Screen Editor";
+        splash_lines[0]  = "           SE - Screen Editor";
         splash_lines[1]  = "";
-        splash_lines[2]  = "   type   [E]  or  [Enter] to edit";
-        splash_lines[3]  = "   type   [N]              to new file";
-        splash_lines[4]  = "   type   [O]              to open file";
-        splash_lines[5]  = "   type   [S]              to save file";
-        splash_lines[6]  = "   type   [W]  or  [^W]    to close file";
-        splash_lines[7]  = "   type   [L]  or  [^L]    to goto line";
-        splash_lines[8]  = "   type   [A]              for about";
-        splash_lines[9]  = "   type   [M]              for memory info";
-        splash_lines[10] = "   type   [P]              for plugins";
-        splash_lines[11] = "   type   [^P]             for context plugin menu";
-        splash_lines[12] = "   type   [C]              to configure";
-        splash_lines[13] = "   type   [1]              set 80x24";
-        splash_lines[14] = "   type   [2]              set 120x40";
-        splash_lines[15] = "   type   [Q]  or  [^Q]    to exit";
+        splash_lines[2]  = "  type   [E]  or  [Enter] to edit";
+        splash_lines[3]  = "  type   [N]              to new file";
+        splash_lines[4]  = "  type   [O]  or  [^O]    to open file";
+        splash_lines[5]  = "  type   [S]  or  [^S]    to save file";
+        splash_lines[6]  = "  type   [W]  or  [^W]    to close file";
+        splash_lines[7]  = "  type   [L]  or  [^L]    to goto line";
+        splash_lines[8]  = "  type   [A]              for about";
+        splash_lines[9]  = "  type   [M]              for memory info";
+        splash_lines[10] = "  type   [P]              for plugins";
+        splash_lines[11] = "  type   [^P]             for context plugin menu";
+        splash_lines[12] = "  type   [C]              to configure";
+        splash_lines[13] = "  type   [1]              set 80x24";
+        splash_lines[14] = "  type   [2]              set 120x40";
+        splash_lines[15] = "  type   [Q]  or  [^Q]    to exit";
         splash_lines[16] = "";
         if (g_config.screen_mode == MODE_120X40) {
             splash_lines[17] =
-                "   Active Screen : [120x40 (Modern Default)]";
+                "Active Screen : [120x40 (Modern Default)]";
 #ifndef __CPM__
         } else if (g_config.screen_mode == MODE_NATIVE) {
             splash_lines[17] =
-                "   Active Screen : [Native (Dynamic Console)]";
+                "Active Screen : [Native (Dynamic Console)]";
 #endif
         } else {
             splash_lines[17] =
-                "   Active Screen : [80x24 (Classic Terminal)]";
+                "Active Screen : [80x24 (Classic Terminal)]";
         }
+#ifdef __CPM__
+        if (!g_ramdrive_char) {
+            splash_lines[18] =
+                "RAM Drive     : [None Detected]";
+        } else
+#endif
         if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
             splash_lines[18] =
-                "   RAM Drive (A:): [Overwritten (Max RAM)]";
+                "RAM Drive (A:): [Overwritten (Max RAM)]";
         } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
             splash_lines[18] =
-                "   RAM Drive (A:): [Hibernated (Temp Image)]";
+                "RAM Drive (A:): [Hibernated (Temp Image)]";
         } else {
             splash_lines[18] =
-                "   RAM Drive (A:): [Preserved (Active)]";
+                "RAM Drive (A:): [Preserved (Active)]";
         }
+#ifdef __CPM__
+        if (g_ramdrive_char) {
+            ((char *)splash_lines[18])[11] = g_ramdrive_char;
+        }
+#endif
         if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
-            splash_lines[19] = "   Plugin System : [Disabled]";
+            splash_lines[19] = "Plugin System : [Disabled]";
         } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
-            splash_lines[19] = "   Plugin System : [On Demand]";
+            splash_lines[19] = "Plugin System : [On Demand]";
         } else {
-            splash_lines[19] = "   Plugin System : [Operational]";
+            splash_lines[19] = "Plugin System : [Operational]";
         }
         splash_lines[20] = (g_config.lines_mode == 1) ?
-            "   Max Lines     : [32,768 lines]" :
-            "   Max Lines     : [16,384 lines]";
+            "Max Lines     : [32,768 lines]" :
+            "Max Lines     : [16,384 lines]";
 
         if (need_render) {
-            render_tier1_workspace_screen(splash_lines, 21, 50);
+            render_tier1_workspace_screen(splash_lines, 21, 40);
             need_render = 0;
         }
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
-        }
-        if (k == ':') {
-            int next_k = 0;
-            while ((next_k = hal_console_getkey()) <= 0) {
-                /* Wait for following char */
-            }
-            k = next_k;
         }
 
         if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {

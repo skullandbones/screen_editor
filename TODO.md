@@ -3359,8 +3359,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 2 Defects Open (Bugs 2.8.11, 2.8.12 Open; Bugs
-  2.8.1–2.8.6, 2.8.8–2.8.10 Resolved; Bug 2.8.7 Rejected).
+- **Status**: Active / 1 Defect Open (Bug 2.8.12 Open; Bugs 2.8.1–2.8.6,
+  2.8.8–2.8.11 Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -3571,7 +3571,7 @@ have been resolved and archived.
       the user cancels the file browser dialog, it returns `MODAL_RES_CANCEL`
       to prevent discarding unsaved changes. Verified with
       `tests/test_sec_untitled_close.py`.
-  - [ ] **Bug 2.8.11: Splash Screen Missing `[^O]`/`[^S]` Labels, Horizontal
+  - [x] **Bug 2.8.11: Splash Screen Missing `[^O]`/`[^S]` Labels, Horizontal
     Padding Offset & Hardcoded `RAM Drive (A:)`**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 15.1; `TODO.md`
       Section 7.1.
@@ -3602,6 +3602,16 @@ have been resolved and archived.
       column offsets (`21` spaces after `~` for commands, `19` spaces after `~`
       for diagnostics in `80x24`), report `RAM Drive     : [None Detected]`
       when applicable on `SEC.COM`, and remove the `':'` prefix intercept.
+    - *Resolution*: Updated `show_splash_screen()` in `src/core/ui_render.c`
+      to include `or  [^O]` and `or  [^S]`, pass `content_width = 40` to
+      `render_tier1_workspace_screen` (`left_col = 21` in `80x24` / `41` in
+      `120x40`) with `11` leading spaces on the title, `2` on command rows,
+      and `0` on diagnostic rows, remove the blocking `if (k == ':')`
+      intercept, and detect the RomWBW `MD0` RAM drive letter via
+      `hbios_detect_ramdrive()` (`g_ramdrive_char`) in
+      `src/hal/cpm/hal_cpm_memory.c` (falling back to
+      `RAM Drive     : [None Detected]`). Verified with
+      `tests/test_sec_splash_metadata.py`.
   - [ ] **Bug 2.8.12: About Screen Outdated Version/AI Attribution, Missing
     Blank Row & Off-by-One Centering**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.12, 14.6, 15.2; `TODO.md`
