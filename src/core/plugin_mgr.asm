@@ -4266,8 +4266,8 @@ STR_SPLASH_TITLE:	DB	"SE - Screen Editor", 13, 10, "$"
 STR_SPLASH_CMDS:
 	DB "  type   [E]  or  [Enter] to edit",13,10
 	DB "  type   [N]              to new file",13,10
-	DB "  type   [O]              to open file",13,10
-	DB "  type   [S]              to save file",13,10
+	DB "  type   [O]  or  [^O]    to open file",13,10
+	DB "  type   [S]  or  [^S]    to save file",13,10
 	DB "  type   [W]  or  [^W]    to close file",13,10
 	DB "  type   [L]  or  [^L]    to goto line",13,10
 	DB "  type   [A]              for about",13,10

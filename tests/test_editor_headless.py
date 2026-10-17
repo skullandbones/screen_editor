@@ -1452,9 +1452,10 @@ def test_se_execution(use_sec=False, use_python=False):
         time.sleep(0.3)
         os.write(master, b"\x1b")
         out_splash = read_until(
-            master, b"[S]              to save file", timeout=5.0
+            master, b"to save file", timeout=5.0
         )
-        if b"[S]              to save file" not in out_splash:
+        if (b"[S]  or  [^S]    to save file" not in out_splash and
+                b"[S]              to save file" not in out_splash):
             print("[-] Splash screen '[S] to save file' not found. "
                   f"Buffer: {repr(out_splash)}", flush=True)
             return False

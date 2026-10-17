@@ -537,10 +537,12 @@ SPLASH_NOT_CTRL_P:
 	CP KEY_CTRL_O
 	JP Z,HANDLE_SPLASH_OPEN
 
-	; Option: 'S' or 's' -> Save File Screen
+	; Option: 'S' or 's' or Ctrl+S -> Save File Screen
 	CP 's'
 	JP Z,DO_SPLASH_SAVE
 	CP 'S'
+	JP Z,DO_SPLASH_SAVE
+	CP KEY_CTRL_S
 	JP Z,DO_SPLASH_SAVE
 
 	; Option: 'L' or 'l' or Ctrl+L -> Goto Line Screen

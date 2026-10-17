@@ -25,9 +25,9 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 2 Open (Bugs 2.1.21, 2.1.22 Open;
+- **Status**: Active / 1 Open (Bug 2.1.21 Open;
   Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
-  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19 Fixed).
+  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.22 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -298,7 +298,7 @@ have been resolved and archived.
     - *Required Fix*: Add `Ctrl+Y` and `Ctrl+Z` to the Help screen within the
       canonical 22-line Tier 1 layout (80x24 fit), update Section 7.3, and
       apply the same change to `HELPNEXT.OVL` (Bug 2.2.17).
-  - [ ] **Bug 2.1.22: Splash Screen Missing `Ctrl+O` / `Ctrl+S` Support**:
+  - [x] **Bug 2.1.22: Splash Screen `Ctrl+O` / `Ctrl+S` Support [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 10.
     - *Issue*: On the Splash Screen, Close (`[W]  or  [^W]`), Goto Line
       (`[L]  or  [^L]`), and Exit (`[Q]  or  [^Q]`) support and display

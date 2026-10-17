@@ -631,8 +631,8 @@ content blocks rather than top-aligned text.
      ~
      ~         type   [E]  or  [Enter] to edit
      ~         type   [N]              to new file
-     ~         type   [O]              to open file
-     ~         type   [S]              to save file
+     ~         type   [O]  or  [^O]    to open file
+     ~         type   [S]  or  [^S]    to save file
      ~         type   [W]  or  [^W]    to close file
      ~         type   [L]  or  [^L]    to goto line
      ~         type   [A]              for about
