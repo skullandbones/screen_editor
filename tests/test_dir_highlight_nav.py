@@ -5,22 +5,24 @@ File Navigation across Open File, Save File, Block Insert File, and Block Save
 File screens in SE.COM (CP/M-80).
 
 Verifies:
-  1. Inject SE.COM and 7 test files (NAV01.TXT .. NAV07.TXT) onto C: user 5.
+  1. Inject SE.COM and 7 test files (NAV01.TXT .. NAV07.TXT) onto C: user 5,
+     and ensure drive A: has >60 files (multi-page directory listing).
   2. Boot RomWBW CP/M on RC2014 emulator and switch to C5:.
   3. Launch SE.COM -> Open File screen ('o').
   4. Press Tab in the filename text box:
      - Verify inverse highlight bar appears on top-left entry (NAV01.TXT).
      - Verify text box is automatically filled with "C5:NAV01.TXT".
   5. Navigate highlight bar using cursor keys (Right -> NAV02.TXT, Down ->
-     NAV07.TXT, Up -> NAV02.TXT, Left -> NAV01.TXT):
-     - Verify text box updates automatically on each cursor movement.
+     NAV07.TXT, Up -> NAV02.TXT, Left -> NAV01.TXT), and verify WordStar keys
+     (^D, ^S, ^E, ^X) are ignored in highlight mode.
   6. Press Tab to exit highlight bar mode:
      - Verify highlight bar disappears (normal video restored).
      - Verify user can continue editing filename in text box (Backspace 5 chars
        and type "3.TXT" -> "C5:NAV03.TXT") and press Enter to open NAV03.TXT.
-  7. Open File screen via Ctrl+O, press Tab -> Right -> Down (selects NAV07.TXT)
-     and press Enter directly while highlight bar is active:
-     - Verify NAV07.TXT is loaded into the editor.
+  7. Open File screen via Ctrl+O, switch to multi-page drive A0:, press Tab ->
+     verify PgDn moves highlight bar to top-left file of Page 2 and PgUp moves
+     highlight bar to bottom-right file of Page 1; switch back to C5: and press
+     Enter directly on highlighted NAV07.TXT.
   8. Block Insert File screen (Ctrl+B then Ctrl+O):
      - Press Tab -> Right (selects NAV02.TXT) and press Enter.
      - Verify selected file content is inserted at cursor.
@@ -115,11 +117,19 @@ def test_dir_highlight_nav():
     emu_bin, rom_file, img_file, se_bin, cpmcp_bin, cpmrm_bin = find_paths()
 
     print(
-        "[*] Step 1: Injecting SE.COM and test files onto C: (user 0 & 5)...",
+        "[*] Step 1: Injecting SE.COM and test files onto C: (user 5 & 6)...",
         flush=True,
     )
     subprocess.run(
-        [cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.COM", "5:*.*"],
+        [
+            cpmrm_bin,
+            "-f",
+            "wbw_hd1k_0",
+            img_file,
+            "0:SE.COM",
+            "5:*.*",
+            "6:*.*",
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -149,8 +159,21 @@ def test_dir_highlight_nav():
                 ],
                 check=True,
             )
+        # Create 65 files on C6: (PG01.TXT .. PG65.TXT) so Page 1 has 60 files
+        # (PG01..PG60) and Page 2 has 5 files (PG61..PG65).
+        pg_paths = []
+        for i in range(1, 66):
+            fname = f"PG{i:02d}.TXT"
+            fpath = os.path.join(tmpdir, fname)
+            with open(fpath, "wb") as f:
+                f.write(b"PAGE_TEST\r\n")
+            pg_paths.append(fpath)
+        subprocess.run(
+            [cpmcp_bin, "-f", "wbw_hd1k_0", img_file] + pg_paths + ["6:"],
+            check=True,
+        )
     print(
-        "[+] Step 1: Injected SE.COM and NAV01.TXT..NAV07.TXT into C5:.",
+        "[+] Step 1: Injected SE.COM, C5: (NAV01..07), and C6: (PG01..65).",
         flush=True,
     )
 
@@ -260,9 +283,21 @@ def test_dir_highlight_nav():
         )
 
         print(
-            "[*] Step 5: Navigating highlight bar with cursor keys...",
+            "[*] Step 5: Navigating highlight bar with cursor keys and "
+            "verifying WordStar keys are ignored...",
             flush=True,
         )
+        # Verify WordStar ^D (0x04) is ignored
+        os.write(master, b"\x04")
+        out_ws = drain_all(master, quiet_time=0.3)
+        if out_ws != b"":
+            print(
+                f"[-] Step 5: WordStar ^D was not ignored! Output: "
+                f"{repr(out_ws)}",
+                flush=True,
+            )
+            return False
+
         # Right -> NAV02.TXT (index 1)
         os.write(master, b"\x1b[C")
         out_right = drain_all(master, quiet_time=0.4)
@@ -278,8 +313,7 @@ def test_dir_highlight_nav():
             )
             return False
 
-        # Down -> index 1 + 5 = 6 (0:NAV01, 1:NAV02, 2:NAV03, 3:NAV04,
-        # 4:NAV05, 5:NAV06, 6:NAV07)
+        # Down -> index 1 + 5 = 6 (NAV07.TXT)
         os.write(master, b"\x1b[B")
         out_down = drain_all(master, quiet_time=0.4)
         if (
@@ -324,8 +358,8 @@ def test_dir_highlight_nav():
             )
             return False
         print(
-            "[+] Step 5: Cursor keys (Right, Down, Up, Left) moved highlight "
-            "and updated text box.",
+            "[+] Step 5: Cursor keys moved highlight, updated text box, and "
+            "ignored WordStar keys.",
             flush=True,
         )
 
@@ -366,13 +400,74 @@ def test_dir_highlight_nav():
         )
 
         print(
-            "[*] Step 7: Testing Enter directly on highlighted file in Open "
-            "File UI...",
+            "[*] Step 7: Testing multi-page PgDn/PgUp highlight positioning "
+            "and Enter selection...",
             flush=True,
         )
         os.write(master, b"\x0f")  # Ctrl+O
         read_until(master, b"Enter filename to open:", timeout=15.0)
         drain_all(master)
+        # Switch to C6: (65 files -> 2 pages: Page 1 has PG01..PG60, Page 2
+        # has PG61..PG65)
+        os.write(master, b"\x08\x08\x08C6:\r")
+        out_c6 = read_until(master, b"Enter filename to open:", timeout=15.0)
+        out_c6 += drain_all(master, quiet_time=0.4)
+        if b"[Page 1/2]" not in out_c6:
+            buf_str = repr(out_c6[-400:])
+            print(
+                f"[-] Step 7: Failed to switch to multi-page C6:. "
+                f"Buffer: {buf_str}",
+                flush=True,
+            )
+            return False
+        # Press Tab -> highlights PG01.TXT (top-left of Page 1)
+        os.write(master, b"\t")
+        out_c6_tab = drain_all(master, quiet_time=0.4)
+        if b"C6:PG01.TXT" not in out_c6_tab:
+            buf_str = repr(out_c6_tab[-400:])
+            print(
+                f"[-] Step 7: Tab on C6: did not select PG01.TXT. "
+                f"Buffer: {buf_str}",
+                flush=True,
+            )
+            return False
+        # Press PgDn (ESC [ 6 ~) -> Page 2, highlight bar at top-left (PG61.TXT)
+        os.write(master, b"\x1b[6~")
+        out_pgdn = drain_all(master, quiet_time=0.6)
+        if (
+            b"[Page 2/2]" not in out_pgdn
+            or b"\x1b[7mPG61.TXT    \x1b[0m" not in out_pgdn
+            or b"C6:PG61.TXT" not in out_pgdn
+        ):
+            buf_str = repr(out_pgdn[-400:])
+            print(
+                f"[-] Step 7: PgDn in highlight mode did not select top-left "
+                f"PG61.TXT on Page 2. Buffer: {buf_str}",
+                flush=True,
+            )
+            return False
+        # Press PgUp (ESC [ 5 ~) -> Page 1, highlight bar at bottom-right
+        # (PG60.TXT)
+        os.write(master, b"\x1b[5~")
+        out_pgup = drain_all(master, quiet_time=0.6)
+        if (
+            b"[Page 1/2]" not in out_pgup
+            or b"\x1b[7mPG60.TXT    \x1b[0m" not in out_pgup
+            or b"C6:PG60.TXT" not in out_pgup
+        ):
+            buf_str = repr(out_pgup[-400:])
+            print(
+                f"[-] Step 7: PgUp in highlight mode did not select "
+                f"bottom-right PG60.TXT on Page 1. Buffer: {buf_str}",
+                flush=True,
+            )
+            return False
+        # Exit highlight mode via Tab, switch back to C5:, and select NAV07.TXT
+        os.write(master, b"\t")
+        drain_all(master, quiet_time=0.3)
+        os.write(master, b"\x08" * 15 + b"C5:\r")
+        read_until(master, b"Enter filename to open:", timeout=15.0)
+        drain_all(master, quiet_time=0.4)
         # Tab (NAV01) -> Right (NAV02) -> Down (NAV07) -> Enter
         os.write(master, b"\t")
         drain_all(master, quiet_time=0.3)
@@ -394,7 +489,8 @@ def test_dir_highlight_nav():
             )
             return False
         print(
-            "[+] Step 7: Enter in highlight mode loaded NAV07.TXT directly.",
+            "[+] Step 7: Multi-page PgDn (top-left) & PgUp (bottom-right) and "
+            "Enter selection verified.",
             flush=True,
         )
 

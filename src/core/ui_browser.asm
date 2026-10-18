@@ -5128,6 +5128,7 @@ NO_SWAP_NEEDED:
 ;------------------------------------------------------------------------------
 DIR_PAGE_FILE_CNT	EQU DIR_TEMP_ENTRY + 13
 DIR_HL_INDEX		EQU DIR_TEMP_ENTRY + 14
+DIR_HL_AUTO_MODE	EQU DIR_TEMP_ENTRY + 15
 
 RESTORE_WORK_FCB_FROM_TEMP:
 	LD HL,DIR_TEMP_FCB
@@ -5141,6 +5142,7 @@ RESTORE_WORK_FCB_FROM_TEMP:
 CALC_DIR_PAGES:
 	XOR A
 	LD (DIR_PAGE_INDEX),A
+	LD (DIR_HL_AUTO_MODE),A
 	LD A,(DIR_FILE_COUNT)
 	OR A
 	JR NZ,CDP_NONZERO
@@ -5667,6 +5669,9 @@ READ_FILENAME_INPUT_PREFILLED:
 	LD (SHOWING_FNF_MSG),A
 	LD A,(INPUT_BUF_LEN)
 	LD (INPUT_CURSOR_POS),A
+	LD A,(DIR_HL_AUTO_MODE)
+	OR A
+	JP NZ,INPUT_AUTO_DIR_NAV
 	JR INPUT_CHAR_LOOP
 
 INPUT_CHAR_LOOP:
@@ -6246,14 +6251,27 @@ INPUT_ENTER_EMPTY:
 ;------------------------------------------------------------------------------
 ; Directory Highlight Bar Navigation Mode (Tab from Filename Text Box)
 ;------------------------------------------------------------------------------
+INPUT_AUTO_DIR_NAV:
+	LD B,A				; B = 1 (top-left) or 2 (bottom-right)
+	XOR A
+	LD (DIR_HL_AUTO_MODE),A
+	LD A,(DIR_PAGE_FILE_CNT)
+	OR A
+	JP Z,INPUT_CHAR_LOOP
+	DEC B
+	JR Z,ITDN_SET_TOP_LEFT
+	DEC A				; A = DIR_PAGE_FILE_CNT - 1 (last file)
+	JR ITDN_HAVE_INDEX
+
 INPUT_TAB_TO_DIR_NAV:
 	LD A,(DIR_PAGE_FILE_CNT)
 	OR A
 	JP Z,INPUT_CHAR_LOOP		; No files on page -> stay in text box
-
+ITDN_SET_TOP_LEFT:
+	XOR A				; Start at top-left entry (index 0)
+ITDN_HAVE_INDEX:
+	LD (DIR_HL_INDEX),A
 	CALL TERM_HIDE_CURSOR
-	XOR A
-	LD (DIR_HL_INDEX),A		; Start at top-left entry (index 0)
 	CALL DRAW_HL_ON
 
 DIR_NAV_LOOP:
@@ -6292,7 +6310,7 @@ DNL_CHK_ENTER:
 
 DNL_CHK_ESC:
 	CP KEY_ESC
-	JR NZ,DNL_CHK_CTRL
+	JP NZ,DNL_CHK_PAGE_CTRL
 
 	LD BC,ESC_TIMEOUT_LOOPS
 DNL_WAIT_ESC:
@@ -6337,13 +6355,21 @@ DNL_CSI:
 DNL_CSI_PGUP:
 	CALL GET_KEY
 DNL_DO_PGUP:
-	CALL TERM_SHOW_CURSOR
+	LD A,(DIR_PAGE_COUNT)
+	CP 2
+	JP C,DIR_NAV_LOOP		; Single page -> stay on current file
+	LD A,2				; 2 = auto-highlight bottom-right file
+	LD (DIR_HL_AUTO_MODE),A
 	JP INPUT_DO_PGUP
 
 DNL_CSI_PGDN:
 	CALL GET_KEY
 DNL_DO_PGDN:
-	CALL TERM_SHOW_CURSOR
+	LD A,(DIR_PAGE_COUNT)
+	CP 2
+	JP C,DIR_NAV_LOOP		; Single page -> stay on current file
+	LD A,1				; 1 = auto-highlight top-left file
+	LD (DIR_HL_AUTO_MODE),A
 	JP INPUT_DO_PGDN
 
 DNL_SS3:
@@ -6358,21 +6384,13 @@ DNL_SS3:
 	JR Z,DNL_MOVE_LEFT
 	JP DIR_NAV_LOOP
 
-DNL_CHK_CTRL:
+DNL_CHK_PAGE_CTRL:
 	CP KEY_CTRL_U
 	JR Z,DNL_DO_PGUP
 	CP KEY_CTRL_B
 	JR Z,DNL_DO_PGUP
 	CP KEY_CTRL_V
 	JR Z,DNL_DO_PGDN
-	CP KEY_CTRL_E
-	JR Z,DNL_MOVE_UP
-	CP KEY_CTRL_X
-	JR Z,DNL_MOVE_DOWN
-	CP KEY_CTRL_S
-	JR Z,DNL_MOVE_LEFT
-	CP KEY_CTRL_D
-	JR Z,DNL_MOVE_RIGHT
 	JP DIR_NAV_LOOP
 
 DNL_MOVE_LEFT:

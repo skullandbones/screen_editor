@@ -1034,9 +1034,15 @@ content blocks rather than top-aligned text.
        currently highlighted filename (prefixed with the active `<Drive><User>:`
        in CP/M mode).
      - The highlight bar can be navigated across the multi-column file grid
-       using the cursor keys (`<Left>`, `<Right>`, `<Up>`, `<Down>` or WordStar
-       equivalents `^S`, `^D`, `^E`, `^X`), updating both the highlighted cell
-       and the filename text box in-place without full-screen redraws.
+       using the cursor keys (`<Left>`, `<Right>`, `<Up>`, `<Down>`), updating
+       both the highlighted cell and the filename text box in-place without
+       full-screen redraws.
+     - Multi-Page Highlight Paging (`<PgUp>` / `<PgDn>`): When the directory
+       listing spans multiple pages (`DIR_PAGE_COUNT >= 2`) and the highlight
+       bar is active, pressing `<PgDn>` advances to the next page and places
+       the highlight bar on the top-left file (index `0`), while pressing
+       `<PgUp>` moves to the previous page and places the highlight bar on the
+       bottom-right (last) file on that page.
      - Pressing `<Enter>` while the highlight bar is active immediately accepts
        and uses the highlighted filename (identical to pressing `<Enter>` in
        the filename text box).
