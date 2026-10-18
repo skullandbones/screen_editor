@@ -635,7 +635,7 @@ void show_about_screen(void)
 {
     static const char *s_about_lines[9] = {
         "               SE - Screen Editor",
-        "         version 1.1.3 (2026-10-17) (C)",
+        "         version 1.1.4 (2026-10-18) (C)",
         "                 by Dean Jenkins",
         "",
         "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",

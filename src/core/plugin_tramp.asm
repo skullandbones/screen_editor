@@ -105,7 +105,7 @@ PLUGIN_HOST_API:
 	IFDEF TARGET_NEXT
 	DW 0114H			; +2:  Host version (v1.1.4)
 	ELSE
-	DW 0113H			; +2:  Host version (v1.1.3)
+	DW 0114H			; +2:  Host version (v1.1.4)
 	ENDIF
 	DW ACTIVE_LINE_BUF		; +4:  Pointer to ACTIVE_LINE_BUF
 

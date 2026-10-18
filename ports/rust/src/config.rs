@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-pub const SE_VERSION_STR: &str = "v1.1.3";
+pub const SE_VERSION_STR: &str = "v1.1.4";
 
 pub const COLS_80: u8 = 80;
 pub const ROWS_24: u8 = 24;

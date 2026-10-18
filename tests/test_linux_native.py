@@ -3393,7 +3393,7 @@ def test_bug_2_4_44_about_screen_canonical_layout():
         lang_tag = (
             "(Rust)" if USE_RUST else ("(Python)" if PY_MODE else "(C)")
         )
-        expected_ver = f"version 1.1.3 (2026-10-17) {lang_tag}"
+        expected_ver = f"version 1.1.4 (2026-10-18) {lang_tag}"
         expected_credits = (
             "Google Antigravity 2.23.0 & Gemini 4 Argon Medium"
         )
@@ -4156,7 +4156,7 @@ def test_bug_2_4_52_about_screen_version_attribution_and_centering():
         "[*] Testing About version, attribution & centering (Bug 2.4.52)..."
     )
 
-    # 1. Verify CLI --help version banner is updated to v1.1.3
+    # 1. Verify CLI --help version banner is updated to v1.1.4
     if not PY_MODE:
         res = subprocess.run(
             [SE_LINUX_BIN, "--help"],
@@ -4165,8 +4165,8 @@ def test_bug_2_4_52_about_screen_version_attribution_and_centering():
             cwd=PROJECT_DIR,
         )
         assert res.returncode == 0, f"--help failed: {res.returncode}"
-        assert "(v1.1.3)" in res.stdout, (
-            f"Expected '(v1.1.3)' in --help output:\n{res.stdout}"
+        assert "(v1.1.4)" in res.stdout, (
+            f"Expected '(v1.1.4)' in --help output:\n{res.stdout}"
         )
 
     # 2. Verify live About screen layout, blank rows, and per-line centering
@@ -4190,9 +4190,9 @@ def test_bug_2_4_52_about_screen_version_attribution_and_centering():
         about_out = about_raw.decode("utf-8", errors="replace")
 
         ver_row = (
-            "\x1b[9;17H        version 1.1.3 (2026-10-17) (Rust)"
+            "\x1b[9;17H        version 1.1.4 (2026-10-18) (Rust)"
             if USE_RUST
-            else "\x1b[9;17H         version 1.1.3 (2026-10-17) (C)"
+            else "\x1b[9;17H         version 1.1.4 (2026-10-18) (C)"
         )
         expected_rows = [
             "\x1b[8;17H               SE - Screen Editor",

@@ -42,7 +42,7 @@ def test_bug_2_2_10():
     with open(bin_cpm, "rb") as f:
         code_cpm = f.read()
 
-    expected_version = b"version 1.1.3 (2026-10-17) (Z80 Assembly)"
+    expected_version = b"version 1.1.4 (2026-10-18) (Z80 Assembly)"
     assert expected_version in code_next, (
         f"Expected '{expected_version.decode()}' in SE_NEXT.COM"
     )

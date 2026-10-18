@@ -582,7 +582,7 @@ class TestEditor(unittest.TestCase):
         self.editor.action_about()
         about_text = "\n".join(rendered_lines)
         self.assertIn("SE - Screen Editor", about_text)
-        self.assertIn("version 1.1.3 (2026-10-17) (Python)", about_text)
+        self.assertIn("version 1.1.4 (2026-10-18) (Python)", about_text)
         self.assertIn("by Dean Jenkins", about_text)
         self.assertIn("MIT License", about_text)
         self.assertIn("Press any key to continue", about_text)
@@ -2374,7 +2374,7 @@ class TestEditor(unittest.TestCase):
         self.editor.terminal.get_key = MagicMock(return_value=" ")
         self.editor.action_about()
         about_str = "\n".join(rendered)
-        self.assertIn("version 1.1.3 (2026-10-17) (Python)", about_str)
+        self.assertIn("version 1.1.4 (2026-10-18) (Python)", about_str)
         self.assertNotIn("(Linux)", about_str)
         print(
             "[+] Step 50: About screen predominant language verified.",
@@ -2978,7 +2978,7 @@ class TestEditor(unittest.TestCase):
         )
         import se
 
-        self.assertEqual(se.__version__, "1.1.3")
+        self.assertEqual(se.__version__, "1.1.4")
 
         cols, rows = 80, 24
         self.editor.terminal.cols = cols
@@ -3022,7 +3022,7 @@ class TestEditor(unittest.TestCase):
         # Content block is 9 rows on Screen Rows 8..16 (0-indexed 7..15)
         expected_lines = [
             "SE - Screen Editor",
-            "version 1.1.3 (2026-10-17) (Python)",
+            "version 1.1.4 (2026-10-18) (Python)",
             "by Dean Jenkins",
             "",
             "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",

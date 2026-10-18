@@ -736,7 +736,7 @@ def run_step_65(master):
         return False, f"Return prompt not found on About screen: {out_about}"
     if b"SE - Screen Editor" not in out_about:
         return False, f"'SE - Screen Editor' title not found: {out_about}"
-    if b"version 1.1.3" not in out_about:
+    if b"version 1.1.4" not in out_about:
         return False, f"Version details not found on About screen: {out_about}"
     if b"by Dean Jenkins" not in out_about:
         return False, f"Author attribution not found on About: {out_about}"

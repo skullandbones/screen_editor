@@ -11,7 +11,7 @@ Verifies:
 3. HELPNEXT.OVL and PLUGIN.PRL check for Host API version >= 0x0114 and call
    the +76 (hide cursor) and +79 (show cursor) trampolines, falling back to
    their local cursor strings when loaded on an older host (< 0x0114).
-4. SE.COM (RomWBW) remains byte-for-byte identical (Host API v0x0113, so
+4. SE.COM (RomWBW) remains byte-for-byte identical (Host API v0x0114, so
    PLUGIN.PRL falls back to emitting ESC[?25l on RomWBW).
 5. CCP headroom check (`check_ccp.py SE_NEXT.COM`) and plugin ABI check
    (`check_plugin.py`) pass.

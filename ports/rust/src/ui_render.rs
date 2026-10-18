@@ -633,7 +633,7 @@ pub fn show_help_screen() {
 
 const ABOUT_LINES: [&str; 9] = [
     "               SE - Screen Editor",
-    "        version 1.1.3 (2026-10-17) (Rust)",
+    "        version 1.1.4 (2026-10-18) (Rust)",
     "                 by Dean Jenkins",
     "",
     "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
