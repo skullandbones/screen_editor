@@ -716,9 +716,9 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 1 Open (Bug 2.3.14 Open; Bugs 2.3.1, 2.3.3,
-  2.3.4, 2.3.5, 2.3.9, 2.3.10, 2.3.11, 2.3.12, 2.3.13 Resolved; Bugs 2.3.2,
-  2.3.6, 2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 0 Open (Bugs 2.3.1, 2.3.3, 2.3.4, 2.3.5, 2.3.9,
+  2.3.10, 2.3.11, 2.3.12, 2.3.13, 2.3.14 Resolved; Bugs 2.3.2, 2.3.6,
+  2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -905,8 +905,8 @@ have been resolved and archived.
     - *Resolution*: Added `CP KEY_CTRL_S` and `JP Z,DO_SPLASH_SAVE` to
       `SPLASH_LOOP` in `src/se_next.asm` and verified via
       `tests/test_bug_2_3_13.py`.
-  - [ ] **Bug 2.3.14: Splash Screen Blank Gap Row Replacing Omitted
-    `[2] set 120x40`**:
+  - [x] **Bug 2.3.14: Splash Screen Blank Gap Row Replacing Omitted
+    `[2] set 120x40` [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.1, 15.1.5.
     - *Issue*: Under `IFDEF TARGET_NEXT` in `src/core/plugin_mgr.asm:4278-4281`,
       `STR_SPLASH_CMDS` replaces the omitted `[2] set 120x40` line with
@@ -920,6 +920,11 @@ have been resolved and archived.
       `SPLASH_MENU_LINES EQU 20` under `IFDEF TARGET_NEXT` in
       `src/include/ui.inc` so the 20-line Splash Screen block centers cleanly
       on 80x24 without a gap row between `[1]` and `[Q]`.
+    - *Resolution*: Removed the `DB 13,10` placeholder under
+      `IFDEF TARGET_NEXT` in `STR_SPLASH_CMDS` (`src/core/plugin_mgr.asm`),
+      defined `SPLASH_MENU_LINES EQU 20` under `IFDEF TARGET_NEXT` in
+      `src/include/ui.inc`, and verified on `SE.NEX` and `.se` via
+      `tests/test_bug_2_3_14.py`.
 
 ### 2.4 Profile 4: Linux Native C Profile (`se-linux`)
 - **Target Platform**: Linux PC / Workstation (`x86_64`) and Raspberry Pi 4/5
