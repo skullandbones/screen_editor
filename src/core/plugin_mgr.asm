@@ -4281,7 +4281,6 @@ STR_SPLASH_CMDS:
 	DB "  type   [C]              to configure",13,10
 	IFDEF TARGET_NEXT
 	DB "  type   [1]              set 80x24",13,10
-	DB 13,10
 	ELSE
 	DB "  type   [1]              set 80x24",13,10
 	DB "  type   [2]              set 120x40",13,10

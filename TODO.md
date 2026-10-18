@@ -320,10 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 4 Open (Bugs 2.2.16, 2.2.18, 2.2.19, 2.2.22 Open;
-  13 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
-  2.2.15, 2.2.17, 2.2.20, 2.2.21 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5,
-  2.2.6 Rejected).
+- **Status**: Active / 3 Open (Bugs 2.2.16, 2.2.18, 2.2.19 Open;
+  14 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
+  2.2.15, 2.2.17, 2.2.20, 2.2.21, 2.2.22 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4,
+  2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -687,8 +687,8 @@ have been resolved and archived.
     - *Resolution*: Added `CP KEY_CTRL_S` and `JP Z,DO_SPLASH_SAVE` to
       `SPLASH_LOOP` in `src/se_next_cpm.asm` and verified via
       `tests/test_bug_2_2_21.py`.
-  - [ ] **Bug 2.2.22: Splash Screen Blank Gap Row Replacing Omitted
-    `[2] set 120x40`**:
+  - [x] **Bug 2.2.22: Splash Screen Blank Gap Row Replacing Omitted
+    `[2] set 120x40` [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.1, 15.1.5.
     - *Issue*: Under `IFDEF TARGET_NEXT` in `src/core/plugin_mgr.asm:4278-4281`,
       `STR_SPLASH_CMDS` omits `type   [2]              set 120x40` by replacing
@@ -704,6 +704,10 @@ have been resolved and archived.
       `SPLASH_MENU_LINES EQU 20` under `IFDEF TARGET_NEXT` in
       `src/include/ui.inc` so the 20-line Splash Screen block centers cleanly
       on 80x24 without a gap row between `[1]` and `[Q]`.
+    - *Resolution*: Removed the `DB 13,10` placeholder under
+      `IFDEF TARGET_NEXT` in `STR_SPLASH_CMDS` (`src/core/plugin_mgr.asm`),
+      defined `SPLASH_MENU_LINES EQU 20` under `IFDEF TARGET_NEXT` in
+      `src/include/ui.inc`, and verified via `tests/test_bug_2_2_22.py`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and

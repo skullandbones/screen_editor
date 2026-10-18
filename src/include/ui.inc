@@ -27,7 +27,11 @@ FILENAME_FIELD_WIDTH	EQU	14	; Filename field width
 ;------------------------------------------------------------------------------
 ; Static Menu Screen Line Counts
 ;------------------------------------------------------------------------------
+	IFDEF TARGET_NEXT
+SPLASH_MENU_LINES	EQU	20	; Splash & Commands screen line count
+	ELSE
 SPLASH_MENU_LINES	EQU	21	; Splash & Commands screen line count
+	ENDIF
 ABOUT_MENU_LINES	EQU	9	; About dialog line count
 CONFIG_MENU_LINES	EQU	11	; Configuration dialog line count
 MEM_INFO_LINES		EQU	23	; Extended memory info screen line count
