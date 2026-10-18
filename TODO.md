@@ -3472,8 +3472,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.12
-  Resolved; Bug 2.8.7 Rejected).
+- **Status**: Active / 10 Defects Open (Bugs 2.8.13–2.8.22 Open; Bugs
+  2.8.1–2.8.6, 2.8.8–2.8.12 Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -3763,6 +3763,215 @@ have been resolved and archived.
       `120x40`) with exact per-line leading spaces (`15`, `9`, `17`, `0`, `3`,
       `12`) matching Section 15.2.2, and skipped redundant cursor locates on
       blank `~` rows. Verified with `tests/test_sec_about_screen.py`.
+  - [ ] **Bug 2.8.13: Directory Browser Layout, Vertical Centering, Inverse
+    Prompt & `[TAB]` Highlight Navigation Non-Conformities**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5–7.9, 15.3.
+    - *Issue*: In `src/core/ui_browser.c:216-681` (`render_browser_prompt` and
+      `ui_browser_workspace`):
+      1. *Top-Aligned Fixed Grid Instead of Dynamic Vertical Centering*:
+         `ui_browser_workspace()` hardcodes `num_rows = 12` (`28` in `120x40`),
+         `prompt_row = 8 + num_rows` (Row 20), and always starts the top `===`
+         border at Row 1 with 12 fixed file rows, whereas Section 15.3.2
+         mandates dynamic vertical centering (`FileRows = ceil(PageFiles /
+         DIR_COLS_PER_ROW) + 1`, `PromptRows = 3` in single-page or `4` in
+         multi-page, `DIR_TOP_PAD_COUNT = max(0, (ACTIVE_ROWS - 4 - BodyRows)
+         / 2)` blank `~` rows above the top `===` border).
+      2. *Wrong Horizontal Rule Width & Column Width*: Sets
+         `content_width = 70` (emitting 69 `=`/`-` chars on Columns 2..70) and
+         `col_width = 14` in `80x24`, whereas Section 7.5 and Section 15.3.2
+         mandate `ACTIVE_COLS - 2 = 78` `=`/`-` chars (`118` in `120x40`),
+         `DIR_COL_WIDTH = 15` in `80x24` (`16` in `120x40`), and `DIR_LEFT_PAD
+         = 3` spaces after `~` in `120x40` (currently hardcoded to 2 spaces).
+      3. *Missing Inverse Video on Prompt Label & Missing `<Drive><User>:`
+         Preload*: `render_browser_prompt()` prints `"  Enter filename to open:
+         ["` in normal video without preloading `<Drive><User>:` (e.g. `C0:`)
+         and without the trailing `[TAB]=Select File` mode hint, violating
+         Section 7.5 and Section 15.3.2 (`\x1b[7mEnter filename to
+         open:\x1b[0m [` + 20-char field + `]  [TAB]=Select File          `).
+      4. *Non-Canonical Guide Hint & Extra Single-Page Blank Row*: Line 433
+         prints `"  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, *.TXT)"`
+         instead of canonical `"  [ESC]=Cancel  Enter [d:][u:][pattern] to list
+         (e.g. B:, C1:, 1C:, *.TXT)"` (Section 15.3.2). In single-page
+         Open/Insert mode (`total_pages == 1`), lines 404–419 still emit an
+         extra blank `~` row before the `---` divider rule, violating the
+         Section 7.5 Single-Page Invariant (`PromptRows = 3`).
+      5. *Always-Active Grid Highlight & Missing `[TAB]` Highlight Bar Mode*:
+         Line 377 unconditionally highlights `selected_idx` in inverse video
+         while the text box is active, and `TAB` (`0x09`) is unhandled, whereas
+         Sections 7.5, 7.9, and 15.3.2 require the grid highlight to be off in
+         text box mode and toggled via `TAB` (`[TAB]=Edit Name  [Enter]=OK`,
+         12-char cell highlight, arrow/page navigation, hidden cursor).
+    - *Required Fix*: Refactor `ui_browser_workspace()` and
+      `render_browser_prompt()` in `src/core/ui_browser.c` to compute dynamic
+      vertical centering (`DIR_TOP_PAD_COUNT`, `FileRows`, `PromptRows`), emit
+      full-width `78`/`118` rules and `15`/`16`-col grids, render the inverse
+      prompt label with `<Drive><User>:` preload and `[TAB]` hint, enforce the
+      Single-Page Invariant, and implement `[TAB]` highlight bar mode.
+  - [ ] **Bug 2.8.14: Prohibited WordStar Diamond & Control Key Aliases (`^E`,
+    `^X`, `^R`, `^C`) in Plugin Palette and File Browser**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 6.3, 6.4, 10, 11.8
+      (Anti-Pattern #8).
+    - *Issue*:
+      1. In `src/core/plugin_mgr.c:235-239` (`show_plugin_palette`),
+         `KEY_CTRL_E` is aliased to `KEY_UP` and `KEY_CTRL_X` is aliased to
+         `KEY_DOWN`.
+      2. In `src/core/ui_browser.c:597-608` (`ui_browser_workspace`),
+         `KEY_CTRL_R` is aliased to `KEY_PGUP` and `KEY_CTRL_C` is aliased to
+         `KEY_PGDN`.
+      3. Section 10 and Anti-Pattern #8 strictly prohibit WordStar diamond and
+         legacy control navigation aliases across all surfaces and modals.
+    - *Required Fix*: Remove `KEY_CTRL_E` / `KEY_CTRL_X` from
+      `show_plugin_palette()` in `src/core/plugin_mgr.c` and remove
+      `KEY_CTRL_R` / `KEY_CTRL_C` from `ui_browser_workspace()` in
+      `src/core/ui_browser.c`.
+  - [ ] **Bug 2.8.15: Default Tab Width Initialized to `4` Instead of Canonical
+    `8` & `g_config_loaded` Never Set on CP/M**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4, 13.2, 13.3.
+    - *Issue*:
+      1. *Default Tab Width*: `config_init_defaults()` in
+         `src/core/config.c:43` initializes `g_config.tab_width = 4` (and
+         fallbacks in `src/core/ui_render.c:76` and `src/core/editor.c:54, 481`
+         use `4`), whereas Section 6.2 and Section 13.2 mandate `TAB = 8` as
+         the canonical default across all SE variants.
+      2. *`g_config_loaded` Never Set on CP/M*: Under `#ifdef __CPM__`,
+         `config_load_file()` (`src/core/config.c:157-204`) and
+         `config_save_file()` (`lines 213-269`) never set `g_config_loaded = 1`
+         on success, so `show_config_screen()` (`src/core/ui_render.c:681`)
+         permanently displays `"Config Status: Defaults"` even after loading or
+         saving `SE.CFG` (violating Section 7.4).
+      3. *Missing Program-Drive Fallback*: `config_load_file()` only probes the
+         current default drive (`SE.CFG`) and does not fall back to `A:SE.CFG`
+         per Section 13.3.
+    - *Required Fix*: Set default `tab_width = 8` in `src/core/config.c`,
+      `src/core/ui_render.c`, and `src/core/editor.c`; set `g_config_loaded = 1`
+      in CP/M `config_load_file()` and `config_save_file()`; and add `A:SE.CFG`
+      fallback probing in `config_load_file()`.
+  - [ ] **Bug 2.8.16: Help Screen Width (`74` vs `78` Columns), Missing
+    `g_is_splash_screen` Status Bar Context & Visible Cursor**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.3, 11.2
+      (Anti-Pattern #2).
+    - *Issue*: In `src/core/ui_render.c:588-632` (`show_help_screen`):
+      1. `s_help_eq` and `s_help_lines[20]` are 74 characters wide and rendered
+         with `content_width = 74` (`left_col = 4` in `80x24`, leaving 2
+         leading spaces after `~`), whereas Section 7.3 mandates full-width
+         `=` and `-` rules across columns `2..79` (`78` characters after `~` in
+         `80x24`) and 31 leading spaces before `EDITOR MODE KEYS`.
+      2. `show_help_screen()` does not set `g_is_splash_screen = 1` when called
+         from the editor via `Ctrl+K`, so Status Bar Field 4 displays
+         `^K: Editor keys` on the Help screen itself instead of `Free: <N> KB`
+         (violating Section 4.3, Section 7.3, and Anti-Pattern #2).
+      3. `show_help_screen()` does not hide the hardware cursor via
+         `hal_console_hide_cursor()`.
+    - *Required Fix*: Expand `s_help_eq` and `s_help_lines[20]` to 78 chars (or
+      `g_active_cols - 2`), align `EDITOR MODE KEYS` per Section 7.3, save and
+      set `g_is_splash_screen = 1` during `show_help_screen()`, and hide the
+      cursor while displaying the Help screen.
+  - [ ] **Bug 2.8.17: Missing Unsaved Modifications Prompt on Splash `Q`/`N`/`O`
+    and Editor `Ctrl+O` & Unprefilled Splash `S` Filename**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.7, 7.11, 8.3
+      (Archetype B).
+    - *Issue*:
+      1. In `show_splash_screen()` (`src/core/ui_render.c:494-510`), pressing
+         `Q`/`q`/`Ctrl+Q` (Quit), `N`/`n` (New file), or `O`/`o`/`Ctrl+O` (Open
+         file) after returning to the Splash Screen from a modified document
+         (`g_doc_modified == 1` via `ESC`) does not call
+         `modal_confirm_save_changes()`, discarding unsaved edits without
+         prompting.
+      2. In `editor_handle_key()` (`src/core/editor.c:611-620`), `KEY_CTRL_O`
+         opens `ui_browser_open_dialog()` before checking
+         `modal_confirm_save_changes()`, instead of prompting to save unsaved
+         modifications before entering the Open File browser.
+      3. In `show_splash_screen()` (`src/core/ui_render.c:512`), pressing
+         `S`/`s`/`Ctrl+S` initializes `dlg_fname[0] = '\0'` instead of
+         pre-filling `g_current_filename` per Section 7.7.
+    - *Required Fix*: Gate `Q`, `N`, and `O` in `show_splash_screen()` and
+      `KEY_CTRL_O` in `editor_handle_key()` with `modal_confirm_save_changes()`
+      when `g_doc_modified` is set, and pre-fill `dlg_fname` from
+      `g_current_filename` on Splash `S`/`Ctrl+S`.
+  - [ ] **Bug 2.8.18: Status Bar Field 4 Block Metrics Pluralization (`1 chars`
+    / `1 lines`) & Missing `>= 100` Compact Format (`<N>c` / `<N>L`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3 (Field 4 items 2–3),
+      Section 9.2.
+    - *Issue*: Under `#ifdef __CPM__`, `render_status_bar()` in
+      `src/core/ui_render.c:186-202` unconditionally formats
+      `"%s: %u chars"` and `"%s: %u lines"`:
+      1. When `count == 1`, it emits `"Sel: 1 chars"` / `"Block: 1 lines"`
+         instead of singular `"char"` / `"line"`.
+      2. For solidified blocks (`BLOCK_MODE_SOLIDIFIED`) with `count >= 100`
+         (and `count >= 1000` where `"Block: 1000 chars"` is 17 chars and
+         truncates at 15 chars `"%-15.15s"` to `"Block: 1000 cha"`), it fails
+         to switch to the compact `"Block: %uc"` / `"Block: %uL"` format
+         mandated by Section 4.3.
+    - *Required Fix*: Update the `#ifdef __CPM__` block metric formatter in
+      `render_status_bar()` (`src/core/ui_render.c`) to use singular `"char"` /
+      `"line"` when `count == 1` and compact `"Block: %uc"` / `"Block: %uL"`
+      when solidified `count >= 100`.
+  - [ ] **Bug 2.8.19: Search & Replace (`Ctrl+R`) Broken Confirmation Check
+    (`MODAL_RES_OK` vs `MODAL_RES_YES`) & Non-Conforming Modal Framing**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3 (Archetypes A, B,
+      C), 10, 11.9.
+    - *Issue*: In `src/core/search.c:338-404` (`do_ctrl_r_replace`):
+      1. *Replacements Always Skipped*: Line 366 calls `ans = modal_confirm(
+         "Replace Match?", "Replace this occurrence?", "Replace", "Skip")` and
+         checks `if (ans == MODAL_RES_OK)` (`1`), whereas `modal_confirm()`
+         returns `MODAL_RES_YES` (`2`, see `src/include/ui_modal.h:16-18`). As
+         a result, `ans == MODAL_RES_OK` is always false and confirming a
+         replacement in `Ctrl+R` never replaces any match (`replaced_count` is
+         always `0`).
+      2. *Non-Conforming Replace Input Prompt*: `do_ctrl_r_replace()` calls
+         generic `modal_prompt_text()` with inverse-video field and
+         `[Enter]=Confirm      [ESC]=Cancel` instead of supporting `[Tab]=Toggle
+         Case` and canonical Replace prompt framing (`[Enter]=Replace
+         [Tab]=Toggle Case  [ESC]=Cancel`).
+    - *Required Fix*: Fix the confirmation return value check in
+      `do_ctrl_r_replace()` (`src/core/search.c`) and align the `Ctrl+R` prompt
+      and match confirmation dialogs with `docs/UI_UX_DESIGN.md` Section 8.3.
+  - [ ] **Bug 2.8.20: `Ctrl+N` (Find Next) Unbound in `editor_handle_key()`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10 (Canonical
+      Keybinding Matrix, line 1461).
+    - *Issue*: Although `do_ctrl_n_find_next()` is implemented in
+      `src/core/search.c:324` and advertised on the Help Screen (`Ctrl+F /
+      Ctrl+N : Find String / Find Next`), `KEY_CTRL_N` (`0x0E`) is missing from
+      the `switch (key)` dispatch table in `editor_handle_key()`
+      (`src/core/editor.c:520-677`), making `Ctrl+N` a silent no-op in Editor
+      Mode.
+    - *Required Fix*: Add `case KEY_CTRL_N: do_ctrl_n_find_next(); break;` to
+      `editor_handle_key()` in `src/core/editor.c`.
+  - [ ] **Bug 2.8.21: Confirmation Modals (`modal_confirm`) Non-Conforming
+    Reverse-Video Selector & `Enter`/`Space` Acceptance**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3 (Archetype B, lines
+      1259–1288).
+    - *Issue*: Section 8.3 (Archetype B) specifies that confirmation modals
+      (`Unsaved Modifications` and `Overwrite File`) render plain text options
+      `[Y]es      [N]o      [ESC]=Cancel` and are confirmed strictly via
+      explicit `Y`/`y` and cancelled via `N`/`n` or `ESC`. Instead,
+      `modal_confirm()` in `src/core/ui_modal.c:167-233` renders an interactive
+      reverse-video button selector on `[Y]es` / `[N]o` navigated with
+      `Tab`/`Left`/`Right` and accepts `Enter` or `Space` (`' '`) to trigger the
+      highlighted button.
+    - *Required Fix*: Update `modal_confirm()` in `src/core/ui_modal.c` to
+      render plain `[Y]es      [N]o      [ESC]=Cancel` options without reverse
+      button highlights and accept only `Y`/`y` for Yes and `N`/`n`/`ESC` for
+      No/Cancel per Section 8.3 Archetype B.
+  - [ ] **Bug 2.8.22: Non-Conforming Memory Info (`[M]`) & Plugin Manager (`[P]`
+    / `Ctrl+Z`) Layouts and Prohibited Ellipses**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 4.1, 5.2, 7.1, 7.2, 8.2,
+      11.9 (Anti-Pattern #9).
+    - *Issue*:
+      1. `show_mem_info_screen()` (`src/core/ui_render.c:787-808`) renders an
+         uncentered 5-line stub with prohibited trailing ellipsis (`"Press any
+         key to return..."`), does not set `g_is_splash_screen = 1`, and leaves
+         the hardware cursor visible.
+      2. `plugin_manager_ui()` (`src/core/plugin_mgr.c:82-119`) computes 0-based
+         `top = (g_active_rows - height) / 2` (missing `+ 1`), overwrites the
+         Row `top + 2` title separator border `+---+` with `"Slot  Name
+         Status      Capabilities"`, emits a prohibited trailing ellipsis in
+         `"Press Esc or Q to return to editor..."`, and leaves the hardware
+         cursor visible.
+    - *Required Fix*: Harmonize `show_mem_info_screen()` in
+      `src/core/ui_render.c` and `plugin_manager_ui()` in
+      `src/core/plugin_mgr.c` to canonical centered framing, remove prohibited
+      `...` ellipses, preserve box borders, and hide the hardware cursor.
 
 ---
 
