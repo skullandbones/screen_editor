@@ -218,6 +218,8 @@ image: $(IMAGE) $(TARGET) $(TARGET_SEC) $(TARGET_NEXT_CPM) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HIBERN.OVL 0:HIBERN.OVL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HELP.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HELP.OVL 0:HELP.OVL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:HELPNEXT.OVL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/HELPNEXT.OVL 0:HELPNEXT.OVL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:2.TXT 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) 2.TXT 0:2.TXT
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:SE.COM 0:se.com 2>/dev/null || true
@@ -253,10 +255,12 @@ image: $(IMAGE) $(TARGET) $(TARGET_SEC) $(TARGET_NEXT_CPM) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HIBERN.OVL 0:HIBERN.OVL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:HELP.OVL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HELP.OVL 0:HELP.OVL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:HELPNEXT.OVL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/HELPNEXT.OVL 0:HELPNEXT.OVL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:2.TXT 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) 2.TXT 0:2.TXT
 
-next-image: se-next-cpm se-next-native
+next-image: se-next-cpm se-next-native plugins
 	@echo "==> Populating ZX Spectrum Next MMC image (tbblue.mmc)..."
 	python3 tools/populate_next_disk.py
 

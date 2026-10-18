@@ -163,7 +163,11 @@ RESTORE_RAMDRIVE:
 STR_HIBERN_OVL_NAME:
 	DB "HIBERN  OVL"
 STR_HELP_OVL_NAME:
+	IFDEF TARGET_NEXT_CPM
+	DB "HELPNEXTOVL"
+	ELSE
 	DB "HELP    OVL"
+	ENDIF
 
 ;------------------------------------------------------------------------------
 ; INIT_OVERLAY_FCB: Initialize OVERLAY_FCB with overlay file name

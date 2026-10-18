@@ -298,6 +298,29 @@ def main():
                     os.path.join(plugin_dir, "help_100.bin"),
                     os.path.join(plugin_dir, "help_200.bin")], check=True)
 
+    # 10. Build HELPNEXT.OVL (4KB TPA Relocatable Overlay for ZX Spectrum Next)
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'helpnext_100.bin')}",
+                    os.path.join(plugin_dir, "helpnext.asm")], check=True)
+
+    helpnext_200_asm = os.path.join(plugin_dir, "helpnext_200.asm")
+    with open(os.path.join(plugin_dir, "helpnext.asm"), "r") as f:
+        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
+    with open(helpnext_200_asm, "w") as f:
+        f.write(src)
+
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'helpnext_200.bin')}",
+                    helpnext_200_asm], check=True)
+    if os.path.exists(helpnext_200_asm):
+        os.remove(helpnext_200_asm)
+
+    subprocess.run([sys.executable, mkprl_bin, "-n", "HELPNEXT",
+                    "-o", os.path.join(plugin_dir, "HELPNEXT.OVL"),
+                    "--tpa", "--has-about", "--has-config",
+                    os.path.join(plugin_dir, "helpnext_100.bin"),
+                    os.path.join(plugin_dir, "helpnext_200.bin")], check=True)
+
     # Clean up temporary binaries
     for tmp in ["rot13_100.bin", "rot13_200.bin", "wordcnt.bin",
                 "beautify_100.bin", "beautify_200.bin",
@@ -306,7 +329,8 @@ def main():
                 "bigplug_100.bin", "bigplug_200.bin",
                 "plugin_100.bin", "plugin_200.bin",
                 "hibern_100.bin", "hibern_200.bin",
-                "help_100.bin", "help_200.bin"]:
+                "help_100.bin", "help_200.bin",
+                "helpnext_100.bin", "helpnext_200.bin"]:
         p = os.path.join(plugin_dir, tmp)
         if os.path.exists(p):
             os.remove(p)
@@ -338,6 +362,7 @@ def main():
     print(f"    - {os.path.join(plugin_dir, 'PLUGIN.PRL')}")
     print(f"    - {os.path.join(plugin_dir, 'HIBERN.OVL')}")
     print(f"    - {os.path.join(plugin_dir, 'HELP.OVL')}")
+    print(f"    - {os.path.join(plugin_dir, 'HELPNEXT.OVL')}")
 
 if __name__ == "__main__":
     main()

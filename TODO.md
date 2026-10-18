@@ -320,9 +320,9 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 7 Open (Bugs 2.2.16–2.2.22 Open; 10 Bugs 2.2.2, 2.2.7,
-  2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15 Resolved;
-  Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 6 Open (Bugs 2.2.16, 2.2.18–2.2.22 Open; 11 Bugs 2.2.2,
+  2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15, 2.2.17
+  Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -565,8 +565,8 @@ have been resolved and archived.
       hardcoded DEC sequences. Overlays must fall back to the existing
       `\x1b[?25l/h` strings when loaded by an older host (version check),
       and `SE.COM` must continue to emit `\x1b[?25l/h` on RomWBW.
-  - [ ] **Bug 2.2.17: Help Screen Shows PC/Terminal Keys Instead of ZX
-    Spectrum Next Keys (Create `HELPNEXT.OVL`)**:
+  - [x] **Bug 2.2.17: Help Screen Shows PC/Terminal Keys Instead of ZX
+    Spectrum Next Keys (Create `HELPNEXT.OVL`) [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.4;
       `docs/KEYBINDINGS.md` Section 7.
     - *Issue*: `SE_NEXT.COM` loads the shared `HELP.OVL`
@@ -601,6 +601,17 @@ have been resolved and archived.
         pop-up text accordingly; `SE.COM` must remain byte-identical.
       - Add a build target and deploy `HELPNEXT.OVL` with `SE_NEXT.COM`
         (see Bug 2.2.20).
+    - *Resolution*: Created `plugins/helpnext.asm` (`HELPNEXT.OVL`) with a
+      canonical 22-line Tier 1 layout tailored for the ZX Spectrum Next
+      keyboard (`EXTEND` = `Ctrl`, `*` markers for redefined Next CP/M keys
+      `Arrow Keys`, `INV VIDEO`, `GRAPH`, and `TRUE VIDEO`, plus `DELETE`,
+      `EDIT`, `BREAK`, `EXTEND+Y`, and `EXTEND+Z`, and `ESC f` cursor hide).
+      Updated `src/core/ui_browser.asm` and `src/core/plugin_mgr.asm` under
+      `TARGET_NEXT_CPM` to load `HELPNEXTOVL` and show
+      `HELPNEXT.OVL was not found.` while keeping `SE.COM` byte-identical.
+      Updated `plugins/build_plugins.py`, `Makefile`, and
+      `tools/populate_next_disk.py` to build and deploy `HELPNEXT.OVL`.
+      Validated via `tests/test_bug_2_2_17.py`.
   - [ ] **Bug 2.2.18: Insert/Overwrite Mode Cannot Be Toggled From the Next
     Keyboard**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 10, 10.4.

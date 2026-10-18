@@ -4198,7 +4198,11 @@ STR_POPUP_PLUG_MISS_MSG2:
 STR_POPUP_HELP_MISS_TITLE:
 	DB "|                  Help Missing                  |", 0
 STR_POPUP_HELP_MISS_MSG1:
+	IFDEF TARGET_NEXT_CPM
+	DB "|           HELPNEXT.OVL was not found.          |", 0
+	ELSE
 	DB "|             HELP.OVL was not found.            |", 0
+	ENDIF
 STR_POPUP_HELP_MISS_MSG2:
 	DB "|       Unable to load online help screen.       |", 0
 

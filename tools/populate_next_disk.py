@@ -211,6 +211,7 @@ def populate_next_mmc(
         ("dot_se.bin", "::/se"),
         ("SE.NEX", "::/SE.NEX"),
         ("SE_NEXT.COM", "::/SE_NEXT.COM"),
+        (os.path.join("plugins", "HELPNEXT.OVL"), "::/HELPNEXT.OVL"),
     ]
 
     print("[*] Injecting Next binaries into MMC image...", flush=True)
