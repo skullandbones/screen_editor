@@ -716,9 +716,9 @@ have been resolved and archived.
   tile/text layer (80x25 / 80x32), NextRegs MMU 8KB SRAM banking (1MB/2MB),
   NextZXOS filesystem API (`RST 08h`).
 - **Build Target**: `make se-next-native` (produces `SE.NEX` and `.se`).
-- **Status**: Active / 2 Open (Bugs 2.3.13, 2.3.14 Open; Bugs 2.3.1, 2.3.3,
-  2.3.4, 2.3.5, 2.3.9, 2.3.10, 2.3.11, 2.3.12 Resolved; Bugs 2.3.2, 2.3.6,
-  2.3.7, 2.3.8 Rejected).
+- **Status**: Active / 1 Open (Bug 2.3.14 Open; Bugs 2.3.1, 2.3.3,
+  2.3.4, 2.3.5, 2.3.9, 2.3.10, 2.3.11, 2.3.12, 2.3.13 Resolved; Bugs 2.3.2,
+  2.3.6, 2.3.7, 2.3.8 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.3.1: Dedicated Arrow Keys Mapped to WordStar Diamond Commands**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 10.
@@ -888,8 +888,8 @@ have been resolved and archived.
       *.TXT)` on `SE.NEX` and `.se`, while preserving CP/M user area notation
       on `SE_NEXT.COM` and byte-for-byte binary invariance on `SE.COM`.
       Validated via `tests/test_bug_2_3_12.py`.
-  - [ ] **Bug 2.3.13: Splash Screen `Ctrl+S` (`^S`) Not Dispatched in
-    `SPLASH_LOOP`**:
+  - [x] **Bug 2.3.13: Splash Screen `Ctrl+S` (`^S`) Not Dispatched in
+    `SPLASH_LOOP` [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 10, 15.1; Bug 2.1.22.
     - *Issue*: `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm:4270` displays
       `type   [S]  or  [^S]    to save file` on the Splash Screen, and
@@ -902,6 +902,9 @@ have been resolved and archived.
     - *Required Fix*: In `src/se_next.asm:588-593` (`SPLASH_LOOP`), add
       `CP KEY_CTRL_S` and `JP Z,DO_SPLASH_SAVE` alongside `'s'` and `'S'`
       (matching `src/se.asm:545-546`).
+    - *Resolution*: Added `CP KEY_CTRL_S` and `JP Z,DO_SPLASH_SAVE` to
+      `SPLASH_LOOP` in `src/se_next.asm` and verified via
+      `tests/test_bug_2_3_13.py`.
   - [ ] **Bug 2.3.14: Splash Screen Blank Gap Row Replacing Omitted
     `[2] set 120x40`**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.1, 15.1.5.
