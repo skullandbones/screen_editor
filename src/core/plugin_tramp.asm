@@ -102,7 +102,11 @@ FAT_CHUNK_BUF		EQU	CFG_IO_BUF + 64
 ALIGN 4
 PLUGIN_HOST_API:
 	DB "SE"				; +0:  Magic
+	IFDEF TARGET_NEXT
+	DW 0114H			; +2:  Host version (v1.1.4)
+	ELSE
 	DW 0113H			; +2:  Host version (v1.1.3)
+	ENDIF
 	DW ACTIVE_LINE_BUF		; +4:  Pointer to ACTIVE_LINE_BUF
 
 	DW ACTIVE_LINE_LEN		; +6:  Pointer to ACTIVE_LINE_LEN
@@ -138,6 +142,10 @@ HOST_API_MGR_SLOT:
 	JP TRAMP_SAVE_PLUGIN_CFG	; +67: Call HOST_SAVE_PLUGIN_CFG
 	JP TRAMP_LOAD_PLUGIN_CFG	; +70: Call HOST_LOAD_PLUGIN_CFG
 	JP TRAMP_RENDER_STATUS_BAR	; +73: Call RENDER_STATUS_BAR
+	IFDEF TARGET_NEXT
+	JP TRAMP_HIDE_CURSOR		; +76: Call TERM_HIDE_CURSOR
+	JP TRAMP_SHOW_CURSOR		; +79: Call TERM_SHOW_CURSOR
+	ENDIF
 
 ;------------------------------------------------------------------------------
 ; TRAMP_CHECKOUT_LINE: Host API trampoline for line checkout across memory banks
@@ -689,6 +697,28 @@ TRAMP_FAR_CALL:
 	CALL 0FFF3H
 	POP AF				; Restore return AF
 	RET
+
+	IFDEF TARGET_NEXT
+;------------------------------------------------------------------------------
+; TRAMP_HIDE_CURSOR / TRAMP_SHOW_CURSOR: Host API trampolines for cursor state
+;
+; Purpose:
+;   Calls TERM_HIDE_CURSOR (+76) or TERM_SHOW_CURSOR (+79) across memory banks.
+;------------------------------------------------------------------------------
+TRAMP_HIDE_CURSOR:
+	LD A,(PLUGIN_IS_FAR_EXEC)
+	OR A
+	JP Z,TERM_HIDE_CURSOR
+	LD HL,TERM_HIDE_CURSOR
+	JR TRAMP_FAR_CALL
+
+TRAMP_SHOW_CURSOR:
+	LD A,(PLUGIN_IS_FAR_EXEC)
+	OR A
+	JP Z,TERM_SHOW_CURSOR
+	LD HL,TERM_SHOW_CURSOR
+	JR TRAMP_FAR_CALL
+	ENDIF
 
 ;------------------------------------------------------------------------------
 ; EXEC_PLUGIN_MGR_ACTION: Execute specific entry point of PLUGIN.PRL via HBIOS

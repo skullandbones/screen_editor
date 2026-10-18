@@ -320,10 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 3 Open (Bugs 2.2.16, 2.2.18, 2.2.19 Open;
-  14 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
-  2.2.15, 2.2.17, 2.2.20, 2.2.21, 2.2.22 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4,
-  2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 2 Open (Bugs 2.2.18, 2.2.19 Open;
+  15 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
+  2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22 Resolved; Bugs 2.2.1, 2.2.3,
+  2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -541,8 +541,8 @@ have been resolved and archived.
       `tests/test_bug_2_2_15.py`.
     - *Follow-up*: Hardcoded `\x1b[?25l` in `HELPNEXT.OVL` and `PLUGIN.PRL` is
       tracked separately as Bug 2.2.16.
-  - [ ] **Bug 2.2.16: Cursor Visible While `HELPNEXT.OVL` / `PLUGIN.PRL`
-    Overlays Are Displayed**:
+  - [x] **Bug 2.2.16: Cursor Visible While `HELPNEXT.OVL` / `PLUGIN.PRL`
+    Overlays Are Displayed [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 8; Bug 2.2.15.
     - *Issue*: In `SE_NEXT.COM`, the terminal cursor may remain visible
       while the Help screen (`HELPNEXT.OVL`, opened via `Ctrl+K` /
@@ -567,6 +567,14 @@ have been resolved and archived.
       hardcoded DEC sequences. Overlays must fall back to the existing
       `\x1b[?25l/h` strings when loaded by an older host (version check),
       and `SE.COM` must continue to emit `\x1b[?25l/h` on RomWBW.
+    - *Resolution*: Appended `TRAMP_HIDE_CURSOR` (`+76`) and
+      `TRAMP_SHOW_CURSOR` (`+79`) to `PLUGIN_HOST_API` under `TARGET_NEXT`
+      (bumping the Host API version to `0114H`) in `src/core/plugin_tramp.asm`
+      and `src/include/plugin.inc`. Updated `plugins/helpnext.asm` and
+      `plugins/plugin.asm` to call the `+76`/`+79` vectors when Host API
+      version $\ge \text{0x0114}$ and fall back to local cursor strings on
+      older hosts, preserving `SE.COM` byte-for-byte binary invariance.
+      Validated via `tests/test_bug_2_2_16.py`.
   - [x] **Bug 2.2.17: Help Screen Shows PC/Terminal Keys Instead of ZX
     Spectrum Next Keys (Create `HELPNEXT.OVL`) [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10.4;

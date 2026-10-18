@@ -45,7 +45,7 @@ PLUG_CTX_ABOUT		EQU	6	; About SE.COM dialog
 ; Upper Memory Host API Vector Offsets (Base = PLUGIN_HOST_API in Upper RAM)
 ;------------------------------------------------------------------------------
 HOST_API_OFF_MAGIC	EQU	0	; "SE" signature (2 bytes)
-HOST_API_OFF_VERSION	EQU	2	; Host version word (0113H = v1.1.3)
+HOST_API_OFF_VERSION	EQU	2	; Host version word (0114H = v1.1.4)
 HOST_API_OFF_LINE_BUF	EQU	4	; Pointer to ACTIVE_LINE_BUF
 
 HOST_API_OFF_LINE_LEN	EQU	6	; Pointer to ACTIVE_LINE_LEN
@@ -77,6 +77,8 @@ HOST_API_OFF_OPEN_UI	EQU	64	; JP to DO_OPEN_FILE_UI (plugin mode)
 HOST_API_OFF_SAVE_CFG	EQU	67	; JP to HOST_SAVE_PLUGIN_CFG
 HOST_API_OFF_LOAD_CFG	EQU	70	; JP to HOST_LOAD_PLUGIN_CFG
 HOST_API_OFF_RENDER_STAT EQU	73	; JP to RENDER_STATUS_BAR
+HOST_API_OFF_HIDE_CUR	EQU	76	; JP to TERM_HIDE_CURSOR
+HOST_API_OFF_SHOW_CUR	EQU	79	; JP to TERM_SHOW_CURSOR
 
 ;------------------------------------------------------------------------------
 ; Plugin Subsystem Function Entry Points & Register Contracts

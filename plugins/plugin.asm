@@ -593,8 +593,7 @@ PLUG_MENU_LINES		EQU	16
 ; Render Full Plugin Manager Screen
 ;------------------------------------------------------------------------------
 RENDER_PLUGIN_SCREEN:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 	LD	DE,STR_CLEAR_SCREEN
 	CALL	HOST_PRINT_STR
 
@@ -677,6 +676,7 @@ RPS_BOTTOM_LOOP:
 RPS_BOTTOM_DONE:
 	; Row HOST_ROWS: Persistent Status bar
 	CALL	HOST_RENDER_STATUS_BAR
+	CALL	HOST_HIDE_CURSOR
 	RET
 
 LOCATE_STATUS_ROW:
@@ -1013,8 +1013,7 @@ PROMPT_LOAD_PLUGIN:
 ; Modal Pop-up: Confirmation to Unload Selected Slot
 ;------------------------------------------------------------------------------
 CONFIRM_UNLOAD_SLOT:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 
 	; Center 7-line dialog box vertically: ((HOST_ROWS - 7) / 2) + 1
 	LD	A,(HOST_ROWS)
@@ -1071,8 +1070,7 @@ CUS_KEY_LOOP:
 	CP	27			; ESC
 	JR	NZ,CUS_NOT_ESC
 	CALL	DRAIN_ESC_SEQUENCE
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 	SCF				; Carry = 1 (cancelled)
 	RET
 CUS_NOT_ESC:
@@ -1089,14 +1087,12 @@ CUS_NOT_ESC:
 	JR	CUS_KEY_LOOP
 
 CUS_CANCELLED:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 	SCF				; Carry = 1 (cancelled)
 	RET
 
 CUS_CONFIRMED:
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 	LD	A,(SELECTED_SLOT)
 	CALL	HOST_UNLOAD_SLOT
 	OR	A			; Carry = 0 (unloaded)
@@ -1233,8 +1229,7 @@ DCPP_CALC_ROW:
 
 DCPP_DRAW_BOX:
 	; Render Modal Box
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 
 	; Line 1: Top Border
 	CALL	POPUP_LOCATE_NEXT
@@ -1799,8 +1794,7 @@ DO_PLUGIN_ABOUT:
 	CALL	INIT_HOST_API
 	JP	C,INIT_ERR
 
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 
 	; Center 9-line dialog box vertically: ((HOST_ROWS - 9) / 2) + 1
 	LD	A,(HOST_ROWS)
@@ -1860,8 +1854,7 @@ STR_ABT_LINE5:	DB	"|           Press any key to continue            |", 0
 SHOW_SAVE_CFG_POPUP:
 	PUSH	AF			; Preserve Carry flag (save status)
 
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 
 	; Center 7-line dialog box vertically: ((HOST_ROWS - 7) / 2) + 1
 	LD	A,(HOST_ROWS)
@@ -1932,8 +1925,7 @@ SHOW_ALERT_POPUP:
 	PUSH	HL			; Save Msg pointer
 	PUSH	DE			; Save Title pointer
 
-	LD	DE,STR_HIDE_CURSOR
-	CALL	HOST_PRINT_STR
+	CALL	HOST_HIDE_CURSOR
 
 	; Center 7-line dialog box vertically: ((HOST_ROWS - 7) / 2) + 1
 	LD	A,(HOST_ROWS)
@@ -2328,6 +2320,68 @@ HOST_RENDER_STATUS_BAR:
 	ADD	HL,BC
 	POP	BC
 	EX	(SP),HL
+	RET
+
+HOST_HIDE_CURSOR:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	CALL	HAS_CURSOR_API
+	JR	C,HHC_FALLBACK
+	LD	BC,76			; Offset +76: TRAMP_HIDE_CURSOR
+	ADD	HL,BC
+	CALL	CALL_HL
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+HHC_FALLBACK:
+	LD	DE,STR_HIDE_CURSOR
+	CALL	HOST_PRINT_STR
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+HOST_SHOW_CURSOR:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	CALL	HAS_CURSOR_API
+	JR	C,HSC_FALLBACK
+	LD	BC,79			; Offset +79: TRAMP_SHOW_CURSOR
+	ADD	HL,BC
+	CALL	CALL_HL
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+HSC_FALLBACK:
+	LD	DE,STR_SHOW_CURSOR
+	CALL	HOST_PRINT_STR
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+
+; Returns HL = (HOST_API_PTR), Carry = 0 if Host API version >= 0114H,
+; else Carry = 1
+HAS_CURSOR_API:
+	LD	HL,(HOST_API_PTR)
+	INC	HL
+	INC	HL
+	LD	E,(HL)
+	INC	HL
+	LD	A,(HL)
+	LD	HL,(HOST_API_PTR)
+	CP	01H
+	RET	C
+	JR	NZ,HCA_OK
+	LD	A,E
+	CP	14H
+	RET	C
+HCA_OK:
+	OR	A
 	RET
 
 ;==============================================================================
