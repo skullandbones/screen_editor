@@ -194,6 +194,24 @@ def populate_next_mmc(
         shutil.copyfile(os.path.join(PROJECT_DIR, "SE.nex"),
                         os.path.join(PROJECT_DIR, "SE.NEX"))
 
+        # 3. Build plugins (HELPNEXT.OVL, HELP.OVL, PLUGIN.PRL, etc.)
+        build_plugins_py = os.path.join(
+            PROJECT_DIR, "plugins", "build_plugins.py"
+        )
+        env = os.environ.copy()
+        env["TOOLS_DIR"] = tools_root
+        env["TOOL_DIR"] = tools_root
+        res = subprocess.run(
+            [sys.executable, build_plugins_py],
+            cwd=PROJECT_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if res.returncode != 0:
+            print(f"[-] build_plugins.py failed: {res.stderr}", flush=True)
+            return False
+
     with tempfile.TemporaryDirectory() as temp_dir:
         fixtures = generate_fixtures(temp_dir)
 
@@ -205,13 +223,19 @@ def populate_next_mmc(
                 return False
             print(f"    [+] Injected {fname} -> {dest}", flush=True)
 
-    # Inject binaries
+    # Inject binaries and overlays/plugins
     binaries = [
         ("dot_se.bin", "::/dot/se"),
         ("dot_se.bin", "::/se"),
         ("SE.NEX", "::/SE.NEX"),
         ("SE_NEXT.COM", "::/SE_NEXT.COM"),
         (os.path.join("plugins", "HELPNEXT.OVL"), "::/HELPNEXT.OVL"),
+        (os.path.join("plugins", "HELP.OVL"), "::/HELP.OVL"),
+        (os.path.join("plugins", "PLUGIN.PRL"), "::/PLUGIN.PRL"),
+        (os.path.join("plugins", "PLUGIN.CFG"), "::/PLUGIN.CFG"),
+        (os.path.join("plugins", "WORDCNT.OVL"), "::/WORDCNT.OVL"),
+        (os.path.join("plugins", "ROT13.PRL"), "::/ROT13.PRL"),
+        (os.path.join("plugins", "BEAUTIFY.PRL"), "::/BEAUTIFY.PRL"),
     ]
 
     print("[*] Injecting Next binaries into MMC image...", flush=True)
@@ -232,12 +256,17 @@ def populate_next_mmc(
     res_dot = subprocess.run(["mdir", "-b", "-i", mmc_spec, "::/dot"],
                              capture_output=True, text=True)
 
-    root_files = [line.strip().upper() for line in res_root.stdout.splitlines()]
+    root_files = [
+        line.strip().upper() for line in res_root.stdout.splitlines()
+    ]
     dot_files = [line.strip().upper() for line in res_dot.stdout.splitlines()]
 
     assert "::/BIG.TXT" in root_files, "BIG.TXT not found in root"
     assert "::/30.TXT" in root_files, "30.TXT not found in root"
     assert "::/SE.CFG" in root_files, "SE.CFG not found in root"
+    assert "::/SE_NEXT.COM" in root_files, "SE_NEXT.COM not found in root"
+    assert "::/HELPNEXT.OVL" in root_files, "HELPNEXT.OVL not found in root"
+    assert "::/PLUGIN.PRL" in root_files, "PLUGIN.PRL not found in root"
     assert "::/DOT/SE" in dot_files, "se not found in /dot"
 
     print("[+] MMC disk image population verified successfully.", flush=True)

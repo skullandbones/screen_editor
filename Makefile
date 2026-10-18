@@ -332,7 +332,7 @@ test-fatfs-hook: image
 	@echo "==> Running FATFS Phase 2 VFS hook & status bar test suite..."
 	python3 tests/test_fatfs_vfs_hook.py
 
-test-next: se-next-cpm se-next-native
+test-next: se-next-cpm se-next-native plugins
 	@echo "==> Running ZX Spectrum Next multi-target test suite..."
 	python3 tests/test_next_targets.py
 

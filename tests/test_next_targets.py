@@ -132,6 +132,87 @@ def test_next_dot():
         print(f"    [+] {name}: {size} B, ORG=0x2000, JP START [PASS]")
 
 
+def test_next_disk_deployment():
+    """Verify Next disk image deployment includes HELPNEXT.OVL & PLUGIN.PRL."""
+    print("[*] Validating Next MMC deployment (HELPNEXT.OVL & PLUGIN.PRL)...")
+    helpnext_path = os.path.join(PROJECT_DIR, "plugins", "HELPNEXT.OVL")
+    plugin_prl_path = os.path.join(PROJECT_DIR, "plugins", "PLUGIN.PRL")
+
+    if not os.path.isfile(helpnext_path) or not os.path.isfile(
+        plugin_prl_path
+    ):
+        res_plug = subprocess.run(
+            [
+                sys.executable,
+                os.path.join(PROJECT_DIR, "plugins", "build_plugins.py"),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_DIR,
+        )
+        assert res_plug.returncode == 0, (
+            f"build_plugins.py failed:\n{res_plug.stderr}"
+        )
+
+    assert os.path.isfile(helpnext_path), f"Missing {helpnext_path}"
+    assert os.path.isfile(plugin_prl_path), f"Missing {plugin_prl_path}"
+
+    pop_script = os.path.join(PROJECT_DIR, "tools", "populate_next_disk.py")
+    with open(pop_script, "r", encoding="utf-8") as f:
+        pop_src = f.read()
+
+    assert '::/HELPNEXT.OVL' in pop_src, (
+        "populate_next_disk.py must inject HELPNEXT.OVL into tbblue.mmc"
+    )
+    assert '::/PLUGIN.PRL' in pop_src, (
+        "populate_next_disk.py must inject PLUGIN.PRL into tbblue.mmc"
+    )
+
+    # If tbblue.mmc and mdir exist on host, populate and verify via mdir
+    mmc_path = os.path.join(PROJECT_DIR, "disks", "tbblue.mmc")
+    mmc_base = "/usr/share/zesarux/tbblue.mmc"
+    if shutil.which("mdir") and shutil.which("mcopy") and (
+        os.path.isfile(mmc_path) or os.path.isfile(mmc_base)
+    ):
+        res_pop = subprocess.run(
+            [sys.executable, pop_script],
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_DIR,
+        )
+        assert res_pop.returncode == 0, (
+            f"populate_next_disk.py failed:\n{res_pop.stdout}\n{res_pop.stderr}"
+        )
+        mmc_spec = f"{mmc_path}@@1048576"
+        res_mdir = subprocess.run(
+            ["mdir", "-b", "-i", mmc_spec, "::"],
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_DIR,
+        )
+        assert res_mdir.returncode == 0, f"mdir failed:\n{res_mdir.stderr}"
+        root_files = [
+            line.strip().upper() for line in res_mdir.stdout.splitlines()
+        ]
+        for expected in (
+            "::/SE_NEXT.COM",
+            "::/HELPNEXT.OVL",
+            "::/PLUGIN.PRL",
+        ):
+            assert expected in root_files, (
+                f"{expected} missing from Next MMC image root"
+            )
+        print(
+            "    [+] tbblue.mmc populated and verified: "
+            "SE_NEXT.COM, HELPNEXT.OVL, PLUGIN.PRL [PASS]"
+        )
+    else:
+        print(
+            "    [+] HELPNEXT.OVL & PLUGIN.PRL built and registered in "
+            "populate_next_disk.py [PASS]"
+        )
+
+
 def test_emulator_harness():
     """Check for CSpect or ZEsarUX and run automated headless test if found."""
     print("[*] Probing for ZX Spectrum Next emulators (CSpect / ZEsarUX)...")
@@ -178,6 +259,7 @@ def main():
         test_next_cpm()
         test_next_nex()
         test_next_dot()
+        test_next_disk_deployment()
         test_emulator_harness()
         print("=" * 70)
         print("  ALL NEXT TARGET TESTS PASSED")

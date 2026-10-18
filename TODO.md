@@ -320,9 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 6 Open (Bugs 2.2.16, 2.2.18–2.2.22 Open; 11 Bugs 2.2.2,
-  2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15, 2.2.17
-  Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 5 Open (Bugs 2.2.16, 2.2.18, 2.2.19, 2.2.21, 2.2.22 Open;
+  12 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
+  2.2.15, 2.2.17, 2.2.20 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
+  Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -650,8 +651,8 @@ have been resolved and archived.
       Section 10.4 / Section 7 tables to show three columns: standard SE
       key, standard Next CP/M key code, and `SE_NEXT.COM` behaviour, so
       every key that `SE_NEXT.COM` redefines is explicit.
-  - [ ] **Bug 2.2.20: `HELP` Overlay and `PLUGIN.PRL` Not Deployed to the
-    Next Disk Image**:
+  - [x] **Bug 2.2.20: `HELP` Overlay and `PLUGIN.PRL` Not Deployed to the
+    Next Disk Image [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3; `Makefile`
       `next-image` target.
     - *Issue*: `make next-image` runs `tools/populate_next_disk.py`, which
@@ -664,6 +665,12 @@ have been resolved and archived.
       `next-image` dependencies) to build and inject `HELPNEXT.OVL`
       (Bug 2.2.17) and `PLUGIN.PRL` alongside `SE_NEXT.COM`, and add a
       check to `tests/test_next_targets.py`.
+    - *Resolution*: Updated `Makefile` (`next-image` and `test-next` targets)
+      to depend on `plugins`, extended `tools/populate_next_disk.py` to build
+      and inject `HELPNEXT.OVL`, `HELP.OVL`, `PLUGIN.PRL`, `PLUGIN.CFG`,
+      `WORDCNT.OVL`, `ROT13.PRL`, and `BEAUTIFY.PRL` into `tbblue.mmc` and
+      verify their presence via `mdir`, and added `test_next_disk_deployment`
+      to `tests/test_next_targets.py`.
   - [ ] **Bug 2.2.21: Splash Screen `Ctrl+S` (`^S`) Not Dispatched in
     `SPLASH_LOOP`**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 10, 15.1; Bug 2.1.22.
