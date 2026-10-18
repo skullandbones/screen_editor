@@ -868,33 +868,54 @@ content blocks rather than top-aligned text.
        An `Enter option: _` prompt line is strictly prohibited and the
        terminal hardware cursor is cleanly hidden (`TERM_HIDE_CURSOR`).
 
-5. File Open Workspace (`Ctrl+O` / `:o` from Splash):
+5. File Open Workspace (`Ctrl+O` in Editor / `O` or `Ctrl+O` from Splash):
    - Full-screen Tier 1 directory browser listing files on current drive/user.
    - Screen mode capacity:
-     - 80x24 mode: 5 columns x 12 rows (60 files/page), column width 15 chars.
-     - 120x40 mode: 7 columns x 28 rows (196 files/page), width 16 chars.
+     - 80x24 mode: 5 columns x 12 rows (60 files/page), column width 15 chars,
+       2-space left margin after `~` (`DIR_LEFT_PAD = 2`).
+     - 120x40 mode: 7 columns x 28 rows (196 files/page), column width 16 chars,
+       3-space left margin after `~` (`DIR_LEFT_PAD = 3`).
    - Paging navigation via `<PgUp>` and `<PgDn>` when file count exceeds page.
+   - Inverse-video prompt label (`Enter filename to open:`) followed by a
+     20-character bracketed input field (`[J0:                 ]`) and mode
+     hint.
+   - Directory highlight bar navigation via `TAB` (`[TAB]=Select File` <->
+     `[TAB]=Edit Name  [Enter]=OK`).
    - Single-Page vs. Multi-Page Invariant:
      - When `total_pages <= 1` (single-page mode), the pagination footer row
        (`[Page %d/%d]  <PgUp>/<PgDn>=Page`) is suppressed to avoid premature
-       pagination prompts, leaving an empty margin row (`~`).
+       pagination prompts.
      - When `total_pages > 1` (multi-page mode), the pagination footer row
-       displays `[Page %d/%d]  <PgUp>/<PgDn>=Page`.
-   - Visual Structure (80x24 Mode, Multi-Page Example):
-     ```text
-     ~====================================================================
-     ~                      OPEN FILE (DIRECTORY - DRIVE A:)
-     ~====================================================================
-     ~  FILE1   .TXT    FILE2   .ASM    README  .DOC    TEST    .C
-     ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
-     ~
-     ~  [Page 1/2]  <PgUp>/<PgDn>=Page
-     ~--------------------------------------------------------------------
-     ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
-     ~  Enter filename to open: [ README.DOC           ]
-     ~
-     [STATUS BAR AT ROW 24]
-     ```
+       displays `[Page %d/%d]  <PgUp>/<PgDn>=Page` immediately below the `---`
+       divider rule.
+   - Visual Structure (Canonical SE.COM 80x24 Template — see Section 15.3 for
+     full 1:1 grid and profile adaptation rules):
+```text
+~
+~
+~
+~==============================================================================
+~                       OPEN FILE (DIRECTORY - DRIVE J:)
+~==============================================================================
+~  1.TXT          10.TXT         2.TXT          20.TXT         30.TXT         
+~  3328.TXT       40.TXT         50.TXT         BEAUTIFY.PRL   BIGPLUG.PRL    
+~  DIAGBNK.COM    DIGIT5.AS      DIGIT5.ASM     DIGIT5.CPM     FATFS.PRL      
+~  FATTEST.COM    HALFPLUG.PRL   HELP.OVL       HELPNEXT.OVL   HIBERN.OVL     
+~  MIDPLUG.PRL    OUTPUT.TXT     PLUGBAD.CFG    PLUGIN.CFG     PLUGIN.PRL     
+~  ROT13.PRL      SE.ASM         SE.CFG         SE.COM         SEBIG.ASM      
+~  SEC.COM        SE_NEXT.COM    SNIP.TXT       TE.BKP         TEMP.TXT       
+~  TEMP2.TXT      TEST.TXT       TODO.MD        UP.SUB         VFSTEST.COM    
+~  WORDCNT.OVL    ZMC.COM        
+~
+~------------------------------------------------------------------------------
+~  [ESC]=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)
+~  Enter filename to open: [J0:                 ]  [TAB]=Select File          
+~
+~
+~
+~
+ | (Untitled)     |  80x24 | CP/M  | Free: 288 KB    | Line    1/1    Col 0   | 
+```
    - Universal Status Bar Presence:
      The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
      variants supporting dynamic memory queries (such as `SE.COM`), Field 4
@@ -1438,7 +1459,7 @@ or display notifications.
 | `Ctrl+K`     | `0x0B`| `KEY_CTRL_K`  | Display full-screen Help workspace  |
 | `Ctrl+L`     | `0x0C`| `KEY_CTRL_L`  | Open Goto Line Number modal dialog  |
 | `Ctrl+N`     | `0x0E`| `KEY_CTRL_N`  | Find Next search match              |
-| `Ctrl+O`     | `0x0F`| `KEY_CTRL_O`  | Open File input modal               |
+| `Ctrl+O`     | `0x0F`| `KEY_CTRL_O`  | Open File directory browser         |
 | `Ctrl+P`     | `0x10`| `KEY_CTRL_P`  | Open context-aware Plugin Palette   |
 | `Ctrl+Q`     | `0x11`| `KEY_CTRL_Q`  | Safe exit (prompts if unsaved edits)|
 | `Ctrl+R`     | `0x12`| `KEY_CTRL_R`  | Open Search & Replace modal dialog  |
@@ -2194,3 +2215,126 @@ and its target profiles.
      As on the Splash Screen (Section 15.1.5), large-memory host profiles may
      omit `Free: <N> KB` in Status Bar Field 4 (rendering a blank 15-character
      field `               | `).
+
+15.3 CP/M-80 `SE.COM` — Open File Screen Layout (`DO_OPEN_FILE_UI`)
+--------------------------------------------------------------------------------
+1. Source Reference:
+   - Entry Point & Page Loop: `DO_OPEN_FILE_UI` / `RENDER_OPEN_PAGE`
+     (`src/core/ui_browser.asm:4621-4745`)
+   - Layout & Rendering Routines: `INIT_DIR_LAYOUT`, `CALC_DIR_BODY_ROWS`,
+     `CALC_DIR_TOP_PAD`, `RENDER_DIR_TITLE`, `DISPLAY_DIR_PAGE`,
+     `DISPLAY_OPEN_PROMPT`, `DRAW_FILENAME_BOX`, `FINISH_UI_PAGE_AND_STATUS`
+     (`src/core/ui_browser.asm:3002-3553, 5200-5568`)
+   - Directory Highlight Bar Navigation (`[TAB]`): `INPUT_TAB_TO_DIR_NAV`,
+     `DIR_NAV_LOOP`, `DRAW_HL_ON`, `DRAW_HL_OFF`
+     (`src/core/ui_browser.asm:6254-6520`)
+   - String Constants: `STR_TITLE_OPEN_PRE`, `STR_OPEN_PROMPT_TXT`,
+     `STR_ESC_CANCEL_TXT`, `STR_TAB_SELECT_HINT`, `STR_TAB_EDIT_HINT`,
+     `STR_PAGE_*` (`src/core/plugin_mgr.asm:4497-4543`)
+
+2. Vertical & Horizontal Geometry Metrics:
+   - Available Workspace Rows: `AvailRows = ACTIVE_ROWS - 1` (`23` in `80x24`,
+     `39` in `120x40`).
+   - Dynamic Vertical Centering (`CALC_DIR_BODY_ROWS` & `CALC_DIR_TOP_PAD`):
+     - `FileRows = ceil(PageFiles / DIR_COLS_PER_ROW) + 1` (includes `1`
+       trailing blank `~` row after the last file row; or `2` rows when `0`
+       files are found).
+     - `PromptRows = 3` in single-page mode (`DIR_PAGE_COUNT <= 1`) or `4` in
+       multi-page mode (`DIR_PAGE_COUNT >= 2`).
+     - `BodyRows = FileRows + PromptRows`; total content block height is
+       `3 + BodyRows` rows (including the 3-row title header).
+     - `DIR_TOP_PAD_COUNT = max(0, (ACTIVE_ROWS - 4 - BodyRows) / 2)` blank `~`
+       rows emitted above the top `===` border.
+     - Remaining rows between the prompt line (`UI_CUR_ROW`) and
+       `ACTIVE_ROWS - 1` are filled with `~` by `FINISH_UI_PAGE_AND_STATUS`.
+   - Title Header Block (`3` rows):
+     - Top & Bottom Rules (`PRINT_HR_EQUAL`): `~` in Column 1 followed by
+       `ACTIVE_COLS - 2` (`78` in `80x24`, `118` in `120x40`) `=` characters
+       (1-based Columns `2..79` in `80x24`).
+     - Centered Title Row (`RENDER_TITLE_COMMON`): `~` in Column 1 followed by
+       `(ACTIVE_COLS - TitleLen) / 2 - 1` spaces (`23` spaces after `~` in
+       `80x24` for the 32-char `"OPEN FILE (DIRECTORY - DRIVE J:)"`).
+       - User Area & Filter Suffixes: Appends user number when
+         `CURRENT_DIR_USER > 0` (e.g. `DRIVE J1:`) and `: [<filter>]` when a
+         wildcard filter is active (e.g. `DRIVE J: [*.TXT])`).
+   - Directory Entry Grid (`DISPLAY_DIR_PAGE`):
+     - `80x24` mode: `DIR_COLS_PER_ROW = 5` columns, `DIR_COL_WIDTH = 15`
+       characters per column, up to `12` file rows (`DIR_PAGE_CAPACITY = 60`
+       files/page), `DIR_LEFT_PAD = 2` spaces after `~` (grid starts at 1-based
+       Column 4).
+     - `120x40` mode: `DIR_COLS_PER_ROW = 7` columns, `DIR_COL_WIDTH = 16`
+       characters per column, up to `28` file rows (`DIR_PAGE_CAPACITY = 196`
+       files/page), `DIR_LEFT_PAD = 3` spaces after `~` (grid starts at 1-based
+       Column 5).
+     - Entry Formatting (`FORMAT_DIR_ENTRY_HL`): Compact `NAME.EXT` string
+       (padding spaces stripped from 8.3 FCB fields) right-padded with spaces
+       to `DIR_COL_WIDTH` (`15` chars in `80x24`).
+   - Prompt & Input Footer Block (`DISPLAY_OPEN_PROMPT`):
+     - Dash Divider Rule (`PRINT_HR_DASH`): `~` in Column 1 followed by
+       `ACTIVE_COLS - 2` (`78` in `80x24`) `-` characters.
+     - Optional Pagination Row (shown only when `DIR_PAGE_COUNT >= 2`):
+       `~  [Page <cur>/<total>]  <PgUp>/<PgDn>=Page`
+     - Command & Filter Hint Row (`STR_ESC_CANCEL_TXT`, prefixed by `~  `):
+       `[ESC]=Cancel  Enter [d:][u:][pattern] to list`
+       `(e.g. B:, C1:, 1C:, *.TXT)`
+     - Filename Input Row (`DRAW_FILENAME_BOX`):
+       - Starts with `~  `, followed by `Enter filename to open:` rendered in
+         ANSI inverse video (`\x1b[7mEnter filename to open:\x1b[0m`), then
+         ` [` + 20-character input field (preloaded with `<Drive><User>:`, e.g.
+         `J0:                 `) + mode hint:
+         - Text Input Mode (default): `]  [TAB]=Select File          ` (hardware
+           cursor visible inside the bracketed box at
+           `Col = 27 + DIR_LEFT_PAD + INPUT_CURSOR_POS`, i.e. Column 32 after
+           `J0:` in `80x24`).
+         - Directory Highlight Mode (toggled via `TAB`):
+           `]  [TAB]=Edit Name  [Enter]=OK` (hardware cursor hidden; active
+           12-char file cell in the directory grid highlighted in inverse video
+           and copied into the input box).
+   - Universal Status Bar:
+     - Rendered on Screen Row `24` (`80x24`) or Screen Row `40` (`120x40`), with
+       Status Bar Field 4 displaying `Free: <N> KB`.
+
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.4,
+   42 Files on Drive J:, Single-Page):
+```text
+~
+~
+~
+~==============================================================================
+~                       OPEN FILE (DIRECTORY - DRIVE J:)
+~==============================================================================
+~  1.TXT          10.TXT         2.TXT          20.TXT         30.TXT         
+~  3328.TXT       40.TXT         50.TXT         BEAUTIFY.PRL   BIGPLUG.PRL    
+~  DIAGBNK.COM    DIGIT5.AS      DIGIT5.ASM     DIGIT5.CPM     FATFS.PRL      
+~  FATTEST.COM    HALFPLUG.PRL   HELP.OVL       HELPNEXT.OVL   HIBERN.OVL     
+~  MIDPLUG.PRL    OUTPUT.TXT     PLUGBAD.CFG    PLUGIN.CFG     PLUGIN.PRL     
+~  ROT13.PRL      SE.ASM         SE.CFG         SE.COM         SEBIG.ASM      
+~  SEC.COM        SE_NEXT.COM    SNIP.TXT       TE.BKP         TEMP.TXT       
+~  TEMP2.TXT      TEST.TXT       TODO.MD        UP.SUB         VFSTEST.COM    
+~  WORDCNT.OVL    ZMC.COM        
+~
+~------------------------------------------------------------------------------
+~  [ESC]=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)
+~  Enter filename to open: [J0:                 ]  [TAB]=Select File          
+~
+~
+~
+~
+ | (Untitled)     |  80x24 | CP/M  | Free: 288 KB    | Line    1/1    Col 0   | 
+```
+
+4. Notes for Other Profiles:
+   - Native Path & Filter Hint Adaptation:
+     - Standard CP/M profiles (`SE.COM`, `SE_NEXT.COM`, `SEC.COM`) display
+       CP/M drive, user area, and wildcard syntax (`[d:][u:][pattern]`) and
+       preload `<Drive><User>:` (e.g. `J0:`) in the 20-character input box.
+     - Native ZX Spectrum Next (`SE.NEX`, `.se`): Under `IFDEF
+       TARGET_NEXT_NATIVE`, CP/M user areas do not exist; the hint line adapts
+       to `[ESC]=Cancel  Enter [path][pattern] to list (e.g. /dot/, *.TXT)`.
+     - Linux / POSIX Native Profiles (`se-linux`, `se-py`, `se-rs`): Display the
+       host directory path in the title banner and accept standard POSIX paths
+       and filenames without a CP/M `<Drive><User>:` prefix.
+   - Status Bar Free Memory Indication (Field 4):
+     As on the Splash and About screens (Sections 15.1.5 & 15.2.4), large-memory
+     host profiles may omit `Free: <N> KB` in Status Bar Field 4.
+
