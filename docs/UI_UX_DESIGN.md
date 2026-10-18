@@ -1026,6 +1026,10 @@ content blocks rather than top-aligned text.
    - Confirmation and Cancellation: `<Enter>` confirms the filename; `<ESC>`
      cancels the directory workspace and returns to the previous screen.
    - Directory Listing Highlight Bar Navigation (`<Tab>`):
+     - Dynamic On-Screen Mode Hint: To the right of the filename input box,
+       the prompt line displays `[TAB]=Select File` when editing the filename
+       box, and dynamically updates in-place to `[TAB]=Edit Name  [Enter]=OK`
+       while the directory highlight bar is active.
      - Pressing `<Tab>` while in the filename input box activates a reverse-
        video highlight bar (`12` columns wide) in the directory listing view,
        starting at the top-left entry (index `0`) when at least one file is

@@ -4529,6 +4529,8 @@ STR_SAVE_FMT_LINUX:	DB	"Linux","$"
 STR_SAVE_FMT_SUFFIX:	DB	"]   [^F]=Toggle Format",13,10,"$"
 
 STR_SAVE_PROMPT_TXT:	DB	"Enter filename to save:","$"
+STR_TAB_SELECT_HINT:	DB	"]  [TAB]=Select File          ","$"
+STR_TAB_EDIT_HINT:	DB	"]  [TAB]=Edit Name  [Enter]=OK","$"
 
 	IFDEF TARGET_NEXT_NATIVE
 STR_ESC_CANCEL_TXT:

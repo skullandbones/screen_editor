@@ -5497,20 +5497,8 @@ DFB_SPACE_LOOP:
 	DJNZ DFB_SPACE_LOOP
 
 DFB_CLOSE_BOX:
-	LD A,']'
-	CALL PUTC
-
-	; Move cursor back (21 - INPUT_BUF_LEN) positions to sit on next space
-	; after prefilled text
-	LD A,21
-	LD HL,INPUT_BUF_LEN
-	SUB (HL)
-	LD B,A
-DFB_BS_LOOP:
-	LD A,008H
-	CALL PUTC
-	DJNZ DFB_BS_LOOP
-	RET
+	LD DE,STR_TAB_SELECT_HINT
+	JP PRINT_STR
 
 ;------------------------------------------------------------------------------
 ; FINISH_UI_PAGE_AND_STATUS: Render bottom padding and modal navigation status
@@ -6272,6 +6260,8 @@ ITDN_SET_TOP_LEFT:
 ITDN_HAVE_INDEX:
 	LD (DIR_HL_INDEX),A
 	CALL TERM_HIDE_CURSOR
+	LD DE,STR_TAB_EDIT_HINT
+	CALL DRAW_TAB_MODE_HINT
 	CALL DRAW_HL_ON
 
 DIR_NAV_LOOP:
@@ -6296,6 +6286,8 @@ DNL_CHK_TAB:
 	JR NZ,DNL_CHK_ENTER
 	; Tab pressed in highlight mode -> erase highlight and return to box
 	CALL DRAW_HL_OFF
+	LD DE,STR_TAB_SELECT_HINT
+	CALL DRAW_TAB_MODE_HINT
 	LD A,(INPUT_CURSOR_POS)
 	CALL LOCATE_INPUT_BOX_OFFSET_A
 	CALL TERM_SHOW_CURSOR
@@ -6430,6 +6422,13 @@ DNL_UPDATE_INDEX:
 	LD (DIR_HL_INDEX),A
 	CALL DRAW_HL_ON
 	JP DIR_NAV_LOOP
+
+DRAW_TAB_MODE_HINT:
+	PUSH DE
+	LD A,20				; Offset 20 is the closing ']'
+	CALL LOCATE_INPUT_BOX_OFFSET_A
+	POP DE
+	JP PRINT_STR
 
 DRAW_HL_OFF:
 	CALL PREP_HL_CELL

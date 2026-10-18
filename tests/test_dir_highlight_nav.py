@@ -246,7 +246,11 @@ def test_dir_highlight_nav():
         os.write(master, b"o")
         out_open = read_until(master, b"Enter filename to open:", timeout=15.0)
         out_open += drain_all(master)
-        if b"NAV01.TXT" not in out_open or b"NAV07.TXT" not in out_open:
+        if (
+            b"NAV01.TXT" not in out_open
+            or b"NAV07.TXT" not in out_open
+            or b"[TAB]=Select File" not in out_open
+        ):
             buf_str = repr(out_open[-400:])
             print(
                 f"[-] Step 3: Directory listing missing NAV files. "
@@ -268,6 +272,7 @@ def test_dir_highlight_nav():
         if (
             b"\x1b[7mNAV01.TXT   \x1b[0m" not in out_tab1
             or b"C5:NAV01.TXT" not in out_tab1
+            or b"[TAB]=Edit Name  [Enter]=OK" not in out_tab1
         ):
             buf_str = repr(out_tab1[-400:])
             print(
@@ -370,7 +375,11 @@ def test_dir_highlight_nav():
         )
         os.write(master, b"\t")
         out_tab2 = drain_all(master, quiet_time=0.4)
-        if b"NAV01.TXT   " not in out_tab2 or b"\x1b[?25h" not in out_tab2:
+        if (
+            b"NAV01.TXT   " not in out_tab2
+            or b"\x1b[?25h" not in out_tab2
+            or b"[TAB]=Select File" not in out_tab2
+        ):
             buf_str = repr(out_tab2[-400:])
             print(
                 f"[-] Step 6: Second Tab did not clear highlight or show "
