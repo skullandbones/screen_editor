@@ -320,10 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 5 Open (Bugs 2.2.16, 2.2.18, 2.2.19, 2.2.21, 2.2.22 Open;
-  12 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
-  2.2.15, 2.2.17, 2.2.20 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
-  Rejected).
+- **Status**: Active / 4 Open (Bugs 2.2.16, 2.2.18, 2.2.19, 2.2.22 Open;
+  13 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
+  2.2.15, 2.2.17, 2.2.20, 2.2.21 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5,
+  2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -671,8 +671,8 @@ have been resolved and archived.
       `WORDCNT.OVL`, `ROT13.PRL`, and `BEAUTIFY.PRL` into `tbblue.mmc` and
       verify their presence via `mdir`, and added `test_next_disk_deployment`
       to `tests/test_next_targets.py`.
-  - [ ] **Bug 2.2.21: Splash Screen `Ctrl+S` (`^S`) Not Dispatched in
-    `SPLASH_LOOP`**:
+  - [x] **Bug 2.2.21: Splash Screen `Ctrl+S` (`^S`) Not Dispatched in
+    `SPLASH_LOOP` [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 10, 15.1; Bug 2.1.22.
     - *Issue*: `STR_SPLASH_CMDS` in `src/core/plugin_mgr.asm:4270` displays
       `type   [S]  or  [^S]    to save file` on the Splash Screen, and
@@ -684,6 +684,9 @@ have been resolved and archived.
     - *Required Fix*: In `src/se_next_cpm.asm:545-550` (`SPLASH_LOOP`), add
       `CP KEY_CTRL_S` and `JP Z,DO_SPLASH_SAVE` alongside `'s'` and `'S'`
       (matching `src/se.asm:545-546`).
+    - *Resolution*: Added `CP KEY_CTRL_S` and `JP Z,DO_SPLASH_SAVE` to
+      `SPLASH_LOOP` in `src/se_next_cpm.asm` and verified via
+      `tests/test_bug_2_2_21.py`.
   - [ ] **Bug 2.2.22: Splash Screen Blank Gap Row Replacing Omitted
     `[2] set 120x40`**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 14.1, 15.1.5.
