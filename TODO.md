@@ -3763,7 +3763,7 @@ have been resolved and archived.
       `120x40`) with exact per-line leading spaces (`15`, `9`, `17`, `0`, `3`,
       `12`) matching Section 15.2.2, and skipped redundant cursor locates on
       blank `~` rows. Verified with `tests/test_sec_about_screen.py`.
-  - [ ] **Bug 2.8.13: Directory Browser Layout, Vertical Centering, Inverse
+  - [x] **Bug 2.8.13: Directory Browser Layout, Vertical Centering, Inverse
     Prompt & `[TAB]` Highlight Navigation Non-Conformities**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5–7.9, 15.3.
     - *Issue*: In `src/core/ui_browser.c:216-681` (`render_browser_prompt` and
@@ -3807,6 +3807,16 @@ have been resolved and archived.
       full-width `78`/`118` rules and `15`/`16`-col grids, render the inverse
       prompt label with `<Drive><User>:` preload and `[TAB]` hint, enforce the
       Single-Page Invariant, and implement `[TAB]` highlight bar mode.
+    - *Resolution*: Refactored `src/core/ui_browser.c` and `src/core/file_io.c`
+      to implement dynamic vertical centering (`s_top_pad`, `file_rows`,
+      `prompt_rows`), `g_active_cols - 2` (`78`/`118`) horizontal `=`/`-`
+      rules, `15`/`16`-col file cells with `2`/`3`-space left padding, inverse
+      prompt labels with `<Drive><User>:` preload and `[TAB]` mode hints,
+      Single-Page Invariant (`[Page]` omitted when `s_total_pages < 2`),
+      canonical guide row text, `[TAB]` Highlight Bar Navigation Mode, and
+      CP/M drive/user prefix parsing (`cpm_parse_prefix`). Verified with
+      `tests/test_sec_browser_layout.py`, `tests/test_sanity.py --sec`, and
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.8.14: Prohibited WordStar Diamond & Control Key Aliases (`^E`,
     `^X`, `^R`, `^C`) in Plugin Palette and File Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 6.3, 6.4, 10, 11.8

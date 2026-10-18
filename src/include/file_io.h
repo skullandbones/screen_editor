@@ -43,6 +43,11 @@ extern uint8_t  g_file_format;
 #ifdef __CPM__
 extern uint8_t   g_cpm_dma_buf[128];
 extern cpm_fcb_t g_cpm_fcb;
+extern uint8_t   g_doc_drive;
+extern uint8_t   g_doc_user;
+extern uint8_t   g_target_user;
+const char *cpm_parse_prefix(const char *path, uint8_t *out_drv,
+                             uint8_t *out_usr);
 #endif
 
 /* File I/O Subsystem Function Entry Points */

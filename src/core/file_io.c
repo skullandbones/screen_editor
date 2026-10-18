@@ -28,49 +28,96 @@ uint8_t g_file_format = FMT_CPM;
 uint8_t g_file_format = FMT_LINUX;
 #endif
 
+#ifdef __CPM__
+#include <cpm.h>
+uint8_t   g_cpm_dma_buf[128];
+cpm_fcb_t g_cpm_fcb;
+uint8_t   g_doc_drive = 0;
+uint8_t   g_doc_user = 0;
+uint8_t   g_target_user = 0;
+#define s_cpm_sec_buf g_cpm_dma_buf
+#define s_cpm_io_fcb  g_cpm_fcb
+#endif
+
+const char *cpm_parse_prefix(const char *path, uint8_t *out_drv,
+                             uint8_t *out_usr)
+{
+    const char *p = path;
+    const char *colon;
+    const char *q;
+    uint8_t drv = 0;
+    uint8_t usr = 0xFF;
+
+    if (out_drv) *out_drv = 0;
+    if (out_usr) *out_usr = 0xFF;
+    if (!p) return path;
+
+    while (*p == ' ') p++;
+    colon = strchr(p, ':');
+    if (!colon || colon == p || (colon - p) > 3) return p;
+
+    for (q = p; q < colon; q++) {
+        char ch = *q;
+        if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 32);
+        if (ch >= 'A' && ch <= 'P') {
+            if (drv != 0) return p;
+            drv = (uint8_t)(ch - 'A' + 1);
+        } else if (ch >= '0' && ch <= '9') {
+            uint8_t d = (uint8_t)(ch - '0');
+            if (usr == 0xFF) {
+                usr = d;
+            } else if (q > p && *(q - 1) >= '0' && *(q - 1) <= '9') {
+                usr = (uint8_t)(usr * 10 + d);
+            } else {
+                return p;
+            }
+        } else {
+            return p;
+        }
+    }
+    if ((usr != 0xFF && usr > 15) || (drv == 0 && usr == 0xFF)) return p;
+    if (out_drv) *out_drv = drv;
+    if (out_usr) *out_usr = usr;
+    return colon + 1;
+}
+
+static void fill_fcb_field(char *dst, const char *src, uint8_t len)
+{
+    uint8_t i;
+    for (i = 0; i < len && src[i] && src[i] != '.' &&
+                src[i] != ':' && src[i] != ' '; i++) {
+        char c = src[i];
+        if (c == '*') {
+            while (i < len) dst[i++] = '?';
+            break;
+        }
+        if (c >= 'a' && c <= 'z') c = (char)(c - 32);
+        dst[i] = c;
+    }
+}
+
 void file_populate_fcb(const char *path, cpm_fcb_t *fcb)
 {
-    int i;
-    const char *p = path;
+    uint8_t drv = 0, usr = 0xFF;
+    const char *p;
     const char *dot;
+    const char *col;
 
     if (!fcb) return;
     memset(fcb, 0, sizeof(cpm_fcb_t));
-    memset(fcb->name, ' ', 8);
-    memset(fcb->ext, ' ', 3);
+    memset(fcb->name, ' ', 11);
+    if (!path) return;
 
-    if (p[0] && p[1] == ':') {
-        char drive_letter = p[0];
-        if (drive_letter >= 'a' && drive_letter <= 'p') {
-            fcb->drive = (uint8_t)(drive_letter - 'a' + 1);
-        } else if (drive_letter >= 'A' && drive_letter <= 'P') {
-            fcb->drive = (uint8_t)(drive_letter - 'A' + 1);
-        }
-        p += 2;
-    }
-
+    p = cpm_parse_prefix(path, &drv, &usr);
+    fcb->drive = drv;
+#ifdef __CPM__
+    g_target_user = (usr != 0xFF) ? usr : g_doc_user;
+#endif
+    fill_fcb_field(fcb->name, p, 8);
     dot = strchr(p, '.');
-    for (i = 0; i < 8 && p[i] && p[i] != '.'; i++) {
-        char c = p[i];
-        if (c == '*') {
-            while (i < 8) fcb->name[i++] = '?';
-            break;
-        }
-        if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
-        fcb->name[i] = c;
-    }
-
-    if (dot) {
-        dot++;
-        for (i = 0; i < 3 && dot[i]; i++) {
-            char c = dot[i];
-            if (c == '*') {
-                while (i < 3) fcb->ext[i++] = '?';
-                break;
-            }
-            if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
-            fcb->ext[i] = c;
-        }
+    col = strchr(p, ':');
+    if (dot && (!col || dot < col)) {
+        fill_fcb_field(fcb->ext, dot + 1, 3);
     }
 }
 
@@ -81,12 +128,28 @@ int file_check_hibernated(const char *path)
 }
 
 #ifdef __CPM__
-#include <cpm.h>
+static void cpm_format_doc_filename(const cpm_fcb_t *fcb, uint8_t user)
+{
+    char *dst = g_current_filename;
+    const char *raw = fcb->name;
+    uint8_t i;
 
-uint8_t   g_cpm_dma_buf[128];
-cpm_fcb_t g_cpm_fcb;
-#define s_cpm_sec_buf g_cpm_dma_buf
-#define s_cpm_io_fcb  g_cpm_fcb
+    *dst++ = (char)('A' + (fcb->drive ? (fcb->drive - 1) : bdos(25, 0)));
+    if (user >= 10) {
+        *dst++ = '1';
+        *dst++ = (char)('0' + (user - 10));
+    } else if (user > 0) {
+        *dst++ = (char)('0' + user);
+    }
+    *dst++ = ':';
+    for (i = 0; i < 11; i++) {
+        char c = (char)(raw[i] & 0x7F);
+        if (i == 8) *dst++ = '.';
+        if (c != ' ' && c != 0) *dst++ = c;
+    }
+    if (dst[-1] == '.') dst--;
+    *dst = '\0';
+}
 
 static void cpm_commit_loaded_line(uint16_t row, uint16_t col,
                                    uint8_t is_insert)
@@ -108,21 +171,41 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     char *line_buf = g_scratch_line_buf;
     uint16_t row;
     uint16_t col = 0;
+    uint16_t target_line = 0;
     int i;
     int done = 0;
+    int orig_user;
+    const char *lcol;
 
     if (!filename || filename[0] == '\0') {
         return -1;
     }
 
+    lcol = strchr(cpm_parse_prefix(filename, NULL, NULL), ':');
+    if (lcol && lcol[1] >= '0' && lcol[1] <= '9') {
+        target_line = (uint16_t)atoi(lcol + 1);
+    }
+
     file_populate_fcb(filename, &s_cpm_io_fcb);
+    if (s_cpm_io_fcb.drive == 0) {
+        s_cpm_io_fcb.drive = g_doc_drive ? g_doc_drive
+                                         : (uint8_t)(bdos(25, 0) + 1);
+    }
+    orig_user = bdos(32, 0xFF);
+    bdos(32, g_target_user);
+
     if ((uint8_t)bdos(15, (int)&s_cpm_io_fcb) == 0xFF) {
+        bdos(32, orig_user);
         modal_alert_file_not_found(filename);
         return -1;
     }
 
     if (!is_insert) {
+        uint8_t saved_drv = s_cpm_io_fcb.drive;
+        uint8_t saved_usr = g_target_user;
         buffer_init();
+        s_cpm_io_fcb.drive = saved_drv;
+        g_target_user = saved_usr;
         g_file_format = FMT_LINUX;
         row = 0;
     } else {
@@ -165,10 +248,12 @@ static int file_read_op(const char *filename, uint8_t is_insert)
 
     bdos(16, (int)&s_cpm_io_fcb);
     bdos(26, DEFAULT_DMA);
+    bdos(32, orig_user);
 
     if (!is_insert) {
-        strncpy(g_current_filename, filename, sizeof(g_current_filename) - 1);
-        g_current_filename[sizeof(g_current_filename) - 1] = '\0';
+        g_doc_drive = s_cpm_io_fcb.drive;
+        g_doc_user = g_target_user;
+        cpm_format_doc_filename(&s_cpm_io_fcb, g_doc_user);
         g_doc_total_lines = row ? row : 1;
         g_cur_doc_row = 0;
         g_cur_col = 0;
@@ -179,6 +264,9 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     }
 
     checkout_active_line(g_cur_doc_row);
+    if (!is_insert && target_line > 0) {
+        goto_line(target_line);
+    }
     g_need_screen_render = 1;
     return 0;
 }
@@ -207,6 +295,7 @@ static int file_write_op(const char *filename, uint16_t start_row,
     uint16_t rec_num = 0;
     uint8_t sec_pos = 0;
     uint16_t i, len;
+    int orig_user;
 
     if (!filename || filename[0] == '\0') {
         return -1;
@@ -215,8 +304,16 @@ static int file_write_op(const char *filename, uint16_t start_row,
     commit_active_line();
 
     file_populate_fcb(filename, &s_cpm_io_fcb);
+    if (s_cpm_io_fcb.drive == 0) {
+        s_cpm_io_fcb.drive = g_doc_drive ? g_doc_drive
+                                         : (uint8_t)(bdos(25, 0) + 1);
+    }
+    orig_user = bdos(32, 0xFF);
+    bdos(32, g_target_user);
+
     bdos(19, (int)&s_cpm_io_fcb);
     if ((uint8_t)bdos(22, (int)&s_cpm_io_fcb) == 0xFF) {
+        bdos(32, orig_user);
         return -1;
     }
 
@@ -247,6 +344,7 @@ static int file_write_op(const char *filename, uint16_t start_row,
 
     bdos(16, (int)&s_cpm_io_fcb);
     bdos(26, DEFAULT_DMA);
+    bdos(32, orig_user);
 
     checkout_active_line(g_cur_doc_row);
     g_need_screen_render = 1;
@@ -255,6 +353,7 @@ static int file_write_op(const char *filename, uint16_t start_row,
 write_err:
     bdos(16, (int)&s_cpm_io_fcb);
     bdos(26, DEFAULT_DMA);
+    bdos(32, orig_user);
     return -1;
 }
 #else
@@ -400,11 +499,17 @@ int file_save(const char *filename, uint8_t format)
     uint16_t last_row = g_doc_total_lines ? (g_doc_total_lines - 1) : 0;
     int res = file_write_op(target, 0, last_row, format);
     if (res == 0) {
+#ifdef __CPM__
+        g_doc_drive = s_cpm_io_fcb.drive;
+        g_doc_user = g_target_user;
+        cpm_format_doc_filename(&s_cpm_io_fcb, g_doc_user);
+#else
         if (filename && filename != g_current_filename) {
             strncpy(g_current_filename, filename,
                     sizeof(g_current_filename) - 1);
             g_current_filename[sizeof(g_current_filename) - 1] = '\0';
         }
+#endif
         g_doc_modified = 0;
 #ifndef __CPM__
         modal_show_notification("Save Complete",

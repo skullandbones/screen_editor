@@ -22,7 +22,7 @@ extern "C" {
 
 /* Maximum Browser Entries & Layout */
 #ifdef __CPM__
-#define MAX_BROWSER_FILES       32
+#define MAX_BROWSER_FILES       80
 #define BROWSER_FILENAME_LEN    13
 #else
 #define MAX_BROWSER_FILES       256
@@ -43,8 +43,8 @@ typedef struct {
     uint32_t size_bytes;        /* File size in bytes */
     uint8_t  drive;             /* Drive number (0=A, 1=B, etc.) */
     uint8_t  user;              /* User area (0..15) */
-#endif
     uint8_t  is_dir;            /* 1 if directory / folder */
+#endif
 } browser_entry_t;
 
 /* Browser Subsystem Function Entry Points */

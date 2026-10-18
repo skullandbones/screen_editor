@@ -160,7 +160,7 @@ void render_status_bar(void)
 
     if (!g_current_filename[0]) {
         strcpy(raw_name, "(Untitled)");
-    } else if (g_current_filename[1] != ':') {
+    } else if (!strchr(g_current_filename, ':')) {
         snprintf(raw_name, sizeof(raw_name), "%c:%s",
                  (char)('A' + bdos(25, 0)), g_current_filename);
     } else {

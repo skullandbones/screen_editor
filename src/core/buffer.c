@@ -11,6 +11,9 @@
 
 #include <string.h>
 #include <stdio.h>
+#ifdef __CPM__
+#include <cpm.h>
+#endif
 #include "../include/config.h"
 #include "../include/buffer.h"
 #include "../include/memory.h"
@@ -60,7 +63,10 @@ void init_empty_document(void)
     g_active_line_len = 0;
     g_active_line_buf[0] = '\0';
     g_doc_modified = 0;
+    g_current_filename[0] = '\0';
 #ifdef __CPM__
+    g_doc_drive = 0;
+    g_doc_user = (uint8_t)bdos(32, 0xFF);
     g_file_format = FMT_CPM;
 #else
     g_file_format = FMT_LINUX;
