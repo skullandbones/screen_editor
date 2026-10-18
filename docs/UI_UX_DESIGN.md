@@ -1025,6 +1025,25 @@ content blocks rather than top-aligned text.
      inserting without overwriting existing input.
    - Confirmation and Cancellation: `<Enter>` confirms the filename; `<ESC>`
      cancels the directory workspace and returns to the previous screen.
+   - Directory Listing Highlight Bar Navigation (`<Tab>`):
+     - Pressing `<Tab>` while in the filename input box activates a reverse-
+       video highlight bar (`12` columns wide) in the directory listing view,
+       starting at the top-left entry (index `0`) when at least one file is
+       present on the page, and hides the hardware cursor (`TERM_HIDE_CURSOR`).
+     - The filename input box is automatically populated in-place with the
+       currently highlighted filename (prefixed with the active `<Drive><User>:`
+       in CP/M mode).
+     - The highlight bar can be navigated across the multi-column file grid
+       using the cursor keys (`<Left>`, `<Right>`, `<Up>`, `<Down>` or WordStar
+       equivalents `^S`, `^D`, `^E`, `^X`), updating both the highlighted cell
+       and the filename text box in-place without full-screen redraws.
+     - Pressing `<Enter>` while the highlight bar is active immediately accepts
+       and uses the highlighted filename (identical to pressing `<Enter>` in
+       the filename text box).
+     - Pressing `<Tab>` while the highlight bar is active erases the highlight
+       bar, restores the hardware cursor at the end of the filename in the
+       text box (`TERM_SHOW_CURSOR`), and returns control to the filename text
+       box so the user can continue editing the filename.
 
 10. Workspace Prompt Input & Keystroke Rendering Discipline (SE.COM Parity):
     When entering filenames, paths, or drive specs in Tier 1 directory browsers

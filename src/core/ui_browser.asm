@@ -1420,31 +1420,7 @@ REFRESH_OPEN_DIR:
 	CALL SORT_DIR_ENTRIES
 
 	; 3. Calculate Total Pages (using dynamic DIR_PAGE_CAPACITY)
-	XOR A
-	LD (DIR_PAGE_INDEX),A
-
-	LD A,(DIR_FILE_COUNT)
-	OR A
-	JR NZ,CALC_PAGES
-	LD A,1
-	LD (DIR_PAGE_COUNT),A
-	JR RENDER_OPEN_PAGE
-
-CALC_PAGES:
-	DEC A				; A = N - 1
-	LD B,0				; B = quotient
-	LD HL,DIR_PAGE_CAPACITY
-	LD C,(HL)
-DIV_PAGE_LOOP:
-	CP C
-	JR C,DIV_PAGE_DONE
-	SUB C
-	INC B
-	JR DIV_PAGE_LOOP
-DIV_PAGE_DONE:
-	INC B				; Total pages = quotient + 1
-	LD A,B
-	LD (DIR_PAGE_COUNT),A
+	CALL CALC_DIR_PAGES
 
 RENDER_OPEN_PAGE:
 	CALL TERM_INIT
@@ -1599,26 +1575,14 @@ HANDLE_OPEN_FILTER:
 	JP REFRESH_OPEN_DIR
 
 OPEN_RAMDRV_UNAVAILABLE:
-	; Restore previous WORK_FCB from DIR_TEMP_FCB
-	LD HL,DIR_TEMP_FCB
-	LD DE,WORK_FCB
-	LD BC,36
-	LDIR
-	LD A,(DOC_USER_NUM)
-	LD (WORK_FCB_USER),A
+	CALL RESTORE_WORK_FCB_FROM_TEMP
 	LD A,(PREV_DOC_IS_FAT)
 	LD (DOC_IS_FAT),A
 	CALL SHOW_POPUP_RAMDRV_UNAVAIL
 	JP RENDER_OPEN_PAGE
 
 OPEN_FILE_NOT_FOUND:
-	; Restore previous WORK_FCB from DIR_TEMP_FCB
-	LD HL,DIR_TEMP_FCB
-	LD DE,WORK_FCB
-	LD BC,36
-	LDIR
-	LD A,(DOC_USER_NUM)
-	LD (WORK_FCB_USER),A
+	CALL RESTORE_WORK_FCB_FROM_TEMP
 	LD A,(PREV_DOC_IS_FAT)
 	LD (DOC_IS_FAT),A
 	CALL SHOW_POPUP_FILE_NOT_FOUND
@@ -1750,15 +1714,7 @@ DO_PARSE_AND_INSERT:
 	LD A,(WORK_FCB_USER)
 	LD (BLOCK_IO_USER),A
 
-	; Restore original document WORK_FCB from DIR_TEMP_FCB
-	LD HL,DIR_TEMP_FCB
-	LD DE,WORK_FCB
-	LD BC,36
-	LDIR
-
-	; Restore WORK_FCB_USER from DOC_USER_NUM
-	LD A,(DOC_USER_NUM)
-	LD (WORK_FCB_USER),A
+	CALL RESTORE_WORK_FCB_FROM_TEMP
 
 	; Set BDOS user area to BLOCK_IO_USER
 	LD A,(BLOCK_IO_USER)
@@ -1808,14 +1764,7 @@ DPAI_PROBE_OK:
 	CALL DO_PERFORM_BLOCK_INSERT
 
 DPAI_CLEANUP:
-	; Restore original document WORK_FCB from DIR_TEMP_FCB
-	LD HL,DIR_TEMP_FCB
-	LD DE,WORK_FCB
-	LD BC,36
-	LDIR
-
-	LD A,(DOC_USER_NUM)
-	LD (WORK_FCB_USER),A
+	CALL RESTORE_WORK_FCB_FROM_TEMP
 
 	; Restore original HAS_FILE_ARG
 	LD A,(SAVED_HAS_FILE_ARG)
@@ -2640,31 +2589,7 @@ REFRESH_SAVE_DIR:
 	CALL SORT_DIR_ENTRIES
 
 	; 3. Calculate Total Pages (using dynamic DIR_PAGE_CAPACITY)
-	XOR A
-	LD (DIR_PAGE_INDEX),A
-
-	LD A,(DIR_FILE_COUNT)
-	OR A
-	JR NZ,CALC_SAVE_PAGES
-	LD A,1
-	LD (DIR_PAGE_COUNT),A
-	JR RENDER_SAVE_PAGE
-
-CALC_SAVE_PAGES:
-	DEC A				; A = N - 1
-	LD B,0
-	LD HL,DIR_PAGE_CAPACITY
-	LD C,(HL)
-DIV_PAGE_SAVE_LOOP:
-	CP C
-	JR C,DIV_PAGE_SAVE_DONE
-	SUB C
-	INC B
-	JR DIV_PAGE_SAVE_LOOP
-DIV_PAGE_SAVE_DONE:
-	INC B
-	LD A,B
-	LD (DIR_PAGE_COUNT),A
+	CALL CALC_DIR_PAGES
 
 RENDER_SAVE_PAGE:
 	CALL TERM_INIT
@@ -2784,13 +2709,7 @@ OW_DRAIN_BYTE:
 	JR OW_DRAIN_MORE
 
 DO_OVERWRITE_CANCELLED:
-	; Restore original WORK_FCB
-	LD HL,DIR_TEMP_FCB
-	LD DE,WORK_FCB
-	LD BC,36
-	LDIR
-	LD A,(DOC_USER_NUM)
-	LD (WORK_FCB_USER),A
+	CALL RESTORE_WORK_FCB_FROM_TEMP
 	CALL RESTORE_DOC_USER
 	RET
 
@@ -2835,14 +2754,7 @@ DO_ACTUAL_SAVE:
 
 DO_ACTUAL_BLOCK_SAVE:
 	CALL SAVE_BLOCK_FILE
-	; Restore original document WORK_FCB from DIR_TEMP_FCB
-	LD HL,DIR_TEMP_FCB
-	LD DE,WORK_FCB
-	LD BC,36
-	LDIR
-	LD A,(DOC_USER_NUM)
-	LD (WORK_FCB_USER),A
-	RET
+	JP RESTORE_WORK_FCB_FROM_TEMP
 
 ;------------------------------------------------------------------------------
 ; DRAW_OVERWRITE_POPUP: Display overwrite confirmation modal dialog
@@ -2915,13 +2827,7 @@ DRAW_OVERWRITE_POPUP:
 	RET
 
 SAVE_RAMDRV_UNAVAILABLE:
-	; Restore previous WORK_FCB from DIR_TEMP_FCB
-	LD HL,DIR_TEMP_FCB
-	LD DE,WORK_FCB
-	LD BC,36
-	LDIR
-	LD A,(DOC_USER_NUM)
-	LD (WORK_FCB_USER),A
+	CALL RESTORE_WORK_FCB_FROM_TEMP
 	CALL SHOW_POPUP_RAMDRV_UNAVAIL
 	JP RENDER_SAVE_PAGE
 
@@ -5220,8 +5126,47 @@ NO_SWAP_NEEDED:
 ; Preserves / Modifies:
 ;   Clobbers all working registers.
 ;------------------------------------------------------------------------------
+DIR_PAGE_FILE_CNT	EQU DIR_TEMP_ENTRY + 13
+DIR_HL_INDEX		EQU DIR_TEMP_ENTRY + 14
+
+RESTORE_WORK_FCB_FROM_TEMP:
+	LD HL,DIR_TEMP_FCB
+	LD DE,WORK_FCB
+	LD BC,36
+	LDIR
+	LD A,(DOC_USER_NUM)
+	LD (WORK_FCB_USER),A
+	RET
+
+CALC_DIR_PAGES:
+	XOR A
+	LD (DIR_PAGE_INDEX),A
+	LD A,(DIR_FILE_COUNT)
+	OR A
+	JR NZ,CDP_NONZERO
+	INC A
+	LD (DIR_PAGE_COUNT),A
+	RET
+CDP_NONZERO:
+	DEC A				; A = N - 1
+	LD B,0				; B = quotient
+	LD HL,DIR_PAGE_CAPACITY
+	LD C,(HL)
+CDP_DIV_LOOP:
+	CP C
+	JR C,CDP_DIV_DONE
+	SUB C
+	INC B
+	JR CDP_DIV_LOOP
+CDP_DIV_DONE:
+	INC B
+	LD A,B
+	LD (DIR_PAGE_COUNT),A
+	RET
+
 DISPLAY_DIR_PAGE:
 	LD A,(DIR_FILE_COUNT)
+	LD (DIR_PAGE_FILE_CNT),A
 	OR A
 	JR NZ,DO_SHOW_PAGE
 	LD HL,UI_CUR_ROW
@@ -5247,24 +5192,11 @@ DO_SHOW_PAGE:
 	JR C,HAVE_PAGE_COUNT
 	LD A,(HL)
 HAVE_PAGE_COUNT:
+	LD (DIR_PAGE_FILE_CNT),A
 	LD B,A			; B = number of files to display on this page
 
-	; Calculate pointer in DIR_NAMES_BUF: DIR_NAMES_BUF + (DIR_START_FILE *
-	; 13)
 	LD A,(DIR_START_FILE)
-	LD L,A
-	LD H,0
-	LD D,H
-	LD E,L
-	ADD HL,HL			; *2
-	ADD HL,HL			; *4
-	ADD HL,DE			; *5
-	ADD HL,HL			; *10
-	ADD HL,DE			; *11
-	ADD HL,DE			; *12
-	ADD HL,DE			; *13
-	LD DE,DIR_NAMES_BUF
-	ADD HL,DE		; HL = pointer to start entry on this page
+	CALL CALC_ENTRY_PTR_A	; HL = pointer to start entry on this page
 
 	XOR A
 	LD (DIR_COL_COUNT),A
@@ -5280,86 +5212,9 @@ DISPLAY_PAGE_LOOP:
 	CALL PRINT_DIR_PREFIX
 DPL_NOT_FIRST_COL:
 
-	; Format entry into a clean 16-char padded column:
-	; e.g. "DIGIT5  .ASM" -> "DIGIT5.ASM      "
-	LD DE,LOAD_LINE_TEMP
-	LD B,8
-COPY_DISP_NAME:
-	LD A,(HL)
-	CP ' '
-	JR Z,SKIP_NAME_SPACE
-	LD (DE),A
-	INC DE
-SKIP_NAME_SPACE:
-	INC HL
-	DJNZ COPY_DISP_NAME
-
-	; Check if byte 8 is '/' (subdirectory indicator from VFS_CMD_LIST_DIR)
-	LD A,(HL)
-	CP '/'
-	JR NZ,DPL_NOT_SUBDIR
-	; Subdirectory: emit '/' and pad column
-	LD (DE),A
-	INC DE
-	INC HL				; skip byte 8 ('/')
-	INC HL				; skip byte 9
-	INC HL				; skip byte 10
-	INC HL				; skip byte 11
-	JR PAD_COLUMN
-
-DPL_NOT_SUBDIR:
-	; Check extension (3 chars) at HL+1
-	INC HL				; Skip '.'
-	LD A,(HL)
-	CP ' '
-	JR Z,NO_DISP_EXT
-	; Has extension: append '.' and extension chars (trimmed)
-	DEC HL				; Point back to '.'
-	LD A,'.'
-	LD (DE),A
-	INC DE
-	INC HL
-	LD B,3
-COPY_DISP_EXT:
-	LD A,(HL)
-	CP ' '
-	JR Z,SKIP_EXT_SPACE
-	LD (DE),A
-	INC DE
-SKIP_EXT_SPACE:
-	INC HL
-	DJNZ COPY_DISP_EXT
-	JR PAD_COLUMN
-
-NO_DISP_EXT:
-	INC HL
-	INC HL
-	INC HL
-
-PAD_COLUMN:
-	; Calculate printed length in LOAD_LINE_TEMP
-	LD HL,LOAD_LINE_TEMP
-	LD A,E
-	SUB L				; A = character count in line
-	; Pad with spaces up to DIR_COL_WIDTH characters
-	LD C,A
+	CALL FORMAT_DIR_ENTRY_HL
 	LD A,(DIR_COL_WIDTH)
-	SUB C				; A = DIR_COL_WIDTH - char_count
-	JR Z,DISP_COL_TERMINATE
-	JR C,DISP_COL_TERMINATE
-	LD B,A
-PAD_COL_SPACES:
-	LD A,' '
-	LD (DE),A
-	INC DE
-	DJNZ PAD_COL_SPACES
-
-DISP_COL_TERMINATE:
-	XOR A
-	LD (DE),A			; Null-terminate LOAD_LINE_TEMP
-
-	; Print column (null-terminated; avoids early '$' stop in PRINT_STR)
-	CALL PRINT_DIR_COL_ENTRY
+	CALL PRINT_PADDED_ENTRY_A
 
 	; Increment column counter
 	LD A,(DIR_COL_COUNT)
@@ -5416,18 +5271,93 @@ DISP_PAGE_DONE:
 ; Preserves / Modifies:
 ;   Clobbers AF, HL; preserves BC, DE.
 ;------------------------------------------------------------------------------
-PRINT_DIR_COL_ENTRY:
-	PUSH HL
+CALC_ENTRY_PTR_A:
+	LD L,A
+	LD H,0
+	LD D,H
+	LD E,L
+	ADD HL,HL			; *2
+	ADD HL,HL			; *4
+	ADD HL,DE			; *5
+	ADD HL,HL			; *10
+	ADD HL,DE			; *11
+	ADD HL,DE			; *12
+	ADD HL,DE			; *13
+	LD DE,DIR_NAMES_BUF
+	ADD HL,DE
+	RET
+
+FORMAT_DIR_ENTRY_HL:
+	LD DE,LOAD_LINE_TEMP
+	LD B,8
+COPY_DISP_NAME:
+	LD A,(HL)
+	CP ' '
+	JR Z,SKIP_NAME_SPACE
+	LD (DE),A
+	INC DE
+SKIP_NAME_SPACE:
+	INC HL
+	DJNZ COPY_DISP_NAME
+
+	; Check if byte 8 is '/' (subdirectory indicator from VFS_CMD_LIST_DIR)
+	LD A,(HL)
+	CP '/'
+	JR NZ,DPL_NOT_SUBDIR
+	LD (DE),A
+	INC DE
+	JR FDE_TERMINATE
+
+DPL_NOT_SUBDIR:
+	; Check extension (3 chars) at HL+1
+	INC HL				; Skip '.'
+	LD A,(HL)
+	CP ' '
+	JR Z,FDE_TERMINATE
+	LD A,'.'
+	LD (DE),A
+	INC DE
+	LD B,3
+COPY_DISP_EXT:
+	LD A,(HL)
+	CP ' '
+	JR Z,SKIP_EXT_SPACE
+	LD (DE),A
+	INC DE
+SKIP_EXT_SPACE:
+	INC HL
+	DJNZ COPY_DISP_EXT
+
+FDE_TERMINATE:
+	XOR A
+	LD (DE),A
 	LD HL,LOAD_LINE_TEMP
-PDCE_LOOP:
+	LD A,E
+	SUB L
+	LD C,A				; C = formatted filename length
+	RET
+
+PRINT_PADDED_ENTRY_A:
+	; A = target padded width, C = length of string in LOAD_LINE_TEMP
+	SUB C
+	LD B,A				; B = spaces to pad (if > 0)
+	LD HL,LOAD_LINE_TEMP
+PPE_CHAR_LOOP:
 	LD A,(HL)
 	OR A
-	JR Z,PDCE_DONE
+	JR Z,PPE_PAD_CHECK
 	CALL PUTC
 	INC HL
-	JR PDCE_LOOP
-PDCE_DONE:
-	POP HL
+	JR PPE_CHAR_LOOP
+PPE_PAD_CHECK:
+	LD A,B
+	OR A
+	RET Z
+	RET M
+PPE_SPACE_LOOP:
+	LD A,' '
+	CALL PUTC
+	DJNZ PPE_SPACE_LOOP
 	RET
 
 ;------------------------------------------------------------------------------
@@ -5622,27 +5552,30 @@ FUPS_STATUS:
 	CALL RENDER_STATUS_BAR
 
 	; Reposition cursor inside filename input box on UI_CUR_ROW
-	; Col = Base + DIR_LEFT_PAD + INPUT_BUF_LEN
+	LD A,(INPUT_BUF_LEN)
+	CALL LOCATE_INPUT_BOX_OFFSET_A
+	JP TERM_SHOW_CURSOR
+
+LOCATE_INPUT_BOX_OFFSET_A:
+	; A = character offset inside filename text box (0..20)
+	LD C,A
 	LD A,(IS_BLOCK_INSERT_UI)
 	OR A
 	LD A,29
-	JR NZ,FUPS_BOX_COL
+	JR NZ,LIBO_ADD
 	LD A,(IS_PLUGIN_LOAD_UI)
 	OR A
 	LD A,28
-	JR NZ,FUPS_BOX_COL
+	JR NZ,LIBO_ADD
 	LD A,27
-FUPS_BOX_COL:
+LIBO_ADD:
 	LD HL,DIR_LEFT_PAD
 	ADD A,(HL)
-	LD HL,INPUT_BUF_LEN
-	ADD A,(HL)
+	ADD A,C
 	LD L,A
 	LD A,(UI_CUR_ROW)
 	LD H,A
-	CALL LOCATE_RC
-	CALL TERM_SHOW_CURSOR
-	RET
+	JP LOCATE_RC
 
 ;------------------------------------------------------------------------------
 ; LOCATE_RC: Position terminal cursor with boundary clamping
@@ -5880,6 +5813,10 @@ INPUT_CHECK_PAGE_KEYS:
 	JP Z,INPUT_DEL_CHAR
 
 CHECK_ENTER_KEY:
+	; Tab -> Enter directory highlight bar navigation mode
+	CP KEY_TAB
+	JP Z,INPUT_TAB_TO_DIR_NAV
+
 	; Enter -> Finish input or advance page if empty
 	CP KEY_ENTER
 	JP Z,INPUT_ENTER
@@ -6305,6 +6242,267 @@ INPUT_ENTER:
 
 INPUT_ENTER_EMPTY:
 	JP INPUT_CANCEL
+
+;------------------------------------------------------------------------------
+; Directory Highlight Bar Navigation Mode (Tab from Filename Text Box)
+;------------------------------------------------------------------------------
+INPUT_TAB_TO_DIR_NAV:
+	LD A,(DIR_PAGE_FILE_CNT)
+	OR A
+	JP Z,INPUT_CHAR_LOOP		; No files on page -> stay in text box
+
+	CALL TERM_HIDE_CURSOR
+	XOR A
+	LD (DIR_HL_INDEX),A		; Start at top-left entry (index 0)
+	CALL DRAW_HL_ON
+
+DIR_NAV_LOOP:
+	CALL GET_KEY
+
+	; Ctrl-F -> Toggle Save Format (Save Screen only)
+	CP KEY_CTRL_F
+	JR NZ,DNL_CHK_TAB
+	LD A,(IS_SAVE_UI)
+	OR A
+	JR Z,DIR_NAV_LOOP
+	CALL TERM_SHOW_CURSOR
+	LD A,(SAVE_FORMAT)
+	XOR 1
+	LD (SAVE_FORMAT),A
+	LD A,2
+	SCF
+	RET
+
+DNL_CHK_TAB:
+	CP KEY_TAB
+	JR NZ,DNL_CHK_ENTER
+	; Tab pressed in highlight mode -> erase highlight and return to box
+	CALL DRAW_HL_OFF
+	LD A,(INPUT_CURSOR_POS)
+	CALL LOCATE_INPUT_BOX_OFFSET_A
+	CALL TERM_SHOW_CURSOR
+	JP INPUT_CHAR_LOOP
+
+DNL_CHK_ENTER:
+	CP KEY_ENTER
+	JR NZ,DNL_CHK_ESC
+	; Enter pressed in highlight mode -> accept highlighted filename
+	CALL TERM_SHOW_CURSOR
+	JP INPUT_ENTER
+
+DNL_CHK_ESC:
+	CP KEY_ESC
+	JR NZ,DNL_CHK_CTRL
+
+	LD BC,ESC_TIMEOUT_LOOPS
+DNL_WAIT_ESC:
+	CALL CHECK_KEY_READY
+	JR NZ,DNL_GOT_ESC_BYTE
+	DEC BC
+	LD A,B
+	OR C
+	JR NZ,DNL_WAIT_ESC
+	; Standalone ESC -> Cancel dialog
+	CALL TERM_SHOW_CURSOR
+	JP INPUT_CANCEL
+
+DNL_GOT_ESC_BYTE:
+	CALL GET_KEY
+	CP '['
+	JR Z,DNL_CSI
+	CP 'O'
+	JR Z,DNL_SS3
+	JR DIR_NAV_LOOP
+
+DNL_CSI:
+	CALL GET_KEY
+	CP 'A'
+	JP Z,DNL_MOVE_UP
+	CP 'B'
+	JP Z,DNL_MOVE_DOWN
+	CP 'C'
+	JP Z,DNL_MOVE_RIGHT
+	CP 'D'
+	JP Z,DNL_MOVE_LEFT
+	CP '5'
+	JR Z,DNL_CSI_PGUP
+	CP '6'
+	JR Z,DNL_CSI_PGDN
+	CP 'I'
+	JR Z,DNL_DO_PGUP
+	CP 'G'
+	JR Z,DNL_DO_PGDN
+	JP DIR_NAV_LOOP
+
+DNL_CSI_PGUP:
+	CALL GET_KEY
+DNL_DO_PGUP:
+	CALL TERM_SHOW_CURSOR
+	JP INPUT_DO_PGUP
+
+DNL_CSI_PGDN:
+	CALL GET_KEY
+DNL_DO_PGDN:
+	CALL TERM_SHOW_CURSOR
+	JP INPUT_DO_PGDN
+
+DNL_SS3:
+	CALL GET_KEY
+	CP 'A'
+	JR Z,DNL_MOVE_UP
+	CP 'B'
+	JR Z,DNL_MOVE_DOWN
+	CP 'C'
+	JR Z,DNL_MOVE_RIGHT
+	CP 'D'
+	JR Z,DNL_MOVE_LEFT
+	JP DIR_NAV_LOOP
+
+DNL_CHK_CTRL:
+	CP KEY_CTRL_U
+	JR Z,DNL_DO_PGUP
+	CP KEY_CTRL_B
+	JR Z,DNL_DO_PGUP
+	CP KEY_CTRL_V
+	JR Z,DNL_DO_PGDN
+	CP KEY_CTRL_E
+	JR Z,DNL_MOVE_UP
+	CP KEY_CTRL_X
+	JR Z,DNL_MOVE_DOWN
+	CP KEY_CTRL_S
+	JR Z,DNL_MOVE_LEFT
+	CP KEY_CTRL_D
+	JR Z,DNL_MOVE_RIGHT
+	JP DIR_NAV_LOOP
+
+DNL_MOVE_LEFT:
+	LD A,(DIR_HL_INDEX)
+	OR A
+	JP Z,DIR_NAV_LOOP
+	DEC A
+	JR DNL_UPDATE_INDEX
+
+DNL_MOVE_RIGHT:
+	LD A,(DIR_HL_INDEX)
+	INC A
+	LD HL,DIR_PAGE_FILE_CNT
+	CP (HL)
+	JP NC,DIR_NAV_LOOP
+	JR DNL_UPDATE_INDEX
+
+DNL_MOVE_UP:
+	LD A,(DIR_HL_INDEX)
+	LD HL,DIR_COLS_PER_ROW
+	SUB (HL)
+	JP C,DIR_NAV_LOOP
+	JR DNL_UPDATE_INDEX
+
+DNL_MOVE_DOWN:
+	LD A,(DIR_HL_INDEX)
+	LD HL,DIR_COLS_PER_ROW
+	ADD A,(HL)
+	LD HL,DIR_PAGE_FILE_CNT
+	CP (HL)
+	JP NC,DIR_NAV_LOOP
+
+DNL_UPDATE_INDEX:
+	PUSH AF
+	CALL DRAW_HL_OFF
+	POP AF
+	LD (DIR_HL_INDEX),A
+	CALL DRAW_HL_ON
+	JP DIR_NAV_LOOP
+
+DRAW_HL_OFF:
+	CALL PREP_HL_CELL
+	LD A,12
+	JP PRINT_PADDED_ENTRY_A
+
+DRAW_HL_ON:
+	CALL PREP_HL_CELL
+	CALL TERM_INVERSE_ON
+	LD A,12
+	CALL PRINT_PADDED_ENTRY_A
+	CALL TERM_INVERSE_OFF
+
+	; Auto-fill filename text box with highlighted filename
+	CALL PRELOAD_DRIVE_USER_PREFIX
+	LD A,(CURRENT_DIR_IS_FAT)
+	OR A
+	JR Z,DHO_APPEND_NAME
+	; In FAT mode, replace buffer directly with entry name
+	LD DE,INPUT_FILENAME_BUF
+	LD C,0
+DHO_APPEND_NAME:
+	LD HL,LOAD_LINE_TEMP
+DHO_COPY_LOOP:
+	LD A,(HL)
+	OR A
+	JR Z,DHO_COPY_DONE
+	LD (DE),A
+	INC HL
+	INC DE
+	INC C
+	JR DHO_COPY_LOOP
+DHO_COPY_DONE:
+	XOR A
+	LD (DE),A
+	LD (INPUT_CURSOR_POS),A
+	LD A,C
+	LD (INPUT_BUF_LEN),A
+
+	; Redraw filename text box contents in-place
+	XOR A
+	CALL LOCATE_INPUT_BOX_OFFSET_A
+	CALL REFRESH_BOX_FROM_CURSOR
+	LD A,(INPUT_BUF_LEN)
+	LD (INPUT_CURSOR_POS),A
+	RET
+
+PREP_HL_CELL:
+	; Locate cursor at (DIR_HL_INDEX) grid cell and format entry into
+	; LOAD_LINE_TEMP
+	LD A,(DIR_HL_INDEX)
+	LD B,0
+	LD HL,DIR_COLS_PER_ROW
+	LD C,(HL)
+PHC_DIV_LOOP:
+	CP C
+	JR C,PHC_DIV_DONE
+	SUB C
+	INC B
+	JR PHC_DIV_LOOP
+PHC_DIV_DONE:
+	; B = row_offset, A = col_offset
+	LD C,A
+	LD A,(DIR_TOP_PAD_COUNT)
+	ADD A,4
+	ADD A,B
+	LD H,A				; H = 1-based screen row
+
+	LD A,(DIR_COL_WIDTH)
+	LD D,A
+	LD A,C
+	OR A
+	LD A,0
+	JR Z,PHC_MUL_DONE
+	LD B,C
+PHC_MUL_LOOP:
+	ADD A,D
+	DJNZ PHC_MUL_LOOP
+PHC_MUL_DONE:
+	LD B,A
+	LD A,(DIR_LEFT_PAD)
+	ADD A,2
+	ADD A,B
+	LD L,A				; L = 1-based screen col
+	CALL LOCATE_RC
+
+	LD A,(DIR_START_FILE)
+	LD HL,DIR_HL_INDEX
+	ADD A,(HL)
+	CALL CALC_ENTRY_PTR_A
+	JP FORMAT_DIR_ENTRY_HL
 
 ;------------------------------------------------------------------------------
 ; PARSE_OPEN_LINE_NUM: Parse optional ":<line>" suffix from filename string
