@@ -1106,14 +1106,14 @@ def test_bug_2_4_15_sticky_target_col_and_tab_clamping():
             read_all_available(master, 0.2)
 
             # Move down 2 lines to Line 3 (\tXYZ). Target 2 is inside tab.
-            # Snap-forward alignment (§6.2, §6.4) snaps to Col 4 (index 1).
+            # Snap-forward alignment (§6.2, §6.4) snaps to Col 8 (index 1).
             os.write(master, b"\x1b[B\x1b[B")
             time.sleep(0.1)
             out_tab = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Line    3/3" in out_tab and "Col 4" in out_tab, (
-                f"Expected tab interior snap-forward to Col 4:\n{out_tab}"
+            assert "Line    3/3" in out_tab and "Col 8" in out_tab, (
+                f"Expected tab interior snap-forward to Col 8:\n{out_tab}"
             )
 
             # Move up 2 lines back to Line 1: TARGET_COL 2 preserved!
@@ -1376,7 +1376,7 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
                 "    /* 1. Defaults verification (§13.2) */\n"
                 "    config_init_defaults();\n"
                 "    assert(g_config.screen_mode == MODE_80X24);\n"
-                "    assert(g_config.tab_width == 4);\n"
+                "    assert(g_config.tab_width == 8);\n"
                 "    assert(g_config.save_format == FMT_LINUX);\n"
                 "    assert(g_config.lines_mode == 0);\n"
                 "    assert(g_config.ramdrive_mode == "
@@ -2852,13 +2852,13 @@ def test_bug_2_4_37_config_screen_interactive():
                 f"Failed to enter Configuration Manager:\n{cfg_out}"
             )
 
-            # Toggle Tab Width via '4' (4 -> 8)
+            # Toggle Tab Width via '4' (8 -> 4)
             os.write(master, b"4")
             time.sleep(0.2)
             tab_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "4. Tab Width        : 8" in tab_out, (
+            assert "4. Tab Width        : 4" in tab_out, (
                 f"Tab width toggle failed:\n{tab_out}"
             )
 
@@ -2898,7 +2898,7 @@ def test_bug_2_4_37_config_screen_interactive():
             assert os.path.exists(cfg_path), "SE.CFG was not created"
             with open(cfg_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            assert "TAB=8" in content, f"Expected TAB=8 in SE.CFG:\n{content}"
+            assert "TAB=4" in content, f"Expected TAB=4 in SE.CFG:\n{content}"
             assert "LINES=32K" in content, (
                 f"Expected LINES=32K in SE.CFG:\n{content}"
             )
@@ -2908,8 +2908,8 @@ def test_bug_2_4_37_config_screen_interactive():
 
 
 def test_bug_2_4_38_default_tab_width():
-    """Verify default tab width is 4 columns (Bug 2.4.38)."""
-    print("[*] Testing default tab width is 4 columns (Bug 2.4.38)...")
+    """Verify canonical default tab width is 8 columns (§6.2, §13.2)."""
+    print("[*] Testing default tab width is 8 columns (Bug 2.8.15)...")
     temp_dir = tempfile.mkdtemp()
     test_file = os.path.join(temp_dir, "test_tab.txt")
     with open(test_file, "w") as f:
@@ -2934,14 +2934,14 @@ def test_bug_2_4_38_default_tab_width():
             )
             assert "Col 0" in init_out, f"Expected initial Col 0:\n{init_out}"
 
-            # Move right 1 character past tab: visual column must leap to 4
+            # Move right 1 character past tab: visual column must leap to 8
             os.write(master, b"\x1b[C")
             time.sleep(0.1)
             out_tab = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Col 4" in out_tab, (
-                f"Expected visual Col 4 after default tab width 4:\n{out_tab}"
+            assert "Col 8" in out_tab, (
+                f"Expected visual Col 8 after default tab width 8:\n{out_tab}"
             )
 
             # Exit cleanly via Ctrl+Q
@@ -2949,7 +2949,7 @@ def test_bug_2_4_38_default_tab_width():
             time.sleep(0.1)
             os.close(master)
             os.waitpid(pid, 0)
-            print("    [+] Default tab width 4 verified [PASS]")
+            print("    [+] Default tab width 8 verified [PASS]")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -3136,14 +3136,14 @@ def test_bug_2_4_41_tab_snap_forward():
             )
 
             # Move down to Line 2 (\tABCDEF): TARGET_COL 2 falls inside tab.
-            # Snap-forward alignment snaps across tab to Col 4 (char 'A').
+            # Snap-forward alignment snaps across tab to Col 8 (char 'A').
             os.write(master, b"\x1b[B")
             time.sleep(0.1)
             out_l2 = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "Line    2/2" in out_l2 and "Col 4" in out_l2, (
-                f"Expected Line 2 Col 4 via snap-forward:\n{out_l2}"
+            assert "Line    2/2" in out_l2 and "Col 8" in out_l2, (
+                f"Expected Line 2 Col 8 via snap-forward:\n{out_l2}"
             )
 
             # Move up back to Line 1: sticky TARGET_COL 2 preserved!

@@ -40,7 +40,7 @@ static char *trim_whitespace(char *str)
 void config_init_defaults(void)
 {
     g_config_loaded = 0;
-    g_config.tab_width = 4;
+    g_config.tab_width = 8;
     g_config.lines_mode = 0;             /* 16K lines */
     g_config.screen_mode = MODE_80X24;  /* Canonical 80x24 (Section 13.2) */
     g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
@@ -168,7 +168,13 @@ int config_load_file(const char *filename)
 
     file_populate_fcb(filename, &s_cfg_fcb);
     if ((uint8_t)bdos(15, (int)&s_cfg_fcb) == 0xFF) {
-        return -1;
+        if (s_cfg_fcb.drive != 0) {
+            return -1;
+        }
+        file_populate_fcb("A:SE.CFG", &s_cfg_fcb);
+        if ((uint8_t)bdos(15, (int)&s_cfg_fcb) == 0xFF) {
+            return -1;
+        }
     }
 
     bdos(26, (int)s_cfg_dma);
@@ -200,6 +206,7 @@ cfg_load_done:
     }
     bdos(16, (int)&s_cfg_fcb);
     bdos(26, DEFAULT_DMA);
+    g_config_loaded = 1;
     return 0;
 }
 
@@ -265,6 +272,7 @@ int config_save_file(const char *filename)
     bdos(34, (int)&s_cfg_fcb);
     bdos(16, (int)&s_cfg_fcb);
     bdos(26, DEFAULT_DMA);
+    g_config_loaded = 1;
     return 0;
 }
 #else

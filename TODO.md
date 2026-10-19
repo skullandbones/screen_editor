@@ -3835,7 +3835,7 @@ have been resolved and archived.
       `KEY_CTRL_R` and `KEY_CTRL_C` paging aliases from
       `ui_browser_workspace()` in `src/core/ui_browser.c`. Verified via
       `tests/test_sanity.py --sec` and `tests/test_linux_native.py`.
-  - [ ] **Bug 2.8.15: Default Tab Width Initialized to `4` Instead of Canonical
+  - [x] **Bug 2.8.15: Default Tab Width Initialized to `4` Instead of Canonical
     `8` & `g_config_loaded` Never Set on CP/M**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4, 13.2, 13.3.
     - *Issue*:
@@ -3853,10 +3853,13 @@ have been resolved and archived.
       3. *Missing Program-Drive Fallback*: `config_load_file()` only probes the
          current default drive (`SE.CFG`) and does not fall back to `A:SE.CFG`
          per Section 13.3.
-    - *Required Fix*: Set default `tab_width = 8` in `src/core/config.c`,
-      `src/core/ui_render.c`, and `src/core/editor.c`; set `g_config_loaded = 1`
-      in CP/M `config_load_file()` and `config_save_file()`; and add `A:SE.CFG`
-      fallback probing in `config_load_file()`.
+    - *Resolution*: Initialized `g_config.tab_width = 8` in
+      `config_init_defaults()` (`src/core/config.c`) and updated `tab_w`
+      fallbacks to `8` in `src/core/ui_render.c` and `src/core/editor.c`. Added
+      `A:SE.CFG` fallback probing and set `g_config_loaded = 1` in CP/M
+      `config_load_file()` and `config_save_file()`. Updated default tab width
+      assertions in `tests/test_linux_native.py` and verified with
+      `tests/test_sanity.py --sec`.
   - [ ] **Bug 2.8.16: Help Screen Width (`74` vs `78` Columns), Missing
     `g_is_splash_screen` Status Bar Context & Visible Cursor**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.3, 11.2
