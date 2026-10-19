@@ -618,7 +618,13 @@ def run_ccp_shim(se_bin_path: str) -> None:
                 low.startswith("sec ")
             ):
                 parts = cmd_line.split()
-                subprocess.run([sys.executable, se_bin_path] + parts[1:])
+                with open(se_bin_path, "rb") as bf:
+                    magic = bf.read(4)
+                if magic == b"\x7fELF":
+                    run_cmd = [se_bin_path] + parts[1:]
+                else:
+                    run_cmd = [sys.executable, se_bin_path] + parts[1:]
+                subprocess.run(run_cmd)
                 tty.setraw(sys.stdin.fileno())
 
             out.write(f"\r\n{drive}>".encode("latin1"))

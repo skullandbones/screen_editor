@@ -65,7 +65,7 @@ def normalize_py_output(buf):
     'DRIVE C:' headers and 'C:NAME' status fields.
     """
     buf = re.sub(
-        rb"\(DIRECTORY - [^ )\[]*/(?=[ )\[])",
+        rb"\(DIRECTORY(?:\s*-\s*[^ )\[]*/)?(?=[ )\[])",
         b"(DIRECTORY - DRIVE C:",
         buf,
     )
@@ -224,13 +224,16 @@ def use_python_splash_targets():
     PY_MODE = True
     SPLASH_FREE_TARGETS[:] = [b"Active Screen :"]
 
-def test_se_execution(use_sec=False, use_python=False):
+def test_se_execution(use_sec=False, use_python=False, use_linux=False):
     script_dir0 = os.path.dirname(os.path.abspath(__file__))
     repo_root0 = os.path.dirname(script_dir0)
-    if use_python:
+    if use_python or use_linux:
         use_python_splash_targets()
         emu_bin = rom_file = img_file = ""
-        se_bin = os.path.join(repo_root0, "ports", "python", "bin", "se")
+        if use_linux:
+            se_bin = os.path.join(repo_root0, "se-linux")
+        else:
+            se_bin = os.path.join(repo_root0, "ports", "python", "bin", "se")
     else:
         emu_bin, rom_file, img_file, se_bin = find_paths(use_sec=use_sec)
     target_name = "SEC.COM" if use_sec else "SE.COM"
@@ -238,7 +241,7 @@ def test_se_execution(use_sec=False, use_python=False):
     target_cpm_bytes = target_name.encode("ascii")
     cmd_name = b"sec" if use_sec else b"se"
 
-    if not use_python:
+    if not (use_python or use_linux):
         if not os.path.isfile(emu_bin):
             print(f"[-] Emulator binary not found: {emu_bin}", flush=True)
             return False
@@ -265,7 +268,7 @@ def test_se_execution(use_sec=False, use_python=False):
         f.write("SCREEN=120x40\r\nRAMDRIVE=ON\r\n")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
-    if use_python:
+    if use_python or use_linux:
         cpmrm_bin = cpmcp_bin = ""
     else:
         tools_dir = find_tools_dir(repo_root)
@@ -401,8 +404,9 @@ def test_se_execution(use_sec=False, use_python=False):
             )
 
     py_tmp = None
-    if use_python:
-        print("[*] Launching Python SE via CCP shim...", flush=True)
+    if use_python or use_linux:
+        label = "se-linux" if use_linux else "Python SE"
+        print(f"[*] Launching {label} via CCP shim...", flush=True)
         py_tmp = tempfile.TemporaryDirectory(prefix="se_py_")
         stage_headless_fixtures(py_tmp.name, repo_root)
         cmd = [
@@ -1496,9 +1500,8 @@ def test_se_execution(use_sec=False, use_python=False):
         if b"EDITOR MODE KEYS" not in out_keys:
             print(f"[-] Help screen not reached via Ctrl+K. Buffer: {repr(out_keys)}", flush=True)
             return False
-        ctrl_o_help = (b"Ctrl+O: Open File" if PY_MODE
-                       else b"Ctrl+O           Open file screen")
-        if ctrl_o_help not in out_keys:
+        if (b"Ctrl+O           Open file screen" not in out_keys and
+                b"Ctrl+O: Open File" not in out_keys):
             print(f"[-] Ctrl+O missing from Editor Mode Keys screen. Buffer: {repr(out_keys)}", flush=True)
             return False
         # Press Space to return to editor
@@ -3143,9 +3146,10 @@ def test_se_execution(use_sec=False, use_python=False):
 
         # Verify modal pop-up contains title and Save changes? prompt
         # inside the box enclosure
-        if b"Unsaved Modifications" not in out_s52_prompt or \
-           (b"|                  Save changes?" if PY_MODE
-            else b"|                 Save changes?") not in out_s52_prompt:
+        if b"Unsaved Modifications" not in out_s52_prompt or (
+            b"|                 Save changes?" not in out_s52_prompt
+            and b"|                  Save changes?" not in out_s52_prompt
+        ):
             print(f"[-] Step 52 failed: Save changes prompt not embedded in "
                   f"modal popup. Buffer: {repr(out_s52_prompt)}", flush=True)
             return False
@@ -6361,8 +6365,11 @@ def test_se_execution(use_sec=False, use_python=False):
 if __name__ == "__main__":
     use_sec_arg = "--sec" in sys.argv
     use_python_arg = "--python" in sys.argv
+    use_linux_arg = "--linux" in sys.argv
     success = test_se_execution(
-        use_sec=use_sec_arg, use_python=use_python_arg
+        use_sec=use_sec_arg,
+        use_python=use_python_arg,
+        use_linux=use_linux_arg,
     )
     if success:
         print("[+] All automated SE.COM emulator tests PASSED.", flush=True)
