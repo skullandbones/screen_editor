@@ -114,9 +114,13 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
         } else {
             if (vis_col >= g_horiz_pan_offset) {
                 int in_blk = check_cursor_in_block(doc_row, i);
-                if (in_blk) hal_console_inverse_on();
+                int cont_hl = (g_block_mode == BLOCK_MODE_OFF &&
+                               vis_col + 1 == g_horiz_pan_offset +
+                                              max_content_cols &&
+                               i + 1 < len);
+                if (in_blk || cont_hl) hal_console_inverse_on();
                 hal_console_putc(c);
-                if (in_blk) hal_console_inverse_off();
+                if (in_blk || cont_hl) hal_console_inverse_off();
             }
             vis_col++;
         }
@@ -271,8 +275,14 @@ void render_status_bar(void)
     uint16_t vis_col = 0;
 
     fname = g_current_filename[0] ? g_current_filename : "(Untitled)";
-    snprintf(raw_name, sizeof(raw_name), "%s%c", fname,
-             g_doc_modified ? '*' : ' ');
+    strncpy(raw_name, fname, sizeof(raw_name) - 2);
+    raw_name[sizeof(raw_name) - 2] = '\0';
+    i = strlen(raw_name);
+    if (i > 13) {
+        i = 13;
+    }
+    raw_name[i] = g_doc_modified ? '*' : ' ';
+    raw_name[i + 1] = '\0';
 
     if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
         strcpy(geom_buf, " 80x24");
@@ -569,6 +579,10 @@ void show_splash_screen(void)
             g_config.screen_mode = MODE_80X24;
             g_active_cols = SCREEN_COLS_80;
             g_active_rows = SCREEN_ROWS_24;
+            if (g_cur_doc_row >= g_top_doc_row + 23) {
+                g_cur_doc_row = (uint16_t)(g_top_doc_row + 22);
+                checkout_active_line(g_cur_doc_row);
+            }
             need_render = 1;
         } else if (k == '2') {
             clear_screen();

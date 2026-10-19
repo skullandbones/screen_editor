@@ -468,6 +468,7 @@ int modal_confirm_save_changes(void)
         }
         return MODAL_RES_OK;
     } else if (res == MODAL_RES_NO) {
+        g_doc_modified = 0;
         return MODAL_RES_OK;
     }
     return MODAL_RES_CANCEL;
