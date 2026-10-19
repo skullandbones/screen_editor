@@ -1113,7 +1113,8 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 0 Open (Bugs 2.4.1–2.4.52 Resolved).
+- **Status**: Active / 7 Open (Bugs 2.4.1–2.4.52 Resolved; Bugs 2.4.53–2.4.59
+  Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -2128,6 +2129,198 @@ have been resolved and archived.
       Validated via
       `test_bug_2_4_52_about_screen_version_attribution_and_centering` in
       `tests/test_linux_native.py`.
+  - [ ] **Bug 2.4.53: Plugin System Not Permanently Builtin on Splash &
+    Configuration Screens**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 13.2, 14.8, 15.1.5.
+    - *Issue*: Sections 7.2, 7.4, 13.2, 14.8, and 15.1.5 mandate that on
+      non-CP/M systems (`se-linux`), the plugin manager is permanently builtin
+      (`Plugin System : [Builtin]` on the Splash Screen), and neither the
+      Configuration Manager (`[C]`) nor `SE.CFG` (`PLUGIN=...`) can disable the
+      plugin manager. Currently in `src/core/ui_render.c:478-484`
+      (`show_splash_screen`), `se-linux` displays
+      `Plugin System : [Operational]`, `[On Demand]`, or `[Disabled]` based on
+      `g_config.plugin_mode` instead of `Plugin System : [Builtin]`.
+      Furthermore, `show_config_screen()` (`src/core/ui_render.c:730-736,
+      791-799`) allows toggling Option 5 (`Plugin Manager : Autoload / Demand /
+      Disabled`) on Linux, and `src/core/config.c:124-139, 304-345` parses and
+      serializes `PLUGIN=OFF`/`DEMAND` to disable plugins on Linux.
+    - *Required Fix*: Under `#ifndef __CPM__` in `src/core/ui_render.c` and
+      `src/core/config.c`, unconditionally display
+      `"Plugin System : [Builtin]"` on the Splash Screen, display
+      `"         5. Plugin Manager   : Builtin"` (non-disableable) on the
+      Configuration Manager screen, and ignore `PLUGIN=OFF`/`DEMAND` in
+      `parse_config_line()` on non-CP/M builds so the builtin plugin manager
+      cannot be disabled.
+  - [ ] **Bug 2.4.54: Status Bar Field 4 Context Hierarchy Missing & Field 5
+    Variable-Length Tag Jitter**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2, 11.1, 14.5.
+    - *Issue*: Under `#ifndef __CPM__`, `render_status_bar()` in
+      `src/core/ui_render.c:247-361` violates Section 4.3's Field 4 Priority
+      Hierarchy and Field 5 Fixed-Width Jitter-Free Mandate:
+      1. In `src/core/ui_render.c:280-284`, Field 4 only checks
+         `if (g_is_splash_screen)` and otherwise hardcodes
+         `" ^K: Editor keys |"`, ignoring active dynamic block selection
+         (`Sel: <N> char(s)` / `Sel: <N> line(s)`), solidified block selection
+         (`Block: <N> char(s)` / `<N>c` or `Block: <N> line(s)` / `<N>L`),
+         horizontal viewport panning (`[Pan +<N>]`), and overwrite mode
+         (`Overwrite mode`).
+      2. In `src/core/ui_render.c:296-315`, `render_status_bar()` appends
+         variable-length tags (`" [Pan +%u]"`, `" [SEL]"`, `" [BLK LOCK]"`) to
+         Field 5, causing cursor coordinate jitter and exceeding the
+         78-character enclosed status bar width (Anti-Pattern #3: Terminal
+         Column Spill).
+      3. In `src/core/ui_render.c:270-271`, Field 2 formats `120x40` with an
+         extra leading space (`" 120x40 |"` = 10 chars) instead of canonical
+         9-character `"120x40 | "` (`" %s |"` where `"120x40"` has 0 leading
+         spaces inside the 6-char slot).
+    - *Required Fix*: Update `render_status_bar()` under `#ifndef __CPM__` in
+      `src/core/ui_render.c` to format Field 4 (15 chars + `" | "`) using the
+      canonical Section 4.3 priority hierarchy (Blank `               ` on
+      Splash/Browser/Help/About/Config overlays per the Fallback Rule,
+      `Sel: ...`, `Block: ...`, `[Pan +%u]`, `Overwrite mode`, or
+      `^K: Editor keys`), keep Field 5 strictly fixed at
+      `" Line %4u/%-4u Col %-3u |"`, and format `120x40` in Field 2 without an
+      extra leading space.
+  - [ ] **Bug 2.4.55: Splash & Configuration Screens Default to CP/M
+    `RAM Drive (A:)` on Linux & Leak Splash State**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 13.2, 14.1, 15.1.5.
+    - *Issue*:
+      1. *Default `RAM Drive (A:): [Preserved (Active)]` on Linux*:
+         In `src/core/config.c:46`, `config_init_defaults()` initializes
+         `g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED` unconditionally.
+         Because `g_ramdrive_char` is only compiled under `#ifdef __CPM__` in
+         `src/core/ui_render.c:453-471`, `show_splash_screen()` on `se-linux`
+         displays `"RAM Drive (A:): [Preserved (Active)]"` by default even
+         though Linux has no CP/M `A:` RomWBW RAM drive (Section 15.1.5 states
+         hardware RAM drive management does not apply on Linux and must report
+         `"RAM Drive     : [None Detected]"` or be omitted).
+      2. *Configuration Screen Missing `g_is_splash_screen` & Cursor Hidden
+         State*: In `src/core/ui_render.c:693-808`, `show_config_screen()` does
+         not preserve `g_is_splash_screen = 1` and unconditionally calls
+         `hal_console_show_cursor()` on exit (line 806) before returning to the
+         Splash Screen, violating Section 7.2's hidden cursor mandate on the
+         Splash Screen.
+      3. *Undocumented `?`/`h`/`H`/`Ctrl+K` Keys on Splash Screen*:
+         In `src/core/ui_render.c:562-564`, `show_splash_screen()` dispatches
+         undocumented `?`, `h`, `H`, and `Ctrl+K` keys instead of silently
+         ignoring unassigned keys per Section 7.2's Non-Entry Key Exclusion &
+         Silent Rejection Mandate.
+    - *Required Fix*: Under `#ifndef __CPM__`, default `g_config.ramdrive_mode`
+      to `RAMDRV_MODE_DISABLED` (or report `"RAM Drive     : [None Detected]"`
+      on the Splash Screen), preserve `g_is_splash_screen` and keep the cursor
+      hidden when exiting `show_config_screen()` to Splash, and remove the
+      undocumented `?`/`h`/`H`/`Ctrl+K` branch from `show_splash_screen()`.
+  - [ ] **Bug 2.4.56: Directory Browser WordStar Aliasing, CP/M Filter Prompt &
+    Editor `Ctrl+S` Save Workspace Bypass**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 7.5, 7.6, 7.7, 7.8, 7.9,
+      10, 11.8, 15.3.5.
+    - *Issue*: In `src/core/ui_browser.c` and `src/core/editor.c`:
+      1. *WordStar & Non-Canonical Control Keys in Directory Browser Input
+         (`src/core/ui_browser.c:600, 781-795`)*:
+         - Line 600 aliases `KEY_CTRL_B` (`Ctrl+B`) to Page Up.
+         - Line 781 maps `KEY_CTRL_G` (`Ctrl+G`) instead of canonical
+           `KEY_CTRL_D` (`Ctrl+D`) to forward delete in the filename input box.
+         - Lines 787–795 alias WordStar diamond keys `KEY_CTRL_S` (`Ctrl+S`) to
+           Left Arrow and `KEY_CTRL_D` (`Ctrl+D`) to Right Arrow inside the
+           directory filename input box, directly violating the WordStar
+           Diamond Deprecation Mandate (Sections 1, 7.9, 10, 11.8) and breaking
+           `Ctrl+D` forward delete.
+      2. *CP/M Drive/User Prompt Hint on Linux
+         (`src/core/ui_browser.c:488, 536-538`)*:
+         Line 537 unconditionally displays
+         `"[ESC]=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:,
+         *.TXT)"` and line 488 displays `"[No files found on current drive]"`
+         on `se-linux`, where CP/M drive letters and user areas do not exist
+         (Section 15.3.5).
+      3. *Editor `Ctrl+S` Bypasses Save File Workspace on Existing Files
+         (`src/core/editor.c:573-583`)*:
+         Under `#ifndef __CPM__`, pressing `Ctrl+S` in the editor when
+         `g_current_filename[0] != '\0'` bypasses `ui_browser_save_dialog()`
+         and immediately overwrites the file, preventing the user from changing
+         the target filename or toggling the `CP/M` / `Linux` line-ending
+         format via `Ctrl+F` as mandated by Section 7.7.
+    - *Required Fix*: In `src/core/ui_browser.c`, remove the `KEY_CTRL_S` and
+      `KEY_CTRL_D` WordStar cursor aliases and `KEY_CTRL_B`/`KEY_CTRL_G`
+      aliases, map `KEY_DEL` and `KEY_CTRL_D` to forward character deletion,
+      adapt the `#ifndef __CPM__` filter prompt to POSIX path/wildcard syntax
+      (`[ESC]=Cancel  Enter [path/][pattern] to list (e.g. src/, *.c, *.txt)`),
+      and in `src/core/editor.c` open `ui_browser_save_dialog()` on `Ctrl+S`
+      with `g_current_filename` pre-filled.
+  - [ ] **Bug 2.4.57: Help Screen Alignment/Quit Label & Memory Info Screen
+    Non-Blocking Key Read**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2, 7.3, 14.5.
+    - *Issue*: In `src/core/ui_render.c`:
+      1. *Help Screen Column 1 Alignment (`src/core/ui_render.c:613-614`)*:
+         In `s_help_lines`, rows 5 and 6 (`Ctrl+W` and `Ctrl+K`) have only 10
+         spaces after the 6-character key name, placing descriptions at column
+         20 (`"Close file to splash"` and `"Help / Solidify block"`) instead of
+         canonical column 21 (`11` spaces after 6-char keys, matching `Ctrl+O`
+         on row 4 and Section 7.3). Additionally, row 5 displays
+         `"Quit to CP/M"` on Linux builds.
+      2. *Memory Info Screen (`[M]`) Immediate Dismissal & `SE.COM` Title
+         (`src/core/ui_render.c:810-838`)*:
+         `show_mem_info_screen()` calls non-blocking `hal_console_getkey()`
+         once at line 831 without a `while (hal_console_getkey() <= 0)` wait
+         loop, causing `[M]` from the Splash Screen to immediately return
+         without waiting for a keystroke when the input buffer is empty. It
+         also displays `"SE.COM - Extended Memory Map"` instead of canonical
+         `"SE - "` header prefix (Section 7.1) and does not dispatch `Ctrl+P`
+         to `show_plugin_palette()`.
+    - *Required Fix*: In `src/core/ui_render.c`, align `Ctrl+W` and `Ctrl+K`
+      descriptions at column 21 in `s_help_lines`, update
+      `show_mem_info_screen()` to use `"SE - Extended Memory Map"`, wait for a
+      keystroke in a `while ((k = hal_console_getkey()) <= 0)` loop (supporting
+      `Ctrl+P` plugin palette), and keep the hardware cursor hidden when
+      returning to the Splash Screen.
+  - [ ] **Bug 2.4.58: Tier 2 Modal Box Width (`52` vs Canonical `50`) &
+    `ESC` Sequence Drain**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 8.3 (Archetypes A,
+      B, C), 10.3.
+    - *Issue*:
+      1. *Non-Canonical 52-Column Modal Width (`src/core/ui_modal.c:26-30`)*:
+         Under `#ifndef __CPM__`, `MODAL_BOX_WIDTH` is defined as `52` instead
+         of canonical `50` (`Section 8.3` mandates `50 cols x 7 rows` across
+         all variants). In `modal_confirm()` (`src/core/ui_modal.c:187`), the
+         overwrite confirmation cursor is placed at `left + 40`, which assumes
+         `width = 50`.
+      2. *Missing Trailing Escape Byte Drain on Modal Cancel
+         (`src/core/ui_modal.c:158, 198`, `src/core/search.c:239, 391`)*:
+         Unlike `modal_goto_line()` (`src/core/ui_modal.c:409-411`),
+         `modal_alert()`, `modal_confirm()`, and `prompt_search_box()` do not
+         drain trailing escape bytes or sleep when polling
+         `hal_console_getkey()` (note `prompt_search_box()` and `replace`
+         confirmation in `src/core/search.c:238, 390` spin in a tight CPU
+         busy-loop when `hal_console_getkey() <= 0`).
+    - *Required Fix*: Standardize `MODAL_BOX_WIDTH` to `50` in
+      `src/core/ui_modal.c`, and ensure modal key polling loops in
+      `src/core/search.c` and `src/core/plugin_mgr.c` ignore `k <= 0` without
+      tight-spinning.
+  - [ ] **Bug 2.4.59: `hal_console_init` & `sigwinch_handler` Override
+    Configured `80x24` / `120x40` Geometry With Host Window Size**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 6.5, 7.2, 13.2.
+    - *Issue*: In `src/hal/linux/hal_linux_console.c:41-59` (`sigwinch_handler`)
+      and `105-122` (`hal_console_init`), when `g_config.screen_mode` is NOT
+      `MODE_NATIVE` (e.g. default `MODE_80X24` or `MODE_120X40`), the driver
+      inspects `ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)` and overwrites
+      `g_active_cols` and `g_active_rows` based on whether the host PTY happens
+      to be $\ge 120 \times 40$ (`g_active_cols = 120; g_active_rows = 40`) or
+      smaller (`g_active_cols = 80; g_active_rows = 24`). Consequently:
+      1. Launching `se-linux` in a host terminal window $\ge 120 \times 40$
+         forces `g_active_cols = 120, g_active_rows = 40` even though
+         `g_config.screen_mode` is `MODE_80X24`, causing the Splash Screen to
+         report `Active Screen : [80x24 (Classic Terminal)]` while rendering on
+         a `120x40` grid!
+      2. Selecting `120x40` via `SCREEN=120X40` in `SE.CFG` is overwritten back
+         to `80x24` by `hal_console_init()` if the PTY reports $80 \times 24$.
+      3. `ui_init()` (`src/core/ui_render.c:44-55`) does not handle
+         `MODE_NATIVE`, and `sigwinch_handler()` does not clear the screen or
+         constrain the cursor viewport (`Section 2.1` & `Section 6.5`) when
+         resizing in `MODE_NATIVE`.
+    - *Required Fix*: In `src/hal/linux/hal_linux_console.c` and
+      `src/core/ui_render.c` (`ui_init`), strictly respect
+      `g_config.screen_mode`: use `80x24` when `MODE_80X24`, `120x40` when
+      `MODE_120X40`, and query `TIOCGWINSZ` dynamically only when
+      `g_config.screen_mode == MODE_NATIVE`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.
