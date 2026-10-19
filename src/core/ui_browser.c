@@ -597,15 +597,14 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 draw_tab_mode_hint();
                 locate_input_cursor();
             }
-        } else if (k == KEY_PGUP || k == KEY_CTRL_U || k == KEY_CTRL_B ||
-                   k == KEY_CTRL_R) {
+        } else if (k == KEY_PGUP || k == KEY_CTRL_U || k == KEY_CTRL_B) {
             if (s_total_pages >= 2) {
                 if (s_hl_active) s_hl_auto_mode = 2;
                 s_cur_page = (s_cur_page > 0) ? (s_cur_page - 1)
                                               : (s_total_pages - 1);
                 need_full_render = 1;
             }
-        } else if (k == KEY_PGDN || k == KEY_CTRL_V || k == KEY_CTRL_C) {
+        } else if (k == KEY_PGDN || k == KEY_CTRL_V) {
             if (s_total_pages >= 2) {
                 if (s_hl_active) s_hl_auto_mode = 1;
                 s_cur_page = (s_cur_page + 1 < s_total_pages)

@@ -3817,7 +3817,7 @@ have been resolved and archived.
       CP/M drive/user prefix parsing (`cpm_parse_prefix`). Verified with
       `tests/test_sec_browser_layout.py`, `tests/test_sanity.py --sec`, and
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.8.14: Prohibited WordStar Diamond & Control Key Aliases (`^E`,
+  - [x] **Bug 2.8.14: Prohibited WordStar Diamond & Control Key Aliases (`^E`,
     `^X`, `^R`, `^C`) in Plugin Palette and File Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 6.3, 6.4, 10, 11.8
       (Anti-Pattern #8).
@@ -3830,10 +3830,11 @@ have been resolved and archived.
          `KEY_PGDN`.
       3. Section 10 and Anti-Pattern #8 strictly prohibit WordStar diamond and
          legacy control navigation aliases across all surfaces and modals.
-    - *Required Fix*: Remove `KEY_CTRL_E` / `KEY_CTRL_X` from
-      `show_plugin_palette()` in `src/core/plugin_mgr.c` and remove
-      `KEY_CTRL_R` / `KEY_CTRL_C` from `ui_browser_workspace()` in
-      `src/core/ui_browser.c`.
+    - *Resolution*: Removed `KEY_CTRL_E` and `KEY_CTRL_X` navigation aliases
+      from `show_plugin_palette()` in `src/core/plugin_mgr.c`, and removed
+      `KEY_CTRL_R` and `KEY_CTRL_C` paging aliases from
+      `ui_browser_workspace()` in `src/core/ui_browser.c`. Verified via
+      `tests/test_sanity.py --sec` and `tests/test_linux_native.py`.
   - [ ] **Bug 2.8.15: Default Tab Width Initialized to `4` Instead of Canonical
     `8` & `g_config_loaded` Never Set on CP/M**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 6.2, 7.4, 13.2, 13.3.

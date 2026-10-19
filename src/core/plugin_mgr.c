@@ -232,9 +232,9 @@ void show_plugin_palette(void)
             }
             break;
         }
-        if (k == KEY_UP || k == KEY_CTRL_E) {
+        if (k == KEY_UP) {
             selected = (selected == 0) ? (num_items - 1) : (selected - 1);
-        } else if (k == KEY_DOWN || k == KEY_CTRL_X) {
+        } else if (k == KEY_DOWN) {
             selected = (selected + 1) % num_items;
         }
     }
