@@ -4402,6 +4402,15 @@ STR_ABOUT_RETURN:	DB	"Press any key to continue", "$"
 ;------------------------------------------------------------------------------
 ; Memory Information Screen Strings
 ;------------------------------------------------------------------------------
+	IFDEF TARGET_NEXT_CPM
+STR_MEM_TITLE_PAD_NEXT:
+	DB "                   ","$"	; 19 spaces to center SE_NEXT.COM title
+STR_MEM_INFO_TITLE_NEXT:
+	DB "SE_NEXT.COM - Extended Memory Map",13,10,"$"
+STR_MEM_TABLE_HDR_NEXT:
+	DB "Bank  Phys   Size   System / OS Role        SE_NEXT.COM Usage",13,10
+	DB "$"
+	ENDIF
 STR_MEM_TITLE_PAD:
 	DB "                      ","$"	; 22 spaces to center within 72 columns
 STR_MEM_INFO_TITLE:
@@ -4504,6 +4513,9 @@ STR_STATUS_LOADING_POS:
 
 STR_STATUS_COL:	DB	" Col ","$"
 
+	IFDEF TARGET_NEXT_CPM
+MSG_EXIT_NEXT:	DB	13,10,"Exiting SE_NEXT.COM. Returned to CP/M.",13,10,"$"
+	ENDIF
 MSG_EXIT:	DB	13,10,"Exiting SE.COM. Returned to CP/M.",13,10,"$"
 
 STR_TITLE_OPEN_PRE:	DB	"OPEN FILE (DIRECTORY - DRIVE ","$"

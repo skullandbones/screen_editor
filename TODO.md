@@ -320,10 +320,11 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 3 Open (Bugs 2.2.18, 2.2.19, 2.2.28 Open;
-  20 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
+- **Status**: Active / 2 Open (Bugs 2.2.18, 2.2.19 Open;
+  21 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
   2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23, 2.2.24, 2.2.25,
-  2.2.26, 2.2.27 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+  2.2.26, 2.2.27, 2.2.28 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
+  Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -865,9 +866,9 @@ have been resolved and archived.
       for both `"SE_NEXT COM"` and `"SE      COM"`, recording `EXEC_IS_SE_COM`
       for runtime UI and exit banner display. Validated via
       `tests/test_bug_2_2_27.py`.
-  - [ ] **Bug 2.2.28: Exit Banner and Extended Memory Map Title Hardcode
+  - [x] **Bug 2.2.28: Exit Banner and Extended Memory Map Title Hardcode
     `SE.COM` Instead of the Actual Executable Name (`src/core/plugin_mgr.asm` &
-    `src/se_next_cpm.asm`)**:
+    `src/se_next_cpm.asm`) [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11, 12.1, 13.3, 14.7.
     - *Issue*: In `src/core/plugin_mgr.asm:4396-4398` and `4495`,
       `STR_MEM_INFO_TITLE`, `STR_MEM_TABLE_HDR`, and `MSG_EXIT` unconditionally
@@ -881,6 +882,12 @@ have been resolved and archived.
       probing the active/program drive or CCP command buffer) in
       `STR_MEM_INFO_TITLE`, `STR_MEM_TABLE_HDR`, and `MSG_EXIT` (with centered
       padding preserved).
+    - *Resolution*: Added `STR_MEM_TITLE_PAD_NEXT`, `STR_MEM_INFO_TITLE_NEXT`,
+      `STR_MEM_TABLE_HDR_NEXT`, and `MSG_EXIT_NEXT` under
+      `IFDEF TARGET_NEXT_CPM` in `src/core/plugin_mgr.asm`, and updated
+      `SHOW_MEM_INFO_SCREEN` and `EXIT_PROGRAM` in `src/se_next_cpm.asm` to
+      dynamically select the `SE_NEXT.COM` or `SE.COM` strings according to
+      `EXEC_IS_SE_COM`. Validated via `tests/test_bug_2_2_28.py`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
