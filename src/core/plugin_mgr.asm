@@ -4323,9 +4323,13 @@ STR_CONFIG_CUR_MODE:	DB	"1. Screen Geometry : [", "$"
 STR_CONFIG_RAM_DRV_PRE:	DB	"2. RAM Drive (", "$"
 STR_CONFIG_RAM_DRV_POST:DB	":)  : [", "$"
 STR_CONFIG_RAM_NONE:	DB	"2. RAM Drive       : [", "$"
+	IFDEF TARGET_NEXT_CPM
+STR_RAM_PROTECTED_LBL:	DB	"None Detected (Next MMU 384KB)]    ",13,10,"$"
+	ELSE
 STR_RAM_PROTECTED_LBL:	DB	"Preserve (RAM Drive Active, 128KB)]",13,10,"$"
 STR_RAM_HIBERNATE_LBL:	DB	"Hibernate (Backup/Restore, 384KB)] ",13,10,"$"
 STR_RAM_ENABLED_LBL:	DB	"Overwrite (Sacrifice Drive, 384KB)]",13,10,"$"
+	ENDIF
 
 STR_CONFIG_LINES_LBL:	DB	"3. Max Doc Lines   : [", "$"
 STR_LINES_16K_LBL:	DB	"16K (16,384 Lines)]                ",13,10,"$"
@@ -4349,7 +4353,11 @@ STR_CFG_STAT_END:	DB	":SE.CFG)]          ",13,10,"$"
 STR_CFG_STAT_ERR:	DB	"ERROR writing SE.CFG]              ",13,10,"$"
 
 STR_CONFIG_FOOTER:
+	IFDEF TARGET_NEXT
+	DB "[3-5]=Toggle Option   [S]=Save Config   [ESC]=Exit", "$"
+	ELSE
 	DB "[1-5]=Toggle Option   [S]=Save Config   [ESC]=Exit", "$"
+	ENDIF
 
 STR_CFG_HDR:		DB	"# SE.CFG - Screen Editor Configuration",13,10,0
 STR_KEY_SCREEN_NAME:	DB	"SCREEN",0

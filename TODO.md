@@ -320,10 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 5 Open (Bugs 2.2.18, 2.2.19, 2.2.26, 2.2.27, 2.2.28
-  Open; 18 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13,
-  2.2.14, 2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23, 2.2.24,
-  2.2.25 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 4 Open (Bugs 2.2.18, 2.2.19, 2.2.27, 2.2.28 Open;
+  19 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
+  2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23, 2.2.24, 2.2.25,
+  2.2.26 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -809,9 +809,9 @@ have been resolved and archived.
       `Available / Reserved` in 16K mode and `Line Table (0..16K)` /
       `Line Table (16K..32K)` in 32K mode. Validated via
       `tests/test_bug_2_2_25.py`.
-  - [ ] **Bug 2.2.26: Configuration Manager Displays Inapplicable RomWBW RAM
+  - [x] **Bug 2.2.26: Configuration Manager Displays Inapplicable RomWBW RAM
     Drive Options and `120x40` Toggle Hint on Next Hardware
-    (`src/se_next_cpm.asm` & `src/core/plugin_mgr.asm`)**:
+    (`src/se_next_cpm.asm` & `src/core/plugin_mgr.asm`) [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 7.11, 15.1.5.
     - *Issue*: In `SHOW_CONFIG_SCREEN` (`src/se_next_cpm.asm:3168-3202`) and
       `CONFIG_LOOP` (`src/se_next_cpm.asm:705-707, 744-781`), Option
@@ -830,6 +830,13 @@ have been resolved and archived.
       `IFDEF TARGET_NEXT` in `src/core/plugin_mgr.asm`) to reflect fixed 80x24
       Next geometry and Next MMU SRAM banking rather than RomWBW HBIOS
       128KB/384KB RAM drive preservation modes.
+    - *Resolution*: Updated `SHOW_CONFIG_SCREEN` and `CONFIG_LOOP` in
+      `src/se_next_cpm.asm` and `STR_RAM_PROTECTED_LBL` / `STR_CONFIG_FOOTER`
+      in `src/core/plugin_mgr.asm` to display
+      `2. RAM Drive       : [None Detected (Next MMU 384KB)]` and
+      `[3-5]=Toggle Option   [S]=Save Config   [ESC]=Exit`, disabling RomWBW
+      RAM drive toggling on Next hardware. Validated via
+      `tests/test_bug_2_2_26.py`.
   - [ ] **Bug 2.2.27: `PROBE_PROGRAM_DRIVE` Only Searches for `SE.COM` and
     Fails When Binary is Named `SE_NEXT.COM` (`src/core/config.asm`)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 13.3, 14.7.
