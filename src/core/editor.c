@@ -608,15 +608,16 @@ int editor_handle_key(int key)
             }
             break;
         }
+        if (modal_confirm_save_changes() != MODAL_RES_OK) {
+            break;
+        }
         s_editor_fname[0] = '\0';
         if (ui_browser_open_dialog(s_editor_fname,
                                    sizeof(s_editor_fname)) == MODAL_RES_OK &&
             s_editor_fname[0]) {
-            if (modal_confirm_save_changes() == MODAL_RES_OK) {
-                file_load(s_editor_fname);
-                g_need_screen_render = 1;
-            }
+            file_load(s_editor_fname);
         }
+        g_need_screen_render = 1;
         break;
     }
     case KEY_CTRL_P: show_plugin_palette(); break;

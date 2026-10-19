@@ -3882,7 +3882,7 @@ have been resolved and archived.
       and hid the hardware cursor via `hal_console_hide_cursor()` during Help
       screen execution. Verified via `tests/test_sanity.py --sec` and
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.8.17: Missing Unsaved Modifications Prompt on Splash `Q`/`N`/`O`
+  - [x] **Bug 2.8.17: Missing Unsaved Modifications Prompt on Splash `Q`/`N`/`O`
     and Editor `Ctrl+O` & Unprefilled Splash `S` Filename**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.7, 7.11, 8.3
       (Archetype B).
@@ -3900,10 +3900,13 @@ have been resolved and archived.
       3. In `show_splash_screen()` (`src/core/ui_render.c:512`), pressing
          `S`/`s`/`Ctrl+S` initializes `dlg_fname[0] = '\0'` instead of
          pre-filling `g_current_filename` per Section 7.7.
-    - *Required Fix*: Gate `Q`, `N`, and `O` in `show_splash_screen()` and
-      `KEY_CTRL_O` in `editor_handle_key()` with `modal_confirm_save_changes()`
-      when `g_doc_modified` is set, and pre-fill `dlg_fname` from
-      `g_current_filename` on Splash `S`/`Ctrl+S`.
+    - *Resolution*: Gated `Q`/`Ctrl+Q`, `N`, and `O`/`Ctrl+O` in
+      `show_splash_screen()` (`src/core/ui_render.c`) and `KEY_CTRL_O` in
+      `editor_handle_key()` (`src/core/editor.c`) with
+      `modal_confirm_save_changes()` prior to discarding or opening a file, and
+      pre-filled `dlg_fname` from `g_current_filename` on Splash `S`/`Ctrl+S`.
+      Verified via `tests/test_sanity.py --sec` and
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.8.18: Status Bar Field 4 Block Metrics Pluralization (`1 chars`
     / `1 lines`) & Missing `>= 100` Compact Format (`<N>c` / `<N>L`)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3 (Field 4 items 2–3),

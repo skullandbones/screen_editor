@@ -492,24 +492,33 @@ void show_splash_screen(void)
         }
 
         if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
-            g_editor_exit_flag = 1;
-            break;
-        } else if (k == 'e' || k == 'E' || k == KEY_ENTER) {
-            break;
-        } else if (k == 'n' || k == 'N') {
-            init_empty_document();
-            g_current_filename[0] = '\0';
-            break;
-        } else if (k == 'o' || k == 'O' || k == KEY_CTRL_O) {
-            dlg_fname[0] = '\0';
-            if (ui_browser_open_dialog(dlg_fname, sizeof(dlg_fname)) ==
-                MODAL_RES_OK && dlg_fname[0]) {
-                file_load(dlg_fname);
+            if (modal_confirm_save_changes() == MODAL_RES_OK) {
+                g_editor_exit_flag = 1;
                 break;
             }
             need_render = 1;
+        } else if (k == 'e' || k == 'E' || k == KEY_ENTER) {
+            break;
+        } else if (k == 'n' || k == 'N') {
+            if (modal_confirm_save_changes() == MODAL_RES_OK) {
+                init_empty_document();
+                g_current_filename[0] = '\0';
+                break;
+            }
+            need_render = 1;
+        } else if (k == 'o' || k == 'O' || k == KEY_CTRL_O) {
+            if (modal_confirm_save_changes() == MODAL_RES_OK) {
+                dlg_fname[0] = '\0';
+                if (ui_browser_open_dialog(dlg_fname, sizeof(dlg_fname)) ==
+                    MODAL_RES_OK && dlg_fname[0]) {
+                    file_load(dlg_fname);
+                    break;
+                }
+            }
+            need_render = 1;
         } else if (k == 's' || k == 'S' || k == KEY_CTRL_S) {
-            dlg_fname[0] = '\0';
+            strncpy(dlg_fname, g_current_filename, sizeof(dlg_fname) - 1);
+            dlg_fname[sizeof(dlg_fname) - 1] = '\0';
             if (ui_browser_save_dialog(dlg_fname, sizeof(dlg_fname)) ==
                 MODAL_RES_OK && dlg_fname[0]) {
                 file_save(dlg_fname, g_file_format);
