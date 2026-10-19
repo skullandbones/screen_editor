@@ -112,7 +112,8 @@ breaks another.
      2. Clears the entire terminal screen via `TERM_INIT`
         (`\x1b[0m\x1b[?25h\x1b[2J\x1b[H`).
      3. Emits the canonical exit message string followed by CRLF:
-        `\r\nExiting SE.COM. Returned to CP/M.\r\n` (on CP/M targets), or
+        `\r\nExiting <BINARY>. Returned to CP/M.\r\n` (on CP/M targets, e.g.
+        `SE.COM`, `SE_NEXT.COM`, or `SE.CMD`), or
         `\r\nExiting SE. Returned to OS prompt.\r\n` (on host/Linux targets).
      4. Explicitly restores hardware cursor visibility (`TERM_SHOW_CURSOR`).
      5. Restores original host/CP/M environment state (user area, RAM drive,
@@ -450,13 +451,13 @@ viewport panning algorithms defined in `src/core/editor.asm` and
      - Viewport scroll: If `CUR_DOC_ROW - TOP_DOC_ROW > ACTIVE_ROWS - 2`:
        `TOP_DOC_ROW += 1`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
-   - Page Up (`PAGE_UP` / dedicated `PgUp` key):
+   - Page Up (`PAGE_UP` / `Ctrl+U` / dedicated `PgUp` key):
      - `step = ACTIVE_ROWS - 2` (22 on 80x24; 38 on 120x40).
      - `CUR_DOC_ROW = max(0, CUR_DOC_ROW - step)`.
      - `TOP_DOC_ROW = max(0, TOP_DOC_ROW - step)`.
      - Clamp: Ensure `TOP_DOC_ROW <= CUR_DOC_ROW`.
      - Realign: `ADJUST_COL_TO_TARGET()`.
-   - Page Down (`PAGE_DOWN` / dedicated `PgDn` key):
+   - Page Down (`PAGE_DOWN` / `Ctrl+V` / dedicated `PgDn` key):
      - `step = ACTIVE_ROWS - 2`.
      - `max_row = max(0, DOC_TOTAL_LINES - 1)`.
      - `CUR_DOC_ROW = min(max_row, CUR_DOC_ROW + step)`.
@@ -666,9 +667,13 @@ content blocks rather than top-aligned text.
        - Hibernate: `RAM Drive (B:): [Hibernated (Temp Image)]`
        - None detected: `RAM Drive     : [None Detected]`
      - `Plugin System`:
-       - Autoload (Resident): `Plugin System : [Operational]`
-       - Demand: `Plugin System : [On Demand]`
-       - Disabled: `Plugin System : [Disabled]`
+       - Autoload (CP/M-80 Resident `PLUGIN.PRL`):
+         `Plugin System : [Operational]`
+       - Demand (CP/M-80 On-Demand `PLUGIN.PRL`):
+         `Plugin System : [On Demand]`
+       - Disabled (CP/M-80): `Plugin System : [Disabled]`
+       - Builtin (Non-CP/M systems & CP/M-86 `SE.CMD`):
+         `Plugin System : [Builtin]`
      - `Max Lines`:
        - `16K` mode (default): `Max Lines     : [16,384 lines]`
        - `32K` mode: `Max Lines     : [32,768 lines]`
@@ -735,8 +740,6 @@ content blocks rather than top-aligned text.
      - Note: When a block is actively marked (`BLOCK_ACTIVE != 0`), `Ctrl+K`
        instead opens the Tier 2 Block Operations modal dialog
        (`DO_BLOCK_MENU_POPUP`) per Section 9.3.
-     - From splash / command menus, hotkeys `?`, `h`, `H`, or `:?` open the
-       Help workspace.
    - Visual Structure (Canonical SE.COM Template):
      ```text
      ~========================================================================
@@ -822,7 +825,7 @@ content blocks rather than top-aligned text.
      execution. On variants lacking dynamic memory reading, Field 4 is left
      blank (`               | `), conforming strictly to Section 4.3.
 
-4. Configuration Manager Workspace (`:c` from Splash):
+4. Configuration Manager Workspace (`[C]` from Splash):
    - Displays active parameters, config file origin, and instant hotkey
      toggling:
      ```text
@@ -853,9 +856,12 @@ content blocks rather than top-aligned text.
        host ports without banked RAM).
      - `3. Max Doc Lines`: Toggles `16K` <-> `32K`.
      - `4. Tab Width`: Toggles `4` <-> `8`.
-     - `5. Plugin Manager`: Cycles `Autoload` (`AUTO` / `AUTOLOAD`) ->
-       `Demand` (`DEMAND` / `ONDEMAND`) -> `Disabled` (`OFF` / `DISABLED`) ->
-       `Autoload`.
+     - `5. Plugin Manager`: On <64KB CP/M-80 systems (`SE.COM`, `SE_NEXT.COM`)
+       where `PLUGIN.PRL` is dynamically loaded, cycles `Autoload`
+       (`AUTO` / `AUTOLOAD`) -> `Demand` (`DEMAND` / `ONDEMAND`) -> `Disabled`
+       (`OFF` / `DISABLED`) -> `Autoload`. On non-CP/M systems (and CP/M-86
+       `SE.CMD`), the plugin manager is builtin and cannot be disabled via the
+       Configure screen or `SE.CFG` (see Section 14.8).
    - Instant Keystroke Dispatch Protocol:
      - Keys `1` through `5` immediately toggle the corresponding configuration
        parameter and redraw the workspace.
@@ -924,26 +930,28 @@ content blocks rather than top-aligned text.
      Field 4 is left blank (`               | `), conforming strictly to
      Section 4.3.
 
-6. File Insert Workspace (`Ctrl+O` with Active Block / `Ctrl+K R`):
-   - Invoked when block selection is active or via `Ctrl+K R` shortcut.
+6. File Insert Workspace (`Ctrl+O` with Active Block):
+   - Invoked when block selection is active in the editor (`DO_BLOCK_INSERT`).
    - Solidifies dynamic block bounds and opens directory browser in insert mode.
    - Streams selected file content into document at cursor without replacing
      existing document lines.
+   - Shares the identical 5-column x 15-char directory grid, 78-char `===`/`---`
+     rules, 20-char bracketed input field, and `[TAB]=Select File` highlight
+     navigation as the Open File workspace (Section 15.3).
    - Visual Structure (80x24 Mode, Single-Page Example):
-     ```text
-     ~====================================================================
-     ~                     INSERT FILE (DIRECTORY - DRIVE A:)
-     ~====================================================================
-     ~  HEADER  .INC    MACROS  .LIB    SNIPPET .ASM    TEST    .C
-     ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
-     ~
-     ~
-     ~--------------------------------------------------------------------
-     ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
-     ~  Enter filename to insert: [ HEADER.INC          ]
-     ~
-     [STATUS BAR AT ROW 24]
-     ```
+```text
+~==============================================================================
+~                      INSERT FILE (DIRECTORY - DRIVE A:)
+~==============================================================================
+~  DATA.DAT       HEADER.INC     MACROS.LIB     MANUAL.TXT     PROG.PAS       
+~  SE.COM         SNIPPET.ASM    TEST.C         
+~
+~------------------------------------------------------------------------------
+~  [ESC]=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)
+~  Enter filename to insert: [A0:HEADER.INC       ]  [TAB]=Select File        
+~
+[STATUS BAR AT ROW 24]
+```
    - Universal Status Bar Presence:
      The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
      variants supporting dynamic memory queries (such as `SE.COM`), Field 4
@@ -952,7 +960,7 @@ content blocks rather than top-aligned text.
      Field 4 is left blank (`               | `), conforming strictly to
      Section 4.3.
 
-7. Save File Workspace (`Ctrl+S` / `:s` from Splash):
+7. Save File Workspace (`Ctrl+S` in Editor / `S` or `Ctrl+S` from Splash):
    - Full-screen Tier 1 save workspace displaying directory contents, target
      filename input box, and line ending format indicator.
    - Document End-of-Line Handling Specification (All Variants):
@@ -961,8 +969,8 @@ content blocks rather than top-aligned text.
      - Native Default for New Files: When saving a newly created document
        (`(Untitled)`), the editor defaults to the host platform's native text
        file format:
-       - CP/M & Next targets (`SE.COM`, `SE_NEXT.COM`): Defaults to native
-         CP/M format (`CRLF`, `0x0D, 0x0A`).
+       - CP/M & Next targets (`SE.COM`, `SE_NEXT.COM`, `SE.CMD`): Defaults to
+         native CP/M format (`CRLF`, `0x0D, 0x0A`).
        - Linux & POSIX targets (`se-linux`, `se-py`, `se-rs`): Defaults to
          native Linux format (`LF`, `0x0A`).
      - Line Ending Preservation for Existing Files: When opening an existing
@@ -971,26 +979,26 @@ content blocks rather than top-aligned text.
        throughout all editing operations. An open file continues to use its
        detected line ending format upon save unless explicitly overridden.
      - Save Screen Format Override (`Ctrl+F`): The Save File screen explicitly
-       displays the active save format on row 9 (`Format: [CP/M]` or
-       `Format: [Linux]`). The user can press `Ctrl+F` (`[^F]=Toggle Format`)
-       to toggle and override the line ending format for that specific save.
-       Status bar Field 3 immediately updates to reflect the active format.
+       displays the active save format (`Format: [CP/M]` or `Format: [Linux]`).
+       The user can press `Ctrl+F` (`[^F]=Toggle Format`) to toggle and
+       override the line ending format for that specific save. Status bar
+       Field 3 immediately updates to reflect the active format.
    - Pre-fills active filename if document already has an associated file.
    - Visual Structure (80x24 Mode):
-     ```text
-     ~====================================================================
-     ~                      SAVE FILE (DIRECTORY - DRIVE A:)
-     ~====================================================================
-     ~  FILE1   .TXT    FILE2   .ASM    README  .DOC    TEST    .C
-     ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
-     ~
-     ~  Format: [CP/M]   [^F]=Toggle Format
-     ~--------------------------------------------------------------------
-     ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
-     ~  Enter filename to save: [ MYPROG.ASM          ]
-     ~
-     [STATUS BAR AT ROW 24]
-     ```
+```text
+~==============================================================================
+~                       SAVE FILE (DIRECTORY - DRIVE A:)
+~==============================================================================
+~  DATA.DAT       FILE1.TXT      FILE2.ASM      MANUAL.TXT     PROG.PAS       
+~  README.DOC     SE.COM         TEST.C         
+~
+~------------------------------------------------------------------------------
+~  [ESC]=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)
+~  Format: [CP/M]   [^F]=Toggle Format
+~  Enter filename to save: [A0:MYPROG.ASM       ]  [TAB]=Select File          
+~
+[STATUS BAR AT ROW 24]
+```
    - Universal Status Bar Presence:
      The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
      variants supporting dynamic memory queries (such as `SE.COM`), Field 4
@@ -999,26 +1007,26 @@ content blocks rather than top-aligned text.
      Field 4 is left blank (`               | `), conforming strictly to
      Section 4.3.
 
-8. Block Save Workspace (`Ctrl+S` with Active Block / `Ctrl+K S`):
-   - Invoked when block selection is active or via `Ctrl+K S` shortcut.
+8. Block Save Workspace (`Ctrl+S` with Active Block):
+   - Invoked when block selection is active in the editor (`DO_BLOCK_SAVE`).
    - Solidifies dynamic block bounds and opens save dialog in block mode.
    - Writes only the highlighted block lines and characters to target file.
    - Retains block selection state upon completion for subsequent editing.
    - Visual Structure (80x24 Mode):
-     ```text
-     ~====================================================================
-     ~                     SAVE BLOCK (DIRECTORY - DRIVE A:)
-     ~====================================================================
-     ~  FILE1   .TXT    FILE2   .ASM    README  .DOC    TEST    .C
-     ~  PROG    .PAS    MANUAL  .TXT    DATA    .DAT    SE      .COM
-     ~
-     ~  Format: [CP/M]   [^F]=Toggle Format
-     ~--------------------------------------------------------------------
-     ~  [ESC]=Cancel  [d:][u:][pattern] to list (e.g. B:, C1:, *.TXT)
-     ~  Enter filename to save: [ SNIPPET.TXT         ]
-     ~
-     [STATUS BAR AT ROW 24]
-     ```
+```text
+~==============================================================================
+~                      SAVE BLOCK (DIRECTORY - DRIVE A:)
+~==============================================================================
+~  DATA.DAT       FILE1.TXT      FILE2.ASM      MANUAL.TXT     PROG.PAS       
+~  README.DOC     SE.COM         TEST.C         
+~
+~------------------------------------------------------------------------------
+~  [ESC]=Cancel  Enter [d:][u:][pattern] to list (e.g. B:, C1:, 1C:, *.TXT)
+~  Format: [CP/M]   [^F]=Toggle Format
+~  Enter filename to save: [A0:SNIPPET.TXT      ]  [TAB]=Select File          
+~
+[STATUS BAR AT ROW 24]
+```
    - Universal Status Bar Presence:
      The Universal Status Bar is persistently displayed on Row `HOST_ROWS`. On
      variants supporting dynamic memory queries (such as `SE.COM`), Field 4
@@ -1109,7 +1117,7 @@ content blocks rather than top-aligned text.
         4. Line ending format toggling via `Ctrl+F` in the Save workspace.
         5. Dismissal of child modal dialogs (e.g. Overwrite Confirmation).
 
-11. Document Close Lifecycle (`Ctrl+W` / `:w` from Splash):
+11. Document Close Lifecycle (`Ctrl+W` in Editor / `W` or `Ctrl+W` from Splash):
     - Closing an active document returns the user directly to the Tier 1
       Splash Screen workspace.
     - Clean Document (`DOC_MODIFIED == 0`):
@@ -1178,6 +1186,8 @@ content blocks rather than top-aligned text.
         `version 1.1.4 (2026-10-18) (Z80 Assembly)`
       - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
         `version 1.1.4 (2026-10-18) (Z80 Assembly)`
+      - 16-bit CP/M-86 (`SE.CMD`):
+        `version 1.1.4 (2026-10-18) (x86 Assembly)` (or `(C)`)
       - Linux Native C / CP/M C port (`se-linux` / `SEC.COM`):
         `version 1.1.4 (2026-10-18) (C)`
       - Linux Native Python port (`se-py`):
@@ -1501,8 +1511,8 @@ or display notifications.
 
 1. Operational Descriptions for Deletion Keys:
    Canonical SE distinguishes between backward deletion, forward deletion, and
-   block range deletion across the primary editor, active blocks, and modal
-   dialogs:
+   block range deletion across the primary editor, active blocks, Tier 1
+   directory filename boxes, and Tier 2 modal dialogs:
 
    - `Backspace` (`KEY_BACKSPACE`, `0x08`, `Ctrl+H`):
      - Editor Workspace: Deletes character to the left of the cursor
@@ -1512,9 +1522,12 @@ or display notifications.
        does not exceed MAX_INPUT_LINE_CHARS (1,000 chars); blocked at Row 0.
      - Block-Active Context: Cancels dynamic block (`BLOCK_ACTIVE = 0`)
        to safeguard highlighted text against accidental deletion.
-     - Modal Input Dialogs (Archetype C): Deletes character preceding the
-       input cursor inside the bracket field `[  ]`, shifting trailing text
+     - Tier 1 Directory Filename Input Boxes (Section 7.9): Deletes the
+       character preceding the cursor inside `[  ]`, shifting trailing text
        left and decrementing cursor index; blocked at index 0.
+     - Tier 2 Modal Input Dialogs (Archetype C, Section 8.3): Erases the last
+       character in the linear append/backspace input buffer; blocked at
+       index 0.
 
    - `Delete` (`KEY_DELETE`, `0x7F`, ANSI `\x1b[3~`) & `Ctrl+D` (`0x04`):
      - Editor Workspace: Deletes the character directly under the cursor
@@ -1525,9 +1538,12 @@ or display notifications.
      - Block-Active Context: Solidifies selection and deletes the entire
        highlighted block range (`DO_DELETE_BLOCK`), resetting block mode and
        moving following text up to the block start.
-     - Modal Input Dialogs (Archetype C): Deletes the character directly under
-       the input cursor inside the bracket field `[  ]`, shifting trailing text
-       left without moving the cursor index; blocked at end of input text.
+     - Tier 1 Directory Filename Input Boxes (Section 7.9): Deletes the
+       character directly under the cursor inside `[  ]`, shifting trailing
+       text left without moving the cursor index; blocked at end of input text.
+     - Tier 2 Modal Input Dialogs (Archetype C, Section 8.3): `Delete` (`0x7F`)
+       acts as Backspace, erasing the character preceding the cursor in the
+       linear input buffer.
 
 2. Operational Descriptions for Directional Navigation:
    Directional navigation across all surfaces is performed exclusively with
@@ -1537,15 +1553,19 @@ or display notifications.
    - `Down Arrow` (`KEY_DOWN`): Moves cursor down one row; realigns to sticky
      `TARGET_COL`. Blocked at bottom of document.
    - `Left Arrow` (`KEY_LEFT`): Moves cursor left one column; wraps to previous
-     line at column 0. In modal input fields, shifts cursor index left.
+     line at column 0. In Tier 1 directory filename boxes (Section 7.9), shifts
+     cursor index left.
    - `Right Arrow` (`KEY_RIGHT`): Moves cursor right one column; wraps to next
-     line at end of line. In modal input fields, shifts cursor index right.
-   - Dedicated Paging Keys: `PgUp` (`KEY_PGUP`, ANSI `\x1b[5~` / Page Up),
-     `PgDn` (`KEY_PGDN`, ANSI `\x1b[6~` / Page Down).
-   - Motion Shortcuts: `Ctrl+A` (Home / Start of input), `Ctrl+E` (End of line
-     / End of input), `Ctrl+T` (Top of document), `Ctrl+G` (Bottom of
-     document). Legacy `Ctrl+U` and `Ctrl+V` paging aliases are removed as all
-     target keyboards provide dedicated `PgUp` and `PgDn` keys.
+     line at end of line. In Tier 1 directory filename boxes (Section 7.9),
+     shifts cursor index right.
+   - Paging Keys & Shortcuts: Dedicated `PgUp` (`KEY_PGUP`, ANSI `\x1b[5~`) and
+     `Ctrl+U` (`KEY_CTRL_U`, `0x15`) perform Page Up (`ACTIVE_ROWS - 2` rows);
+     dedicated `PgDn` (`KEY_PGDN`, ANSI `\x1b[6~`) and `Ctrl+V` (`KEY_CTRL_V`,
+     `0x16`) perform Page Down (`ACTIVE_ROWS - 2` rows).
+   - Motion Shortcuts: `Ctrl+A` / `Home` (Start of line / Start of directory
+     filename input), `Ctrl+E` / `End` (End of line / End of directory filename
+     input), `Ctrl+T` / `^Home` (Top of document), `Ctrl+G` / `^End` (Bottom of
+     document).
    - WordStar Prohibition: WordStar diamond navigation keys (`Ctrl+S`,
      `Ctrl+D`, `Ctrl+E`, `Ctrl+X`) are strictly not supported for navigation
      in any editor workspace or modal input dialog.
@@ -1805,11 +1825,16 @@ allocations, screen mode, tab stops, and subsystem behaviors.
      - `ON` (`1`): Uses all 12 Far RAM banks (384 KB) for editor buffer heap.
      - `HIBERNATE` (`2`): Automatically dumps RAM disk to `RAMDRV.IMG` on
        startup and restores on exit.
-   - `PLUGIN` / `PLUGINS` (Default: `AUTOLOAD`):
-     Plugin subsystem dispatch:
+   - `PLUGIN` / `PLUGINS` (Default: `AUTOLOAD` on CP/M-80):
+     Plugin subsystem dispatch on <64KB CP/M-80 systems (`SE.COM`,
+     `SE_NEXT.COM`) that load `PLUGIN.PRL`:
      - `AUTOLOAD` (`1`): Automatically loads `PLUGIN.PRL` at boot.
      - `ONDEMAND` (`2`): Loads `PLUGIN.PRL` on demand when a plugin is invoked.
      - `DISABLED` (`0`): Plugin manager completely disabled.
+     - Note for Non-CP/M Systems & CP/M-86 (`SE.CMD`): On non-CP/M systems and
+       CP/M-86 (`SE.CMD`), the plugin manager is builtin
+       (`Plugin System : [Builtin]`), and neither the Configure screen nor
+       `SE.CFG` can disable the plugin manager (see Section 14.8).
 
 3. Discovery & Persistence Rules:
    - Loading Priority:
@@ -1986,8 +2011,10 @@ specific architectural adaptations.
    language predominantly used to create that specific port appended to the
    version number and build date line on the Tier 1 About screen
    (Section 7.12). For example:
-   - `SE.COM` / `SE_NEXT.COM`:
+   - `SE.COM` / `SE_NEXT.COM` / `SE.NEX` / `.se`:
      `version 1.1.4 (2026-10-18) (Z80 Assembly)`
+   - `SE.CMD`:
+     `version 1.1.4 (2026-10-18) (x86 Assembly)` (or `(C)`)
    - `se-linux` / `SEC.COM`:
      `version 1.1.4 (2026-10-18) (C)`
    - `se-py`:
@@ -2016,6 +2043,40 @@ specific architectural adaptations.
        `<BINARY> - Extended Memory Map`, column header `<BINARY> Usage`, and
        the OS exit message `Exiting <BINARY>. Returned to CP/M.`) dynamically
        display the actual detected binary name (`SE_NEXT.COM` or `SE.COM`).
+
+8. Plugin Manager Architecture, Module ABI & Builtin vs. Loadable Systems:
+   - Loadable `PLUGIN.PRL` vs. Builtin Plugin Manager:
+     - The external `PLUGIN.PRL` relocatable overlay file is only loadable into
+       systems constrained to less than 64 KB of base addressable TPA memory—
+       specifically 8-bit CP/M-80 systems (`SE.COM` on RomWBW CP/M-80 and
+       `SE_NEXT.COM` on Next CP/M-80).
+     - The CP/M-80 plugin manager (`PLUGIN.PRL`) auto-detects the underlying
+       hardware banking mechanism at runtime (e.g. RomWBW HBIOS bank switching
+       vs. ZX Spectrum Next MMU banking).
+     - All other SE variants (including CP/M-86 `SE.CMD`, native ZX Spectrum
+       Next `SE.NEX` and `.se`, Linux C `se-linux`, Linux Python `se-py`, and
+       Linux Rust `se-rs`) have a builtin plugin manager integrated directly
+       into the main executable.
+   - Plugin Module Non-Interchangeability & API / ABI Boundaries:
+     - Non-CP/M plugin modules are not interchangeable with CP/M plugin modules.
+     - CP/M-80 plugin modules (`.PRL` / `.OVL` 8-bit Z80 binaries) may share a
+       common 8-bit API / ABI (the Z80 `PLUGIN_HOST_API` jump table and
+       `.PRL` / `.OVL` binary header contract).
+     - CP/M-86 (`SE.CMD`) defines its own 16-bit x86 API / ABI for plugins that
+       is not interchangeable with CP/M-80 or non-CP/M systems.
+     - Non-CP/M plugin modules may share a common 64-bit API / ABI (e.g. a C
+       ABI shared object interface across native C and Rust builds); otherwise,
+       each 64-bit programming language (such as C, Rust, or Python) defines
+       its own language-specific plugin API / ABI.
+   - Builtin Plugin Manager Splash Screen, Configure Screen & `SE.CFG` Behavior:
+     - Splash Screen Status: On non-CP/M systems (and CP/M-86 `SE.CMD` with its
+       builtin plugin manager), the Splash Screen diagnostic line for the
+       plugin subsystem shall display:
+       `Plugin System : [Builtin]`
+     - Configure Screen & `SE.CFG` Invariance: On non-CP/M systems (and CP/M-86
+       `SE.CMD`), because the plugin manager is permanently builtin, neither
+       the Configure screen (`[C]`) nor `SE.CFG` (`PLUGIN=...`) can disable the
+       plugin manager.
 
 15. Canonical Screen Layouts (SE.COM & Target Profiles)
 --------------------------------------------------------------------------------
@@ -2139,13 +2200,16 @@ and its target profiles.
        applicable; the `RAM Drive` diagnostic line either reports
        `[None Detected]` or is omitted.
    - Plugin Manager & Plugin Subsystem (`Plugin System`):
-     - On CP/M-80 `SE.COM`, the Plugin Manager (`PLUGIN.PRL`) and plugins
-       (`.PRL` / `.OVL`) are dynamically loaded disk overlays.
-     - On other profiles, the plugin manager and standard plugins (`ROT13`,
-       `WORDCNT`, `BEAUTIFY`) may be built-in (statically compiled into the
-       binary, as in `se-linux` and `se-py`) or not supported on memory-
-       constrained profiles (such as `SEC.COM`), and the splash menu/status
-       adapts accordingly.
+     - `PLUGIN.PRL` is only loadable into systems limited to less than 64 KB of
+       base TPA memory, specifically CP/M-80 (RomWBW CP/M-80 `SE.COM` and Next
+       CP/M-80 `SE_NEXT.COM`), where it auto-detects the banking mechanism
+       (e.g. RomWBW vs. Next) and the Splash Screen displays `[Operational]`,
+       `[On Demand]`, or `[Disabled]` (or `[Disabled]` on unbanked `SEC.COM`).
+     - All other variants (including CP/M-86 `SE.CMD` with its own 16-bit
+       plugin API/ABI, and non-CP/M `SE.NEX`, `.se`, `se-linux`, `se-py`,
+       `se-rs`) have a builtin plugin manager. On these systems, the Splash
+       Screen displays `Plugin System : [Builtin]`, and neither the Configure
+       screen nor `SE.CFG` can disable the plugin manager (see Section 14.8).
    - Maximum Document Lines (`Max Lines`):
      - On 8-bit banked and non-banked systems (`SE.COM`, `SE_NEXT.COM`,
        `SE.NEX`, `.se`, `SEC.COM`), document line capacity is bounded by
@@ -2236,6 +2300,7 @@ and its target profiles.
      canonical `SE.COM` (e.g. `version 1.1.4 (2026-10-18)`), appending their
      predominant implementation language in parentheses:
      - `SE.COM`, `SE_NEXT.COM`, `SE.NEX`, `.se`: `(Z80 Assembly)`
+     - `SE.CMD`: `(x86 Assembly)` (or `(C)`)
      - `se-linux`, `SEC.COM`: `(C)`
      - `se-py`: `(Python)`
      - `se-rs`: `(Rust)`
