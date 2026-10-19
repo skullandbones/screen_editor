@@ -600,8 +600,12 @@ static const char *s_help_lines[22] = {
   s_help_eq,
   "  FILE & SYSTEM:",
   "    Ctrl+O           Open file screen      Ctrl+S         Save file screen",
-  "    Ctrl+W          Close file to splash   Ctrl+Q         Quit to CP/M",
-  "    Ctrl+K          Help / Solidify block  Ctrl+P         Plugins pop-up",
+#ifdef __CPM__
+  "    Ctrl+W           Close file to splash  Ctrl+Q         Quit to CP/M",
+#else
+  "    Ctrl+W           Close file to splash  Ctrl+Q         Quit to OS",
+#endif
+  "    Ctrl+K           Help / Solidify block Ctrl+P         Plugins pop-up",
   "  NAVIGATION & SEARCH:",
   "    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line",
   "    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line",
@@ -813,6 +817,7 @@ void show_mem_info_screen(void)
     char line1[44];
     char line2[44];
     const char *mem_lines[6];
+    int k;
     uint8_t prev_splash = g_is_splash_screen;
 
     g_is_splash_screen = 1;
@@ -821,15 +826,24 @@ void show_mem_info_screen(void)
              (unsigned)mem_get_free_slots());
     snprintf(line2, sizeof(line2), "       Free Document Buffer: %u KB",
              (unsigned)mem_get_free_kb());
-    mem_lines[0] = "         SE.COM - Extended Memory Map";
+    mem_lines[0] = "          SE - Extended Memory Map";
     mem_lines[1] = "";
     mem_lines[2] = line1;
     mem_lines[3] = line2;
     mem_lines[4] = "";
     mem_lines[5] = "          Press any key to continue";
 
-    render_tier1_workspace_screen(mem_lines, 6, 46);
-    hal_console_getkey();
+    while (1) {
+        render_tier1_workspace_screen(mem_lines, 6, 46);
+        while ((k = hal_console_getkey()) <= 0) {
+            /* Wait for user keystroke */
+        }
+        if (k == KEY_CTRL_P) {
+            show_plugin_palette();
+            continue;
+        }
+        break;
+    }
     clear_screen();
     g_is_splash_screen = prev_splash;
     if (!g_is_splash_screen) {

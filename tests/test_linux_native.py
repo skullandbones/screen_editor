@@ -4541,6 +4541,114 @@ def test_bug_2_4_56_browser_keys_prompt_and_ctrl_s_workspace():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_57_help_alignment_and_mem_info_screen():
+    """Verify Help column alignment & Mem Info screen blocking (2.4.57)."""
+    print(
+        "[*] Testing Help column alignment & Mem Info screen "
+        "(Bug 2.4.57)..."
+    )
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # 1. Press 'm' on Splash Screen to open Extended Memory Map
+            os.write(master, b"m")
+            time.sleep(0.3)
+            mem_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SE - Extended Memory Map" in mem_out, (
+                f"Expected 'SE - Extended Memory Map' title:\n{mem_out}"
+            )
+            assert "SE.COM - Extended Memory Map" not in mem_out, (
+                f"Prohibited 'SE.COM - ' prefix in Memory Map:\n{mem_out}"
+            )
+            assert "Press any key to continue" in mem_out, (
+                f"Expected 'Press any key to continue' in Mem Map:\n{mem_out}"
+            )
+
+            # Wait 0.2s without sending any key and verify it is still
+            # waiting on the Memory Map screen (not auto-dismissed!)
+            extra_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SE - Screen Editor" not in extra_out, (
+                f"Memory Map screen auto-dismissed without keystroke:\n"
+                f"{extra_out}"
+            )
+
+            # Dismiss Memory Map screen with Space and verify Splash return
+            # with cursor hidden (\x1b[?25h must NOT be emitted)
+            os.write(master, b" ")
+            time.sleep(0.2)
+            back_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SE - Screen Editor" in back_out, (
+                f"Expected return to Splash Screen:\n{back_out}"
+            )
+            assert "\x1b[?25h" not in back_out, (
+                f"Cursor should remain hidden on return to Splash:\n"
+                f"{back_out!r}"
+            )
+
+            # 2. Enter editor via 'e' and open Help screen via Ctrl+K (\x0b)
+            os.write(master, b"e")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            os.write(master, b"\x0b")
+            time.sleep(0.2)
+            help_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert (
+                "    Ctrl+O           Open file screen      "
+                "Ctrl+S         Save file screen" in help_out
+            ), f"Expected aligned Ctrl+O line in Help:\n{help_out}"
+            assert (
+                "    Ctrl+W           Close file to splash  "
+                "Ctrl+Q         Quit to OS" in help_out
+            ), (
+                f"Expected aligned Ctrl+W and 'Quit to OS' in Help:\n"
+                f"{help_out}"
+            )
+            assert (
+                "    Ctrl+K           Help / Solidify block "
+                "Ctrl+P         Plugins pop-up" in help_out
+            ), f"Expected aligned Ctrl+K line in Help:\n{help_out}"
+            assert "Quit to CP/M" not in help_out, (
+                f"'Quit to CP/M' should not appear on Linux Help:\n{help_out}"
+            )
+
+            # Dismiss Help and exit via Ctrl+Q (\x11)
+            os.write(master, b" ")
+            time.sleep(0.1)
+            os.write(master, b"\x11")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print(
+                "    [+] Help column alignment & Mem Info screen verified "
+                "[PASS]"
+            )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print(
@@ -4604,6 +4712,7 @@ def main():
     test_bug_2_4_54_status_bar_field4_and_field5()
     test_bug_2_4_55_splash_ram_drive_and_config_cursor_state()
     test_bug_2_4_56_browser_keys_prompt_and_ctrl_s_workspace()
+    test_bug_2_4_57_help_alignment_and_mem_info_screen()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

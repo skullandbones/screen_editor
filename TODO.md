@@ -1113,7 +1113,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 3 Open (Bugs 2.4.1–2.4.56 Resolved; Bugs 2.4.57–2.4.59
+- **Status**: Active / 2 Open (Bugs 2.4.1–2.4.57 Resolved; Bugs 2.4.58–2.4.59
   Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
@@ -2280,7 +2280,7 @@ have been resolved and archived.
       to open `ui_browser_save_dialog()` with `g_current_filename` pre-filled.
       Validated via `test_bug_2_4_56_browser_keys_prompt_and_ctrl_s_workspace`
       in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.57: Help Screen Alignment/Quit Label & Memory Info Screen
+  - [x] **Bug 2.4.57: Help Screen Alignment/Quit Label & Memory Info Screen
     Non-Blocking Key Read**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2, 7.3, 14.5.
     - *Issue*: In `src/core/ui_render.c`:
@@ -2306,6 +2306,13 @@ have been resolved and archived.
       keystroke in a `while ((k = hal_console_getkey()) <= 0)` loop (supporting
       `Ctrl+P` plugin palette), and keep the hardware cursor hidden when
       returning to the Splash Screen.
+    - *Resolution*: Aligned `Ctrl+W` and `Ctrl+K` descriptions at column 21 and
+      updated the Linux quit label to `"Quit to OS"` in `s_help_lines`, and
+      updated `show_mem_info_screen()` in `src/core/ui_render.c` to display
+      `"SE - Extended Memory Map"`, block for a keystroke in a `while` loop with
+      `Ctrl+P` plugin palette support, and keep the cursor hidden on return to
+      Splash. Validated via `test_bug_2_4_57_help_alignment_and_mem_info_screen`
+      in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.58: Tier 2 Modal Box Width (`52` vs Canonical `50`) &
     `ESC` Sequence Drain**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 8.3 (Archetypes A,
