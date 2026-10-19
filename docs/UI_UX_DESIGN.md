@@ -1814,10 +1814,20 @@ allocations, screen mode, tab stops, and subsystem behaviors.
 3. Discovery & Persistence Rules:
    - Loading Priority:
      1. Probes the current logged-in default drive first (`0:SE.CFG`).
-     2. If not found on default drive, probes the program drive where `SE.COM`
-        was executed.
+     2. If not found on default drive, probes the program drive where the
+        executable (`SE.COM` or `SE_NEXT.COM`) was executed.
      3. If no `SE.CFG` exists on either drive, internal hardcoded defaults
         are activated.
+   - Local Binary Renaming & Dynamic Executable Name Detection (`SE_NEXT.COM` /
+     `SE.COM`):
+     - On ZX Spectrum Next under NextCPM, the build artifact `SE_NEXT.COM` may
+       be deployed as `SE_NEXT.COM` or locally renamed on disk to `SE.COM` for
+       typing convenience at the CP/M prompt.
+     - During startup (`PROBE_PROGRAM_DRIVE`), `SE_NEXT.COM` probes for both
+       `"SE_NEXT COM"` and `"SE      COM"` across the current and logged-in
+       drives so program-drive discovery of `SE.CFG` and `.OVL` overlays works
+       transparently under either filename, and records the matched executable
+       name for UI titles (`Extended Memory Map`) and the exit banner.
    - Saving Destination:
      - Saving configuration (via Configuration Manager `[S]` or programmatic
        save) always writes to the current logged-in default drive (`SE.CFG`),
@@ -1988,6 +1998,24 @@ specific architectural adaptations.
    `SE.COM` (e.g. `v1.1.4`). Generic host OS labels (such as `(Linux)`) must
    not be used; each binary shall clearly state its predominant programming
    language on the About screen.
+
+7. Executable Binary Name Discovery & Local Renaming (`SE_NEXT.COM` / `SE.COM`):
+   - On ZX Spectrum Next under NextCPM, the build target produces `SE_NEXT.COM`
+     to distinguish it from the standard RomWBW `SE.COM` binary in multi-target
+     build directories and SD card images. However, on actual ZX Spectrum Next
+     hardware, users frequently rename `SE_NEXT.COM` locally to `SE.COM` so the
+     editor can be launched simply by typing `SE` at the CP/M prompt.
+   - Therefore, `SE_NEXT.COM` must not hardcode `"SE_NEXT.COM"` or `"SE.COM"`
+     to the exclusion of the other:
+     - Program Drive & Overlay Discovery (`PROBE_PROGRAM_DRIVE`): When searching
+       for the program drive (to locate `SE.CFG`, `HELPNEXT.OVL`, or
+       `PLUGIN.PRL`), the editor probes each candidate drive for both
+       `"SE_NEXT COM"` and `"SE      COM"`.
+     - Runtime Binary Name Display: Screen titles and banners that display the
+       executable binary name (such as the Extended Memory Map header
+       `<BINARY> - Extended Memory Map`, column header `<BINARY> Usage`, and
+       the OS exit message `Exiting <BINARY>. Returned to CP/M.`) dynamically
+       display the actual detected binary name (`SE_NEXT.COM` or `SE.COM`).
 
 15. Canonical Screen Layouts (SE.COM & Target Profiles)
 --------------------------------------------------------------------------------

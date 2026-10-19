@@ -320,10 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 2 Open (Bugs 2.2.18, 2.2.19 Open;
-  15 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
-  2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22 Resolved; Bugs 2.2.1, 2.2.3,
-  2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 8 Open (Bugs 2.2.18, 2.2.19, 2.2.23, 2.2.24, 2.2.25,
+  2.2.26, 2.2.27, 2.2.28 Open; 15 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10,
+  2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21,
+  2.2.22 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -716,6 +716,140 @@ have been resolved and archived.
       `IFDEF TARGET_NEXT` in `STR_SPLASH_CMDS` (`src/core/plugin_mgr.asm`),
       defined `SPLASH_MENU_LINES EQU 20` under `IFDEF TARGET_NEXT` in
       `src/include/ui.inc`, and verified via `tests/test_bug_2_2_22.py`.
+  - [ ] **Bug 2.2.23: `SE.CFG` `SCREEN=120X40` Not Overridden to `80x24` on
+    Startup (`src/core/config.asm` / `src/se_next_cpm.asm`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 7.4, 13.2, 14.1,
+      15.1.5; Bug 2.2.13.
+    - *Issue*: While Bug 2.2.13 disabled hotkey `2` in `SPLASH_LOOP` and made
+      `DO_SET_120X40` / `CONFIG_TOGGLE_MODE` call `SET_MODE_80X24`,
+      `PARSE_CONFIG_BUFFER` in `src/core/config.asm:359-373` (`PCB_CHECK_120`)
+      still calls `SET_MODE_120X40` (`src/se_next_cpm.asm:2167-2180`), which
+      sets `SCREEN_MODE = MODE_120X40`, `ACTIVE_ROWS = 40`, and
+      `ACTIVE_COLS = 120`. If an `SE.CFG` file on disk contains
+      `SCREEN=120X40`, `SE_NEXT.COM` boots into 120x40 geometry on the fixed
+      80x24 NextCPM console, causing severe horizontal column spill and
+      corrupted line wrapping (Anti-Pattern #3).
+    - *Required Fix*: In `src/se_next_cpm.asm:2167` (`SET_MODE_120X40`) or
+      `src/core/config.asm:371` (`PCB_CHECK_120` under `IFDEF TARGET_NEXT`),
+      enforce `SET_MODE_80X24` so `SE_NEXT.COM` can never enter `MODE_120X40`
+      via `SE.CFG`.
+  - [ ] **Bug 2.2.24: Far RAM Plugin Manager (`PLUGIN.PRL`) and Far-Mode
+    Plugins Call RomWBW `0FFF9H` (`HB_BNKCALL`) and `0FFF3H` (`HB_BNKSEL`)
+    Under NextCPM (`src/core/plugin_tramp.asm` & `src/core/plugin_mgr.asm`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 7.5, 7.10, 14.5,
+      15.1.4.
+    - *Issue*: In `SE_NEXT.COM`, `NEXTCPM_MEM_INIT`
+      (`src/hal/next_cpm/hal_nextcpm_memory.asm:79-107`) sets
+      `EXT_BANK_COUNT = 10` using Next MMU 8KB SRAM pages (`NextReg 0x51`), and
+      `START` calls `AUTO_LOAD_PLUGIN_MGR`. When `PLUGIN.PRL` is present on
+      disk (deployed by `tools/populate_next_disk.py`),
+      `ENSURE_PLUGIN_MGR_LOADED` (`src/core/plugin_tramp.asm:841-1028`) loads
+      `PLUGIN.PRL` into Far RAM via `NEXT_SYSBNKCPY` and then calls
+      `EXEC_PLUGIN_MGR_ACTION` (`src/core/plugin_tramp.asm:743-783`), which
+      executes `CALL 0FFF9H` (`HB_BNKCALL`, RomWBW HBIOS bank call vector).
+      Similarly, `EXEC_PLUGIN_FAR` (`src/core/plugin_mgr.asm:1405`) calls
+      `0FFF9H`, and all Host API trampolines in
+      `src/core/plugin_tramp.asm:175, 178, 206, 210, 239, 246, 421, 426, 690,
+      697` call `0FFF3H` (`HB_BNKSEL`). Under NextCPM on ZX Spectrum Next,
+      RomWBW HBIOS vectors do not exist at `0xFFF3`/`0xFFF9`; calling `0FFF9H`
+      on startup when `PLUGIN.PRL` is present (or pressing `P`, `Ctrl+P`, or
+      `Ctrl+Z`) jumps into high memory and crashes `SE_NEXT.COM`.
+    - *Required Fix*: Implement Next MMU bank switching / bank call trampolines
+      under `IFDEF TARGET_NEXT` in `src/core/plugin_tramp.asm` and
+      `src/core/plugin_mgr.asm` (or execute `PLUGIN.PRL` and far-mode plugins
+      via Next MMU slot mapping / TPA staging) instead of calling RomWBW
+      `0FFF3H` and `0FFF9H`.
+  - [ ] **Bug 2.2.25: Max Document Lines (`CFG_LINES_MODE`) Hardcoded to 32K in
+    `NEXTCPM_MEM_INIT`, Ignoring `SE.CFG` and Configuration Manager `[3]`
+    Toggle (`src/hal/next_cpm/hal_nextcpm_memory.asm` &
+    `src/se_next_cpm.asm`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 13.2, 15.1.3,
+      15.1.4.
+    - *Issue*: Per Section 7.2, 7.4, 13.2, and 15.1.4, the default `Max Lines`
+      setting is `16K` (`16,384 lines`, `CFG_LINES_MODE = 0`), toggleable via
+      Configuration Manager Option `[3]` (`16K (16,384 Lines)` <->
+      `32K (32,768 Lines)`). However, `NEXTCPM_MEM_INIT`
+      (`src/hal/next_cpm/hal_nextcpm_memory.asm:84-92`) unconditionally
+      allocates both `LINE_TABLE_BANK = 0` and `LINE_TABLE_BANK_1 = 1` and sets
+      `MAX_DOC_LINES_LIMIT = MAX_DOC_LINES_32K` (`32,768`) without checking
+      `CFG_LINES_MODE`. Consequently:
+      1. On startup with default `CFG_LINES_MODE = 0`, the Splash Screen
+         (`RENDER_SPLASH` in `src/se_next_cpm.asm:2748`, which tests
+         `MAX_DOC_LINES_LIMIT+1 == 80H`) displays
+         `Max Lines     : [32,768 lines]`, contradicting the Configuration
+         Manager (`SHOW_CONFIG_SCREEN` in `src/se_next_cpm.asm:3208`, which
+         tests `CFG_LINES_MODE`), which displays
+         `3. Max Doc Lines   : [16K (16,384 Lines)]`.
+      2. Pressing `[3]` in the Configuration Manager toggles `CFG_LINES_MODE`
+         and calls `BUFFER_INIT` -> `NEXTCPM_MEM_INIT`, which again forces
+         `MAX_DOC_LINES_LIMIT = 32,768`, so `16,384 lines` can never be
+         activated.
+    - *Required Fix*: In `NEXTCPM_MEM_INIT`
+      (`src/hal/next_cpm/hal_nextcpm_memory.asm:84-92`), check
+      `CFG_LINES_MODE`: when `0` (16K), set `LINE_TABLE_BANK_1 = 0` and
+      `MAX_DOC_LINES_LIMIT = MAX_DOC_LINES_16K`; when `1` (32K), set
+      `LINE_TABLE_BANK_1 = 1` and `MAX_DOC_LINES_LIMIT = MAX_DOC_LINES_32K`.
+      Update `PRINT_MEM_BANK_ROW` (`src/se_next_cpm.asm:3673-3690`) so Bank 01
+      accurately reflects 16K vs 32K mode.
+  - [ ] **Bug 2.2.26: Configuration Manager Displays Inapplicable RomWBW RAM
+    Drive Options and `120x40` Toggle Hint on Next Hardware
+    (`src/se_next_cpm.asm` & `src/core/plugin_mgr.asm`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 7.11, 15.1.5.
+    - *Issue*: In `SHOW_CONFIG_SCREEN` (`src/se_next_cpm.asm:3168-3202`) and
+      `CONFIG_LOOP` (`src/se_next_cpm.asm:705-707, 744-781`), Option
+      `2. RAM Drive : [Preserve (RAM Drive Active, 128KB)]` /
+      `[Hibernate (Backup/Restore, 384KB)]` /
+      `[Overwrite (Sacrifice Drive, 384KB)]` is displayed and toggleable even
+      though NextCPM does not use RomWBW HBIOS RAM drives (`HIBERN.OVL` always
+      returns `Not Found` because `HBIOS_DETECT` returns `NZ`), and toggling
+      Option `2` has no effect on Next MMU SRAM allocation (`NEXTCPM_MEM_INIT`
+      always allocates 10 text banks = 320 KB). Furthermore, Option
+      `1. Screen Geometry : [80x24 (Classic Terminal)]` is listed as toggleable
+      in `[1-5]=Toggle Option` even though `120x40` is unsupported on Next
+      hardware and pressing `1` is a no-op.
+    - *Required Fix*: Update `SHOW_CONFIG_SCREEN` and `CONFIG_LOOP` in
+      `src/se_next_cpm.asm` (and corresponding strings under
+      `IFDEF TARGET_NEXT` in `src/core/plugin_mgr.asm`) to reflect fixed 80x24
+      Next geometry and Next MMU SRAM banking rather than RomWBW HBIOS
+      128KB/384KB RAM drive preservation modes.
+  - [ ] **Bug 2.2.27: `PROBE_PROGRAM_DRIVE` Only Searches for `SE.COM` and
+    Fails When Binary is Named `SE_NEXT.COM` (`src/core/config.asm`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.4, 13.3, 14.7.
+    - *Issue*: Per Section 13.3 (*Discovery & Persistence Rules*), when
+      `SE.CFG` is not found on the current logged-in default drive, the editor
+      probes the program drive where the executable resides. On ZX Spectrum
+      Next hardware, the NextCPM binary is built as `SE_NEXT.COM` but may also
+      be locally renamed to `SE.COM` on disk because `SE` is easier to type at
+      the CP/M prompt. Currently, `INIT_COM_PROBE_FCB` in
+      `src/core/config.asm:1297-1329` only probes for `"SE      COM"`. If the
+      executable on the program drive is still named `SE_NEXT.COM` (and no
+      `SE.COM` is present on that drive), `PROBE_PROGRAM_DRIVE` fails to locate
+      the program drive and therefore fails to discover `SE.CFG` (and overlays
+      `HELPNEXT.OVL` / `HIBERN.OVL` via `CONFIG_SOURCE_DRIVE`). Conversely,
+      hardcoding `"SE_NEXT COM"` would break when the user renames the binary
+      to `SE.COM`.
+    - *Required Fix*: Under `IFDEF TARGET_NEXT_CPM` in `PROBE_PROGRAM_DRIVE` /
+      `INIT_COM_PROBE_FCB` (`src/core/config.asm`), dynamically detect and
+      record the actual binary name (`SE_NEXT.COM` or `SE.COM`) by probing the
+      current drive first and then each logged-in drive for both `"SE_NEXT COM"`
+      and `"SE      COM"`, storing the matched executable name for runtime UI
+      and exit banner display.
+  - [ ] **Bug 2.2.28: Exit Banner and Extended Memory Map Title Hardcode
+    `SE.COM` Instead of the Actual Executable Name (`src/core/plugin_mgr.asm` &
+    `src/se_next_cpm.asm`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11, 12.1, 13.3, 14.7.
+    - *Issue*: In `src/core/plugin_mgr.asm:4396-4398` and `4495`,
+      `STR_MEM_INFO_TITLE`, `STR_MEM_TABLE_HDR`, and `MSG_EXIT` unconditionally
+      hardcode `"SE.COM - Extended Memory Map"`, `"SE.COM Usage"`, and
+      `"Exiting SE.COM. Returned to CP/M."`. On the ZX Spectrum Next under
+      NextCPM, the executable may be run as `SE_NEXT.COM` or locally renamed to
+      `SE.COM` for convenience. Hardcoding either `"SE.COM"` or `"SE_NEXT.COM"`
+      mismatches the actual binary name when the other name is used.
+    - *Required Fix*: Under `IFDEF TARGET_NEXT_CPM`, use the actual detected
+      executable filename (`SE_NEXT.COM` or `SE.COM`, determined at startup by
+      probing the active/program drive or CCP command buffer) in
+      `STR_MEM_INFO_TITLE`, `STR_MEM_TABLE_HDR`, and `MSG_EXIT` (with centered
+      padding preserved).
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
