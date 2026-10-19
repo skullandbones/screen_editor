@@ -41,6 +41,15 @@ LOAD_CONFIG:
 	LD C,25				; BDOS Get Current Drive
 	CALL BDOS_ENTRY
 	LD (CURRENT_DEFAULT_DRIVE),A
+	IFDEF TARGET_NEXT_CPM
+	XOR A
+	LD (EXEC_FOUND_LOCAL),A
+	CALL PROBE_DRIVE_EXECUTABLE
+	JR C,LC_NO_LOCAL_EXEC
+	LD A,1
+	LD (EXEC_FOUND_LOCAL),A
+LC_NO_LOCAL_EXEC:
+	ENDIF
 	XOR A
 	LD (CONFIG_STATUS_FLAG),A
 	LD A,0FFH
@@ -61,16 +70,21 @@ LOAD_CONFIG:
 	LD (CONFIG_STATUS_FLAG),A
 	LD A,(CURRENT_DEFAULT_DRIVE)
 	LD (CONFIG_SOURCE_DRIVE),A
+	IFDEF TARGET_NEXT_CPM
+	LD A,(EXEC_FOUND_LOCAL)
+	OR A
+	CALL Z,PROBE_PROGRAM_DRIVE
+	ENDIF
 	CALL PARSE_CONFIG_BUFFER
 	RET
 
 LOAD_CFG_NOT_LOCAL:
-	; 3. Probe other logged-in drives for SE.COM
+	; 3. Probe other logged-in drives for SE.COM (or SE_NEXT.COM)
 	; Returns A = drive index (0..15) if found, Carry = 0
 	CALL PROBE_PROGRAM_DRIVE
 	RET C				; Not found on any other drive
 
-	; SE.COM found on drive A! Try opening SE.CFG on that drive
+	; Executable found on drive A! Try opening SE.CFG on that drive
 	LD (CONFIG_SOURCE_DRIVE),A	; Save program drive index (0..15)
 	INC A				; A = FCB drive code (1=A..16=P)
 	CALL INIT_CFG_FCB_DRIVE
@@ -131,11 +145,20 @@ PPD_LOOP:
 	CP D
 	JR Z,PPD_NEXT
 
-	; Drive D is valid and distinct! Probe for SE.COM on drive D+1
+	; Drive D is valid and distinct! Probe for executable on drive D+1
 	PUSH HL
 	PUSH DE
 	LD A,D
 	INC A				; 1=A, 2=B...
+	IFDEF TARGET_NEXT_CPM
+	CALL PROBE_DRIVE_EXECUTABLE
+	POP DE
+	POP HL
+	JR C,PPD_NEXT
+	LD A,D				; A = drive index (0..15)
+	OR A				; Carry = 0
+	RET
+	ELSE
 	CALL INIT_COM_PROBE_FCB
 	LD DE,COM_PROBE_FCB
 	LD C,15				; BDOS Open File
@@ -154,6 +177,7 @@ PPD_LOOP:
 	LD A,D				; A = drive index (0..15)
 	OR A				; Carry = 0
 	RET
+	ENDIF
 
 PPD_NEXT:
 	INC D
@@ -1294,6 +1318,71 @@ INIT_CFG_ZERO:
 ; Preserves / Modifies:
 ;   Clobbers AF, B, HL.
 ;------------------------------------------------------------------------------
+	IFDEF TARGET_NEXT_CPM
+;------------------------------------------------------------------------------
+; PROBE_DRIVE_EXECUTABLE: Probe drive A for SE_NEXT.COM or SE.COM
+;
+; Purpose:
+;   Checks if "SE_NEXT.COM" or "SE.COM" exists on FCB drive code A (0=current,
+;   1=A..16=P). Sets EXEC_IS_SE_COM = 0 if SE_NEXT.COM is found, or 1 if
+;   SE.COM is found.
+;
+; Outputs:
+;   Carry = 0 if found, Carry = 1 if neither found.
+;------------------------------------------------------------------------------
+PROBE_DRIVE_EXECUTABLE:
+	PUSH AF
+	CALL INIT_NEXT_COM_PROBE_FCB
+	LD DE,COM_PROBE_FCB
+	LD C,15
+	CALL BDOS_ENTRY
+	CP 0FFH
+	JR Z,PDE_TRY_SE_COM
+	POP AF
+	XOR A
+	LD (EXEC_IS_SE_COM),A
+	JR PDE_FOUND_CLOSE
+
+PDE_TRY_SE_COM:
+	POP AF
+	CALL INIT_COM_PROBE_FCB
+	LD DE,COM_PROBE_FCB
+	LD C,15
+	CALL BDOS_ENTRY
+	CP 0FFH
+	SCF
+	RET Z
+	LD A,1
+	LD (EXEC_IS_SE_COM),A
+
+PDE_FOUND_CLOSE:
+	LD DE,COM_PROBE_FCB
+	LD C,16
+	CALL BDOS_ENTRY
+	OR A
+	RET
+
+INIT_NEXT_COM_PROBE_FCB:
+	LD HL,STR_PROBE_SE_NEXT
+	JR ICPF_COPY
+
+INIT_COM_PROBE_FCB:
+	LD HL,STR_PROBE_SE_COM
+ICPF_COPY:
+	LD DE,COM_PROBE_FCB
+	LD (DE),A
+	INC DE
+	LD BC,11
+	LDIR
+	EX DE,HL
+	LD B,24
+	JP INIT_CFG_ZERO
+
+STR_PROBE_SE_NEXT:	DB	"SE_NEXT COM"
+STR_PROBE_SE_COM:	DB	"SE      COM"
+EXEC_IS_SE_COM:		DB	0
+EXEC_FOUND_LOCAL:	DB	0
+	ELSE
 INIT_COM_PROBE_FCB:
 	; A = drive code (1=A, 2=B...)
 	LD HL,COM_PROBE_FCB
@@ -1327,4 +1416,6 @@ INIT_COM_ZERO:
 	INC HL
 	DJNZ INIT_COM_ZERO
 	RET
+	ENDIF
+
 
