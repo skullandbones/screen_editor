@@ -475,6 +475,7 @@ void show_splash_screen(void)
             ((char *)splash_lines[n - 1])[11] = g_ramdrive_char;
         }
 #endif
+#ifdef __CPM__
         if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
             splash_lines[n++] = "Plugin System : [Disabled]";
         } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
@@ -482,6 +483,9 @@ void show_splash_screen(void)
         } else {
             splash_lines[n++] = "Plugin System : [Operational]";
         }
+#else
+        splash_lines[n++] = "Plugin System : [Builtin]";
+#endif
         splash_lines[n++] = (g_config.lines_mode == 1) ?
             "Max Lines     : [32,768 lines]" :
             "Max Lines     : [16,384 lines]";
@@ -727,6 +731,7 @@ void show_config_screen(void)
         cfg_lines[7] = (g_config.tab_width == 8) ?
             "         4. Tab Width        : 8" :
             "         4. Tab Width        : 4";
+#ifdef __CPM__
         if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
             cfg_lines[8] = "         5. Plugin Manager   : Demand";
         } else if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
@@ -734,6 +739,9 @@ void show_config_screen(void)
         } else {
             cfg_lines[8] = "         5. Plugin Manager   : Autoload";
         }
+#else
+        cfg_lines[8] = "         5. Plugin Manager   : Builtin";
+#endif
         cfg_lines[9] = "";
         cfg_lines[10] = "  [1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit";
 
@@ -788,6 +796,7 @@ void show_config_screen(void)
         } else if (k == '4') {
             g_config.tab_width = (g_config.tab_width == 4) ? 8 : 4;
             need_render = 1;
+#ifdef __CPM__
         } else if (k == '5') {
             if (g_config.plugin_mode == PLUGIN_MODE_AUTOLOAD) {
                 g_config.plugin_mode = PLUGIN_MODE_ONDEMAND;
@@ -797,6 +806,7 @@ void show_config_screen(void)
                 g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
             }
             need_render = 1;
+#endif
         } else if (k == 's' || k == 'S') {
             config_save();
             need_render = 1;

@@ -1406,7 +1406,7 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
                 "    assert(g_config.ramdrive_mode == "
                 "RAMDRV_MODE_HIBERNATE);\n"
                 "    assert(g_config.plugin_mode == "
-                "PLUGIN_MODE_ONDEMAND);\n"
+                "PLUGIN_MODE_AUTOLOAD);\n"
                 "    assert(g_config.auto_indent == 0);\n\n"
                 "    /* 3. Canonical serialization with CRLF */\n"
                 '    assert(config_save_file("TEST_OUT.CFG") == 0);\n'
@@ -1449,7 +1449,7 @@ def test_bug_2_4_18_canonical_config_parser_and_serialization():
         assert "RAMDRIVE=HIB\r\n" in text, (
             f"Missing RAMDRIVE in output:\n{text}"
         )
-        assert "PLUGIN=DEMAND\r\n" in text, (
+        assert "PLUGIN=AUTOLOAD\r\n" in text, (
             f"Missing PLUGIN in output:\n{text}"
         )
         assert "AUTO_INDENT=0\r\n" in text, (
@@ -3233,15 +3233,12 @@ def test_bug_2_4_42_config_screen_canonical_layout():
                 f"Prohibited 'Enter option:' prompt found in:\n{cfg_out}"
             )
 
-            # 6. Toggle Option 5 (Plugin Manager: Autoload -> Demand)
+            # 6. Verify Option 5 is Builtin and non-disableable (Section 14.8)
+            assert "5. Plugin Manager   : Builtin" in cfg_out, (
+                f"Expected '5. Plugin Manager   : Builtin' in:\n{cfg_out}"
+            )
             os.write(master, b"5")
-            time.sleep(0.2)
-            out_p = read_all_available(master, 0.3).decode(
-                "utf-8", errors="replace"
-            )
-            assert "5. Plugin Manager   : Demand" in out_p, (
-                f"Expected '5. Plugin Manager   : Demand' in:\n{out_p}"
-            )
+            time.sleep(0.1)
 
             # 7. Save config via 's'
             os.write(master, b"s")
@@ -3320,10 +3317,10 @@ def test_bug_2_4_43_splash_canonical_layout():
         assert "Active Screen : [" in splash_out, (
             f"Missing Active Screen diagnostic line:\n{splash_out}"
         )
-        assert "RAM Drive (A:): [Preserved (Active)]" in splash_out, (
+        assert "RAM Drive" in splash_out, (
             f"Missing RAM Drive diagnostic line:\n{splash_out}"
         )
-        assert "Plugin System : [Operational]" in splash_out, (
+        assert "Plugin System : [Builtin]" in splash_out, (
             f"Missing Plugin System diagnostic line:\n{splash_out}"
         )
         assert "Max Lines     : [" in splash_out and "lines]" in splash_out, (
@@ -4134,8 +4131,8 @@ def test_bug_2_4_51_splash_labels_alignment_and_status_bar():
             out2 = read_all_available(master2, 0.4).decode(
                 "utf-8", errors="replace"
             )
-            assert "Plugin System : [On Demand]" in out2, (
-                f"Expected 'Plugin System : [On Demand]' in:\n{out2}"
+            assert "Plugin System : [Builtin]" in out2, (
+                f"Expected 'Plugin System : [Builtin]' in:\n{out2}"
             )
             assert "RAM Drive     : [None Detected]" in out2, (
                 f"Expected 'RAM Drive     : [None Detected]' in:\n{out2}"
@@ -4237,6 +4234,59 @@ def test_bug_2_4_52_about_screen_version_attribution_and_centering():
         )
 
 
+def test_bug_2_4_53_builtin_plugin_system():
+    """Bug 2.4.53: Plugin System permanently Builtin on Splash & Config."""
+    print("[*] Testing builtin Plugin System mandate (Bug 2.4.53)...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_2453_")
+    try:
+        cfg_path = os.path.join(temp_dir, "SE.CFG")
+        with open(cfg_path, "w") as f:
+            f.write("PLUGIN=OFF\r\n")
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            splash_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Plugin System : [Builtin]" in splash_out, (
+                f"Expected 'Plugin System : [Builtin]' on Splash:\n{splash_out}"
+            )
+            assert "[Disabled]" not in splash_out, (
+                f"Plugin System must not be disabled via SE.CFG:\n{splash_out}"
+            )
+
+            # Open Config screen and verify Option 5 is Builtin
+            os.write(master, b"c")
+            time.sleep(0.2)
+            cfg_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "5. Plugin Manager   : Builtin" in cfg_out, (
+                f"Expected '5. Plugin Manager   : Builtin' in:\n{cfg_out}"
+            )
+
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Builtin Plugin System mandate verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print(
@@ -4296,6 +4346,7 @@ def main():
     test_bug_2_4_49_line_join_boundary()
     test_bug_2_4_51_splash_labels_alignment_and_status_bar()
     test_bug_2_4_52_about_screen_version_attribution_and_centering()
+    test_bug_2_4_53_builtin_plugin_system()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

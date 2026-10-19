@@ -124,6 +124,7 @@ static void parse_config_line(char *line)
     } else if (strcasecmp(key, "PLUGIN") == 0 ||
                strcasecmp(key, "PLUGINS") == 0 ||
                strcasecmp(key, "PLUGIN_MODE") == 0) {
+#ifdef __CPM__
         if (strcasecmp(val, "AUTO") == 0 ||
             strcasecmp(val, "AUTOLOAD") == 0 ||
             strcmp(val, "1") == 0) {
@@ -137,6 +138,11 @@ static void parse_config_line(char *line)
                    strcmp(val, "0") == 0) {
             g_config.plugin_mode = PLUGIN_MODE_DISABLED;
         }
+#else
+        /* Non-CP/M plugin manager is builtin and cannot be disabled (14.8) */
+        (void)val;
+        g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
+#endif
     } else if (strcasecmp(key, "AUTO_INDENT") == 0) {
         if (strcasecmp(val, "OFF") == 0 || strcasecmp(val, "NO") == 0 ||
             strcmp(val, "0") == 0) {

@@ -1113,7 +1113,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 7 Open (Bugs 2.4.1–2.4.52 Resolved; Bugs 2.4.53–2.4.59
+- **Status**: Active / 6 Open (Bugs 2.4.1–2.4.53 Resolved; Bugs 2.4.54–2.4.59
   Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
@@ -2129,7 +2129,7 @@ have been resolved and archived.
       Validated via
       `test_bug_2_4_52_about_screen_version_attribution_and_centering` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.53: Plugin System Not Permanently Builtin on Splash &
+  - [x] **Bug 2.4.53: Plugin System Not Permanently Builtin on Splash &
     Configuration Screens**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 13.2, 14.8, 15.1.5.
     - *Issue*: Sections 7.2, 7.4, 13.2, 14.8, and 15.1.5 mandate that on
@@ -2151,6 +2151,14 @@ have been resolved and archived.
       Configuration Manager screen, and ignore `PLUGIN=OFF`/`DEMAND` in
       `parse_config_line()` on non-CP/M builds so the builtin plugin manager
       cannot be disabled.
+    - *Resolution*: Updated `show_splash_screen()` and `show_config_screen()`
+      in `src/core/ui_render.c` and `parse_config_line()` in
+      `src/core/config.c` under `#ifndef __CPM__` so that `se-linux`
+      permanently displays `"Plugin System : [Builtin]"` on the Splash Screen
+      and `"5. Plugin Manager   : Builtin"` on the Configuration Manager
+      screen, and `SE.CFG` cannot disable the builtin plugin manager. Validated
+      via `test_bug_2_4_53_builtin_plugin_system` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.54: Status Bar Field 4 Context Hierarchy Missing & Field 5
     Variable-Length Tag Jitter**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2, 11.1, 14.5.
