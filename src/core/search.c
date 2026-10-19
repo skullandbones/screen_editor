@@ -82,17 +82,19 @@ static void restore_editor_screen(void)
     locate_cursor();
 }
 
-static void draw_find_field(uint8_t top, uint8_t left,
-                            const char *input, uint8_t cur_len,
-                            uint8_t cursor_pos)
+static void draw_search_field(uint8_t top, uint8_t left, uint8_t is_rep,
+                              const char *input, uint8_t cur_len,
+                              uint8_t cursor_pos)
 {
     uint8_t i;
-    hal_console_locate(top + 4, (uint8_t)(left + 14));
-    for (i = 0; i < FIND_POPUP_FIELD_LEN; i++) {
+    uint8_t flen = is_rep ? REPLACE_POPUP_FIELD_LEN : FIND_POPUP_FIELD_LEN;
+    uint8_t col = left + (is_rep ? 17 : 14);
+    hal_console_locate(top + 4, col);
+    for (i = 0; i < flen; i++) {
         hal_console_putc((i < cur_len) ? input[i] : ' ');
     }
-    hal_console_puts("]      |");
-    hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+    hal_console_puts(is_rep ? "] |" : "]      |");
+    hal_console_locate(top + 4, (uint8_t)(col + cursor_pos));
 }
 
 int execute_find_forward(void)
@@ -206,33 +208,30 @@ static uint8_t check_start_from_block(char *input)
     return 0;
 }
 
-int do_ctrl_f_find(void)
+static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
 {
-    char input[32];
     uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
-    uint8_t cur_len;
-    uint8_t cursor_pos;
+    uint8_t flen = is_rep ? REPLACE_POPUP_FIELD_LEN : FIND_POPUP_FIELD_LEN;
+    uint8_t col = left + (is_rep ? 17 : 14);
+    uint8_t cursor_pos = cur_len;
     int k;
 
-    input[0] = '\0';
-    cur_len = check_start_from_block(input);
-    cursor_pos = cur_len;
-
     hal_console_hide_cursor();
-
-    /* Draw 50x7 Find Text popup frame */
-    modal_draw_frame(top, left, 50, 7, "Find Text");
+    modal_draw_frame(top, left, 50, 7, is_rep ? "Replace Text" : "Find Text");
     modal_draw_row_centered(top + 3, left, 50,
-                            g_search_case_sensitive ?
-                            s_find_mode_sens : s_find_mode_insens);
+                            is_rep ?
+                            "Enter replacement text to substitute for match" :
+                            (g_search_case_sensitive ?
+                             s_find_mode_sens : s_find_mode_insens));
     hal_console_locate(top + 4, left);
-    hal_console_puts("|      Find: [");
-    draw_find_field(top, left, input, cur_len, cursor_pos);
+    hal_console_puts(is_rep ? "|  Replace with: [" : "|      Find: [");
+    draw_search_field(top, left, is_rep, input, cur_len, cursor_pos);
     modal_draw_row_centered(top + 5, left, 50,
+                            is_rep ?
+                            "[Enter]=Replace  [Tab]=Toggle Case  [ESC]=Cancel" :
                             "[Enter]=Find   [Tab]=Toggle Case   [ESC]=Cancel");
-
-    hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+    hal_console_locate(top + 4, (uint8_t)(col + cursor_pos));
     hal_console_show_cursor();
 
     while (1) {
@@ -242,47 +241,41 @@ int do_ctrl_f_find(void)
             return -1;
         }
         if (k == KEY_ENTER) {
-            if (cur_len > 0) {
-                strncpy(g_search_buf, input, sizeof(g_search_buf) - 1);
-                g_search_buf[sizeof(g_search_buf) - 1] = '\0';
-                g_search_len = (uint16_t)cur_len;
-            } else if (g_search_len == 0) {
-                restore_editor_screen();
-                return -1;
-            }
             restore_editor_screen();
-            return execute_find_forward();
+            return (int)cur_len;
         }
         if (k == KEY_TAB || k == KEY_CTRL_I) {
             g_search_case_sensitive ^= 1;
-            modal_draw_row_centered(top + 3, left, 50,
-                                    g_search_case_sensitive ?
-                                    s_find_mode_sens : s_find_mode_insens);
-            hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+            if (!is_rep) {
+                modal_draw_row_centered(top + 3, left, 50,
+                                        g_search_case_sensitive ?
+                                        s_find_mode_sens : s_find_mode_insens);
+            }
+            hal_console_locate(top + 4, (uint8_t)(col + cursor_pos));
             continue;
         }
         if (k == KEY_LEFT) {
             if (cursor_pos > 0) {
                 cursor_pos--;
-                hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+                hal_console_locate(top + 4, (uint8_t)(col + cursor_pos));
             }
             continue;
         }
         if (k == KEY_RIGHT) {
             if (cursor_pos < cur_len) {
                 cursor_pos++;
-                hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+                hal_console_locate(top + 4, (uint8_t)(col + cursor_pos));
             }
             continue;
         }
         if (k == KEY_HOME || k == KEY_CTRL_A) {
             cursor_pos = 0;
-            hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+            hal_console_locate(top + 4, (uint8_t)(col + cursor_pos));
             continue;
         }
         if (k == KEY_END || k == KEY_CTRL_E) {
             cursor_pos = cur_len;
-            hal_console_locate(top + 4, (uint8_t)(left + 14 + cursor_pos));
+            hal_console_locate(top + 4, (uint8_t)(col + cursor_pos));
             continue;
         }
         if (k == KEY_BACKSPACE || k == 8) {
@@ -292,7 +285,8 @@ int do_ctrl_f_find(void)
                 cur_len--;
                 cursor_pos--;
                 input[cur_len] = '\0';
-                draw_find_field(top, left, input, cur_len, cursor_pos);
+                draw_search_field(top, left, is_rep, input,
+                                  cur_len, cursor_pos);
             }
             continue;
         }
@@ -302,23 +296,45 @@ int do_ctrl_f_find(void)
                         cur_len - cursor_pos);
                 cur_len--;
                 input[cur_len] = '\0';
-                draw_find_field(top, left, input, cur_len, cursor_pos);
+                draw_search_field(top, left, is_rep, input,
+                                  cur_len, cursor_pos);
             }
             continue;
         }
         if (k >= 32 && k <= 126) {
-            if (cur_len < FIND_POPUP_FIELD_LEN) {
+            if (cur_len < flen) {
                 memmove(input + cursor_pos + 1, input + cursor_pos,
                         cur_len - cursor_pos + 1);
                 input[cursor_pos] = (char)k;
                 cur_len++;
                 cursor_pos++;
                 input[cur_len] = '\0';
-                draw_find_field(top, left, input, cur_len, cursor_pos);
+                draw_search_field(top, left, is_rep, input,
+                                  cur_len, cursor_pos);
             }
             continue;
         }
     }
+}
+
+int do_ctrl_f_find(void)
+{
+    char input[32];
+    int len;
+
+    input[0] = '\0';
+    len = prompt_search_box(0, input, check_start_from_block(input));
+    if (len < 0) {
+        return -1;
+    }
+    if (len > 0) {
+        strncpy(g_search_buf, input, sizeof(g_search_buf) - 1);
+        g_search_buf[sizeof(g_search_buf) - 1] = '\0';
+        g_search_len = (uint16_t)len;
+    } else if (g_search_len == 0) {
+        return -1;
+    }
+    return execute_find_forward();
 }
 
 int do_ctrl_n_find_next(void)
@@ -339,32 +355,62 @@ int do_ctrl_r_replace(void)
 {
     char input[32];
     uint16_t replaced_count = 0;
+    uint8_t replace_all = 0;
+    int len;
 
-    input[0] = '\0';
-    if (modal_prompt_text("Replace Text", "Search for:",
-                          input, REPLACE_POPUP_FIELD_LEN) !=
-        MODAL_RES_OK || input[0] == '\0') {
+    if (do_ctrl_f_find() < 0) {
         return 0;
     }
-    strncpy(g_search_buf, input, sizeof(g_search_buf) - 1);
-    g_search_buf[sizeof(g_search_buf) - 1] = '\0';
-    g_search_len = (uint16_t)strlen(g_search_buf);
 
     input[0] = '\0';
-    if (modal_prompt_text("Replace Text", "Replace with:",
-                          input, REPLACE_POPUP_FIELD_LEN) !=
-        MODAL_RES_OK) {
+    len = prompt_search_box(1, input, 0);
+    if (len < 0) {
         return 0;
     }
     strncpy(g_replace_buf, input, sizeof(g_replace_buf) - 1);
     g_replace_buf[sizeof(g_replace_buf) - 1] = '\0';
-    g_replace_len = (uint16_t)strlen(g_replace_buf);
+    g_replace_len = (uint16_t)len;
 
-    while (execute_find_forward() == 0) {
-        int ans = modal_confirm("Replace Match?",
-                                "Replace this occurrence?",
-                                "Replace", "Skip");
-        if (ans == MODAL_RES_OK) {
+    while (1) {
+        int ans = MODAL_RES_YES;
+        if (!replace_all) {
+            uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
+            uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
+            hal_console_hide_cursor();
+            modal_draw_frame(top, left, 50, 7, "Replace Confirmation");
+            modal_draw_row_centered(top + 3, left, 50,
+                                    "Match found for search pattern in text");
+            modal_draw_row_centered(top + 4, left, 50,
+                                    "Replace this occurrence?");
+            modal_draw_row_centered(top + 5, left, 50,
+                                    "[Y]es  [N]o  [A]ll   [ESC]=Cancel");
+            hal_console_locate(top + 4, (uint8_t)(left + 36));
+            hal_console_show_cursor();
+            while (1) {
+                int k = hal_console_getkey();
+                if (k == KEY_ESC) {
+                    ans = MODAL_RES_CANCEL;
+                    break;
+                }
+                if (k == 'y' || k == 'Y' || k == KEY_ENTER) {
+                    ans = MODAL_RES_YES;
+                    break;
+                }
+                if (k == 'n' || k == 'N') {
+                    ans = MODAL_RES_NO;
+                    break;
+                }
+                if (k == 'a' || k == 'A') {
+                    replace_all = 1;
+                    ans = MODAL_RES_YES;
+                    break;
+                }
+            }
+        }
+        if (ans == MODAL_RES_CANCEL) {
+            break;
+        }
+        if (ans == MODAL_RES_YES) {
             uint16_t i;
             checkout_active_line(g_cur_doc_row);
             for (i = 0; i < g_search_len; i++) {
@@ -374,12 +420,16 @@ int do_ctrl_r_replace(void)
                 do_char_insert(g_replace_buf[i]);
             }
             replaced_count++;
-        } else if (ans == MODAL_RES_CANCEL) {
+        } else {
+            g_cur_col++;
+        }
+        if (execute_find_forward() != 0) {
             break;
         }
     }
 
     show_popup_replace_done(replaced_count);
+    restore_editor_screen();
     return 0;
 }
 

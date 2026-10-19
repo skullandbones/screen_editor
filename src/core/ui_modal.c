@@ -291,6 +291,7 @@ int modal_confirm_3btn(const char *title, const char *msg,
 }
 #endif
 
+#ifndef __CPM__
 int modal_prompt_text(const char *title, const char *prompt,
                       char *buffer, size_t max_len)
 {
@@ -334,9 +335,7 @@ int modal_prompt_text(const char *title, const char *prompt,
 
         int k;
         while ((k = hal_console_getkey()) <= 0) {
-#ifndef __CPM__
             usleep(5000);
-#endif
         }
         if (k == KEY_ENTER) {
             hal_console_hide_cursor();
@@ -384,6 +383,7 @@ int modal_prompt_text(const char *title, const char *prompt,
         }
     }
 }
+#endif
 
 int modal_goto_line(char *buffer, size_t max_len)
 {

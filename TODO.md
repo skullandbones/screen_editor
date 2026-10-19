@@ -3926,7 +3926,7 @@ have been resolved and archived.
       / `" line"` when `cnt == 1` and compact `"c"` / `"L"` units when
       solidified (`!is_sel && cnt >= 100`). Verified via `make check-ccp` and
       `tests/test_sanity.py --sec`.
-  - [ ] **Bug 2.8.19: Search & Replace (`Ctrl+R`) Broken Confirmation Check
+  - [x] **Bug 2.8.19: Search & Replace (`Ctrl+R`) Broken Confirmation Check
     (`MODAL_RES_OK` vs `MODAL_RES_YES`) & Non-Conforming Modal Framing**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3 (Archetypes A, B,
       C), 10, 11.9.
@@ -3943,9 +3943,14 @@ have been resolved and archived.
          `[Enter]=Confirm      [ESC]=Cancel` instead of supporting `[Tab]=Toggle
          Case` and canonical Replace prompt framing (`[Enter]=Replace
          [Tab]=Toggle Case  [ESC]=Cancel`).
-    - *Required Fix*: Fix the confirmation return value check in
-      `do_ctrl_r_replace()` (`src/core/search.c`) and align the `Ctrl+R` prompt
-      and match confirmation dialogs with `docs/UI_UX_DESIGN.md` Section 8.3.
+    - *Resolution*: Refactored `do_ctrl_f_find()` and `do_ctrl_r_replace()` in
+      `src/core/search.c` to share `prompt_search_box()` for canonical 50x7
+      Archetype C Find/Replace input prompts (with `[Tab]=Toggle Case`), and
+      implemented the canonical 50x7 `Replace Confirmation` query (`[Y]es  [N]o
+      [A]ll   [ESC]=Cancel`) in `do_ctrl_r_replace()`. Guarded unused
+      `modal_prompt_text()` under `#ifndef __CPM__` in `src/core/ui_modal.c`
+      and `src/include/ui_modal.h`. Verified via `tests/test_linux_native.py`
+      and `tests/test_sanity.py --sec`.
   - [ ] **Bug 2.8.20: `Ctrl+N` (Find Next) Unbound in `editor_handle_key()`**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10 (Canonical
       Keybinding Matrix, line 1461).

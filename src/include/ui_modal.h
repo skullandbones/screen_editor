@@ -44,9 +44,9 @@ int  modal_confirm(const char *title, const char *msg,
 #ifndef __CPM__
 int  modal_confirm_3btn(const char *title, const char *msg,
                         const char *btn1, const char *btn2, const char *btn3);
-#endif
 int  modal_prompt_text(const char *title, const char *prompt,
                        char *buffer, size_t max_len);
+#endif
 int  modal_goto_line(char *buffer, size_t max_len);
 int  modal_confirm_save_changes(void);
 int  modal_confirm_overwrite(void);
