@@ -320,10 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 8 Open (Bugs 2.2.18, 2.2.19, 2.2.23, 2.2.24, 2.2.25,
-  2.2.26, 2.2.27, 2.2.28 Open; 15 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10,
-  2.2.11, 2.2.12, 2.2.13, 2.2.14, 2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21,
-  2.2.22 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 7 Open (Bugs 2.2.18, 2.2.19, 2.2.24, 2.2.25, 2.2.26,
+  2.2.27, 2.2.28 Open; 16 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11,
+  2.2.12, 2.2.13, 2.2.14, 2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22,
+  2.2.23 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -716,8 +716,8 @@ have been resolved and archived.
       `IFDEF TARGET_NEXT` in `STR_SPLASH_CMDS` (`src/core/plugin_mgr.asm`),
       defined `SPLASH_MENU_LINES EQU 20` under `IFDEF TARGET_NEXT` in
       `src/include/ui.inc`, and verified via `tests/test_bug_2_2_22.py`.
-  - [ ] **Bug 2.2.23: `SE.CFG` `SCREEN=120X40` Not Overridden to `80x24` on
-    Startup (`src/core/config.asm` / `src/se_next_cpm.asm`)**:
+  - [x] **Bug 2.2.23: `SE.CFG` `SCREEN=120X40` Not Overridden to `80x24` on
+    Startup (`src/core/config.asm` / `src/se_next_cpm.asm`) [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 7.2, 7.4, 13.2, 14.1,
       15.1.5; Bug 2.2.13.
     - *Issue*: While Bug 2.2.13 disabled hotkey `2` in `SPLASH_LOOP` and made
@@ -733,6 +733,9 @@ have been resolved and archived.
       `src/core/config.asm:371` (`PCB_CHECK_120` under `IFDEF TARGET_NEXT`),
       enforce `SET_MODE_80X24` so `SE_NEXT.COM` can never enter `MODE_120X40`
       via `SE.CFG`.
+    - *Resolution*: Redirected `SET_MODE_120X40` in `src/se_next_cpm.asm` to
+      `JP SET_MODE_80X24` (matching `src/se_next.asm`) and verified via
+      `tests/test_bug_2_2_23.py`.
   - [ ] **Bug 2.2.24: Far RAM Plugin Manager (`PLUGIN.PRL`) and Far-Mode
     Plugins Call RomWBW `0FFF9H` (`HB_BNKCALL`) and `0FFF3H` (`HB_BNKSEL`)
     Under NextCPM (`src/core/plugin_tramp.asm` & `src/core/plugin_mgr.asm`)**:

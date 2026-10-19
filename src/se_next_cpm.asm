@@ -2165,19 +2165,8 @@ EXIT_PROGRAM:
 ;   Preserves BC, DE; clobbers AF, HL.
 ;------------------------------------------------------------------------------
 SET_MODE_120X40:
-	LD A,MODE_120X40
-	LD (SCREEN_MODE),A
-	LD A,40
-	LD (ACTIVE_ROWS),A
-	LD (HOST_API_ROWS),A
-	LD A,120
-	LD (ACTIVE_COLS),A
-	LD (HOST_API_COLS),A
-	LD HL,0
-	LD (VIEW_LEFT_COL),HL
-	LD HL,120
-	LD (VIEW_RIGHT_COL),HL
-	RET
+	; 120x40 is unsupported on Next fixed 80-column hardware; enforce 80x24
+	JP SET_MODE_80X24
 
 ;------------------------------------------------------------------------------
 ; SET_MODE_80X24: Configure display geometry for 80 columns x 24 rows
