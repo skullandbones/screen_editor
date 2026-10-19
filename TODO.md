@@ -3907,7 +3907,7 @@ have been resolved and archived.
       pre-filled `dlg_fname` from `g_current_filename` on Splash `S`/`Ctrl+S`.
       Verified via `tests/test_sanity.py --sec` and
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.8.18: Status Bar Field 4 Block Metrics Pluralization (`1 chars`
+  - [x] **Bug 2.8.18: Status Bar Field 4 Block Metrics Pluralization (`1 chars`
     / `1 lines`) & Missing `>= 100` Compact Format (`<N>c` / `<N>L`)**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3 (Field 4 items 2–3),
       Section 9.2.
@@ -3921,10 +3921,11 @@ have been resolved and archived.
          truncates at 15 chars `"%-15.15s"` to `"Block: 1000 cha"`), it fails
          to switch to the compact `"Block: %uc"` / `"Block: %uL"` format
          mandated by Section 4.3.
-    - *Required Fix*: Update the `#ifdef __CPM__` block metric formatter in
-      `render_status_bar()` (`src/core/ui_render.c`) to use singular `"char"` /
-      `"line"` when `count == 1` and compact `"Block: %uc"` / `"Block: %uL"`
-      when solidified `count >= 100`.
+    - *Resolution*: Updated the `#ifdef __CPM__` block metric formatter in
+      `render_status_bar()` (`src/core/ui_render.c`) to use singular `" char"`
+      / `" line"` when `cnt == 1` and compact `"c"` / `"L"` units when
+      solidified (`!is_sel && cnt >= 100`). Verified via `make check-ccp` and
+      `tests/test_sanity.py --sec`.
   - [ ] **Bug 2.8.19: Search & Replace (`Ctrl+R`) Broken Confirmation Check
     (`MODAL_RES_OK` vs `MODAL_RES_YES`) & Non-Conforming Modal Framing**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3 (Archetypes A, B,

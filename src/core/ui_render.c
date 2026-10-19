@@ -185,20 +185,23 @@ void render_status_bar(void)
         f4 = sbuf;
     } else if (g_block_mode == BLOCK_MODE_SELECTING ||
                g_block_mode == BLOCK_MODE_SOLIDIFIED) {
-        const char *bpre = (g_block_mode == BLOCK_MODE_SELECTING) ?
-                           "Sel" : "Block";
+        uint8_t is_sel = (g_block_mode == BLOCK_MODE_SELECTING);
+        uint16_t cnt;
+        const char *unit;
         normalize_block_bounds();
         if (g_norm_start_row == g_norm_end_row) {
-            uint16_t b_chars = (g_norm_end_col >= g_norm_start_col) ?
+            cnt = (g_norm_end_col >= g_norm_start_col) ?
                 (g_norm_end_col - g_norm_start_col) : 0;
-            snprintf(sbuf, sizeof(sbuf), "%s: %u chars",
-                     bpre, (unsigned)b_chars);
+            unit = (!is_sel && cnt >= 100) ? "c" :
+                   ((cnt == 1) ? " char" : " chars");
         } else {
-            uint16_t b_lines = (g_norm_end_row >= g_norm_start_row) ?
+            cnt = (g_norm_end_row >= g_norm_start_row) ?
                 (g_norm_end_row - g_norm_start_row + 1) : 1;
-            snprintf(sbuf, sizeof(sbuf), "%s: %u lines",
-                     bpre, (unsigned)b_lines);
+            unit = (!is_sel && cnt >= 100) ? "L" :
+                   ((cnt == 1) ? " line" : " lines");
         }
+        snprintf(sbuf, sizeof(sbuf), "%s: %u%s",
+                 is_sel ? "Sel" : "Block", (unsigned)cnt, unit);
         f4 = sbuf;
     } else if (g_status_msg[0] != '\0') {
         f4 = g_status_msg;
