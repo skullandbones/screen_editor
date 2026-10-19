@@ -556,9 +556,9 @@ def test_modal_archetypes_and_framing():
             assert "Unsaved Modifications" in modal_b_out, (
                 "Modal Archetype B missing title"
             )
-            assert "+--------------------------------------------------+" in (
+            assert "+------------------------------------------------+" in (
                 modal_b_out
-            ), "Modal Archetype B missing border/title divider (+---+)"
+            ), "Modal Archetype B missing 50-col border/title divider (+---+)"
             assert "[Y]es" in modal_b_out and "[N]o" in modal_b_out, (
                 "Modal Archetype B missing [Y]es / [N]o options"
             )
@@ -2105,9 +2105,9 @@ def test_bug_2_4_28_overwrite_confirmation():
             assert "Overwrite File" in alert_out, (
                 f"Expected 'Overwrite File' modal title:\n{alert_out}"
             )
-            assert "+--------------------------------------------------+" in (
+            assert "+------------------------------------------------+" in (
                 alert_out
-            ), f"Expected 52-column modal border:\n{alert_out}"
+            ), f"Expected 50-column modal border:\n{alert_out}"
             assert "Existing file contents will be lost" in alert_out, (
                 f"Expected warning text in modal:\n{alert_out}"
             )
@@ -4649,6 +4649,90 @@ def test_bug_2_4_57_help_alignment_and_mem_info_screen():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_58_modal_box_width_50_and_esc_drain():
+    """Verify canonical 50-column Tier 2 modal width & ESC drain (2.4.58)."""
+    print(
+        "[*] Testing 50-column Tier 2 modal width & ESC drain "
+        "(Bug 2.4.58)..."
+    )
+    temp_dir = tempfile.mkdtemp()
+    test_file = os.path.join(temp_dir, "DOC.TXT")
+    with open(test_file, "w") as f:
+        f.write("Hello world\n")
+
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", test_file)
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.2)
+
+            # 1. Trigger Archetype A (Search Failed via Ctrl+F -> "NOPE\r")
+            os.write(master, b"\x06NOPE\r")
+            time.sleep(0.3)
+            alert_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Pattern Not Found" in alert_out, (
+                f"Expected 'Pattern Not Found' modal:\n{alert_out}"
+            )
+            assert "+------------------------------------------------+" in (
+                alert_out
+            ), f"Expected 50-column (+48 dashes+) border:\n{alert_out}"
+            assert (
+                "+--------------------------------------------------+"
+                not in alert_out
+            ), f"Non-canonical 52-column border still present:\n{alert_out}"
+
+            # Dismiss alert with space
+            os.write(master, b" ")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # 2. Dirty buffer ('X'), press Ctrl+Q (\x11) for Archetype B
+            #    (Unsaved Modifications), and verify 50-col border
+            os.write(master, b"X\x11")
+            time.sleep(0.3)
+            confirm_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Unsaved Modifications" in confirm_out, (
+                f"Expected 'Unsaved Modifications' modal:\n{confirm_out}"
+            )
+            assert "+------------------------------------------------+" in (
+                confirm_out
+            ), f"Expected 50-column border on Archetype B:\n{confirm_out}"
+            assert (
+                "+--------------------------------------------------+"
+                not in confirm_out
+            ), f"Non-canonical 52-col border on Archetype B:\n{confirm_out}"
+
+            # Cancel Unsaved Modifications via ESC, then quit discarding ('n')
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            os.write(master, b"\x11")
+            time.sleep(0.2)
+            os.write(master, b"n")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print(
+                "    [+] 50-column Tier 2 modal width & ESC drain verified "
+                "[PASS]"
+            )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print(
@@ -4713,6 +4797,7 @@ def main():
     test_bug_2_4_55_splash_ram_drive_and_config_cursor_state()
     test_bug_2_4_56_browser_keys_prompt_and_ctrl_s_workspace()
     test_bug_2_4_57_help_alignment_and_mem_info_screen()
+    test_bug_2_4_58_modal_box_width_50_and_esc_drain()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

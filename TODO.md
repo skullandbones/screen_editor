@@ -1113,8 +1113,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 2 Open (Bugs 2.4.1–2.4.57 Resolved; Bugs 2.4.58–2.4.59
-  Open).
+- **Status**: Active / 1 Open (Bugs 2.4.1–2.4.58 Resolved; Bug 2.4.59 Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -2313,7 +2312,7 @@ have been resolved and archived.
       `Ctrl+P` plugin palette support, and keep the cursor hidden on return to
       Splash. Validated via `test_bug_2_4_57_help_alignment_and_mem_info_screen`
       in `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.58: Tier 2 Modal Box Width (`52` vs Canonical `50`) &
+  - [x] **Bug 2.4.58: Tier 2 Modal Box Width (`52` vs Canonical `50`) &
     `ESC` Sequence Drain**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.1, 8.2, 8.3 (Archetypes A,
       B, C), 10.3.
@@ -2336,6 +2335,14 @@ have been resolved and archived.
       `src/core/ui_modal.c`, and ensure modal key polling loops in
       `src/core/search.c` and `src/core/plugin_mgr.c` ignore `k <= 0` without
       tight-spinning.
+    - *Resolution*: Standardized `MODAL_BOX_WIDTH` to `50` across all builds in
+      `src/core/ui_modal.c`, added trailing escape sequence draining on
+      `KEY_ESC` in `modal_alert()`, `modal_confirm()`, `prompt_search_box()`,
+      replace confirmation, `plugin_manager_ui()`, and `show_plugin_palette()`,
+      and added `usleep(5000)` to modal key polling loops in `src/core/search.c`
+      and `src/core/plugin_mgr.c`. Validated via
+      `test_bug_2_4_58_modal_box_width_50_and_esc_drain` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.59: `hal_console_init` & `sigwinch_handler` Override
     Configured `80x24` / `120x40` Geometry With Host Window Size**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 6.5, 7.2, 13.2.

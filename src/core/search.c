@@ -20,6 +20,9 @@
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
 #include "../include/hal.h"
+#ifndef __CPM__
+#include <unistd.h>
+#endif
 
 /* Global Search State Variables */
 char     g_search_buf[SEARCH_BUF_MAX];
@@ -235,8 +238,15 @@ static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
     hal_console_show_cursor();
 
     while (1) {
-        k = hal_console_getkey();
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
         if (k == KEY_ESC) {
+            while (hal_console_getkey() > 0) {
+                /* Drain trailing escape sequence bytes */
+            }
             restore_editor_screen();
             return -1;
         }
@@ -387,8 +397,16 @@ int do_ctrl_r_replace(void)
             hal_console_locate(top + 4, (uint8_t)(left + 36));
             hal_console_show_cursor();
             while (1) {
-                int k = hal_console_getkey();
+                int k;
+                while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+                    usleep(5000);
+#endif
+                }
                 if (k == KEY_ESC) {
+                    while (hal_console_getkey() > 0) {
+                        /* Drain trailing escape sequence bytes */
+                    }
                     ans = MODAL_RES_CANCEL;
                     break;
                 }

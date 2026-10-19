@@ -23,11 +23,7 @@
 #include <unistd.h>
 #endif
 
-#ifdef __CPM__
 #define MODAL_BOX_WIDTH   50
-#else
-#define MODAL_BOX_WIDTH   52
-#endif
 
 void modal_puts_centered(uint8_t row, uint8_t left,
                         uint8_t width, const char *str)
@@ -155,10 +151,18 @@ int modal_alert(const char *title, const char *msg1, const char *msg2)
     }
     modal_draw_row_centered(top + 5, left, width, "Press any key to continue");
 
-    while (hal_console_getkey() <= 0) {
+    {
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
 #ifndef __CPM__
-        usleep(5000);
+            usleep(5000);
 #endif
+        }
+        if (k == KEY_ESC) {
+            while (hal_console_getkey() > 0) {
+                /* Drain trailing escape sequence bytes */
+            }
+        }
     }
     g_need_screen_render = 1;
     return MODAL_RES_OK;
@@ -197,6 +201,9 @@ int modal_confirm(const char *title, const char *msg,
         }
         if (k == KEY_ESC) {
             /* Cancelable solely by ESC (not Ctrl+C or q) */
+            while (hal_console_getkey() > 0) {
+                /* Drain trailing escape sequence bytes */
+            }
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;

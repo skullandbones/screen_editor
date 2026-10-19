@@ -19,6 +19,9 @@
 #include "../include/editor.h"
 #include "../include/beautify.h"
 #include "../include/hal.h"
+#ifndef __CPM__
+#include <unistd.h>
+#endif
 
 static plugin_entry_t s_plugin_registry[PLUGIN_MAX_SLOTS];
 static uint8_t        s_plugin_count = 0;
@@ -109,8 +112,18 @@ void plugin_manager_ui(void)
     modal_draw_row_centered(top + 13, left, width,
                             "[Q]/[ESC]=Return");
     while (1) {
-        int k = hal_console_getkey();
+        int k;
+        while ((k = hal_console_getkey()) <= 0) {
+#ifndef __CPM__
+            usleep(5000);
+#endif
+        }
         if (k == KEY_ESC || k == 'q' || k == 'Q') {
+            if (k == KEY_ESC) {
+                while (hal_console_getkey() > 0) {
+                    /* Drain trailing escape sequence bytes */
+                }
+            }
             break;
         }
     }
@@ -209,10 +222,15 @@ void show_plugin_palette(void)
 
         int k;
         while ((k = hal_console_getkey()) <= 0) {
-            /* Wait for key */
+#ifndef __CPM__
+            usleep(5000);
+#endif
         }
 
         if (k == KEY_ESC) {
+            while (hal_console_getkey() > 0) {
+                /* Drain trailing escape sequence bytes */
+            }
             break;
         }
         if (k >= '1' && k <= '3') {
