@@ -130,6 +130,13 @@ int hal_console_getkey(void)
             if (b == 'D') return (modifier == 2) ? KEY_SHIFT_LEFT : KEY_LEFT;
             if (b == 'H') return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
             if (b == 'F') return (modifier == 5) ? KEY_CTRL_G : KEY_END;
+            if (b == 'a') return KEY_SHIFT_UP;
+            if (b == 'b') return KEY_SHIFT_DOWN;
+            if (b == 'c') return KEY_SHIFT_RIGHT;
+            if (b == 'd') return KEY_SHIFT_LEFT;
+            if (b == 'I') return KEY_PGUP;
+            if (b == 'G') return KEY_PGDN;
+            if (b == 'L' || b == '@') return KEY_INS;
 
             if (b == '~') {
                 if (prefix == 1) return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
@@ -140,6 +147,12 @@ int hal_console_getkey(void)
                 if (prefix == 6) return KEY_PGDN;
                 if (prefix == 7) return KEY_HOME;
                 if (prefix == 8) return KEY_END;
+            }
+
+            if (b == '^') {
+                if (prefix == 7) return KEY_CTRL_T;
+                if (prefix == 8) return KEY_CTRL_G;
+                return 0;
             }
 
             /* Drain remaining bytes of unrecognized or malformed sequence */
@@ -163,6 +176,13 @@ int hal_console_getkey(void)
             default: break;
             }
             return 0;
+        }
+
+        if (b1 == '<' || b1 == 't' || b1 == 'T') {
+            return KEY_CTRL_T;
+        }
+        if (b1 == '>' || b1 == 'b' || b1 == 'B') {
+            return KEY_CTRL_G;
         }
 
         /* Not a recognized escape sequence prefix: unget and return ESC */

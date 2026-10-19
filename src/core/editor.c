@@ -528,8 +528,14 @@ int editor_handle_key(int key)
     case KEY_RIGHT: cursor_right(); break;
     case KEY_HOME: cursor_home(); break;
     case KEY_END: cursor_end(); break;
-    case KEY_PGUP: page_up(); break;
-    case KEY_PGDN: page_down(); break;
+    case KEY_PGUP:
+    case KEY_CTRL_U:
+        page_up();
+        break;
+    case KEY_PGDN:
+    case KEY_CTRL_V:
+        page_down();
+        break;
     case KEY_INS: toggle_insert_mode(); break;
     case KEY_DEL: do_delete(); break;
     case KEY_CTRL_A: cursor_home(); break;
