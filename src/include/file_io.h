@@ -63,6 +63,10 @@ int  file_save_block(const char *filename,
                      uint8_t format);
 void file_populate_fcb(const char *path, cpm_fcb_t *fcb);
 int  file_check_hibernated(const char *path);
+#ifndef __CPM__
+void resolve_linux_path(const char *raw, char *out_path, size_t max_len,
+                        uint16_t *out_line);
+#endif
 
 #ifdef __cplusplus
 }

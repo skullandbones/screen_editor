@@ -40,10 +40,17 @@ int main(int argc, char **argv)
     editor_init();
 
     if (target_file) {
-        if (file_load(target_file) != 0) {
+        char clean_name[256];
+        FILE *tf;
+        resolve_linux_path(target_file, clean_name, sizeof(clean_name), NULL);
+        tf = fopen(clean_name, "rb");
+        if (tf) {
+            fclose(tf);
+            file_load(target_file);
+        } else {
             /* Create new document under this name */
             init_empty_document();
-            strncpy(g_current_filename, target_file,
+            strncpy(g_current_filename, clean_name,
                     sizeof(g_current_filename) - 1);
             g_current_filename[sizeof(g_current_filename) - 1] = '\0';
         }

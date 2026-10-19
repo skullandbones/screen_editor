@@ -740,21 +740,26 @@ reset_view:
                 continue;
             }
 #endif
-            if (mode == BROWSER_MODE_OPEN || mode == BROWSER_MODE_INSERT) {
-                FILE *fp_check = fopen(s_in_buf, "rb");
-                if (!fp_check) {
-                    modal_alert_file_not_found(s_in_buf);
-                    need_full_render = 1;
-                    continue;
-                }
-                fclose(fp_check);
-            } else {
-                FILE *fp_check = fopen(s_in_buf, "rb");
-                if (fp_check) {
-                    fclose(fp_check);
-                    if (modal_confirm_overwrite() != MODAL_RES_OK) {
+            {
+                char check_path[256];
+                resolve_linux_path(s_in_buf, check_path,
+                                   sizeof(check_path), NULL);
+                if (mode == BROWSER_MODE_OPEN || mode == BROWSER_MODE_INSERT) {
+                    FILE *fp_check = fopen(check_path, "rb");
+                    if (!fp_check) {
+                        modal_alert_file_not_found(check_path);
                         need_full_render = 1;
                         continue;
+                    }
+                    fclose(fp_check);
+                } else {
+                    FILE *fp_check = fopen(check_path, "rb");
+                    if (fp_check) {
+                        fclose(fp_check);
+                        if (modal_confirm_overwrite() != MODAL_RES_OK) {
+                            need_full_render = 1;
+                            continue;
+                        }
                     }
                 }
             }

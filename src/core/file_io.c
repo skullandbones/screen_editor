@@ -358,10 +358,68 @@ write_err:
     return -1;
 }
 #else
+#include <dirent.h>
+#include <strings.h>
+
+void resolve_linux_path(const char *raw, char *out_path, size_t max_len,
+                        uint16_t *out_line)
+{
+    const char *p;
+    const char *lcol;
+    size_t n;
+    DIR *d;
+    struct dirent *de;
+
+    if (out_line) {
+        *out_line = 0;
+    }
+    if (!raw || !out_path || max_len == 0) {
+        if (out_path && max_len > 0) out_path[0] = '\0';
+        return;
+    }
+
+    p = cpm_parse_prefix(raw, NULL, NULL);
+    lcol = strchr(p, ':');
+    if (lcol && lcol[1] >= '0' && lcol[1] <= '9') {
+        if (out_line) {
+            *out_line = (uint16_t)atoi(lcol + 1);
+        }
+        n = (size_t)(lcol - p);
+    } else {
+        n = strlen(p);
+    }
+    if (n >= max_len) {
+        n = max_len - 1;
+    }
+    memcpy(out_path, p, n);
+    out_path[n] = '\0';
+
+    if (strchr(out_path, '/') == NULL) {
+        FILE *tf = fopen(out_path, "rb");
+        if (tf) {
+            fclose(tf);
+            return;
+        }
+        d = opendir(".");
+        if (d) {
+            while ((de = readdir(d)) != NULL) {
+                if (strcasecmp(de->d_name, out_path) == 0) {
+                    strncpy(out_path, de->d_name, max_len - 1);
+                    out_path[max_len - 1] = '\0';
+                    break;
+                }
+            }
+            closedir(d);
+        }
+    }
+}
+
 static int file_read_op(const char *filename, uint8_t is_insert)
 {
     FILE *fp;
     char *line_buf = g_scratch_line_buf;
+    char clean_name[256];
+    uint16_t target_line = 0;
     uint16_t row;
     int c;
     uint16_t col = 0;
@@ -370,9 +428,11 @@ static int file_read_op(const char *filename, uint8_t is_insert)
         return -1;
     }
 
-    fp = fopen(filename, "rb");
+    resolve_linux_path(filename, clean_name, sizeof(clean_name), &target_line);
+
+    fp = fopen(clean_name, "rb");
     if (!fp) {
-        modal_alert_file_not_found(filename);
+        modal_alert_file_not_found(clean_name);
         return -1;
     }
 
@@ -430,7 +490,8 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     fclose(fp);
 
     if (!is_insert) {
-        strncpy(g_current_filename, filename, sizeof(g_current_filename) - 1);
+        strncpy(g_current_filename, clean_name,
+                sizeof(g_current_filename) - 1);
         g_current_filename[sizeof(g_current_filename) - 1] = '\0';
         g_doc_total_lines = row ? row : 1;
         g_cur_doc_row = 0;
@@ -442,6 +503,9 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     }
 
     checkout_active_line(g_cur_doc_row);
+    if (!is_insert && target_line > 0) {
+        goto_line(target_line);
+    }
     g_need_screen_render = 1;
     return 0;
 }
@@ -452,14 +516,17 @@ static int file_write_op(const char *filename, uint16_t start_row,
     FILE *fp;
     uint16_t row;
     char *line_buf = g_scratch_line_buf;
+    char clean_name[256];
 
     if (!filename || filename[0] == '\0') {
         return -1;
     }
 
+    resolve_linux_path(filename, clean_name, sizeof(clean_name), NULL);
+
     commit_active_line();
 
-    fp = fopen(filename, "wb");
+    fp = fopen(clean_name, "wb");
     if (!fp) {
         return -1;
     }
@@ -506,15 +573,13 @@ int file_save(const char *filename, uint8_t format)
         cpm_format_doc_filename(&s_cpm_io_fcb, g_doc_user);
 #else
         if (filename && filename != g_current_filename) {
-            strncpy(g_current_filename, filename,
-                    sizeof(g_current_filename) - 1);
-            g_current_filename[sizeof(g_current_filename) - 1] = '\0';
+            resolve_linux_path(filename, g_current_filename,
+                               sizeof(g_current_filename), NULL);
         }
 #endif
         g_doc_modified = 0;
 #ifndef __CPM__
-        modal_show_notification("Save Complete",
-                                filename ? filename : g_current_filename);
+        modal_show_notification("Save Complete", g_current_filename);
 #endif
     }
     return res;
