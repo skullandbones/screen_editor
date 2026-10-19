@@ -444,9 +444,7 @@ void show_splash_screen(void)
         if (!g_ramdrive_char) {
             splash_lines[n++] =
                 "RAM Drive     : [None Detected]";
-        } else
-#endif
-        if (g_config.ramdrive_mode == RAMDRV_MODE_DISABLED) {
+        } else if (g_config.ramdrive_mode == RAMDRV_MODE_DISABLED) {
             splash_lines[n++] =
                 "RAM Drive     : [None Detected]";
         } else if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
@@ -459,11 +457,12 @@ void show_splash_screen(void)
             splash_lines[n++] =
                 "RAM Drive (A:): [Preserved (Active)]";
         }
-#ifdef __CPM__
         if (g_ramdrive_char &&
             g_config.ramdrive_mode != RAMDRV_MODE_DISABLED) {
             ((char *)splash_lines[n - 1])[11] = g_ramdrive_char;
         }
+#else
+        splash_lines[n++] = "RAM Drive     : [None Detected]";
 #endif
 #ifdef __CPM__
         if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
@@ -552,9 +551,6 @@ void show_splash_screen(void)
             need_render = 1;
         } else if (k == KEY_CTRL_P) {
             show_plugin_palette();
-            need_render = 1;
-        } else if (k == '?' || k == 'h' || k == 'H' || k == KEY_CTRL_K) {
-            show_help_screen();
             need_render = 1;
         } else if (k == '1') {
             clear_screen();
@@ -689,7 +685,9 @@ void show_config_screen(void)
     const char *cfg_lines[11];
     int k;
     uint8_t need_render = 1;
+    uint8_t prev_splash = g_is_splash_screen;
 
+    g_is_splash_screen = 1;
     hal_console_hide_cursor();
 
     while (1) {
@@ -803,7 +801,10 @@ void show_config_screen(void)
         }
     }
     clear_screen();
-    hal_console_show_cursor();
+    g_is_splash_screen = prev_splash;
+    if (!g_is_splash_screen) {
+        hal_console_show_cursor();
+    }
     g_need_screen_render = 1;
 }
 

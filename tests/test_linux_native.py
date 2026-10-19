@@ -708,29 +708,24 @@ def test_bug_2_4_9_splash_screen_commands():
             "SE — Screen Editor" in splash_out
         ), f"Return from Config failed to render Splash screen:\n{splash_out}"
 
-        # Dispatch '?' for Help screen
+        # Verify unassigned '?' key is silently ignored on Splash (Section 7.2)
         os.write(master, b"?")
         time.sleep(0.2)
-        help_out = read_all_available(master, 0.3).decode(
+        ignored_out = read_all_available(master, 0.2).decode(
             "utf-8", errors="replace"
         )
-        assert "EDITOR MODE KEYS" in help_out, (
-            f"Splash '?' failed to open Help screen:\n{help_out}"
+        assert "EDITOR MODE KEYS" not in ignored_out, (
+            f"Splash '?' should be ignored per Section 7.2:\n{ignored_out}"
         )
 
-        # Press space to return to Splash screen
-        os.write(master, b" ")
-        time.sleep(0.2)
-        read_all_available(master, 0.2)
-
-        # Dispatch ':e' to enter editor mode
-        os.write(master, b":e")
+        # Dispatch 'e' to enter editor mode
+        os.write(master, b"e")
         time.sleep(0.2)
         editor_out = read_all_available(master, 0.3).decode(
             "utf-8", errors="replace"
         )
         assert "Line    1/" in editor_out, (
-            f"Splash ':e' failed to enter editor mode:\n{editor_out}"
+            f"Splash 'e' failed to enter editor mode:\n{editor_out}"
         )
 
         # Safe exit via Ctrl+Q
@@ -3785,21 +3780,6 @@ def test_bug_2_4_48_utf8_prohibition():
                 "Splash screen header must use ASCII hyphen '-'"
             )
 
-            # Open Help screen via 'h'
-            os.write(master, b"h")
-            time.sleep(0.2)
-            help_bytes = read_all_available(master, 0.3)
-            assert b"\xe2\x80\x94" not in help_bytes, (
-                "Help screen contains prohibited UTF-8 em-dash"
-            )
-            assert b"EDITOR MODE KEYS" in help_bytes, (
-                "Help screen title missing in output"
-            )
-            # Return from Help screen
-            os.write(master, b"\r")
-            time.sleep(0.2)
-            read_all_available(master, 0.2)
-
             # Open About screen via 'a'
             os.write(master, b"a")
             time.sleep(0.2)
@@ -3830,8 +3810,26 @@ def test_bug_2_4_48_utf8_prohibition():
             time.sleep(0.2)
             read_all_available(master, 0.2)
 
-            # Quit to OS prompt via 'q'
-            os.write(master, b"q")
+            # Enter Editor via 'e' and open Help screen via Ctrl+K (\x0b)
+            os.write(master, b"e")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+            os.write(master, b"\x0b")
+            time.sleep(0.2)
+            help_bytes = read_all_available(master, 0.3)
+            assert b"\xe2\x80\x94" not in help_bytes, (
+                "Help screen contains prohibited UTF-8 em-dash"
+            )
+            assert b"EDITOR MODE KEYS" in help_bytes, (
+                "Help screen title missing in output"
+            )
+            # Return from Help screen
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Quit to OS prompt via Ctrl+Q
+            os.write(master, b"\x11")
             exit_code = wait_pid_with_timeout(pid, 2.0)
             assert exit_code == 0, f"Expected clean exit 0, got {exit_code}"
             print("    [+] UTF-8 prohibition & ASCII headers verified [PASS]")
@@ -4360,6 +4358,80 @@ def test_bug_2_4_54_status_bar_field4_and_field5():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_55_splash_ram_drive_and_config_cursor_state():
+    """Bug 2.4.55: Splash RAM Drive [None Detected] & Config cursor state."""
+    print("[*] Testing Bug 2.4.55: Splash RAM Drive & Config cursor state...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_2455_")
+    try:
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            splash_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            # 1. Default Splash reports RAM Drive : [None Detected] on Linux
+            assert "RAM Drive     : [None Detected]" in splash_out, (
+                f"Expected 'RAM Drive     : [None Detected]' on Splash:\n"
+                f"{splash_out}"
+            )
+            assert "RAM Drive (A:)" not in splash_out, (
+                f"CP/M 'RAM Drive (A:)' should not appear on Linux:\n"
+                f"{splash_out}"
+            )
+
+            # 2. Undocumented '?'/'h'/'H'/Ctrl+K keys on Splash are ignored
+            os.write(master, b"?hH\x0b")
+            time.sleep(0.2)
+            ignored_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "EDITOR MODE KEYS" not in ignored_out, (
+                f"Undocumented help keys should be ignored on Splash:\n"
+                f"{ignored_out}"
+            )
+
+            # 3. Open Config ('c') and exit via ESC: cursor stays hidden
+            os.write(master, b"c")
+            time.sleep(0.2)
+            cfg_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SE - Configuration Manager" in cfg_out
+            assert "|                 | Line" in cfg_out, (
+                f"Expected blank Field 4 on Config screen:\n{cfg_out}"
+            )
+
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            back_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "\x1b[?25h" not in back_out, (
+                f"Cursor must remain hidden on return to Splash:\n{back_out!r}"
+            )
+
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print(
+                "    [+] Splash RAM Drive & Config cursor state verified "
+                "[PASS]"
+            )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print(
@@ -4421,6 +4493,7 @@ def main():
     test_bug_2_4_52_about_screen_version_attribution_and_centering()
     test_bug_2_4_53_builtin_plugin_system()
     test_bug_2_4_54_status_bar_field4_and_field5()
+    test_bug_2_4_55_splash_ram_drive_and_config_cursor_state()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

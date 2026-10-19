@@ -1113,7 +1113,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 5 Open (Bugs 2.4.1–2.4.54 Resolved; Bugs 2.4.55–2.4.59
+- **Status**: Active / 4 Open (Bugs 2.4.1–2.4.55 Resolved; Bugs 2.4.56–2.4.59
   Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
@@ -2199,7 +2199,7 @@ have been resolved and archived.
       Field 2 as `%-6s` (`" 80x24"` / `"120x40"`). Validated via
       `test_bug_2_4_54_status_bar_field4_and_field5` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.55: Splash & Configuration Screens Default to CP/M
+  - [x] **Bug 2.4.55: Splash & Configuration Screens Default to CP/M
     `RAM Drive (A:)` on Linux & Leak Splash State**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 13.2, 14.1, 15.1.5.
     - *Issue*:
@@ -2228,6 +2228,14 @@ have been resolved and archived.
       on the Splash Screen), preserve `g_is_splash_screen` and keep the cursor
       hidden when exiting `show_config_screen()` to Splash, and remove the
       undocumented `?`/`h`/`H`/`Ctrl+K` branch from `show_splash_screen()`.
+    - *Resolution*: Updated `show_splash_screen()` in `src/core/ui_render.c`
+      under `#ifndef __CPM__` to report `"RAM Drive     : [None Detected]"` and
+      removed the undocumented `?`/`h`/`H`/`Ctrl+K` key branch per Section 7.2's
+      Silent Rejection Mandate. Updated `show_config_screen()` to preserve
+      `g_is_splash_screen` and keep the hardware cursor hidden when returning
+      to the Splash Screen. Validated via
+      `test_bug_2_4_55_splash_ram_drive_and_config_cursor_state` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.56: Directory Browser WordStar Aliasing, CP/M Filter Prompt &
     Editor `Ctrl+S` Save Workspace Bypass**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 7.5, 7.6, 7.7, 7.8, 7.9,
