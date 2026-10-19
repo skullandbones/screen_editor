@@ -320,10 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 6 Open (Bugs 2.2.18, 2.2.19, 2.2.25, 2.2.26, 2.2.27,
-  2.2.28 Open; 17 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12,
-  2.2.13, 2.2.14, 2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23,
-  2.2.24 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 5 Open (Bugs 2.2.18, 2.2.19, 2.2.26, 2.2.27, 2.2.28
+  Open; 18 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13,
+  2.2.14, 2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23, 2.2.24,
+  2.2.25 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -769,10 +769,10 @@ have been resolved and archived.
       `EXEC_PLUGIN_MGR_ACTION`, `EXEC_PLUGIN_FAR` (`src/core/plugin_mgr.asm`),
       and all Host API trampolines to them instead of RomWBW `0FFF9H` and
       `0FFF3H`. Validated via `tests/test_bug_2_2_24.py`.
-  - [ ] **Bug 2.2.25: Max Document Lines (`CFG_LINES_MODE`) Hardcoded to 32K in
+  - [x] **Bug 2.2.25: Max Document Lines (`CFG_LINES_MODE`) Hardcoded to 32K in
     `NEXTCPM_MEM_INIT`, Ignoring `SE.CFG` and Configuration Manager `[3]`
     Toggle (`src/hal/next_cpm/hal_nextcpm_memory.asm` &
-    `src/se_next_cpm.asm`)**:
+    `src/se_next_cpm.asm`) [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 13.2, 15.1.3,
       15.1.4.
     - *Issue*: Per Section 7.2, 7.4, 13.2, and 15.1.4, the default `Max Lines`
@@ -801,6 +801,14 @@ have been resolved and archived.
       `LINE_TABLE_BANK_1 = 1` and `MAX_DOC_LINES_LIMIT = MAX_DOC_LINES_32K`.
       Update `PRINT_MEM_BANK_ROW` (`src/se_next_cpm.asm:3673-3690`) so Bank 01
       accurately reflects 16K vs 32K mode.
+    - *Resolution*: Updated `NEXTCPM_MEM_INIT`
+      (`src/hal/next_cpm/hal_nextcpm_memory.asm`) to configure
+      `LINE_TABLE_BANK_1` and `MAX_DOC_LINES_LIMIT` (`16,384` vs `32,768`)
+      according to `CFG_LINES_MODE`, and updated `PRINT_MEM_BANK_ROW`
+      (`src/se_next_cpm.asm`) to display `Line Table (16K)` /
+      `Available / Reserved` in 16K mode and `Line Table (0..16K)` /
+      `Line Table (16K..32K)` in 32K mode. Validated via
+      `tests/test_bug_2_2_25.py`.
   - [ ] **Bug 2.2.26: Configuration Manager Displays Inapplicable RomWBW RAM
     Drive Options and `120x40` Toggle Hint on Next Hardware
     (`src/se_next_cpm.asm` & `src/core/plugin_mgr.asm`)**:

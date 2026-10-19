@@ -81,14 +81,20 @@ NEXTCPM_MEM_INIT:
 	LD A,0FFH
 	LD (CPM_USER_BANK),A
 
-	; Configure Line Table banks (Banks 0 and 1 = 64KB line table)
+	; Configure Line Table banks according to CFG_LINES_MODE (0=16K, 1=32K)
 	XOR A
 	LD (LINE_TABLE_BANK),A		; Bank 0: lines 0..16383
-	INC A
+	LD A,(CFG_LINES_MODE)
+	OR A
+	JR NZ,NCMI_MODE_32K
+	LD (LINE_TABLE_BANK_1),A	; 16K mode: LINE_TABLE_BANK_1 = 0
+	LD HL,MAX_DOC_LINES_16K
+	JR NCMI_SET_LIMIT
+NCMI_MODE_32K:
+	LD A,1
 	LD (LINE_TABLE_BANK_1),A	; Bank 1: lines 16384..32767
-
-	; Configure document line limit: 32,768 lines
 	LD HL,MAX_DOC_LINES_32K
+NCMI_SET_LIMIT:
 	LD (MAX_DOC_LINES_LIMIT),HL
 
 	; Populate EXT_BANK_TABLE with text slot banks 2..11 (10 banks)
