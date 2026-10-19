@@ -586,7 +586,11 @@ void show_splash_screen(void)
 }
 
 static const char s_help_eq[] =
-  "==========================================================================";
+    "========================================"
+    "======================================";
+static const char s_help_dash[] =
+    "----------------------------------------"
+    "--------------------------------------";
 
 static const char *s_help_lines[22] = {
   s_help_eq,
@@ -609,15 +613,18 @@ static const char *s_help_lines[22] = {
   "    Delete / Ctrl+D Delete char or block   Ctrl+B         Start/Toggle blk",
   "    Ctrl+C          Copy solidified block  Ctrl+K         Solidify block",
   "    Ctrl+X          Move solidified block  ESC            Clear block",
-  "--------------------------------------------------------------------------",
+  s_help_dash,
   "                          Press any key to continue"
 };
 
 void show_help_screen(void)
 {
     int k;
+    uint8_t prev_splash = g_is_splash_screen;
+    g_is_splash_screen = 1;
+    hal_console_hide_cursor();
     while (1) {
-        render_tier1_workspace_screen(s_help_lines, 22, 74);
+        render_tier1_workspace_screen(s_help_lines, 22, 78);
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }
@@ -628,6 +635,10 @@ void show_help_screen(void)
         break;
     }
     clear_screen();
+    g_is_splash_screen = prev_splash;
+    if (!g_is_splash_screen) {
+        hal_console_show_cursor();
+    }
     g_need_screen_render = 1;
 }
 

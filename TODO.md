@@ -3860,7 +3860,7 @@ have been resolved and archived.
       `config_load_file()` and `config_save_file()`. Updated default tab width
       assertions in `tests/test_linux_native.py` and verified with
       `tests/test_sanity.py --sec`.
-  - [ ] **Bug 2.8.16: Help Screen Width (`74` vs `78` Columns), Missing
+  - [x] **Bug 2.8.16: Help Screen Width (`74` vs `78` Columns), Missing
     `g_is_splash_screen` Status Bar Context & Visible Cursor**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.3, 11.2
       (Anti-Pattern #2).
@@ -3876,10 +3876,12 @@ have been resolved and archived.
          (violating Section 4.3, Section 7.3, and Anti-Pattern #2).
       3. `show_help_screen()` does not hide the hardware cursor via
          `hal_console_hide_cursor()`.
-    - *Required Fix*: Expand `s_help_eq` and `s_help_lines[20]` to 78 chars (or
-      `g_active_cols - 2`), align `EDITOR MODE KEYS` per Section 7.3, save and
-      set `g_is_splash_screen = 1` during `show_help_screen()`, and hide the
-      cursor while displaying the Help screen.
+    - *Resolution*: Expanded `s_help_eq` and `s_help_dash` to 78 characters and
+      rendered `show_help_screen()` with `content_width = 78` (`left_col = 2` in
+      `80x24`), set `g_is_splash_screen = 1` (restoring `prev_splash` on exit),
+      and hid the hardware cursor via `hal_console_hide_cursor()` during Help
+      screen execution. Verified via `tests/test_sanity.py --sec` and
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.8.17: Missing Unsaved Modifications Prompt on Splash `Q`/`N`/`O`
     and Editor `Ctrl+O` & Unprefilled Splash `S` Filename**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.7, 7.11, 8.3
