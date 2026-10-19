@@ -320,10 +320,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 7 Open (Bugs 2.2.18, 2.2.19, 2.2.24, 2.2.25, 2.2.26,
-  2.2.27, 2.2.28 Open; 16 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11,
-  2.2.12, 2.2.13, 2.2.14, 2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22,
-  2.2.23 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
+- **Status**: Active / 6 Open (Bugs 2.2.18, 2.2.19, 2.2.25, 2.2.26, 2.2.27,
+  2.2.28 Open; 17 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12,
+  2.2.13, 2.2.14, 2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23,
+  2.2.24 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -736,9 +736,10 @@ have been resolved and archived.
     - *Resolution*: Redirected `SET_MODE_120X40` in `src/se_next_cpm.asm` to
       `JP SET_MODE_80X24` (matching `src/se_next.asm`) and verified via
       `tests/test_bug_2_2_23.py`.
-  - [ ] **Bug 2.2.24: Far RAM Plugin Manager (`PLUGIN.PRL`) and Far-Mode
+  - [x] **Bug 2.2.24: Far RAM Plugin Manager (`PLUGIN.PRL`) and Far-Mode
     Plugins Call RomWBW `0FFF9H` (`HB_BNKCALL`) and `0FFF3H` (`HB_BNKSEL`)
-    Under NextCPM (`src/core/plugin_tramp.asm` & `src/core/plugin_mgr.asm`)**:
+    Under NextCPM (`src/core/plugin_tramp.asm` & `src/core/plugin_mgr.asm`)
+    [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 7.5, 7.10, 14.5,
       15.1.4.
     - *Issue*: In `SE_NEXT.COM`, `NEXTCPM_MEM_INIT`
@@ -762,6 +763,12 @@ have been resolved and archived.
       `src/core/plugin_mgr.asm` (or execute `PLUGIN.PRL` and far-mode plugins
       via Next MMU slot mapping / TPA staging) instead of calling RomWBW
       `0FFF3H` and `0FFF9H`.
+    - *Resolution*: Implemented `NEXT_BNKCALL` and `NEXT_BNKSEL` in Upper
+      Memory (`src/core/plugin_tramp.asm`) under `IFDEF TARGET_NEXT` to save
+      and switch Next MMU Slots 0..3 (`NextRegs 0x50..0x53`), and routed
+      `EXEC_PLUGIN_MGR_ACTION`, `EXEC_PLUGIN_FAR` (`src/core/plugin_mgr.asm`),
+      and all Host API trampolines to them instead of RomWBW `0FFF9H` and
+      `0FFF3H`. Validated via `tests/test_bug_2_2_24.py`.
   - [ ] **Bug 2.2.25: Max Document Lines (`CFG_LINES_MODE`) Hardcoded to 32K in
     `NEXTCPM_MEM_INIT`, Ignoring `SE.CFG` and Configuration Manager `[3]`
     Toggle (`src/hal/next_cpm/hal_nextcpm_memory.asm` &

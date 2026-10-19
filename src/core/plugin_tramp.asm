@@ -172,10 +172,18 @@ TRAMP_CHECKOUT_LINE:
 	JP Z,HOST_CHECKOUT_LINE
 	PUSH AF
 	LD A,(CPM_USER_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	CALL HOST_CHECKOUT_LINE
 	LD A,(PLUGIN_FAR_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	POP AF
 	RET
 
@@ -204,10 +212,18 @@ TRAMP_COMMIT_LINE:
 	JP Z,HOST_COMMIT_LINE
 	PUSH AF
 	LD A,(CPM_USER_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	CALL HOST_COMMIT_LINE
 	LD A,(PLUGIN_FAR_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	POP AF
 	RET
 
@@ -236,14 +252,22 @@ TRAMP_PUTC:
 	OR A
 	JR Z,TPC_DIRECT
 	LD A,(CPM_USER_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	EI
 	POP AF
 	PUSH AF
 	CALL PUTC
 	DI
 	LD A,(PLUGIN_FAR_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	POP AF
 	RET
 TPC_DIRECT:
@@ -418,12 +442,20 @@ TRAMP_LOCATE_RC:
 	JP Z,LOCATE_RC
 	PUSH AF
 	LD A,(CPM_USER_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	EI
 	CALL LOCATE_RC
 	DI
 	LD A,(PLUGIN_FAR_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	POP AF
 	RET
 
@@ -687,14 +719,22 @@ TRAMP_RENDER_STATUS_BAR:
 TRAMP_FAR_CALL:
 	PUSH AF				; Preserve input AF (parameters)
 	LD A,(CPM_USER_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	EI
 	POP AF				; Restore input AF
 	CALL CALL_HL		; Call target function with original AF, BC, DE
 	PUSH AF				; Preserve return AF (results & Carry)
 	DI
 	LD A,(PLUGIN_FAR_BANK)
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKSEL
+	ELSE
 	CALL 0FFF3H
+	ENDIF
 	POP AF				; Restore return AF
 	RET
 
@@ -718,6 +758,98 @@ TRAMP_SHOW_CURSOR:
 	JP Z,TERM_SHOW_CURSOR
 	LD HL,TERM_SHOW_CURSOR
 	JR TRAMP_FAR_CALL
+
+;------------------------------------------------------------------------------
+; NEXT_BNKCALL: Execute Far RAM entry point (IX) in Next MMU Far RAM Bank A
+;
+; Purpose:
+;   Saves MMU Slots 0..3 ($0000..$7FFF, NextRegs 0x50..0x53), maps the 4 8KB
+;   pages of Far RAM Bank A into Slots 0..3, invokes (IX), and restores the
+;   original MMU Slots 0..3 before returning to the caller.
+;------------------------------------------------------------------------------
+NEXT_BNKCALL:
+	PUSH AF
+	LD HL,NEXT_SAVED_MMU_SLOTS
+	LD D,050H
+	LD E,4
+NBC_SAVE_LOOP:
+	LD BC,NEXT_PORT_REG_SELECT
+	OUT (C),D
+	LD BC,NEXT_PORT_REG_DATA
+	IN A,(C)
+	LD (HL),A
+	INC HL
+	INC D
+	DEC E
+	JR NZ,NBC_SAVE_LOOP
+	POP AF
+	CALL NEXT_BNKSEL
+	CALL NEXT_CALL_IX
+	PUSH AF
+	LD A,(CPM_USER_BANK)
+	CALL NEXT_BNKSEL
+	POP AF
+	RET
+
+NEXT_CALL_IX:
+	JP (IX)
+
+;------------------------------------------------------------------------------
+; NEXT_BNKSEL: Switch Next MMU Slots 0..3 ($0000..$7FFF) to Bank A or User Bank
+;
+; Purpose:
+;   If A == CPM_USER_BANK, restores saved MMU Slots 0..3 from
+;   NEXT_SAVED_MMU_SLOTS. Otherwise maps the 4 8KB pages of Far RAM Bank A
+;   (NEXT_FAR_RAM_BASE_PAGE + A * 4) into NextRegs 0x50..0x53 with interrupts
+;   disabled. Preserves BC, DE, HL.
+;------------------------------------------------------------------------------
+NEXT_BNKSEL:
+	PUSH BC
+	PUSH DE
+	PUSH HL
+	LD HL,CPM_USER_BANK
+	CP (HL)
+	JR Z,NBS_RESTORE_USER
+	DI
+	ADD A,A
+	ADD A,A
+	ADD A,NEXT_FAR_RAM_BASE_PAGE
+	LD L,A
+	LD D,050H
+	LD E,4
+NBS_MAP_FAR:
+	LD BC,NEXT_PORT_REG_SELECT
+	OUT (C),D
+	LD BC,NEXT_PORT_REG_DATA
+	OUT (C),L
+	INC L
+	INC D
+	DEC E
+	JR NZ,NBS_MAP_FAR
+	JR NBS_DONE
+
+NBS_RESTORE_USER:
+	LD HL,NEXT_SAVED_MMU_SLOTS
+	LD D,050H
+	LD E,4
+NBS_REST_LOOP:
+	LD BC,NEXT_PORT_REG_SELECT
+	OUT (C),D
+	LD BC,NEXT_PORT_REG_DATA
+	LD A,(HL)
+	OUT (C),A
+	INC HL
+	INC D
+	DEC E
+	JR NZ,NBS_REST_LOOP
+NBS_DONE:
+	POP HL
+	POP DE
+	POP BC
+	RET
+
+NEXT_SAVED_MMU_SLOTS:
+	DS 4
 	ENDIF
 
 ;------------------------------------------------------------------------------
@@ -726,7 +858,7 @@ TRAMP_SHOW_CURSOR:
 ; Purpose:
 ;   Sets Host API geometry and context fields, sets IX to entry point
 ;   0x0100 + C * 3, sets IY to PLUGIN_HOST_API, sets Far RAM bank, and invokes
-;   HBIOS HB_BNKCALL (0xFFF9).
+;   HBIOS HB_BNKCALL (0xFFF9) or Next MMU NEXT_BNKCALL.
 ;
 ; Call Usage / Protocol:
 ;   Called via CALL to launch Plugin Manager actions (0..3).
@@ -774,7 +906,11 @@ EPMA_ENTRY:
 	LD A,(PLUGIN_MGR_BANK)
 	LD (PLUGIN_FAR_BANK),A	; In case host trampolines need PLUGIN_FAR_BANK
 	DI
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKCALL
+	ELSE
 	CALL 0FFF9H			; HB_BNKCALL
+	ENDIF
 	EI
 	PUSH AF
 	XOR A
