@@ -822,11 +822,8 @@ def test_bug_2_4_11_block_selection_cursor_tracking():
             out_sel_chars = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[SEL]" in out_sel_chars, (
-                f"Expected '[SEL]' indicator in output:\n{out_sel_chars}"
-            )
-            assert "^K: Editor keys" in out_sel_chars, (
-                f"Expected '^K: Editor keys' invariant:\n{out_sel_chars}"
+            assert "Sel: 5 chars" in out_sel_chars, (
+                f"Expected 'Sel: 5 chars' in Field 4:\n{out_sel_chars}"
             )
             assert "\x1b[7m" in out_sel_chars, (
                 f"Expected inverse video highlight '\\x1b[7m':\n{out_sel_chars}"
@@ -838,11 +835,8 @@ def test_bug_2_4_11_block_selection_cursor_tracking():
             out_sel_lines = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[SEL]" in out_sel_lines, (
-                f"Expected '[SEL]' indicator in multi-line:\n{out_sel_lines}"
-            )
-            assert "^K: Editor keys" in out_sel_lines, (
-                f"Expected '^K: Editor keys' invariant:\n{out_sel_lines}"
+            assert "Sel: 2 lines" in out_sel_lines, (
+                f"Expected 'Sel: 2 lines' in multi-line:\n{out_sel_lines}"
             )
 
             # Cancel block selection via Ctrl+B toggle
@@ -851,8 +845,8 @@ def test_bug_2_4_11_block_selection_cursor_tracking():
             out_cancel = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[SEL]" not in out_cancel, (
-                f"Expected '[SEL]' cleared on toggle:\n{out_cancel}"
+            assert "Sel:" not in out_cancel, (
+                f"Expected 'Sel:' cleared on toggle:\n{out_cancel}"
             )
             assert "^K: Editor keys" in out_cancel, (
                 f"Expected '^K: Editor keys' restored:\n{out_cancel}"
@@ -907,11 +901,8 @@ def test_bug_2_4_12_clipboard_copy_paste():
             out_lock = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[BLK LOCK]" in out_lock, (
-                f"Expected '[BLK LOCK]' status indicator:\n{out_lock}"
-            )
-            assert "^K: Editor keys |" in out_lock, (
-                f"Expected Field 4 preserved after lock:\n{out_lock}"
+            assert "Block: 5 chars" in out_lock, (
+                f"Expected 'Block: 5 chars' status indicator:\n{out_lock}"
             )
 
             # Move down to line 2 and jump to Col 0 via Ctrl+A
@@ -1187,34 +1178,28 @@ def test_bug_2_4_16_status_bar_field_invariance_and_visual_col():
                 f"Expected Field 4 preserved:\n{out_tab}"
             )
 
-            # Start block selection: [SEL] in Field 5, Field 4 preserved
+            # Start block selection: Sel: 0 chars in Field 4
             os.write(master, b"\x02")
             time.sleep(0.1)
             out_sel = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[SEL]" in out_sel, (
-                f"Expected '[SEL]' indicator in Field 5:\n{out_sel}"
-            )
-            assert "^K: Editor keys |" in out_sel, (
-                f"Expected Field 4 preserved during selection:\n{out_sel}"
+            assert "Sel: 0 chars" in out_sel, (
+                f"Expected 'Sel: 0 chars' indicator in Field 4:\n{out_sel}"
             )
 
             # Cancel selection
             os.write(master, b"\x02")
             time.sleep(0.1)
 
-            # Move to end of line to trigger pan (+40)
+            # Move to end of line to trigger pan (+40) in Field 4
             os.write(master, b"\x1b[F")
             time.sleep(0.2)
             out_pan = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "[Pan +40]" in out_pan, (
-                f"Expected '[Pan +40]' in Field 5:\n{out_pan}"
-            )
-            assert "^K: Editor keys |" in out_pan, (
-                f"Expected Field 4 preserved during horizontal pan:\n{out_pan}"
+            assert "[Pan +40]       |" in out_pan, (
+                f"Expected '[Pan +40]       |' in Field 4:\n{out_pan}"
             )
 
             # Exit cleanly via Ctrl+Q (no modification dialog)
@@ -1704,8 +1689,8 @@ def test_bug_2_4_22_delete_active_block():
 
             out = read_all_available(master, 0.3)
             out_str = out.decode("utf-8", errors="replace")
-            # Should not have [SEL] anymore
-            assert "[SEL]" not in out_str, f"Block still active:\n{out_str}"
+            # Should not have Sel: anymore
+            assert "Sel:" not in out_str, f"Block still active:\n{out_str}"
 
             # Save file (Ctrl+S)
             os.write(master, b"\x13")
@@ -1776,8 +1761,8 @@ def test_bug_2_4_23_backspace_cancels_block():
             time.sleep(0.1)
 
             out = read_all_available(master, 0.1)
-            assert "[SEL]" in out.decode("utf-8", errors="replace"), (
-                "Expected [SEL] in status bar"
+            assert "Sel:" in out.decode("utf-8", errors="replace"), (
+                "Expected Sel: in status bar"
             )
 
             # Send Backspace (0x08) to cancel block
@@ -1786,7 +1771,7 @@ def test_bug_2_4_23_backspace_cancels_block():
 
             out_bs = read_all_available(master, 0.3)
             out_str = out_bs.decode("utf-8", errors="replace")
-            assert "[SEL]" not in out_str, f"Block still active:\n{out_str}"
+            assert "Sel:" not in out_str, f"Block still active:\n{out_str}"
 
             # Save file (Ctrl+S)
             os.write(master, b"\x13")
@@ -1857,8 +1842,8 @@ def test_bug_2_4_24_enter_solidifies_block():
             time.sleep(0.1)
 
             out = read_all_available(master, 0.1)
-            assert "[SEL]" in out.decode("utf-8", errors="replace"), (
-                "Expected [SEL] in status bar"
+            assert "Sel:" in out.decode("utf-8", errors="replace"), (
+                "Expected Sel: in status bar"
             )
 
             # Press Enter (\r) to solidify block
@@ -1867,11 +1852,11 @@ def test_bug_2_4_24_enter_solidifies_block():
 
             out_enter = read_all_available(master, 0.3)
             out_str = out_enter.decode("utf-8", errors="replace")
-            assert "[BLK LOCK]" in out_str, (
-                f"Expected [BLK LOCK] in status bar after Enter:\n{out_str}"
+            assert "Block:" in out_str, (
+                f"Expected Block: in status bar after Enter:\n{out_str}"
             )
-            assert "[SEL]" not in out_str, (
-                f"[SEL] still present in status bar:\n{out_str}"
+            assert "Sel:" not in out_str, (
+                f"Sel: still present in status bar:\n{out_str}"
             )
 
             # Exit cleanly via Ctrl+Q
@@ -2241,7 +2226,7 @@ def test_bug_2_4_29_block_save_and_insert():
                 "utf-8", errors="replace"
             )
             # Selection state is retained per §7.8
-            assert "[BLK LOCK]" in ed_out or "[SEL]" in ed_out, (
+            assert "Block:" in ed_out or "Sel:" in ed_out, (
                 f"Block selection was not retained:\n{ed_out}"
             )
 
@@ -2357,8 +2342,8 @@ def test_bug_2_4_30_block_menu_popup():
             ed_out = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[SEL]" in ed_out, (
-                f"Expected [SEL] retained after ESC close:\n{ed_out}"
+            assert "Sel:" in ed_out, (
+                f"Expected Sel: retained after ESC close:\n{ed_out}"
             )
 
             # 5. Open popup again and press Enter to Lock/Set (solidify)
@@ -2370,8 +2355,8 @@ def test_bug_2_4_30_block_menu_popup():
             ed_out2 = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[BLK LOCK]" in ed_out2, (
-                f"Expected [BLK LOCK] after Enter in popup:\n{ed_out2}"
+            assert "Block:" in ed_out2, (
+                f"Expected Block: after Enter in popup:\n{ed_out2}"
             )
 
             # 6. Open popup while solidified -> check Marked Block & Copy
@@ -2393,7 +2378,7 @@ def test_bug_2_4_30_block_menu_popup():
             ed_out3 = read_all_available(master, 0.2).decode(
                 "utf-8", errors="replace"
             )
-            assert "[BLK LOCK]" not in ed_out3 and "[SEL]" not in ed_out3, (
+            assert "Block:" not in ed_out3 and "Sel:" not in ed_out3, (
                 f"Expected block cleared after 'b':\n{ed_out3}"
             )
 
@@ -2624,8 +2609,8 @@ def test_bug_2_4_33_block_typing_cancellation():
             sel_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "[SEL]" in sel_out, (
-                f"Expected [SEL] in status bar:\n{sel_out}"
+            assert "Sel:" in sel_out, (
+                f"Expected Sel: in status bar:\n{sel_out}"
             )
 
             # 2. Type 'Z' in dynamic mode -> cancels block, does NOT insert 'Z'
@@ -2634,8 +2619,8 @@ def test_bug_2_4_33_block_typing_cancellation():
             after_z = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "[SEL]" not in after_z, (
-                f"[SEL] not cleared on char typing:\n{after_z}"
+            assert "Sel:" not in after_z, (
+                f"Sel: not cleared on char typing:\n{after_z}"
             )
             assert "ZHello" not in after_z and "Line 1: Z" not in after_z, (
                 f"'Z' should NOT be inserted in dynamic selection:\n{after_z}"
@@ -2647,8 +2632,8 @@ def test_bug_2_4_33_block_typing_cancellation():
             solid_out = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "[BLK LOCK]" in solid_out, (
-                f"Expected [BLK LOCK]:\n{solid_out}"
+            assert "Block:" in solid_out, (
+                f"Expected Block::\n{solid_out}"
             )
 
             # 4. Type 'Q' in solidified mode -> clears block AND inserts 'Q'
@@ -2657,8 +2642,8 @@ def test_bug_2_4_33_block_typing_cancellation():
             after_q = read_all_available(master, 0.3).decode(
                 "utf-8", errors="replace"
             )
-            assert "[BLK LOCK]" not in after_q, (
-                f"[BLK LOCK] not cleared:\n{after_q}"
+            assert "Block:" not in after_q, (
+                f"Block: not cleared:\n{after_q}"
             )
             assert "Q" in after_q, (
                 f"Expected 'Q' inserted in solidified mode:\n{after_q}"
@@ -4287,6 +4272,94 @@ def test_bug_2_4_53_builtin_plugin_system():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_54_status_bar_field4_and_field5():
+    """Verify Status Bar Field 4 priority hierarchy and fixed-width Field 5."""
+    print("[*] Testing Bug 2.4.54: Status Bar Field 4 hierarchy & Field 5...")
+    temp_dir = tempfile.mkdtemp(prefix="se_test_bug_2_4_54_")
+    try:
+        sample_path = os.path.join(temp_dir, "TEST.TXT")
+        long_line = "A" * 100 + "\nSecond line\n"
+        with open(sample_path, "w") as f:
+            f.write(long_line)
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", "TEST.TXT")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            init_out = read_all_available(master, 0.4).decode(
+                "utf-8", errors="replace"
+            )
+            assert "| ^K: Editor keys | Line    1/2    Col 0   |" in init_out, (
+                f"Expected canonical Field 4 & Field 5 on startup:\n{init_out}"
+            )
+
+            # Toggle Overwrite mode via Insert key (\x1b[2~)
+            os.write(master, b"\x1b[2~")
+            time.sleep(0.2)
+            ovr_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "| Overwrite mode  |" in ovr_out, (
+                f"Expected '| Overwrite mode  |' in Field 4:\n{ovr_out}"
+            )
+            # Toggle back to Insert mode
+            os.write(master, b"\x1b[2~")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
+
+            # Move to end of line to trigger [Pan +40] in Field 4
+            os.write(master, b"\x1b[F")
+            time.sleep(0.2)
+            pan_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "| [Pan +40]       | Line    1/2    Col 100 |" in pan_out, (
+                f"Expected '[Pan +40]' in Field 4 & fixed Field 5:\n{pan_out}"
+            )
+            assert "[SEL]" not in pan_out and "[BLK LOCK]" not in pan_out
+
+            # Return to Home (Ctrl+A) and test Sel: / Block: metrics
+            os.write(master, b"\x01")
+            time.sleep(0.1)
+            read_all_available(master, 0.2)
+
+            os.write(master, b"\x02\x1b[C\x1b[C")
+            time.sleep(0.2)
+            sel_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "| Sel: 2 chars    | Line    1/2    Col 2   |" in sel_out, (
+                f"Expected '| Sel: 2 chars    |' in Field 4:\n{sel_out}"
+            )
+
+            # Solidify via Enter
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            blk_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "| Block: 2 chars  | Line    1/2    Col 2   |" in blk_out, (
+                f"Expected '| Block: 2 chars  |' in Field 4:\n{blk_out}"
+            )
+
+            os.write(master, b"\x11")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print("    [+] Status Bar Field 4 & Field 5 verified [PASS]")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print(
@@ -4347,6 +4420,7 @@ def main():
     test_bug_2_4_51_splash_labels_alignment_and_status_bar()
     test_bug_2_4_52_about_screen_version_attribution_and_centering()
     test_bug_2_4_53_builtin_plugin_system()
+    test_bug_2_4_54_status_bar_field4_and_field5()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

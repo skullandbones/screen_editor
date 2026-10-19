@@ -1113,7 +1113,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 6 Open (Bugs 2.4.1–2.4.53 Resolved; Bugs 2.4.54–2.4.59
+- **Status**: Active / 5 Open (Bugs 2.4.1–2.4.54 Resolved; Bugs 2.4.55–2.4.59
   Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
@@ -2159,7 +2159,7 @@ have been resolved and archived.
       screen, and `SE.CFG` cannot disable the builtin plugin manager. Validated
       via `test_bug_2_4_53_builtin_plugin_system` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.54: Status Bar Field 4 Context Hierarchy Missing & Field 5
+  - [x] **Bug 2.4.54: Status Bar Field 4 Context Hierarchy Missing & Field 5
     Variable-Length Tag Jitter**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2, 11.1, 14.5.
     - *Issue*: Under `#ifndef __CPM__`, `render_status_bar()` in
@@ -2189,6 +2189,16 @@ have been resolved and archived.
       `^K: Editor keys`), keep Field 5 strictly fixed at
       `" Line %4u/%-4u Col %-3u |"`, and format `120x40` in Field 2 without an
       extra leading space.
+    - *Resolution*: Updated `render_status_bar()` under `#ifndef __CPM__` in
+      `src/core/ui_render.c` to format Field 4 (`| %-15s |`) using the
+      canonical Section 4.3 priority hierarchy (blank on non-editor overlays,
+      `Sel: <N> char(s)` / `Sel: <N> line(s)`, `Block: <N> char(s)` / `<N>c` /
+      `Block: <N> line(s)` / `<N>L`, `[Pan +%u]`, `Overwrite mode`, or
+      `^K: Editor keys`), locked Field 5 to fixed-width
+      `" Line %4u/%-4u Col %-3u |"` with no variable-length tags, and formatted
+      Field 2 as `%-6s` (`" 80x24"` / `"120x40"`). Validated via
+      `test_bug_2_4_54_status_bar_field4_and_field5` in
+      `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.55: Splash & Configuration Screens Default to CP/M
     `RAM Drive (A:)` on Linux & Leak Splash State**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2, 7.4, 13.2, 14.1, 15.1.5.

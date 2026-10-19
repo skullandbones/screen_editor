@@ -247,88 +247,78 @@ void render_status_bar(void)
 void render_status_bar(void)
 {
     char raw_name[80];
-    char field1[32];
-    char field2[16];
-    char field3[16];
-    char field4[32];
-    char field5[80];
+    char sbuf[20];
+    char geom_buf[16];
     const char *fname;
     const char *fmt_str;
+    const char *f4 = "^K: Editor keys";
     char core[256];
     char full_bar[256];
     size_t core_len;
     size_t i, idx;
+    uint16_t vis_col = 0;
 
     fname = g_current_filename[0] ? g_current_filename : "(Untitled)";
     snprintf(raw_name, sizeof(raw_name), "%s%c", fname,
              g_doc_modified ? '*' : ' ');
-    snprintf(field1, sizeof(field1), "| %-14.14s |", raw_name);
 
     if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
-        snprintf(field2, sizeof(field2), " 80x24 |");
+        strcpy(geom_buf, " 80x24");
     } else if (g_active_cols == SCREEN_COLS_120 &&
                g_active_rows == SCREEN_ROWS_40) {
-        snprintf(field2, sizeof(field2), " 120x40 |");
+        strcpy(geom_buf, "120x40");
     } else {
-        snprintf(field2, sizeof(field2), " %ux%u |",
+        snprintf(geom_buf, sizeof(geom_buf), "%ux%u",
                  (unsigned)g_active_cols, (unsigned)g_active_rows);
     }
 
     fmt_str = (g_file_format == FMT_CPM) ? "CP/M " : "Linux";
-    snprintf(field3, sizeof(field3), " %s |", fmt_str);
 
     if (g_is_splash_screen) {
-        snprintf(field4, sizeof(field4), "                 |");
-    } else {
-        snprintf(field4, sizeof(field4), " ^K: Editor keys |");
+        f4 = "";
+    } else if (g_block_mode == BLOCK_MODE_SELECTING ||
+               g_block_mode == BLOCK_MODE_SOLIDIFIED) {
+        uint8_t is_sel = (g_block_mode == BLOCK_MODE_SELECTING);
+        uint16_t cnt;
+        const char *unit;
+        normalize_block_bounds();
+        if (g_norm_start_row == g_norm_end_row) {
+            cnt = (g_norm_end_col >= g_norm_start_col) ?
+                (g_norm_end_col - g_norm_start_col) : 0;
+            unit = (!is_sel && cnt >= 100) ? "c" :
+                   ((cnt == 1) ? " char" : " chars");
+        } else {
+            cnt = (g_norm_end_row >= g_norm_start_row) ?
+                (g_norm_end_row - g_norm_start_row + 1) : 1;
+            unit = (!is_sel && cnt >= 100) ? "L" :
+                   ((cnt == 1) ? " line" : " lines");
+        }
+        snprintf(sbuf, sizeof(sbuf), "%s: %u%s",
+                 is_sel ? "Sel" : "Block", (unsigned)cnt, unit);
+        f4 = sbuf;
+    } else if (g_horiz_pan_offset > 0) {
+        snprintf(sbuf, sizeof(sbuf), "[Pan +%u]",
+                 (unsigned)g_horiz_pan_offset);
+        f4 = sbuf;
+    } else if (!g_insert_mode) {
+        f4 = "Overwrite mode";
     }
 
-    {
-        uint16_t vis_col = 0;
-        char mode_flags[32];
-        mode_flags[0] = '\0';
-
-        if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
-            checkout_active_line(g_cur_doc_row);
-            vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
-        }
-
-        if (g_horiz_pan_offset > 0) {
-            char pan_buf[16];
-            snprintf(pan_buf, sizeof(pan_buf), " [Pan +%u]",
-                     (unsigned)g_horiz_pan_offset);
-            strncat(mode_flags, pan_buf,
-                    sizeof(mode_flags) - strlen(mode_flags) - 1);
-        }
-        if (g_block_mode == BLOCK_MODE_SELECTING) {
-            strncat(mode_flags, " [SEL]",
-                    sizeof(mode_flags) - strlen(mode_flags) - 1);
-        } else if (g_block_mode == BLOCK_MODE_SOLIDIFIED) {
-            strncat(mode_flags, " [BLK LOCK]",
-                    sizeof(mode_flags) - strlen(mode_flags) - 1);
-        }
-
-        snprintf(field5, sizeof(field5), " Line %4u/%-4u Col %-3u%s |",
-                 (unsigned)(g_cur_doc_row + 1),
-                 (unsigned)g_doc_total_lines,
-                 (unsigned)vis_col,
-                 mode_flags);
-
-        snprintf(core, sizeof(core), "%s%s%s%s%s",
-                 field1, field2, field3, field4, field5);
-        core_len = strlen(core);
-
-        if (core_len > g_active_cols && mode_flags[0] != '\0') {
-            snprintf(field5, sizeof(field5), " Line %u/%u Col %u%s |",
-                     (unsigned)(g_cur_doc_row + 1),
-                     (unsigned)g_doc_total_lines,
-                     (unsigned)vis_col,
-                     mode_flags);
-            snprintf(core, sizeof(core), "%s%s%s%s%s",
-                     field1, field2, field3, field4, field5);
-            core_len = strlen(core);
-        }
+    if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
+        checkout_active_line(g_cur_doc_row);
+        vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
     }
+
+    snprintf(core, sizeof(core),
+             "| %-14.14s | %-6s | %s | %-15.15s | Line %4u/%-4u Col %-3u |",
+             raw_name,
+             geom_buf,
+             fmt_str,
+             f4,
+             (unsigned)(g_cur_doc_row + 1),
+             (unsigned)g_doc_total_lines,
+             (unsigned)vis_col);
+    core_len = strlen(core);
 
     if (core_len < g_active_cols) {
         size_t pad = g_active_cols - core_len;
