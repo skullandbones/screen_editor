@@ -340,7 +340,7 @@ int do_ctrl_f_find(void)
 int do_ctrl_n_find_next(void)
 {
     if (g_search_len == 0) {
-        return -1;
+        return do_ctrl_f_find();
     }
     g_cur_col++;
     return execute_find_forward();

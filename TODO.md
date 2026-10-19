@@ -3951,7 +3951,7 @@ have been resolved and archived.
       `modal_prompt_text()` under `#ifndef __CPM__` in `src/core/ui_modal.c`
       and `src/include/ui_modal.h`. Verified via `tests/test_linux_native.py`
       and `tests/test_sanity.py --sec`.
-  - [ ] **Bug 2.8.20: `Ctrl+N` (Find Next) Unbound in `editor_handle_key()`**:
+  - [x] **Bug 2.8.20: `Ctrl+N` (Find Next) Unbound in `editor_handle_key()`**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10 (Canonical
       Keybinding Matrix, line 1461).
     - *Issue*: Although `do_ctrl_n_find_next()` is implemented in
@@ -3960,8 +3960,11 @@ have been resolved and archived.
       the `switch (key)` dispatch table in `editor_handle_key()`
       (`src/core/editor.c:520-677`), making `Ctrl+N` a silent no-op in Editor
       Mode.
-    - *Required Fix*: Add `case KEY_CTRL_N: do_ctrl_n_find_next(); break;` to
-      `editor_handle_key()` in `src/core/editor.c`.
+    - *Resolution*: Bound `KEY_CTRL_N` to `do_ctrl_n_find_next()` in
+      `editor_handle_key()` (`src/core/editor.c`), and updated
+      `do_ctrl_n_find_next()` (`src/core/search.c`) to fall back to
+      `do_ctrl_f_find()` when no prior search pattern is set. Verified via
+      `tests/test_linux_native.py` and `tests/test_sanity.py --sec`.
   - [ ] **Bug 2.8.21: Confirmation Modals (`modal_confirm`) Non-Conforming
     Reverse-Video Selector & `Enter`/`Space` Acceptance**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3 (Archetype B, lines

@@ -542,6 +542,7 @@ int editor_handle_key(int key)
         }
         break;
     case KEY_CTRL_F: do_ctrl_f_find(); break;
+    case KEY_CTRL_N: do_ctrl_n_find_next(); break;
     case KEY_CTRL_R: do_ctrl_r_replace(); break;
     case KEY_CTRL_S:
         if (g_block_mode != BLOCK_MODE_OFF) {
