@@ -83,39 +83,38 @@ void plugin_manager_ui(void)
 {
     uint8_t width = 60;
     uint8_t height = 16;
-    uint8_t top = (g_active_rows > height) ? (g_active_rows - height) / 2 : 4;
-    uint8_t left = (g_active_cols > width) ? (g_active_cols - width) / 2 : 10;
+    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
     uint8_t i;
 
     hal_console_hide_cursor();
     modal_draw_frame(top, left, width, height, "Plugin Manager");
 
-    hal_console_locate(top + 2, left + 4);
-    hal_console_puts("Slot  Name      Status      Capabilities");
+    modal_draw_row_left(top + 3, left, width,
+                        "   Slot  Name      Status      Capabilities");
 
     for (i = 0; i < PLUGIN_MAX_SLOTS; i++) {
-        char buf[80];
+        char buf[64];
         if (s_plugin_registry[i].active) {
             snprintf(buf, sizeof(buf),
-                     "[%u]   %-8.8s  Active      Far RAM Exec",
+                     "   [%u]   %-8.8s  Active      Far RAM Exec",
                      (unsigned)i, s_plugin_registry[i].name);
         } else {
-            snprintf(buf, sizeof(buf), "[%u]   --------  (empty)     ---",
+            snprintf(buf, sizeof(buf), "   [%u]   --------  (empty)     ---",
                      (unsigned)i);
         }
-        hal_console_locate(top + 4 + i, left + 4);
-        hal_console_puts(buf);
+        modal_draw_row_left(top + 4 + i, left, width, buf);
     }
 
-        hal_console_locate(top + 13, left + 4);
-        hal_console_puts("Press Esc or Q to return to editor...");
-        while (1) {
-            int k = hal_console_getkey();
-            if (k == KEY_ESC || k == 'q' || k == 'Q') {
-                break;
-            }
+    modal_draw_row_centered(top + 13, left, width,
+                            "[Q]/[ESC]=Return");
+    while (1) {
+        int k = hal_console_getkey();
+        if (k == KEY_ESC || k == 'q' || k == 'Q') {
+            break;
         }
-        g_need_screen_render = 1;
+    }
+    g_need_screen_render = 1;
 }
 
 static void exec_rot13(void)

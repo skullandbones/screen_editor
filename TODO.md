@@ -3983,7 +3983,7 @@ have been resolved and archived.
       when `btn2` is set, and accept strictly `Y`/`y` for Yes, `N`/`n` for No,
       and `ESC` for Cancel per Section 8.3 Archetype B. Verified via
       `tests/test_linux_native.py` and `tests/test_sanity.py --sec`.
-  - [ ] **Bug 2.8.22: Non-Conforming Memory Info (`[M]`) & Plugin Manager (`[P]`
+  - [x] **Bug 2.8.22: Non-Conforming Memory Info (`[M]`) & Plugin Manager (`[P]`
     / `Ctrl+Z`) Layouts and Prohibited Ellipses**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 4.1, 5.2, 7.1, 7.2, 8.2,
       11.9 (Anti-Pattern #9).
@@ -3998,10 +3998,14 @@ have been resolved and archived.
          Status      Capabilities"`, emits a prohibited trailing ellipsis in
          `"Press Esc or Q to return to editor..."`, and leaves the hardware
          cursor visible.
-    - *Required Fix*: Harmonize `show_mem_info_screen()` in
-      `src/core/ui_render.c` and `plugin_manager_ui()` in
-      `src/core/plugin_mgr.c` to canonical centered framing, remove prohibited
-      `...` ellipses, preserve box borders, and hide the hardware cursor.
+    - *Resolution*: Updated `show_mem_info_screen()` (`src/core/ui_render.c`)
+      to set `g_is_splash_screen = 1`, hide the cursor, and render the centered
+      `"SE.COM - Extended Memory Map"` header and `"Press any key to continue"`
+      footer without ellipses; updated `plugin_manager_ui()`
+      (`src/core/plugin_mgr.c`) to use 1-based centering (`+ 1`), preserve the
+      `top + 2` title separator border, and display `"[Q]/[ESC]=Return"`
+      without trailing ellipses. Verified via `tests/test_linux_native.py` and
+      `tests/test_sanity.py --sec`.
 
 ---
 

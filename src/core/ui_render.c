@@ -811,20 +811,28 @@ void show_mem_info_screen(void)
 {
     char line1[44];
     char line2[44];
-    const char *mem_lines[5];
+    const char *mem_lines[6];
+    uint8_t prev_splash = g_is_splash_screen;
 
-    snprintf(line1, sizeof(line1), "      Free Virtual Slots: %u",
+    g_is_splash_screen = 1;
+    hal_console_hide_cursor();
+    snprintf(line1, sizeof(line1), "       Free Virtual Slots: %u",
              (unsigned)mem_get_free_slots());
-    snprintf(line2, sizeof(line2), "      Free Document Buffer: %u KB",
+    snprintf(line2, sizeof(line2), "       Free Document Buffer: %u KB",
              (unsigned)mem_get_free_kb());
-    mem_lines[0] = "    === Virtual Memory & Banking Status ===";
+    mem_lines[0] = "         SE.COM - Extended Memory Map";
     mem_lines[1] = "";
     mem_lines[2] = line1;
     mem_lines[3] = line2;
-    mem_lines[4] = "          Press any key to return...";
+    mem_lines[4] = "";
+    mem_lines[5] = "          Press any key to continue";
 
-    render_tier1_workspace_screen(mem_lines, 5, 46);
+    render_tier1_workspace_screen(mem_lines, 6, 46);
     hal_console_getkey();
     clear_screen();
+    g_is_splash_screen = prev_splash;
+    if (!g_is_splash_screen) {
+        hal_console_show_cursor();
+    }
     g_need_screen_render = 1;
 }
