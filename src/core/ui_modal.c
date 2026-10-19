@@ -171,9 +171,6 @@ int modal_confirm(const char *title, const char *msg,
     uint8_t height = 7;
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
-    uint8_t selected = 0;
-    (void)btn1;
-    (void)btn2;
 
     hal_console_hide_cursor();
     modal_draw_frame(top, left, width, height, title);
@@ -183,49 +180,32 @@ int modal_confirm(const char *title, const char *msg,
     }
     modal_draw_row_centered(top + 4, left, width,
                             btn1 ? btn1 : "Save changes?");
+    modal_draw_row_centered(top + 5, left, width,
+                            "[Y]es      [N]o      [ESC]=Cancel");
+
+    if (btn2) {
+        hal_console_locate(top + 4, (uint8_t)(left + 40));
+        hal_console_show_cursor();
+    }
 
     while (1) {
-        /* Render Options: [Y]es      [N]o      [ESC]=Cancel */
-        hal_console_locate(top + 5, left);
-#ifdef __CPM__
-        hal_console_puts("|        ");
-#else
-        hal_console_puts("|         ");
-#endif
-        if (selected == 0) hal_console_inverse_on();
-        hal_console_puts("[Y]es");
-        if (selected == 0) hal_console_inverse_off();
-
-        hal_console_puts("      ");
-        if (selected == 1) hal_console_inverse_on();
-        hal_console_puts("[N]o");
-        if (selected == 1) hal_console_inverse_off();
-
-#ifdef __CPM__
-        hal_console_puts("      [ESC]=Cancel       |");
-#else
-        hal_console_puts("      [ESC]=Cancel        |");
-#endif
-
         int k;
         while ((k = hal_console_getkey()) <= 0) {
 #ifndef __CPM__
             usleep(5000);
 #endif
         }
-        if (k == KEY_ENTER || k == ' ') {
-            g_need_screen_render = 1;
-            return (selected == 0) ? MODAL_RES_YES : MODAL_RES_NO;
-        } else if (k == KEY_ESC) {
+        if (k == KEY_ESC) {
             /* Cancelable solely by ESC (not Ctrl+C or q) */
+            hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == KEY_TAB || k == KEY_LEFT || k == KEY_RIGHT) {
-            selected = (selected == 0) ? 1 : 0;
         } else if (k == 'y' || k == 'Y') {
+            hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_YES;
         } else if (k == 'n' || k == 'N') {
+            hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_NO;
         }

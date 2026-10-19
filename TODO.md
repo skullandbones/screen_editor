@@ -3965,7 +3965,7 @@ have been resolved and archived.
       `do_ctrl_n_find_next()` (`src/core/search.c`) to fall back to
       `do_ctrl_f_find()` when no prior search pattern is set. Verified via
       `tests/test_linux_native.py` and `tests/test_sanity.py --sec`.
-  - [ ] **Bug 2.8.21: Confirmation Modals (`modal_confirm`) Non-Conforming
+  - [x] **Bug 2.8.21: Confirmation Modals (`modal_confirm`) Non-Conforming
     Reverse-Video Selector & `Enter`/`Space` Acceptance**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3 (Archetype B, lines
       1259–1288).
@@ -3977,10 +3977,12 @@ have been resolved and archived.
       reverse-video button selector on `[Y]es` / `[N]o` navigated with
       `Tab`/`Left`/`Right` and accepts `Enter` or `Space` (`' '`) to trigger the
       highlighted button.
-    - *Required Fix*: Update `modal_confirm()` in `src/core/ui_modal.c` to
-      render plain `[Y]es      [N]o      [ESC]=Cancel` options without reverse
-      button highlights and accept only `Y`/`y` for Yes and `N`/`n`/`ESC` for
-      No/Cancel per Section 8.3 Archetype B.
+    - *Resolution*: Updated `modal_confirm()` in `src/core/ui_modal.c` to
+      render plain centered `[Y]es      [N]o      [ESC]=Cancel` options without
+      reverse-video button highlights, position the cursor after `Overwrite? `
+      when `btn2` is set, and accept strictly `Y`/`y` for Yes, `N`/`n` for No,
+      and `ESC` for Cancel per Section 8.3 Archetype B. Verified via
+      `tests/test_linux_native.py` and `tests/test_sanity.py --sec`.
   - [ ] **Bug 2.8.22: Non-Conforming Memory Info (`[M]`) & Plugin Manager (`[P]`
     / `Ctrl+Z`) Layouts and Prohibited Ellipses**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.6, 4.1, 5.2, 7.1, 7.2, 8.2,
