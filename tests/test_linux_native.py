@@ -487,8 +487,8 @@ def test_tier1_centering_and_tilde_discipline():
             "SE — Screen Editor" in splash_out
         ), "Splash screen missing canonical centered title"
 
-        # Press space to enter editor mode
-        os.write(master, b" ")
+        # Press 'e' to enter editor mode
+        os.write(master, b"e")
         time.sleep(0.2)
         read_all_available(master, 0.2)
 
@@ -1548,7 +1548,9 @@ def test_bug_2_4_19_panning_edge_trigger_and_geometry():
             os.close(master)
             assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
 
-        # Part 2: Dynamic geometry adaptation on wide terminal (§14.1)
+        # Part 2: Dynamic geometry adaptation on wide terminal in NATIVE mode
+        with open(os.path.join(temp_dir, "SE.CFG"), "w") as cf:
+            cf.write("SCREEN=NATIVE\r\n")
         master2, slave2 = pty.openpty()
         winsize = struct.pack("HHHH", 40, 120, 0, 0)
         fcntl.ioctl(slave2, termios.TIOCSWINSZ, winsize)
@@ -4733,6 +4735,92 @@ def test_bug_2_4_58_modal_box_width_50_and_esc_drain():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_59_default_80x24_geometry_invariance():
+    """Verify configured 80x24 / 120x40 geometry invariance on PTY (2.4.59)."""
+    print(
+        "[*] Testing configured 80x24 / 120x40 geometry invariance "
+        "(Bug 2.4.59)..."
+    )
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        # 1. Default mode (no SE.CFG -> MODE_80X24) on a 130x45 PTY must stay
+        #    80x24, NOT get overwritten to 120x40 by hal_console_init()
+        master, slave = pty.openpty()
+        fcntl.ioctl(
+            slave, termios.TIOCSWINSZ, struct.pack("HHHH", 45, 130, 0, 0)
+        )
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            out1 = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Active Screen : [80x24 (Classic Terminal)]" in out1, (
+                f"Expected 80x24 Splash label:\n{out1}"
+            )
+            assert " 80x24 |" in out1, (
+                f"Expected ' 80x24 |' in status bar on 130x45 PTY when "
+                f"default MODE_80X24 is active:\n{out1}"
+            )
+            assert " 120x40 |" not in out1, (
+                f"Host PTY >=120x40 must not override default 80x24:\n{out1}"
+            )
+            os.write(master, b"q")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+        # 2. SCREEN=120X40 in SE.CFG on an 80x24 PTY must honour 120x40
+        with open(os.path.join(temp_dir, "SE.CFG"), "w") as cf:
+            cf.write("SCREEN=120X40\r\n")
+        master2, slave2 = pty.openpty()
+        fcntl.ioctl(
+            slave2, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0)
+        )
+        pid2 = os.fork()
+        if pid2 == 0:
+            os.chdir(temp_dir)
+            os.close(master2)
+            os.dup2(slave2, 0)
+            os.dup2(slave2, 1)
+            os.dup2(slave2, 2)
+            os.close(slave2)
+            os.execl(SE_LINUX_BIN, "se-linux")
+        else:
+            os.close(slave2)
+            time.sleep(0.3)
+            out2 = read_all_available(master2, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "Active Screen : [120x40 (Modern Default)]" in out2, (
+                f"Expected 120x40 Splash label from SE.CFG:\n{out2}"
+            )
+            assert " 120x40 |" in out2, (
+                f"Expected ' 120x40 |' in status bar from SE.CFG:\n{out2}"
+            )
+            os.write(master2, b"q")
+            exit_code2 = wait_pid_with_timeout(pid2, 2.0)
+            os.close(master2)
+            assert exit_code2 == 0, f"Expected exit code 0, got {exit_code2}"
+
+        print(
+            "    [+] Configured 80x24 / 120x40 geometry invariance verified "
+            "[PASS]"
+        )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print(
@@ -4798,6 +4886,7 @@ def main():
     test_bug_2_4_56_browser_keys_prompt_and_ctrl_s_workspace()
     test_bug_2_4_57_help_alignment_and_mem_info_screen()
     test_bug_2_4_58_modal_box_width_50_and_esc_drain()
+    test_bug_2_4_59_default_80x24_geometry_invariance()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")

@@ -1113,7 +1113,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 1 Open (Bugs 2.4.1–2.4.58 Resolved; Bug 2.4.59 Open).
+- **Status**: Resolved (All 59 Bugs 2.4.1–2.4.59 Resolved).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3.
@@ -2343,7 +2343,7 @@ have been resolved and archived.
       and `src/core/plugin_mgr.c`. Validated via
       `test_bug_2_4_58_modal_box_width_50_and_esc_drain` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.59: `hal_console_init` & `sigwinch_handler` Override
+  - [x] **Bug 2.4.59: `hal_console_init` & `sigwinch_handler` Override
     Configured `80x24` / `120x40` Geometry With Host Window Size**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 2.1, 6.5, 7.2, 13.2.
     - *Issue*: In `src/hal/linux/hal_linux_console.c:41-59` (`sigwinch_handler`)
@@ -2369,6 +2369,13 @@ have been resolved and archived.
       `g_config.screen_mode`: use `80x24` when `MODE_80X24`, `120x40` when
       `MODE_120X40`, and query `TIOCGWINSZ` dynamically only when
       `g_config.screen_mode == MODE_NATIVE`.
+    - *Resolution*: Updated `hal_console_init()` and `sigwinch_handler()` in
+      `src/hal/linux/hal_linux_console.c` and `ui_init()` in
+      `src/core/ui_render.c` to strictly respect `g_config.screen_mode` (`80x24`
+      for `MODE_80X24`, `120x40` for `MODE_120X40`, and dynamic `TIOCGWINSZ`
+      querying with viewport clamping only for `MODE_NATIVE`). Validated via
+      `test_bug_2_4_59_default_80x24_geometry_invariance` in
+      `tests/test_linux_native.py`.
 
 ### 2.5 Profile 5: CP/M-86 Profile (`SE.CMD`)
 - **Target Platform**: 8086 / 8088 Personal Computer & CP/M-86 environments.

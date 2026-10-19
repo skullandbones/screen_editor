@@ -46,6 +46,18 @@ void ui_init(void)
     if (g_config.screen_mode == MODE_120X40) {
         g_active_cols = SCREEN_COLS_120;
         g_active_rows = SCREEN_ROWS_40;
+#ifndef __CPM__
+    } else if (g_config.screen_mode == MODE_NATIVE) {
+        uint8_t ncols = 0, nrows = 0;
+        if (hal_console_get_native_size(&ncols, &nrows) == 0 &&
+            ncols >= SCREEN_COLS_80 && nrows >= SCREEN_ROWS_24) {
+            g_active_cols = ncols;
+            g_active_rows = nrows;
+        } else {
+            g_active_cols = SCREEN_COLS_80;
+            g_active_rows = SCREEN_ROWS_24;
+        }
+#endif
     } else {
         g_active_cols = SCREEN_COLS_80;
         g_active_rows = SCREEN_ROWS_24;

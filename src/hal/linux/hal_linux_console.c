@@ -16,6 +16,8 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include "../../include/config.h"
+#include "../../include/buffer.h"
+#include "../../include/editor.h"
 #include "../../include/ui.h"
 #include "../../include/hal.h"
 
@@ -38,23 +40,21 @@ static void sigwinch_handler(int sig)
     struct winsize ws;
     (void)sig;
 
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0) {
-        if (g_config.screen_mode == MODE_NATIVE) {
-            if (ws.ws_col >= SCREEN_COLS_80 && ws.ws_row >= SCREEN_ROWS_24) {
-                g_active_cols = (uint8_t)(ws.ws_col > 255 ? 255 : ws.ws_col);
-                g_active_rows = (uint8_t)(ws.ws_row > 255 ? 255 : ws.ws_row);
-            } else {
-                g_active_cols = SCREEN_COLS_80;
-                g_active_rows = SCREEN_ROWS_24;
-            }
-        } else if (ws.ws_col >= SCREEN_COLS_120 &&
-                   ws.ws_row >= SCREEN_ROWS_40) {
-            g_active_cols = SCREEN_COLS_120;
-            g_active_rows = SCREEN_ROWS_40;
+    if (g_config.screen_mode == MODE_NATIVE &&
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0) {
+        uint8_t view_rows;
+        if (ws.ws_col >= SCREEN_COLS_80 && ws.ws_row >= SCREEN_ROWS_24) {
+            g_active_cols = (uint8_t)(ws.ws_col > 255 ? 255 : ws.ws_col);
+            g_active_rows = (uint8_t)(ws.ws_row > 255 ? 255 : ws.ws_row);
         } else {
             g_active_cols = SCREEN_COLS_80;
             g_active_rows = SCREEN_ROWS_24;
         }
+        view_rows = (uint8_t)(g_active_rows - 1);
+        if (g_cur_doc_row >= g_top_doc_row + view_rows) {
+            g_top_doc_row = (uint16_t)(g_cur_doc_row - view_rows + 1);
+        }
+        update_horizontal_pan();
         g_need_screen_render = 1;
     }
 }
@@ -102,23 +102,21 @@ void hal_console_init(void)
     /* Set up window resize signal */
     signal(SIGWINCH, sigwinch_handler);
 
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
-        if (g_config.screen_mode == MODE_NATIVE) {
-            if (ws.ws_col >= SCREEN_COLS_80 && ws.ws_row >= SCREEN_ROWS_24) {
-                g_active_cols = (uint8_t)(ws.ws_col > 255 ? 255 : ws.ws_col);
-                g_active_rows = (uint8_t)(ws.ws_row > 255 ? 255 : ws.ws_row);
-            } else {
-                g_active_cols = SCREEN_COLS_80;
-                g_active_rows = SCREEN_ROWS_24;
-            }
-        } else if (ws.ws_col >= SCREEN_COLS_120 &&
-                   ws.ws_row >= SCREEN_ROWS_40) {
-            g_active_cols = SCREEN_COLS_120;
-            g_active_rows = SCREEN_ROWS_40;
+    if (g_config.screen_mode == MODE_NATIVE) {
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 &&
+            ws.ws_col >= SCREEN_COLS_80 && ws.ws_row >= SCREEN_ROWS_24) {
+            g_active_cols = (uint8_t)(ws.ws_col > 255 ? 255 : ws.ws_col);
+            g_active_rows = (uint8_t)(ws.ws_row > 255 ? 255 : ws.ws_row);
         } else {
             g_active_cols = SCREEN_COLS_80;
             g_active_rows = SCREEN_ROWS_24;
         }
+    } else if (g_config.screen_mode == MODE_120X40) {
+        g_active_cols = SCREEN_COLS_120;
+        g_active_rows = SCREEN_ROWS_40;
+    } else {
+        g_active_cols = SCREEN_COLS_80;
+        g_active_rows = SCREEN_ROWS_24;
     }
 
     /* Emit canonical TERM_INIT: reset attributes, show cursor, clear & home */
