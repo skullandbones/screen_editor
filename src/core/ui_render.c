@@ -246,7 +246,7 @@ void render_status_bar(void)
 #else
 void render_status_bar(void)
 {
-    char raw_name[80];
+    char raw_name[260];
     char sbuf[20];
     char geom_buf[16];
     const char *fname;

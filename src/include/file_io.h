@@ -38,7 +38,11 @@ typedef struct {
 } cpm_fcb_t;
 
 /* Global Document Filename State */
+#ifdef __CPM__
 extern char     g_current_filename[32];
+#else
+extern char     g_current_filename[256];
+#endif
 extern uint8_t  g_file_format;
 #ifdef __CPM__
 extern uint8_t   g_cpm_dma_buf[128];

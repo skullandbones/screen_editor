@@ -1113,7 +1113,7 @@ have been resolved and archived.
   Hardware Abstraction Layer (`src/hal/linux/`), `termios` raw mode ANSI
   terminal I/O, dynamic heap buffer management.
 - **Build Target**: `make se-linux` (verified via `make test-linux`).
-- **Status**: Active / 4 Open (Bugs 2.4.1–2.4.55 Resolved; Bugs 2.4.56–2.4.59
+- **Status**: Active / 3 Open (Bugs 2.4.1–2.4.56 Resolved; Bugs 2.4.57–2.4.59
   Open).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.4.1: Status Bar Layout Inversion & Missing Canonical Fields**:
@@ -2236,7 +2236,7 @@ have been resolved and archived.
       to the Splash Screen. Validated via
       `test_bug_2_4_55_splash_ram_drive_and_config_cursor_state` in
       `tests/test_linux_native.py`.
-  - [ ] **Bug 2.4.56: Directory Browser WordStar Aliasing, CP/M Filter Prompt &
+  - [x] **Bug 2.4.56: Directory Browser WordStar Aliasing, CP/M Filter Prompt &
     Editor `Ctrl+S` Save Workspace Bypass**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 7.5, 7.6, 7.7, 7.8, 7.9,
       10, 11.8, 15.3.5.
@@ -2272,6 +2272,14 @@ have been resolved and archived.
       (`[ESC]=Cancel  Enter [path/][pattern] to list (e.g. src/, *.c, *.txt)`),
       and in `src/core/editor.c` open `ui_browser_save_dialog()` on `Ctrl+S`
       with `g_current_filename` pre-filled.
+    - *Resolution*: Removed `KEY_CTRL_S`, `KEY_CTRL_D`, `KEY_CTRL_B`, and
+      `KEY_CTRL_G` aliases from `ui_browser_workspace()` in
+      `src/core/ui_browser.c`, bound `KEY_DEL` and `KEY_CTRL_D` to forward
+      delete, adapted the `#ifndef __CPM__` filter prompt and empty-directory
+      message to POSIX syntax, and updated `KEY_CTRL_S` in `src/core/editor.c`
+      to open `ui_browser_save_dialog()` with `g_current_filename` pre-filled.
+      Validated via `test_bug_2_4_56_browser_keys_prompt_and_ctrl_s_workspace`
+      in `tests/test_linux_native.py`.
   - [ ] **Bug 2.4.57: Help Screen Alignment/Quit Label & Memory Info Screen
     Non-Blocking Key Read**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.1, 7.2, 7.3, 14.5.

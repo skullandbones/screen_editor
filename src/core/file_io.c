@@ -21,10 +21,11 @@
 #include "../include/ui_modal.h"
 
 /* Global File Filename and Format State */
-char    g_current_filename[32];
 #ifdef __CPM__
+char    g_current_filename[32];
 uint8_t g_file_format = FMT_CPM;
 #else
+char    g_current_filename[256];
 uint8_t g_file_format = FMT_LINUX;
 #endif
 

@@ -33,7 +33,11 @@ uint16_t g_horiz_pan_offset = 0;
 uint8_t  g_insert_mode = 1;
 uint8_t  g_editor_exit_flag = 0;
 uint8_t  g_action_code = ACTION_EXIT;
+#ifdef __CPM__
 static char s_editor_fname[32];
+#else
+static char s_editor_fname[256];
+#endif
 
 void editor_init(void)
 {
@@ -560,7 +564,6 @@ int editor_handle_key(int key)
             g_need_screen_render = 1;
             break;
         }
-#ifdef __CPM__
         strncpy(s_editor_fname, g_current_filename,
                 sizeof(s_editor_fname) - 1);
         s_editor_fname[sizeof(s_editor_fname) - 1] = '\0';
@@ -569,18 +572,6 @@ int editor_handle_key(int key)
             MODAL_RES_OK && s_editor_fname[0]) {
             file_save(s_editor_fname, g_file_format);
         }
-#else
-        if (g_current_filename[0] == '\0') {
-            s_editor_fname[0] = '\0';
-            if (ui_browser_save_dialog(s_editor_fname,
-                                       sizeof(s_editor_fname)) ==
-                MODAL_RES_OK && s_editor_fname[0]) {
-                file_save(s_editor_fname, g_file_format);
-            }
-        } else {
-            file_save(NULL, g_file_format);
-        }
-#endif
         g_need_screen_render = 1;
         g_need_status_render = 1;
         break;

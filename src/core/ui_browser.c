@@ -222,10 +222,10 @@ static int     s_files_per_page;
 #define s_page_buf  (g_scratch_line_buf + 144)
 #define IN_BUF_CAP  64
 #else
-static char s_in_buf[64];
+static char s_in_buf[256];
 static char s_title_buf[80];
 static char s_page_buf[48];
-#define IN_BUF_CAP  64
+#define IN_BUF_CAP  256
 #endif
 
 static void draw_tilde_row(uint8_t row)
@@ -268,7 +268,8 @@ static void puts_padded(const char *s, uint8_t width)
 
 static void locate_input_cursor(void)
 {
-    hal_console_locate(s_prompt_row, (uint8_t)(s_box_col + s_cursor_pos));
+    uint8_t vis_pos = (s_cursor_pos > 20) ? 20 : s_cursor_pos;
+    hal_console_locate(s_prompt_row, (uint8_t)(s_box_col + vis_pos));
     hal_console_show_cursor();
 }
 
@@ -395,9 +396,9 @@ static int ui_browser_workspace(int mode, char *selected_filename,
     s_cursor_pos = (uint8_t)strlen(s_in_buf);
 #else
     if (selected_filename && selected_filename[0] != '\0') {
-        strncpy(s_in_buf, selected_filename, IN_BUF_CAP - 1);
+        snprintf(s_in_buf, IN_BUF_CAP, "%s", selected_filename);
     } else if (mode == BROWSER_MODE_SAVE && g_current_filename[0] != '\0') {
-        strncpy(s_in_buf, g_current_filename, IN_BUF_CAP - 1);
+        snprintf(s_in_buf, IN_BUF_CAP, "%s", g_current_filename);
     }
     s_cursor_pos = (uint8_t)strlen(s_in_buf);
 #endif
@@ -485,7 +486,11 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             if (s_page_files == 0) {
                 screen_row++;
                 emit_left_pad(screen_row);
+#ifdef __CPM__
                 hal_console_puts("[No files found on current drive]");
+#else
+                hal_console_puts("[No files found in directory]");
+#endif
                 hal_console_clear_eol();
             } else {
                 uint8_t idx = 0;
@@ -533,9 +538,15 @@ static int ui_browser_workspace(int mode, char *selected_filename,
 
             screen_row++;
             emit_left_pad(screen_row);
+#ifdef __CPM__
             hal_console_puts(
                 "[ESC]=Cancel  Enter [d:][u:][pattern] to list "
                 "(e.g. B:, C1:, 1C:, *.TXT)");
+#else
+            hal_console_puts(
+                "[ESC]=Cancel  Enter [path/][pattern] to list "
+                "(e.g. src/, *.c, *.txt)");
+#endif
             hal_console_clear_eol();
 
             screen_row++;
@@ -597,7 +608,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 draw_tab_mode_hint();
                 locate_input_cursor();
             }
-        } else if (k == KEY_PGUP || k == KEY_CTRL_U || k == KEY_CTRL_B) {
+        } else if (k == KEY_PGUP || k == KEY_CTRL_U) {
             if (s_total_pages >= 2) {
                 if (s_hl_active) s_hl_auto_mode = 2;
                 s_cur_page = (s_cur_page > 0) ? (s_cur_page - 1)
@@ -778,21 +789,19 @@ reset_view:
                 s_cursor_pos--;
                 refresh_browser_box();
             }
-        } else if (k == KEY_DEL || k == KEY_CTRL_G) {
+        } else if (k == KEY_DEL || k == KEY_CTRL_D) {
             if (s_cursor_pos < (uint8_t)strlen(s_in_buf)) {
                 memmove(&s_in_buf[s_cursor_pos], &s_in_buf[s_cursor_pos + 1],
                         strlen(&s_in_buf[s_cursor_pos + 1]) + 1);
                 refresh_browser_box();
             }
-        } else if (k == KEY_LEFT || k == KEY_CTRL_S ||
-                   k == KEY_RIGHT || k == KEY_CTRL_D ||
+        } else if (k == KEY_LEFT || k == KEY_RIGHT ||
                    k == KEY_HOME || k == KEY_CTRL_A ||
                    k == KEY_END || k == KEY_CTRL_E) {
             uint8_t in_len = (uint8_t)strlen(s_in_buf);
-            if ((k == KEY_LEFT || k == KEY_CTRL_S) && s_cursor_pos > 0) {
+            if (k == KEY_LEFT && s_cursor_pos > 0) {
                 s_cursor_pos--;
-            } else if ((k == KEY_RIGHT || k == KEY_CTRL_D) &&
-                       s_cursor_pos < in_len) {
+            } else if (k == KEY_RIGHT && s_cursor_pos < in_len) {
                 s_cursor_pos++;
             } else if (k == KEY_HOME || k == KEY_CTRL_A) {
                 s_cursor_pos = 0;

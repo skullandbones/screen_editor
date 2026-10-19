@@ -161,8 +161,12 @@ def test_document_load_and_save():
             # Insert additional characters
             os.write(master, b"EXTRA_TEXT_")
             time.sleep(0.2)
-            # Send Ctrl+S (0x13) to save
+            # Send Ctrl+S (0x13) to open Save workspace, Enter + 'y' to save
             os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
             time.sleep(0.2)
             # Dismiss save notification modal (press any key)
             os.write(master, b" ")
@@ -265,11 +269,11 @@ def test_status_event_notification_modal():
             time.sleep(0.3)
             os.write(master, b"\x13")
             time.sleep(0.2)
-            output = b""
-            try:
-                output += os.read(master, 8192)
-            except Exception:
-                pass
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
+            time.sleep(0.2)
+            output = read_all_available(master, 0.3)
 
             os.write(master, b" ")
             time.sleep(0.1)
@@ -428,8 +432,12 @@ def test_horizontal_panning_and_line_barrier():
             os.write(master, b"B" * 60)  # Total 85 + 60 = 145 attempted
             time.sleep(0.2)
 
-            # Save file (Ctrl+S)
+            # Save file (Ctrl+S -> Enter -> 'y')
             os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
             time.sleep(0.2)
             # Dismiss save modal with space
             os.write(master, b" ")
@@ -916,8 +924,12 @@ def test_bug_2_4_12_clipboard_copy_paste():
             os.write(master, b"\x1b")
             time.sleep(0.1)
 
-            # Save file via Ctrl+S
+            # Save file via Ctrl+S -> Enter -> 'y'
             os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
             time.sleep(0.2)
             # Dismiss save notification modal
             os.write(master, b" ")
@@ -1687,10 +1699,14 @@ def test_bug_2_4_22_delete_active_block():
             # Should not have Sel: anymore
             assert "Sel:" not in out_str, f"Block still active:\n{out_str}"
 
-            # Save file (Ctrl+S)
+            # Save file (Ctrl+S -> Enter -> 'y')
             os.write(master, b"\x13")
-            time.sleep(0.3)
-            read_all_available(master, 0.3)
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
             # Dismiss save modal with space
             os.write(master, b" ")
             time.sleep(0.2)
@@ -1768,10 +1784,14 @@ def test_bug_2_4_23_backspace_cancels_block():
             out_str = out_bs.decode("utf-8", errors="replace")
             assert "Sel:" not in out_str, f"Block still active:\n{out_str}"
 
-            # Save file (Ctrl+S)
+            # Save file (Ctrl+S -> Enter -> 'y')
             os.write(master, b"\x13")
-            time.sleep(0.3)
-            read_all_available(master, 0.3)
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
+            time.sleep(0.2)
+            read_all_available(master, 0.2)
             # Dismiss save modal with space
             os.write(master, b" ")
             time.sleep(0.2)
@@ -3530,8 +3550,12 @@ def test_bug_2_4_45_line_ending_decoupling():
                 f"Expected 'CP/M  |' in status bar for CRLF file:\n{ed_out}"
             )
 
-            # Save via Ctrl+S -> directly saves and preserves detected format
+            # Save via Ctrl+S -> Save workspace -> Enter -> 'y'
             os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
             time.sleep(0.3)
             save_out = read_all_available(master, 0.4).decode(
                 "utf-8", errors="replace"
@@ -3718,8 +3742,12 @@ def test_bug_2_4_47_direct_inplace_block_manipulation():
             os.write(master, b"\r")
             time.sleep(0.1)
 
-            # Save file via Ctrl+S
+            # Save file via Ctrl+S -> Enter -> 'y'
             os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
             time.sleep(0.2)
             # Dismiss save notification modal
             os.write(master, b"\n")
@@ -3879,8 +3907,12 @@ def test_bug_2_4_49_line_join_boundary():
             os.write(master, b"\x08")
             time.sleep(0.2)
 
-            # Save via Ctrl+S and dismiss modal
+            # Save via Ctrl+S -> Enter -> 'y' and dismiss modal
             os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
             time.sleep(0.2)
             os.write(master, b"\n")
             time.sleep(0.2)
@@ -3935,8 +3967,12 @@ def test_bug_2_4_49_line_join_boundary():
             os.write(master, b"\x1b[3~")
             time.sleep(0.2)
 
-            # Save via Ctrl+S and dismiss modal
+            # Save via Ctrl+S -> Enter -> 'y' and dismiss modal
             os.write(master, b"\x13")
+            time.sleep(0.2)
+            os.write(master, b"\r")
+            time.sleep(0.2)
+            os.write(master, b"y")
             time.sleep(0.2)
             os.write(master, b"\n")
             time.sleep(0.2)
@@ -4432,6 +4468,79 @@ def test_bug_2_4_55_splash_ram_drive_and_config_cursor_state():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_bug_2_4_56_browser_keys_prompt_and_ctrl_s_workspace():
+    """Bug 2.4.56: Browser WordStar removal, POSIX filter prompt & Ctrl+S."""
+    print(
+        "[*] Testing Bug 2.4.56: Browser keys, prompt & Ctrl+S workspace..."
+    )
+    temp_dir = tempfile.mkdtemp(prefix="se_test_2456_")
+    try:
+        sample_path = os.path.join(temp_dir, "DOC.TXT")
+        with open(sample_path, "w") as f:
+            f.write("Hello World\n")
+
+        master, slave = pty.openpty()
+        pid = os.fork()
+        if pid == 0:
+            os.chdir(temp_dir)
+            os.close(master)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.dup2(slave, 2)
+            os.close(slave)
+            os.execl(SE_LINUX_BIN, "se-linux", "DOC.TXT")
+        else:
+            os.close(slave)
+            time.sleep(0.3)
+            read_all_available(master, 0.3)
+
+            # 1. Press Ctrl+S (\x13) on an already-named file: must open
+            #    SAVE FILE (DIRECTORY) workspace with filename pre-filled
+            os.write(master, b"\x13")
+            time.sleep(0.2)
+            save_out = read_all_available(master, 0.3).decode(
+                "utf-8", errors="replace"
+            )
+            assert "SAVE FILE (DIRECTORY)" in save_out, (
+                f"Expected 'SAVE FILE (DIRECTORY)' on Ctrl+S:\n{save_out}"
+            )
+            assert "DOC.TXT" in save_out, (
+                f"Expected pre-filled 'DOC.TXT' in Save box:\n{save_out}"
+            )
+            assert (
+                "Enter [path/][pattern] to list (e.g. src/, *.c, *.txt)"
+                in save_out
+            ), f"Expected POSIX path/pattern prompt hint:\n{save_out}"
+            assert "[d:][u:]" not in save_out, (
+                f"CP/M [d:][u:] prompt should not appear on Linux:\n{save_out}"
+            )
+
+            # 2. Verify Ctrl+S (\x13) does not move cursor left and Ctrl+D
+            #    (\x04) performs forward delete at Home (Ctrl+A / \x01)
+            os.write(master, b"\x01\x04")
+            time.sleep(0.2)
+            del_out = read_all_available(master, 0.2).decode(
+                "utf-8", errors="replace"
+            )
+            assert "OC.TXT" in del_out, (
+                f"Expected 'D' deleted by Ctrl+D at Home:\n{del_out}"
+            )
+
+            # Cancel Save workspace via ESC (\x1b) and exit via Ctrl+Q (\x11)
+            os.write(master, b"\x1b")
+            time.sleep(0.2)
+            os.write(master, b"\x11")
+            exit_code = wait_pid_with_timeout(pid, 2.0)
+            os.close(master)
+            assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+            print(
+                "    [+] Browser keys, prompt & Ctrl+S workspace verified "
+                "[PASS]"
+            )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     print("=" * 80)
     print(
@@ -4494,6 +4603,7 @@ def main():
     test_bug_2_4_53_builtin_plugin_system()
     test_bug_2_4_54_status_bar_field4_and_field5()
     test_bug_2_4_55_splash_ram_drive_and_config_cursor_state()
+    test_bug_2_4_56_browser_keys_prompt_and_ctrl_s_workspace()
 
     print("=" * 80)
     print("VERDICT: [ PASS ] All Linux Native Profile tests succeeded!")
