@@ -244,9 +244,11 @@ static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
 #endif
         }
         if (k == KEY_ESC) {
+#ifndef __CPM__
             while (hal_console_getkey() > 0) {
                 /* Drain trailing escape sequence bytes */
             }
+#endif
             restore_editor_screen();
             return -1;
         }
@@ -404,9 +406,11 @@ int do_ctrl_r_replace(void)
 #endif
                 }
                 if (k == KEY_ESC) {
+#ifndef __CPM__
                     while (hal_console_getkey() > 0) {
                         /* Drain trailing escape sequence bytes */
                     }
+#endif
                     ans = MODAL_RES_CANCEL;
                     break;
                 }

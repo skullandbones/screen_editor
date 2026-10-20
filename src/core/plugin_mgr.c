@@ -119,11 +119,13 @@ void plugin_manager_ui(void)
 #endif
         }
         if (k == KEY_ESC || k == 'q' || k == 'Q') {
+#ifndef __CPM__
             if (k == KEY_ESC) {
                 while (hal_console_getkey() > 0) {
                     /* Drain trailing escape sequence bytes */
                 }
             }
+#endif
             break;
         }
     }
@@ -228,9 +230,11 @@ void show_plugin_palette(void)
         }
 
         if (k == KEY_ESC) {
+#ifndef __CPM__
             while (hal_console_getkey() > 0) {
                 /* Drain trailing escape sequence bytes */
             }
+#endif
             break;
         }
         if (k >= '1' && k <= '3') {

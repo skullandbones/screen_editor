@@ -4426,6 +4426,26 @@ have been resolved and archived.
       `top + 2` title separator border, and display `"[Q]/[ESC]=Return"`
       without trailing ellipses. Verified via `tests/test_linux_native.py` and
       `tests/test_sanity.py --sec`.
+  - [x] **Bug 2.8.23: Blocking `hal_console_getkey()` Drain Loop on `KEY_ESC`
+    Swallows Next Keystroke on CP/M**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3 (Archetypes A, B, C,
+      D), 10.3.
+    - *Issue*: In `src/core/ui_modal.c` (`modal_alert`, `modal_confirm`,
+      `modal_goto_line`), `src/core/search.c` (`prompt_search_box`,
+      `do_ctrl_r_replace`), and `src/core/plugin_mgr.c` (`plugin_manager_ui`,
+      `show_plugin_palette`), pressing `KEY_ESC` executes
+      `while (hal_console_getkey() > 0)` to drain trailing escape sequence
+      bytes. While `hal_console_getkey()` is non-blocking on Linux (`poll(...,
+      0)`), on CP/M (`src/hal/cpm/hal_cpm_keyboard.c:82`) it calls blocking
+      `bios_conin()` and already drains any trailing CSI/escape bytes via
+      `cpm_read_byte_timeout()`. Consequently, calling `hal_console_getkey()`
+      after `KEY_ESC` on CP/M blocks the editor before repainting the screen and
+      consumes the user's next command keystroke (e.g. `Ctrl+S` in Step 17 after
+      canceling `Ctrl+F` with `ESC` in Step 16).
+    - *Resolution*: Guarded the `while (hal_console_getkey() > 0)` post-`ESC`
+      drain loops under `#ifndef __CPM__` in `src/core/ui_modal.c`,
+      `src/core/search.c`, and `src/core/plugin_mgr.c`. Verified via Step 16–17
+      of `tests/test_editor_headless.py --sec`.
 
 ---
 

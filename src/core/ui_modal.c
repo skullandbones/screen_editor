@@ -159,9 +159,11 @@ int modal_alert(const char *title, const char *msg1, const char *msg2)
 #endif
         }
         if (k == KEY_ESC) {
+#ifndef __CPM__
             while (hal_console_getkey() > 0) {
                 /* Drain trailing escape sequence bytes */
             }
+#endif
         }
     }
     g_need_screen_render = 1;
@@ -201,9 +203,11 @@ int modal_confirm(const char *title, const char *msg,
         }
         if (k == KEY_ESC) {
             /* Cancelable solely by ESC (not Ctrl+C or q) */
+#ifndef __CPM__
             while (hal_console_getkey() > 0) {
                 /* Drain trailing escape sequence bytes */
             }
+#endif
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
@@ -413,9 +417,11 @@ int modal_goto_line(char *buffer, size_t max_len)
             }
             return MODAL_RES_OK;
         } else if (k == KEY_ESC) {
+#ifndef __CPM__
             while (hal_console_getkey() > 0) {
                 /* Drain trailing escape sequence bytes */
             }
+#endif
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
