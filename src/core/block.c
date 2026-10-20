@@ -53,10 +53,12 @@ void cancel_block(void)
 void solidify_block(void)
 {
     if (g_block_mode == BLOCK_MODE_SELECTING) {
-        g_block_mode = BLOCK_MODE_SOLIDIFIED;
-        g_block_active_row = g_cur_doc_row;
-        g_block_active_col = g_cur_col;
         normalize_block_bounds();
+        g_block_anchor_row = g_norm_start_row;
+        g_block_anchor_col = g_norm_start_col;
+        g_block_active_row = g_norm_end_row;
+        g_block_active_col = g_norm_end_col;
+        g_block_mode = BLOCK_MODE_SOLIDIFIED;
         g_need_screen_render = 1;
     }
 }
@@ -84,9 +86,9 @@ void normalize_block_bounds(void)
         g_norm_end_col = g_block_active_col;
     } else if (g_block_anchor_row > g_block_active_row) {
         g_norm_start_row = g_block_active_row;
-        g_norm_start_col = g_block_active_col;
+        g_norm_start_col = g_block_active_col + 1;
         g_norm_end_row = g_block_anchor_row;
-        g_norm_end_col = g_block_anchor_col;
+        g_norm_end_col = g_block_anchor_col + 1;
     } else {
         g_norm_start_row = g_block_anchor_row;
         g_norm_end_row = g_block_anchor_row;
@@ -94,8 +96,8 @@ void normalize_block_bounds(void)
             g_norm_start_col = g_block_anchor_col;
             g_norm_end_col = g_block_active_col;
         } else {
-            g_norm_start_col = g_block_active_col;
-            g_norm_end_col = g_block_anchor_col;
+            g_norm_start_col = g_block_active_col + 1;
+            g_norm_end_col = g_block_anchor_col + 1;
         }
     }
 }

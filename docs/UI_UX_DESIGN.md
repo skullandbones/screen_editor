@@ -1400,6 +1400,15 @@ or display notifications.
 --------------------------------------------------------------------------------
 1. Block Marker Model:
    - Half-open interval: `[StartRow:StartCol, EndRow:EndCol)`.
+   - Forward vs. Backwards Normalization (`NORMALIZE_BLOCK_BOUNDS`):
+     - Forward selection (`Anchor <= Cursor`): `Start = Anchor` (inclusive),
+       `End = Cursor` (exclusive).
+     - Backwards selection (`Cursor < Anchor`): The cursor position is excluded
+       and the anchor character is included:
+       `Start = (CursorRow, CursorCol + 1)`, `End = (AnchorRow, AnchorCol + 1)`.
+       This ensures the cursor position immediately to the left of the selected
+       span lies outside `[StartCol, EndCol)` so `Ctrl+C` / `Ctrl+X` can paste
+       at the cursor position after solidifying.
    - Multi-Line Count Rule (`GET_BLOCK_BOUNDS`):
      - When `EndRow > StartRow`, the multi-line count is
        `(EndRow - StartRow) + (1 if EndCol > 0 else 0)`. When `EndCol == 0`,

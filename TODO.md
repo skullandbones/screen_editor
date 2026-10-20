@@ -4505,6 +4505,32 @@ have been resolved and archived.
       ((g_norm_end_col > 0) ? 1 : 0)`. Documented the Multi-Line Count Rule in
       Section 9.1 of `docs/UI_UX_DESIGN.md`. Verified via Step 36 of
       `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.27: Backwards Block Selection Normalization Includes Cursor
+    Instead of Anchor (`NBB_COL_CB` / `NBB_CUR_FIRST`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1 (`NORMALIZE_BLOCK_BOUNDS`
+      in `src/core/block.asm:528-564`).
+    - *Issue*: In `src/core/block.c:80-100` (`normalize_block_bounds`), when
+      selecting backwards (`g_block_active_row < g_block_anchor_row` or
+      `g_block_active_col < g_block_anchor_col` on the same row), the C port
+      sets `g_norm_start_col = g_block_active_col` and
+      `g_norm_end_col = g_block_anchor_col`. In contrast, canonical Z80
+      `NORMALIZE_BLOCK_BOUNDS` (`src/core/block.asm:528-564`) excludes the
+      cursor position and includes the anchor character by setting
+      `BLOCK_START_COL = CUR_COL + 1` and
+      `BLOCK_END_COL = BLOCK_ANCHOR_COL + 1`. Because `normalize_block_bounds()`
+      did not add `+ 1` on backwards selection, after solidifying a backwards
+      selection with `Enter`, the cursor sat at `g_norm_start_col` (inside the
+      half-open interval `[g_norm_start_col, g_norm_end_col)`), causing
+      `do_copy_block()` (`Ctrl+C`) at the cursor to be rejected by
+      `check_cursor_in_block()` in Step 38.
+    - *Resolution*: Updated `normalize_block_bounds()` in `src/core/block.c` to
+      set `g_norm_start_col = g_block_active_col + 1` and
+      `g_norm_end_col = g_block_anchor_col + 1` when `Cursor < Anchor`, and
+      updated `solidify_block()` to lock the normalized coordinates into
+      `g_block_anchor_*` and `g_block_active_*` before transitioning to
+      `BLOCK_MODE_SOLIDIFIED`. Documented Forward vs. Backwards Normalization in
+      Section 9.1 of `docs/UI_UX_DESIGN.md`. Verified via Step 38 of
+      `tests/test_editor_headless.py --sec`.
 
 ---
 
