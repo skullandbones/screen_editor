@@ -61,11 +61,20 @@ def find_paths():
         )
         os.chmod(img_file, 0o644)
     se_bin = os.path.join(repo_root, "SE.COM")
+    sec_bin = os.path.join(repo_root, "SEC.COM")
     cpmrm_bin = os.path.join(
         tools_dir, "romwbw_src", "Tools", "Linux", "cpmrm"
     )
+    cpmcp_bin = os.path.join(
+        tools_dir, "romwbw_src", "Tools", "Linux", "cpmcp"
+    )
+    diskdefs_path = os.path.join(
+        tools_dir, "romwbw_src", "Tools", "cpmtools", "diskdefs"
+    )
+    if os.path.isfile(diskdefs_path) and "DISKDEFS" not in os.environ:
+        os.environ["DISKDEFS"] = diskdefs_path
 
-    return emu_bin, rom_file, img_file, se_bin, cpmrm_bin
+    return emu_bin, rom_file, img_file, se_bin, sec_bin, cpmrm_bin, cpmcp_bin
 
 def read_until(master_fd, match_bytes, timeout=5.0):
     buf = b""
@@ -99,9 +108,13 @@ def drain_all(master_fd, quiet_time=0.1):
 
 def run_sanity_test(use_sec=False):
     t_start = time.time()
-    emu_bin, rom_file, img_file, se_bin, cpmrm_bin = find_paths()
+    (emu_bin, rom_file, img_file, se_bin, sec_bin,
+     cpmrm_bin, cpmcp_bin) = find_paths()
     target_name = "SEC.COM" if use_sec else "SE.COM"
+    target_bin = sec_bin if use_sec else se_bin
     cmd_name = b"sec" if use_sec else b"se"
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    two_txt_host = os.path.join(repo_root, "2.TXT")
 
     if not os.path.isfile(emu_bin):
         print(f"[-] Emulator binary not found: {emu_bin}", flush=True)
@@ -121,6 +134,24 @@ def run_sanity_test(use_sec=False):
         subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file, "0:SE.CFG"],
                        stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL)
+        if os.path.isfile(cpmcp_bin) and os.path.isfile(target_bin):
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file,
+                            f"0:{target_name}"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+            subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                            target_bin, f"0:{target_name}"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+        if os.path.isfile(cpmcp_bin) and os.path.isfile(two_txt_host):
+            subprocess.run([cpmrm_bin, "-f", "wbw_hd1k_0", img_file,
+                            "0:2.TXT"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+            subprocess.run([cpmcp_bin, "-f", "wbw_hd1k_0", img_file,
+                            two_txt_host, "0:2.TXT"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
 
     print(f"[*] Launching RomWBW on RC2014 emulator ({target_name} Sanity)...",
           flush=True)
@@ -267,8 +298,8 @@ def run_sanity_test(use_sec=False):
         print("[+] Step 8: Clean exit with unsaved prompt verified.",
               flush=True)
 
-        # 9. Verify CLI file load & clean status bar filename: '<cmd> 2.TXT'
-        print(f"[*] Step 9: Verifying CLI file load & status bar "
+        # 9. Verify CLI file load, status bar & file contents: '<cmd> 2.TXT'
+        print(f"[*] Step 9: Verifying CLI file load, status bar & contents "
               f"({cmd_name.decode()} 2.TXT)...", flush=True)
         drain_all(master)
         time.sleep(0.5)
@@ -284,8 +315,16 @@ def run_sanity_test(use_sec=False):
                   f"erroneous 'U:' suffix! Buffer: {repr(out_load[-400:])}",
                   flush=True)
             return False
-        print(f"[+] Step 9: Verified clean status bar for CP/M file "
-              f"({cmd_name.decode()} 2.TXT): '| C:2.TXT        |'.", flush=True)
+        if (b"Line    1/2" not in out_load or
+                b"First line of two" not in out_load or
+                b"Second line of two" not in out_load):
+            print(f"[-] Step 9: File contents of 2.TXT not rendered in "
+                  f"editor window. Buffer: {repr(out_load[-400:])}",
+                  flush=True)
+            return False
+        print(f"[+] Step 9: Verified status bar ('| C:2.TXT        |', "
+              f"'Line    1/2') and 2.TXT contents in editor window.",
+              flush=True)
 
         # Clean exit to CP/M
         time.sleep(0.3)
