@@ -394,8 +394,9 @@ int do_ctrl_r_replace(void)
                                     "Match found for search pattern in text");
             modal_draw_row_centered(top + 4, left, 50,
                                     "Replace this occurrence?");
-            modal_draw_row_centered(top + 5, left, 50,
-                                    "[Y]es  [N]o  [A]ll   [ESC]=Cancel");
+            modal_draw_row_centered(
+                top + 5, left, 50,
+                "[Y]es  [N]o  [A]ll  [R]everse   [ESC]=Cancel");
             hal_console_locate(top + 4, (uint8_t)(left + 36));
             hal_console_show_cursor();
             while (1) {

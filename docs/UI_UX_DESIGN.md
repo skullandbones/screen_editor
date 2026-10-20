@@ -1296,6 +1296,21 @@ or display notifications.
        (Col 40).
      - Confirmed via `Y`/`y`, cancelled via `N`/`n` or `ESC`.
 
+     Replace Confirmation Modal Dialog (50 cols x 7 rows):
+     ```text
+     +------------------------------------------------+
+     |              Replace Confirmation              |
+     +------------------------------------------------+
+     |     Match found for search pattern in text     |
+     |            Replace this occurrence?            |
+     |  [Y]es  [N]o  [A]ll  [R]everse   [ESC]=Cancel  |
+     +------------------------------------------------+
+     ```
+     - Displays for each interactive match during Search & Replace (`Ctrl+R`).
+     - Confirmed via `Y`/`y`/`Enter`, skipped via `N`/`n`, switched to
+       unprompted Replace All via `A`/`a`, direction-reversed via `R`/`r`
+       (or `P`/`p`), and cancelled via `ESC` (`[Q]uit` is prohibited).
+
    Archetype C: Single-Line Text Input (`show_input`)
      Used for text parameters (Find string, Replace string, Goto Line).
      Target input field enclosed in bracket pair `[  text  ]`.

@@ -4547,6 +4547,21 @@ have been resolved and archived.
       `SHIFT_CURSOR_*` in `src/core/editor.asm:485-500`. Documented `Shift +
       Arrow` behavior in `docs/UI_UX_DESIGN.md` Section 9.1. Verified via Step
       39 of `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.29: `Replace Confirmation` Modal Footer Missing `[R]everse`
+    Option**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (`STR_REP_CONFIRM_KEYS` in
+      `src/core/plugin_mgr.asm:4127`).
+    - *Issue*: In `src/core/search.c:398` (`do_ctrl_r_replace`), the `Replace
+      Confirmation` modal action footer displays
+      `"[Y]es  [N]o  [A]ll   [ESC]=Cancel"`, omitting `[R]everse` which is
+      required by canonical `SE.COM` (`"[Y]es  [N]o  [A]ll  [R]everse
+      [ESC]=Cancel"`) and checked in Step 47 of
+      `tests/test_editor_headless.py`.
+    - *Resolution*: Updated the `Replace Confirmation` modal footer in
+      `src/core/search.c` to `"[Y]es  [N]o  [A]ll  [R]everse   [ESC]=Cancel"`
+      and added the `Replace Confirmation Modal Dialog` template to Section 8.3
+      of `docs/UI_UX_DESIGN.md`. Verified via Step 47 of
+      `tests/test_editor_headless.py --sec`.
 
 ---
 
