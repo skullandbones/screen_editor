@@ -44,6 +44,7 @@ extern char     g_current_filename[32];
 extern char     g_current_filename[256];
 #endif
 extern uint8_t  g_file_format;
+extern uint8_t  g_is_loading_file;
 #ifdef __CPM__
 extern uint8_t   g_cpm_dma_buf[128];
 extern cpm_fcb_t g_cpm_fcb;

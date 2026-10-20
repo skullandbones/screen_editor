@@ -16,6 +16,7 @@
 #include "../../include/hal.h"
 #include "../../include/file_io.h"
 
+#ifndef __CPM__
 int hal_storage_open(const char *path, void *handle)
 {
     cpm_fcb_t *fcb = (cpm_fcb_t *)handle;
@@ -66,3 +67,4 @@ int hal_storage_write_sec(void *handle, const uint8_t *buf)
     bdos(26, (int)buf);
     return (bdos(21, (int)fcb) == 0) ? 0 : 1;
 }
+#endif

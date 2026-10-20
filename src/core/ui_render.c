@@ -255,15 +255,24 @@ void render_status_bar(void)
         vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
     }
 
-    snprintf(core, sizeof(core),
-             "| %-14.14s | %s | %s | %-15.15s | Line %4u/%-4u Col %-3u |",
-             raw_name,
-             (g_active_cols == SCREEN_COLS_120) ? "120x40" : " 80x24",
-             (g_file_format == FMT_CPM) ? "CP/M " : "Linux",
-             f4,
-             (unsigned)(g_cur_doc_row + 1),
-             (unsigned)g_doc_total_lines,
-             (unsigned)vis_col);
+    if (g_is_loading_file) {
+        snprintf(core, sizeof(core),
+                 "| %-14.14s | %s |       | %-15.15s | "
+                 "Line    1/---- Col 0   |",
+                 raw_name,
+                 (g_active_cols == SCREEN_COLS_120) ? "120x40" : " 80x24",
+                 f4);
+    } else {
+        snprintf(core, sizeof(core),
+                 "| %-14.14s | %s | %s | %-15.15s | Line %4u/%-4u Col %-3u |",
+                 raw_name,
+                 (g_active_cols == SCREEN_COLS_120) ? "120x40" : " 80x24",
+                 (g_file_format == FMT_CPM) ? "CP/M " : "Linux",
+                 f4,
+                 (unsigned)(g_cur_doc_row + 1),
+                 (unsigned)g_doc_total_lines,
+                 (unsigned)vis_col);
+    }
 
     pad = (g_active_cols > 78) ? (uint8_t)((g_active_cols - 78) / 2) : 1;
     right_pad = (g_active_cols > (78 + pad)) ?

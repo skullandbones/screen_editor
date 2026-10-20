@@ -23,6 +23,7 @@
 #include <unistd.h>
 #endif
 
+#ifndef __CPM__
 static plugin_entry_t s_plugin_registry[PLUGIN_MAX_SLOTS];
 static uint8_t        s_plugin_count = 0;
 
@@ -81,6 +82,9 @@ int plugin_exec_slot(uint8_t slot, uint8_t action)
     /* Dispatch action to plugin */
     return 0;
 }
+#else
+void plugin_init_registry(void) {}
+#endif
 
 void plugin_manager_ui(void)
 {
@@ -97,12 +101,15 @@ void plugin_manager_ui(void)
                         "   Slot  Name      Status      Capabilities");
 
     for (i = 0; i < PLUGIN_MAX_SLOTS; i++) {
-        char buf[64];
+        char buf[48];
+#ifndef __CPM__
         if (s_plugin_registry[i].active) {
             snprintf(buf, sizeof(buf),
                      "   [%u]   %-8.8s  Active      Far RAM Exec",
                      (unsigned)i, s_plugin_registry[i].name);
-        } else {
+        } else
+#endif
+        {
             snprintf(buf, sizeof(buf), "   [%u]   --------  (empty)     ---",
                      (unsigned)i);
         }

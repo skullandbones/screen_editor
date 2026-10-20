@@ -20,8 +20,10 @@
 #include "../include/file_io.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/hal.h"
 
 /* Global File Filename and Format State */
+uint8_t g_is_loading_file = 0;
 #ifdef __CPM__
 char    g_current_filename[32];
 uint8_t g_file_format = FMT_CPM;
@@ -153,31 +155,60 @@ static void cpm_format_doc_filename(const cpm_fcb_t *fcb, uint8_t user)
     *dst = '\0';
 }
 
-static void cpm_commit_loaded_line(uint16_t row, uint16_t col,
-                                   uint8_t is_insert)
+static void cpm_commit_loaded_line(uint16_t row, uint16_t col)
 {
+    uint16_t slot_id = SLOT_TERM;
     g_scratch_line_buf[col] = '\0';
-    if (!is_insert) {
-        uint16_t slot_id = SLOT_TERM;
-        if (col > 0) {
-            mem_write_line(&slot_id, g_scratch_line_buf, col);
-        }
-        set_line_slot(row, slot_id);
-        return;
+    if (col > 0) {
+        mem_write_line(&slot_id, g_scratch_line_buf, col);
     }
-    insert_blank_line(row);
-    checkout_active_line(row);
-    memcpy(g_active_line_buf, g_scratch_line_buf, col + 1);
-    g_active_line_len = col;
-    commit_active_line();
+    set_line_slot(row, slot_id);
+}
+
+static void draw_progress_tick(uint16_t lines)
+{
+    char lbuf[16];
+    uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
+    snprintf(lbuf, sizeof(lbuf), "Line %5u", (unsigned)lines);
+    modal_draw_row_centered(top + 4, left, 50, lbuf);
+}
+
+static void draw_progress_modal(const char *title, uint8_t is_loading)
+{
+    char fbuf[40];
+    uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
+    uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
+    uint8_t r;
+
+    hal_console_hide_cursor();
+    if (is_loading) {
+        hal_console_clear();
+        for (r = 1; r < g_active_rows; r++) {
+            hal_console_puts("~\r\n");
+        }
+    }
+    render_status_bar();
+    modal_draw_frame(top, left, 50, 7, title);
+    snprintf(fbuf, sizeof(fbuf), "File: %s",
+             g_current_filename[0] ? g_current_filename : "(Untitled)");
+    modal_draw_row_centered(top + 3, left, 50, fbuf);
+    draw_progress_tick(is_loading ? 1 : 0);
+    modal_draw_row_centered(top + 5, left, 50, "Please wait...");
 }
 
 static int file_read_op(const char *filename, uint8_t is_insert)
 {
-    char *line_buf = g_scratch_line_buf;
+    char *line_buf;
+    char saved_fname[32];
     uint16_t row;
     uint16_t col = 0;
     uint16_t target_line = 0;
+    uint16_t orig_row = 0, orig_col = 0;
+    uint16_t suffix_slot = SLOT_TERM, suffix_len = 0;
+    uint16_t prog_lines = 0;
+    uint8_t prog_cnt = 100;
+    uint8_t saved_mod = g_doc_modified;
     int i;
     int done = 0;
     int orig_user;
@@ -212,12 +243,47 @@ static int file_read_op(const char *filename, uint8_t is_insert)
         buffer_init();
         s_cpm_io_fcb.drive = saved_drv;
         g_target_user = saved_usr;
+        g_doc_drive = saved_drv;
+        g_doc_user = saved_usr;
+        cpm_format_doc_filename(&s_cpm_io_fcb, g_doc_user);
         g_file_format = FMT_LINUX;
         row = 0;
+        line_buf = g_scratch_line_buf;
     } else {
-        commit_active_line();
-        row = g_cur_doc_row;
+        strcpy(saved_fname, g_current_filename);
+        cpm_format_doc_filename(&s_cpm_io_fcb, g_target_user);
+        if (g_block_mode != BLOCK_MODE_OFF) {
+            normalize_block_bounds();
+            if (g_norm_start_row != g_norm_end_row ||
+                g_norm_start_col != g_norm_end_col) {
+                do_delete_block();
+            } else {
+                cancel_block();
+                g_cur_doc_row = g_norm_start_row;
+                g_cur_col = g_norm_start_col;
+            }
+        }
+        checkout_active_line(g_cur_doc_row);
+        if (g_cur_col > g_active_line_len) {
+            g_cur_col = g_active_line_len;
+        }
+        orig_row = g_cur_doc_row;
+        orig_col = g_cur_col;
+        suffix_len = g_active_line_len - orig_col;
+        if (suffix_len > 0) {
+            mem_write_line(&suffix_slot, g_active_line_buf + orig_col,
+                           suffix_len);
+        }
+        g_active_line_len = orig_col;
+        g_active_line_buf[orig_col] = '\0';
+        row = orig_row;
+        col = orig_col;
+        line_buf = g_active_line_buf;
     }
+
+    g_doc_modified = 0;
+    g_is_loading_file = 1;
+    draw_progress_modal(is_insert ? "Inserting File" : "Opening File", 1);
 
     bdos(26, (int)s_cpm_sec_buf);
 
@@ -236,9 +302,24 @@ static int file_read_op(const char *filename, uint8_t is_insert)
                 continue;
             }
             if (c == '\n') {
-                cpm_commit_loaded_line(row, col, is_insert);
-                row++;
-                col = 0;
+                if (!is_insert) {
+                    cpm_commit_loaded_line(row, col);
+                    row++;
+                    col = 0;
+                } else {
+                    g_active_line_len = col;
+                    g_active_line_buf[col] = '\0';
+                    commit_active_line();
+                    insert_blank_line(row + 1);
+                    row++;
+                    checkout_active_line(row);
+                    col = 0;
+                }
+                prog_lines++;
+                if (--prog_cnt == 0) {
+                    prog_cnt = 100;
+                    draw_progress_tick(prog_lines);
+                }
                 continue;
             }
             if (col + 1 < MAX_INPUT_LINE_CHARS) {
@@ -247,19 +328,45 @@ static int file_read_op(const char *filename, uint8_t is_insert)
         }
     }
 
-    if (col > 0 || (!is_insert && row == 0)) {
-        cpm_commit_loaded_line(row, col, is_insert);
+    if (!is_insert && (col > 0 || row == 0)) {
+        cpm_commit_loaded_line(row, col);
         row++;
+        prog_lines++;
+    } else if (is_insert) {
+        uint16_t end_row = row;
+        uint16_t end_col = col;
+        prog_lines++;
+        if (suffix_slot != SLOT_TERM) {
+            uint16_t slen = mem_read_line(suffix_slot, g_scratch_line_buf,
+                                          MAX_INPUT_LINE_CHARS);
+            mem_free_line_chain(suffix_slot);
+            if (col + slen >= MAX_INPUT_LINE_CHARS) {
+                slen = (MAX_INPUT_LINE_CHARS - 1) - col;
+            }
+            memcpy(g_active_line_buf + col, g_scratch_line_buf, slen);
+            col += slen;
+        }
+        g_active_line_len = col;
+        g_active_line_buf[col] = '\0';
+        commit_active_line();
+        g_cur_doc_row = end_row;
+        g_cur_col = end_col;
+        if (orig_row != end_row || orig_col != end_col) {
+            g_block_anchor_row = g_norm_start_row = orig_row;
+            g_block_anchor_col = g_norm_start_col = orig_col;
+            g_block_active_row = g_norm_end_row = end_row;
+            g_block_active_col = g_norm_end_col = end_col;
+            g_block_mode = BLOCK_MODE_SOLIDIFIED;
+        }
     }
+    draw_progress_tick(prog_lines ? prog_lines : 1);
+    g_is_loading_file = 0;
 
     bdos(16, (int)&s_cpm_io_fcb);
     bdos(26, DEFAULT_DMA);
     bdos(32, orig_user);
 
     if (!is_insert) {
-        g_doc_drive = s_cpm_io_fcb.drive;
-        g_doc_user = g_target_user;
-        cpm_format_doc_filename(&s_cpm_io_fcb, g_doc_user);
         g_doc_total_lines = row ? row : 1;
         g_cur_doc_row = 0;
         g_cur_col = 0;
@@ -267,10 +374,13 @@ static int file_read_op(const char *filename, uint8_t is_insert)
         g_doc_modified = 0;
         g_active_line_valid = 0;
     } else {
+        strcpy(g_current_filename, saved_fname);
         g_doc_modified = 1;
+        (void)saved_mod;
     }
 
     checkout_active_line(g_cur_doc_row);
+    g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
     if (!is_insert && target_line > 0) {
         goto_line(target_line);
     }

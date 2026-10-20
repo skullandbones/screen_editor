@@ -193,6 +193,7 @@ static void beautify_line(uint16_t row)
     commit_active_line();
 }
 
+#ifndef __CPM__
 void beautify_document(void)
 {
     uint16_t r;
@@ -212,15 +213,21 @@ void beautify_block(uint16_t start_row, uint16_t end_row)
     g_doc_modified = 1;
     g_need_screen_render = 1;
 }
+#endif
 
 int do_ctrl_y_beautify(void)
 {
+    uint16_t r, s = 0, e = g_doc_total_lines ? (g_doc_total_lines - 1) : 0;
     if (g_block_mode != BLOCK_MODE_OFF) {
         normalize_block_bounds();
-        beautify_block(g_norm_start_row, g_norm_end_row);
-    } else {
-        beautify_document();
+        s = g_norm_start_row;
+        e = g_norm_end_row;
     }
+    for (r = s; r <= e && r < g_doc_total_lines; r++) {
+        beautify_line(r);
+    }
+    g_doc_modified = 1;
+    g_need_screen_render = 1;
     modal_show_notification("Beautify Complete",
                             "Assembly formatting applied.");
     return 0;

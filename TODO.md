@@ -4718,6 +4718,29 @@ have been resolved and archived.
       `16384` and `MAX_ACTIVE_SLOTS` to `3072` in `src/include/config.h`, and
       updated `cpm_commit_loaded_line()` in `src/core/file_io.c` to write
       loaded lines in O(1) directly to `set_line_slot(row, slot_id)`.
+  - [x] **Bug 2.8.37: Block Insert File (`file_insert`) Inserting Full Lines
+    Above Cursor Without Splitting Host Line, Replacing Selected Block,
+    Solidifying Inserted Range, or Showing Progress Modal**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6 (Insert File into Block
+      `Ctrl+B` then `Ctrl+O`), Section 8.5 (Opening / Inserting / Saving File
+      Progress Modals), and `src/core/ui_browser.asm:885-984, 1736-2203`
+      (**Non-Conformity with `UI_UX_DESIGN.md`**).
+    - *Issue*: `file_read_op(..., is_insert=1)` in `src/core/file_io.c` called
+      `insert_blank_line(row)` before the active line instead of deleting any
+      non-empty active block selection, splitting the active host line at
+      `g_cur_col`, streaming inserted characters/lines into place, re-attaching
+      the host suffix, and solidifying the inserted text span as
+      `BLOCK_MODE_SOLIDIFIED`. Additionally, `file_read_op()` omitted the
+      tilde-prefixed loading screen, neutral loading status bar (`|       |`
+      and `Line    1/----`), and `Opening File` / `Inserting File` progress
+      modal, causing Step 66 (and Step 75) to fail.
+    - *Resolution*: Updated `file_read_op()` in `src/core/file_io.c` and
+      `render_status_bar()` in `src/core/ui_render.c` to render the tilde
+      background, loading status bar, and `Opening File` / `Inserting File`
+      progress modal with 100-line ticks, and implemented full mid-line block
+      file insertion with non-empty block replacement, host line suffix
+      preservation, `g_current_filename` restoration, and solidified block
+      bounds around the inserted text.
 
 ---
 
