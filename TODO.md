@@ -4484,6 +4484,27 @@ have been resolved and archived.
       and `\x1b[0m` are emitted only on span transitions. Clarified Contiguous
       Inverse Span & Tab Expansion Highlighting in `docs/UI_UX_DESIGN.md`
       Section 9.2. Verified via Step 35 of `tests/test_editor_headless.py`.
+  - [x] **Bug 2.8.26: Multi-Line Block Count Off-By-One When `g_norm_end_col ==
+    0`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 9.1, 9.2
+      (`GET_BLOCK_BOUNDS` in `src/core/block.asm:591-622`).
+    - *Issue*: In `src/core/ui_render.c:234-236, 333-335` (`render_status_bar`)
+      and `src/core/block.c:454` (`do_block_menu_popup`), multi-line block line
+      counts are computed unconditionally as
+      `g_norm_end_row - g_norm_start_row + 1`. Because SE uses a half-open block
+      interval `[StartRow:StartCol, EndRow:EndCol)`, when `g_norm_end_col == 0`
+      and `g_norm_end_row > g_norm_start_row`, `g_norm_end_row` contributes 0
+      characters (`GET_BLOCK_BOUNDS` in `src/core/block.asm:605-616` only
+      increments `end_row - start_row` when `BLOCK_END_COL > 0`). Thus,
+      selecting from `(Row 1, Col 0)` down 1 row to `(Row 2, Col 0)` in Step 36
+      reports `Sel: 2 lines` / `Block: 2 lines` instead of canonical `Sel: 1
+      line` / `Block: 1 line`.
+    - *Resolution*: Updated multi-line block count calculations in
+      `render_status_bar()` (`src/core/ui_render.c`) and `do_block_menu_popup()`
+      (`src/core/block.c`) to `g_norm_end_row - g_norm_start_row +
+      ((g_norm_end_col > 0) ? 1 : 0)`. Documented the Multi-Line Count Rule in
+      Section 9.1 of `docs/UI_UX_DESIGN.md`. Verified via Step 36 of
+      `tests/test_editor_headless.py --sec`.
 
 ---
 

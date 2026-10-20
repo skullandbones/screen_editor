@@ -451,7 +451,8 @@ int do_block_menu_popup(void)
         snprintf(metrics, sizeof(metrics), "%s%u %s",
                  pre, (unsigned)chars, (chars == 1) ? "char" : "chars");
     } else {
-        uint16_t lines = g_norm_end_row - g_norm_start_row + 1;
+        uint16_t lines = g_norm_end_row - g_norm_start_row +
+                         ((g_norm_end_col > 0) ? 1 : 0);
         snprintf(metrics, sizeof(metrics), "%s%u %s",
                  pre, (unsigned)lines, (lines == 1) ? "line" : "lines");
     }

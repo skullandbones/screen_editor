@@ -232,7 +232,8 @@ void render_status_bar(void)
                    ((cnt == 1) ? " char" : " chars");
         } else {
             cnt = (g_norm_end_row >= g_norm_start_row) ?
-                (g_norm_end_row - g_norm_start_row + 1) : 1;
+                (g_norm_end_row - g_norm_start_row +
+                 ((g_norm_end_col > 0) ? 1 : 0)) : 1;
             unit = (!is_sel && cnt >= 100) ? "L" :
                    ((cnt == 1) ? " line" : " lines");
         }
@@ -331,7 +332,8 @@ void render_status_bar(void)
                    ((cnt == 1) ? " char" : " chars");
         } else {
             cnt = (g_norm_end_row >= g_norm_start_row) ?
-                (g_norm_end_row - g_norm_start_row + 1) : 1;
+                (g_norm_end_row - g_norm_start_row +
+                 ((g_norm_end_col > 0) ? 1 : 0)) : 1;
             unit = (!is_sel && cnt >= 100) ? "L" :
                    ((cnt == 1) ? " line" : " lines");
         }

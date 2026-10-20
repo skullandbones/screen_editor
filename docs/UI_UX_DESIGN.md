@@ -1400,6 +1400,11 @@ or display notifications.
 --------------------------------------------------------------------------------
 1. Block Marker Model:
    - Half-open interval: `[StartRow:StartCol, EndRow:EndCol)`.
+   - Multi-Line Count Rule (`GET_BLOCK_BOUNDS`):
+     - When `EndRow > StartRow`, the multi-line count is
+       `(EndRow - StartRow) + (1 if EndCol > 0 else 0)`. When `EndCol == 0`,
+       `EndRow` is exclusive (contributes 0 characters on `EndRow`), so a
+       selection from `(Row 1, Col 0)` to `(Row 2, Col 0)` spans `1 line`.
    - Toggled via `Ctrl+B`.
    - Cursor movement extends selection range.
 
