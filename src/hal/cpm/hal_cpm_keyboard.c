@@ -193,9 +193,12 @@ int hal_console_getkey(void)
         return KEY_ENTER;
     }
 
-    /* Translate Backspace */
-    if (c == 127 || c == 8) {
+    /* Translate Backspace and Rubout/Delete */
+    if (c == 8) {
         return KEY_BACKSPACE;
+    }
+    if (c == 127) {
+        return KEY_DEL;
     }
 
     return (int)c;

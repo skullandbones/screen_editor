@@ -4897,6 +4897,26 @@ have been resolved and archived.
       `src/core/ui_browser.asm`), and packed `raw_name` (`+32`), `sbuf`
       (`+50`), and `core` (`+68`, 84 bytes) in `render_status_bar()` within the
       152-byte bounds of `g_scratch_line_buf`.
+  - [x] **Bug 2.8.46: `hal_console_getkey()` Mapped ASCII `0x7F` (`KEY_DEL`) to
+    `KEY_BACKSPACE`, Preventing `0x7F` From Deleting Active Block or Character
+    Under Cursor**:
+    - *Reference*: `src/hal/cpm/hal_cpm_keyboard.c:196-200`,
+      `src/se.asm:1319-1327`, `src/core/editor.c:556, 562`.
+    - *Issue*: `hal_console_getkey()` in `src/hal/cpm/hal_cpm_keyboard.c`
+      translated both `c == 8` and `c == 127` (`0x7F`) to `KEY_BACKSPACE` (`8`)
+      instead of returning `KEY_DEL` (`127`) for `0x7F`. In `SE.COM`
+      (`src/se.asm:1319-1327`), `0x7F` (`KEY_DEL`) invokes `DO_DELETE_BLOCK`
+      when a block is active (`BLOCK_ACTIVE == 1` or `2`) and
+      `DO_DELETE_FORWARD` otherwise, whereas in `SEC.COM`, pressing `0x7F` on a
+      solidified block ran `do_backspace()` instead of `do_delete()`, leaving
+      the block active and deleting a single character to the left of the
+      cursor (failing Step 66 Subtest 6).
+    - *Resolution*: Updated `hal_console_getkey()` in
+      `src/hal/cpm/hal_cpm_keyboard.c` to return `KEY_BACKSPACE` for `c == 8`
+      and `KEY_DEL` for `c == 127` (`0x7F`), matching `CHECK_BACKSPACE` in
+      `src/se.asm` while modal text prompts in `ui_browser.c`, `ui_modal.c`,
+      and `search.c` continue to accept both `KEY_BACKSPACE` and `KEY_DEL` as
+      rubout.
 
 ---
 
