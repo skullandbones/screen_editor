@@ -1405,6 +1405,15 @@ or display notifications.
 
 2. Visual Presentation:
    - Highlighting is rendered using ANSI Inverse Video (`\x1b[7m`).
+   - Contiguous Inverse Span & Tab Expansion Highlighting:
+     - Inverse video (`\x1b[7m` .. `\x1b[0m`) is toggled only at the boundaries
+       of a highlighted span on a row (not wrapped individually around each
+       character), preventing per-character escape bloat.
+     - When a Tab character (`0x09`) falls inside the half-open block interval
+       `[StartRow:StartCol, EndRow:EndCol)`, all of its expanded visual spaces
+       are rendered inside the inverse-video span. On the final row of a block
+       (`EndRow`), a Tab at `EndCol` is NOT highlighted until the cursor moves
+       past it (`EndCol > tab_index`).
    - Status Bar Field 4 dynamically displays selection metrics:
      - Dynamic Selection (`BLOCK_ACTIVE == 1`): `Sel: <N> char(s)` (single-line)
        or `Sel: <N> line(s)` (multi-line) padded to 15 chars + ` | `.

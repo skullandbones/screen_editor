@@ -4465,6 +4465,25 @@ have been resolved and archived.
       `render_browser_prompt()` (`src/core/ui_browser.c`) so the opening bracket
       and pre-filled filename string are emitted contiguously. Verified via
       Steps 30–31 of `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.25: Tab Characters Not Highlighted in Block Selection &
+    Per-Character Inverse Video Spam in `render_row_content()`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1, 9.2 (Contiguous Inverse
+      Span & Tab Expansion Highlighting).
+    - *Issue*: In `src/core/ui_render.c:105-126` (`render_row_content`), when
+      rendering a Tab character (`c == '\t'`), the loop emits plain `' '`
+      spaces without checking `check_cursor_in_block(doc_row, i)`, so tabs
+      inside an active or solidified block selection are never highlighted in
+      inverse video. In addition, for regular characters, `render_row_content()`
+      toggles `hal_console_inverse_on()` and `hal_console_inverse_off()` around
+      every individual character (`\x1b[7mL\x1b[0m\x1b[7m1\x1b[0m`) instead of
+      maintaining a contiguous inverse-video span across the block range (e.g.
+      `\x1b[7mA       \x1b[0mB` in Step 35 of `tests/test_editor_headless.py`).
+    - *Resolution*: Updated `render_row_content()` in `src/core/ui_render.c` to
+      check `check_cursor_in_block(doc_row, i)` for both Tab characters and
+      regular characters and track `in_inv` state across the row so `\x1b[7m`
+      and `\x1b[0m` are emitted only on span transitions. Clarified Contiguous
+      Inverse Span & Tab Expansion Highlighting in `docs/UI_UX_DESIGN.md`
+      Section 9.2. Verified via Step 35 of `tests/test_editor_headless.py`.
 
 ---
 

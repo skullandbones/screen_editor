@@ -99,30 +99,50 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
 
     len = fetch_line_to_buffer(doc_row, line_buf, MAX_ACTIVE_PAYLOAD);
 
-    for (i = 0; i < len && vis_col < g_horiz_pan_offset + max_content_cols;
-         i++) {
-        char c = line_buf[i];
-        if (c == '\t') {
-            uint16_t next_tab = (uint16_t)((vis_col / tab_w + 1) * tab_w);
-            while (vis_col < next_tab &&
-                   vis_col < g_horiz_pan_offset + max_content_cols) {
+    {
+        uint8_t in_inv = 0;
+        for (i = 0; i < len && vis_col < g_horiz_pan_offset + max_content_cols;
+             i++) {
+            char c = line_buf[i];
+            int in_blk = check_cursor_in_block(doc_row, i);
+            if (c == '\t') {
+                uint16_t next_tab = (uint16_t)((vis_col / tab_w + 1) * tab_w);
+                while (vis_col < next_tab &&
+                       vis_col < g_horiz_pan_offset + max_content_cols) {
+                    if (vis_col >= g_horiz_pan_offset) {
+                        int cont_hl = (g_block_mode == BLOCK_MODE_OFF &&
+                                       vis_col + 1 == g_horiz_pan_offset +
+                                                      max_content_cols &&
+                                       (vis_col + 1 < next_tab || i + 1 < len));
+                        uint8_t want_inv = (uint8_t)(in_blk || cont_hl);
+                        if (want_inv != in_inv) {
+                            if (want_inv) hal_console_inverse_on();
+                            else hal_console_inverse_off();
+                            in_inv = want_inv;
+                        }
+                        hal_console_putc(' ');
+                    }
+                    vis_col++;
+                }
+            } else {
                 if (vis_col >= g_horiz_pan_offset) {
-                    hal_console_putc(' ');
+                    int cont_hl = (g_block_mode == BLOCK_MODE_OFF &&
+                                   vis_col + 1 == g_horiz_pan_offset +
+                                                  max_content_cols &&
+                                   i + 1 < len);
+                    uint8_t want_inv = (uint8_t)(in_blk || cont_hl);
+                    if (want_inv != in_inv) {
+                        if (want_inv) hal_console_inverse_on();
+                        else hal_console_inverse_off();
+                        in_inv = want_inv;
+                    }
+                    hal_console_putc(c);
                 }
                 vis_col++;
             }
-        } else {
-            if (vis_col >= g_horiz_pan_offset) {
-                int in_blk = check_cursor_in_block(doc_row, i);
-                int cont_hl = (g_block_mode == BLOCK_MODE_OFF &&
-                               vis_col + 1 == g_horiz_pan_offset +
-                                              max_content_cols &&
-                               i + 1 < len);
-                if (in_blk || cont_hl) hal_console_inverse_on();
-                hal_console_putc(c);
-                if (in_blk || cont_hl) hal_console_inverse_off();
-            }
-            vis_col++;
+        }
+        if (in_inv) {
+            hal_console_inverse_off();
         }
     }
     hal_console_clear_eol();
