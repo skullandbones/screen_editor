@@ -4816,6 +4816,24 @@ have been resolved and archived.
       in `src/core/ui_browser.c` to update only the `Format: [...]` row in place
       (`s_prompt_row - 2`) and restore the input cursor via
       `locate_input_cursor()` instead of triggering a full-screen redraw.
+  - [x] **Bug 2.8.42: Insufficient Stack Headroom Below `0xD000` Caused Stack
+    and BSS Overlap (`Bdos Err On O: Select` / Step 18 Exit Hang)**:
+    - *Reference*: `src/include/ui_browser.h:25`, `src/core/editor.c:214-295`,
+      `src/core/block.c:306-308`, `src/sec_cpm.c:58`.
+    - *Issue*: With `BSS_END` at `0xCF15..0xCF61` and `REGISTER_SP=0xD000`,
+      fewer than 235 bytes separated the top of BSS (`g_cpm_dma_buf` /
+      `s_browser_files`) from the Z80 downward-growing stack. Functions that
+      allocated 152-byte stack buffers (`do_backspace`, `do_delete`, `do_enter`,
+      `do_delete_block`, `render_status_bar`) or called into CBIOS/BDOS pushed
+      `SP` down into the top of BSS, corrupting `target_file` (`Bdos Err On O:
+      Select` in Step 19) or saved stack frames on exit.
+    - *Resolution*: Reused `g_scratch_line_buf` instead of 152-byte stack arrays
+      in `do_backspace()`, `do_delete()`, `do_enter()` (`src/core/editor.c`),
+      `do_delete_block()` (`src/core/block.c`), and `config_load_file()`
+      (`src/core/config.c`), made `target_file[32]` `static` in `main()`
+      (`src/sec_cpm.c`), and reduced `MAX_BROWSER_FILES` to `36` in
+      `src/include/ui_browser.h`, increasing `SEC.COM` stack/CCP headroom to
+      `+413 bytes` (`BSS_END = 0xCE63`).
 
 ---
 

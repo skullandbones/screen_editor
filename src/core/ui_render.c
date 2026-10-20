@@ -187,7 +187,7 @@ void render_buffer_line(uint16_t row)
 #ifdef __CPM__
 void render_status_bar(void)
 {
-    char raw_name[24];
+    char raw_name[18];
     char sbuf[20];
     char core[84];
     const char *f4 = "^K: Editor keys";

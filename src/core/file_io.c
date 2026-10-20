@@ -176,7 +176,7 @@ static void draw_progress_tick(uint16_t lines)
 
 static void draw_progress_modal(const char *title, uint8_t is_loading)
 {
-    char fbuf[40];
+    char fbuf[36];
     uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
     uint8_t r;

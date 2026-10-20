@@ -55,7 +55,7 @@ static int parse_target_filename(char *out_buf, size_t max_len,
 
 int main(int argc, char **argv)
 {
-    char target_file[32];
+    static char target_file[32];
     int has_target = parse_target_filename(target_file, sizeof(target_file),
                                            argc, argv);
 

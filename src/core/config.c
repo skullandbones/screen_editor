@@ -166,6 +166,7 @@ static void parse_config_line(char *line)
 
 #ifdef __CPM__
 #include <cpm.h>
+#include "../include/buffer.h"
 #include "../include/file_io.h"
 
 #define s_cfg_fcb g_cpm_fcb
@@ -174,7 +175,7 @@ static void parse_config_line(char *line)
 int config_load_file(const char *filename)
 {
     int i;
-    char line[64];
+    char *line = g_scratch_line_buf;
     uint8_t line_len = 0;
 
     config_init_defaults();
@@ -210,7 +211,7 @@ int config_load_file(const char *filename)
                 line_len = 0;
                 continue;
             }
-            if (line_len + 1 < sizeof(line)) {
+            if (line_len + 1 < 64) {
                 line[line_len++] = (char)c;
             }
         }

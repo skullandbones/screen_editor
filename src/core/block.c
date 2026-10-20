@@ -303,9 +303,9 @@ int do_delete_block(void)
         }
     } else {
         /* Multi-line deletion */
-        char tail_buf[MAX_ACTIVE_PAYLOAD];
+        char *tail_buf = g_scratch_line_buf;
         uint16_t tail_len = fetch_line_to_buffer(g_norm_end_row, tail_buf,
-                                                 sizeof(tail_buf));
+                                                 MAX_ACTIVE_PAYLOAD);
         uint16_t tail_start = g_norm_end_col;
         if (tail_start > tail_len) tail_start = tail_len;
 
@@ -435,7 +435,7 @@ int do_block_menu_popup(void)
     uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
     char metrics[32];
-    char fname[64];
+    char fname[32];
     const char *pre;
     int key;
 
