@@ -187,21 +187,26 @@ void render_buffer_line(uint16_t row)
 #ifdef __CPM__
 void render_status_bar(void)
 {
-    char raw_name[18];
-    char sbuf[20];
-    char core[84];
+    char *raw_name = g_scratch_line_buf + 128;
+    char *sbuf = g_scratch_line_buf + 146;
+    char *core = g_scratch_line_buf + 166;
     const char *f4 = "^K: Editor keys";
     uint8_t pad, right_pad, i;
     uint16_t vis_col = 0;
 
+    if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
+        checkout_active_line(g_cur_doc_row);
+        vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
+    }
+
     if (!g_current_filename[0]) {
         strcpy(raw_name, "(Untitled)");
     } else if (!strchr(g_current_filename, ':')) {
-        snprintf(raw_name, sizeof(raw_name), "%c:%s",
+        snprintf(raw_name, 18, "%c:%s",
                  (char)('A' + bdos(25, 0)), g_current_filename);
     } else {
-        strncpy(raw_name, g_current_filename, sizeof(raw_name) - 2);
-        raw_name[sizeof(raw_name) - 2] = '\0';
+        strncpy(raw_name, g_current_filename, 16);
+        raw_name[16] = '\0';
     }
     i = (uint8_t)strlen(raw_name);
     if (i > 13) {
@@ -217,7 +222,7 @@ void render_status_bar(void)
                              (10 * 256 - g_doc_total_lines) : 0;
             free_kb = slots >> 3;
         }
-        snprintf(sbuf, sizeof(sbuf), "Free: %u KB", (unsigned)free_kb);
+        snprintf(sbuf, 20, "Free: %u KB", (unsigned)free_kb);
         f4 = sbuf;
     } else if (g_block_mode == BLOCK_MODE_SELECTING ||
                g_block_mode == BLOCK_MODE_SOLIDIFIED) {
@@ -237,33 +242,28 @@ void render_status_bar(void)
             unit = (!is_sel && cnt >= 100) ? "L" :
                    ((cnt == 1) ? " line" : " lines");
         }
-        snprintf(sbuf, sizeof(sbuf), "%s: %u%s",
+        snprintf(sbuf, 20, "%s: %u%s",
                  is_sel ? "Sel" : "Block", (unsigned)cnt, unit);
         f4 = sbuf;
     } else if (g_status_msg[0] != '\0') {
         f4 = g_status_msg;
     } else if (g_horiz_pan_offset > 0) {
-        snprintf(sbuf, sizeof(sbuf), "[Pan +%u]",
+        snprintf(sbuf, 20, "[Pan +%u]",
                  (unsigned)g_horiz_pan_offset);
         f4 = sbuf;
     } else if (!g_insert_mode) {
         f4 = "Overwrite mode";
     }
 
-    if (g_doc_total_lines > 0 && g_cur_doc_row < g_doc_total_lines) {
-        checkout_active_line(g_cur_doc_row);
-        vis_col = calc_visual_col(g_active_line_buf, g_cur_col);
-    }
-
     if (g_is_loading_file) {
-        snprintf(core, sizeof(core),
+        snprintf(core, 84,
                  "| %-14.14s | %s |       | %-15.15s | "
                  "Line    1/---- Col 0   |",
                  raw_name,
                  (g_active_cols == SCREEN_COLS_120) ? "120x40" : " 80x24",
                  f4);
     } else {
-        snprintf(core, sizeof(core),
+        snprintf(core, 84,
                  "| %-14.14s | %s | %s | %-15.15s | Line %4u/%-4u Col %-3u |",
                  raw_name,
                  (g_active_cols == SCREEN_COLS_120) ? "120x40" : " 80x24",

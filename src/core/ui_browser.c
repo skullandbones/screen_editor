@@ -225,7 +225,7 @@ static int     s_files_per_page;
 #else
 static char s_in_buf[256];
 static char s_title_buf[80];
-static char s_page_buf[48];
+static char s_page_buf[64];
 #define IN_BUF_CAP  256
 #endif
 
@@ -528,9 +528,10 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             if (s_total_pages >= 2) {
                 screen_row++;
                 emit_left_pad(screen_row);
-                snprintf(s_page_buf, 38,
+                snprintf(s_page_buf, 40,
                          "[Page %d/%d]  <PgUp>/<PgDn>=Page",
-                         s_cur_page + 1, s_total_pages);
+                         (int)(uint8_t)(s_cur_page + 1),
+                         (int)(uint8_t)s_total_pages);
                 hal_console_puts(s_page_buf);
                 hal_console_clear_eol();
             }

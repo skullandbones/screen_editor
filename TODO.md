@@ -4834,6 +4834,27 @@ have been resolved and archived.
       (`src/sec_cpm.c`), and reduced `MAX_BROWSER_FILES` to `36` in
       `src/include/ui_browser.h`, increasing `SEC.COM` stack/CCP headroom to
       `+413 bytes` (`BSS_END = 0xCE63`).
+  - [x] **Bug 2.8.43: `draw_progress_modal()` Stack Growth Overwrote Open
+    `g_cpm_fcb` in BSS During File Load and Save**:
+    - *Reference*: `src/core/file_io.c:175-290, 425-445`,
+      `src/core/ui_render.c:188-275`, `src/core/buffer.c:36-39`.
+    - *Issue*: `g_cpm_fcb` (`s_cpm_io_fcb`) and `g_cpm_dma_buf` were linked in
+      `src/core/file_io.c` near the top of BSS (`0xCE1C..0xCE3F`). In
+      `file_read_op()` and `file_write_op()`, `bdos(15)` (Open File) and
+      `bdos(22)` (Make File) opened `s_cpm_io_fcb` before calling
+      `draw_progress_modal()`. Inside `draw_progress_modal()`,
+      `render_status_bar()` allocated `122` bytes on the stack (`raw_name`,
+      `sbuf`, `core`) and invoked `snprintf()`, pushing `SP` from `0xD000` down
+      into `0xCE1C` and corrupting the open FCB in BSS—causing `bdos(20)` to
+      return immediate EOF (`0` lines loaded) on file open and `bdos(34)` to
+      fail with `Bdos Err On N: Select` on file save.
+    - *Resolution*: Moved `g_cpm_dma_buf[128]` and `g_cpm_fcb` definitions to
+      `src/core/buffer.c` at the bottom of BSS (`0xC8C7` / `0xC947`, over
+      1,700 bytes below `SP = 0xD000`), reused `g_scratch_line_buf` (`+128`) for
+      `raw_name`, `sbuf`, and `core` in `render_status_bar()` and `fbuf` in
+      `draw_progress_modal()`, called `draw_progress_modal("Saving File", 0)`
+      before `bdos(19)` / `bdos(22)` in `file_write_op()`, and removed the
+      unused `s_local_line_slots[16]` array in `src/hal/cpm/hal_cpm_memory.c`.
 
 ---
 

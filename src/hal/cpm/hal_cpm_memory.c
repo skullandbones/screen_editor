@@ -28,7 +28,6 @@ static uint8_t  s_hbios_dst_bank = 0;
 static uint16_t s_hbios_src_addr = 0;
 static uint16_t s_hbios_dst_addr = 0;
 static uint16_t s_hbios_word_tmp = 0;
-static uint16_t s_local_line_slots[16];
 
 static void hbios_detect_ramdrive(void)
 {
@@ -197,7 +196,7 @@ uint16_t hal_line_slot_get(uint16_t idx)
         hbios_do_copy_2();
         return s_hbios_word_tmp;
     }
-    return (idx < 16) ? s_local_line_slots[idx] : SLOT_TERM;
+    return SLOT_TERM;
 }
 
 void hal_line_slot_set(uint16_t idx, uint16_t slot_id)
@@ -209,10 +208,6 @@ void hal_line_slot_set(uint16_t idx, uint16_t slot_id)
         s_hbios_src_addr = (uint16_t)&s_hbios_word_tmp;
         s_hbios_dst_addr = (uint16_t)(idx << 1);
         hbios_do_copy_2();
-        return;
-    }
-    if (idx < 16) {
-        s_local_line_slots[idx] = slot_id;
     }
 }
 

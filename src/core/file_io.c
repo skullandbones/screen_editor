@@ -34,8 +34,6 @@ uint8_t g_file_format = FMT_LINUX;
 
 #ifdef __CPM__
 #include <cpm.h>
-uint8_t   g_cpm_dma_buf[128];
-cpm_fcb_t g_cpm_fcb;
 uint8_t   g_doc_drive = 0;
 uint8_t   g_doc_user = 0;
 uint8_t   g_target_user = 0;
@@ -176,7 +174,7 @@ static void draw_progress_tick(uint16_t lines)
 
 static void draw_progress_modal(const char *title, uint8_t is_loading)
 {
-    char fbuf[36];
+    char *fbuf = g_scratch_line_buf;
     uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
     uint8_t r;
@@ -190,7 +188,7 @@ static void draw_progress_modal(const char *title, uint8_t is_loading)
     }
     render_status_bar();
     modal_draw_frame(top, left, 50, 7, title);
-    snprintf(fbuf, sizeof(fbuf), "File: %s",
+    snprintf(fbuf, 36, "File: %s",
              g_current_filename[0] ? g_current_filename : "(Untitled)");
     modal_draw_row_centered(top + 3, left, 50, fbuf);
     draw_progress_tick(is_loading ? 1 : 0);
@@ -288,7 +286,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     bdos(26, (int)s_cpm_sec_buf);
 
     while (!done) {
-        if (bdos(20, (int)&s_cpm_io_fcb) != 0) {
+        if ((uint8_t)bdos(20, (int)&s_cpm_io_fcb) != 0) {
             break;
         }
         for (i = 0; i < 128; i++) {
@@ -395,7 +393,7 @@ static int cpm_write_byte(uint8_t b, uint8_t *sec_pos, uint16_t *rec_num)
         s_cpm_io_fcb.random_r0 = (uint8_t)(*rec_num & 0xFF);
         s_cpm_io_fcb.random_r1 = (uint8_t)((*rec_num >> 8) & 0xFF);
         s_cpm_io_fcb.random_r2 = 0;
-        if (bdos(34, (int)&s_cpm_io_fcb) != 0) {
+        if ((uint8_t)bdos(34, (int)&s_cpm_io_fcb) != 0) {
             return -1;
         }
         (*rec_num)++;
@@ -429,19 +427,23 @@ static int file_write_op(const char *filename, uint16_t start_row,
         s_cpm_io_fcb.drive = g_doc_drive ? g_doc_drive
                                          : (uint8_t)(bdos(25, 0) + 1);
     }
+
+    strcpy(saved_fname, g_current_filename);
+    cpm_format_doc_filename(&s_cpm_io_fcb, g_target_user);
+    g_doc_modified = 0;
+    draw_progress_modal("Saving File", 0);
+
     orig_user = bdos(32, 0xFF);
     bdos(32, g_target_user);
 
     bdos(19, (int)&s_cpm_io_fcb);
     if ((uint8_t)bdos(22, (int)&s_cpm_io_fcb) == 0xFF) {
         bdos(32, orig_user);
+        strcpy(g_current_filename, saved_fname);
+        g_doc_modified = saved_mod;
+        g_need_screen_render = 1;
         return -1;
     }
-
-    strcpy(saved_fname, g_current_filename);
-    cpm_format_doc_filename(&s_cpm_io_fcb, g_target_user);
-    g_doc_modified = 0;
-    draw_progress_modal("Saving File", 0);
 
     bdos(26, (int)s_cpm_sec_buf);
 
