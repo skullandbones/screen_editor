@@ -4876,6 +4876,27 @@ have been resolved and archived.
       cancelled, and removed the deprecated WordStar `KEY_CTRL_S`/`KEY_CTRL_G`
       aliases while binding `KEY_CTRL_D` to forward delete per Section 7.9 of
       `docs/UI_UX_DESIGN.md`.
+  - [x] **Bug 2.8.45: `draw_progress_modal("Saving File", 0)` Prematurely
+    Emitted Editor Status Bar and `render_status_bar` Overflowed
+    `g_scratch_line_buf` Into `g_cpm_dma_buf`**:
+    - *Reference*: `src/core/file_io.c:175-196`,
+      `src/core/ui_render.c:188-195`, `src/core/ui_browser.asm:906, 7156-7174`.
+    - *Issue*: In `draw_progress_modal()`, `render_status_bar()` was called
+      unconditionally even when `is_loading == 0` (`"Saving File"`). Because
+      `ui_browser_workspace()` had already restored `g_is_splash_screen = 0`
+      before returning to `editor_handle_key()`, `draw_progress_modal("Saving
+      File", 0)` emitted `"^K: Editor keys"` on the status bar BEFORE disk
+      writes began, causing callers waiting for `"^K: Editor keys"` to send the
+      next keystroke (`ESC`) while `file_write_op()` was still writing sectors.
+      Additionally, `render_status_bar()` placed `core` (84 bytes) at
+      `g_scratch_line_buf + 166`, overflowing the 152-byte `g_scratch_line_buf`
+      into `g_cpm_dma_buf`.
+    - *Resolution*: Updated `draw_progress_modal()` in `src/core/file_io.c` to
+      call `render_status_bar()` only when `is_loading` is non-zero (matching
+      `DRAW_LOADING_SCREEN` vs `INIT_SAVE_PROGRESS` in
+      `src/core/ui_browser.asm`), and packed `raw_name` (`+32`), `sbuf`
+      (`+50`), and `core` (`+68`, 84 bytes) in `render_status_bar()` within the
+      152-byte bounds of `g_scratch_line_buf`.
 
 ---
 

@@ -185,8 +185,8 @@ static void draw_progress_modal(const char *title, uint8_t is_loading)
         for (r = 1; r < g_active_rows; r++) {
             hal_console_puts("~\r\n");
         }
+        render_status_bar();
     }
-    render_status_bar();
     modal_draw_frame(top, left, 50, 7, title);
     snprintf(fbuf, 36, "File: %s",
              g_current_filename[0] ? g_current_filename : "(Untitled)");

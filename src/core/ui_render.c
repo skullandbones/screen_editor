@@ -187,9 +187,9 @@ void render_buffer_line(uint16_t row)
 #ifdef __CPM__
 void render_status_bar(void)
 {
-    char *raw_name = g_scratch_line_buf + 128;
-    char *sbuf = g_scratch_line_buf + 146;
-    char *core = g_scratch_line_buf + 166;
+    char *raw_name = g_scratch_line_buf + 32;
+    char *sbuf = g_scratch_line_buf + 50;
+    char *core = g_scratch_line_buf + 68;
     const char *f4 = "^K: Editor keys";
     uint8_t pad, right_pad, i;
     uint16_t vis_col = 0;
