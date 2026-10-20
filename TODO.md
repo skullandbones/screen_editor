@@ -4802,6 +4802,20 @@ have been resolved and archived.
       `MAX_BROWSER_FILES` to `48` in `src/include/ui_browser.h`, and uppercased
       config keys/values in `src/core/config.c` to keep `SEC.COM` CCP headroom
       at `+259 bytes`.
+  - [x] **Bug 2.8.41: Save Screen `^F` Format Toggle Full-Screen Redraw Dropped
+    Typed Filename Input**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6 (Save Screen `[^F]=Toggle
+      Format` responsiveness), `src/core/ui_browser.c:594-599`.
+    - *Issue*: Pressing `Ctrl+F` (`KEY_CTRL_F`) in `ui_browser_workspace()` in
+      `src/core/ui_browser.c` set `need_full_render = 1`, causing a full
+      40-row screen redraw on every format toggle. Under 4 MHz Z80 serial output
+      in the RC2014 emulator, this redraw took longer than 200 ms, causing
+      subsequently typed characters (`OUTPUT.TXT\r` in Step 17) to overflow the
+      CBIOS UART input buffer and fail to submit the save dialog.
+    - *Resolution*: Updated the `KEY_CTRL_F` handler in `ui_browser_workspace()`
+      in `src/core/ui_browser.c` to update only the `Format: [...]` row in place
+      (`s_prompt_row - 2`) and restore the input cursor via
+      `locate_input_cursor()` instead of triggering a full-screen redraw.
 
 ---
 

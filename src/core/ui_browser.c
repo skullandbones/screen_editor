@@ -292,6 +292,15 @@ static void draw_tab_mode_hint(void)
     hal_console_clear_eol();
 }
 
+static void draw_save_fmt_row(uint8_t row)
+{
+    emit_left_pad(row);
+    hal_console_puts("Format: [");
+    hal_console_puts((g_file_format == FMT_CPM) ? "CP/M" : "Linux");
+    hal_console_puts("]   [^F]=Toggle Format");
+    hal_console_clear_eol();
+}
+
 static void render_browser_prompt(const char *prompt_txt)
 {
     emit_left_pad(s_prompt_row);
@@ -528,12 +537,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
 
             if (s_is_save) {
                 screen_row++;
-                emit_left_pad(screen_row);
-                hal_console_puts("Format: [");
-                hal_console_puts((g_file_format == FMT_CPM)
-                                 ? "CP/M" : "Linux");
-                hal_console_puts("]   [^F]=Toggle Format");
-                hal_console_clear_eol();
+                draw_save_fmt_row(screen_row);
             }
 
             screen_row++;
@@ -595,7 +599,8 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             if (s_is_save) {
                 g_file_format = (g_file_format == FMT_CPM)
                     ? FMT_LINUX : FMT_CPM;
-                need_full_render = 1;
+                draw_save_fmt_row((uint8_t)(s_prompt_row - 2));
+                locate_input_cursor();
             }
         } else if (k == KEY_TAB || k == '\t') {
             if (!s_hl_active) {
