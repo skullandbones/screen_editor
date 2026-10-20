@@ -4953,6 +4953,22 @@ have been resolved and archived.
       that `raw_name` is only clamped to index `13` with `'*'` appended when
       `g_doc_modified` is non-zero, leaving unmodified 14-character filenames
       intact for `%-14.14s` formatting.
+  - [x] **Bug 2.8.49: CP/M Directory Browser Capped Listing at 36 Files
+    (`MAX_BROWSER_FILES = 36`), Omitting Alphabetically Later Entries Like
+    `SEC.COM`**:
+    - *Reference*: `src/include/ui_browser.h:25`,
+      `src/core/ui_browser.c:34-158`, `src/hal/cpm/hal_cpm_memory.c:188-235`.
+    - *Issue*: `MAX_BROWSER_FILES` on CP/M was limited to `36` entries in local
+      TPA BSS (`s_browser_files[36]`). Because Drive C: on the RomWBW disk
+      image contains over 110 files, `scan_cpm_directory()` discarded all files
+      sorting after the 36th entry (including `SE.COM` and `SEC.COM`), causing
+      Step 70 Subtest 1 (`SEC.COM not found in unfiltered directory listing`)
+      to fail.
+    - *Resolution*: Relocated the CP/M directory entry table into the upper
+      2 KB (`0x7800..0x7FFF`) of the HBIOS line-slot bank (`s_user_bank - 1`)
+      via `hal_dir_entry_get()` / `hal_dir_entry_set()` in
+      `src/hal/cpm/hal_cpm_memory.c`, increasing `MAX_BROWSER_FILES` on CP/M to
+      `128` entries while freeing 468 bytes of TPA BSS.
 
 ---
 

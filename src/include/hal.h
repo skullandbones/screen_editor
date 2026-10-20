@@ -46,6 +46,11 @@ int      hal_mem_write_slot(uint16_t slot_id, const uint8_t *src);
 void     hal_mem_set_bank(uint8_t bank);
 uint16_t hal_line_slot_get(uint16_t idx);
 void     hal_line_slot_set(uint16_t idx, uint16_t slot_id);
+#ifdef __CPM__
+void     hal_dir_entry_get(uint8_t idx, char *out_name);
+void     hal_dir_entry_set(uint8_t idx, const char *name);
+void     hal_dir_entry_shift(uint8_t idx, uint8_t count);
+#endif
 
 /* HAL Storage & File I/O Sub-system Interface */
 int  hal_storage_open(const char *path, void *handle);

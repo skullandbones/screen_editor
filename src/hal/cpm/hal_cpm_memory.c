@@ -28,6 +28,7 @@ static uint8_t  s_hbios_dst_bank = 0;
 static uint16_t s_hbios_src_addr = 0;
 static uint16_t s_hbios_dst_addr = 0;
 static uint16_t s_hbios_word_tmp = 0;
+static uint16_t s_hbios_len_tmp = 16;
 
 static void hbios_detect_ramdrive(void)
 {
@@ -184,6 +185,84 @@ static void hbios_do_copy_2(void)
     pop iy
     pop ix
 #endasm
+}
+
+static void hbios_do_copy_len(void)
+{
+#asm
+    push ix
+    push iy
+    ld a, (_s_hbios_dst_bank)
+    ld d, a
+    ld a, (_s_hbios_src_bank)
+    ld e, a
+    ld hl, (_s_hbios_len_tmp)
+    ld b, 0F4h      ; SYSSETCPY
+    rst 08h
+
+    ld hl, (_s_hbios_src_addr)
+    ld de, (_s_hbios_dst_addr)
+    ld b, 0F5h      ; SYSBNKCPY
+    rst 08h
+    pop iy
+    pop ix
+#endasm
+}
+
+void hal_dir_entry_get(uint8_t idx, char *out_name)
+{
+    if (s_hbios_present) {
+        s_hbios_dst_bank = s_user_bank;
+        s_hbios_src_bank = (uint8_t)(s_user_bank - 1);
+        s_hbios_src_addr = (uint16_t)(0x7800U + ((uint16_t)idx << 4));
+        s_hbios_dst_addr = (uint16_t)out_name;
+        s_hbios_len_tmp = 16;
+        hbios_do_copy_len();
+    } else {
+        out_name[0] = '\0';
+    }
+}
+
+void hal_dir_entry_set(uint8_t idx, const char *name)
+{
+    if (s_hbios_present) {
+        s_hbios_dst_bank = (uint8_t)(s_user_bank - 1);
+        s_hbios_src_bank = s_user_bank;
+        s_hbios_src_addr = (uint16_t)name;
+        s_hbios_dst_addr = (uint16_t)(0x7800U + ((uint16_t)idx << 4));
+        s_hbios_len_tmp = 16;
+        hbios_do_copy_len();
+    }
+}
+
+void hal_dir_entry_shift(uint8_t idx, uint8_t count)
+{
+    uint16_t cur = (uint16_t)(idx + count);
+    if (!s_hbios_present || count == 0) {
+        return;
+    }
+    while (cur > idx) {
+        uint8_t chunk = (uint8_t)(cur - idx);
+        uint16_t bytes;
+        if (chunk > 7) {
+            chunk = 7;
+        }
+        cur -= chunk;
+        bytes = (uint16_t)chunk << 4;
+        s_hbios_dst_bank = s_user_bank;
+        s_hbios_src_bank = (uint8_t)(s_user_bank - 1);
+        s_hbios_src_addr = (uint16_t)(0x7800U + (cur << 4));
+        s_hbios_dst_addr = (uint16_t)(g_scratch_line_buf + 32);
+        s_hbios_len_tmp = bytes;
+        hbios_do_copy_len();
+
+        s_hbios_dst_bank = (uint8_t)(s_user_bank - 1);
+        s_hbios_src_bank = s_user_bank;
+        s_hbios_src_addr = (uint16_t)(g_scratch_line_buf + 32);
+        s_hbios_dst_addr = (uint16_t)(0x7810U + (cur << 4));
+        s_hbios_len_tmp = bytes;
+        hbios_do_copy_len();
+    }
 }
 
 uint16_t hal_line_slot_get(uint16_t idx)

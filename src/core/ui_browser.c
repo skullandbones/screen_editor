@@ -31,7 +31,9 @@
 #include "../include/file_io.h"
 #include "../include/hal.h"
 
+#ifndef __CPM__
 static browser_entry_t s_browser_files[MAX_BROWSER_FILES];
+#endif
 static int             s_browser_count = 0;
 
 void ui_browser_clear_entries(void)
@@ -44,16 +46,17 @@ int ui_browser_add_entry(const char *name, uint32_t size, uint8_t is_dir)
     if (s_browser_count >= MAX_BROWSER_FILES) {
         return -1;
     }
+#ifndef __CPM__
     strncpy(s_browser_files[s_browser_count].filename, name,
             BROWSER_FILENAME_LEN - 1);
     s_browser_files[s_browser_count].filename[
         BROWSER_FILENAME_LEN - 1] = '\0';
-#ifndef __CPM__
     s_browser_files[s_browser_count].size_bytes = size;
     s_browser_files[s_browser_count].drive = 0;
     s_browser_files[s_browser_count].user = 0;
     s_browser_files[s_browser_count].is_dir = is_dir;
 #else
+    (void)name;
     (void)size;
     (void)is_dir;
 #endif
@@ -112,7 +115,8 @@ static void scan_cpm_directory(char drive, uint8_t user, const char *mask)
     while (res != 0xFF && res >= 0 && res <= 3) {
         uint8_t *entry = &s_dir_dma[res * 32];
         if (entry[0] == user) {
-            char name[14];
+            char name[16];
+            char cur[16];
             uint8_t ni = 0;
             uint8_t j;
             for (j = 1; j <= 11; j++) {
@@ -125,28 +129,31 @@ static void scan_cpm_directory(char drive, uint8_t user, const char *mask)
 
             if (ni > 0 && !(name[0] == '$' && name[1] == '$' &&
                             name[2] == '$')) {
-                int k;
-                for (k = 0; k < s_browser_count; k++) {
-                    int cmp = strcmp(name, s_browser_files[k].filename);
+                int lo = 0, hi = s_browser_count - 1;
+                while (lo <= hi) {
+                    int mid = (lo + hi) >> 1;
+                    int cmp;
+                    hal_dir_entry_get((uint8_t)mid, cur);
+                    cmp = strcmp(name, cur);
                     if (cmp == 0) {
                         goto next_entry;
                     }
                     if (cmp < 0) {
-                        break;
+                        hi = mid - 1;
+                    } else {
+                        lo = mid + 1;
                     }
                 }
-                if (k < MAX_BROWSER_FILES) {
-                    int move_cnt;
+                if (lo < MAX_BROWSER_FILES) {
                     if (s_browser_count < MAX_BROWSER_FILES) {
                         s_browser_count++;
                     }
-                    move_cnt = s_browser_count - 1 - k;
-                    if (move_cnt > 0) {
-                        memmove(&s_browser_files[k + 1],
-                                &s_browser_files[k],
-                                (size_t)move_cnt * sizeof(browser_entry_t));
+                    if (s_browser_count - 1 > lo) {
+                        hal_dir_entry_shift(
+                            (uint8_t)lo,
+                            (uint8_t)(s_browser_count - 1 - lo));
                     }
-                    strcpy(s_browser_files[k].filename, name);
+                    hal_dir_entry_set((uint8_t)lo, name);
                 }
             }
         }
@@ -192,11 +199,26 @@ int ui_browser_get_file_count(void)
 
 const browser_entry_t *ui_browser_get_entry(int index)
 {
+#ifndef __CPM__
     if (index >= 0 && index < s_browser_count) {
         return &s_browser_files[index];
     }
+#else
+    (void)index;
+#endif
     return NULL;
 }
+
+#ifdef __CPM__
+static const char *get_entry_name(int idx)
+{
+    static char s_fn[16];
+    hal_dir_entry_get((uint8_t)idx, s_fn);
+    return s_fn;
+}
+#else
+#define get_entry_name(idx) (s_browser_files[(idx)].filename)
+#endif
 
 /* Shared browser layout and interaction state */
 static uint8_t s_left_pad;
@@ -326,7 +348,7 @@ static void draw_hl_cell(uint8_t inverse)
     if (inverse) {
         hal_console_inverse_on();
     }
-    puts_padded(s_browser_files[s_page_start + s_hl_index].filename, 12);
+    puts_padded(get_entry_name(s_page_start + s_hl_index), 12);
     if (inverse) {
         hal_console_inverse_off();
     }
@@ -334,7 +356,7 @@ static void draw_hl_cell(uint8_t inverse)
 
 static void apply_hl_to_box(void)
 {
-    const char *fn = s_browser_files[s_page_start + s_hl_index].filename;
+    const char *fn = get_entry_name(s_page_start + s_hl_index);
 #ifdef __CPM__
     format_drv_usr_str(s_in_buf, s_browser_drive, s_browser_user, fn);
 #else
@@ -509,7 +531,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                     for (col = 0; col < s_num_cols; col++) {
                         if (idx < (uint8_t)s_page_files) {
                             puts_padded(
-                                s_browser_files[s_page_start + idx].filename,
+                                get_entry_name(s_page_start + idx),
                                 s_col_width);
                             idx++;
                         }
