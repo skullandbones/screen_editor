@@ -229,10 +229,12 @@ void show_plugin_palette(void)
 #endif
         }
 
-        if (k == KEY_ESC) {
+        if (k == KEY_ESC || k == KEY_CTRL_P || k == 'q' || k == 'Q') {
 #ifndef __CPM__
-            while (hal_console_getkey() > 0) {
-                /* Drain trailing escape sequence bytes */
+            if (k == KEY_ESC) {
+                while (hal_console_getkey() > 0) {
+                    /* Drain trailing escape sequence bytes */
+                }
             }
 #endif
             break;
@@ -242,8 +244,8 @@ void show_plugin_palette(void)
             k = KEY_ENTER;
         }
         if (k == KEY_ENTER || k == '\r' || k == '\n') {
-            clear_screen();
             g_need_screen_render = 1;
+            g_need_status_render = 1;
             if (selected == 0) {
                 exec_rot13();
             } else if (selected == 1) {
@@ -260,6 +262,6 @@ void show_plugin_palette(void)
         }
     }
 
-    clear_screen();
     g_need_screen_render = 1;
+    g_need_status_render = 1;
 }

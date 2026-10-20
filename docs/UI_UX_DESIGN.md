@@ -1406,6 +1406,8 @@ or display notifications.
      Built-in plugins are listed in canonical slot order:
      Slot 1 `ROT13`, Slot 2 `WORDCNT`, Slot 3 `BEAUTIFY`.
      Navigation with Up/Down arrows, Enter to run, or direct digit key (`1..9`).
+     Pressing `<ESC>`, `Ctrl+P` (`0x10`, toggle), or `q`/`Q` cancels and
+     dismisses the palette cleanly without a screen flash (`\x1b[2J`).
      ```text
      +------------------------------------------------+
      |                 Plugin Palette                 |

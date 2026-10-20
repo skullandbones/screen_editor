@@ -4604,6 +4604,23 @@ have been resolved and archived.
       trailing spaces are printed contiguously immediately after `"|      Find:
       ["` / `"|  Replace with: ["` without an intervening cursor-locate escape.
       Verified via Steps 49–51 of `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.32: `show_plugin_palette()` Does Not Toggle-Dismiss on
+    `Ctrl+P` or `q`/`Q` in `plugin_mgr.c`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype D: Selection
+      Menu / Plugin Palette) and `plugins/plugin.asm:1304-1308`.
+    - *Issue*: In `src/core/plugin_mgr.c:232-265`, `show_plugin_palette()` only
+      checked `k == KEY_ESC` to cancel and dismiss the palette, ignoring
+      `KEY_CTRL_P` (`0x10`) and `q`/`Q`, and called `clear_screen()` on exit.
+      When Step 51 of `tests/test_editor_headless.py` sent `Ctrl+P` twice to
+      open and toggle-dismiss the Plugin Palette before pressing `Ctrl+R`, the
+      second `Ctrl+P` was ignored and the open Plugin Palette swallowed the
+      subsequent `Ctrl+R` keystroke.
+    - *Resolution*: Updated `show_plugin_palette()` in `src/core/plugin_mgr.c`
+      to dismiss on `KEY_ESC`, `KEY_CTRL_P`, `'q'`, or `'Q'`, removed
+      `clear_screen()` on exit, and set `g_need_screen_render = 1` and
+      `g_need_status_render = 1` to repaint the editor screen and status bar
+      cleanly; documented `Ctrl+P` / `q`/`Q` dismissal in `docs/UI_UX_DESIGN.md`
+      Section 8.3. Verified in Step 51 (`tests/test_editor_headless.py --sec`).
 
 ---
 
