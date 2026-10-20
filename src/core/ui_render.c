@@ -209,11 +209,15 @@ void render_status_bar(void)
         raw_name[16] = '\0';
     }
     i = (uint8_t)strlen(raw_name);
-    if (i > 13) {
-        i = 13;
+    if (g_doc_modified) {
+        if (i > 13) {
+            i = 13;
+        }
+        raw_name[i] = '*';
+        raw_name[i + 1] = '\0';
+    } else if (i > 14) {
+        raw_name[14] = '\0';
     }
-    raw_name[i] = g_doc_modified ? '*' : ' ';
-    raw_name[i + 1] = '\0';
 
     if (g_is_splash_screen) {
         uint16_t free_kb = 320;
@@ -308,11 +312,15 @@ void render_status_bar(void)
     strncpy(raw_name, fname, sizeof(raw_name) - 2);
     raw_name[sizeof(raw_name) - 2] = '\0';
     i = strlen(raw_name);
-    if (i > 13) {
-        i = 13;
+    if (g_doc_modified) {
+        if (i > 13) {
+            i = 13;
+        }
+        raw_name[i] = '*';
+        raw_name[i + 1] = '\0';
+    } else if (i > 14) {
+        raw_name[14] = '\0';
     }
-    raw_name[i] = g_doc_modified ? '*' : ' ';
-    raw_name[i + 1] = '\0';
 
     if (g_active_cols == SCREEN_COLS_80 && g_active_rows == SCREEN_ROWS_24) {
         strcpy(geom_buf, " 80x24");

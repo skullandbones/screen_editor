@@ -4939,6 +4939,20 @@ have been resolved and archived.
       format `g_current_filename` via `cpm_format_doc_filename(&g_cpm_fcb,
       g_doc_user)` for new bare filenames or print `<N:FILENAME.EXT> file not
       found` and exit when an explicit drive/user prefix was supplied.
+  - [x] **Bug 2.8.48: `render_status_bar()` Truncated 14-Character Clean
+    Filenames at Index 13 by Overwriting Index 13 With a Space**:
+    - *Reference*: `src/core/ui_render.c:211-216, 310-315`,
+      `src/core/ui_render.asm:296-308`.
+    - *Issue*: `render_status_bar()` in `src/core/ui_render.c` clamped `i =
+      strlen(raw_name)` to `13` and wrote `raw_name[i] = g_doc_modified ? '*' :
+      ' '` even when `g_doc_modified == 0`. For a 14-character drive-prefixed
+      filename such as `C:LONGNAME.TXT` (Step 69 Subtest 3a), this overwrote
+      the 14th character (`'T'`) with a space, rendering `| C:LONGNAME.TX  |`
+      instead of `| C:LONGNAME.TXT |`.
+    - *Resolution*: Updated `render_status_bar()` in `src/core/ui_render.c` so
+      that `raw_name` is only clamped to index `13` with `'*'` appended when
+      `g_doc_modified` is non-zero, leaving unmodified 14-character filenames
+      intact for `%-14.14s` formatting.
 
 ---
 
