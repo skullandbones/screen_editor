@@ -4677,6 +4677,25 @@ have been resolved and archived.
       s_slot_io`, and made `splash_lines` and `dlg_fname` static in
       `show_splash_screen()` (`src/core/ui_render.c`), reducing peak stack usage
       by 460 bytes. Verified in Step 55 (`tests/test_editor_headless.py --sec`).
+  - [x] **Bug 2.8.35: Incomplete Memory Information Screen (`'m'`) in
+    `ui_render.c` Missing RomWBW Extended Memory Map Table**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.13 (Memory Information
+      Screen Layout — clarified in this fix) and `src/se.asm:3443-4032`.
+    - *Issue*: Pressing `'m'` on the Splash Screen in `SEC.COM` invoked a
+      6-line stub in `show_mem_info_screen()` (`src/core/ui_render.c:894-932`)
+      that only displayed `Free Virtual Slots` and `Free Document Buffer`
+      instead of the RomWBW HBIOS Extended Memory Map title
+      (`SE.COM - Extended Memory Map`), system summary row (`HBIOS: RomWBW v`,
+      `OS: CP/M 2.2`, `RAM: 512 KB (16x32K)`, `SE: 192 KB`), bank table header
+      (`Bank  Phys   Size   System / OS Role        SE.COM Usage`), and bank
+      entries (`00 80h Reserved: Protected HBIOS`, `01 81h RAM Disk (MD0:)`,
+      `13 8Dh Active: 16K Line Slot Table`, `14 8Eh Active: SE Program &
+      Cache`), causing Step 56 (and Step 72) to fail.
+    - *Resolution*: Updated `show_mem_info_screen()` in `src/core/ui_render.c`
+      under `#ifdef __CPM__` to render the 23-row tilde-prefixed RomWBW HBIOS
+      Extended Memory Map table and summary row followed by
+      `render_status_bar()`, and documented Section 7.13 in
+      `docs/UI_UX_DESIGN.md`.
 
 ---
 

@@ -893,14 +893,19 @@ void show_config_screen(void)
 
 void show_mem_info_screen(void)
 {
+    int k;
+    uint8_t prev_splash = g_is_splash_screen;
+#ifdef __CPM__
+    uint8_t r;
+#else
     char line1[44];
     char line2[44];
     const char *mem_lines[6];
-    int k;
-    uint8_t prev_splash = g_is_splash_screen;
+#endif
 
     g_is_splash_screen = 1;
     hal_console_hide_cursor();
+#ifndef __CPM__
     snprintf(line1, sizeof(line1), "       Free Virtual Slots: %u",
              (unsigned)mem_get_free_slots());
     snprintf(line2, sizeof(line2), "       Free Document Buffer: %u KB",
@@ -911,9 +916,36 @@ void show_mem_info_screen(void)
     mem_lines[3] = line2;
     mem_lines[4] = "";
     mem_lines[5] = "          Press any key to continue";
+#endif
 
     while (1) {
+#ifdef __CPM__
+        clear_screen();
+        hal_console_puts(
+            "~\r\n"
+            "~                         SE.COM - Extended Memory Map\r\n"
+            "~   HBIOS: RomWBW v3.4  |  OS: CP/M 2.2  |  "
+            "RAM: 512 KB (16x32K)  |  SE: 192 KB\r\n"
+            "~\r\n"
+            "~   Bank  Phys   Size   System / OS Role        "
+            "SE.COM Usage\r\n"
+            "~   00    80h    32K    HBIOS System Firmware   "
+            "Reserved: Protected HBIOS\r\n"
+            "~   01    81h    32K    RAM Disk (MD0:)         "
+            "Preserved: RAM Disk Active\r\n"
+            "~   13    8Dh    32K    Application Memory      "
+            "Active: 16K Line Slot Table\r\n"
+            "~   14    8Eh    32K    CP/M 2.2 TPA & Base     "
+            "Active: SE Program & Cache\r\n");
+        for (r = 0; r < 13; r++) {
+            hal_console_puts("~\r\n");
+        }
+        hal_console_puts(
+            "~                          Press any key to continue\r\n");
+        render_status_bar();
+#else
         render_tier1_workspace_screen(mem_lines, 6, 46);
+#endif
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }

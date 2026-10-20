@@ -1207,6 +1207,22 @@ content blocks rather than top-aligned text.
     - Dismissal: Any key press dismisses the About screen and returns to the
       Splash Screen.
 
+13. Memory Information Screen Layout (`[M]` from Splash):
+    - Displays the Tier 1 Extended Memory Map (`SE.COM - Extended Memory Map`)
+      with column 0 tilde (`~`) margin discipline across all 23 body rows and
+      the Universal Status Bar on Row `HOST_ROWS`.
+    - On RomWBW HBIOS CP/M-80 targets (`SE.COM`, `SEC.COM`), renders the system
+      summary line (`HBIOS: RomWBW v... | OS: CP/M 2.2 | RAM: 512 KB (16x32K) |
+      SE: ... KB`), the 5-column bank table header
+      (`Bank  Phys   Size   System / OS Role        SE.COM Usage`), the bank
+      status rows (`00` `80h` HBIOS System Firmware `Reserved: Protected HBIOS`,
+      `01` `81h` `RAM Disk (MD0:)`, `13` `8Dh` `Active: 16K Line Slot Table`,
+      `14` `8Eh` `CP/M 2.2 TPA & Base` `Active: SE Program & Cache`), and the
+      centered return prompt `Press any key to continue`.
+    - Dismissal: Any key press (except `Ctrl+P`, which opens the context plugin
+      palette) dismisses the Memory Information screen and returns to the
+      Splash Screen.
+
 8. Tier 2 Centered Boxed Modal Pop-ups
 --------------------------------------------------------------------------------
 Modal pop-ups appear centered over the active screen surface to request input
