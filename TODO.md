@@ -4446,6 +4446,25 @@ have been resolved and archived.
       drain loops under `#ifndef __CPM__` in `src/core/ui_modal.c`,
       `src/core/search.c`, and `src/core/plugin_mgr.c`. Verified via Step 16–17
       of `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.24: Redundant `hal_console_locate` Inside
+    `render_browser_prompt()` Splits ` [` and Input Text**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.9, 15.3.2
+      (`DRAW_FILENAME_BOX`).
+    - *Issue*: In `src/core/ui_browser.c:300-302` (`render_browser_prompt`),
+      after emitting `" ["`, the function calls
+      `hal_console_locate(s_prompt_row, s_box_col)` before calling
+      `puts_padded(s_in_buf, 20)`. Because the cursor is already at `s_box_col`
+      immediately following `" ["`, the redundant ANSI cursor positioning
+      sequence (`\x1b[<row>;<col>H`) splits the opening bracket `'['` from the
+      pre-filled input string (emitting `[\x1b[26;30HB:` instead of contiguous
+      `[B:` as in `DRAW_FILENAME_BOX` in `src/core/ui_browser.asm:5468-5486`),
+      breaking contiguous `"[B:"` / `"[C:"` prompt stream matching in Step 30–31
+      of `tests/test_editor_headless.py`.
+    - *Resolution*: Removed the redundant `hal_console_locate(s_prompt_row,
+      s_box_col)` call after `hal_console_puts(" [")` in
+      `render_browser_prompt()` (`src/core/ui_browser.c`) so the opening bracket
+      and pre-filled filename string are emitted contiguously. Verified via
+      Steps 30–31 of `tests/test_editor_headless.py --sec`.
 
 ---
 

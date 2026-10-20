@@ -298,7 +298,6 @@ static void render_browser_prompt(const char *prompt_txt)
     hal_console_puts(prompt_txt);
     hal_console_inverse_off();
     hal_console_puts(" [");
-    hal_console_locate(s_prompt_row, s_box_col);
     puts_padded(s_in_buf, 20);
     draw_tab_mode_hint();
     if (!s_hl_active) {
