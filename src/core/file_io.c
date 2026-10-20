@@ -130,7 +130,7 @@ int file_check_hibernated(const char *path)
 }
 
 #ifdef __CPM__
-static void cpm_format_doc_filename(const cpm_fcb_t *fcb, uint8_t user)
+void cpm_format_doc_filename(const cpm_fcb_t *fcb, uint8_t user)
 {
     char *dst = g_current_filename;
     const char *raw = fcb->name;
@@ -231,7 +231,6 @@ static int file_read_op(const char *filename, uint8_t is_insert)
 
     if ((uint8_t)bdos(15, (int)&s_cpm_io_fcb) == 0xFF) {
         bdos(32, orig_user);
-        modal_alert_file_not_found(filename);
         return -1;
     }
 

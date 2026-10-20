@@ -77,11 +77,21 @@ int main(int argc, char **argv)
 
     if (has_target) {
         if (file_load(target_file) != 0) {
+            uint8_t drv = 0, usr = 0xFF;
+            if (cpm_parse_prefix(target_file, &drv, &usr) > target_file) {
+                cpm_format_doc_filename(&g_cpm_fcb, g_target_user);
+                hal_console_puts("\r\n");
+                hal_console_puts(g_current_filename);
+                hal_console_puts(" file not found\r\n");
+                goto clean_exit_sp;
+            }
             /* Create new document under this name */
+            drv = g_cpm_fcb.drive;
+            usr = g_target_user;
             init_empty_document();
-            strncpy(g_current_filename, target_file,
-                    sizeof(g_current_filename) - 1);
-            g_current_filename[sizeof(g_current_filename) - 1] = '\0';
+            g_doc_drive = drv;
+            g_doc_user = usr;
+            cpm_format_doc_filename(&g_cpm_fcb, g_doc_user);
         }
     } else {
         show_splash_screen();
@@ -94,6 +104,7 @@ int main(int argc, char **argv)
     hal_console_locate(1, 1);
     hal_console_show_cursor();
     hal_console_puts("\r\nExiting SE.COM. Returned to CP/M.\r\n");
+clean_exit_sp:
 #asm
     extern __restore_sp_onexit
     ld sp, (__restore_sp_onexit + 1)

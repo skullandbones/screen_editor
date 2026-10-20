@@ -4917,6 +4917,28 @@ have been resolved and archived.
       `src/se.asm` while modal text prompts in `ui_browser.c`, `ui_modal.c`,
       and `search.c` continue to accept both `KEY_BACKSPACE` and `KEY_DEL` as
       rubout.
+  - [x] **Bug 2.8.47: Command-Line Invocation on Non-Existent Bare Filename
+    Displayed Spurious `"File Not Found"` Modal and Unformatted Filename**:
+    - *Reference*: `src/core/file_io.c:232-236`, `src/sec_cpm.c:79-85`,
+      `src/se.asm:274-302`.
+    - *Issue*: When `SEC.COM` was invoked from the CP/M command line with a
+      non-existent bare filename (e.g. `sec LONGNAME.TXT` in Step 69 Subtest 3),
+      `file_read_op()` in `src/core/file_io.c` unconditionally invoked
+      `modal_alert_file_not_found(filename)`, blocking on a modal popup before
+      `main()` in `src/sec_cpm.c` copied the raw unformatted `target_file`
+      into `g_current_filename` without drive prefix or FCB normalization. In
+      `SE.COM` (`AUTO_LOAD_NOT_FOUND` in `src/se.asm:274-302`), bare filenames
+      that do not exist open a new empty document directly in the editor with
+      the drive-prefixed uppercase filename (`C:LONGNAME.TXT`), while explicit
+      drive-prefixed non-existent files print `<N:FILENAME.EXT> file not found`
+      and exit to CP/M.
+    - *Resolution*: Removed the redundant `modal_alert_file_not_found()` call
+      from `file_read_op()` (interactive Open/Insert browsers already validate
+      existence and display the alert in `ui_browser_workspace()`), exposed
+      `cpm_format_doc_filename()`, and updated `main()` in `src/sec_cpm.c` to
+      format `g_current_filename` via `cpm_format_doc_filename(&g_cpm_fcb,
+      g_doc_user)` for new bare filenames or print `<N:FILENAME.EXT> file not
+      found` and exit when an explicit drive/user prefix was supplied.
 
 ---
 

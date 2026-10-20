@@ -53,6 +53,7 @@ extern uint8_t   g_doc_user;
 extern uint8_t   g_target_user;
 const char *cpm_parse_prefix(const char *path, uint8_t *out_drv,
                              uint8_t *out_usr);
+void cpm_format_doc_filename(const cpm_fcb_t *fcb, uint8_t user);
 #endif
 
 /* File I/O Subsystem Function Entry Points */
