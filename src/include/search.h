@@ -22,7 +22,11 @@ extern "C" {
 #endif
 
 /* Search Buffer Capacities & Modal Field Lengths */
+#ifdef __CPM__
+#define SEARCH_BUF_MAX          32
+#else
 #define SEARCH_BUF_MAX          64
+#endif
 #define FIND_POPUP_FIELD_LEN    28
 #define REPLACE_POPUP_FIELD_LEN 29
 

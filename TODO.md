@@ -4741,6 +4741,29 @@ have been resolved and archived.
       file insertion with non-empty block replacement, host line suffix
       preservation, `g_current_filename` restoration, and solidified block
       bounds around the inserted text.
+  - [x] **Bug 2.8.38: Block Save (`file_save_block`) Writing Full Unclipped
+    Lines, Overwriting Active Document Filename/Dirty State, and Omitting
+    `Saving File` Progress Modal**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6 (Save Block to File
+      `Ctrl+B` then `Ctrl+S`), Section 8.5 (`Saving File` Progress Modal and
+      100-line ticks), and `src/core/ui_browser.asm:6943-7106`
+      (**Non-Conformity with `UI_UX_DESIGN.md`**).
+    - *Issue*: `file_save_block()` in `src/core/file_io.c` delegated directly to
+      `file_write_op(filename, start_row, end_row, format)`, which wrote entire
+      lines `start_row..end_row` without clipping to `g_norm_start_col` and
+      `g_norm_end_col` (and without skipping the trailing row when
+      `g_norm_end_col == 0` on multi-line blocks), and `file_write_op()` did not
+      render the `Saving File` progress modal or 100-line ticks (`Line   100`,
+      `Line   200`, `Line   300`). Additionally, `editor.c` (`KEY_CTRL_O` with
+      active block) called `cancel_block()` immediately after `file_insert()`,
+      clearing the newly solidified block around the inserted file.
+    - *Resolution*: Updated `file_write_op()` in `src/core/file_io.c` to accept
+      an `is_block` flag that clips written columns to `g_norm_start_col..
+      g_norm_end_col` (and skips `end_row` when `g_norm_end_col == 0` on
+      multi-line blocks), preserves `g_current_filename` and `g_doc_modified` on
+      block saves, and renders the `Saving File` progress modal with 100-line
+      ticks during both document and block saves; also removed the extraneous
+      `cancel_block()` after `file_insert()` in `src/core/editor.c`.
 
 ---
 

@@ -405,12 +405,16 @@ static int cpm_write_byte(uint8_t b, uint8_t *sec_pos, uint16_t *rec_num)
 }
 
 static int file_write_op(const char *filename, uint16_t start_row,
-                         uint16_t end_row, uint8_t format)
+                         uint16_t end_row, uint8_t format, uint8_t is_block)
 {
     uint16_t row;
     char *line_buf = g_scratch_line_buf;
+    char saved_fname[32];
     uint16_t rec_num = 0;
+    uint16_t prog_lines = 0;
+    uint8_t prog_cnt = 100;
     uint8_t sec_pos = 0;
+    uint8_t saved_mod = g_doc_modified;
     uint16_t i, len;
     int orig_user;
 
@@ -434,11 +438,33 @@ static int file_write_op(const char *filename, uint16_t start_row,
         return -1;
     }
 
+    strcpy(saved_fname, g_current_filename);
+    cpm_format_doc_filename(&s_cpm_io_fcb, g_target_user);
+    g_doc_modified = 0;
+    draw_progress_modal("Saving File", 0);
+
     bdos(26, (int)s_cpm_sec_buf);
 
     for (row = start_row; row <= end_row && row < g_doc_total_lines; row++) {
+        uint16_t c_start = 0;
+        uint16_t c_end;
+        if (is_block && start_row != end_row && row == end_row &&
+            g_norm_end_col == 0) {
+            break;
+        }
         len = fetch_line_to_buffer(row, line_buf, MAX_ACTIVE_PAYLOAD);
-        for (i = 0; i < len; i++) {
+        c_end = len;
+        if (is_block) {
+            if (row == start_row && g_norm_start_col < c_end) {
+                c_start = g_norm_start_col;
+            } else if (row == start_row) {
+                c_start = c_end;
+            }
+            if (row == end_row && g_norm_end_col < c_end) {
+                c_end = g_norm_end_col;
+            }
+        }
+        for (i = c_start; i < c_end; i++) {
             if (cpm_write_byte((uint8_t)line_buf[i], &sec_pos, &rec_num) != 0) {
                 goto write_err;
             }
@@ -451,7 +477,13 @@ static int file_write_op(const char *filename, uint16_t start_row,
         if (cpm_write_byte('\n', &sec_pos, &rec_num) != 0) {
             goto write_err;
         }
+        prog_lines++;
+        if (--prog_cnt == 0) {
+            prog_cnt = 100;
+            draw_progress_tick(prog_lines);
+        }
     }
+    draw_progress_tick(prog_lines);
 
     while (sec_pos != 0) {
         if (cpm_write_byte(0x1A, &sec_pos, &rec_num) != 0) {
@@ -463,11 +495,18 @@ static int file_write_op(const char *filename, uint16_t start_row,
     bdos(26, DEFAULT_DMA);
     bdos(32, orig_user);
 
+    if (is_block) {
+        strcpy(g_current_filename, saved_fname);
+        g_doc_modified = saved_mod;
+    }
     checkout_active_line(g_cur_doc_row);
     g_need_screen_render = 1;
+    g_need_status_render = 1;
     return 0;
 
 write_err:
+    strcpy(g_current_filename, saved_fname);
+    g_doc_modified = saved_mod;
     bdos(16, (int)&s_cpm_io_fcb);
     bdos(26, DEFAULT_DMA);
     bdos(32, orig_user);
@@ -627,12 +666,13 @@ static int file_read_op(const char *filename, uint8_t is_insert)
 }
 
 static int file_write_op(const char *filename, uint16_t start_row,
-                         uint16_t end_row, uint8_t format)
+                         uint16_t end_row, uint8_t format, uint8_t is_block)
 {
     FILE *fp;
     uint16_t row;
     char *line_buf = g_scratch_line_buf;
     char clean_name[256];
+    (void)is_block;
 
     if (!filename || filename[0] == '\0') {
         return -1;
@@ -681,7 +721,7 @@ int file_save(const char *filename, uint8_t format)
 {
     const char *target = filename ? filename : g_current_filename;
     uint16_t last_row = g_doc_total_lines ? (g_doc_total_lines - 1) : 0;
-    int res = file_write_op(target, 0, last_row, format);
+    int res = file_write_op(target, 0, last_row, format, 0);
     if (res == 0) {
 #ifdef __CPM__
         g_doc_drive = s_cpm_io_fcb.drive;
@@ -704,7 +744,7 @@ int file_save(const char *filename, uint8_t format)
 int file_save_block(const char *filename, uint16_t start_row,
                     uint16_t end_row, uint8_t format)
 {
-    int res = file_write_op(filename, start_row, end_row, format);
+    int res = file_write_op(filename, start_row, end_row, format, 1);
 #ifndef __CPM__
     if (res == 0) {
         modal_show_notification("Save Complete", filename);

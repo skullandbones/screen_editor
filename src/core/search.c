@@ -114,6 +114,7 @@ static int match_pattern_at(const char *s)
     return 1;
 }
 
+#ifndef __CPM__
 int find_string_in_line(const char *pattern, uint16_t pat_len,
                          const char *line, uint16_t line_len,
                          uint16_t *match_col)
@@ -149,6 +150,7 @@ int find_string_in_line(const char *pattern, uint16_t pat_len,
     }
     return -1;
 }
+#endif
 
 static const char s_find_mode_sens[] =
     "Search Pattern: [Case Sensitive  ]";

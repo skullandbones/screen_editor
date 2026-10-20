@@ -617,8 +617,8 @@ int editor_handle_key(int key)
                                          sizeof(s_editor_fname)) ==
                 MODAL_RES_OK && s_editor_fname[0]) {
                 file_insert(s_editor_fname);
-                cancel_block();
                 g_need_screen_render = 1;
+                g_need_status_render = 1;
             }
             break;
         }
