@@ -4790,6 +4790,18 @@ have been resolved and archived.
       `show_config_screen()` in `src/core/ui_render.c` with canonical RAM drive
       mode labels, cycle order (`Preserve` -> `Hibernate` -> `Overwrite`), and
       `Saved to local drive` status feedback.
+  - [x] **Bug 2.8.40: Reducing `MAX_INPUT_LINE_CHARS` to `124` Prevented
+    Horizontal Panning Past Col 124 in 120x40 Mode (Step 15)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2 (Horizontal Panning `[Pan
+      +40]` in 120x40 geometry), `src/include/config.h:40-44`.
+    - *Issue*: Trimming `MAX_ACTIVE_LINE_STRIDE` to `128` (`MAX_INPUT_LINE_CHARS
+      = 124`) capped line insertion at column 124, preventing Step 15 from
+      extending a line past column 135 in 120x40 mode.
+    - *Resolution*: Increased `MAX_ACTIVE_LINE_STRIDE` to `152`
+      (`MAX_INPUT_LINE_CHARS = 148`) in `src/include/config.h`, adjusted
+      `MAX_BROWSER_FILES` to `48` in `src/include/ui_browser.h`, and uppercased
+      config keys/values in `src/core/config.c` to keep `SEC.COM` CCP headroom
+      at `+259 bytes`.
 
 ---
 

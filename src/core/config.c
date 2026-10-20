@@ -74,68 +74,79 @@ static void parse_config_line(char *line)
     *eq = '\0';
     key = trim_whitespace(p);
     val = trim_whitespace(eq + 1);
+#ifdef __CPM__
+    for (p = key; *p; p++) {
+        if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 32);
+    }
+    for (p = val; *p; p++) {
+        if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 32);
+    }
+#define CFG_EQ(a, b) (strcmp((a), (b)) == 0)
+#else
+#define CFG_EQ(a, b) (strcasecmp((a), (b)) == 0)
+#endif
 
-    if (strcasecmp(key, "SCREEN") == 0 ||
-        strcasecmp(key, "SCREEN_MODE") == 0) {
-        if (strcasecmp(val, "80X24") == 0 || strcasecmp(val, "1") == 0) {
+    if (CFG_EQ(key, "SCREEN") ||
+        CFG_EQ(key, "SCREEN_MODE")) {
+        if (CFG_EQ(val, "80X24") || CFG_EQ(val, "1")) {
             g_config.screen_mode = MODE_80X24;
-        } else if (strcasecmp(val, "120X40") == 0 ||
-                   strcasecmp(val, "0") == 0) {
+        } else if (CFG_EQ(val, "120X40") ||
+                   CFG_EQ(val, "0")) {
             g_config.screen_mode = MODE_120X40;
-        } else if (strcasecmp(val, "NATIVE") == 0 ||
-                   strcasecmp(val, "2") == 0) {
+        } else if (CFG_EQ(val, "NATIVE") ||
+                   CFG_EQ(val, "2")) {
             g_config.screen_mode = MODE_NATIVE;
         }
-    } else if (strcasecmp(key, "TAB") == 0 ||
-               strcasecmp(key, "TABS") == 0 ||
-               strcasecmp(key, "TAB_WIDTH") == 0) {
+    } else if (CFG_EQ(key, "TAB") ||
+               CFG_EQ(key, "TABS") ||
+               CFG_EQ(key, "TAB_WIDTH")) {
         int w = atoi(val);
         if (w == 4 || w == 8) {
             g_config.tab_width = (uint8_t)w;
         }
-    } else if (strcasecmp(key, "LINES") == 0 ||
-               strcasecmp(key, "MAXLINES") == 0 ||
-               strcasecmp(key, "LINES_MODE") == 0) {
-        if (strcasecmp(val, "32K") == 0 || strcmp(val, "1") == 0) {
+    } else if (CFG_EQ(key, "LINES") ||
+               CFG_EQ(key, "MAXLINES") ||
+               CFG_EQ(key, "LINES_MODE")) {
+        if (CFG_EQ(val, "32K") || CFG_EQ(val, "1")) {
             g_config.lines_mode = 1;
-        } else if (strcasecmp(val, "16K") == 0 || strcmp(val, "0") == 0) {
+        } else if (CFG_EQ(val, "16K") || CFG_EQ(val, "0")) {
             g_config.lines_mode = 0;
         }
-    } else if (strcasecmp(key, "RAMDRIVE") == 0 ||
-               strcasecmp(key, "RAMDISK") == 0) {
-        if (strcasecmp(val, "PRESERVE") == 0 ||
-            strcasecmp(val, "OFF") == 0 ||
-            strcmp(val, "0") == 0) {
+    } else if (CFG_EQ(key, "RAMDRIVE") ||
+               CFG_EQ(key, "RAMDISK")) {
+        if (CFG_EQ(val, "PRESERVE") ||
+            CFG_EQ(val, "OFF") ||
+            CFG_EQ(val, "0")) {
             g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
-        } else if (strcasecmp(val, "ON") == 0 ||
-                   strcasecmp(val, "OVERWRITE") == 0 ||
-                   strcasecmp(val, "ENABLED") == 0 ||
-                   strcmp(val, "1") == 0) {
+        } else if (CFG_EQ(val, "ON") ||
+                   CFG_EQ(val, "OVERWRITE") ||
+                   CFG_EQ(val, "ENABLED") ||
+                   CFG_EQ(val, "1")) {
             g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
-        } else if (strcasecmp(val, "HIB") == 0 ||
-                   strcasecmp(val, "HIBERNATE") == 0 ||
-                   strcmp(val, "2") == 0) {
+        } else if (CFG_EQ(val, "HIB") ||
+                   CFG_EQ(val, "HIBERNATE") ||
+                   CFG_EQ(val, "2")) {
             g_config.ramdrive_mode = RAMDRV_MODE_HIBERNATE;
-        } else if (strcasecmp(val, "DISABLED") == 0 ||
-                   strcasecmp(val, "NONE") == 0 ||
-                   strcmp(val, "3") == 0) {
+        } else if (CFG_EQ(val, "DISABLED") ||
+                   CFG_EQ(val, "NONE") ||
+                   CFG_EQ(val, "3")) {
             g_config.ramdrive_mode = RAMDRV_MODE_DISABLED;
         }
-    } else if (strcasecmp(key, "PLUGIN") == 0 ||
-               strcasecmp(key, "PLUGINS") == 0 ||
-               strcasecmp(key, "PLUGIN_MODE") == 0) {
+    } else if (CFG_EQ(key, "PLUGIN") ||
+               CFG_EQ(key, "PLUGINS") ||
+               CFG_EQ(key, "PLUGIN_MODE")) {
 #ifdef __CPM__
-        if (strcasecmp(val, "AUTO") == 0 ||
-            strcasecmp(val, "AUTOLOAD") == 0 ||
-            strcmp(val, "1") == 0) {
+        if (CFG_EQ(val, "AUTO") ||
+            CFG_EQ(val, "AUTOLOAD") ||
+            CFG_EQ(val, "1")) {
             g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
-        } else if (strcasecmp(val, "DEMAND") == 0 ||
-                   strcasecmp(val, "ONDEMAND") == 0 ||
-                   strcmp(val, "2") == 0) {
+        } else if (CFG_EQ(val, "DEMAND") ||
+                   CFG_EQ(val, "ONDEMAND") ||
+                   CFG_EQ(val, "2")) {
             g_config.plugin_mode = PLUGIN_MODE_ONDEMAND;
-        } else if (strcasecmp(val, "OFF") == 0 ||
-                   strcasecmp(val, "DISABLED") == 0 ||
-                   strcmp(val, "0") == 0) {
+        } else if (CFG_EQ(val, "OFF") ||
+                   CFG_EQ(val, "DISABLED") ||
+                   CFG_EQ(val, "0")) {
             g_config.plugin_mode = PLUGIN_MODE_DISABLED;
         }
 #else
@@ -143,9 +154,9 @@ static void parse_config_line(char *line)
         (void)val;
         g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
 #endif
-    } else if (strcasecmp(key, "AUTO_INDENT") == 0) {
-        if (strcasecmp(val, "OFF") == 0 || strcasecmp(val, "NO") == 0 ||
-            strcmp(val, "0") == 0) {
+    } else if (CFG_EQ(key, "AUTO_INDENT")) {
+        if (CFG_EQ(val, "OFF") || CFG_EQ(val, "NO") ||
+            CFG_EQ(val, "0")) {
             g_config.auto_indent = 0;
         } else {
             g_config.auto_indent = 1;

@@ -38,9 +38,9 @@ extern "C" {
 #define MAX_COPY_LINE_CHARS     120
 #define MAX_FAR_BANKS           12
 #ifdef __CPM__
-#define MAX_ACTIVE_LINE_STRIDE  128
-#define MAX_ACTIVE_PAYLOAD      126
-#define MAX_INPUT_LINE_CHARS    124
+#define MAX_ACTIVE_LINE_STRIDE  152
+#define MAX_ACTIVE_PAYLOAD      150
+#define MAX_INPUT_LINE_CHARS    148
 #define CACHE_SIZE_LINES        16
 #define MAX_DOC_LINES_16K       16384
 #define MAX_DOC_LINES_32K       16384
