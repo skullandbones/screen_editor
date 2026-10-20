@@ -132,7 +132,7 @@ breaks another.
 7. Version Number Harmonization Mandate:
    All SE variants across all target platforms (CP/M, ZX Spectrum Next, Linux,
    Python, etc.) must use the exact same release version number as canonical
-   SE.COM (e.g. `v1.1.0`). Independent or divergent versioning across ports is
+   SE.COM (e.g. `v1.1.4`). Independent or divergent versioning across ports is
    strictly prohibited.
 
 3. Screen Surface Taxonomy (The Three Tiers)
@@ -1192,8 +1192,10 @@ content blocks rather than top-aligned text.
         `version 1.1.4 (2026-10-18) (C)`
       - Linux Native Python port (`se-py`):
         `version 1.1.4 (2026-10-18) (Python)`
-      - Future Rust port (`se-rs`):
-        `version 1.1.4 (2026-10-18) (Rust)`
+      - Linux Native Rust / Ada / Algol 68 / Pascal ports (`se-rs`, `se-ada`,
+        `se-a68`, `se-pas`):
+        `version 1.1.4 (2026-10-18) (Rust)` (or `(Ada)`, `(Algol 68)`,
+        `(Pascal)`)
       Generic host OS labels (such as `(Linux)`) must not be used; each
       binary shall clearly state its predominant programming language on the
       About screen.
@@ -1345,9 +1347,9 @@ content blocks rather than top-aligned text.
              - `05` (`Active Document Text`): `<DocBytes> B (<KB> KB)` ->
                `Active: <TotalLines> / <MaxLines> Lines (<Format>)`
              - `06` (`Line Index & Gap Buffers`): `<IndexKB> KB` ->
-               `Active: Line Table + 1 KB Edit Buffer + Undo/Cache`
-             - `07` (`Block & Clipboard Buffer`): `<ClipBytes> B` ->
-               `Active: Block Selection / Copy Buffer` (or `Idle (0 B)`)
+               `Active: Line Table + 1 KB Edit Buffer + Line Cache`
+             - `07` (`Active Block Selection`): `<BlockBytes> B` ->
+               `Active: In-Place Marked Block Range` (or `Inactive (0 B)`)
              - `08` (`Terminal Screen Surface`): `<Cols>x<Rows> (<Buf> KB)` ->
                `Active: Viewport Framebuffer & ANSI Render Buffer`
            - Rows `09..15` — Builtin Plugin Manager & Loaded 64-Bit Plugins
@@ -2179,8 +2181,8 @@ specific architectural adaptations.
      `version 1.1.4 (2026-10-18) (C)`
    - `se-py`:
      `version 1.1.4 (2026-10-18) (Python)`
-   - `se-rs`:
-     `version 1.1.4 (2026-10-18) (Rust)`
+   - `se-rs` / `se-ada` / `se-a68` / `se-pas`:
+     `version 1.1.4 (2026-10-18) (Rust)` (or `(Ada)`, `(Algol 68)`, `(Pascal)`)
    All SE variants shall share the identical version number as canonical
    `SE.COM` (e.g. `v1.1.4`). Generic host OS labels (such as `(Linux)`) must
    not be used; each binary shall clearly state its predominant programming
@@ -2214,9 +2216,9 @@ specific architectural adaptations.
        hardware banking mechanism at runtime (e.g. RomWBW HBIOS bank switching
        vs. ZX Spectrum Next MMU banking).
      - All other SE variants (including CP/M-86 `SE.CMD`, native ZX Spectrum
-       Next `SE.NEX` and `.se`, Linux C `se-linux`, Linux Python `se-py`, and
-       Linux Rust `se-rs`) have a builtin plugin manager integrated directly
-       into the main executable.
+       Next `SE.NEX` and `.se`, and 64-bit Linux ports `se-linux`, `se-py`,
+       `se-rs`, `se-ada`, `se-a68`, `se-pas`) have a builtin plugin manager
+       integrated directly into the main executable.
    - Plugin Module Non-Interchangeability & API / ABI Boundaries:
      - Non-CP/M plugin modules are not interchangeable with CP/M plugin modules.
      - CP/M-80 plugin modules (`.PRL` / `.OVL` 8-bit Z80 binaries) may share a
@@ -2224,10 +2226,11 @@ specific architectural adaptations.
        `.PRL` / `.OVL` binary header contract).
      - CP/M-86 (`SE.CMD`) defines its own 16-bit x86 API / ABI for plugins that
        is not interchangeable with CP/M-80 or non-CP/M systems.
-     - Non-CP/M plugin modules may share a common 64-bit API / ABI (e.g. a C
-       ABI shared object interface across native C and Rust builds); otherwise,
-       each 64-bit programming language (such as C, Rust, or Python) defines
-       its own language-specific plugin API / ABI.
+     - Non-CP/M 64-bit plugin modules may share a common 64-bit API / ABI (via
+       `dlopen` `.so` shared libraries using the 64-bit System V C ABI across
+       C, Rust, Python, Ada, Algol 68, and Pascal on the same `x86_64` or
+       `ARM64` CPU architecture); otherwise, a language-specific plugin
+       mechanism is used.
    - Builtin Plugin Manager Splash Screen, Configure Screen & `SE.CFG` Behavior:
      - Splash Screen Status: On non-CP/M systems (and CP/M-86 `SE.CMD` with its
        builtin plugin manager), the Splash Screen diagnostic line for the
@@ -2467,6 +2470,7 @@ and its target profiles.
      - `se-linux`, `SEC.COM`: `(C)`
      - `se-py`: `(Python)`
      - `se-rs`: `(Rust)`
+     - `se-ada`, `se-a68`, `se-pas`: `(Ada)`, `(Algol 68)`, `(Pascal)`
    - Status Bar Free Memory Indication (Field 4):
      As on the Splash Screen (Section 15.1.5), large-memory host profiles may
      omit `Free: <N> KB` in Status Bar Field 4 (rendering a blank 15-character

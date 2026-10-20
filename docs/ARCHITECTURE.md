@@ -2,8 +2,8 @@
 
 This document provides a comprehensive technical overview of the architecture,
 subsystems, memory organization, and data flows of **`SE.COM`** (Screen
-Editor), a high-performance text editor for CP/M 2.2 / 3.0 systems running on
-the **RomWBW v3.6.0+** firmware platform (Z80 and Z180 processors).
+Editor) and its multi-platform targets (8-bit CP/M-80 on **RomWBW v3.5+** and
+**ZX Spectrum Next**, 16-bit CP/M-86 `SE.CMD`, and 64-bit Linux ports).
 
 ---
 
@@ -71,78 +71,79 @@ subsystem state:
 
 ---
 
-## 3. Banked Memory Subsystem (RomWBW HBIOS v3.6.0+)
+## 3. Banked Memory Subsystem (RomWBW HBIOS v3.5+ & Next MMU)
 
 To overcome the 64KB Z80 address barrier, `SE.COM` interfaces directly with
-RomWBW HBIOS firmware services via `RST 08H` (strictly requiring RomWBW v3.6.0
-or later).
+RomWBW HBIOS firmware services via `RST 08H` (RomWBW v3.5 or later) or the ZX
+Spectrum Next MMU slot registers (`NEXTREG 0x50..0x53` on `SE_NEXT.COM`).
 
-### 3.1 HBIOS Bank Operations
+### 3.1 HBIOS & MMU Bank Operations
 
 * **Probe Banks (`BF_SYSGET`)**: Detects total physical banks, current bank,
-  and user area configuration.
-* **Bank Copy (`BF_SYSCOPY`)**: High-speed inter-bank block memory transfer
-  between Common RAM (0x8000..0xFFFF) and Far RAM banks without CPU-driven
-  byte loops.
-* **Bank Switch (`BF_SYSSET`)**: Fast mapping of 32KB / 64KB physical banks.
+  RAM drive bounds, and application bank configuration.
+* **Bank Copy (`BF_SYSSETCPY` `0xF4` / `BF_SYSBNKCPY` `0xF5`)**: High-speed
+  inter-bank block memory transfer between Upper Common RAM (`0x8000..0xFFFF`)
+  and 32KB Far RAM banks (`0x0000..0x7FFF`).
+* **Bank Switch & Call (`HB_BNKSEL` `0xFFF3` / `HB_BNKCALL` `0xFFF9`)**: Fast
+  mapping and cross-bank execution of 32KB physical banks (mirrored by
+  `NEXT_BNKSEL` and `NEXT_BNKCALL` on ZX Spectrum Next).
 
 ### 3.2 Bank Allocation Strategy
 
-RomWBW typically provides up to 512KB (or more) of banked RAM divided into
-physical 32KB/64KB banks:
-* **Bank 0**: Primary CP/M System RAM (TPA + BDOS + BIOS).
-* **Bank 1**: Line Pointer Table (stores 16-bit physical line slot descriptors
-  for up to 16,384 or 32,768 document lines).
-* **Banks 2..N**: Document Page Storage (caches document text in 128-byte
-  virtual slots).
-* **Plugin Banks**: Far RAM resident plugins (`BIGPLUG.PRL`, `FATFS.PRL`,
-  `HALFPLUG.PRL`) execute in dedicated Far RAM banks above document storage.
+RomWBW typically provides up to 512KB (16 x 32KB banks) of banked RAM:
+* **Bank 0 (`80h`)**: HBIOS System Firmware.
+* **TPA Bank (`8Eh` / `8Fh`)**: Primary CP/M System RAM (TPA + BDOS + BIOS).
+* **Line Table Bank(s)**: Stores 16-bit physical line slot descriptors for up
+  to 16,384 lines (1 bank) or 32,768 document lines (2 banks).
+* **Document Buffer Banks (`EXT_BANK_TABLE`)**: Pools remaining 32KB Far RAM
+  banks for document text storage in multi-stride 128-byte slots.
+* **Plugin Manager & Far RAM Plugin Banks**: `PLUGIN.PRL` occupies a dedicated
+  32KB Far RAM bank (`PLUGIN_MGR_BANK`), and loaded plugins dynamically borrow
+  32KB Far RAM banks (`BORROW_NEW_FAR_BANK`) from `EXT_BANK_TABLE`.
 
 ### 3.3 RAM Drive Detection & Protection Modes
 
-RomWBW often allocates high RAM banks for an in-memory RAM disk (typically
-Drive `A:`). `SE.COM` detects the RAM disk and provides three configurable
-protection strategies:
-1. **Preserve Mode**: Protects the RAM disk completely. `SE.COM` restricts its
-   bank allocation ceiling below the RAM disk boundary.
-2. **Hibernate Mode**: Backs up RAM disk directory and allocation tables to a
-   temporary swap file, reclaims the banks for document editing, and restores
-   the RAM disk upon exit.
-3. **Overwrite Mode**: Sacrifices RAM disk data to provide maximum editing
-   headroom (~384KB to 512KB Far RAM).
+RomWBW allocates intermediate RAM banks (`81h..88h`) for an in-memory RAM disk
+(e.g. Drive `B:` or `A:` / `MD0:`). `SE.COM` detects the RAM disk and provides
+three configurable protection strategies:
+1. **Preserve Mode (`Protected`, Default)**: Protects the RAM disk completely.
+   `SE.COM` restricts its bank allocation to the HBIOS application banks.
+2. **Hibernate Mode (`Hibernate`)**: Saves the RAM disk banks to a temporary
+   image file (`RAMDRV.IMG`) via `HIBERN.OVL`, reclaims the banks for document
+   editing, and restores the RAM disk upon exit.
+3. **Overwrite Mode (`Enabled`)**: Uses the RAM disk banks directly to provide
+   maximum editing capacity (~384KB to 448KB Far RAM).
 
 ---
 
 ## 4. Document Model & Virtual Storage Engine
 
 `SE.COM` represents documents as an indexed sequence of variable-length
-null-terminated text lines.
+null-terminated text lines up to 1,000 characters per line
+(`MAX_LINE_CHARS = 1000`).
 
-### 4.1 Slot-Based Virtual Storage Architecture
+### 4.1 Slot-Based Far RAM Storage Architecture
 
 ```text
 Document Line Index (0 .. Total Lines - 1)
        |
        v
 +-----------------------+
-| Line Slot Descriptor  | -> Slot Index (16-bit)
+| Line Slot Descriptor  | -> Slot Index (16-bit) & Stride Count
 +-----------------------+
        |
-       +---> [Physical Bank in Far RAM] (if cached in RAM)
-       |
-       +---> [Swap File `$$$SE$$$.SWP`] (if paged out to disk)
+       +---> [Physical 32KB Bank in Far RAM (EXT_BANK_TABLE)]
 ```
 
-* **Slot Size**: Lines are stored in 128-byte fixed records. Lines up to 120
-  characters fit in a single slot.
+* **Multi-Stride Slot Allocation**: Lines are stored in 128-byte base slots in
+  32KB Far RAM banks (`256` slots per 32KB bank), automatically spanning up to
+  8 contiguous slots (`1,024` bytes) for lines up to 1,000 characters.
 * **Two-Level Table**:
-  - The Line Table maps each document line number to a virtual slot index.
-  - The Slot Allocation Bitmap tracks free vs occupied physical slots in Far
-    RAM.
-* **Swap Paging Engine**: When total document size exceeds available Far RAM
-  banks, `SE.COM` activates its LRU (Least Recently Used) disk paging system,
-  streaming inactive 128-byte slots to the hidden file `$$$SE$$$.SWP` on the
-  current drive and retrieving them transparently upon navigation.
+  - The Line Pointer Table (`LINE_TABLE_BANK` / `LINE_TABLE_BANK_1`) maps each
+    document line number (`0..16,383` or `0..32,767`) to its Far RAM bank and
+    slot descriptor.
+  - Per-bank allocation bitmaps track free vs. occupied 128-byte slots across
+    all active document banks in `EXT_BANK_TABLE`.
 
 ### 4.2 Local Working Cache (`LINE_STORAGE`)
 
@@ -222,12 +223,16 @@ serial lines or memory-mapped hardware consoles.
 
 ### 6.1 Geometry Modes
 
-* **Modern Widescreen (120x40)**: Default mode for modern terminal emulators
-  (Minicom, PuTTY, Windows Terminal) providing 120 columns by 40 rows.
-* **Classic Retro (80x24)**: Standard VT100 80 columns by 24 rows.
-* **Horizontal Panning**: In 80x24 mode, lines longer than 80 columns trigger
-  automatic viewport horizontal panning (`[Pan +N]`) with column 79
-  continuation indicators.
+* **Classic Retro (`80x24`, Option 1 — Universal Default)**: Standard VT100 80
+  columns by 24 rows. Default mode across all SE platforms and targets.
+* **Modern Widescreen (`120x40`, Option 2)**: Optional wide console mode for
+  modern terminal emulators (Minicom, PuTTY, Windows Terminal) providing 120
+  columns by 40 rows.
+* **Native Host Terminal (`Native`, Option 3)**: Dynamic host terminal sizing on
+  native OS ports (`se-linux`, `se-py`, `se-rs`, etc.).
+* **Horizontal Panning**: Lines longer than the active screen width trigger
+  automatic viewport horizontal panning (`[Pan +N]` in 40-column increments up
+  to 1,000 characters).
 
 ### 6.2 UI/UX Hierarchy & Rules
 
@@ -583,7 +588,8 @@ The codebase is organized into three distinct tiers:
    - `hal.inc`: Hardware abstraction interface constants and vector jumps.
    - `buffer.inc`: Line pointer tables, document buffers, and edit records.
    - `editor.inc`: Mode flags, cursor state, navigation, and key commands.
-   - `block.inc`: Block anchor coordinates, selection state, and clipboard.
+   - `block.inc`: Block anchor coordinates, selection state, and in-place block
+     operations.
    - `search.inc`: Search patterns, case flags, and match coordinators.
    - `ui.inc`: Modal dialog geometries, palette attributes, and status rows.
    - `file_io.inc`: FCB layouts, sector transfer buffers, and error codes.
