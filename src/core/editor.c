@@ -526,6 +526,22 @@ int editor_handle_key(int key)
     case KEY_DOWN: cursor_down(); break;
     case KEY_LEFT: cursor_left(); break;
     case KEY_RIGHT: cursor_right(); break;
+    case KEY_SHIFT_UP:
+        start_new_block_at_cursor();
+        cursor_up();
+        break;
+    case KEY_SHIFT_DOWN:
+        start_new_block_at_cursor();
+        cursor_down();
+        break;
+    case KEY_SHIFT_LEFT:
+        start_new_block_at_cursor();
+        cursor_left();
+        break;
+    case KEY_SHIFT_RIGHT:
+        start_new_block_at_cursor();
+        cursor_right();
+        break;
     case KEY_HOME: cursor_home(); break;
     case KEY_END: cursor_end(); break;
     case KEY_PGUP:

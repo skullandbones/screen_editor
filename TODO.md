@@ -4531,6 +4531,22 @@ have been resolved and archived.
       `BLOCK_MODE_SOLIDIFIED`. Documented Forward vs. Backwards Normalization in
       Section 9.1 of `docs/UI_UX_DESIGN.md`. Verified via Step 38 of
       `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.28: `KEY_SHIFT_UP/DOWN/LEFT/RIGHT` Ignored in
+    `editor_handle_key()`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1 (`SHIFT_CURSOR_*` in
+      `src/core/editor.asm:485-500`).
+    - *Issue*: Although `hal_cpm_keyboard.c` and `hal_linux_keyboard.c` decode
+      `Shift + Arrow` escape sequences (`\x1b[1;2A`..`\x1b[1;2D`) into
+      `KEY_SHIFT_UP`, `KEY_SHIFT_DOWN`, `KEY_SHIFT_LEFT`, and `KEY_SHIFT_RIGHT`,
+      `editor_handle_key()` in `src/core/editor.c:524-530` has no `case`
+      branches for `KEY_SHIFT_*`, silently dropping them in Step 39.
+    - *Resolution*: Added `KEY_SHIFT_UP`, `KEY_SHIFT_DOWN`, `KEY_SHIFT_LEFT`,
+      and `KEY_SHIFT_RIGHT` handlers to `editor_handle_key()` in
+      `src/core/editor.c` calling `start_new_block_at_cursor()` followed by the
+      directional cursor motion (`cursor_up/down/left/right()`), matching
+      `SHIFT_CURSOR_*` in `src/core/editor.asm:485-500`. Documented `Shift +
+      Arrow` behavior in `docs/UI_UX_DESIGN.md` Section 9.1. Verified via Step
+      39 of `tests/test_editor_headless.py --sec`.
 
 ---
 

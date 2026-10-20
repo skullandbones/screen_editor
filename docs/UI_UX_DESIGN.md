@@ -1416,6 +1416,13 @@ or display notifications.
        selection from `(Row 1, Col 0)` to `(Row 2, Col 0)` spans `1 line`.
    - Toggled via `Ctrl+B`.
    - Cursor movement extends selection range.
+   - `Shift + Arrow` Keys (`KEY_SHIFT_UP`, `KEY_SHIFT_DOWN`, `KEY_SHIFT_LEFT`,
+     `KEY_SHIFT_RIGHT` — ANSI `\x1b[1;2A`..`\x1b[1;2D`, `\x1b[2A`..`\x1b[2D`,
+     `\x1b[a`..`\x1b[d`): Always start a fresh dynamic block selection anchored
+     at the current cursor position (`START_NEW_BLOCK_AT_CURSOR`, replacing any
+     prior active or solidified block) and immediately move the cursor one step
+     in the arrow direction. Subsequent unshifted arrow keys continue extending
+     that dynamic selection.
 
 2. Visual Presentation:
    - Highlighting is rendered using ANSI Inverse Video (`\x1b[7m`).
