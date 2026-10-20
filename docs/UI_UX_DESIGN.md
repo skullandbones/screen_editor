@@ -132,7 +132,7 @@ breaks another.
 7. Version Number Harmonization Mandate:
    All SE variants across all target platforms (CP/M, ZX Spectrum Next, Linux,
    Python, etc.) must use the exact same release version number as canonical
-   SE.COM (e.g. `v1.1.0`). Independent or divergent versioning across ports is
+   SE.COM (e.g. `v1.1.4`). Independent or divergent versioning across ports is
    strictly prohibited.
 
 3. Screen Surface Taxonomy (The Three Tiers)
@@ -1197,8 +1197,10 @@ content blocks rather than top-aligned text.
         `version 1.1.4 (2026-10-18) (C)`
       - Linux Native Python port (`se-py`):
         `version 1.1.4 (2026-10-18) (Python)`
-      - Future Rust port (`se-rs`):
-        `version 1.1.4 (2026-10-18) (Rust)`
+      - Linux Native Rust / Ada / Algol 68 / Pascal ports (`se-rs`, `se-ada`,
+        `se-a68`, `se-pas`):
+        `version 1.1.4 (2026-10-18) (Rust)` (or `(Ada)`, `(Algol 68)`,
+        `(Pascal)`)
       Generic host OS labels (such as `(Linux)`) must not be used; each
       binary shall clearly state its predominant programming language on the
       About screen.
@@ -1207,21 +1209,165 @@ content blocks rather than top-aligned text.
     - Dismissal: Any key press dismisses the About screen and returns to the
       Splash Screen.
 
-13. Memory Information Screen Layout (`[M]` from Splash):
-    - Displays the Tier 1 Extended Memory Map (`SE.COM - Extended Memory Map`)
-      with column 0 tilde (`~`) margin discipline across all 23 body rows and
-      the Universal Status Bar on Row `HOST_ROWS`.
-    - On RomWBW HBIOS CP/M-80 targets (`SE.COM`, `SEC.COM`), renders the system
-      summary line (`HBIOS: RomWBW v... | OS: CP/M 2.2 | RAM: 512 KB (16x32K) |
-      SE: ... KB`), the 5-column bank table header
-      (`Bank  Phys   Size   System / OS Role        SE.COM Usage`), the bank
-      status rows (`00` `80h` HBIOS System Firmware `Reserved: Protected HBIOS`,
-      `01` `81h` `RAM Disk (MD0:)`, `13` `8Dh` `Active: 16K Line Slot Table`,
-      `14` `8Eh` `CP/M 2.2 TPA & Base` `Active: SE Program & Cache`), and the
-      centered return prompt `Press any key to continue`.
-    - Dismissal: Any key press (except `Ctrl+P`, which opens the context plugin
-      palette) dismisses the Memory Information screen and returns to the
-      Splash Screen.
+13. Memory Information Screen (`[M]` from Splash — 8-Bit, 16-Bit & 64-Bit):
+    - Invoked by pressing `M` / `m` on the Splash Screen (`DO_MEM_INFO_SCREEN` /
+      `SHOW_MEM_INFO_SCREEN`).
+    - Geometry & Centering Discipline (All Variants):
+      - Content Height: 23 lines (`MEM_INFO_LINES = 23`), horizontally centered
+        within a 72-column table block (`PRINT_MEM_PREFIX` outputs `~` in
+        Column 0 followed by `(ACTIVE_COLS - 74) / 2` spaces: `3` spaces in
+        80x24 mode, `23` spaces in 120x40 mode).
+      - Vertical Top Padding: `((ACTIVE_ROWS - 1) - 23) / 2` blank `~` rows
+        (`0` in 80x24 mode, `8` in 120x40 mode).
+      - Row Structure (23 Content Lines):
+        - Line 1: Centered Title (`<BINARY> - Extended Memory Map` or
+          `<BINARY> - Process & Editor Memory Map`).
+        - Line 2: 1-line System / Architecture Summary (`|`-delimited fields).
+        - Line 3: Blank `~` line.
+        - Line 4: Table Column Headers (72 columns wide).
+        - Line 5: Table Column Dash Dividers (`----`).
+        - Lines 6..21: 16 diagnostic table rows (rows `00..15`).
+        - Line 22: Blank `~` line.
+        - Line 23: Centered Return Prompt (`Press any key to continue`).
+      - Universal Status Bar rendered on Row `HOST_ROWS` (`24` or `40`), with
+        hardware cursor hidden (`TERM_HIDE_CURSOR`). Any key dismisses back to
+        the Splash Screen.
+
+    13.1 8-Bit CPU Variants (CP/M-80: `SE.COM`, `SE_NEXT.COM`, `SEC.COM`)
+         On 8-bit Z80 / Z180 / Z80N CP/M-80 systems constrained to a 64 KB CPU
+         address space with 32 KB hardware bank switching (RomWBW HBIOS or ZX
+         Spectrum Next MMU), the Memory Screen usefully shows the **16-bank
+         (512 KB) physical/logical 32 KB bank allocation map**:
+         - System Summary Line (Line 2):
+           `HBIOS: RomWBW v3.5 | OS: CP/M 2.2 | RAM: 512 KB (16x32K) |`
+           `SE: <N> KB` (or `MMU: ZX Next 2MB | OS: NextCPM` on `SE_NEXT.COM`,
+           or `HBIOS: None | OS: CP/M 2.2 | RAM: 64 KB Base | SE: 64 KB` on
+           unbanked 64 KB systems).
+         - 16-Row Table Columns
+           (`Bank  Phys   Size   System / OS Role        SE.COM Usage`):
+           - `Bank` (`00..15`): Logical 32 KB bank slot index.
+           - `Phys` (`80h..8Fh` on RomWBW; `16 KB/8 KB` MMU pages on Next):
+             Hardware physical bank identifier.
+           - `Size` (`32K`, `64K`, or `--`): Bank capacity (`--` if not
+             installed).
+           - `System / OS Role`: Hardware/OS assignment:
+             - `HBIOS System Firmware` (Bank `80h`)
+             - `CP/M 2.2 TPA & Base` / `CP/M 3.1 TPA & Base` /
+               `Z-System TPA & Base`
+             - `Operating System Bank` / `Reserved: CP/M 3 Buffers`
+             - `RAM Disk (MD0:)` (RomWBW RAM drive banks `81h..88h`)
+             - `Application Memory` (RomWBW App banks `89h..8Bh`)
+             - `Not Installed`
+           - `SE.COM Usage`: Live editor & plugin subsystem assignment for each
+             bank:
+             - `Reserved: Protected HBIOS` / `Reserved: Operating System`
+             - `Preserved: RAM Disk Active` (when `RAM Drive Mode` is
+               `Protected` or `Hibernated`)
+             - `Active: SE Program & Cache` (Base TPA bank: code, 5 KB line
+               cache, Upper Common RAM `>= 0x8000`, and TPA headroom below BDOS)
+             - `Active: 16K Line Slot Table` (or `Active: Line Slots (0..16K)`
+               and `Active: Line Slots (16K..32K)` in 32K line mode)
+             - `Active: PLUGIN.PRL Subsystem` (Dedicated 32 KB Far RAM bank
+               holding the external Plugin Manager)
+             - `Active: Far RAM Plugins` (32 KB Far RAM bank(s) borrowed from
+               `EXT_BANK_TABLE` for staged `.PRL`/`.OVL` plugins)
+             - `Active: Doc Buffer Bank 01..14` (32 KB Far RAM banks actively
+               pooled for document text storage)
+             - `Free / Unallocated` / `Not Present`
+
+    13.2 16-Bit CPU Variants (CP/M-86: `SE.CMD` on 8086 / 8088 / V20 / 80286)
+         On 16-bit x86 CP/M-86 systems, there is no RomWBW 32 KB bank switcher;
+         instead, the CPU addresses up to **1 MB (`00000h..FFFFFh`)** via 16-bit
+         paragraph segments (`CS`, `DS`, `ES`, `SS`), managed by the **CP/M-86
+         BDOS Memory Control Block (MCB) allocator** (BDOS Functions 53–58) and
+         the `.CMD` group descriptors (`CODE`, `DATA`, `EXTRA`, `STACK`). The
+         Memory Screen usefully shows the **CP/M-86 Segment Group & Paragraph
+         Arena Map**:
+         - System Summary Line (Line 2):
+           `CPU: 8086/8088 | OS: CP/M-86 v1.1 | TPA: <Tot> KB | SE: <Used> KB`
+         - 16-Row Table Columns
+           (`Slot  Segm   Size   CP/M-86 Arena / Group   SE.CMD Usage`):
+           - Rows `00..03` — System & Resident OS Low Memory:
+             - `00` (`0000h`, `1K`): `x86 Interrupt Vectors` ->
+               `Reserved: INT 00h..FFh IVT` (`INT E0h` BDOS, `INT E1h` BIOS).
+             - `01` (`0040h`, `Var`): `BIOS & System Data` ->
+               `Reserved: CP/M-86 XIOS / BDA`.
+             - `02` (`xxxxh`, `Var`): `CP/M-86 BDOS & CCP` ->
+               `Reserved: Resident OS Kernel`.
+             - `03` (`xxxxh`, `Var`): `Resident RSX Modules` ->
+               `System Extensions (or None)`.
+           - Rows `04..07` — `SE.CMD` Base Segment Groups (from `.CMD` header):
+             - `04` (`CS:xxxxh`, `<N>K`): `SE.CMD CODE Group` ->
+               `Active: Editor & Builtin PM` (includes builtin Plugin Manager).
+             - `05` (`DS:xxxxh`, `<N>K`): `SE.CMD DATA Group` ->
+               `Active: UI State & Line Cache` (`ACTIVE_LINE_BUF`,
+               `LINE_STORAGE`).
+             - `06` (`SS:xxxxh`, `<N>K`): `SE.CMD STACK Group` ->
+               `Active: Execution Stack`.
+             - `07` (`xxxxh`, `<N>K`): `Line Pointer Table` ->
+               `Active: 16K/32K Line Index` (`far` pointer + length
+               descriptors).
+           - Rows `08..13` — Dynamically Allocated Document & Plugin Segments
+             (allocated via CP/M-86 BDOS `MCB_ALLOC` / `M_ALLOC` up to 64 KB per
+             segment across `ES` extra segments):
+             - `08..11` (`ES:xxxxh`, `64K` each): `Extra Heap Segment 01..04` ->
+               `Active: Doc Text Pool (<Used>/<Cap> KB)` (or `Free TPA Arena`).
+             - `12..13` (`xxxxh`, `<N>K`): `Plugin Arena Pool` ->
+               `Active: Loaded 16-bit Plugins (<Count>/8 slots)` (showing total
+               paragraphs used by loaded 8086 `.PRL`/`.OVL` plugins).
+           - Rows `14..15` — Unallocated CP/M-86 TPA & Upper Memory:
+             - `14` (`xxxxh`, `<Free>K`): `CP/M-86 Free TPA Pool` ->
+               `Available MCB Contiguous RAM` (largest free MCB block & total
+               free paragraphs).
+             - `15` (`A000h+`, `384K`): `Upper / Video / ROM` ->
+               `System Display & BIOS ROM`.
+
+    13.3 64-Bit CPU Variants (Linux `x86_64` & `ARM64`: `se-linux`, `se-py`,
+         `se-rs`, `se-ada`, `se-a68`, `se-pas`)
+         On 64-bit Linux systems (`x86_64` and `aarch64`), 32 KB hardware banks
+         and 64 KB segment limits do not exist; virtual address space is
+         effectively unbounded (`128 TB+`). Displaying fake or empty 32 KB
+         RomWBW bank rows is uninformative. Instead, the 64-bit Memory Screen
+         usefully shows **Host System RAM, Process Virtual/Resident Memory
+         (`/proc/self/statm` & `/proc/self/status`), Live Editor Document Pool
+         Telemetry, and Loaded 64-Bit Plugin Footprints**:
+         - System Summary Line (Line 2):
+           `Arch: <x86_64|ARM64> | OS: Linux <x.y> | RAM: <Av>/<Tot> MB |`
+           `RSS: <N> KB`
+         - 16-Row Table Columns
+           (`Idx   Region / Subsystem      Size / Metric   Status / Telemetry`):
+           - Rows `00..03` — Host OS & Process Memory Telemetry (`/proc/meminfo`
+             & `/proc/self/status`):
+             - `00` (`Host Physical RAM`): `<Avail> / <Total> MB` ->
+               `System Available / Total RAM`
+             - `01` (`Process Virtual (VmSize)`): `<VmSize> KB` ->
+               `Total 64-bit Virtual Address Space`
+             - `02` (`Process Resident (VmRSS)`): `<VmRSS> KB` ->
+               `Physical Pages Mapped in RAM (Peak: <VmHWM> KB)`
+             - `03` (`Process Heap / Data`): `<VmData> KB` ->
+               `Native Heap & Allocator Arena (glibc / jemalloc / runtime)`
+           - Rows `04..08` — Editor Core & Active Document Telemetry:
+             - `04` (`Executable & Builtin PM`): `<VmExe> KB` ->
+               `Active: <Language> Runtime & Builtin Plugin Mgr`
+             - `05` (`Active Document Text`): `<DocBytes> B (<KB> KB)` ->
+               `Active: <TotalLines> / <MaxLines> Lines (<Format>)`
+             - `06` (`Line Index & Gap Buffers`): `<IndexKB> KB` ->
+               `Active: Line Table + 1 KB Edit Buffer + Line Cache`
+             - `07` (`Active Block Selection`): `<BlockBytes> B` ->
+               `Active: In-Place Marked Block Range` (or `Inactive (0 B)`)
+             - `08` (`Terminal Screen Surface`): `<Cols>x<Rows> (<Buf> KB)` ->
+               `Active: Viewport Framebuffer & ANSI Render Buffer`
+           - Rows `09..15` — Builtin Plugin Manager & Loaded 64-Bit Plugins
+             (`dlopen` `.so` shared objects in `/proc/self/maps` or language
+             modules in Slots `0..7`):
+             - `09` (`Plugin Subsystem Summary`): `<Loaded>/8 Slots` ->
+               `Builtin Manager (<Mechanism: dlopen .so / native>)`
+             - `10..15` (`Plugin Slot 01..06` or summary of active slots):
+               Displays each loaded plugin's name, mapped `.so` code+data size
+               (from `dl_iterate_phdr` / `/proc/self/maps` or module size), ABI
+               type (`64-bit C ABI .so` or language module), and capabilities
+               (e.g. `ROT13 (.so, 16 KB) - Active [DOC_MUTATE]`), or
+               `Slot Empty — Available` for unused slots.
 
 8. Tier 2 Centered Boxed Modal Pop-ups
 --------------------------------------------------------------------------------
@@ -2104,8 +2250,8 @@ specific architectural adaptations.
      `version 1.1.4 (2026-10-18) (C)`
    - `se-py`:
      `version 1.1.4 (2026-10-18) (Python)`
-   - `se-rs`:
-     `version 1.1.4 (2026-10-18) (Rust)`
+   - `se-rs` / `se-ada` / `se-a68` / `se-pas`:
+     `version 1.1.4 (2026-10-18) (Rust)` (or `(Ada)`, `(Algol 68)`, `(Pascal)`)
    All SE variants shall share the identical version number as canonical
    `SE.COM` (e.g. `v1.1.4`). Generic host OS labels (such as `(Linux)`) must
    not be used; each binary shall clearly state its predominant programming
@@ -2139,9 +2285,9 @@ specific architectural adaptations.
        hardware banking mechanism at runtime (e.g. RomWBW HBIOS bank switching
        vs. ZX Spectrum Next MMU banking).
      - All other SE variants (including CP/M-86 `SE.CMD`, native ZX Spectrum
-       Next `SE.NEX` and `.se`, Linux C `se-linux`, Linux Python `se-py`, and
-       Linux Rust `se-rs`) have a builtin plugin manager integrated directly
-       into the main executable.
+       Next `SE.NEX` and `.se`, and 64-bit Linux ports `se-linux`, `se-py`,
+       `se-rs`, `se-ada`, `se-a68`, `se-pas`) have a builtin plugin manager
+       integrated directly into the main executable.
    - Plugin Module Non-Interchangeability & API / ABI Boundaries:
      - Non-CP/M plugin modules are not interchangeable with CP/M plugin modules.
      - CP/M-80 plugin modules (`.PRL` / `.OVL` 8-bit Z80 binaries) may share a
@@ -2149,10 +2295,11 @@ specific architectural adaptations.
        `.PRL` / `.OVL` binary header contract).
      - CP/M-86 (`SE.CMD`) defines its own 16-bit x86 API / ABI for plugins that
        is not interchangeable with CP/M-80 or non-CP/M systems.
-     - Non-CP/M plugin modules may share a common 64-bit API / ABI (e.g. a C
-       ABI shared object interface across native C and Rust builds); otherwise,
-       each 64-bit programming language (such as C, Rust, or Python) defines
-       its own language-specific plugin API / ABI.
+     - Non-CP/M 64-bit plugin modules may share a common 64-bit API / ABI (via
+       `dlopen` `.so` shared libraries using the 64-bit System V C ABI across
+       C, Rust, Python, Ada, Algol 68, and Pascal on the same `x86_64` or
+       `ARM64` CPU architecture); otherwise, a language-specific plugin
+       mechanism is used.
    - Builtin Plugin Manager Splash Screen, Configure Screen & `SE.CFG` Behavior:
      - Splash Screen Status: On non-CP/M systems (and CP/M-86 `SE.CMD` with its
        builtin plugin manager), the Splash Screen diagnostic line for the
@@ -2162,6 +2309,9 @@ specific architectural adaptations.
        `SE.CMD`), because the plugin manager is permanently builtin, neither
        the Configure screen (`[C]`) nor `SE.CFG` (`PLUGIN=...`) can disable the
        plugin manager.
+     - See `docs/ARCHITECTURE.md` (Section 7) for the complete technical
+       specification of the CP/M-80 plugin mechanism and cross-platform plugin
+       architecture.
 
 15. Canonical Screen Layouts (SE.COM & Target Profiles)
 --------------------------------------------------------------------------------
@@ -2389,6 +2539,7 @@ and its target profiles.
      - `se-linux`, `SEC.COM`: `(C)`
      - `se-py`: `(Python)`
      - `se-rs`: `(Rust)`
+     - `se-ada`, `se-a68`, `se-pas`: `(Ada)`, `(Algol 68)`, `(Pascal)`
    - Status Bar Free Memory Indication (Field 4):
      As on the Splash Screen (Section 15.1.5), large-memory host profiles may
      omit `Free: <N> KB` in Status Bar Field 4 (rendering a blank 15-character
