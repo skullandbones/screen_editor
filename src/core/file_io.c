@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include "../include/config.h"
 #include "../include/buffer.h"
+#include "../include/memory.h"
 #include "../include/editor.h"
 #include "../include/block.h"
 #include "../include/file_io.h"
@@ -156,12 +157,16 @@ static void cpm_commit_loaded_line(uint16_t row, uint16_t col,
                                    uint8_t is_insert)
 {
     g_scratch_line_buf[col] = '\0';
-    if (!is_insert && row == 0) {
-        checkout_active_line(0);
-    } else {
-        insert_blank_line(row);
-        checkout_active_line(row);
+    if (!is_insert) {
+        uint16_t slot_id = SLOT_TERM;
+        if (col > 0) {
+            mem_write_line(&slot_id, g_scratch_line_buf, col);
+        }
+        set_line_slot(row, slot_id);
+        return;
     }
+    insert_blank_line(row);
+    checkout_active_line(row);
     memcpy(g_active_line_buf, g_scratch_line_buf, col + 1);
     g_active_line_len = col;
     commit_active_line();
@@ -260,6 +265,7 @@ static int file_read_op(const char *filename, uint8_t is_insert)
         g_cur_col = 0;
         g_top_doc_row = 0;
         g_doc_modified = 0;
+        g_active_line_valid = 0;
     } else {
         g_doc_modified = 1;
     }

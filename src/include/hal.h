@@ -40,10 +40,12 @@ void hal_console_show_cursor(void);
 int  hal_console_get_native_size(uint8_t *cols, uint8_t *rows);
 
 /* HAL Memory & Far Banking Sub-system Interface */
-int  hal_mem_init(void);
-int  hal_mem_read_slot(uint16_t slot_id, uint8_t *dest);
-int  hal_mem_write_slot(uint16_t slot_id, const uint8_t *src);
-void hal_mem_set_bank(uint8_t bank);
+int      hal_mem_init(void);
+int      hal_mem_read_slot(uint16_t slot_id, uint8_t *dest);
+int      hal_mem_write_slot(uint16_t slot_id, const uint8_t *src);
+void     hal_mem_set_bank(uint8_t bank);
+uint16_t hal_line_slot_get(uint16_t idx);
+void     hal_line_slot_set(uint16_t idx, uint16_t slot_id);
 
 /* HAL Storage & File I/O Sub-system Interface */
 int  hal_storage_open(const char *path, void *handle);

@@ -4696,6 +4696,28 @@ have been resolved and archived.
       Extended Memory Map table and summary row followed by
       `render_status_bar()`, and documented Section 7.13 in
       `docs/UI_UX_DESIGN.md`.
+  - [x] **Bug 2.8.36: Local TPA BSS Line Slot Table Limiting `SEC.COM` to 320
+    Document Lines and 512 Slots Instead of Far RAM Bank `0x8D` (16K Lines) and
+    3,072 Far RAM Slots**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.2 (Max Lines 16,384 lines),
+      Section 7.13 (Bank 13 `8Dh` Active: 16K Line Slot Table), and
+      `src/core/buffer.asm:291-421`.
+    - *Issue*: `src/include/config.h` defined `MAX_DOC_LINES` as `320` and
+      `MAX_ACTIVE_SLOTS` as `512` under `#ifdef __CPM__` because
+      `s_line_slots[MAX_DOC_LINES]` was stored in local TPA BSS (`640 B`) and
+      `hal_cpm_memory.c` mapped `slot_id / 256` upward from `s_first_app_bank`
+      (`0x89`). Consequently, loading 3,072-line files such as `BIG.TXT` in Step
+      57 truncated at 320 lines and O(N^2) line table shifts during `file_load`
+      slowed down multi-thousand-line loads.
+    - *Resolution*: Implemented `hal_line_slot_get()` and `hal_line_slot_set()`
+      in `src/hal/cpm/hal_cpm_memory.c` storing the 16,384-entry line slot table
+      in Far RAM Bank `s_user_bank - 1` (`0x8D`) via 2-byte HBIOS `SYSSETCPY` /
+      `SYSBNKCPY` transfers (with a 16-line local fallback when HBIOS is
+      absent), mapped Far RAM text slots `0..3071` across banks
+      `s_user_bank - 2` (`0x8C`) down to `0x81`, increased `MAX_DOC_LINES` to
+      `16384` and `MAX_ACTIVE_SLOTS` to `3072` in `src/include/config.h`, and
+      updated `cpm_commit_loaded_line()` in `src/core/file_io.c` to write
+      loaded lines in O(1) directly to `set_line_slot(row, slot_id)`.
 
 ---
 

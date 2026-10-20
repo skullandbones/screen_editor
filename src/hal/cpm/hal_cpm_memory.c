@@ -27,6 +27,8 @@ static uint8_t  s_hbios_src_bank = 0;
 static uint8_t  s_hbios_dst_bank = 0;
 static uint16_t s_hbios_src_addr = 0;
 static uint16_t s_hbios_dst_addr = 0;
+static uint16_t s_hbios_word_tmp = 0;
+static uint16_t s_local_line_slots[16];
 
 static void hbios_detect_ramdrive(void)
 {
@@ -163,6 +165,57 @@ static void hbios_do_copy_128(void)
 #endasm
 }
 
+static void hbios_do_copy_2(void)
+{
+#asm
+    push ix
+    push iy
+    ld a, (_s_hbios_dst_bank)
+    ld d, a
+    ld a, (_s_hbios_src_bank)
+    ld e, a
+    ld hl, 2
+    ld b, 0F4h      ; SYSSETCPY
+    rst 08h
+
+    ld hl, (_s_hbios_src_addr)
+    ld de, (_s_hbios_dst_addr)
+    ld b, 0F5h      ; SYSBNKCPY
+    rst 08h
+    pop iy
+    pop ix
+#endasm
+}
+
+uint16_t hal_line_slot_get(uint16_t idx)
+{
+    if (s_hbios_present) {
+        s_hbios_dst_bank = s_user_bank;
+        s_hbios_src_bank = (uint8_t)(s_user_bank - 1);
+        s_hbios_src_addr = (uint16_t)(idx << 1);
+        s_hbios_dst_addr = (uint16_t)&s_hbios_word_tmp;
+        hbios_do_copy_2();
+        return s_hbios_word_tmp;
+    }
+    return (idx < 16) ? s_local_line_slots[idx] : SLOT_TERM;
+}
+
+void hal_line_slot_set(uint16_t idx, uint16_t slot_id)
+{
+    if (s_hbios_present) {
+        s_hbios_word_tmp = slot_id;
+        s_hbios_dst_bank = (uint8_t)(s_user_bank - 1);
+        s_hbios_src_bank = s_user_bank;
+        s_hbios_src_addr = (uint16_t)&s_hbios_word_tmp;
+        s_hbios_dst_addr = (uint16_t)(idx << 1);
+        hbios_do_copy_2();
+        return;
+    }
+    if (idx < 16) {
+        s_local_line_slots[idx] = slot_id;
+    }
+}
+
 int hal_mem_init(void)
 {
     g_ramdrive_char = 0;
@@ -186,10 +239,10 @@ int hal_mem_read_slot(uint16_t slot_id, uint8_t *dest)
         return -1;
     }
     if (s_hbios_present) {
-        uint8_t bank_offset = (uint8_t)(slot_id / 256);
-        uint16_t slot_in_bank = slot_id % 256;
+        uint8_t bank_offset = (uint8_t)(slot_id >> 8);
+        uint16_t slot_in_bank = slot_id & 0xFF;
         s_hbios_dst_bank = s_user_bank;
-        s_hbios_src_bank = (uint8_t)(s_first_app_bank + bank_offset);
+        s_hbios_src_bank = (uint8_t)((s_user_bank - 2) - bank_offset);
         s_hbios_src_addr = slot_in_bank * FAR_SLOT_SIZE;
         s_hbios_dst_addr = (uint16_t)dest;
         hbios_do_copy_128();
@@ -210,9 +263,9 @@ int hal_mem_write_slot(uint16_t slot_id, const uint8_t *src)
         return -1;
     }
     if (s_hbios_present) {
-        uint8_t bank_offset = (uint8_t)(slot_id / 256);
-        uint16_t slot_in_bank = slot_id % 256;
-        s_hbios_dst_bank = (uint8_t)(s_first_app_bank + bank_offset);
+        uint8_t bank_offset = (uint8_t)(slot_id >> 8);
+        uint16_t slot_in_bank = slot_id & 0xFF;
+        s_hbios_dst_bank = (uint8_t)((s_user_bank - 2) - bank_offset);
         s_hbios_src_bank = s_user_bank;
         s_hbios_src_addr = (uint16_t)src;
         s_hbios_dst_addr = slot_in_bank * FAR_SLOT_SIZE;
