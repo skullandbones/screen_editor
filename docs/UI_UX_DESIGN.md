@@ -1345,6 +1345,23 @@ or display notifications.
      - Terminal cursor positioned directly inside `Find: [ ... ]` at insertion
        offset.
      - When opened with an active block, the selection text is pre-filled.
+     - Solidified Match Highlighting & Wrap-Around Search:
+       - Whenever a match is found by Find (`Ctrl+F`), Find Next (`Ctrl+N`),
+         or Replace (`Ctrl+R`), the matched substring `[match_col, match_col +
+         search_len)` on the matched row is automatically highlighted as a
+         solidified block (`BLOCK_ACTIVE == 2`, displaying `Block: <N> char(s)`
+         in Status Bar Field 4) and the cursor is positioned immediately past
+         the end of the matched block (`CUR_COL = match_col + search_len`).
+       - Pressing `<Enter>` on an empty `Find: [ ... ]` input field repeats the
+         most recent search pattern if one is stored (`SEARCH_LEN > 0`).
+       - Both forward and reverse searches wrap around the document boundary
+         (`DOC_TOTAL_LINES - 1 -> 0` or `0 -> DOC_TOTAL_LINES - 1`) back to the
+         search start origin. If no occurrence of the pattern was ever found in
+         the current search session, the `"Pattern Not Found"` modal alert
+         (`"Pattern not found."`) is displayed and any active block is cleared;
+         if at least one occurrence was previously matched, the `"Search
+         Completed"` modal alert (`"Search completed."`) is displayed while
+         preserving the solidified block highlight on the last match.
 
      Goto Line Modal Dialog (50 cols x 7 rows):
      ```text

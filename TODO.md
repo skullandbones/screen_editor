@@ -4562,6 +4562,32 @@ have been resolved and archived.
       and added the `Replace Confirmation Modal Dialog` template to Section 8.3
       of `docs/UI_UX_DESIGN.md`. Verified via Step 47 of
       `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.30: Search Matches Not Highlighted as Solidified Blocks, No
+    Wrap-Around Search, Missing `"Search completed."` vs `"Pattern not found."`
+    Distinction, and Missing `[R]everse` Direction Toggle in `search.c`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (`HIGHLIGHT_FOUND_BLOCK`,
+      `FIND_STRING_FORWARD_CONT`, `FIND_STRING_BACKWARD_CONT`, and
+      `SEARCH_NOT_FOUND` in `src/core/search.asm:567-1022, 2142-2256`).
+    - *Issue*: In `src/core/search.c`:
+      1. `execute_find_forward()` and `execute_find_backward()` did not activate
+         a solidified block (`BLOCK_MODE_SOLIDIFIED`) around the matched text or
+         advance `g_cur_col` past the match (`match_col + g_search_len`),
+         causing Step 48 (`Block: 8 chars` at `Col 8`) and Step 49 to fail.
+      2. Forward and backward searches did not wrap around EOF/BOF or track
+         `s_search_ever_found`, always displaying `"Pattern not found."` instead
+         of `"Search completed."` when `Ctrl+N` wrapped after finding a match
+         (Step 50).
+      3. `do_ctrl_r_replace()` did not handle `[R]everse` (`r`/`R`/`p`/`P`) to
+         dynamically toggle search direction during interactive replace (Step
+         51), and did not call `cancel_block()` before showing `Replace Done`.
+    - *Resolution*: Implemented `apply_search_match()`,
+      `handle_search_not_found()`, wrap-around `find_string_forward_cont()` and
+      `find_string_backward_cont()`, `s_search_ever_found` tracking, and
+      interactive `[R]everse` direction toggling in `src/core/search.c`; trimmed
+      unused in-field cursor movement from Archetype C `prompt_search_box()` per
+      `docs/UI_UX_DESIGN.md` Section 8.3; documented Solidified Match
+      Highlighting & Wrap-Around Search in `docs/UI_UX_DESIGN.md` Section 8.3.
+      Verified via Steps 47–51 of `tests/test_editor_headless.py --sec`.
 
 ---
 
