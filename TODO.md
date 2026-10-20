@@ -4855,6 +4855,27 @@ have been resolved and archived.
       `draw_progress_modal()`, called `draw_progress_modal("Saving File", 0)`
       before `bdos(19)` / `bdos(22)` in `file_write_op()`, and removed the
       unused `s_local_line_slots[16]` array in `src/hal/cpm/hal_cpm_memory.c`.
+  - [x] **Bug 2.8.44: Cancelling Overwrite Confirmation in
+    `ui_browser_workspace` Stayed in Save Screen and WordStar `Ctrl+S`/`Ctrl+D`
+    Aliases Swallowed Subsequent `Ctrl+S` Keystroke**:
+    - *Reference*: `src/core/ui_browser.c:722-727, 773-779, 816-838`,
+      `src/core/ui_browser.asm:2664-2715`, `docs/UI_UX_DESIGN.md` Section 7.9.
+    - *Issue*: When the user cancelled the Overwrite File modal (`'n'` or
+      `ESC`) in `ui_browser_workspace()`, `src/core/ui_browser.c` set
+      `need_full_render = 1; continue;` and remained inside the Save File
+      browser loop instead of returning `MODAL_RES_CANCEL` to the caller as
+      `DO_OVERWRITE_CANCELLED` (`RET`) does in `src/core/ui_browser.asm`.
+      Furthermore, `ui_browser.c` still bound legacy WordStar diamond aliases
+      `KEY_CTRL_S` (`Left`) and `KEY_CTRL_D` (`Right`), so when Step 27 sent
+      `Ctrl+S` (`0x13`) to re-open the Save Screen after `'n'`, the still-active
+      Save Screen interpreted `Ctrl+S` as cursor-left and remained in the Save
+      Screen.
+    - *Resolution*: Updated `ui_browser_workspace()` in `src/core/ui_browser.c`
+      to restore `g_is_splash_screen`, set `g_need_screen_render = 1`, and
+      return `MODAL_RES_CANCEL` when `modal_confirm_overwrite()` is declined or
+      cancelled, and removed the deprecated WordStar `KEY_CTRL_S`/`KEY_CTRL_G`
+      aliases while binding `KEY_CTRL_D` to forward delete per Section 7.9 of
+      `docs/UI_UX_DESIGN.md`.
 
 ---
 

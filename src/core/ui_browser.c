@@ -721,8 +721,9 @@ reset_view:
                         }
                     } else if (exists != 0xFF) {
                         if (modal_confirm_overwrite() != MODAL_RES_OK) {
-                            need_full_render = 1;
-                            continue;
+                            g_need_screen_render = 1;
+                            g_is_splash_screen = prev_splash;
+                            return MODAL_RES_CANCEL;
                         }
                     }
 
@@ -774,8 +775,9 @@ reset_view:
                     if (fp_check) {
                         fclose(fp_check);
                         if (modal_confirm_overwrite() != MODAL_RES_OK) {
-                            need_full_render = 1;
-                            continue;
+                            g_need_screen_render = 1;
+                            g_is_splash_screen = prev_splash;
+                            return MODAL_RES_CANCEL;
                         }
                     }
                 }
@@ -811,21 +813,19 @@ reset_view:
                 s_cursor_pos--;
                 refresh_browser_box();
             }
-        } else if (k == KEY_DEL || k == KEY_CTRL_G) {
+        } else if (k == KEY_DEL || k == KEY_CTRL_D) {
             if (s_cursor_pos < (uint8_t)strlen(s_in_buf)) {
                 memmove(&s_in_buf[s_cursor_pos], &s_in_buf[s_cursor_pos + 1],
                         strlen(&s_in_buf[s_cursor_pos + 1]) + 1);
                 refresh_browser_box();
             }
-        } else if (k == KEY_LEFT || k == KEY_CTRL_S ||
-                   k == KEY_RIGHT || k == KEY_CTRL_D ||
+        } else if (k == KEY_LEFT || k == KEY_RIGHT ||
                    k == KEY_HOME || k == KEY_CTRL_A ||
                    k == KEY_END || k == KEY_CTRL_E) {
             uint8_t in_len = (uint8_t)strlen(s_in_buf);
-            if ((k == KEY_LEFT || k == KEY_CTRL_S) && s_cursor_pos > 0) {
+            if (k == KEY_LEFT && s_cursor_pos > 0) {
                 s_cursor_pos--;
-            } else if ((k == KEY_RIGHT || k == KEY_CTRL_D) &&
-                       s_cursor_pos < in_len) {
+            } else if (k == KEY_RIGHT && s_cursor_pos < in_len) {
                 s_cursor_pos++;
             } else if (k == KEY_HOME || k == KEY_CTRL_A) {
                 s_cursor_pos = 0;
