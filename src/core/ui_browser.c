@@ -829,24 +829,24 @@ reset_view:
                 draw_hl_cell(1);
                 apply_hl_to_box();
             }
-        } else if (k == KEY_BACKSPACE || k == '\b' || k == 127 || k == 8) {
+        } else if (k == KEY_BACKSPACE || k == '\b' || k == 8) {
             if (s_cursor_pos > 0) {
                 memmove(&s_in_buf[s_cursor_pos - 1], &s_in_buf[s_cursor_pos],
                         strlen(&s_in_buf[s_cursor_pos]) + 1);
                 s_cursor_pos--;
                 refresh_browser_box();
             }
-        } else if (k == KEY_DEL || k == KEY_CTRL_D) {
+        } else if (k == KEY_DEL || k == KEY_CTRL_D || k == KEY_CTRL_G) {
             if (s_cursor_pos < (uint8_t)strlen(s_in_buf)) {
                 memmove(&s_in_buf[s_cursor_pos], &s_in_buf[s_cursor_pos + 1],
                         strlen(&s_in_buf[s_cursor_pos + 1]) + 1);
                 refresh_browser_box();
             }
-        } else if (k == KEY_LEFT || k == KEY_RIGHT ||
+        } else if (k == KEY_LEFT || k == KEY_CTRL_S || k == KEY_RIGHT ||
                    k == KEY_HOME || k == KEY_CTRL_A ||
                    k == KEY_END || k == KEY_CTRL_E) {
             uint8_t in_len = (uint8_t)strlen(s_in_buf);
-            if (k == KEY_LEFT && s_cursor_pos > 0) {
+            if ((k == KEY_LEFT || k == KEY_CTRL_S) && s_cursor_pos > 0) {
                 s_cursor_pos--;
             } else if (k == KEY_RIGHT && s_cursor_pos < in_len) {
                 s_cursor_pos++;

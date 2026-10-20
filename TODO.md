@@ -4984,6 +4984,23 @@ have been resolved and archived.
       `g_doc_drive = s_cpm_io_fcb.drive` and `g_doc_user = g_target_user` when
       `is_block == 0`, and added `hal_console_hide_cursor()` at the start of
       full browser page renders in `ui_browser_workspace()`.
+  - [x] **Bug 2.8.51**: `KEY_DEL` (`127`) intercepted as Backspace in File
+    Browser Edit Box (`src/core/ui_browser.c`):
+    - *Symptom*: Pressing the `Delete` key (`ESC [ 3 ~`, decoded to
+      `KEY_DEL = 127`) at column 0 in the Save or Open file dialog edit box
+      failed to delete the character under the cursor (Step 73 Subtests 1 & 2).
+    - *Root Cause*: In `ui_browser_workspace()` (`src/core/ui_browser.c`), the
+      Backspace branch checked `k == KEY_BACKSPACE || k == '\b' || k == 127 ||
+      k == 8` before the `else if (k == KEY_DEL || ...)` branch. Because
+      `KEY_DEL` is defined as `127`, `ESC [ 3 ~` matched the Backspace branch
+      (doing nothing when `s_cursor_pos == 0`) instead of the forward-delete
+      branch. Additionally, `KEY_CTRL_S` (cursor left) and `KEY_CTRL_G`
+      (delete character at cursor) were needed for Step 73 Subtest 3 WordStar
+      edit-box navigation.
+    - *Resolution*: Removed `k == 127` from the Backspace condition in
+      `ui_browser_workspace()` so `KEY_DEL` (`127`) reaches the forward-delete
+      branch, and restored `KEY_CTRL_G` (delete char at cursor) and
+      `KEY_CTRL_S` (move cursor left) in the edit-box key handler.
 
 ---
 
