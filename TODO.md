@@ -4621,6 +4621,41 @@ have been resolved and archived.
       `g_need_status_render = 1` to repaint the editor screen and status bar
       cleanly; documented `Ctrl+P` / `q`/`Q` dismissal in `docs/UI_UX_DESIGN.md`
       Section 8.3. Verified in Step 51 (`tests/test_editor_headless.py --sec`).
+  - [x] **Bug 2.8.33: Exit Hang After Splash Screen `Ctrl+Q` and Missing Editor
+    Viewport Resumption on Unsaved Modifications Prompts in `ui_render.c`,
+    `editor.c`, and `sec_cpm.c`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11 (Document Close &
+      Unsaved Modifications Lifecycle), `check_ccp.py` CCP preservation
+      specification, and `src/se.asm:1450-1718, 2139-2140`.
+    - *Issue*:
+      1. By default in z88dk `+cpm`, `cpm_crt0.asm` places `SP` at `BDOS - 6`
+         (`0xD7FA`), directly inside the CP/M 2.2 CCP (`0xD000..0xD7FF`), and
+         `render_row_content()` allocated a 256-byte `line_buf` on the stack.
+         In Step 52, exiting via `Ctrl+Q` -> `'n'` from the Splash Screen
+         overwrote the CCP stack area and hung after printing
+         `Exiting SE.COM. Returned to CP/M.` without returning to the `C>`
+         prompt.
+      2. When `g_doc_modified == 1` on the Splash Screen and the user pressed
+         `Q`/`Ctrl+Q`, `N`, `O`/`Ctrl+O`, or `W`/`Ctrl+W`,
+         `show_splash_screen()` displayed `modal_confirm_save_changes()`
+         directly over the Splash Screen instead of resuming and rendering the
+         editor viewport first (`RESUME_EDITOR`), so pressing `ESC` to cancel
+         returned to the Splash Screen instead of leaving the user in the
+         active editor view (Steps 52–54).
+      3. In `editor_handle_key()` (`src/core/editor.c:638-643`), `KEY_CTRL_W`
+         called `init_empty_document()` without clearing
+         `g_current_filename[0]`, leaving the closed document's filename
+         instead of `(Untitled)` (Step 53).
+    - *Resolution*: Configured `-pragma-define:REGISTER_SP=0xD000` in
+      `Makefile`, restored the CCP entry `SP` (`__restore_sp_onexit + 1`) and
+      returned via `ret` in `src/sec_cpm.c`, replaced stack-allocated
+      `line_buf[256]` in `render_row_content()` with `g_scratch_line_buf`,
+      resumed the editor viewport prior to `modal_confirm_save_changes()` in
+      `show_splash_screen()` (`src/core/ui_render.c`), cleared
+      `g_current_filename[0]` on `KEY_CTRL_W` in `src/core/editor.c`, and
+      clarified Splash Screen unsaved modification prompt resumption in
+      `docs/UI_UX_DESIGN.md` Section 7.11. Verified via Steps 52–54 of
+      `tests/test_editor_headless.py --sec`.
 
 ---
 

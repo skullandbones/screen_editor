@@ -94,5 +94,10 @@ int main(int argc, char **argv)
     hal_console_locate(1, 1);
     hal_console_show_cursor();
     hal_console_puts("\r\nExiting SE.COM. Returned to CP/M.\r\n");
+#asm
+    extern __restore_sp_onexit
+    ld sp, (__restore_sp_onexit + 1)
+    ret
+#endasm
     return 0;
 }

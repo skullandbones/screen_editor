@@ -1125,7 +1125,11 @@ content blocks rather than top-aligned text.
       the Splash Screen workspace without prompting.
     - Modified Document (`DOC_MODIFIED == 1`):
       Intercepts close and presents a Tier 2 Centered Boxed Modal Pop-up
-      querying whether to save unsaved modifications:
+      querying whether to save unsaved modifications. When invoked from the
+      Splash Screen (`Q`/`Ctrl+Q`, `N`, `O`/`Ctrl+O`, or `W`/`Ctrl+W` with
+      `DOC_MODIFIED == 1`), the editor first resumes and renders the active
+      editor viewport (`RESUME_EDITOR`) before displaying the modal pop-up,
+      so canceling with `ESC` leaves the user in the active editor workspace:
       ```text
       +--------------------------------------------------+
       |              Unsaved Modifications               |
@@ -1138,8 +1142,9 @@ content blocks rather than top-aligned text.
       ```
       - Response `[Y]es`: Transitions to Save File workspace to write changes,
         then closes document to Splash Screen.
-      - Response `[N]o`: Discards unsaved modifications and closes document to
-        Splash Screen.
+      - Response `[N]o`: Discards unsaved modifications, clears
+        `g_current_filename` to `(Untitled)`, and closes document to Splash
+        Screen.
       - Response `[ESC]=Cancel`: Cancels close request and returns directly to
         the active editor workspace with document state intact.
 

@@ -638,6 +638,7 @@ int editor_handle_key(int key)
     case KEY_CTRL_W:
         if (modal_confirm_save_changes() == MODAL_RES_OK) {
             init_empty_document();
+            g_current_filename[0] = '\0';
             show_splash_screen();
         }
         break;
