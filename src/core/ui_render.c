@@ -441,10 +441,10 @@ extern char g_ramdrive_char;
 
 void show_splash_screen(void)
 {
-    const char *splash_lines[22];
+    static const char *splash_lines[22];
     size_t n;
     int k;
-    char dlg_fname[32];
+    static char dlg_fname[32];
     uint8_t need_render = 1;
 
     hal_console_hide_cursor();

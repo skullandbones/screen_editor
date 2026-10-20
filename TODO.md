@@ -4656,6 +4656,27 @@ have been resolved and archived.
       clarified Splash Screen unsaved modification prompt resumption in
       `docs/UI_UX_DESIGN.md` Section 7.11. Verified via Steps 52–54 of
       `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.34: Stack-Allocated `far_slot_t` Buffers in `memory.c`
+    Overflowing into Top of BSS During Splash Screen File Open (`:o`
+    `30.TXT:10`)**:
+    - *Reference*: `src/core/memory.c:55-232`, `src/core/ui_render.c:442-581`,
+      and `check_ccp.py` stack/BSS layout (`BSS_END` below `0xD000`).
+    - *Issue*: `mem_write_line()` allocated two 128-byte `far_slot_t` structs
+      (`cur_slot_data` and `prev_slot_data` = 256 B) on the Z80 stack while
+      calling `mem_alloc_slot()`, which allocated another 128-byte `far_slot_t`
+      (`slot_init`) on the stack (384 B of stack frame depth in `memory.c`
+      alone). When `file_load()` was invoked from `show_splash_screen()` (which
+      had an additional 76 B of local arrays `splash_lines[22]` and
+      `dlg_fname[32]` on the stack), the Z80 stack grew downward from `0xD000`
+      into the top of BSS (`s_cpm_io_fcb` / `s_cpm_sec_buf` in `file_io.c`) on
+      the 5th line of `30.TXT`, corrupting the active FCB and truncating the
+      loaded document to 5 lines (`Line 5/5`) in Step 55 sub-step 5.
+    - *Resolution*: Replaced all stack-allocated `far_slot_t` buffers in
+      `mem_alloc_slot()`, `mem_free_line_chain()`, `mem_write_line()`, and
+      `mem_read_line()` (`src/core/memory.c`) with a single static `far_slot_t
+      s_slot_io`, and made `splash_lines` and `dlg_fname` static in
+      `show_splash_screen()` (`src/core/ui_render.c`), reducing peak stack usage
+      by 460 bytes. Verified in Step 55 (`tests/test_editor_headless.py --sec`).
 
 ---
 

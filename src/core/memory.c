@@ -28,6 +28,7 @@ static uint16_t   s_total_allocations = 0;
 static const uint8_t s_bit_mask[8] = {
     0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80
 };
+static far_slot_t s_slot_io;
 
 static int is_slot_allocated(uint16_t id)
 {
@@ -58,11 +59,10 @@ uint16_t mem_alloc_slot(void)
     for (i = 0; i < MAX_ACTIVE_SLOTS; i++) {
         uint16_t idx = (s_free_slot_hint + i) % MAX_ACTIVE_SLOTS;
         if (!is_slot_allocated(idx)) {
-            far_slot_t slot_init;
             set_slot_allocated(idx);
-            slot_init.next_slot = SLOT_TERM;
-            memset(slot_init.payload, 0, FAR_SLOT_PAYLOAD);
-            hal_mem_write_slot(idx, (const uint8_t *)&slot_init);
+            s_slot_io.next_slot = SLOT_TERM;
+            memset(s_slot_io.payload, 0, FAR_SLOT_PAYLOAD);
+            hal_mem_write_slot(idx, (const uint8_t *)&s_slot_io);
             s_free_slot_hint = (idx + 1) % MAX_ACTIVE_SLOTS;
             s_total_allocations++;
             return idx;
@@ -89,13 +89,12 @@ void mem_free_line_chain(uint16_t slot_id)
     uint16_t cur = slot_id;
     uint16_t next;
     uint16_t guard = 0;
-    far_slot_t slot_buf;
 
     while (cur != SLOT_TERM && cur < MAX_ACTIVE_SLOTS && guard < 65535) {
-        if (hal_mem_read_slot(cur, (uint8_t *)&slot_buf) != 0) {
+        if (hal_mem_read_slot(cur, (uint8_t *)&s_slot_io) != 0) {
             break;
         }
-        next = slot_buf.next_slot;
+        next = s_slot_io.next_slot;
         mem_free_slot(cur);
         cur = next;
         guard++;
@@ -124,8 +123,6 @@ int mem_write_line(uint16_t *start_slot, const char *text, uint16_t len)
     uint16_t offset = 0;
     uint16_t prev_slot = SLOT_TERM;
     uint16_t first_slot = SLOT_TERM;
-    far_slot_t cur_slot_data;
-    far_slot_t prev_slot_data;
 
     if (!start_slot || !text) {
         return -1;
@@ -158,10 +155,10 @@ int mem_write_line(uint16_t *start_slot, const char *text, uint16_t len)
         }
         if (prev_slot != SLOT_TERM) {
             if (hal_mem_read_slot(prev_slot,
-                                  (uint8_t *)&prev_slot_data) == 0) {
-                prev_slot_data.next_slot = cur_slot;
+                                  (uint8_t *)&s_slot_io) == 0) {
+                s_slot_io.next_slot = cur_slot;
                 hal_mem_write_slot(prev_slot,
-                                   (const uint8_t *)&prev_slot_data);
+                                   (const uint8_t *)&s_slot_io);
             }
         }
 
@@ -170,10 +167,10 @@ int mem_write_line(uint16_t *start_slot, const char *text, uint16_t len)
             chunk_len = FAR_SLOT_PAYLOAD;
         }
 
-        memset(&cur_slot_data, 0, sizeof(far_slot_t));
-        cur_slot_data.next_slot = SLOT_TERM;
-        memcpy(cur_slot_data.payload, text + offset, chunk_len);
-        hal_mem_write_slot(cur_slot, (const uint8_t *)&cur_slot_data);
+        memset(&s_slot_io, 0, sizeof(far_slot_t));
+        s_slot_io.next_slot = SLOT_TERM;
+        memcpy(s_slot_io.payload, text + offset, chunk_len);
+        hal_mem_write_slot(cur_slot, (const uint8_t *)&s_slot_io);
 
         bytes_remaining -= chunk_len;
         offset += chunk_len;
@@ -189,7 +186,6 @@ uint16_t mem_read_line(uint16_t start_slot, char *dest, uint16_t max_len)
     uint16_t cur_slot = start_slot;
     uint16_t bytes_copied = 0;
     uint16_t guard = 0;
-    far_slot_t cur_slot_data;
 
     if (!dest || max_len == 0) {
         return 0;
@@ -202,12 +198,12 @@ uint16_t mem_read_line(uint16_t start_slot, char *dest, uint16_t max_len)
         uint16_t chunk_len = FAR_SLOT_PAYLOAD;
         uint16_t actual_len;
 
-        if (hal_mem_read_slot(cur_slot, (uint8_t *)&cur_slot_data) != 0) {
+        if (hal_mem_read_slot(cur_slot, (uint8_t *)&s_slot_io) != 0) {
             break;
         }
 
         for (actual_len = 0; actual_len < chunk_len; actual_len++) {
-            if (cur_slot_data.payload[actual_len] == '\0') {
+            if (s_slot_io.payload[actual_len] == '\0') {
                 break;
             }
         }
@@ -217,7 +213,7 @@ uint16_t mem_read_line(uint16_t start_slot, char *dest, uint16_t max_len)
         }
 
         if (actual_len > 0) {
-            memcpy(dest + bytes_copied, cur_slot_data.payload,
+            memcpy(dest + bytes_copied, s_slot_io.payload,
                    actual_len);
             bytes_copied += actual_len;
         }
@@ -226,7 +222,7 @@ uint16_t mem_read_line(uint16_t start_slot, char *dest, uint16_t max_len)
             break;
         }
 
-        cur_slot = cur_slot_data.next_slot;
+        cur_slot = s_slot_io.next_slot;
         guard++;
     }
 
