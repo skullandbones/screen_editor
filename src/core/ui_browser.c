@@ -453,6 +453,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             uint8_t r, col, screen_row, tlen, title_spaces;
             int avail;
 
+            hal_console_hide_cursor();
 #ifdef __CPM__
             strcpy(s_title_buf, op_str);
             strcat(s_title_buf, " (DIRECTORY - DRIVE ");

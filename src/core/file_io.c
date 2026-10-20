@@ -499,6 +499,9 @@ static int file_write_op(const char *filename, uint16_t start_row,
     if (is_block) {
         strcpy(g_current_filename, saved_fname);
         g_doc_modified = saved_mod;
+    } else {
+        g_doc_drive = s_cpm_io_fcb.drive;
+        g_doc_user = g_target_user;
     }
     checkout_active_line(g_cur_doc_row);
     g_need_screen_render = 1;

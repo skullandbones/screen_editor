@@ -4969,6 +4969,21 @@ have been resolved and archived.
       via `hal_dir_entry_get()` / `hal_dir_entry_set()` in
       `src/hal/cpm/hal_cpm_memory.c`, increasing `MAX_BROWSER_FILES` on CP/M to
       `128` entries while freeing 468 bytes of TPA BSS.
+  - [x] **Bug 2.8.50: `file_write_op()` Did Not Update `g_doc_drive` and
+    `g_doc_user` After Saving Document to a New Drive or User Area**:
+    - *Reference*: `src/core/file_io.c:499-503`, `src/core/ui_browser.c:415`.
+    - *Issue*: When saving the active document (`is_block == 0`) to a new drive
+      or user area (e.g. saving `C0:30.TXT` as `D0:30.TXT` in Step 73 Subtest
+      1), `file_write_op()` updated `g_current_filename` to `"D:30.TXT"` but
+      left `g_doc_drive` and `g_doc_user` pointing to the old drive/user (`3` =
+      Drive C:). Subsequent Open/Save dialogs initialized `s_browser_drive` and
+      the preloaded edit-box prefix from `g_doc_drive` (`"C0:"` instead of
+      `"D0:"`), causing Step 73 Subtest 2 in-line editing (`Home`, `Del`, `'C'`,
+      `End`, `"30.TXT"`) to fail.
+    - *Resolution*: Updated `file_write_op()` in `src/core/file_io.c` to set
+      `g_doc_drive = s_cpm_io_fcb.drive` and `g_doc_user = g_target_user` when
+      `is_block == 0`, and added `hal_console_hide_cursor()` at the start of
+      full browser page renders in `ui_browser_workspace()`.
 
 ---
 
