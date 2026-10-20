@@ -155,21 +155,6 @@ static const char s_find_mode_sens[] =
 static const char s_find_mode_insens[] =
     "Search Pattern: [Case Insensitive]";
 
-static void draw_search_field(uint8_t top, uint8_t left, uint8_t is_rep,
-                              const char *input, uint8_t cur_len,
-                              uint8_t cursor_pos)
-{
-    uint8_t i;
-    uint8_t flen = is_rep ? REPLACE_POPUP_FIELD_LEN : FIND_POPUP_FIELD_LEN;
-    uint8_t col = left + (is_rep ? 17 : 14);
-    hal_console_locate(top + 4, col);
-    for (i = 0; i < flen; i++) {
-        hal_console_putc((i < cur_len) ? input[i] : ' ');
-    }
-    hal_console_puts(is_rep ? "] |" : "]      |");
-    hal_console_locate(top + 4, (uint8_t)(col + cursor_pos));
-}
-
 static int find_string_forward_cont(void)
 {
     uint16_t row = g_cur_doc_row;
@@ -320,6 +305,7 @@ static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
     uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
     uint8_t flen = is_rep ? REPLACE_POPUP_FIELD_LEN : FIND_POPUP_FIELD_LEN;
     uint8_t col = left + (is_rep ? 17 : 14);
+    uint8_t i;
     int k;
 
     hal_console_hide_cursor();
@@ -331,7 +317,10 @@ static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
                              s_find_mode_sens : s_find_mode_insens));
     hal_console_locate(top + 4, left);
     hal_console_puts(is_rep ? "|  Replace with: [" : "|      Find: [");
-    draw_search_field(top, left, is_rep, input, cur_len, cur_len);
+    for (i = 0; i < flen; i++) {
+        hal_console_putc((i < cur_len) ? input[i] : ' ');
+    }
+    hal_console_puts(is_rep ? "] |" : "]      |");
     modal_draw_row_centered(top + 5, left, 50,
                             is_rep ?
                             "[Enter]=Replace  [Tab]=Toggle Case  [ESC]=Cancel" :

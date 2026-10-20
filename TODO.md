@@ -4588,6 +4588,22 @@ have been resolved and archived.
       `docs/UI_UX_DESIGN.md` Section 8.3; documented Solidified Match
       Highlighting & Wrap-Around Search in `docs/UI_UX_DESIGN.md` Section 8.3.
       Verified via Steps 47–51 of `tests/test_editor_headless.py --sec`.
+  - [x] **Bug 2.8.31: Redundant `hal_console_locate` Between `"Find: ["` and
+    Pre-Filled Text in `search.c`**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (`DRAW_FIND_POPUP_FULL` in
+      `src/core/search.asm:177-196`).
+    - *Issue*: In `src/core/search.c:165, 333-334` (`prompt_search_box` /
+      `draw_search_field`), after printing `"|      Find: ["` or
+      `"|  Replace with: ["`, `draw_search_field()` emitted a redundant
+      `hal_console_locate(top + 4, col)` (`\x1b[21;50H`) before printing the
+      pre-filled input string, breaking contiguous substring matching for
+      `"Find: [Line"` in Step 49 and `"Find: [content"` in Step 51 of
+      `tests/test_editor_headless.py`.
+    - *Resolution*: Inlined the initial field rendering into
+      `prompt_search_box()` in `src/core/search.c` so the pre-filled text and
+      trailing spaces are printed contiguously immediately after `"|      Find:
+      ["` / `"|  Replace with: ["` without an intervening cursor-locate escape.
+      Verified via Steps 49–51 of `tests/test_editor_headless.py --sec`.
 
 ---
 
