@@ -74,6 +74,7 @@ static int compare_entries(const void *a, const void *b)
 #endif
 
 #ifdef __CPM__
+extern char g_ramdrive_char;
 #define s_dir_dma g_cpm_dma_buf
 #define s_dir_fcb ((uint8_t *)&g_cpm_fcb)
 static char    s_browser_drive = 'C';
@@ -631,8 +632,19 @@ static int ui_browser_workspace(int mode, char *selected_filename,
 #ifdef __CPM__
             {
                 uint8_t drv = 0, usr = 0xFF;
+                char target_drv;
                 const char *rest = cpm_parse_prefix(s_in_buf, &drv, &usr);
                 while (*rest == ' ') rest++;
+                target_drv = (rest > s_in_buf && drv != 0)
+                    ? (char)('A' + drv - 1) : s_browser_drive;
+                if (g_ramdrive_char != 0 &&
+                    g_config.ramdrive_mode != RAMDRV_MODE_PROTECTED &&
+                    target_drv == g_ramdrive_char) {
+                    modal_alert("RAM Drive Unavailable",
+                                "Drive is used for editor memory.", NULL);
+                    need_full_render = 1;
+                    continue;
+                }
 
                 if (rest > s_in_buf && *rest == '\0') {
                     if (drv != 0) s_browser_drive = (char)('A' + drv - 1);
@@ -793,19 +805,21 @@ reset_view:
                 s_cursor_pos--;
                 refresh_browser_box();
             }
-        } else if (k == KEY_DEL || k == KEY_CTRL_D) {
+        } else if (k == KEY_DEL || k == KEY_CTRL_G) {
             if (s_cursor_pos < (uint8_t)strlen(s_in_buf)) {
                 memmove(&s_in_buf[s_cursor_pos], &s_in_buf[s_cursor_pos + 1],
                         strlen(&s_in_buf[s_cursor_pos + 1]) + 1);
                 refresh_browser_box();
             }
-        } else if (k == KEY_LEFT || k == KEY_RIGHT ||
+        } else if (k == KEY_LEFT || k == KEY_CTRL_S ||
+                   k == KEY_RIGHT || k == KEY_CTRL_D ||
                    k == KEY_HOME || k == KEY_CTRL_A ||
                    k == KEY_END || k == KEY_CTRL_E) {
             uint8_t in_len = (uint8_t)strlen(s_in_buf);
-            if (k == KEY_LEFT && s_cursor_pos > 0) {
+            if ((k == KEY_LEFT || k == KEY_CTRL_S) && s_cursor_pos > 0) {
                 s_cursor_pos--;
-            } else if (k == KEY_RIGHT && s_cursor_pos < in_len) {
+            } else if ((k == KEY_RIGHT || k == KEY_CTRL_D) &&
+                       s_cursor_pos < in_len) {
                 s_cursor_pos++;
             } else if (k == KEY_HOME || k == KEY_CTRL_A) {
                 s_cursor_pos = 0;

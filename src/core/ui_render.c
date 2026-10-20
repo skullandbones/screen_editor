@@ -777,6 +777,7 @@ void show_config_screen(void)
     const char *cfg_lines[11];
     int k;
     uint8_t need_render = 1;
+    uint8_t saved_flag = 0;
     uint8_t prev_splash = g_is_splash_screen;
 
     g_is_splash_screen = 1;
@@ -785,9 +786,11 @@ void show_config_screen(void)
     while (1) {
         cfg_lines[0] = "            SE - Configuration Manager";
         cfg_lines[1] = "";
-        cfg_lines[2] = g_config_loaded ?
-            "         Config Status: Loaded from SE.CFG" :
-            "         Config Status: Defaults";
+        cfg_lines[2] = saved_flag ?
+            "         Config Status: Saved to local drive" :
+            (g_config_loaded ?
+             "         Config Status: Loaded from SE.CFG" :
+             "         Config Status: Defaults");
         cfg_lines[3] = "";
         if (g_config.screen_mode == MODE_120X40) {
             cfg_lines[4] = "         1. Screen Geometry  : 120x40 (Wide)";
@@ -799,11 +802,14 @@ void show_config_screen(void)
             cfg_lines[4] = "         1. Screen Geometry  : 80x24 (Classic)";
         }
         if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
-            cfg_lines[5] = "         2. RAM Drive Mode   : Enabled";
+            cfg_lines[5] = "         2. RAM Drive Mode   : "
+                           "[Overwrite (Sacrifice Drive, 384KB)]";
         } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
-            cfg_lines[5] = "         2. RAM Drive Mode   : Hibernate";
+            cfg_lines[5] = "         2. RAM Drive Mode   : "
+                           "[Hibernate (Backup/Restore, 384KB)]";
         } else {
-            cfg_lines[5] = "         2. RAM Drive Mode   : Protected";
+            cfg_lines[5] = "         2. RAM Drive Mode   : "
+                           "[Preserve (RAM Drive Active, 128KB)]";
         }
         cfg_lines[6] = (g_config.lines_mode == 1) ?
             "         3. Max Doc Lines    : 32K" :
@@ -852,7 +858,7 @@ void show_config_screen(void)
                     g_active_rows = nrows;
                 } else {
                     g_active_cols = SCREEN_COLS_80;
-                    g_active_rows = SCREEN_ROWS_24;
+                    g_active_rows = nrows;
                 }
 #endif
             } else {
@@ -863,9 +869,9 @@ void show_config_screen(void)
             need_render = 1;
         } else if (k == '2') {
             if (g_config.ramdrive_mode == RAMDRV_MODE_PROTECTED) {
-                g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
-            } else if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
                 g_config.ramdrive_mode = RAMDRV_MODE_HIBERNATE;
+            } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
+                g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
             } else {
                 g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
             }
@@ -889,6 +895,7 @@ void show_config_screen(void)
 #endif
         } else if (k == 's' || k == 'S') {
             config_save();
+            saved_flag = 1;
             need_render = 1;
         }
     }

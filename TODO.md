@@ -4764,6 +4764,32 @@ have been resolved and archived.
       block saves, and renders the `Saving File` progress modal with 100-line
       ticks during both document and block saves; also removed the extraneous
       `cancel_block()` after `file_insert()` in `src/core/editor.c`.
+  - [x] **Bug 2.8.39: WordStar Keybindings in Browser Filename Box (`^S`, `^D`,
+    `^G`), Config Screen RAM Drive Labels & Save Status, and Unavailable RAM
+    Drive Guard**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5 (Configuration Screen
+      Option 2 RAM Drive Mode labels & cycle order), Section 7.6 (In-line
+      Filename Edit Box WordStar keys & RAM Drive Unavailable modal), and
+      `src/core/ui_browser.asm:1490-1583, 2510-2610`
+      (**Non-Conformity with `UI_UX_DESIGN.md`**).
+    - *Issue*: `ui_browser_workspace()` in `src/core/ui_browser.c` mapped
+      `KEY_CTRL_D` to forward delete instead of cursor right (`^S`=left,
+      `^D`=right, `^G`=delete at cursor) and did not check whether the target
+      drive was an unavailable (Overwritten/Hibernated) RAM drive (`RAM Drive
+      Unavailable` modal). Additionally, `show_config_screen()` in
+      `src/core/ui_render.c` displayed abbreviated RAM drive labels
+      (`Protected`, `Enabled`, `Hibernate`) instead of
+      `[Preserve (RAM Drive Active, 128KB)]`,
+      `[Hibernate (Backup/Restore, 384KB)]`, and
+      `[Overwrite (Sacrifice Drive, 384KB)]`, cycled in reverse order, and did
+      not update `Config Status:` to `Saved to local drive` on `[S]`.
+    - *Resolution*: Updated `ui_browser_workspace()` in `src/core/ui_browser.c`
+      to map `KEY_CTRL_S` to left, `KEY_CTRL_D` to right, and `KEY_CTRL_G` to
+      delete-at-cursor and to display the `RAM Drive Unavailable` modal alert
+      when targeting `g_ramdrive_char` in non-Preserve mode; updated
+      `show_config_screen()` in `src/core/ui_render.c` with canonical RAM drive
+      mode labels, cycle order (`Preserve` -> `Hibernate` -> `Overwrite`), and
+      `Saved to local drive` status feedback.
 
 ---
 
