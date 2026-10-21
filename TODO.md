@@ -25,9 +25,10 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 1 Open (Bug 2.1.21 Open;
+- **Status**: Active / 5 Open (Bugs 2.1.23-2.1.27 Open;
   Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
-  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.22 Fixed).
+  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.21, 2.1.22
+  Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -288,7 +289,7 @@ have been resolved and archived.
       from `SE.COM` would break terminal accessibility and contradict Section
       7.3. Section 10 has been updated to include `Ctrl+U` and `Ctrl+V` as
       paging aliases while reaffirming the prohibition of clipboard paste.
-  - [ ] **Bug 2.1.21: Help Screen Omits `Ctrl+Y` and `Ctrl+Z`**:
+  - [x] **Bug 2.1.21: Help Screen Omits `Ctrl+Y` and `Ctrl+Z` [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3, 10;
       `docs/KEYBINDINGS.md`.
     - *Issue*: The editor handles `Ctrl+Y` (Beautify block / whole file,
@@ -313,6 +314,75 @@ have been resolved and archived.
       (matching `KEY_CTRL_O` -> `HANDLE_SPLASH_OPEN`). In
       `src/core/plugin_mgr.asm` (`STR_SPLASH_CMDS`), update the Open and
       Save menu lines to display `[O]  or  [^O]` and `[S]  or  [^S]`.
+  - [ ] **Bug 2.1.23: Filename Input Box WordStar Keys & `Ctrl+D` Delete**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 7.9, 10.1, 10.2.
+    - *Issue*: Section 7.9 mandates that in the Directory Browser filename
+      input box (`READ_FILENAME_INPUT`), `<Del>` or `<Ctrl+D>` deletes the
+      character directly under the cursor (`INPUT_DEL_CHAR`), and Sections 1
+      and 10 strictly prohibit legacy WordStar navigation keybindings across
+      all surfaces and modal dialogs. However, `INPUT_CHECK_PAGE_KEYS` in
+      `src/core/ui_browser.asm:5789-5806` and `DNL_CHK_PAGE_CTRL` at line 6382
+      still bind WordStar `Ctrl+S` to `INPUT_CURSOR_LEFT`, `Ctrl+D` to
+      `INPUT_CURSOR_RIGHT` (blocking `Ctrl+D` forward delete), `Ctrl+G` to
+      `INPUT_DEL_CHAR`, and `Ctrl+B` to Page Up.
+    - *Required Fix*: In `src/core/ui_browser.asm`, remove the prohibited
+      WordStar `Ctrl+S`, `Ctrl+G`, and `Ctrl+B` bindings from
+      `INPUT_CHECK_PAGE_KEYS` and `DNL_CHK_PAGE_CTRL`, and route `KEY_CTRL_D`
+      to `INPUT_DEL_CHAR` per Section 7.9 and Section 10.
+  - [ ] **Bug 2.1.24: `PLUGIN.PRL` WordStar & Vi Navigation Keybindings**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 8.3 (Archetype D), 10.
+    - *Issue*: Section 1 and Section 10 strictly prohibit legacy WordStar
+      diamond directional keys (`^S`, `^D`, `^E`, `^X`) and Vi movement keys
+      (`J`, `K`) across all surfaces and modal dialogs. However, in
+      `plugins/plugin.asm`, `PLUG_KEY_LOOP` (lines 382-399) and `CPK_KEY_LOOP`
+      (lines 1309-1326) still bind `Ctrl+E` (5), `Ctrl+X` (24), `'K'`, and
+      `'J'` to slot/item selection navigation alongside the canonical Up/Down
+      arrow keys.
+    - *Required Fix*: Remove the non-canonical `Ctrl+E`, `Ctrl+X`, `'K'`, and
+      `'J'` bindings from `PLUG_KEY_LOOP` and `CPK_KEY_LOOP` in
+      `plugins/plugin.asm` and rebuild `plugins/PLUGIN.PRL`.
+  - [ ] **Bug 2.1.25: Replace Confirmation Modal Multi-Byte Escape Drain**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.2, 8.3 (Archetype B), 10.3.
+    - *Issue*: In `src/core/search.asm:2137-2140` (`REPLACE_CONFIRM_KEY`),
+      receiving `KEY_ESC` (`0x1B`) immediately jumps to `REPLACE_QUIT` without
+      checking whether trailing escape sequence bytes follow. Pressing any
+      multi-byte escape sequence (e.g. an arrow key `\x1b[A` or `<Del>`
+      `\x1b[3~`) during interactive Search & Replace prematurely cancels the
+      Replace session and leaves the trailing sequence bytes (`[A`) in the
+      console input queue, which immediately dismisses the `"Replace Done"`
+      summary modal and leaks literal characters into the document buffer.
+    - *Required Fix*: In `REPLACE_CONFIRM_KEY` (`src/core/search.asm`), poll
+      `CHECK_KEY_READY` across `ESC_TIMEOUT_LOOPS` upon receiving `KEY_ESC`:
+      if no trailing byte arrives, treat as standalone `ESC` and jump to
+      `REPLACE_QUIT`; if a multi-byte sequence follows, drain it via
+      `DRAIN_ESC_SEQUENCE` and remain in `REPLACE_CONFIRM_KEY`.
+  - [ ] **Bug 2.1.26: Save Changes & Overwrite Modals Ignore `<Enter>` Key**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B), 10.2.
+    - *Issue*: Section 10.2 specifies that `Enter` (`0x0D`) as well as `Y`/`y`
+      confirms modal queries (`Confirm / Execute / Select: Enter / Y, y`).
+      While `REPLACE_CONFIRM_KEY` and `PLUGIN.PRL` (`CONFIRM_UNLOAD_SLOT`)
+      accept `Enter` as Yes, `DSCP_KEY_LOOP` in `src/se.asm:1834-1849`
+      (`Save changes before closing?`) and `OVERWRITE_KEY_LOOP` in
+      `src/core/ui_browser.asm:2657-2672` (`File already exists. Overwrite?`)
+      ignore `KEY_ENTER` (`13`).
+    - *Required Fix*: Accept `KEY_ENTER` (`13`) alongside `'Y'`/`'y'` in
+      `DSCP_KEY_LOOP` (`src/se.asm`) and `OVERWRITE_KEY_LOOP`
+      (`src/core/ui_browser.asm`).
+  - [ ] **Bug 2.1.27: Directory Browser Multi-Byte CSI Sequence Drain**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.9, 10.3.
+    - *Issue*: Section 10.3 mandates that when a multi-byte CSI sequence
+      (`\x1b[...`) is received, the parser must consume all parameter and
+      intermediate bytes up to the final terminating byte (`0x40`-`0x7E`, such
+      as `~` or a letter) so trailing bytes never leak into input buffers.
+      In `src/core/ui_browser.asm`, `INPUT_HANDLE_CSI` (`5707-5741`) and
+      `DNL_CSI` (`6327-6345`) only read a single byte after `\x1b[1`..`\x1b[6`
+      and do not call `DRAIN_CSI_TAIL` on unrecognized CSI sequences. Pressing
+      a 5-byte function key (e.g. `F5` `\x1b[15~`) or modified arrow key
+      (`\x1b[1;5D`) in the Open/Save filename prompt leaks `'~'` or `'5D'`
+      directly into the filename text box.
+    - *Required Fix*: Update `INPUT_HANDLE_CSI` and `DNL_CSI` in
+      `src/core/ui_browser.asm` to drain trailing CSI bytes via
+      `DRAIN_CSI_TAIL`.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.

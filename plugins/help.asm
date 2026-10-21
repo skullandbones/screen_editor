@@ -377,6 +377,8 @@ STR_HELP_BODY:
 	DB	"Ctrl+Q          Quit to CP/M",13,10
 	DB	"    Ctrl+K           Help / Solidify block   "
 	DB	"Ctrl+P          Plugins pop-up",13,10
+	DB	"    Ctrl+Z           Plugin Manager          "
+	DB	"Ctrl+Y          Beautify text",13,10
 	DB	"  NAVIGATION & SEARCH:",13,10
 	DB	"    Arrow Keys       Move Up/Down/Left/Right "
 	DB	"Ctrl+A / Home   Start of line",13,10
@@ -392,14 +394,12 @@ STR_HELP_BODY:
 	DB	"Ctrl+I / Tab    Toggle find case",13,10
 	DB	"  EDITING & BLOCK:",13,10
 	DB	"    Insert           Toggle Insert/Overwrite "
-	DB	"Enter           New line",13,10
+	DB	"Enter           New line / Lock",13,10
 	DB	"    ASCII 32..126    Insert/Overwrite text   "
 	DB	"Backspace       Delete left / join",13,10
 	DB	"    Delete / Ctrl+D  Delete char or block    "
 	DB	"Ctrl+B          Start/Toggle block",13,10
-	DB	"    Ctrl+C           Copy solidified block   "
-	DB	"Ctrl+K          Solidify block",13,10
-	DB	"    Ctrl+X           Move solidified block   "
+	DB	"    Ctrl+C / Ctrl+X  Copy / Move block       "
 	DB	"ESC             Clear block",13,10,"$"
 
 STR_HELP_RETURN_PROMPT:	DB	"Press any key to continue",13,10,"$"
