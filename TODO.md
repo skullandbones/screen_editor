@@ -25,10 +25,10 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 0 Open (All 27 Bugs Resolved;
+- **Status**: Active / 0 Open (All 28 Bugs Resolved;
   Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
   Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.21, 2.1.22,
-  2.1.23, 2.1.24, 2.1.25, 2.1.26, 2.1.27 Fixed).
+  2.1.23, 2.1.24, 2.1.25, 2.1.26, 2.1.27, 2.1.28 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -383,6 +383,26 @@ have been resolved and archived.
     - *Required Fix*: Update `INPUT_HANDLE_CSI` and `DNL_CSI` in
       `src/core/ui_browser.asm` to drain trailing CSI bytes via
       `DRAIN_CSI_TAIL`.
+  - [x] **Bug 2.1.28: Plugin Manager Status Bar Line Number [FIXED]**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 7.6.
+    - *Issue*: Opening the Plugin Manager screen (`P` from Splash or `Ctrl+Z`
+      from Editor) corrupts Field 5 of the status bar to display an invalid line
+      number (`Line 44413/1 Col 0` or `Line 44413/3 Col 6`).
+    - *Root Cause*: In `plugins/plugin.asm:2351-2369`, `HAS_CURSOR_API` checks
+      if `PLUGIN_HOST_API + 2` (Host API version) is `>= 0114H` (`v1.1.4`) to
+      determine whether `TRAMP_HIDE_CURSOR` (`+76`) and `TRAMP_SHOW_CURSOR`
+      (`+79`) are present in `PLUGIN_HOST_API`. However, in
+      `src/core/plugin_tramp.asm:145-148` and `741-761`, those two jump vectors
+      and trampolines were conditionally compiled under `IFDEF TARGET_NEXT`.
+      When `SE.COM`'s Host API version at `+2` was bumped to `0114H`,
+      `HOST_HIDE_CURSOR` in `PLUGIN.PRL` jumped to `PLUGIN_HOST_API + 76` on
+      `SE.COM`, which fell directly into `TRAMP_CHECKOUT_LINE` at address
+      `0xAD7C` (`44,412`) with `HL = 0xAD7C`. `HOST_CHECKOUT_LINE` then executed
+      `LD (CUR_DOC_ROW),HL`, overwriting `CUR_DOC_ROW` with `44,412` (`44,413`
+      1-based).
+    - *Required Fix*: Expose `JP TRAMP_HIDE_CURSOR` (`+76`),
+      `JP TRAMP_SHOW_CURSOR` (`+79`), and their corresponding trampolines
+      unconditionally across all targets in `src/core/plugin_tramp.asm`.
 
 ### 2.2 Profile 2: CP/M on ZX Spectrum Next (`SE_NEXT.COM`)
 - **Target Platform**: NextCPM / CP/M 2.2 / CP/M Plus on ZX Spectrum Next.

@@ -142,10 +142,8 @@ HOST_API_MGR_SLOT:
 	JP TRAMP_SAVE_PLUGIN_CFG	; +67: Call HOST_SAVE_PLUGIN_CFG
 	JP TRAMP_LOAD_PLUGIN_CFG	; +70: Call HOST_LOAD_PLUGIN_CFG
 	JP TRAMP_RENDER_STATUS_BAR	; +73: Call RENDER_STATUS_BAR
-	IFDEF TARGET_NEXT
 	JP TRAMP_HIDE_CURSOR		; +76: Call TERM_HIDE_CURSOR
 	JP TRAMP_SHOW_CURSOR		; +79: Call TERM_SHOW_CURSOR
-	ENDIF
 
 ;------------------------------------------------------------------------------
 ; TRAMP_CHECKOUT_LINE: Host API trampoline for line checkout across memory banks
@@ -738,7 +736,6 @@ TRAMP_FAR_CALL:
 	POP AF				; Restore return AF
 	RET
 
-	IFDEF TARGET_NEXT
 ;------------------------------------------------------------------------------
 ; TRAMP_HIDE_CURSOR / TRAMP_SHOW_CURSOR: Host API trampolines for cursor state
 ;
@@ -759,6 +756,7 @@ TRAMP_SHOW_CURSOR:
 	LD HL,TERM_SHOW_CURSOR
 	JR TRAMP_FAR_CALL
 
+	IFDEF TARGET_NEXT
 ;------------------------------------------------------------------------------
 ; NEXT_BNKCALL: Execute Far RAM entry point (IX) in Next MMU Far RAM Bank A
 ;
