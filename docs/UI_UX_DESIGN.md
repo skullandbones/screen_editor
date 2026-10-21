@@ -2735,4 +2735,55 @@ and its target profiles.
      CP/M-86 (`SE.CMD`), and 64-bit Linux (`se-linux`, `se-py`, `se-rs`,
      `se-ada`, `se-a68`, `se-pas`) targets.
 
+15.5 CP/M-80 `SE.COM` — Plugin Manager Screen Layout (`DO_MANAGE_PLUGINS`)
+--------------------------------------------------------------------------------
+1. Source Reference:
+   - Renderer: `DO_MANAGE_PLUGINS`, `RENDER_PM_SCREEN`, `PRINT_PM_PREFIX`,
+     `PRINT_PM_SLOT_ROW` (`plugins/plugin.asm`)
+   - Content Line Count: `PM_SCREEN_LINES = 16`
+
+2. Vertical & Horizontal Geometry Metrics:
+   - Available Workspace Rows: `AvailRows = ACTIVE_ROWS - 1` (`23` in `80x24`,
+     `39` in `120x40`).
+   - Top Padding (`PM_TOP_PAD = (AvailRows - 16) / 2`):
+     - `80x24` mode: `3` rows (Screen Rows `1..3` display `~`).
+     - `120x40` mode: `11` rows (Screen Rows `1..11` display `~`).
+   - Content Block Rows (`16` rows total):
+     - `80x24` mode: Screen Rows `4..19`.
+     - `120x40` mode: Screen Rows `12..27`.
+   - Bottom Padding (`AvailRows - PM_TOP_PAD - 16`):
+     - `80x24` mode: `4` rows (Screen Rows `20..23` display `~`).
+     - `120x40` mode: `12` rows (Screen Rows `28..39` display `~`).
+   - Universal Status Bar:
+     - Rendered on Screen Row `24` (`80x24`) or Screen Row `40` (`120x40`).
+
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.4):
+```text
+~
+~
+~
+~              SE - Plugin Manager (4K/8K/16K/32K Dynamic Far RAM)
+~
+~    Far RAM: [Bank 82h (32KB)]    Loaded: [1/8]    TPA Slot: [4KB Overlaid]
+~
+~   Slot Plugin Name      Type   Size    Exec Mode  Capabilities     Status 
+~   ----+----------------+------+-------+----------+---------------+--------
+~   >[0] FATFS            PRL    31530B  FAR (32KB) Modal, Far      [Ready] 
+~    [1] (empty slot)     --     --      --         --               [Free] 
+~    [2] (empty slot)     --     --      --         --               [Free] 
+~    [3] (empty slot)     --     --      --         --               [Free] 
+~    [4] (empty slot)     --     --      --         --               [Free] 
+~    [5] (empty slot)     --     --      --         --               [Free] 
+~    [6] (empty slot)     --     --      --         --               [Free] 
+~    [7] (empty slot)     --     --      --         --               [Free] 
+~
+~ [Up]   [Down]=Select  [Enter]=Unload [A]=About [C]=Config [S]=Save [ESC]=Exit
+~
+~
+~
+~
+ | (Untitled)     |  80x24 | CP/M  | Free: 288 KB    | Line 44393/1    Col 0   |
+```
+
+
 
