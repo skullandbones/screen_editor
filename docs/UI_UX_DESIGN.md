@@ -1239,7 +1239,7 @@ content blocks rather than top-aligned text.
          Spectrum Next MMU), the Memory Screen usefully shows the **16-bank
          (512 KB) physical/logical 32 KB bank allocation map**:
          - System Summary Line (Line 2):
-           `HBIOS: RomWBW v3.5 | OS: CP/M 2.2 | RAM: 512 KB (16x32K) |`
+           `HBIOS: RomWBW v3.6 | OS: CP/M 2.2 | RAM: 512 KB (16x32K) |`
            `SE: <N> KB` (or `MMU: ZX Next 2MB | OS: NextCPM` on `SE_NEXT.COM`,
            or `HBIOS: None | OS: CP/M 2.2 | RAM: 64 KB Base | SE: 64 KB` on
            unbanked 64 KB systems).
@@ -1370,6 +1370,33 @@ content blocks rather than top-aligned text.
                type (`64-bit C ABI .so` or language module), and capabilities
                (e.g. `ROT13 (.so, 16 KB) - Active [DOC_MUTATE]`), or
                `Slot Empty — Available` for unused slots.
+
+14. Plugin Manager Workspace (`[P]` from Splash):
+    - Invoked by pressing `P` / `p` on the Splash Screen
+      (`DO_SPLASH_PLUGIN_SCREEN` / `DO_MANAGE_PLUGINS`).
+    - Geometry & Centering Discipline:
+      - Content Height: 16 lines (`PM_SCREEN_LINES = 16`), horizontally and
+        vertically centered (`TopPad = (AvailRows - 16) / 2` = `3` rows in
+        `80x24`, `11` rows in `120x40`).
+      - Displays the centered title (`SE - Plugin Manager ...`), a 1-line
+        subsystem status banner (Far RAM bank, loaded slot count `[N/8]`, and
+        TPA overlay slot class `[4KB Overlaid]`), and an 8-slot registry table
+        (`Slot`, `Plugin Name`, `Type`, `Size`, `Exec Mode`, `Capabilities`,
+        `Status` `[Ready]` / `[Free]`) with active cursor selector `>[N]`.
+    - Interactive Key Dispatch:
+      - `<Up>` / `<Down>`: Move slot selector `>[0]`..`>[7]`.
+      - `<Enter>`: Load a plugin into a `[Free]` slot (opens the `.PRL`/`.OVL`
+        or native plugin directory browser) or unload a `[Ready]` slot (after
+        Tier 2 confirmation).
+      - `A` / `a`: Invoke Action 1 (`ABOUT`) modal dialog for the selected
+        plugin (if `CAP_HAS_ABOUT` is set).
+      - `C` / `c`: Invoke Action 2 (`CONFIG`) configuration UI for the selected
+        plugin (if `CAP_HAS_CONFIG` is set).
+      - `S` / `s`: Save active slot assignments (`SLOT0=..SLOT7=`) to
+        `PLUGIN.CFG`.
+      - `ESC`: Return to the Splash Screen.
+    - See Section 15.5 for the exact 1:1 80x24 CP/M-80 `SE.COM` Plugin Manager
+      screen layout and example screenshot.
 
 8. Tier 2 Centered Boxed Modal Pop-ups
 --------------------------------------------------------------------------------
@@ -2782,8 +2809,18 @@ and its target profiles.
 ~
 ~
 ~
- | (Untitled)     |  80x24 | CP/M  | Free: 288 KB    | Line 44393/1    Col 0   |
+ | (Untitled)     |  80x24 | CP/M  | Free: 288 KB    | Line    1/1    Col 0   | 
 ```
+
+4. Notes on Status Banner & Profile Adaptations:
+   - `TPA Slot: [4KB Overlaid]`: Denotes the standard 4 KB TPA overlay size
+     class (`CAP_SIZE_4K`) executed inside the 5,120-byte `LINE_STORAGE` buffer
+     in Base TPA (see `docs/ARCHITECTURE.md` Section 7.5).
+   - On systems with a builtin Plugin Manager (CP/M-86 `SE.CMD` and 64-bit
+     Linux ports), the summary line and `Exec Mode` / `Type` columns adapt to
+     the target's plugin mechanism (e.g. `16-bit PRL/OVL` on `SE.CMD` or
+     `dlopen .so` / native module on 64-bit Linux).
+
 
 
 
