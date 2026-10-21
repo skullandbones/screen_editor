@@ -25,10 +25,10 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 2 Open (Bugs 2.1.26, 2.1.27 Open;
+- **Status**: Active / 1 Open (Bug 2.1.27 Open;
   Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
   Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.21, 2.1.22,
-  2.1.23, 2.1.24, 2.1.25 Fixed).
+  2.1.23, 2.1.24, 2.1.25, 2.1.26 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -356,7 +356,7 @@ have been resolved and archived.
       if no trailing byte arrives, treat as standalone `ESC` and jump to
       `REPLACE_QUIT`; if a multi-byte sequence follows, drain it via
       `DRAIN_ESC_SEQUENCE` and remain in `REPLACE_CONFIRM_KEY`.
-  - [ ] **Bug 2.1.26: Save Changes & Overwrite Modals Ignore `<Enter>` Key**:
+  - [x] **Bug 2.1.26: Save Changes & Overwrite Modals `<Enter>` Key [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B), 10.2.
     - *Issue*: Section 10.2 specifies that `Enter` (`0x0D`) as well as `Y`/`y`
       confirms modal queries (`Confirm / Execute / Select: Enter / Y, y`).
