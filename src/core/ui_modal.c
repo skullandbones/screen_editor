@@ -211,7 +211,7 @@ int modal_confirm(const char *title, const char *msg,
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_CANCEL;
-        } else if (k == 'y' || k == 'Y') {
+        } else if (k == 'y' || k == 'Y' || k == KEY_ENTER) {
             hal_console_hide_cursor();
             g_need_screen_render = 1;
             return MODAL_RES_YES;

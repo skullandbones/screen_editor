@@ -3982,7 +3982,7 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.52
+- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.53
   Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
@@ -5108,6 +5108,18 @@ have been resolved and archived.
       under `FILE & SYSTEM:`, `New line / Lock` for `Enter`, and the single
       `Ctrl+C / Ctrl+X Copy / Move block` row under `EDITING & BLOCK:` within
       the 22-line Tier 1 Help Screen layout.
+  - [x] **Bug 2.8.53: Confirmation Modals (`modal_confirm`) Ignore `<Enter>`
+    Key (`KEY_ENTER`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.3 (Archetype B), Section 10
+      (`Enter` = `Split line at cursor / Confirm modal`);
+      `src/core/ui_modal.c:197-223`.
+    - *Issue*: In `modal_confirm()` (`src/core/ui_modal.c:214`), only `k == 'y'
+      || k == 'Y'` returns `MODAL_RES_YES`. Pressing `Enter` (`KEY_ENTER` /
+      `0x0D`) in the `"Save changes?"` (`modal_confirm_save_changes`) or `"File
+      already exists. Overwrite?"` (`modal_confirm_overwrite`) confirmation
+      dialogs is ignored instead of confirming Yes.
+    - *Resolution*: Updated `modal_confirm()` in `src/core/ui_modal.c` to accept
+      `k == 'y' || k == 'Y' || k == KEY_ENTER` as `MODAL_RES_YES`.
 
 ---
 
