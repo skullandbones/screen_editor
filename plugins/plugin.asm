@@ -379,10 +379,6 @@ PKL_NOT_MODAL:
 	RET
 
 PKL_NOT_CTRL_P:
-	CP	5			; Ctrl+E (Up)
-	JP	Z,PLUG_PREV_SLOT
-	CP	24			; Ctrl+X (Down)
-	JP	Z,PLUG_NEXT_SLOT
 	CP	13			; Enter
 	JP	Z,PLUG_DO_ENTER
 
@@ -393,10 +389,6 @@ PKL_NOT_CTRL_P:
 	JR	NC,PKL_NOT_LOWER
 	SUB	32
 PKL_NOT_LOWER:
-	CP	'K'
-	JP	Z,PLUG_PREV_SLOT
-	CP	'J'
-	JP	Z,PLUG_NEXT_SLOT
 	CP	'Q'
 	JP	Z,PKL_EXIT
 	CP	'A'
@@ -1306,10 +1298,6 @@ CPK_KEY_LOOP:
 
 	CP	16			; Ctrl+P
 	JP	Z,CPKL_DISMISS
-	CP	5			; Ctrl+E (Up)
-	JP	Z,CPK_PREV_ITEM
-	CP	24			; Ctrl+X (Down)
-	JP	Z,CPK_NEXT_ITEM
 	CP	13			; Enter (Execute selected)
 	JP	Z,CPK_EXECUTE_CURRENT
 
@@ -1320,10 +1308,6 @@ CPK_KEY_LOOP:
 	JR	NC,CPKL_NOT_LOWER
 	SUB	32
 CPKL_NOT_LOWER:
-	CP	'K'			; Vi Up
-	JP	Z,CPK_PREV_ITEM
-	CP	'J'			; Vi Down
-	JP	Z,CPK_NEXT_ITEM
 	CP	'A'			; Action: About
 	JP	Z,CPK_DO_ABOUT
 	CP	'U'			; Action: Unload

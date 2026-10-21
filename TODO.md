@@ -25,10 +25,10 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 4 Open (Bugs 2.1.24-2.1.27 Open;
+- **Status**: Active / 3 Open (Bugs 2.1.25-2.1.27 Open;
   Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
   Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.21, 2.1.22,
-  2.1.23 Fixed).
+  2.1.23, 2.1.24 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -329,7 +329,7 @@ have been resolved and archived.
       WordStar `Ctrl+S`, `Ctrl+G`, and `Ctrl+B` bindings from
       `INPUT_CHECK_PAGE_KEYS` and `DNL_CHK_PAGE_CTRL`, and route `KEY_CTRL_D`
       to `INPUT_DEL_CHAR` per Section 7.9 and Section 10.
-  - [ ] **Bug 2.1.24: `PLUGIN.PRL` WordStar & Vi Navigation Keybindings**:
+  - [x] **Bug 2.1.24: `PLUGIN.PRL` WordStar & Vi Navigation Keys [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 8.3 (Archetype D), 10.
     - *Issue*: Section 1 and Section 10 strictly prohibit legacy WordStar
       diamond directional keys (`^S`, `^D`, `^E`, `^X`) and Vi movement keys
