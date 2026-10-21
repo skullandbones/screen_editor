@@ -81,11 +81,37 @@ static void parse_config_line(char *line)
     for (p = val; *p; p++) {
         if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 32);
     }
-#define CFG_EQ(a, b) (strcmp((a), (b)) == 0)
+    if (strcmp(key, "SCREEN") == 0) {
+        g_config.screen_mode = (strcmp(val, "80X24") == 0 ||
+                                val[0] == '1') ? MODE_80X24 : MODE_120X40;
+    } else if (strcmp(key, "TAB") == 0) {
+        g_config.tab_width = (val[0] == '8') ? 8 : 4;
+    } else if (strcmp(key, "LINES") == 0) {
+        g_config.lines_mode = (val[0] == '3' || val[0] == '1') ? 1 : 0;
+    } else if (strcmp(key, "RAMDRIVE") == 0) {
+        if (val[0] == 'O' && val[1] != 'F') {
+            g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
+        } else if (val[0] == 'H' || val[0] == '2') {
+            g_config.ramdrive_mode = RAMDRV_MODE_HIBERNATE;
+        } else if (val[0] == 'D' || val[0] == '3') {
+            g_config.ramdrive_mode = RAMDRV_MODE_DISABLED;
+        } else {
+            g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
+        }
+    } else if (strcmp(key, "PLUGIN") == 0) {
+        if (val[0] == 'D' || val[0] == '2') {
+            g_config.plugin_mode = PLUGIN_MODE_ONDEMAND;
+        } else if (val[0] == 'O' || val[0] == '0') {
+            g_config.plugin_mode = PLUGIN_MODE_DISABLED;
+        } else {
+            g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
+        }
+    } else if (strcmp(key, "AUTO_INDENT") == 0) {
+        g_config.auto_indent = (val[0] == '0' || val[0] == 'O' ||
+                                val[0] == 'N') ? 0 : 1;
+    }
 #else
 #define CFG_EQ(a, b) (strcasecmp((a), (b)) == 0)
-#endif
-
     if (CFG_EQ(key, "SCREEN") ||
         CFG_EQ(key, "SCREEN_MODE")) {
         if (CFG_EQ(val, "80X24") || CFG_EQ(val, "1")) {
@@ -135,25 +161,8 @@ static void parse_config_line(char *line)
     } else if (CFG_EQ(key, "PLUGIN") ||
                CFG_EQ(key, "PLUGINS") ||
                CFG_EQ(key, "PLUGIN_MODE")) {
-#ifdef __CPM__
-        if (CFG_EQ(val, "AUTO") ||
-            CFG_EQ(val, "AUTOLOAD") ||
-            CFG_EQ(val, "1")) {
-            g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
-        } else if (CFG_EQ(val, "DEMAND") ||
-                   CFG_EQ(val, "ONDEMAND") ||
-                   CFG_EQ(val, "2")) {
-            g_config.plugin_mode = PLUGIN_MODE_ONDEMAND;
-        } else if (CFG_EQ(val, "OFF") ||
-                   CFG_EQ(val, "DISABLED") ||
-                   CFG_EQ(val, "0")) {
-            g_config.plugin_mode = PLUGIN_MODE_DISABLED;
-        }
-#else
-        /* Non-CP/M plugin manager is builtin and cannot be disabled (14.8) */
         (void)val;
         g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
-#endif
     } else if (CFG_EQ(key, "AUTO_INDENT")) {
         if (CFG_EQ(val, "OFF") || CFG_EQ(val, "NO") ||
             CFG_EQ(val, "0")) {
@@ -162,6 +171,7 @@ static void parse_config_line(char *line)
             g_config.auto_indent = 1;
         }
     }
+#endif
 }
 
 #ifdef __CPM__

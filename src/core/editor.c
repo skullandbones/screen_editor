@@ -34,7 +34,8 @@ uint8_t  g_insert_mode = 1;
 uint8_t  g_editor_exit_flag = 0;
 uint8_t  g_action_code = ACTION_EXIT;
 #ifdef __CPM__
-static char s_editor_fname[32];
+char g_editor_fname[24];
+#define s_editor_fname g_editor_fname
 #else
 static char s_editor_fname[256];
 #endif
@@ -586,9 +587,7 @@ int editor_handle_key(int key)
             g_need_screen_render = 1;
             break;
         }
-        strncpy(s_editor_fname, g_current_filename,
-                sizeof(s_editor_fname) - 1);
-        s_editor_fname[sizeof(s_editor_fname) - 1] = '\0';
+        strcpy(s_editor_fname, g_current_filename);
         if (ui_browser_save_dialog(s_editor_fname,
                                    sizeof(s_editor_fname)) ==
             MODAL_RES_OK && s_editor_fname[0]) {
@@ -634,7 +633,7 @@ int editor_handle_key(int key)
         g_need_screen_render = 1;
         break;
     }
-    case KEY_CTRL_P: show_plugin_palette(); break;
+    case KEY_CTRL_P: show_plugin_palette_ctx(PLUG_CTX_EDITOR); break;
     case KEY_CTRL_W:
         if (modal_confirm_save_changes() == MODAL_RES_OK) {
             init_empty_document();

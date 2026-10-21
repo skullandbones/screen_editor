@@ -101,6 +101,7 @@ void mem_free_line_chain(uint16_t slot_id)
     }
 }
 
+#ifndef __CPM__
 int mem_write_slot(uint16_t slot_id, const uint8_t *src)
 {
     if (slot_id >= MAX_ACTIVE_SLOTS || !is_slot_allocated(slot_id) || !src) {
@@ -116,6 +117,7 @@ int mem_read_slot(uint16_t slot_id, uint8_t *dest)
     }
     return hal_mem_read_slot(slot_id, dest);
 }
+#endif
 
 int mem_write_line(uint16_t *start_slot, const char *text, uint16_t len)
 {
@@ -230,6 +232,7 @@ uint16_t mem_read_line(uint16_t start_slot, char *dest, uint16_t max_len)
     return bytes_copied;
 }
 
+#ifndef __CPM__
 int mem_ensure_page_resident(uint16_t page_id)
 {
     (void)page_id;
@@ -254,3 +257,4 @@ uint32_t mem_get_free_kb(void)
     uint16_t free_slots = mem_get_free_slots();
     return (uint32_t)(free_slots >> 3);
 }
+#endif

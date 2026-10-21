@@ -5183,6 +5183,39 @@ have been resolved and archived.
       was triggered from the `Ctrl+K` Block Operations modal dialog.
     - *Resolution*: Removed the extraneous `cancel_block()` call after
       `file_insert(fname)` in `do_block_menu_popup()` (`src/core/block.c`).
+  - [x] **Bug 2.8.58: `SEC.COM` Fails to Load and Execute `PLUGIN.PRL` and
+    External `.PRL` / `.OVL` Plugins via `PLUGIN_HOST_API` Jump Table**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 5.4 (`lines 601-656`),
+      Section 9.10 (`lines 1859-1929`), Section 13 (`lines 2529-2690`),
+      `src/core/plugin_mgr.asm`, `src/core/plugin_tramp.asm`,
+      `plugins/plugin.asm`, `src/core/plugin_mgr.c`, `src/core/beautify.c`.
+    - *Issue*: Sections 5.4, 9.10, and 13 of `docs/UI_UX_DESIGN.md` specify
+      that on CP/M (`SE.COM` / `SEC.COM`), the Plugin System is driven by
+      loading `PLUGIN.PRL` into a dedicated Far RAM bank and executing
+      Action 0 (Full-Screen Plugin Manager `SE - Plugin Manager` on Splash
+      `[P]` / Editor `Ctrl+Z`), Action 1 (Context-Aware Plugin Pop-up Menu
+      on `Ctrl+P` across all 7 screen contexts `PLUG_CTX_*`), Action 2
+      (About dialog), and Action 3 (Autoload plugins from `PLUGIN.CFG`),
+      communicating with the host editor through the 82-byte `PLUGIN_HOST_API`
+      jump table in Upper Common RAM (`>= 0x8000`) and loading external
+      `.PRL` / `.OVL` plugin binaries (`WORDCNT.OVL`, `ROT13.PRL`,
+      `BEAUTIFY.PRL`, `MIDPLUG.PRL`, `HALFPLUG.PRL`, `BIGPLUG.PRL`) into
+      Far RAM slots. Instead, `SEC.COM` compiled `plugin_init_registry()`
+      as an empty no-op under `#ifdef __CPM__` in `src/core/plugin_mgr.c`
+      and fell back to a hardcoded C modal (`Plugin Manager` showing 8 empty
+      slots without `[L]=Load` / `[S]=Save`) and a 3-item `Plugin Palette`
+      on `Ctrl+P`, never loading `PLUGIN.PRL`, `PLUGIN.CFG`, or external
+      `.PRL` / `.OVL` plugins.
+    - *Resolution*: Implemented the CP/M Far RAM `PLUGIN.PRL` and `.PRL`/`.OVL`
+      loader, slot allocator, PRL bitmap relocator, cross-bank BDOS proxy,
+      and 82-byte Upper Common RAM `PLUGIN_HOST_API` jump table in
+      `src/hal/cpm/hal_cpm_memory.c` and `src/core/plugin_mgr.c`, added
+      `BROWSER_MODE_LOAD_PLUGIN` (`LOAD PLUGIN` / `"Load Plugin (.PRL/.OVL):"`)
+      to `src/core/ui_browser.c`, wired `Ctrl+Y` (`do_ctrl_y_beautify`) on
+      CP/M to dispatch to `BEAUTIFY.PRL` in `src/core/beautify.c`, and
+      connected context-aware `Ctrl+P` pop-ups and base screen redraws
+      across all screen contexts in `src/core/ui_render.c`,
+      `src/core/editor.c`, and `src/sec_cpm.c`.
 
 ---
 

@@ -64,11 +64,13 @@ typedef struct {
 
 /* Plugin Subsystem Function Entry Points */
 void plugin_init_registry(void);
+void plugin_autoload_mgr(void);
 int  plugin_load_by_name(const char *filename);
 void plugin_unload_slot(uint8_t slot);
 int  plugin_exec_slot(uint8_t slot, uint8_t action);
 void plugin_manager_ui(void);
 void show_plugin_palette(void);
+void show_plugin_palette_ctx(uint8_t ctx);
 const plugin_entry_t *plugin_get_entry(uint8_t slot);
 
 #ifdef __cplusplus

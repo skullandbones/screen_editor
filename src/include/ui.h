@@ -53,6 +53,7 @@ extern char     g_status_msg[80];
 #endif
 
 /* UI Subsystem Function Entry Points */
+char *se_append_u16(char *p, uint16_t val);
 void ui_init(void);
 void render_screen(void);
 void render_status_bar(void);
@@ -62,6 +63,7 @@ void show_help_screen(void);
 void show_about_screen(void);
 void show_config_screen(void);
 void show_mem_info_screen(void);
+void redraw_base_screen(uint8_t ctx);
 void render_current_line(void);
 void render_buffer_line(uint16_t row);
 void set_status_msg(const char *msg);

@@ -19,7 +19,11 @@
 #include "../include/beautify.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
+#include "../include/plugin.h"
+#include "../include/editor.h"
+#include "../include/hal.h"
 
+#ifndef __CPM__
 void parse_asm_line(const char *src,
                     char *label, size_t label_max,
                     char *mnemonic, size_t mnem_max,
@@ -193,7 +197,6 @@ static void beautify_line(uint16_t row)
     commit_active_line();
 }
 
-#ifndef __CPM__
 void beautify_document(void)
 {
     uint16_t r;
@@ -213,7 +216,6 @@ void beautify_block(uint16_t start_row, uint16_t end_row)
     g_doc_modified = 1;
     g_need_screen_render = 1;
 }
-#endif
 
 int do_ctrl_y_beautify(void)
 {
@@ -232,3 +234,38 @@ int do_ctrl_y_beautify(void)
                             "Assembly formatting applied.");
     return 0;
 }
+#else
+extern uint8_t g_plugin_registry[256];
+
+int do_ctrl_y_beautify(void)
+{
+    uint8_t slot;
+    int loaded_slot = -1;
+
+    if (g_doc_total_lines == 0) {
+        return 0;
+    }
+
+    for (slot = 0; slot < PLUGIN_MAX_SLOTS; slot++) {
+        uint8_t *ent = &g_plugin_registry[slot * 32];
+        if (ent[22] != 0 && strcmp((const char *)ent, "BEAUTIFY") == 0) {
+            loaded_slot = (int)slot;
+            break;
+        }
+    }
+
+    if (loaded_slot < 0) {
+        loaded_slot = plugin_load_by_name("BEAUTIFY");
+        if (loaded_slot < 0) {
+            modal_alert("Plugin Missing", "BEAUTIFY.PRL not found", NULL);
+            return -1;
+        }
+    }
+
+    plugin_exec_slot((uint8_t)loaded_slot, 0);
+    g_block_mode = BLOCK_MODE_OFF;
+    g_need_screen_render = 1;
+    g_need_status_render = 1;
+    return 0;
+}
+#endif

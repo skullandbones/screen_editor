@@ -26,6 +26,7 @@
 
 #define MODAL_BOX_WIDTH   50
 
+#ifndef __CPM__
 void modal_puts_centered(uint8_t row, uint8_t left,
                         uint8_t width, const char *str)
 {
@@ -43,6 +44,7 @@ void modal_puts_centered(uint8_t row, uint8_t left,
         hal_console_putc(str[i]);
     }
 }
+#endif
 
 void modal_draw_row_centered(uint8_t row, uint8_t left,
                              uint8_t width, const char *str)
@@ -69,6 +71,7 @@ void modal_draw_row_centered(uint8_t row, uint8_t left,
     hal_console_putc('|');
 }
 
+#ifndef __CPM__
 void modal_draw_row_left(uint8_t row, uint8_t left,
                          uint8_t width, const char *str)
 {
@@ -89,49 +92,32 @@ void modal_draw_row_left(uint8_t row, uint8_t left,
     }
     hal_console_putc('|');
 }
+#endif
+
+static void draw_horiz_border(uint8_t row, uint8_t left, uint8_t width)
+{
+    uint8_t c;
+    hal_console_locate(row, left);
+    hal_console_putc('+');
+    for (c = 1; c < width - 1; c++) {
+        hal_console_putc('-');
+    }
+    hal_console_putc('+');
+}
 
 void modal_draw_frame(uint8_t top, uint8_t left,
                       uint8_t width, uint8_t height,
                       const char *title)
 {
-    uint8_t r, c;
+    uint8_t r;
 
-    /* Row 0: Top Border */
-    hal_console_locate(top, left);
-    hal_console_putc('+');
-    for (c = 1; c < width - 1; c++) {
-        hal_console_putc('-');
-    }
-    hal_console_putc('+');
-
-    /* Row 1: Title Row */
+    draw_horiz_border(top, left, width);
     modal_draw_row_centered(top + 1, left, width, title ? title : "");
-
-    /* Row 2: Title Separator Divider (+---+) */
-    hal_console_locate(top + 2, left);
-    hal_console_putc('+');
-    for (c = 1; c < width - 1; c++) {
-        hal_console_putc('-');
-    }
-    hal_console_putc('+');
-
-    /* Rows 3..height-2: Interior Clear */
+    draw_horiz_border(top + 2, left, width);
     for (r = 3; r < height - 1; r++) {
-        hal_console_locate(top + r, left);
-        hal_console_putc('|');
-        for (c = 1; c < width - 1; c++) {
-            hal_console_putc(' ');
-        }
-        hal_console_putc('|');
+        modal_draw_row_centered(top + r, left, width, "");
     }
-
-    /* Row height-1: Bottom Border */
-    hal_console_locate(top + height - 1, left);
-    hal_console_putc('+');
-    for (c = 1; c < width - 1; c++) {
-        hal_console_putc('-');
-    }
-    hal_console_putc('+');
+    draw_horiz_border(top + height - 1, left, width);
 }
 
 int modal_alert(const char *title, const char *msg1, const char *msg2)
@@ -456,18 +442,20 @@ int modal_confirm_save_changes(void)
                         "Save changes?", NULL);
     if (res == MODAL_RES_YES) {
         if (!g_current_filename[0]) {
+#ifdef __CPM__
+            extern char g_editor_fname[24];
+#define dlg_fname g_editor_fname
+#else
             char dlg_fname[32];
+#endif
             dlg_fname[0] = '\0';
-            if (ui_browser_save_dialog(dlg_fname, sizeof(dlg_fname)) !=
+            if (ui_browser_save_dialog(dlg_fname, 24) !=
                 MODAL_RES_OK || !dlg_fname[0]) {
                 return MODAL_RES_CANCEL;
             }
             if (file_save(dlg_fname, g_file_format) != 0) {
                 return MODAL_RES_CANCEL;
             }
-            strncpy(g_current_filename, dlg_fname,
-                    sizeof(g_current_filename) - 1);
-            g_current_filename[sizeof(g_current_filename) - 1] = '\0';
         } else {
             if (file_save(NULL, g_file_format) != 0) {
                 return MODAL_RES_CANCEL;
@@ -491,17 +479,21 @@ int modal_confirm_overwrite(void)
     return (res == MODAL_RES_YES) ? MODAL_RES_OK : res;
 }
 
+#ifndef __CPM__
 void modal_show_notification(const char *title, const char *message)
 {
     modal_alert(title, message, NULL);
 }
+#endif
 
 void modal_alert_file_not_found(const char *fname)
 {
     char msg[48];
 
-    snprintf(msg, sizeof(msg), "'%s' was not found.",
-             fname ? fname : "FILE");
+    msg[0] = '\'';
+    strncpy(msg + 1, fname ? fname : "FILE", 26);
+    msg[27] = '\0';
+    strcat(msg, "' was not found.");
     modal_alert("File Not Found", msg,
                 "Specified file not found on disk.");
 }

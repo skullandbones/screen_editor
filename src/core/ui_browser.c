@@ -29,6 +29,7 @@
 #include "../include/ui_modal.h"
 #include "../include/ui_browser.h"
 #include "../include/file_io.h"
+#include "../include/plugin.h"
 #include "../include/hal.h"
 
 #ifndef __CPM__
@@ -41,12 +42,12 @@ void ui_browser_clear_entries(void)
     s_browser_count = 0;
 }
 
+#ifndef __CPM__
 int ui_browser_add_entry(const char *name, uint32_t size, uint8_t is_dir)
 {
     if (s_browser_count >= MAX_BROWSER_FILES) {
         return -1;
     }
-#ifndef __CPM__
     strncpy(s_browser_files[s_browser_count].filename, name,
             BROWSER_FILENAME_LEN - 1);
     s_browser_files[s_browser_count].filename[
@@ -55,14 +56,10 @@ int ui_browser_add_entry(const char *name, uint32_t size, uint8_t is_dir)
     s_browser_files[s_browser_count].drive = 0;
     s_browser_files[s_browser_count].user = 0;
     s_browser_files[s_browser_count].is_dir = is_dir;
-#else
-    (void)name;
-    (void)size;
-    (void)is_dir;
-#endif
     s_browser_count++;
     return 0;
 }
+#endif
 
 #ifndef __CPM__
 static int compare_entries(const void *a, const void *b)
@@ -192,6 +189,7 @@ void ui_browser_refresh_directory(const char *mask)
 #endif
 }
 
+#ifndef __CPM__
 int ui_browser_get_file_count(void)
 {
     return s_browser_count;
@@ -199,20 +197,17 @@ int ui_browser_get_file_count(void)
 
 const browser_entry_t *ui_browser_get_entry(int index)
 {
-#ifndef __CPM__
     if (index >= 0 && index < s_browser_count) {
         return &s_browser_files[index];
     }
-#else
-    (void)index;
-#endif
     return NULL;
 }
+#endif
 
 #ifdef __CPM__
 static const char *get_entry_name(int idx)
 {
-    static char s_fn[16];
+    char *s_fn = g_scratch_line_buf + 112;
     hal_dir_entry_get((uint8_t)idx, s_fn);
     return s_fn;
 }
@@ -403,6 +398,9 @@ static int ui_browser_workspace(int mode, char *selected_filename,
     } else if (mode == BROWSER_MODE_INSERT) {
         op_str = "INSERT FILE";
         prompt_txt = "Enter filename to insert:";
+    } else if (mode == BROWSER_MODE_LOAD_PLUGIN) {
+        op_str = "LOAD PLUGIN";
+        prompt_txt = "Load Plugin (.PRL/.OVL):";
     } else if (mode == BROWSER_MODE_SAVE_BLOCK) {
         op_str = "SAVE BLOCK";
         prompt_txt = "Enter filename to save:";
@@ -551,10 +549,26 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             if (s_total_pages >= 2) {
                 screen_row++;
                 emit_left_pad(screen_row);
+#ifdef __CPM__
+                {
+                    uint8_t pi = 0;
+                    uint8_t cp = (uint8_t)(s_cur_page + 1);
+                    uint8_t tp = (uint8_t)s_total_pages;
+                    memcpy(s_page_buf, "[Page ", 6);
+                    pi = 6;
+                    if (cp >= 10) s_page_buf[pi++] = (char)('0' + cp / 10);
+                    s_page_buf[pi++] = (char)('0' + cp % 10);
+                    s_page_buf[pi++] = '/';
+                    if (tp >= 10) s_page_buf[pi++] = (char)('0' + tp / 10);
+                    s_page_buf[pi++] = (char)('0' + tp % 10);
+                    strcpy(s_page_buf + pi, "]  <PgUp>/<PgDn>=Page");
+                }
+#else
                 snprintf(s_page_buf, 40,
                          "[Page %d/%d]  <PgUp>/<PgDn>=Page",
                          (int)(uint8_t)(s_cur_page + 1),
                          (int)(uint8_t)s_total_pages);
+#endif
                 hal_console_puts(s_page_buf);
                 hal_console_clear_eol();
             }
@@ -727,6 +741,19 @@ reset_view:
                         if (drv != 0) eff_drv = (char)('A' + drv - 1);
                         if (usr != 0xFF) eff_usr = usr;
                     }
+                    if (mode == BROWSER_MODE_LOAD_PLUGIN) {
+                        char plug_fn[24];
+                        int slot;
+                        format_drv_usr_str(plug_fn, eff_drv, eff_usr, rest);
+                        slot = plugin_load_by_name(plug_fn);
+                        if (slot < 0) {
+                            modal_alert_file_not_found(rest);
+                            need_full_render = 1;
+                            continue;
+                        }
+                        g_is_splash_screen = prev_splash;
+                        return slot;
+                    }
                     file_populate_fcb(rest, (cpm_fcb_t *)s_dir_fcb);
                     s_dir_fcb[0] = (uint8_t)(eff_drv - 'A' + 1);
                     orig_u = bdos(32, 0xFF);
@@ -800,9 +827,8 @@ reset_view:
                     if (fp_check) {
                         fclose(fp_check);
                         if (modal_confirm_overwrite() != MODAL_RES_OK) {
-                            g_need_screen_render = 1;
-                            g_is_splash_screen = prev_splash;
-                            return MODAL_RES_CANCEL;
+                            need_full_render = 1;
+                            continue;
                         }
                     }
                 }
@@ -897,4 +923,11 @@ int ui_browser_save_block_dialog(char *selected_filename, size_t max_len)
 {
     return ui_browser_workspace(BROWSER_MODE_SAVE_BLOCK, selected_filename,
                                 max_len);
+}
+
+int ui_browser_load_plugin_dialog(void)
+{
+    char fn[24];
+    fn[0] = '\0';
+    return ui_browser_workspace(BROWSER_MODE_LOAD_PLUGIN, fn, sizeof(fn));
 }

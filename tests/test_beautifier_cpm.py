@@ -156,7 +156,7 @@ def get_file_from_image(cpmcp_bin, img_file, cpm_filename):
     os.remove(tmp_path)
     return data
 
-def test_config_screen_beautifier_options():
+def test_config_screen_beautifier_options(use_sec=False):
     print("\n[*] TEST 1: Beautifier Plugin Configuration & SE.COM Options Decoupling...", flush=True)
     (
         emu_bin, rom_file, img_file, se_bin,
@@ -348,7 +348,7 @@ def test_config_screen_beautifier_options():
 
     print("[+] Test 1 PASSED: Config screen decoupling and BEAUTIFY.CFG persistence verified.")
 
-def test_ctrl_y_whole_file_beautify():
+def test_ctrl_y_whole_file_beautify(use_sec=False):
     print("\n[*] TEST 2: Whole-File Beautification via Ctrl+Y...", flush=True)
     (
         emu_bin, rom_file, img_file, se_bin,
@@ -469,7 +469,7 @@ def test_ctrl_y_whole_file_beautify():
 
     print("[+] Test 2 PASSED: Whole-file beautification verified.")
 
-def test_ctrl_y_block_beautify():
+def test_ctrl_y_block_beautify(use_sec=False):
     print("\n[*] TEST 3: Block-Scoped Beautification via Ctrl+Y...", flush=True)
     (
         emu_bin, rom_file, img_file, se_bin,
@@ -583,7 +583,7 @@ def test_ctrl_y_block_beautify():
 
     print("[+] Test 3 PASSED: Block-scoped beautification verified.")
 
-def test_cross_platform_parity():
+def test_cross_platform_parity(use_sec=False):
     print("\n[*] TEST 4: Cross-Platform Parity with Linux Python toolchain...", flush=True)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
@@ -638,7 +638,7 @@ def test_cross_platform_parity():
 
     print("[+] Test 4 PASSED: 100% byte-for-byte cross-platform parity confirmed!")
 
-def test_compact_beautification():
+def test_compact_beautification(use_sec=False):
     print("\n[*] TEST 5: Custom Plugin Config (BEAUTIFY.CFG) & Cross-Platform Parity...", flush=True)
     (
         emu_bin, rom_file, img_file, se_bin,
@@ -754,11 +754,11 @@ def main(use_sec=False):
     print("  SE.COM Z80 Beautifier Subsystem Regression Test Suite")
     print("=" * 65)
 
-    test_config_screen_beautifier_options()
-    test_ctrl_y_whole_file_beautify()
-    test_ctrl_y_block_beautify()
-    test_cross_platform_parity()
-    test_compact_beautification()
+    test_config_screen_beautifier_options(use_sec=use_sec)
+    test_ctrl_y_whole_file_beautify(use_sec=use_sec)
+    test_ctrl_y_block_beautify(use_sec=use_sec)
+    test_cross_platform_parity(use_sec=use_sec)
+    test_compact_beautification(use_sec=use_sec)
 
     print("\n" + "=" * 65)
     print("  ALL BEAUTIFIER TESTS PASSED SUCCESSFULLY!")

@@ -309,6 +309,9 @@ static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
     uint8_t col = left + (is_rep ? 17 : 14);
     uint8_t i;
     int k;
+#ifndef __CPM__
+    uint8_t cur_pos = cur_len;
+#endif
 
     hal_console_hide_cursor();
     modal_draw_frame(top, left, 50, 7, is_rep ? "Replace Text" : "Find Text");
@@ -356,9 +359,14 @@ static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
                                         g_search_case_sensitive ?
                                         s_find_mode_sens : s_find_mode_insens);
             }
+#ifdef __CPM__
             hal_console_locate(top + 4, (uint8_t)(col + cur_len));
+#else
+            hal_console_locate(top + 4, (uint8_t)(col + cur_pos));
+#endif
             continue;
         }
+#ifdef __CPM__
         if (k == KEY_BACKSPACE || k == 8 || k == KEY_DEL) {
             if (cur_len > 0) {
                 cur_len--;
@@ -375,6 +383,40 @@ static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
             }
             continue;
         }
+#else
+        if (k == KEY_LEFT || k == KEY_CTRL_S) {
+            if (cur_pos > 0) cur_pos--;
+        } else if (k == KEY_RIGHT) {
+            if (cur_pos < cur_len) cur_pos++;
+        } else if (k == KEY_HOME || k == KEY_CTRL_A) {
+            cur_pos = 0;
+        } else if (k == KEY_END || k == KEY_CTRL_E) {
+            cur_pos = cur_len;
+        } else if (k == KEY_BACKSPACE || k == 8) {
+            if (cur_pos > 0) {
+                memmove(&input[cur_pos - 1], &input[cur_pos],
+                        cur_len - cur_pos + 1);
+                cur_pos--;
+                cur_len--;
+            }
+        } else if (k == KEY_DEL || k == KEY_CTRL_D || k == KEY_CTRL_G) {
+            if (cur_pos < cur_len) {
+                memmove(&input[cur_pos], &input[cur_pos + 1],
+                        cur_len - cur_pos);
+                cur_len--;
+            }
+        } else if (k >= 32 && k <= 126 && cur_len < flen) {
+            memmove(&input[cur_pos + 1], &input[cur_pos],
+                    cur_len - cur_pos + 1);
+            input[cur_pos++] = (char)k;
+            cur_len++;
+        }
+        hal_console_locate(top + 4, col);
+        for (i = 0; i < flen; i++) {
+            hal_console_putc((i < cur_len) ? input[i] : ' ');
+        }
+        hal_console_locate(top + 4, (uint8_t)(col + cur_pos));
+#endif
     }
 }
 
@@ -426,6 +468,7 @@ int do_ctrl_n_find_next(void)
     return -1;
 }
 
+#ifndef __CPM__
 int do_find_prev(void)
 {
     uint16_t prev_row = g_cur_doc_row;
@@ -453,6 +496,7 @@ int do_find_prev(void)
     locate_cursor();
     return -1;
 }
+#endif
 
 int do_ctrl_r_replace(void)
 {
@@ -582,7 +626,9 @@ void show_popup_search_completed(void)
 void show_popup_replace_done(uint16_t count)
 {
     char msg[64];
-    snprintf(msg, sizeof(msg), "Replace done: %u replacement(s).",
-             (unsigned)count);
+    char *p;
+    strcpy(msg, "Replace done: ");
+    p = se_append_u16(msg + 14, count);
+    strcpy(p, " replacement(s).");
     modal_alert("Replace Done", "Search and replace completed.", msg);
 }

@@ -14,7 +14,7 @@
 #include "../../include/config.h"
 #include "../../include/hal.h"
 
-static int bios_const(void)
+int bios_const(void)
 {
 #asm
     push ix
@@ -38,7 +38,7 @@ bios_call_hl_const:
 #endasm
 }
 
-static int bios_conin(void)
+int bios_conin(void)
 {
 #asm
     push ix

@@ -123,11 +123,13 @@ void file_populate_fcb(const char *path, cpm_fcb_t *fcb)
     }
 }
 
+#ifndef __CPM__
 int file_check_hibernated(const char *path)
 {
     (void)path;
     return 0;
 }
+#endif
 
 #ifdef __CPM__
 void cpm_format_doc_filename(const cpm_fcb_t *fcb, uint8_t user)
@@ -166,9 +168,19 @@ static void cpm_commit_loaded_line(uint16_t row, uint16_t col)
 static void draw_progress_tick(uint16_t lines)
 {
     char lbuf[16];
+    char nbuf[8];
+    uint8_t nl, i;
     uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
-    snprintf(lbuf, sizeof(lbuf), "Line %5u", (unsigned)lines);
+    memcpy(lbuf, "Line ", 5);
+    se_append_u16(nbuf, lines);
+    nl = (uint8_t)strlen(nbuf);
+    i = 5;
+    while (nl < 5) {
+        lbuf[i++] = ' ';
+        nl++;
+    }
+    strcpy(lbuf + i, nbuf);
     modal_draw_row_centered(top + 4, left, 50, lbuf);
 }
 
@@ -188,8 +200,10 @@ static void draw_progress_modal(const char *title, uint8_t is_loading)
         render_status_bar();
     }
     modal_draw_frame(top, left, 50, 7, title);
-    snprintf(fbuf, 36, "File: %s",
-             g_current_filename[0] ? g_current_filename : "(Untitled)");
+    strcpy(fbuf, "File: ");
+    strncpy(fbuf + 6,
+            g_current_filename[0] ? g_current_filename : "(Untitled)", 28);
+    fbuf[34] = '\0';
     modal_draw_row_centered(top + 3, left, 50, fbuf);
     draw_progress_tick(is_loading ? 1 : 0);
     modal_draw_row_centered(top + 5, left, 50, "Please wait...");

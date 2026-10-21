@@ -31,10 +31,11 @@ extern "C" {
 #define BROWSER_PAGE_SIZE       16
 
 /* Browser Modes */
-#define BROWSER_MODE_OPEN       0
-#define BROWSER_MODE_INSERT     1
-#define BROWSER_MODE_SAVE       2
-#define BROWSER_MODE_SAVE_BLOCK 3
+#define BROWSER_MODE_OPEN           0
+#define BROWSER_MODE_INSERT         1
+#define BROWSER_MODE_SAVE           2
+#define BROWSER_MODE_SAVE_BLOCK     3
+#define BROWSER_MODE_LOAD_PLUGIN    4
 
 /* Directory File Entry */
 typedef struct {
@@ -52,6 +53,7 @@ int  ui_browser_open_dialog(char *selected_filename, size_t max_len);
 int  ui_browser_save_dialog(char *selected_filename, size_t max_len);
 int  ui_browser_insert_dialog(char *selected_filename, size_t max_len);
 int  ui_browser_save_block_dialog(char *selected_filename, size_t max_len);
+int  ui_browser_load_plugin_dialog(void);
 void ui_browser_refresh_directory(const char *mask);
 int  ui_browser_get_file_count(void);
 const browser_entry_t *ui_browser_get_entry(int index);

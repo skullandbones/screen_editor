@@ -18,6 +18,7 @@
 #include "include/editor.h"
 #include "include/ui.h"
 #include "include/file_io.h"
+#include "include/plugin.h"
 #include "include/hal.h"
 
 static int parse_target_filename(char *out_buf, size_t max_len,
@@ -55,7 +56,7 @@ static int parse_target_filename(char *out_buf, size_t max_len,
 
 int main(int argc, char **argv)
 {
-    static char target_file[32];
+    char target_file[32];
     int has_target = parse_target_filename(target_file, sizeof(target_file),
                                            argc, argv);
 
@@ -74,6 +75,8 @@ int main(int argc, char **argv)
     buffer_init();
     ui_init();
     editor_init();
+    plugin_init_registry();
+    plugin_autoload_mgr();
 
     if (has_target) {
         if (file_load(target_file) != 0) {

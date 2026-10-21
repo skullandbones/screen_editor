@@ -187,12 +187,14 @@ uint16_t fetch_line_to_buffer(uint16_t line_idx, char *dest, size_t max_len)
     return mem_read_line(slot_id, dest, (uint16_t)(max_len - 1));
 }
 
+#ifndef __CPM__
 int store_active_line(void)
 {
      commit_active_line();
      checkout_active_line(g_cur_doc_row);
      return 0;
 }
+#endif
 
 void shift_line_slots_up(uint16_t start_idx, uint16_t count)
 {
@@ -257,7 +259,9 @@ int delete_doc_row(uint16_t line_idx)
     return 0;
 }
 
+#ifndef __CPM__
 void flush_dirty_cache(void)
 {
     commit_active_line();
 }
+#endif

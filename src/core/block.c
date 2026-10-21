@@ -134,6 +134,7 @@ int check_cursor_in_block(uint16_t row, uint16_t col)
     return 1;
 }
 
+#ifndef __CPM__
 int get_line_block_range(uint16_t row, uint16_t *start_col, uint16_t *end_col)
 {
     if (g_block_mode == BLOCK_MODE_OFF || !start_col || !end_col) {
@@ -162,6 +163,7 @@ int get_line_block_range(uint16_t row, uint16_t *start_col, uint16_t *end_col)
     *end_col = 0xFFFF;
     return 1;
 }
+#endif
 
 int do_copy_block(void)
 {
@@ -447,16 +449,22 @@ int do_block_menu_popup(void)
     /* Line 4: Dynamic Selection / Block count */
     pre = (g_block_mode == BLOCK_MODE_SOLIDIFIED) ?
           "Marked Block: " : "Selection: ";
-    if (g_norm_start_row == g_norm_end_row) {
-        uint16_t chars = (g_norm_end_col >= g_norm_start_col) ?
-                         (g_norm_end_col - g_norm_start_col) : 0;
-        snprintf(metrics, sizeof(metrics), "%s%u %s",
-                 pre, (unsigned)chars, (chars == 1) ? "char" : "chars");
-    } else {
-        uint16_t lines = g_norm_end_row - g_norm_start_row +
-                         ((g_norm_end_col > 0) ? 1 : 0);
-        snprintf(metrics, sizeof(metrics), "%s%u %s",
-                 pre, (unsigned)lines, (lines == 1) ? "line" : "lines");
+    {
+        uint16_t cnt;
+        const char *unit;
+        char *p;
+        if (g_norm_start_row == g_norm_end_row) {
+            cnt = (g_norm_end_col >= g_norm_start_col) ?
+                  (g_norm_end_col - g_norm_start_col) : 0;
+            unit = (cnt == 1) ? " char" : " chars";
+        } else {
+            cnt = g_norm_end_row - g_norm_start_row +
+                  ((g_norm_end_col > 0) ? 1 : 0);
+            unit = (cnt == 1) ? " line" : " lines";
+        }
+        strcpy(metrics, pre);
+        p = se_append_u16(metrics + strlen(metrics), cnt);
+        strcpy(p, unit);
     }
     modal_draw_row_centered(top + 3, left, width, metrics);
 
