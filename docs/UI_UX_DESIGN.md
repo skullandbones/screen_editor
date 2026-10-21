@@ -1274,6 +1274,8 @@ content blocks rather than top-aligned text.
              - `Active: Doc Buffer Bank 01..14` (32 KB Far RAM banks actively
                pooled for document text storage)
              - `Free / Unallocated` / `Not Present`
+         - See Section 15.4 for the exact 1:1 80x24 CP/M-80 `SE.COM` Memory
+           Screen layout and example screenshot.
 
     13.2 16-Bit CPU Variants (CP/M-86: `SE.CMD` on 8086 / 8088 / V20 / 80286)
          On 16-bit x86 CP/M-86 systems, there is no RomWBW 32 KB bank switcher;
@@ -2666,4 +2668,71 @@ and its target profiles.
    - Status Bar Free Memory Indication (Field 4):
      As on the Splash and About screens (Sections 15.1.5 & 15.2.4), large-memory
      host profiles may omit `Free: <N> KB` in Status Bar Field 4.
+
+15.4 CP/M-80 `SE.COM` — Memory Screen Layout (`SHOW_MEM_INFO_SCREEN`)
+--------------------------------------------------------------------------------
+1. Source Reference:
+   - Renderer: `SHOW_MEM_INFO_SCREEN`, `PRINT_MEM_PREFIX`,
+     `PRINT_MEM_INFO_SUMMARY`, `PRINT_MEM_BANK_ROW` (`src/se.asm:3402-3895`)
+   - String Constants: `STR_MEM_*`, `STR_ROLE_*`, `STR_USAGE_*`
+     (`src/core/plugin_mgr.asm:4405-4475`)
+   - Content Line Count: `MEM_INFO_LINES = 23` (`src/include/ui.inc:32`)
+
+2. Vertical & Horizontal Geometry Metrics:
+   - Available Workspace Rows: `AvailRows = ACTIVE_ROWS - 1` (`23` in `80x24`,
+     `39` in `120x40`).
+   - Top Padding (`MEM_TOP_PAD_COUNT = (AvailRows - 23) / 2`):
+     - `80x24` mode: `0` rows (Content starts directly on Screen Row 1).
+     - `120x40` mode: `8` rows (Screen Rows `1..8` display `~`).
+   - Content Block Rows (`23` rows total):
+     - `80x24` mode: Screen Rows `1..23`.
+     - `120x40` mode: Screen Rows `9..31`.
+   - Bottom Padding (`AvailRows - MEM_TOP_PAD_COUNT - 23`):
+     - `80x24` mode: `0` rows.
+     - `120x40` mode: `8` rows (Screen Rows `32..39` display `~`).
+   - Horizontal Left Padding (`PRINT_MEM_PREFIX`):
+     - `PRINT_MEM_PREFIX` outputs `~` in Column 1 followed by
+       `(ACTIVE_COLS - 74) / 2` spaces (`3` spaces in `80x24`, `23` spaces in
+       `120x40`) to center the 72-column memory table.
+     - Title row (`STR_MEM_TITLE_PAD`) adds `22` further spaces before
+       `SE.COM - Extended Memory Map` (`25` spaces after `~` in `80x24`).
+     - Return prompt row (`STR_MEM_PROMPT_PAD`) adds `23` further spaces before
+       `Press any key to continue` (`26` spaces after `~` in `80x24`).
+   - Universal Status Bar:
+     - Rendered on Screen Row `24` (`80x24`) or Screen Row `40` (`120x40`).
+
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.4):
+```text
+~                         SE.COM - Extended Memory Map
+~   HBIOS: RomWBW v3.6 | OS: CP/M 2.2 | RAM: 512 KB (16x32K) | SE: 448 KB
+~
+~   Bank  Phys   Size   System / OS Role        SE.COM Usage
+~   ----  ----   ----   ---------------------   ----------------------------
+~   00    80h    32K    HBIOS System Firmware   Reserved: Protected HBIOS   
+~   01    81h    32K    RAM Disk (MD0:)         Active: PLUGIN.PRL Subsystem
+~   02    82h    32K    RAM Disk (MD0:)         Active: Far RAM Plugins     
+~   03    83h    32K    RAM Disk (MD0:)         Active: Doc Buffer Bank 09  
+~   04    84h    32K    RAM Disk (MD0:)         Active: Doc Buffer Bank 08  
+~   05    85h    32K    RAM Disk (MD0:)         Active: Doc Buffer Bank 07  
+~   06    86h    32K    RAM Disk (MD0:)         Active: Doc Buffer Bank 06  
+~   07    87h    32K    RAM Disk (MD0:)         Active: Doc Buffer Bank 05  
+~   08    88h    32K    RAM Disk (MD0:)         Active: Doc Buffer Bank 04  
+~   09    89h    32K    Application Memory      Active: Doc Buffer Bank 03  
+~   10    8Ah    32K    Application Memory      Active: Doc Buffer Bank 02  
+~   11    8Bh    32K    Application Memory      Active: Doc Buffer Bank 01  
+~   12    8Ch    32K    Application Memory      Active: Line Slots (16K..32K)
+~   13    8Dh    32K    Application Memory      Active: Line Slots (0..16K) 
+~   14    8Eh    32K    CP/M 2.2 TPA & Base     Active: SE Program & Cache  
+~   15    8Fh    32K    Operating System Bank   Reserved: Operating System  
+~
+~                          Press any key to continue
+ | (Untitled)     |  80x24 | CP/M  | Free: 288 KB    | Line    1/1    Col 0   | 
+```
+
+4. Notes for Other Profiles:
+   - See Section 7.13 for the functional breakdown of what the Memory Screen
+     displays on 8-bit CP/M-80 (`SE.COM`, `SE_NEXT.COM`, `SEC.COM`), 16-bit
+     CP/M-86 (`SE.CMD`), and 64-bit Linux (`se-linux`, `se-py`, `se-rs`,
+     `se-ada`, `se-a68`, `se-pas`) targets.
+
 
