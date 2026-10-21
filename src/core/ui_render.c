@@ -702,6 +702,7 @@ static const char *s_help_lines[22] = {
   "    Ctrl+W           Close file to splash  Ctrl+Q         Quit to OS",
 #endif
   "    Ctrl+K           Help / Solidify block Ctrl+P         Plugins pop-up",
+  "    Ctrl+Z           Plugin Manager        Ctrl+Y         Beautify text",
   "  NAVIGATION & SEARCH:",
   "    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line",
   "    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line",
@@ -710,11 +711,10 @@ static const char *s_help_lines[22] = {
   "    Ctrl+F          Find text              Ctrl+N         Find next",
   "    Ctrl+R          Search and Replace     Ctrl+I / Tab   Toggle find case",
   "  EDITING & BLOCK:",
-  "    Insert          Toggle Insert/Ovr      Enter          New line",
+  "    Insert          Toggle Insert/Ovr      Enter          New line / Lock",
   "    ASCII 32..126   Insert/Overwrite text  Backspace      Delete left/join",
   "    Delete / Ctrl+D Delete char or block   Ctrl+B         Start/Toggle blk",
-  "    Ctrl+C          Copy solidified block  Ctrl+K         Solidify block",
-  "    Ctrl+X          Move solidified block  ESC            Clear block",
+  "    Ctrl+C / Ctrl+X Copy / Move block      ESC            Clear block",
   s_help_dash,
   "                          Press any key to continue"
 };

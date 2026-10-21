@@ -3982,8 +3982,8 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Active / 10 Defects Open (Bugs 2.8.13–2.8.22 Open; Bugs
-  2.8.1–2.8.6, 2.8.8–2.8.12 Resolved; Bug 2.8.7 Rejected).
+- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.52
+  Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.5, 7.7, 7.10, 8.3;
@@ -5091,6 +5091,23 @@ have been resolved and archived.
       `ui_browser_workspace()` so `KEY_DEL` (`127`) reaches the forward-delete
       branch, and restored `KEY_CTRL_G` (delete char at cursor) and
       `KEY_CTRL_S` (move cursor left) in the edit-box key handler.
+  - [x] **Bug 2.8.52: Help Screen (`Ctrl+K`) Omits `Ctrl+Z` (Plugin Manager)
+    and `Ctrl+Y` (Beautify Text) and Uses Non-Canonical Block Rows**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.3 (`lines 744-769`),
+      Section 10 (`lines 1740-1742`); `plugins/help.asm:372-403`;
+      `src/core/ui_render.c:693-720`.
+    - *Issue*: In `s_help_lines[22]` (`src/core/ui_render.c:693-720`), the
+      `FILE & SYSTEM:` section omits `Ctrl+Z` (`Plugin Manager`) and `Ctrl+Y`
+      (`Beautify text`), the `EDITING & BLOCK:` section displays `Enter` as
+      `New line` instead of `New line / Lock`, and `Ctrl+C` / `Ctrl+X` are split
+      across two lines (`Copy solidified block` / `Move solidified block`)
+      instead of the canonical single row `Ctrl+C / Ctrl+X Copy / Move block` +
+      `ESC Clear block` specified in Section 7.3 of `docs/UI_UX_DESIGN.md`.
+    - *Resolution*: Updated `s_help_lines[22]` in `src/core/ui_render.c` and
+      `tests/test_sec_help_screen.py` to include the `Ctrl+Z` / `Ctrl+Y` row
+      under `FILE & SYSTEM:`, `New line / Lock` for `Enter`, and the single
+      `Ctrl+C / Ctrl+X Copy / Move block` row under `EDITING & BLOCK:` within
+      the 22-line Tier 1 Help Screen layout.
 
 ---
 

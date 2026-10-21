@@ -74,11 +74,16 @@ def test_sec_help_screen():
     print("[*] Step 4: Verifying canonical Help key strings in SEC.COM...",
           flush=True)
     expected_help_strings = [
+        b"Ctrl+Z",
+        b"Plugin Manager",
+        b"Ctrl+Y",
+        b"Beautify text",
         b"Ctrl+U / PgUp",
         b"Ctrl+V / PgDn",
+        b"New line / Lock",
         b"Delete / Ctrl+D",
-        b"Copy solidified block",
-        b"Move solidified block",
+        b"Ctrl+C / Ctrl+X",
+        b"Copy / Move block",
     ]
     missing = [s for s in expected_help_strings if s not in binary_data]
     if missing:
