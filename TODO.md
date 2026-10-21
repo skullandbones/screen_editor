@@ -2175,7 +2175,7 @@ have been resolved and archived.
       `src/se_linux.c:29`:
       1. *Outdated Version & Date*: `s_about_lines[1]` displays
          `"version 1.1.0 (2026-10-09) (C)"` (and `se_linux.c:29` prints
-         `v1.1.0`) instead of canonical `"version 1.1.4 (2026-10-18) (C)"`
+         `v1.1.0`) instead of canonical `"version 1.1.5 (2026-10-21) (C)"`
          mandated by Sections 7.12, 14.6, and 15.2.4.
       2. *Outdated AI Attribution*: `s_about_lines[4]` displays
          `"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"` instead of
@@ -2201,7 +2201,7 @@ have been resolved and archived.
          Screen.
     - *Required Fix*: Update `s_about_lines` and `show_about_screen()` in
       `src/core/ui_render.c` (and version string in `src/se_linux.c`) to
-      `"version 1.1.4 (2026-10-18) (C)"` and
+      `"version 1.1.5 (2026-10-21) (C)"` and
       `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, insert the blank
       line at index 5 (removing the trailing blank line at index 8), center
       each line using `(g_active_cols - 1 - strlen(line)) / 2` spaces after
@@ -2209,7 +2209,7 @@ have been resolved and archived.
       Splash.
     - *Resolution*: Updated `s_about_lines` and `show_about_screen()` in
       `src/core/ui_render.c` and the `--help` version banner in `src/se_linux.c`
-      to `"version 1.1.4 (2026-10-18) (C)"` / `(v1.1.4)` and
+      to `"version 1.1.5 (2026-10-21) (C)"` / `(v1.1.5)` and
       `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, inserted the blank
       row at `s_about_lines[5]`, centered all 9 rows at `content_width = 48`
       (`left_col = 17` in `80x24`) with exact per-line leading spaces (`15`,
@@ -2604,7 +2604,7 @@ have been resolved and archived.
       1. *Outdated Version & Date*: `ABOUT_LINES[1]` displays
          `"version 1.1.0 (2026-10-09) (Rust)"` (and `SE_VERSION_STR` is
          `"v1.1.0"`) instead of canonical
-         `"version 1.1.4 (2026-10-18) (Rust)"` (Sections 7.12, 14.6, 15.2.4).
+         `"version 1.1.5 (2026-10-21) (Rust)"` (Sections 7.12, 14.6, 15.2.4).
       2. *Outdated AI Attribution*: `ABOUT_LINES[4]` displays
          `"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"` instead of
          canonical `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`
@@ -2626,7 +2626,7 @@ have been resolved and archived.
     - *Required Fix*: Update `ABOUT_LINES` and `show_about_screen()` in
       `ports/rust/src/ui_render.rs` (and `SE_VERSION_STR` in
       `ports/rust/src/config.rs`) to display
-      `"version 1.1.4 (2026-10-18) (Rust)"` and
+      `"version 1.1.5 (2026-10-21) (Rust)"` and
       `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, replace
       `ABOUT_LINES[5]` (`"created the code"`) with an empty string `""`, center
       each line individually using `(active_cols - 1 - line.len()) / 2` spaces
@@ -2634,7 +2634,7 @@ have been resolved and archived.
     - *Resolution*: Updated `ABOUT_LINES` and `show_about_screen()` in
       `ports/rust/src/ui_render.rs`, `SE_VERSION_STR` in
       `ports/rust/src/config.rs`, `print_usage()` in `ports/rust/src/main.rs`,
-      and `ports/rust/Cargo.toml` to `v1.1.4` (`2026-10-17`), updated AI
+      and `ports/rust/Cargo.toml` to `v1.1.5` (`2026-10-17`), updated AI
       attribution to `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`,
       replaced the spurious `"created the code"` row with a blank `~` line,
       aligned all lines to canonical per-line centered offsets at width 48
@@ -3943,7 +3943,7 @@ have been resolved and archived.
       1. *Outdated Version & Date*: Line 867 displays
          `"version 1.1.0 (2026-10-09) (Python)"` (and `__version__ = "1.1.0"`
          in `__init__.py`) instead of canonical
-         `"version 1.1.4 (2026-10-18) (Python)"` (Sections 7.12, 14.6, 15.2.4).
+         `"version 1.1.5 (2026-10-21) (Python)"` (Sections 7.12, 14.6, 15.2.4).
       2. *Outdated AI Attribution*: Line 870 displays
          `"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"` instead of
          canonical `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`
@@ -3959,14 +3959,14 @@ have been resolved and archived.
          `~`).
     - *Required Fix*: Update `action_about()` in `ports/python/se/editor.py`
       (and `__version__` in `ports/python/se/__init__.py`) to
-      `"version 1.1.4 (2026-10-18) (Python)"` and
+      `"version 1.1.5 (2026-10-21) (Python)"` and
       `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, and center each
       line individually per Section 15.2.2
       (`LeftPad = (cols - 1 - len(line)) // 2` spaces after `~`).
     - *Resolution*:
-      1. Updated `__version__ = "1.1.4"` in `ports/python/se/__init__.py` and
+      1. Updated `__version__ = "1.1.5"` in `ports/python/se/__init__.py` and
          updated `action_about()` in `ports/python/se/editor.py` to display
-         `"version 1.1.4 (2026-10-18) (Python)"` and
+         `"version 1.1.5 (2026-10-21) (Python)"` and
          `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`.
       2. Updated `render_centered_workspace()` in `ports/python/se/ui.py` to
          center each non-empty About Screen line individually at column
@@ -4243,7 +4243,7 @@ have been resolved and archived.
       `src/sec_cpm.c:66`:
       1. *Outdated Version & Date*: `s_about_lines[1]` displays
          `"version 1.1.0 (2026-10-09) (C)"` (and `src/sec_cpm.c:66` prints
-         `v1.1.0`) instead of canonical `"version 1.1.4 (2026-10-18) (C)"`
+         `v1.1.0`) instead of canonical `"version 1.1.5 (2026-10-21) (C)"`
          (Sections 7.12, 14.6, 15.2.4).
       2. *Outdated AI Attribution*: `s_about_lines[4]` displays
          `"Google Antigravity 2.19.1 & Gemini FLASH 3.8 high"` instead of
@@ -4260,13 +4260,13 @@ have been resolved and archived.
          (instead of 27).
     - *Required Fix*: Update `s_about_lines` and `show_about_screen()` in
       `src/core/ui_render.c` (and version string in `src/sec_cpm.c`) to
-      `"version 1.1.4 (2026-10-18) (C)"` and
+      `"version 1.1.5 (2026-10-21) (C)"` and
       `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, insert the blank
       line at index 5 (removing the trailing blank line at index 8), and center
       each line per Section 15.2.2.
     - *Resolution*: Updated `s_about_lines` and `show_about_screen()` in
       `src/core/ui_render.c` (and version string in `src/sec_cpm.c`) to display
-      `"version 1.1.4 (2026-10-18) (C)"` and
+      `"version 1.1.5 (2026-10-21) (C)"` and
       `"Google Antigravity 2.23.0 & Gemini 4 Argon Medium"`, inserted the blank
       row at index 5 (`s_about_lines[5] = ""`), passed `content_width = 48` to
       `render_tier1_workspace_screen` (`left_col = 17` in `80x24` / `37` in

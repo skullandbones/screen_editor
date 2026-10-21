@@ -3,7 +3,7 @@
 
 Verifies that show_about_screen() adopts the canonical 9-line centered layout
 from docs/UI_UX_DESIGN.md §7.12 & §15.2, eliminates the misleading '(Linux)'
-banner on CP/M, displays 'version 1.1.4 (2026-10-18) (C)', renders
+banner on CP/M, displays 'version 1.1.5 (2026-10-21) (C)', renders
 'Google Antigravity 2.23.0 & Gemini 4 Argon Medium', includes the blank row
 between AI attribution and MIT License, and centers each line per §15.2.2.
 """
@@ -115,17 +115,17 @@ def test_sec_about_screen():
           flush=True)
 
     # Step 3: Verify canonical C version string present in SEC.COM and sec_cpm.c
-    print("[*] Step 3: Verifying 'version 1.1.4 (2026-10-18) (C)'...",
+    print("[*] Step 3: Verifying 'version 1.1.5 (2026-10-21) (C)'...",
           flush=True)
-    expected_version = b"version 1.1.4 (2026-10-18) (C)"
+    expected_version = b"version 1.1.5 (2026-10-21) (C)"
     if expected_version not in binary_data:
         print("[-] Step 3: Canonical version string missing from SEC.COM.",
               flush=True)
         return False
     with open(sec_cpm_src, "r") as f:
         sec_cpm_text = f.read()
-    if "(v1.1.4)" not in sec_cpm_text:
-        print("[-] Step 3: '(v1.1.4)' missing from src/sec_cpm.c.",
+    if "(v1.1.5)" not in sec_cpm_text:
+        print("[-] Step 3: '(v1.1.5)' missing from src/sec_cpm.c.",
               flush=True)
         return False
     print("[+] Step 3: Canonical C language version string verified.",
@@ -206,7 +206,7 @@ def test_sec_about_screen():
 
         # In 80x24 with content_width=48 (left_col=17, 15 spaces after '~'):
         # Row 8:  15 + 15 = 30 spaces after '~' -> "SE - Screen Editor"
-        # Row 9:  15 +  9 = 24 spaces after '~' -> "version 1.1.4 ..."
+        # Row 9:  15 +  9 = 24 spaces after '~' -> "version 1.1.5 ..."
         # Row 10: 15 + 17 = 32 spaces after '~' -> "by Dean Jenkins"
         # Row 11: blank '~' row (\x1b[11;1H~\x1b[K)
         # Row 12: 15 +  0 = 15 spaces after '~' -> "Google Antigravity ..."
@@ -216,7 +216,7 @@ def test_sec_about_screen():
         # Row 16: 15 + 12 = 27 spaces after '~' -> "Press any key..."
         expected_rows = [
             b"\x1b[8;17H               SE - Screen Editor",
-            b"\x1b[9;17H         version 1.1.4 (2026-10-18) (C)",
+            b"\x1b[9;17H         version 1.1.5 (2026-10-21) (C)",
             b"\x1b[10;17H                 by Dean Jenkins",
             b"\x1b[11;1H~\x1b[K",
             b"\x1b[12;17HGoogle Antigravity 2.23.0 & Gemini 4 Argon Medium",

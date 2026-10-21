@@ -63,7 +63,7 @@ int main(int argc, char **argv)
         if (strcmp(target_file, "-h") == 0 ||
             strcmp(target_file, "--help") == 0) {
             hal_console_puts("Usage: SEC [filename]\r\n");
-            hal_console_puts("SE Screen Editor - CP/M C Profile (v1.1.4)\r\n");
+            hal_console_puts("SE Screen Editor - CP/M C Profile (v1.1.5)\r\n");
             return 0;
         }
     }

@@ -33,7 +33,7 @@ def test_bug_2_3_5():
     )
     assert res.returncode == 0, f"make se-next-native failed:\n{res.stderr}"
 
-    expected_banner = b"version 1.1.4 (2026-10-18) (Z80 Assembly)"
+    expected_banner = b"version 1.1.5 (2026-10-21) (Z80 Assembly)"
 
     # 2. Check SE.NEX binary
     assert os.path.exists(TARGET_NEX), f"Missing {TARGET_NEX}"

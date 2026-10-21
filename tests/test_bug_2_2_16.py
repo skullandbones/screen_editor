@@ -5,13 +5,13 @@ Cursor Visible While HELPNEXT.OVL / PLUGIN.PRL Overlays Are Displayed.
 
 Verifies:
 1. SE_NEXT.COM and plugins (HELPNEXT.OVL, PLUGIN.PRL) build cleanly.
-2. PLUGIN_HOST_API in SE_NEXT.COM declares Host API version 0x0114 (v1.1.4)
+2. PLUGIN_HOST_API in SE_NEXT.COM declares Host API version 0x0115 (v1.1.5)
    and exposes TRAMP_HIDE_CURSOR at offset +76 and TRAMP_SHOW_CURSOR at +79,
    which invoke TERM_HIDE_CURSOR (ESC f) and TERM_SHOW_CURSOR (ESC e).
-3. HELPNEXT.OVL and PLUGIN.PRL check for Host API version >= 0x0114 and call
+3. HELPNEXT.OVL and PLUGIN.PRL check for Host API version >= 0x0115 and call
    the +76 (hide cursor) and +79 (show cursor) trampolines, falling back to
-   their local cursor strings when loaded on an older host (< 0x0114).
-4. SE.COM (RomWBW) remains byte-for-byte identical (Host API v0x0114, so
+   their local cursor strings when loaded on an older host (< 0x0115).
+4. SE.COM (RomWBW) remains byte-for-byte identical (Host API v0x0115, so
    PLUGIN.PRL falls back to emitting ESC[?25l on RomWBW).
 5. CCP headroom check (`check_ccp.py SE_NEXT.COM`) and plugin ABI check
    (`check_plugin.py`) pass.
@@ -81,8 +81,8 @@ def test_bug_2_2_16():
     api_off = symbols["PLUGIN_HOST_API"] - ORG
     assert code[api_off:api_off + 2] == b"SE", "Host API magic must be 'SE'"
     api_ver = struct.unpack_from("<H", code, api_off + 2)[0]
-    assert api_ver >= 0x0114, (
-        f"SE_NEXT.COM Host API version must be >= 0x0114, got 0x{api_ver:04X}"
+    assert api_ver >= 0x0115, (
+        f"SE_NEXT.COM Host API version must be >= 0x0115, got 0x{api_ver:04X}"
     )
 
     assert code[api_off + 73:api_off + 76] == jp_bytes(
@@ -109,7 +109,7 @@ def test_bug_2_2_16():
     )
 
     # Step 3: Verify HELPNEXT.OVL and PLUGIN.PRL use +76 / +79 and version
-    # check 0x14 (v1.1.4)
+    # check 0x14 (v1.1.5)
     helpnext_path = os.path.join(PROJECT_DIR, "plugins", "HELPNEXT.OVL")
     plugin_path = os.path.join(PROJECT_DIR, "plugins", "PLUGIN.PRL")
     with open(helpnext_path, "rb") as f:
@@ -174,9 +174,9 @@ def test_bug_2_2_16():
     )
     assert res.returncode == 0, f"check_plugin.py failed:\n{res.stdout}"
 
-    print("    [+] SE_NEXT.COM Host API v1.1.4 exposes +76/+79 cursor "
+    print("    [+] SE_NEXT.COM Host API v1.1.5 exposes +76/+79 cursor "
           "trampolines")
-    print("    [+] HELPNEXT.OVL and PLUGIN.PRL invoke +76/+79 with v1.1.4 "
+    print("    [+] HELPNEXT.OVL and PLUGIN.PRL invoke +76/+79 with v1.1.5 "
           "fallback")
     print("    [+] SE.COM byte-for-byte invariance preserved")
     print("    [+] CCP headroom and plugin ABI checks passed")

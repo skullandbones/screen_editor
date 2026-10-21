@@ -132,7 +132,7 @@ breaks another.
 7. Version Number Harmonization Mandate:
    All SE variants across all target platforms (CP/M, ZX Spectrum Next, Linux,
    Python, etc.) must use the exact same release version number as canonical
-   SE.COM (e.g. `v1.1.4`). Independent or divergent versioning across ports is
+   SE.COM (e.g. `v1.1.5`). Independent or divergent versioning across ports is
    strictly prohibited.
 
 3. Screen Surface Taxonomy (The Three Tiers)
@@ -625,7 +625,7 @@ content blocks rather than top-aligned text.
      - `Option 3`: Native host terminal mode (if supported). Hotkey `3`
        (`DO_SET_NATIVE`). Added to the splash screen only when dynamic host
        terminal sizing is supported (e.g. on native Linux/POSIX ports).
-   - Visual Structure (Canonical SE.COM v1.1.4 80x24 Template — see Section 15.1
+   - Visual Structure (Canonical SE.COM v1.1.5 80x24 Template — see Section 15.1
      for full 1:1 grid and profile adaptation rules):
 ```text
 ~
@@ -1154,7 +1154,7 @@ content blocks rather than top-aligned text.
       `LeftPad = (ACTIVE_COLS - 1 - len(str)) / 2`).
     - All rows above `TopRow` (Rows 1..7 in 80x24) and below `TopRow + 9`
       (Rows 17..23 in 80x24) display `~`.
-    - Visual Structure (Canonical SE.COM v1.1.4 80x24 Template — see
+    - Visual Structure (Canonical SE.COM v1.1.5 80x24 Template — see
       Section 15.2 for full 1:1 24-row grid):
 ```text
 ~
@@ -1165,7 +1165,7 @@ content blocks rather than top-aligned text.
 ~
 ~
 ~                              SE - Screen Editor
-~                   version 1.1.4 (2026-10-18) (Z80 Assembly)
+~                   version 1.1.5 (2026-10-21) (Z80 Assembly)
 ~                                by Dean Jenkins
 ~
 ~               Google Antigravity 2.23.0 & Gemini 4 Argon Medium
@@ -1188,24 +1188,24 @@ content blocks rather than top-aligned text.
       language used to create that specific SE port or binary, formatted as
       `version <version> (<date>) (<Language>)`:
       - 8-bit CP/M (`SE.COM`):
-        `version 1.1.4 (2026-10-18) (Z80 Assembly)`
+        `version 1.1.5 (2026-10-21) (Z80 Assembly)`
       - ZX Spectrum Next (`SE_NEXT.COM` / `SE.NEX` / `.se`):
-        `version 1.1.4 (2026-10-18) (Z80 Assembly)`
+        `version 1.1.5 (2026-10-21) (Z80 Assembly)`
       - 16-bit CP/M-86 (`SE.CMD`):
-        `version 1.1.4 (2026-10-18) (x86 Assembly)` (or `(C)`)
+        `version 1.1.5 (2026-10-21) (x86 Assembly)` (or `(C)`)
       - Linux Native C / CP/M C port (`se-linux` / `SEC.COM`):
-        `version 1.1.4 (2026-10-18) (C)`
+        `version 1.1.5 (2026-10-21) (C)`
       - Linux Native Python port (`se-py`):
-        `version 1.1.4 (2026-10-18) (Python)`
+        `version 1.1.5 (2026-10-21) (Python)`
       - Linux Native Rust / Ada / Algol 68 / Pascal ports (`se-rs`, `se-ada`,
         `se-a68`, `se-pas`):
-        `version 1.1.4 (2026-10-18) (Rust)` (or `(Ada)`, `(Algol 68)`,
+        `version 1.1.5 (2026-10-21) (Rust)` (or `(Ada)`, `(Algol 68)`,
         `(Pascal)`)
       Generic host OS labels (such as `(Linux)`) must not be used; each
       binary shall clearly state its predominant programming language on the
       About screen.
     - Version Harmonization: All SE variants share the exact same release
-      version number as canonical `SE.COM` (e.g. `v1.1.4`).
+      version number as canonical `SE.COM` (e.g. `v1.1.5`).
     - Dismissal: Any key press dismisses the About screen and returns to the
       Splash Screen.
 
@@ -2272,17 +2272,17 @@ specific architectural adaptations.
    version number and build date line on the Tier 1 About screen
    (Section 7.12). For example:
    - `SE.COM` / `SE_NEXT.COM` / `SE.NEX` / `.se`:
-     `version 1.1.4 (2026-10-18) (Z80 Assembly)`
+     `version 1.1.5 (2026-10-21) (Z80 Assembly)`
    - `SE.CMD`:
-     `version 1.1.4 (2026-10-18) (x86 Assembly)` (or `(C)`)
+     `version 1.1.5 (2026-10-21) (x86 Assembly)` (or `(C)`)
    - `se-linux` / `SEC.COM`:
-     `version 1.1.4 (2026-10-18) (C)`
+     `version 1.1.5 (2026-10-21) (C)`
    - `se-py`:
-     `version 1.1.4 (2026-10-18) (Python)`
+     `version 1.1.5 (2026-10-21) (Python)`
    - `se-rs` / `se-ada` / `se-a68` / `se-pas`:
-     `version 1.1.4 (2026-10-18) (Rust)` (or `(Ada)`, `(Algol 68)`, `(Pascal)`)
+     `version 1.1.5 (2026-10-21) (Rust)` (or `(Ada)`, `(Algol 68)`, `(Pascal)`)
    All SE variants shall share the identical version number as canonical
-   `SE.COM` (e.g. `v1.1.4`). Generic host OS labels (such as `(Linux)`) must
+   `SE.COM` (e.g. `v1.1.5`). Generic host OS labels (such as `(Linux)`) must
    not be used; each binary shall clearly state its predominant programming
    language on the About screen.
 
@@ -2386,7 +2386,7 @@ and its target profiles.
        `PRINT_SPLASH_PREFIX` (`19` spaces after `~` in `80x24`; `39` spaces
        after `~` in `120x40`).
 
-3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.4):
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.5):
 ```text
 ~
 ~                              SE - Screen Editor
@@ -2514,7 +2514,7 @@ and its target profiles.
        `LeftPad = (ACTIVE_COLS - 1 - len(str)) / 2` spaces:
        - Screen Row 8 (`"SE - Screen Editor"`, 18 chars): `30` spaces (`80x24`)
          or `50` spaces (`120x40`).
-       - Screen Row 9 (`"version 1.1.4 (2026-10-18) (Z80 Assembly)"`, 41 chars):
+       - Screen Row 9 (`"version 1.1.5 (2026-10-21) (Z80 Assembly)"`, 41 chars):
          `19` spaces (`80x24`) or `39` spaces (`120x40`).
        - Screen Row 10 (`"by Dean Jenkins"`, 15 chars): `32` spaces (`80x24`)
          or `52` spaces (`120x40`).
@@ -2530,7 +2530,7 @@ and its target profiles.
    - Universal Status Bar:
      - Rendered on Screen Row `24` (`80x24`) or Screen Row `40` (`120x40`).
 
-3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.4):
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.5):
 ```text
 ~
 ~
@@ -2540,7 +2540,7 @@ and its target profiles.
 ~
 ~
 ~                              SE - Screen Editor
-~                   version 1.1.4 (2026-10-18) (Z80 Assembly)
+~                   version 1.1.5 (2026-10-21) (Z80 Assembly)
 ~                                by Dean Jenkins
 ~
 ~               Google Antigravity 2.23.0 & Gemini 4 Argon Medium
@@ -2561,7 +2561,7 @@ and its target profiles.
 4. Notes for Other Profiles:
    - Predominant Programming Language Tag (Content Row 2 / Screen Row 9):
      All SE variants share the identical release version number and date as
-     canonical `SE.COM` (e.g. `version 1.1.4 (2026-10-18)`), appending their
+     canonical `SE.COM` (e.g. `version 1.1.5 (2026-10-21)`), appending their
      predominant implementation language in parentheses:
      - `SE.COM`, `SE_NEXT.COM`, `SE.NEX`, `.se`: `(Z80 Assembly)`
      - `SE.CMD`: `(x86 Assembly)` (or `(C)`)
@@ -2652,7 +2652,7 @@ and its target profiles.
      - Rendered on Screen Row `24` (`80x24`) or Screen Row `40` (`120x40`), with
        Status Bar Field 4 displaying `Free: <N> KB`.
 
-3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.4,
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.5,
    42 Files on Drive J:, Single-Page):
 ```text
 ~
@@ -2728,7 +2728,7 @@ and its target profiles.
    - Universal Status Bar:
      - Rendered on Screen Row `24` (`80x24`) or Screen Row `40` (`120x40`).
 
-3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.4):
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.5):
 ```text
 ~                         SE.COM - Extended Memory Map
 ~   HBIOS: RomWBW v3.6 | OS: CP/M 2.2 | RAM: 512 KB (16x32K) | SE: 448 KB
@@ -2784,7 +2784,7 @@ and its target profiles.
    - Universal Status Bar:
      - Rendered on Screen Row `24` (`80x24`) or Screen Row `40` (`120x40`).
 
-3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.4):
+3. Exact 80x24 Screen Layout (1:1 Character Grid, Rows 1..24, SE.COM v1.1.5):
 ```text
 ~
 ~

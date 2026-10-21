@@ -45,7 +45,7 @@ PLUG_CTX_ABOUT		EQU	6	; About SE.COM dialog
 ; Upper Memory Host API Vector Offsets (Base = PLUGIN_HOST_API in Upper RAM)
 ;------------------------------------------------------------------------------
 HOST_API_OFF_MAGIC	EQU	0	; "SE" signature (2 bytes)
-HOST_API_OFF_VERSION	EQU	2	; Host version word (0114H = v1.1.4)
+HOST_API_OFF_VERSION	EQU	2	; Host version word (0115H = v1.1.5)
 HOST_API_OFF_LINE_BUF	EQU	4	; Pointer to ACTIVE_LINE_BUF
 
 HOST_API_OFF_LINE_LEN	EQU	6	; Pointer to ACTIVE_LINE_LEN

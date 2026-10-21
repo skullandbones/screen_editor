@@ -434,7 +434,7 @@ Base TPA bank 0), `PLUGIN_HOST_API` and all shared editor state buffers
 to `CPM_USER_BANK`, invokes the host routine in `SE.COM`, and restores
 `PLUGIN_FAR_BANK` before returning to the plugin:
 * `+0x00` (`MAGIC`, 2B): `"SE"` signature (`0x53, 0x45`).
-* `+0x02` (`VERSION`, 2B): Host ABI version word (`0x0114` = v1.1.4).
+* `+0x02` (`VERSION`, 2B): Host ABI version word (`0x0115` = v1.1.5).
 * `+0x04` (`LINE_BUF`, 2B): Pointer to 1,024-byte `ACTIVE_LINE_BUF`.
 * `+0x06` (`LINE_LEN`, 2B): Pointer to 16-bit `ACTIVE_LINE_LEN`.
 * `+0x08` (`CUR_ROW`, 2B): Pointer to 0-based `CUR_DOC_ROW`.
@@ -521,7 +521,7 @@ A compliant 64-bit `.so` plugin exports a single well-known symbol
 "se_plugin_get_descriptor")`:
 * **Plugin Descriptor (`se_plugin_desc_t`, `#[repr(C)]`)**:
   - `uint32_t magic`: `"SEPL"` (`0x4C504553` LE).
-  - `uint16_t abi_version`: `0x0114` (matches the functional host API contract).
+  - `uint16_t abi_version`: `0x0115` (matches the functional host API contract).
   - `uint16_t capabilities`: Same semantic bitmask (`CAP_DOC_MUTATE`,
     `CAP_MODAL_UI`, `CAP_HAS_ABOUT`, `CAP_HAS_CONFIG`, `CAP_HAS_VFS`). Memory
     size ceiling bits (`CAP_TPA_EXEC`, `CAP_FAR_EXEC`, `CAP_SIZE_*`) are ignored

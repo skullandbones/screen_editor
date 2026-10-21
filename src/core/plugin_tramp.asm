@@ -103,9 +103,9 @@ ALIGN 4
 PLUGIN_HOST_API:
 	DB "SE"				; +0:  Magic
 	IFDEF TARGET_NEXT
-	DW 0114H			; +2:  Host version (v1.1.4)
+	DW 0115H			; +2:  Host version (v1.1.5)
 	ELSE
-	DW 0114H			; +2:  Host version (v1.1.4)
+	DW 0115H			; +2:  Host version (v1.1.5)
 	ENDIF
 	DW ACTIVE_LINE_BUF		; +4:  Pointer to ACTIVE_LINE_BUF
 
