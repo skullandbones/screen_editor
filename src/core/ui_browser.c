@@ -623,7 +623,9 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             if (s_is_save) {
                 g_file_format = (g_file_format == FMT_CPM)
                     ? FMT_LINUX : FMT_CPM;
+                hal_console_hide_cursor();
                 draw_save_fmt_row((uint8_t)(s_prompt_row - 2));
+                render_status_bar();
                 locate_input_cursor();
             }
         } else if (k == KEY_TAB || k == '\t') {

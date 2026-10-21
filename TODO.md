@@ -3982,7 +3982,7 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.54
+- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.55
   Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
@@ -5137,6 +5137,21 @@ have been resolved and archived.
       (`src/hal/cpm/hal_cpm_keyboard.c`) so any intermediate or private CSI
       bytes are atomically consumed up to the final terminator byte (`0x40`–
       `0x7E`).
+  - [x] **Bug 2.8.55: Save File Screen `Ctrl+F` Format Toggle Fails to Update
+    Status Bar Field 3**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.7 (`lines 981-985`);
+      `src/core/ui_browser.asm:2547-2556`; `src/core/ui_browser.c:622-628`.
+    - *Issue*: Section 7.7 of `docs/UI_UX_DESIGN.md` specifies that when the
+      user presses `Ctrl+F` (`[^F]=Toggle Format`) on the Save File or Save
+      Block screen, Status Bar Field 3 (`CP/M ` vs `Linux`) must immediately
+      update to reflect the active format. In `ui_browser_workspace()`
+      (`src/core/ui_browser.c:622-628`), the `KEY_CTRL_F` handler updated the
+      `Format: [...]` row via `draw_save_fmt_row()` without calling
+      `render_status_bar()`, leaving Status Bar Field 3 stale.
+    - *Resolution*: Updated the `KEY_CTRL_F` handler in `ui_browser_workspace()`
+      (`src/core/ui_browser.c`) to hide the cursor, call `draw_save_fmt_row()`,
+      call `render_status_bar()`, and restore the input cursor via
+      `locate_input_cursor()`.
 
 ---
 
