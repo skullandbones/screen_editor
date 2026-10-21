@@ -60,6 +60,8 @@ CHECK_KEY_READY:
 ;
 ; Outputs:
 ;   Pending escape sequence consumed from serial buffer.
+;   Z flag = 1 if standalone ESC (no trailing bytes within timeout);
+;   Z flag = 0 (NZ) if a multi-byte sequence was drained.
 ;
 ; Preserves / Modifies:
 ;   Preserves BC, DE, HL; clobbers AF.
@@ -74,6 +76,7 @@ DES_WAIT:
 	LD A,B
 	OR C
 	JR NZ,DES_WAIT
+	XOR A				; Z = 1 (standalone ESC)
 	POP BC
 	RET				; Standalone ESC, nothing to drain
 
@@ -83,11 +86,13 @@ DES_DRAIN_FIRST:
 	JR Z,DES_DRAIN_TAIL
 	CP 'O'
 	JR Z,DES_DRAIN_TAIL
+	OR 1				; Z = 0 (multi-byte drained)
 	POP BC
 	RET
 
 DES_DRAIN_TAIL:
 	CALL DCT_DRAIN_LOOP
+	OR 1				; Z = 0 (multi-byte drained)
 	POP BC
 	RET
 
