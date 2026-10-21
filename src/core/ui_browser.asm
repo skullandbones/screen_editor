@@ -5783,26 +5783,20 @@ INPUT_HANDLE_SS3:
 	JP INPUT_CHAR_LOOP
 
 INPUT_CHECK_PAGE_KEYS:
-	; Ctrl+U or Ctrl+B -> Page Up
+	; Ctrl+U -> Page Up
 	CP KEY_CTRL_U
-	JR Z,INPUT_DO_PGUP
-	CP KEY_CTRL_B
 	JR Z,INPUT_DO_PGUP
 
 	; Ctrl+V -> Page Down
 	CP KEY_CTRL_V
 	JR Z,INPUT_DO_PGDN
 
-	; WordStar navigation keys
+	; Canonical control keys (Ctrl+A Home, Ctrl+E End, Ctrl+D Delete)
 	CP KEY_CTRL_A			; Ctrl+A -> Home
 	JP Z,INPUT_CURSOR_HOME
 	CP KEY_CTRL_E			; Ctrl+E -> End
 	JP Z,INPUT_CURSOR_END
-	CP KEY_CTRL_S			; Ctrl+S -> Cursor Left
-	JP Z,INPUT_CURSOR_LEFT
-	CP KEY_CTRL_D			; Ctrl+D -> Cursor Right
-	JP Z,INPUT_CURSOR_RIGHT
-	CP KEY_CTRL_G			; Ctrl+G -> Delete char at cursor
+	CP KEY_CTRL_D			; Ctrl+D -> Delete char at cursor
 	JP Z,INPUT_DEL_CHAR
 
 CHECK_ENTER_KEY:
@@ -6378,8 +6372,6 @@ DNL_SS3:
 
 DNL_CHK_PAGE_CTRL:
 	CP KEY_CTRL_U
-	JR Z,DNL_DO_PGUP
-	CP KEY_CTRL_B
 	JR Z,DNL_DO_PGUP
 	CP KEY_CTRL_V
 	JR Z,DNL_DO_PGDN

@@ -25,10 +25,10 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 5 Open (Bugs 2.1.23-2.1.27 Open;
+- **Status**: Active / 4 Open (Bugs 2.1.24-2.1.27 Open;
   Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
-  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.21, 2.1.22
-  Fixed).
+  Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.21, 2.1.22,
+  2.1.23 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -314,7 +314,7 @@ have been resolved and archived.
       (matching `KEY_CTRL_O` -> `HANDLE_SPLASH_OPEN`). In
       `src/core/plugin_mgr.asm` (`STR_SPLASH_CMDS`), update the Open and
       Save menu lines to display `[O]  or  [^O]` and `[S]  or  [^S]`.
-  - [ ] **Bug 2.1.23: Filename Input Box WordStar Keys & `Ctrl+D` Delete**:
+  - [x] **Bug 2.1.23: Filename Input WordStar Keys & `Ctrl+D` Delete [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 1, 7.9, 10.1, 10.2.
     - *Issue*: Section 7.9 mandates that in the Directory Browser filename
       input box (`READ_FILENAME_INPUT`), `<Del>` or `<Ctrl+D>` deletes the
