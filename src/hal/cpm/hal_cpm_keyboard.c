@@ -111,6 +111,11 @@ int hal_console_getkey(void)
                 b = cpm_read_byte_timeout(20000);
             }
 
+            /* Drain any intermediate or private CSI bytes (0x20..0x3F) */
+            while (b >= 0x20 && b <= 0x3F) {
+                b = cpm_read_byte_timeout(20000);
+            }
+
             if (b < 0) {
                 return 0;
             }

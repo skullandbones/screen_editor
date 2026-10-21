@@ -3982,7 +3982,7 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.53
+- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.54
   Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
@@ -5120,6 +5120,23 @@ have been resolved and archived.
       dialogs is ignored instead of confirming Yes.
     - *Resolution*: Updated `modal_confirm()` in `src/core/ui_modal.c` to accept
       `k == 'y' || k == 'Y' || k == KEY_ENTER` as `MODAL_RES_YES`.
+  - [x] **Bug 2.8.54: CP/M CSI Escape Sequence Decoder Fails to Drain
+    Intermediate or Private Parameter Bytes (`0x20`–`0x3F`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 10.3 (`lines 1833-1848`);
+      `src/hal/cpm/hal_cpm_keyboard.c:102-169`.
+    - *Issue*: In `hal_console_getkey()` (`src/hal/cpm/hal_cpm_keyboard.c:103`),
+      the CSI parameter loop only consumes `b == ';' || (b >= '0' && b <= '9')`.
+      When a terminal emits a CSI sequence containing private parameter prefixes
+      (`0x3C`–`0x3F`, such as `?` or `<` in `\x1b[?25h` or SGR mouse reports
+      `\x1b[<0;10;10M`) or intermediate bytes (`0x20`–`0x2F`), the loop exits
+      before reaching the final byte (`0x40`–`0x7E`) and falls through to a
+      short `1000`-loop drain that can time out between serial bytes and leak
+      trailing CSI characters into the document buffer.
+    - *Resolution*: Added a `while (b >= 0x20 && b <= 0x3F)` drain loop using
+      `cpm_read_byte_timeout(20000)` in `hal_console_getkey()`
+      (`src/hal/cpm/hal_cpm_keyboard.c`) so any intermediate or private CSI
+      bytes are atomically consumed up to the final terminator byte (`0x40`–
+      `0x7E`).
 
 ---
 
