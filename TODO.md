@@ -3982,7 +3982,7 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.55
+- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.56
   Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
@@ -5152,6 +5152,22 @@ have been resolved and archived.
       (`src/core/ui_browser.c`) to hide the cursor, call `draw_save_fmt_row()`,
       call `render_status_bar()`, and restore the input cursor via
       `locate_input_cursor()`.
+  - [x] **Bug 2.8.56: Document Close (`Ctrl+W` / Splash `[W]` / `[N]`) With
+    Unsaved Modifications Does Not Clear `g_current_filename` When Discarded**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.11 (`lines 1145-1147`),
+      `src/se.asm:1475-1495`, `src/core/ui_modal.c:476-479`.
+    - *Issue*: Section 7.11 of `docs/UI_UX_DESIGN.md` specifies that responding
+      `[N]o` to the `"Save changes?"` confirmation modal discards unsaved
+      modifications and clears `g_current_filename` to `(Untitled)`. In
+      `modal_confirm_save_changes()` (`src/core/ui_modal.c:476-479`), `else if
+      (res == MODAL_RES_NO)` cleared `g_doc_modified = 0` without clearing
+      `g_current_filename[0] = '\0'`, so if `show_splash_screen()` (`[O]` ->
+      `[N]o`) or `editor_handle_key()` (`Ctrl+O` -> `[N]o`) was followed by
+      cancelling the Open File browser (`ESC`), the modified buffer kept its
+      old filename with `g_doc_modified = 0`.
+    - *Resolution*: Updated the `res == MODAL_RES_NO` branch in
+      `modal_confirm_save_changes()` (`src/core/ui_modal.c`) to call
+      `init_empty_document()` and set `g_current_filename[0] = '\0'`.
 
 ---
 

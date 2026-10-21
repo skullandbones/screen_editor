@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include "../include/config.h"
 #include "../include/buffer.h"
+#include "../include/editor.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
 #include "../include/ui_browser.h"
@@ -474,7 +475,8 @@ int modal_confirm_save_changes(void)
         }
         return MODAL_RES_OK;
     } else if (res == MODAL_RES_NO) {
-        g_doc_modified = 0;
+        init_empty_document();
+        g_current_filename[0] = '\0';
         return MODAL_RES_OK;
     }
     return MODAL_RES_CANCEL;
