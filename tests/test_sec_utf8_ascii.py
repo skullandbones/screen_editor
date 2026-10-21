@@ -79,7 +79,8 @@ def test_sec_utf8_ascii():
     expected_titles = [
         b"SE - Screen Editor",
         b"SE - Configuration Manager",
-        b"SE.COM - EDITOR MODE KEYS",
+        b"SE.COM - Extended Memory Map",
+        b"EDITOR MODE KEYS",
     ]
     missing = [t for t in expected_titles if t not in binary_data]
     if missing:
