@@ -25,10 +25,10 @@ have been resolved and archived.
 - **Core Technology**: 100% Z80 assembly (`src/se.asm`), RomWBW HBIOS 512KB
   Far RAM banking (`RST 08H`), BDOS console & FCB file storage.
 - **Build Target**: `make SE.COM` (or `make`).
-- **Status**: Active / 1 Open (Bug 2.1.27 Open;
+- **Status**: Active / 0 Open (All 27 Bugs Resolved;
   Bugs 2.1.1, 2.1.3-2.1.12, 2.1.15, 2.1.20 Rejected;
   Bugs 2.1.2, 2.1.13, 2.1.14, 2.1.16, 2.1.17, 2.1.18, 2.1.19, 2.1.21, 2.1.22,
-  2.1.23, 2.1.24, 2.1.25, 2.1.26 Fixed).
+  2.1.23, 2.1.24, 2.1.25, 2.1.26, 2.1.27 Fixed).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.1.1: Status Bar Field Squatting & Layout [REJECTED / WONTFIX]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 6.6, 9.2.
@@ -368,7 +368,7 @@ have been resolved and archived.
     - *Required Fix*: Accept `KEY_ENTER` (`13`) alongside `'Y'`/`'y'` in
       `DSCP_KEY_LOOP` (`src/se.asm`) and `OVERWRITE_KEY_LOOP`
       (`src/core/ui_browser.asm`).
-  - [ ] **Bug 2.1.27: Directory Browser Multi-Byte CSI Sequence Drain**:
+  - [x] **Bug 2.1.27: Directory Browser Multi-Byte CSI Drain [FIXED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.9, 10.3.
     - *Issue*: Section 10.3 mandates that when a multi-byte CSI sequence
       (`\x1b[...`) is received, the parser must consume all parameter and
