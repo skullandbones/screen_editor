@@ -3982,7 +3982,7 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.56
+- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.57
   Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
@@ -5168,6 +5168,21 @@ have been resolved and archived.
     - *Resolution*: Updated the `res == MODAL_RES_NO` branch in
       `modal_confirm_save_changes()` (`src/core/ui_modal.c`) to call
       `init_empty_document()` and set `g_current_filename[0] = '\0'`.
+  - [x] **Bug 2.8.57: Block Operations Modal (`do_block_menu_popup`) Clears
+    Solidified Block After File Insertion (`Ctrl+O` / `[R]`)**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 7.6 (`lines 933-940`),
+      Section 9.3 (`lines 1712-1713`), `src/core/block.asm:256-264`,
+      `src/core/block.c:511-520`.
+    - *Issue*: Section 7.6 and Section 9.3 of `docs/UI_UX_DESIGN.md` specify
+      that inserting a file into a block solidifies the inserted text span as
+      `BLOCK_MODE_SOLIDIFIED`. While `editor_handle_key()` (`KEY_CTRL_O` in
+      `src/core/editor.c:619`) preserved the solidified block set by
+      `file_insert()` (Bug 2.8.38), `do_block_menu_popup()` in
+      `src/core/block.c:517` still called `cancel_block()` immediately after
+      `file_insert(fname)`, clearing the newly solidified block when File Insert
+      was triggered from the `Ctrl+K` Block Operations modal dialog.
+    - *Resolution*: Removed the extraneous `cancel_block()` call after
+      `file_insert(fname)` in `do_block_menu_popup()` (`src/core/block.c`).
 
 ---
 

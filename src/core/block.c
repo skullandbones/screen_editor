@@ -514,7 +514,6 @@ int do_block_menu_popup(void)
             if (ui_browser_insert_dialog(fname, sizeof(fname)) ==
                 MODAL_RES_OK && fname[0]) {
                 file_insert(fname);
-                cancel_block();
             }
             break;
         }
