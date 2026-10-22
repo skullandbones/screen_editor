@@ -3982,7 +3982,7 @@ have been resolved and archived.
 - **Core Technology**: Portable C core modules (`src/core/*.c`), CP/M Hardware
   Abstraction Layer (`src/hal/cpm/`), z88dk cross-compiler toolchain (`+cpm`).
 - **Build Target**: `make sec-cpm` (or `make SEC.COM`).
-- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.57
+- **Status**: Complete / 0 Defects Open (Bugs 2.8.1–2.8.6, 2.8.8–2.8.64
   Resolved; Bug 2.8.7 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md & SE.COM Parity)**:
   - [x] **Bug 2.8.1: Full-Screen Redraw on Keystrokes in Directory Browser**:
@@ -5304,6 +5304,17 @@ have been resolved and archived.
       strings. Implement linear row emission in `show_mem_info_screen()` with
       column 0 tildes (`~`), trailing spaces, and CRLF (`\r\n`) pairs up to
       line 23, and restore screen rendering state on keypress.
+  - [x] **Bug 2.8.64: Headless Test Timeout Loading 3,072-Line Document**:
+    - *Reference*: `tests/test_editor_headless.py` (Step 57).
+    - *Issue*: In `tests/test_editor_headless.py`, Step 57 loads `BIG.TXT`
+      (3,072 lines) with a 100-second timeout. Under software Z80 emulation
+      on the test host, `SEC.COM` requires approximately 360–380 seconds to
+      allocate and load 3,072 lines and initialize slot paging tables,
+      resulting in intermittent test failure due to timeout expiration before
+      document ready confirmation.
+    - *Resolution*: Increase the Step 57 `read_until` timeout from 100.0s to
+      450.0s in `tests/test_editor_headless.py`, allowing complete loading
+      and status bar verification under full CPU emulation.
 
 ---
 

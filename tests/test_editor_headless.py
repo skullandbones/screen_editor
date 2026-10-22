@@ -3563,7 +3563,7 @@ def test_se_execution(use_sec=False, use_python=False, use_linux=False):
         drain_all(master)
         time.sleep(0.3)
         os.write(master, cmd_name + b" BIG.TXT\r")
-        out_s57 = read_until(master, b"Line    1/3072", timeout=100.0)
+        out_s57 = read_until(master, b"Line    1/3072", timeout=450.0)
         if b"Line    1/3072" not in out_s57 or b"^K: Editor keys" not in out_s57:
             print(f"[-] Step 57 failed: Failed to load BIG.TXT or missing "
                   f"'^K: Editor keys'. Buffer: {repr(out_s57[-200:])}",
