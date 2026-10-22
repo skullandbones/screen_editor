@@ -102,12 +102,65 @@ causes:
 
 ---
 
-## 4. ZX Spectrum Next Hardware & System Requirements
+## 4. Foreign Filesystem & Removable Storage Access (FAT / SD Card)
+
+`SE.COM` and `SEC.COM` support direct reading, writing, and directory browsing
+of foreign FAT filesystems (FAT12, FAT16, and FAT32) residing on SD cards,
+CompactFlash cards, and IDE drives via RomWBW HBIOS disk devices and the
+modular `FATFS.PRL` Far RAM VFS plugin.
+
+### 4.1 Architecture & Device Mapping
+
+RomWBW HBIOS enumerates block storage devices into physical disk units:
+- **`U0:` through `U7:`**: Logical HBIOS disk units. On RomWBW systems,
+  unit numbers correspond to enumerated hardware interfaces (e.g. `U0:` /
+  `U1:` for primary/secondary IDE/CF, `U2:` / `U4:` for SD card interfaces
+  like the RC2014 SD Module or SC126/SC131 onboard SPI SD reader).
+- **`U:` (Default Unit)**: Refers to the first available non-CP/M removable
+  storage device discovered during RomWBW startup (unit `0xFF` internally).
+
+### 4.2 Far RAM VFS Subsystem & `FATFS.PRL`
+
+Foreign drive access does not consume precious CP/M 64KB TPA memory:
+1. **Dynamic Plugin Execution**:
+   The FAT filesystem driver is packaged as an independent 32KB Far RAM
+   plugin (`FATFS.PRL`). When loaded into a plugin slot, it runs in a banked
+   Far RAM page and exports Headless VFS operations via Action 3 (`ENTRY + 9`).
+2. **Path Syntax & Virtual Drives**:
+   Users can navigate and edit files on foreign drives using canonical path
+   syntax:
+   - `U<unit>:<path>` (e.g. `U4:`, `U4:SLICES.TXT`, `U4:/TURBOPAS/HELLO.PAS`).
+   - Root navigation: Typing `U4:` in Open/Save switches the directory view to
+     the FAT volume root (`/`).
+   - Subdirectory navigation: Typing a directory name (e.g. `TURBOPAS/`)
+     descends into the subdirectory; typing `..` ascends to the parent.
+   - Wildcard filtering: Patterns such as `*.PAS` or `*.*` filter directory
+     listings while preserving subdirectories.
+3. **Missing Plugin Safeguard**:
+   If a user specifies a FAT path prefix (`U0:`..`U7:` or `U:`) while
+   `FATFS.PRL` is not loaded in the plugin registry, the editor intercepts the
+   request and presents a modal alert:
+   ```text
+   +------------------------------------------------+
+   |              FAT Subsystem Missing             |
+   +------------------------------------------------+
+   |           Feature requires FATFS.PRL.          |
+   |      FAT filesystem plugin is not loaded.      |
+   +------------------------------------------------+
+   ```
+4. **Byte Fidelity & Endianness**:
+   `FATFS.PRL` transparently converts between CP/M CRLF line conventions and
+   DOS/FAT text encodings without losing byte fidelity across sector
+   boundaries.
+
+---
+
+## 5. ZX Spectrum Next Hardware & System Requirements
 
 Starting with v1.1.0, the `SE` editor natively supports the **ZX Spectrum Next**
 platform across both CP/M emulation and native NextZXOS operating environments.
 
-### 4.1 Hardware & FPGA Core Requirements
+### 5.1 Hardware & FPGA Core Requirements
 
 | Subsystem | Requirement | Notes |
 | :--- | :--- | :--- |
@@ -119,7 +172,7 @@ platform across both CP/M emulation and native NextZXOS operating environments.
 | **Display** | 80x24 Column Text Stream | Via RST 10H or NextCPM console |
 | **Keyboard** | Sinclair Matrix (Port 0xFE) | Full WordStar cursor navigation |
 
-### 4.2 Next Architectural Features Utilized
+### 5.2 Next Architectural Features Utilized
 
 1. **28 MHz CPU Turbo Mode**:
    - At startup, native Next targets (`SE.NEX` and `.se`) program NextReg
@@ -140,10 +193,7 @@ platform across both CP/M emulation and native NextZXOS operating environments.
      1, 2, 6, 9) and BIOS vectors are routed to the NextCPM 80-column console
      driver with Sinclair keyboard translation.
 
-### 4.3 Verified Next Emulators
-
-In addition to physical ZX Spectrum Next Issue 1/2 hardware, all Next binaries
-are tested and supported under the following software emulators:
+### 5.3 Verified Next Emulators
 
 - **CSpect** (by Mike Dailly):
   - Recommended launch flags: `-w3 -zxnext -nextrom -mmc=<next_sd.img>`
@@ -154,7 +204,7 @@ are tested and supported under the following software emulators:
 
 ---
 
-## 5. Operating System Compatibility Matrix
+## 6. Operating System Compatibility Matrix
 
 Memory footprint verified with `check_tpa.py` against `SE.COM` (v1.1.0):
 
@@ -180,7 +230,7 @@ support Far RAM document buffering.*
 
 ---
 
-## 6. Terminal Emulator Configuration
+## 7. Terminal Emulator Configuration
 
 For optimal full-screen editing over serial connections, configure your
 terminal emulator (Minicom, PuTTY, TeraTerm, screen, or Windows Terminal)
@@ -198,7 +248,7 @@ as follows:
 
 ---
 
-## 7. Operational Troubleshooting & Diagnostics
+## 8. Operational Troubleshooting & Diagnostics
 
 If your system displays `[256 lines (RAM)]` or encounters serial flow control
 issues, consult the dedicated [Troubleshooting Guide](TROUBLESHOOTING.md) for

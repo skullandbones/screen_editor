@@ -120,38 +120,33 @@ void modal_draw_frame(uint8_t top, uint8_t left,
     draw_horiz_border(top + height - 1, left, width);
 }
 
+void modal_init_7row(uint8_t *top, uint8_t *left, const char *title)
+{
+    *top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
+    *left = (uint8_t)(((g_active_cols - MODAL_BOX_WIDTH) / 2) + 1);
+    hal_console_hide_cursor();
+    modal_draw_frame(*top, *left, MODAL_BOX_WIDTH, 7, title);
+}
+
 int modal_alert(const char *title, const char *msg1, const char *msg2)
 {
-    uint8_t width = MODAL_BOX_WIDTH;
-    uint8_t height = 7;
-    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    uint8_t top, left;
 
-    hal_console_hide_cursor();
-    modal_draw_frame(top, left, width, height, title);
+    modal_init_7row(&top, &left, title);
 
     if (msg1 && *msg1) {
-        modal_draw_row_centered(top + 3, left, width, msg1);
+        modal_draw_row_centered(top + 3, left, MODAL_BOX_WIDTH, msg1);
     }
     if (msg2 && *msg2) {
-        modal_draw_row_centered(top + 4, left, width, msg2);
+        modal_draw_row_centered(top + 4, left, MODAL_BOX_WIDTH, msg2);
     }
-    modal_draw_row_centered(top + 5, left, width, "Press any key to continue");
+    modal_draw_row_centered(top + 5, left, MODAL_BOX_WIDTH,
+                            "Press any key to continue");
 
-    {
-        int k;
-        while ((k = hal_console_getkey()) <= 0) {
+    while (hal_console_getkey() <= 0) {
 #ifndef __CPM__
-            usleep(5000);
+        usleep(5000);
 #endif
-        }
-        if (k == KEY_ESC) {
-#ifndef __CPM__
-            while (hal_console_getkey() > 0) {
-                /* Drain trailing escape sequence bytes */
-            }
-#endif
-        }
     }
     g_need_screen_render = 1;
     return MODAL_RES_OK;
@@ -160,20 +155,16 @@ int modal_alert(const char *title, const char *msg1, const char *msg2)
 int modal_confirm(const char *title, const char *msg,
                   const char *btn1, const char *btn2)
 {
-    uint8_t width = MODAL_BOX_WIDTH;
-    uint8_t height = 7;
-    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    uint8_t top, left;
 
-    hal_console_hide_cursor();
-    modal_draw_frame(top, left, width, height, title);
+    modal_init_7row(&top, &left, title);
 
     if (msg && *msg) {
-        modal_draw_row_centered(top + 3, left, width, msg);
+        modal_draw_row_centered(top + 3, left, MODAL_BOX_WIDTH, msg);
     }
-    modal_draw_row_centered(top + 4, left, width,
+    modal_draw_row_centered(top + 4, left, MODAL_BOX_WIDTH,
                             btn1 ? btn1 : "Save changes?");
-    modal_draw_row_centered(top + 5, left, width,
+    modal_draw_row_centered(top + 5, left, MODAL_BOX_WIDTH,
                             "[Y]es      [N]o      [ESC]=Cancel");
 
     if (btn2) {
@@ -188,24 +179,21 @@ int modal_confirm(const char *title, const char *msg,
             usleep(5000);
 #endif
         }
-        if (k == KEY_ESC) {
-            /* Cancelable solely by ESC (not Ctrl+C or q) */
+        if (k >= 'a' && k <= 'z') {
+            k -= 32;
+        }
+        if (k == KEY_ESC || k == 'Y' || k == KEY_ENTER || k == 'N') {
 #ifndef __CPM__
-            while (hal_console_getkey() > 0) {
-                /* Drain trailing escape sequence bytes */
+            if (k == KEY_ESC) {
+                while (hal_console_getkey() > 0) {}
             }
 #endif
             hal_console_hide_cursor();
             g_need_screen_render = 1;
-            return MODAL_RES_CANCEL;
-        } else if (k == 'y' || k == 'Y' || k == KEY_ENTER) {
-            hal_console_hide_cursor();
-            g_need_screen_render = 1;
-            return MODAL_RES_YES;
-        } else if (k == 'n' || k == 'N') {
-            hal_console_hide_cursor();
-            g_need_screen_render = 1;
-            return MODAL_RES_NO;
+            if (k == KEY_ESC) {
+                return MODAL_RES_CANCEL;
+            }
+            return (k == 'N') ? MODAL_RES_NO : MODAL_RES_YES;
         }
     }
 }
@@ -365,10 +353,7 @@ int modal_prompt_text(const char *title, const char *prompt,
 
 int modal_goto_line(char *buffer, size_t max_len)
 {
-    uint8_t width = 50;
-    uint8_t height = 7;
-    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    uint8_t top, left;
     size_t len = 0;
     int k;
 
@@ -377,13 +362,12 @@ int modal_goto_line(char *buffer, size_t max_len)
     }
     buffer[0] = '\0';
 
-    hal_console_hide_cursor();
-    modal_draw_frame(top, left, width, height, "Goto Line");
-    modal_draw_row_centered(top + 3, left, width,
+    modal_init_7row(&top, &left, "Goto Line");
+    modal_draw_row_centered(top + 3, left, MODAL_BOX_WIDTH,
                             "Enter line number to jump to");
-    modal_draw_row_centered(top + 4, left, width,
+    modal_draw_row_centered(top + 4, left, MODAL_BOX_WIDTH,
                             "Goto line: [     ]");
-    modal_draw_row_centered(top + 5, left, width,
+    modal_draw_row_centered(top + 5, left, MODAL_BOX_WIDTH,
                             "[Enter]=Goto Line     [ESC]=Cancel");
 
     /* Position cursor at first digit inside brackets: left + 28 */

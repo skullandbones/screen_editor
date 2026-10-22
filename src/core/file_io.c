@@ -18,6 +18,7 @@
 #include "../include/editor.h"
 #include "../include/block.h"
 #include "../include/file_io.h"
+#include "../include/plugin.h"
 #include "../include/ui.h"
 #include "../include/ui_modal.h"
 #include "../include/hal.h"
@@ -36,6 +37,9 @@ uint8_t g_file_format = FMT_LINUX;
 #include <cpm.h>
 uint8_t   g_doc_drive = 0;
 uint8_t   g_doc_user = 0;
+uint8_t   g_doc_is_fat = 0;
+uint8_t   g_doc_fat_unit = 0xFF;
+char      g_doc_fat_path[32];
 uint8_t   g_target_user = 0;
 #define s_cpm_sec_buf g_cpm_dma_buf
 #define s_cpm_io_fcb  g_cpm_fcb
@@ -45,8 +49,7 @@ const char *cpm_parse_prefix(const char *path, uint8_t *out_drv,
                              uint8_t *out_usr)
 {
     const char *p = path;
-    const char *colon;
-    const char *q;
+    const char *col;
     uint8_t drv = 0;
     uint8_t usr = 0xFF;
 
@@ -55,32 +58,67 @@ const char *cpm_parse_prefix(const char *path, uint8_t *out_drv,
     if (!p) return path;
 
     while (*p == ' ') p++;
-    colon = strchr(p, ':');
-    if (!colon || colon == p || (colon - p) > 3) return p;
+    col = strchr(p, ':');
+    if (!col || col == p || (col - p) > 3) return p;
 
-    for (q = p; q < colon; q++) {
-        char ch = *q;
-        if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 32);
+    while (p < col) {
+        char ch = *p++;
+        if (ch >= 'a' && ch <= 'z') ch -= 32;
         if (ch >= 'A' && ch <= 'P') {
-            if (drv != 0) return p;
+            if (drv) return path;
             drv = (uint8_t)(ch - 'A' + 1);
         } else if (ch >= '0' && ch <= '9') {
             uint8_t d = (uint8_t)(ch - '0');
-            if (usr == 0xFF) {
-                usr = d;
-            } else if (q > p && *(q - 1) >= '0' && *(q - 1) <= '9') {
-                usr = (uint8_t)(usr * 10 + d);
-            } else {
-                return p;
-            }
+            usr = (usr == 0xFF) ? d : (uint8_t)(usr * 10 + d);
         } else {
-            return p;
+            return path;
         }
     }
-    if ((usr != 0xFF && usr > 15) || (drv == 0 && usr == 0xFF)) return p;
+    if ((usr != 0xFF && usr > 15) || (drv == 0 && usr == 0xFF)) return path;
     if (out_drv) *out_drv = drv;
     if (out_usr) *out_usr = usr;
-    return colon + 1;
+    return col + 1;
+}
+
+#ifdef __CPM__
+const char *cpm_parse_fat_path(const char *path, uint8_t *out_unit)
+{
+    const char *p = path;
+    if (out_unit) *out_unit = 0xFF;
+    if (!p) return NULL;
+    while (*p == ' ') p++;
+    if (*p != 'U' && *p != 'u') return NULL;
+    if (p[1] >= '0' && p[1] <= '7' && p[2] == ':') {
+        if (out_unit) *out_unit = (uint8_t)(p[1] - '0');
+        return p + 3;
+    }
+    if (p[1] == ':') {
+        return p + 2;
+    }
+    return NULL;
+}
+#endif
+
+static void resolve_fat_path(char *dst, const char *src)
+{
+    while (*src == ' ') src++;
+    if (*src == '/') {
+        strncpy(dst, src, 31);
+    } else {
+        dst[0] = '/';
+        strncpy(dst + 1, src, 30);
+    }
+    dst[31] = '\0';
+}
+
+static void set_fat_doc_path(const char *path)
+{
+    g_doc_is_fat = 1;
+    g_doc_fat_unit = plugin_vfs_last_unit();
+    strncpy(g_doc_fat_path, path, sizeof(g_doc_fat_path) - 1);
+    g_doc_fat_path[sizeof(g_doc_fat_path) - 1] = '\0';
+    cpm_format_fat_filename(g_doc_fat_unit, g_doc_fat_path);
+    g_doc_modified = 0;
 }
 
 static void fill_fcb_field(char *dst, const char *src, uint8_t len)
@@ -155,6 +193,26 @@ void cpm_format_doc_filename(const cpm_fcb_t *fcb, uint8_t user)
     *dst = '\0';
 }
 
+void cpm_format_fat_filename(uint8_t unit, const char *path)
+{
+    const char *base = path;
+    const char *p;
+    char *dst = g_current_filename;
+    for (p = path; *p; p++) {
+        if (*p == '/' || *p == ':') {
+            base = p + 1;
+        }
+    }
+    *dst++ = 'U';
+    if (unit != 0xFF) {
+        *dst++ = (char)('0' + unit);
+    }
+    *dst++ = ':';
+    strncpy(dst, base, sizeof(g_current_filename) -
+            (size_t)(dst - g_current_filename) - 1);
+    g_current_filename[sizeof(g_current_filename) - 1] = '\0';
+}
+
 static void cpm_commit_loaded_line(uint16_t row, uint16_t col)
 {
     uint16_t slot_id = SLOT_TERM;
@@ -168,30 +226,20 @@ static void cpm_commit_loaded_line(uint16_t row, uint16_t col)
 static void draw_progress_tick(uint16_t lines)
 {
     char lbuf[16];
-    char nbuf[8];
-    uint8_t nl, i;
+    char *p = lbuf;
     uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
     uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
-    memcpy(lbuf, "Line ", 5);
-    se_append_u16(nbuf, lines);
-    nl = (uint8_t)strlen(nbuf);
-    i = 5;
-    while (nl < 5) {
-        lbuf[i++] = ' ';
-        nl++;
-    }
-    strcpy(lbuf + i, nbuf);
+    strcpy(p, "Line "); p += 5;
+    se_append_u16(p, lines);
     modal_draw_row_centered(top + 4, left, 50, lbuf);
 }
 
 static void draw_progress_modal(const char *title, uint8_t is_loading)
 {
     char *fbuf = g_scratch_line_buf;
-    uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
+    uint8_t top, left;
     uint8_t r;
 
-    hal_console_hide_cursor();
     if (is_loading) {
         hal_console_clear();
         for (r = 1; r < g_active_rows; r++) {
@@ -199,7 +247,7 @@ static void draw_progress_modal(const char *title, uint8_t is_loading)
         }
         render_status_bar();
     }
-    modal_draw_frame(top, left, 50, 7, title);
+    modal_init_7row(&top, &left, title);
     strcpy(fbuf, "File: ");
     strncpy(fbuf + 6,
             g_current_filename[0] ? g_current_filename : "(Untitled)", 28);
@@ -229,23 +277,54 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     if (!filename || filename[0] == '\0') {
         return -1;
     }
-
-    lcol = strchr(cpm_parse_prefix(filename, NULL, NULL), ':');
-    if (lcol && lcol[1] >= '0' && lcol[1] <= '9') {
-        target_line = (uint16_t)atoi(lcol + 1);
+    uint8_t fat_u = 0xFF;
+    const char *fat_p = cpm_parse_fat_path(filename, &fat_u);
+    if (!fat_p && g_doc_is_fat && is_insert) {
+        fat_p = filename;
+        fat_u = g_doc_fat_unit;
     }
 
-    file_populate_fcb(filename, &s_cpm_io_fcb);
-    if (s_cpm_io_fcb.drive == 0) {
-        s_cpm_io_fcb.drive = g_doc_drive ? g_doc_drive
-                                         : (uint8_t)(bdos(25, 0) + 1);
-    }
-    orig_user = bdos(32, 0xFF);
-    bdos(32, g_target_user);
+    if (fat_p != NULL) {
+        char resolved_fat[32];
+        if (plugin_ensure_vfs() < 0) {
+            return -1;
+        }
+        resolve_fat_path(resolved_fat, fat_p);
 
-    if ((uint8_t)bdos(15, (int)&s_cpm_io_fcb) == 0xFF) {
-        bdos(32, orig_user);
-        return -1;
+        if (!is_insert) {
+            if (plugin_vfs_exec_cmd(VFS_CMD_LOAD_FILE, fat_u, resolved_fat,
+                                    NULL, 0, 0, 0) < 0) {
+                return -1;
+            }
+            set_fat_doc_path(resolved_fat);
+            checkout_active_line(g_cur_doc_row);
+            g_target_col = calc_visual_col(g_active_line_buf, g_cur_col);
+            g_need_screen_render = 1;
+            return 0;
+        }
+
+        if (plugin_vfs_exec_cmd(VFS_CMD_OPEN_FILE, fat_u, resolved_fat,
+                                NULL, 0, 0, 0) < 0) {
+            return -1;
+        }
+    } else {
+        lcol = strchr(cpm_parse_prefix(filename, NULL, NULL), ':');
+        if (lcol && lcol[1] >= '0' && lcol[1] <= '9') {
+            target_line = (uint16_t)atoi(lcol + 1);
+        }
+
+        file_populate_fcb(filename, &s_cpm_io_fcb);
+        if (s_cpm_io_fcb.drive == 0) {
+            s_cpm_io_fcb.drive = g_doc_drive ? g_doc_drive
+                                             : (uint8_t)(bdos(25, 0) + 1);
+        }
+        orig_user = bdos(32, 0xFF);
+        bdos(32, g_target_user);
+
+        if ((uint8_t)bdos(15, (int)&s_cpm_io_fcb) == 0xFF) {
+            bdos(32, orig_user);
+            return -1;
+        }
     }
 
     if (!is_insert) {
@@ -262,7 +341,9 @@ static int file_read_op(const char *filename, uint8_t is_insert)
         line_buf = g_scratch_line_buf;
     } else {
         strcpy(saved_fname, g_current_filename);
-        cpm_format_doc_filename(&s_cpm_io_fcb, g_target_user);
+        if (fat_p == NULL) {
+            cpm_format_doc_filename(&s_cpm_io_fcb, g_target_user);
+        }
         if (g_block_mode != BLOCK_MODE_OFF) {
             normalize_block_bounds();
             if (g_norm_start_row != g_norm_end_row ||
@@ -296,13 +377,25 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     g_is_loading_file = 1;
     draw_progress_modal(is_insert ? "Inserting File" : "Opening File", 1);
 
-    bdos(26, (int)s_cpm_sec_buf);
+    if (fat_p == NULL) {
+        bdos(26, (int)s_cpm_sec_buf);
+    }
 
     while (!done) {
-        if ((uint8_t)bdos(20, (int)&s_cpm_io_fcb) != 0) {
-            break;
+        uint8_t count = 128;
+        if (fat_p != NULL) {
+            int cnt = plugin_vfs_exec_cmd(VFS_CMD_READ_CHUNK, fat_u, NULL,
+                                          s_cpm_sec_buf, 128, 0, 0);
+            if (cnt <= 0) {
+                break;
+            }
+            count = (uint8_t)cnt;
+        } else {
+            if ((uint8_t)bdos(20, (int)&s_cpm_io_fcb) != 0) {
+                break;
+            }
         }
-        for (i = 0; i < 128; i++) {
+        for (i = 0; i < (int)count; i++) {
             uint8_t c = s_cpm_sec_buf[i];
             if (c == 0x1A || c == 0) {
                 done = 1;
@@ -373,9 +466,13 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     draw_progress_tick(prog_lines ? prog_lines : 1);
     g_is_loading_file = 0;
 
-    bdos(16, (int)&s_cpm_io_fcb);
-    bdos(26, DEFAULT_DMA);
-    bdos(32, orig_user);
+    if (fat_p != NULL) {
+        plugin_vfs_exec_cmd(VFS_CMD_CLOSE_FILE, fat_u, NULL, NULL, 0, 0, 0);
+    } else {
+        bdos(16, (int)&s_cpm_io_fcb);
+        bdos(26, DEFAULT_DMA);
+        bdos(32, orig_user);
+    }
 
     if (!is_insert) {
         g_doc_total_lines = row ? row : 1;
@@ -399,18 +496,21 @@ static int file_read_op(const char *filename, uint8_t is_insert)
     return 0;
 }
 
-static int cpm_write_byte(uint8_t b, uint8_t *sec_pos, uint16_t *rec_num)
+static uint8_t  s_sec_pos;
+static uint16_t s_rec_num;
+
+static int cpm_write_byte(uint8_t b)
 {
-    s_cpm_sec_buf[(*sec_pos)++] = b;
-    if (*sec_pos == 128) {
-        s_cpm_io_fcb.random_r0 = (uint8_t)(*rec_num & 0xFF);
-        s_cpm_io_fcb.random_r1 = (uint8_t)((*rec_num >> 8) & 0xFF);
+    s_cpm_sec_buf[s_sec_pos++] = b;
+    if (s_sec_pos == 128) {
+        s_cpm_io_fcb.random_r0 = (uint8_t)(s_rec_num & 0xFF);
+        s_cpm_io_fcb.random_r1 = (uint8_t)((s_rec_num >> 8) & 0xFF);
         s_cpm_io_fcb.random_r2 = 0;
         if ((uint8_t)bdos(34, (int)&s_cpm_io_fcb) != 0) {
             return -1;
         }
-        (*rec_num)++;
-        *sec_pos = 0;
+        s_rec_num++;
+        s_sec_pos = 0;
     }
     return 0;
 }
@@ -421,16 +521,42 @@ static int file_write_op(const char *filename, uint16_t start_row,
     uint16_t row;
     char *line_buf = g_scratch_line_buf;
     char saved_fname[32];
-    uint16_t rec_num = 0;
     uint16_t prog_lines = 0;
     uint8_t prog_cnt = 100;
-    uint8_t sec_pos = 0;
     uint8_t saved_mod = g_doc_modified;
     uint16_t i, len;
     int orig_user;
 
     if (!filename || filename[0] == '\0') {
         return -1;
+    }
+    uint8_t fat_u = 0xFF;
+    const char *fat_p = cpm_parse_fat_path(filename, &fat_u);
+    if (!fat_p && g_doc_is_fat) {
+        fat_p = filename;
+        fat_u = g_doc_fat_unit;
+    }
+
+    if (fat_p != NULL) {
+        char resolved_fat[32];
+        if (plugin_ensure_vfs() < 0) {
+            return -1;
+        }
+        commit_active_line();
+        resolve_fat_path(resolved_fat, fat_p);
+
+        if (plugin_vfs_exec_cmd(
+                is_block ? VFS_CMD_SAVE_RANGE : VFS_CMD_SAVE_FILE,
+                fat_u, resolved_fat, NULL, 0, start_row, end_row) < 0) {
+            return -1;
+        }
+        if (!is_block) {
+            set_fat_doc_path(resolved_fat);
+        }
+        checkout_active_line(g_cur_doc_row);
+        g_need_screen_render = 1;
+        g_need_status_render = 1;
+        return 0;
     }
 
     commit_active_line();
@@ -459,6 +585,8 @@ static int file_write_op(const char *filename, uint16_t start_row,
     }
 
     bdos(26, (int)s_cpm_sec_buf);
+    s_sec_pos = 0;
+    s_rec_num = 0;
 
     for (row = start_row; row <= end_row && row < g_doc_total_lines; row++) {
         uint16_t c_start = 0;
@@ -480,16 +608,16 @@ static int file_write_op(const char *filename, uint16_t start_row,
             }
         }
         for (i = c_start; i < c_end; i++) {
-            if (cpm_write_byte((uint8_t)line_buf[i], &sec_pos, &rec_num) != 0) {
+            if (cpm_write_byte((uint8_t)line_buf[i]) != 0) {
                 goto write_err;
             }
         }
         if (format == FMT_CPM) {
-            if (cpm_write_byte('\r', &sec_pos, &rec_num) != 0) {
+            if (cpm_write_byte('\r') != 0) {
                 goto write_err;
             }
         }
-        if (cpm_write_byte('\n', &sec_pos, &rec_num) != 0) {
+        if (cpm_write_byte('\n') != 0) {
             goto write_err;
         }
         prog_lines++;
@@ -500,8 +628,8 @@ static int file_write_op(const char *filename, uint16_t start_row,
     }
     draw_progress_tick(prog_lines);
 
-    while (sec_pos != 0) {
-        if (cpm_write_byte(0x1A, &sec_pos, &rec_num) != 0) {
+    while (s_sec_pos != 0) {
+        if (cpm_write_byte(0x1A) != 0) {
             goto write_err;
         }
     }
@@ -742,9 +870,11 @@ int file_save(const char *filename, uint8_t format)
     int res = file_write_op(target, 0, last_row, format, 0);
     if (res == 0) {
 #ifdef __CPM__
-        g_doc_drive = s_cpm_io_fcb.drive;
-        g_doc_user = g_target_user;
-        cpm_format_doc_filename(&s_cpm_io_fcb, g_doc_user);
+        if (!g_doc_is_fat) {
+            g_doc_drive = s_cpm_io_fcb.drive;
+            g_doc_user = g_target_user;
+            cpm_format_doc_filename(&s_cpm_io_fcb, g_doc_user);
+        }
 #else
         if (filename && filename != g_current_filename) {
             resolve_linux_path(filename, g_current_filename,

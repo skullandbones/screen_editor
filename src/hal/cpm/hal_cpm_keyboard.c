@@ -121,45 +121,32 @@ int hal_console_getkey(void)
             }
 
             /* Terminal character dispatch */
-            if (b == 'A') {
-                return (modifier == 2) ? KEY_SHIFT_UP : KEY_UP;
+            if (b >= 'A' && b <= 'D') {
+                return (modifier == 2) ? (KEY_SHIFT_UP + (b - 'A'))
+                                       : (KEY_UP + (b - 'A'));
             }
-            if (b == 'B') {
-                return (modifier == 2) ? KEY_SHIFT_DOWN : KEY_DOWN;
+            if (b >= 'a' && b <= 'd') {
+                return KEY_SHIFT_UP + (b - 'a');
             }
-            if (b == 'C') {
-                return (modifier == 2) ? KEY_SHIFT_RIGHT : KEY_RIGHT;
-            }
-            if (b == 'D') {
-                return (modifier == 2) ? KEY_SHIFT_LEFT : KEY_LEFT;
-            }
-            if (b == 'H') {
-                return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
-            }
-            if (b == 'F') {
-                return (modifier == 5) ? KEY_CTRL_G : KEY_END;
-            }
-            if (b == 'a') return KEY_SHIFT_UP;
-            if (b == 'b') return KEY_SHIFT_DOWN;
-            if (b == 'c') return KEY_SHIFT_RIGHT;
-            if (b == 'd') return KEY_SHIFT_LEFT;
+            if (b == 'H') return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
+            if (b == 'F') return (modifier == 5) ? KEY_CTRL_G : KEY_END;
             if (b == 'I') return KEY_PGUP;
             if (b == 'G') return KEY_PGDN;
             if (b == 'L' || b == '@') return KEY_INS;
 
             if (b == '~') {
-                if (prefix == 1) {
-                    return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
+                if (modifier == 5 && (prefix == 1 || prefix == 7)) {
+                    return KEY_CTRL_T;
                 }
-                if (prefix == 4) {
-                    return (modifier == 5) ? KEY_CTRL_G : KEY_END;
+                if (modifier == 5 && (prefix == 4 || prefix == 8)) {
+                    return KEY_CTRL_G;
                 }
+                if (prefix == 1 || prefix == 7) return KEY_HOME;
+                if (prefix == 4 || prefix == 8) return KEY_END;
                 if (prefix == 2) return KEY_INS;
                 if (prefix == 3) return KEY_DEL;
                 if (prefix == 5) return KEY_PGUP;
                 if (prefix == 6) return KEY_PGDN;
-                if (prefix == 7) return KEY_HOME;
-                if (prefix == 8) return KEY_END;
                 return 0;
             }
 
@@ -175,10 +162,7 @@ int hal_console_getkey(void)
         } else if (b1 == 'O') {
             /* SS3 sequence: \033O... */
             int b2 = cpm_read_byte_timeout(20000);
-            if (b2 == 'A') return KEY_UP;
-            if (b2 == 'B') return KEY_DOWN;
-            if (b2 == 'C') return KEY_RIGHT;
-            if (b2 == 'D') return KEY_LEFT;
+            if (b2 >= 'A' && b2 <= 'D') return KEY_UP + (b2 - 'A');
             if (b2 == 'H') return KEY_HOME;
             if (b2 == 'F') return KEY_END;
             return 0;

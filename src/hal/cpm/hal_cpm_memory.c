@@ -322,6 +322,7 @@ uint8_t  g_plugin_mgr_bank = 0;
 uint8_t  g_plugin_mgr_loaded = 0;
 uint8_t  g_popup_context_id = 0;
 uint16_t g_far_entry_addr = 0;
+uint16_t g_far_de_arg = 0;
 uint16_t g_far_reloc_addr = 0;
 uint16_t g_far_reloc_bmap = 0;
 uint16_t g_far_reloc_size = 0;
@@ -909,6 +910,7 @@ void hal_far_exec_call(void)
     push hl
     pop ix
     ld iy, _g_plugin_host_api
+    ld de, (_g_far_de_arg)
     ld a, (_g_plugin_far_bank)
     di
     call 0FFF9h

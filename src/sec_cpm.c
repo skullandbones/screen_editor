@@ -21,22 +21,14 @@
 #include "include/plugin.h"
 #include "include/hal.h"
 
-static int parse_target_filename(char *out_buf, size_t max_len,
-                                 int argc, char **argv)
+static int parse_target_filename(char *out_buf, size_t max_len)
 {
-    uint8_t cpm_cmd_len;
+    uint8_t cpm_cmd_len = *(const uint8_t *)CMD_LEN;
     const char *tail;
     uint8_t i = 0;
     uint8_t out_idx = 0;
 
     out_buf[0] = '\0';
-    if (argc > 1 && argv[1][0] != '\0') {
-        strncpy(out_buf, argv[1], max_len - 1);
-        out_buf[max_len - 1] = '\0';
-        return 1;
-    }
-
-    cpm_cmd_len = *(const uint8_t *)CMD_LEN;
     if (cpm_cmd_len == 0) {
         return 0;
     }
@@ -57,8 +49,9 @@ static int parse_target_filename(char *out_buf, size_t max_len,
 int main(int argc, char **argv)
 {
     char target_file[32];
-    int has_target = parse_target_filename(target_file, sizeof(target_file),
-                                           argc, argv);
+    int has_target = parse_target_filename(target_file, sizeof(target_file));
+    (void)argc;
+    (void)argv;
 
     if (has_target) {
         if (strcmp(target_file, "-h") == 0 ||
@@ -79,12 +72,25 @@ int main(int argc, char **argv)
     plugin_autoload_mgr();
 
     if (has_target) {
+        uint8_t fat_u = 0xFF;
+        const char *fat_p = cpm_parse_fat_path(target_file, &fat_u);
+        if (fat_p != NULL) {
+            if (plugin_ensure_vfs() < 0) {
+                hal_console_puts("\r\nFATFS.PRL file not found\r\n");
+                goto clean_exit_sp;
+            }
+        }
         if (file_load(target_file) != 0) {
             uint8_t drv = 0, usr = 0xFF;
-            if (cpm_parse_prefix(target_file, &drv, &usr) > target_file) {
-                cpm_format_doc_filename(&g_cpm_fcb, g_target_user);
+            if (fat_p != NULL ||
+                cpm_parse_prefix(target_file, &drv, &usr) > target_file) {
+                const char *fn = target_file;
+                if (fat_p == NULL) {
+                    cpm_format_doc_filename(&g_cpm_fcb, g_target_user);
+                    fn = g_current_filename;
+                }
                 hal_console_puts("\r\n");
-                hal_console_puts(g_current_filename);
+                hal_console_puts(fn);
                 hal_console_puts(" file not found\r\n");
                 goto clean_exit_sp;
             }

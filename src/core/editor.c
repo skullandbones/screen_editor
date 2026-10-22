@@ -528,22 +528,18 @@ int editor_handle_key(int key)
     case KEY_LEFT: cursor_left(); break;
     case KEY_RIGHT: cursor_right(); break;
     case KEY_SHIFT_UP:
-        start_new_block_at_cursor();
-        cursor_up();
-        break;
     case KEY_SHIFT_DOWN:
-        start_new_block_at_cursor();
-        cursor_down();
-        break;
     case KEY_SHIFT_LEFT:
-        start_new_block_at_cursor();
-        cursor_left();
-        break;
     case KEY_SHIFT_RIGHT:
         start_new_block_at_cursor();
-        cursor_right();
+        if (key == KEY_SHIFT_UP) cursor_up();
+        else if (key == KEY_SHIFT_DOWN) cursor_down();
+        else if (key == KEY_SHIFT_LEFT) cursor_left();
+        else cursor_right();
         break;
+    case KEY_CTRL_A:
     case KEY_HOME: cursor_home(); break;
+    case KEY_CTRL_E:
     case KEY_END: cursor_end(); break;
     case KEY_PGUP:
     case KEY_CTRL_U:
@@ -554,10 +550,8 @@ int editor_handle_key(int key)
         page_down();
         break;
     case KEY_INS: toggle_insert_mode(); break;
+    case KEY_CTRL_D:
     case KEY_DEL: do_delete(); break;
-    case KEY_CTRL_A: cursor_home(); break;
-    case KEY_CTRL_E: cursor_end(); break;
-    case KEY_CTRL_D: do_delete(); break;
     case KEY_CTRL_G: jump_file_bottom(); break;
     case KEY_CTRL_T: jump_file_top(); break;
     case KEY_BACKSPACE: do_backspace(); break;

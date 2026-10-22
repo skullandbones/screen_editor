@@ -50,10 +50,15 @@ extern uint8_t   g_cpm_dma_buf[128];
 extern cpm_fcb_t g_cpm_fcb;
 extern uint8_t   g_doc_drive;
 extern uint8_t   g_doc_user;
+extern uint8_t   g_doc_is_fat;
+extern uint8_t   g_doc_fat_unit;
+extern char      g_doc_fat_path[32];
 extern uint8_t   g_target_user;
 const char *cpm_parse_prefix(const char *path, uint8_t *out_drv,
                              uint8_t *out_usr);
+const char *cpm_parse_fat_path(const char *path, uint8_t *out_unit);
 void cpm_format_doc_filename(const cpm_fcb_t *fcb, uint8_t user);
+void cpm_format_fat_filename(uint8_t unit, const char *path);
 #endif
 
 /* File I/O Subsystem Function Entry Points */

@@ -303,18 +303,17 @@ static uint8_t check_start_from_block(char *input)
 
 static int prompt_search_box(uint8_t is_rep, char *input, uint8_t cur_len)
 {
-    uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
+    uint8_t top, left;
     uint8_t flen = is_rep ? REPLACE_POPUP_FIELD_LEN : FIND_POPUP_FIELD_LEN;
-    uint8_t col = left + (is_rep ? 17 : 14);
+    uint8_t col;
     uint8_t i;
     int k;
 #ifndef __CPM__
     uint8_t cur_pos = cur_len;
 #endif
 
-    hal_console_hide_cursor();
-    modal_draw_frame(top, left, 50, 7, is_rep ? "Replace Text" : "Find Text");
+    modal_init_7row(&top, &left, is_rep ? "Replace Text" : "Find Text");
+    col = left + (is_rep ? 17 : 14);
     modal_draw_row_centered(top + 3, left, 50,
                             is_rep ?
                             "Enter replacement text to substitute for match" :
@@ -525,10 +524,8 @@ int do_ctrl_r_replace(void)
     while (1) {
         int ans = MODAL_RES_YES;
         if (!replace_all) {
-            uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
-            uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
-            hal_console_hide_cursor();
-            modal_draw_frame(top, left, 50, 7, "Replace Confirmation");
+            uint8_t top, left;
+            modal_init_7row(&top, &left, "Replace Confirmation");
             modal_draw_row_centered(top + 3, left, 50,
                                     "Match found for search pattern in text");
             modal_draw_row_centered(top + 4, left, 50,
@@ -545,30 +542,29 @@ int do_ctrl_r_replace(void)
                     usleep(5000);
 #endif
                 }
+                if (k >= 'a' && k <= 'z') k -= 32;
                 if (k == KEY_ESC) {
 #ifndef __CPM__
-                    while (hal_console_getkey() > 0) {
-                        /* Drain trailing escape sequence bytes */
-                    }
+                    while (hal_console_getkey() > 0) {}
 #endif
                     ans = MODAL_RES_CANCEL;
                     break;
                 }
-                if (k == 'y' || k == 'Y' || k == KEY_ENTER) {
+                if (k == 'Y' || k == KEY_ENTER) {
                     ans = MODAL_RES_YES;
                     break;
                 }
-                if (k == 'n' || k == 'N') {
+                if (k == 'N') {
                     ans = MODAL_RES_NO;
                     break;
                 }
-                if (k == 'a' || k == 'A') {
+                if (k == 'A') {
                     search_dir = 0;
                     replace_all = 1;
                     ans = MODAL_RES_YES;
                     break;
                 }
-                if (k == 'r' || k == 'R' || k == 'p' || k == 'P') {
+                if (k == 'R' || k == 'P') {
                     search_dir ^= 1;
                     ans = MODAL_RES_NO;
                     break;
@@ -613,22 +609,20 @@ int do_ctrl_r_replace(void)
 
 void show_popup_not_found(void)
 {
-    modal_alert("Pattern Not Found", "Pattern not found.",
-                "Search pattern not found in file.");
+    modal_alert("Pattern Not Found", "Pattern not found in file.", NULL);
 }
 
 void show_popup_search_completed(void)
 {
-    modal_alert("Search Completed", "Search completed.",
-                "No further occurrences found.");
+    modal_alert("Search Completed", "Search completed.", NULL);
 }
 
 void show_popup_replace_done(uint16_t count)
 {
-    char msg[64];
+    char msg[36];
     char *p;
     strcpy(msg, "Replace done: ");
     p = se_append_u16(msg + 14, count);
     strcpy(p, " replacement(s).");
-    modal_alert("Replace Done", "Search and replace completed.", msg);
+    modal_alert("Replace Done", msg, NULL);
 }

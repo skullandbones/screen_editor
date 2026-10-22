@@ -37,21 +37,20 @@ static char *trim_whitespace(char *str)
     return str;
 }
 
+static const editor_config_t s_default_config = {
+    8, 0, MODE_80X24, RAMDRV_MODE_PROTECTED, PLUGIN_MODE_AUTOLOAD,
+#ifdef __CPM__
+    FMT_CPM,
+#else
+    FMT_LINUX,
+#endif
+    1, 0
+};
+
 void config_init_defaults(void)
 {
     g_config_loaded = 0;
-    g_config.tab_width = 8;
-    g_config.lines_mode = 0;             /* 16K lines */
-    g_config.screen_mode = MODE_80X24;  /* Canonical 80x24 (Section 13.2) */
-    g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
-    g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
-#ifdef __CPM__
-    g_config.save_format = FMT_CPM;
-#else
-    g_config.save_format = FMT_LINUX;
-#endif
-    g_config.auto_indent = 1;
-    g_config.show_line_endings = 0;
+    memcpy(&g_config, &s_default_config, sizeof(editor_config_t));
 }
 
 static void parse_config_line(char *line)
@@ -81,14 +80,14 @@ static void parse_config_line(char *line)
     for (p = val; *p; p++) {
         if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 32);
     }
-    if (strcmp(key, "SCREEN") == 0) {
-        g_config.screen_mode = (strcmp(val, "80X24") == 0 ||
-                                val[0] == '1') ? MODE_80X24 : MODE_120X40;
-    } else if (strcmp(key, "TAB") == 0) {
+    if (key[0] == 'S') {
+        g_config.screen_mode = (val[0] == '8' || val[0] == '1') ?
+                               MODE_80X24 : MODE_120X40;
+    } else if (key[0] == 'T') {
         g_config.tab_width = (val[0] == '8') ? 8 : 4;
-    } else if (strcmp(key, "LINES") == 0) {
+    } else if (key[0] == 'L') {
         g_config.lines_mode = (val[0] == '3' || val[0] == '1') ? 1 : 0;
-    } else if (strcmp(key, "RAMDRIVE") == 0) {
+    } else if (key[0] == 'R') {
         if (val[0] == 'O' && val[1] != 'F') {
             g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
         } else if (val[0] == 'H' || val[0] == '2') {
@@ -98,7 +97,7 @@ static void parse_config_line(char *line)
         } else {
             g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
         }
-    } else if (strcmp(key, "PLUGIN") == 0) {
+    } else if (key[0] == 'P') {
         if (val[0] == 'D' || val[0] == '2') {
             g_config.plugin_mode = PLUGIN_MODE_ONDEMAND;
         } else if (val[0] == 'O' || val[0] == '0') {
@@ -106,7 +105,7 @@ static void parse_config_line(char *line)
         } else {
             g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
         }
-    } else if (strcmp(key, "AUTO_INDENT") == 0) {
+    } else if (key[0] == 'A') {
         g_config.auto_indent = (val[0] == '0' || val[0] == 'O' ||
                                 val[0] == 'N') ? 0 : 1;
     }
@@ -238,18 +237,19 @@ cfg_load_done:
     return 0;
 }
 
-static void cfg_append_str(const char *s, int *pos)
+static char *cfg_put(char *p, const char *s)
 {
-    while (*s && *pos < 128) {
-        s_cfg_dma[(*pos)++] = (uint8_t)*s++;
+    while (*s) {
+        *p++ = *s++;
     }
+    return p;
 }
 
 int config_save_file(const char *filename)
 {
     const char *ramdrv_str;
     const char *plugin_str;
-    int pos = 0;
+    char *p = (char *)s_cfg_dma;
 
     if (!filename) {
         filename = "SE.CFG";
@@ -273,19 +273,17 @@ int config_save_file(const char *filename)
 
     memset(s_cfg_dma, 0x1A, sizeof(s_cfg_dma));
 
-    cfg_append_str("# SE.COM Configuration File\r\nSCREEN=", &pos);
-    cfg_append_str((g_config.screen_mode == MODE_120X40) ?
-                   "120X40\r\n" : "80X24\r\n", &pos);
-    cfg_append_str("TAB=", &pos);
-    cfg_append_str((g_config.tab_width == 4) ? "4\r\n" : "8\r\n", &pos);
-    cfg_append_str("LINES=", &pos);
-    cfg_append_str(g_config.lines_mode ? "32K\r\n" : "16K\r\n", &pos);
-    cfg_append_str("RAMDRIVE=", &pos);
-    cfg_append_str(ramdrv_str, &pos);
-    cfg_append_str("\r\nPLUGIN=", &pos);
-    cfg_append_str(plugin_str, &pos);
-    cfg_append_str("\r\nAUTO_INDENT=", &pos);
-    cfg_append_str(g_config.auto_indent ? "1\r\n" : "0\r\n", &pos);
+    p = cfg_put(p, "# SE.COM Configuration File\r\nSCREEN=");
+    p = cfg_put(p, (g_config.screen_mode == MODE_120X40) ?
+                   "120X40\r\n" : "80X24\r\n");
+    p = cfg_put(p, (g_config.tab_width == 4) ? "TAB=4\r\n" : "TAB=8\r\n");
+    p = cfg_put(p, g_config.lines_mode ? "LINES=32K\r\n" : "LINES=16K\r\n");
+    p = cfg_put(p, "RAMDRIVE=");
+    p = cfg_put(p, ramdrv_str);
+    p = cfg_put(p, "\r\nPLUGIN=");
+    p = cfg_put(p, plugin_str);
+    p = cfg_put(p, "\r\nAUTO_INDENT=");
+    cfg_put(p, g_config.auto_indent ? "1\r\n" : "0\r\n");
 
     file_populate_fcb(filename, &s_cfg_fcb);
     bdos(19, (int)&s_cfg_fcb);

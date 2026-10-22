@@ -2190,6 +2190,9 @@ specific architectural adaptations.
        partitions on SD cards, CompactFlash, or IDE hard disks via RomWBW.
        Maps foreign volumes to virtual drives (e.g. `U0:/SUBDIR/FILE.TXT`) with
        directory browsing and file loading directly inside SE.
+       For physical device mappings, RomWBW HBIOS disk units (`U0:`..`U7:`,
+       default `U:`), and hardware details, see `HARDWARE_COMPATIBILITY.md`
+       Section 4.
      - Native Host Plugins (Retro VFS):
        On modern platforms (Linux, macOS), plugins can mount virtual CP/M disk
        images (`.DSK`, `.IMG`), retro archives (`.LBR`, `.ARK`), or remote

@@ -5216,6 +5216,33 @@ have been resolved and archived.
       connected context-aware `Ctrl+P` pop-ups and base screen redraws
       across all screen contexts in `src/core/ui_render.c`,
       `src/core/editor.c`, and `src/sec_cpm.c`.
+  - [x] **Bug 2.8.59: `SEC.COM` File Open/Save Screens Fail to Route `U<unit>:`
+    to `FATFS.PRL` VFS Driver**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 11.3 (`lines 2185-2197`),
+      `docs/HARDWARE_COMPATIBILITY.md` Section 4,
+      `tests/test_fatfs_vfs_hook.py`,
+      `src/core/plugin_mgr.asm:2075-2900`, `src/core/ui_browser.c:678-788`.
+    - *Issue*: In the file open/save browser screens and command-line parsing,
+      `SEC.COM` fails when given RomWBW FAT filesystem paths (`U<unit>:<path>`
+      or `U:<path>`), popping up `'U2:TEST.TXT' was not found.` instead of
+      invoking `FATFS.PRL` Action 3 via the Far RAM VFS interface. When
+      `FATFS.PRL` is not loaded in the plugin registry, `SEC.COM` must display
+      the canonical `FAT Subsystem Missing` modal alert (`"Feature requires
+      FATFS.PRL."` / `"FAT filesystem plugin is not loaded."`). When resident,
+      `SEC.COM` must support drive/unit switching (`U4:`), subdirectory
+      navigation (`TURBOPAS/`, `..`), wildcard filtering (`*.PAS`), bare-name
+      implied volume resolution, full path save prefill (`U4:/SLICES.TXT`),
+      block file insertion from FAT volumes, command-line autoload
+      (`sec U4:SLICES.TXT`), and status bar display (`U4:SLICES.TXT[*]`).
+    - *Resolution*: Implement `cpm_parse_fat_path()`, `vfs_ensure_loaded()`,
+      and Action 3 VFS dispatchers (`VFS_CMD_PROBE_MOUNT`, `VFS_CMD_LIST_DIR`,
+      `VFS_CMD_LOAD_FILE`, `VFS_CMD_SAVE_FILE`, `VFS_CMD_SAVE_RANGE`,
+      `VFS_CMD_OPEN_FILE`, `VFS_CMD_READ_CHUNK`, `VFS_CMD_CLOSE_FILE`) in
+      `src/core/plugin_mgr.c`, route `U<unit>:` and implied FAT context in
+      `src/core/ui_browser.c`, `src/core/file_io.c`, and `src/sec_cpm.c`,
+      pass the 16-byte `FatVfsRequest` pointer in `DE` within
+      `hal_far_exec_call()` in `src/hal/cpm/hal_cpm_memory.c`, and maintain
+      strict CCP headroom ($BSS\_END \le 0xD000$).
 
 ---
 

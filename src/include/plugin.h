@@ -38,6 +38,7 @@ extern "C" {
 #define CAP_SIZE_16K            0x0080
 #define CAP_SIZE_32K            0x00C0
 #define CAP_SIZE_MASK           0x00C0
+#define CAP_HAS_VFS             0x0100
 
 /* Context-Aware Plugin Screen IDs */
 #define PLUG_CTX_EDITOR         0
@@ -62,9 +63,50 @@ typedef struct {
 #endif
 } plugin_entry_t;
 
+/* Headless VFS Command Codes */
+#define VFS_CMD_PROBE_MOUNT     0
+#define VFS_CMD_LIST_DIR        1
+#define VFS_CMD_LOAD_FILE       2
+#define VFS_CMD_SAVE_FILE       3
+#define VFS_CMD_SAVE_RANGE      4
+#define VFS_CMD_OPEN_FILE       5
+#define VFS_CMD_READ_CHUNK      6
+#define VFS_CMD_CLOSE_FILE      7
+
+/* Headless VFS Status Codes */
+#define VFS_STAT_OK             0
+#define VFS_STAT_NOT_FOUND      1
+#define VFS_STAT_DISK_ERR       2
+#define VFS_STAT_BUFFER_FULL    3
+#define VFS_STAT_INV_UNIT       4
+#define VFS_STAT_READ_ONLY      5
+#define VFS_STAT_EOF            6
+#define VFS_STAT_UNSUPPORTED    0xFF
+
+/* 16-byte Headless VFS Request Packet (Upper Common RAM > 0x8000) */
+typedef struct {
+    uint8_t      cmd;           /* +0: Command opcode (VFS_CMD_*) */
+    uint8_t      unit;          /* +1: HBIOS unit (0..7 or 0xFF=default) */
+    uint8_t      status;        /* +2: Output status (VFS_STAT_*) */
+    uint8_t      flags;         /* +3: Option flags */
+    const char  *path;          /* +4: DOS path string pointer */
+    void        *buffer;        /* +6: Data buffer pointer (> 0x8000) */
+    uint16_t     buffer_size;   /* +8: Capacity (bytes or entries) */
+    uint16_t     count;         /* +10: Output count */
+    uint16_t     start_line;    /* +12: Range start line */
+    uint16_t     end_line;      /* +14: Range end line */
+} fat_vfs_request_t;
+
 /* Plugin Subsystem Function Entry Points */
 void plugin_init_registry(void);
 void plugin_autoload_mgr(void);
+int  plugin_find_vfs(void);
+int  plugin_ensure_vfs(void);
+int  plugin_vfs_exec_cmd(uint8_t cmd, uint8_t unit, const char *path,
+                         void *buf, uint16_t size, uint16_t start,
+                         uint16_t end);
+uint8_t plugin_vfs_last_unit(void);
+void plugin_alert_fat_missing(void);
 int  plugin_load_by_name(const char *filename);
 void plugin_unload_slot(uint8_t slot);
 int  plugin_exec_slot(uint8_t slot, uint8_t action);

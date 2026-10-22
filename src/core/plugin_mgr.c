@@ -272,6 +272,19 @@ void show_plugin_palette_ctx(uint8_t ctx)
     (void)ctx;
     show_plugin_palette();
 }
+
+int plugin_find_vfs(void) { return -1; }
+int plugin_ensure_vfs(void) { return -1; }
+int plugin_vfs_exec_cmd(uint8_t cmd, uint8_t unit, const char *path,
+                        void *buf, uint16_t size, uint16_t start,
+                        uint16_t end)
+{
+    (void)cmd; (void)unit; (void)path; (void)buf; (void)size;
+    (void)start; (void)end;
+    return -1;
+}
+uint8_t plugin_vfs_last_unit(void) { return 0xFF; }
+void plugin_alert_fat_missing(void) {}
 #else
 /*==============================================================================
  * CP/M Far RAM Plugin Manager & PRL/OVL Loader Implementation (SEC.COM)
@@ -293,6 +306,7 @@ extern uint8_t  g_plugin_mgr_bank;
 extern uint8_t  g_plugin_mgr_loaded;
 extern uint8_t  g_popup_context_id;
 extern uint16_t g_far_entry_addr;
+extern uint16_t g_far_de_arg;
 extern uint16_t g_far_reloc_addr;
 extern uint16_t g_far_reloc_bmap;
 extern uint16_t g_far_reloc_size;
@@ -840,5 +854,72 @@ void show_plugin_palette_ctx(uint8_t ctx)
     } else {
         redraw_base_screen(ctx);
     }
+}
+
+int plugin_find_vfs(void)
+{
+    uint8_t slot;
+    for (slot = 0; slot < PLUGIN_MAX_SLOTS; slot++) {
+        uint8_t *ent = &g_plugin_registry[slot * 32];
+        if (ent[22] != 0) {
+            uint16_t caps = (uint16_t)ent[20] | ((uint16_t)ent[21] << 8);
+            if (caps & CAP_HAS_VFS) {
+                return (int)slot;
+            }
+        }
+    }
+    return -1;
+}
+
+int plugin_ensure_vfs(void)
+{
+    int slot = plugin_find_vfs();
+    if (slot >= 0) return slot;
+    slot = plugin_load_by_name("FATFS.PRL");
+    if (slot >= 0) return slot;
+    return -1;
+}
+
+static fat_vfs_request_t s_vfs_req;
+
+int plugin_vfs_exec_cmd(uint8_t cmd, uint8_t unit, const char *path,
+                        void *buf, uint16_t size, uint16_t start,
+                        uint16_t end)
+{
+    int slot = plugin_find_vfs();
+    uint8_t *ent;
+    if (slot < 0) return -1;
+    s_vfs_req.cmd = cmd;
+    s_vfs_req.unit = unit;
+    s_vfs_req.status = 0;
+    s_vfs_req.flags = 0;
+    s_vfs_req.path = path;
+    s_vfs_req.buffer = buf;
+    s_vfs_req.buffer_size = size;
+    s_vfs_req.count = 0;
+    s_vfs_req.start_line = start;
+    s_vfs_req.end_line = end;
+    ent = &g_plugin_registry[slot * 32];
+    sync_host_api_state();
+    g_plugin_far_bank = ent[24];
+    g_far_entry_addr = (uint16_t)(((uint16_t)(ent[25] + 1) << 8) + 9U);
+    g_far_de_arg = (uint16_t)&s_vfs_req;
+    hal_far_exec_call();
+    if (s_vfs_req.status != VFS_STAT_OK) {
+        return -1;
+    }
+    return (int)s_vfs_req.count;
+}
+
+uint8_t plugin_vfs_last_unit(void)
+{
+    return s_vfs_req.unit;
+}
+
+void plugin_alert_fat_missing(void)
+{
+    modal_alert("FAT Subsystem Missing",
+                "Feature requires FATFS.PRL.",
+                "FAT filesystem plugin is not loaded.");
 }
 #endif

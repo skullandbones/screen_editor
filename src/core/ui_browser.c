@@ -80,6 +80,25 @@ extern char g_ramdrive_char;
 static char    s_browser_drive = 'C';
 static uint8_t s_browser_user = 0;
 static char    s_browser_filter[14];
+static uint8_t s_browser_is_fat = 0;
+static uint8_t s_browser_fat_unit = 0xFF;
+static char    s_browser_fat_path[32] = "/";
+
+static const char *set_browser_filter(const char *src)
+{
+    uint8_t fi = 0;
+    while (src[fi] && src[fi] != ' ' && fi + 1 < sizeof(s_browser_filter)) {
+        char ch = src[fi];
+        if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 32);
+        s_browser_filter[fi++] = ch;
+    }
+    s_browser_filter[fi] = '\0';
+    if (strcmp(s_browser_filter, "*.*") == 0) {
+        s_browser_filter[0] = '\0';
+        return NULL;
+    }
+    return s_browser_filter;
+}
 
 static void format_drv_usr_str(char *dst, char drv, uint8_t usr,
                                const char *str)
@@ -93,6 +112,36 @@ static void format_drv_usr_str(char *dst, char drv, uint8_t usr,
     }
     *dst++ = ':';
     strcpy(dst, str);
+}
+
+static void browser_insert_entry_sorted(const char *name)
+{
+    char cur[16];
+    int lo = 0, hi = s_browser_count - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) >> 1;
+        int cmp;
+        hal_dir_entry_get((uint8_t)mid, cur);
+        cmp = strcmp(name, cur);
+        if (cmp == 0) {
+            return;
+        }
+        if (cmp < 0) {
+            hi = mid - 1;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    if (lo < MAX_BROWSER_FILES) {
+        if (s_browser_count < MAX_BROWSER_FILES) {
+            s_browser_count++;
+        }
+        if (s_browser_count - 1 > lo) {
+            hal_dir_entry_shift((uint8_t)lo,
+                                (uint8_t)(s_browser_count - 1 - lo));
+        }
+        hal_dir_entry_set((uint8_t)lo, name);
+    }
 }
 
 static void scan_cpm_directory(char drive, uint8_t user, const char *mask)
@@ -113,7 +162,6 @@ static void scan_cpm_directory(char drive, uint8_t user, const char *mask)
         uint8_t *entry = &s_dir_dma[res * 32];
         if (entry[0] == user) {
             char name[16];
-            char cur[16];
             uint8_t ni = 0;
             uint8_t j;
             for (j = 1; j <= 11; j++) {
@@ -126,39 +174,89 @@ static void scan_cpm_directory(char drive, uint8_t user, const char *mask)
 
             if (ni > 0 && !(name[0] == '$' && name[1] == '$' &&
                             name[2] == '$')) {
-                int lo = 0, hi = s_browser_count - 1;
-                while (lo <= hi) {
-                    int mid = (lo + hi) >> 1;
-                    int cmp;
-                    hal_dir_entry_get((uint8_t)mid, cur);
-                    cmp = strcmp(name, cur);
-                    if (cmp == 0) {
-                        goto next_entry;
-                    }
-                    if (cmp < 0) {
-                        hi = mid - 1;
-                    } else {
-                        lo = mid + 1;
-                    }
-                }
-                if (lo < MAX_BROWSER_FILES) {
-                    if (s_browser_count < MAX_BROWSER_FILES) {
-                        s_browser_count++;
-                    }
-                    if (s_browser_count - 1 > lo) {
-                        hal_dir_entry_shift(
-                            (uint8_t)lo,
-                            (uint8_t)(s_browser_count - 1 - lo));
-                    }
-                    hal_dir_entry_set((uint8_t)lo, name);
-                }
+                browser_insert_entry_sorted(name);
             }
         }
-next_entry:
         res = bdos(18, (int)s_dir_fcb);
     }
     bdos(26, DEFAULT_DMA);
     bdos(32, orig_user);
+}
+
+static void scan_fat_directory(uint8_t unit, const char *path,
+                               const char *mask)
+{
+    char filt_fcb[11];
+    char *raw = g_active_line_buf;
+    int fetched;
+    uint16_t idx;
+    uint8_t has_filter = 0;
+
+    if (plugin_ensure_vfs() < 0) {
+        return;
+    }
+
+    if (mask && mask[0] != '\0') {
+        file_populate_fcb(mask, (cpm_fcb_t *)s_dir_fcb);
+        memcpy(filt_fcb, ((cpm_fcb_t *)s_dir_fcb)->name, 11);
+        has_filter = 1;
+    }
+
+    if (g_active_line_valid) {
+        commit_active_line();
+        g_active_line_valid = 0;
+    }
+
+    fetched = plugin_vfs_exec_cmd(VFS_CMD_LIST_DIR, unit,
+                                  (path && path[0]) ? path : "/",
+                                  g_active_line_buf,
+                                  (uint16_t)(sizeof(g_active_line_buf) / 13),
+                                  0, 0);
+    if (fetched < 0) {
+        return;
+    }
+
+    for (idx = 0; idx < (uint16_t)fetched; idx++, raw += 13) {
+        uint8_t is_dir = (uint8_t)(raw[8] == '/');
+        char disp_name[16];
+        uint8_t ni = 0, j;
+
+        if (is_dir) {
+            if (raw[0] == '.' && raw[1] == '.') {
+                browser_insert_entry_sorted("../");
+                continue;
+            }
+        } else if (has_filter) {
+            uint8_t match = 1;
+            for (j = 0; j < 11; j++) {
+                char fc = filt_fcb[j];
+                char rc = (j < 8) ? raw[j] : raw[j + 1];
+                if (fc != '?' && fc != rc) {
+                    match = 0;
+                    break;
+                }
+            }
+            if (!match) {
+                continue;
+            }
+        }
+
+        for (j = 0; j < 8 && raw[j] != ' '; j++) {
+            disp_name[ni++] = raw[j];
+        }
+        if (is_dir) {
+            disp_name[ni++] = '/';
+        } else if (raw[9] != ' ') {
+            disp_name[ni++] = '.';
+            for (j = 9; j < 12 && raw[j] != ' '; j++) {
+                disp_name[ni++] = raw[j];
+            }
+        }
+        disp_name[ni] = '\0';
+        if (ni > 0) {
+            browser_insert_entry_sorted(disp_name);
+        }
+    }
 }
 #endif
 
@@ -181,7 +279,11 @@ void ui_browser_refresh_directory(const char *mask)
         s_browser_count = write_idx;
     }
 #elif defined(__CPM__)
-    scan_cpm_directory(s_browser_drive, s_browser_user, mask);
+    if (s_browser_is_fat) {
+        scan_fat_directory(s_browser_fat_unit, s_browser_fat_path, mask);
+    } else {
+        scan_cpm_directory(s_browser_drive, s_browser_user, mask);
+    }
 #endif
 #ifndef __CPM__
     qsort(s_browser_files, s_browser_count, sizeof(browser_entry_t),
@@ -235,9 +337,9 @@ static int     s_total_pages;
 static int     s_files_per_page;
 
 #ifdef __CPM__
-#define s_in_buf    (g_scratch_line_buf)
-#define s_title_buf (g_scratch_line_buf + 32)
-#define s_page_buf  (g_scratch_line_buf + 88)
+static char s_in_buf[32];
+#define s_title_buf (g_scratch_line_buf)
+#define s_page_buf  (g_scratch_line_buf + 64)
 #define IN_BUF_CAP  32
 #else
 static char s_in_buf[256];
@@ -353,7 +455,12 @@ static void apply_hl_to_box(void)
 {
     const char *fn = get_entry_name(s_page_start + s_hl_index);
 #ifdef __CPM__
-    format_drv_usr_str(s_in_buf, s_browser_drive, s_browser_user, fn);
+    if (s_browser_is_fat) {
+        strncpy(s_in_buf, fn, IN_BUF_CAP - 1);
+        s_in_buf[IN_BUF_CAP - 1] = '\0';
+    } else {
+        format_drv_usr_str(s_in_buf, s_browser_drive, s_browser_user, fn);
+    }
 #else
     strncpy(s_in_buf, fn, IN_BUF_CAP - 1);
     s_in_buf[IN_BUF_CAP - 1] = '\0';
@@ -371,6 +478,421 @@ static void activate_hl_at(uint8_t idx)
     draw_hl_cell(1);
     apply_hl_to_box();
     draw_tab_mode_hint();
+}
+
+#ifdef __CPM__
+static void format_fat_selection(char *dst, const char *src)
+{
+    char *p = dst;
+    *p++ = 'U';
+    if (s_browser_fat_unit != 0xFF) {
+        *p++ = (char)('0' + s_browser_fat_unit);
+    }
+    *p++ = ':';
+    if (src[0] != '/') {
+        strcpy(p, s_browser_fat_path);
+        p += strlen(p);
+        if (*(p - 1) != '/') *p++ = '/';
+    }
+    strcpy(p, src);
+}
+
+static void reset_browser_input_prefix(void)
+{
+#ifdef __CPM__
+    if (s_browser_is_fat) {
+        s_in_buf[0] = 'U';
+        s_in_buf[1] = (char)('0' + s_browser_fat_unit);
+        s_in_buf[2] = ':';
+        s_in_buf[3] = '\0';
+    } else {
+        format_drv_usr_str(s_in_buf, s_browser_drive, s_browser_user, "");
+    }
+    s_cursor_pos = (uint8_t)strlen(s_in_buf);
+#else
+    s_in_buf[0] = '\0';
+    s_cursor_pos = 0;
+#endif
+}
+
+static int handle_fat_nav(const char *fat_p)
+{
+    const char *filt = NULL;
+    size_t len;
+    if (!fat_p || *fat_p == '\0' || (fat_p[0] == '/' && fat_p[1] == '\0')) {
+        strcpy(s_browser_fat_path, "/");
+    } else if (fat_p[0] == '.' && fat_p[1] == '.' &&
+               (fat_p[2] == '\0' || (fat_p[2] == '/' && fat_p[3] == '\0'))) {
+        char *ls = strrchr(s_browser_fat_path, '/');
+        if (ls && ls != s_browser_fat_path) {
+            *ls = '\0';
+        } else {
+            strcpy(s_browser_fat_path, "/");
+        }
+    } else if (strchr(fat_p, '*') || strchr(fat_p, '?')) {
+        filt = set_browser_filter(fat_p);
+    } else if ((len = strlen(fat_p)) > 0 && fat_p[len - 1] == '/') {
+        if (fat_p[0] == '/') {
+            strncpy(s_browser_fat_path, fat_p, 31);
+        } else {
+            size_t plen = strlen(s_browser_fat_path);
+            if (plen == 0 || s_browser_fat_path[plen - 1] != '/') {
+                strcat(s_browser_fat_path, "/");
+            }
+            strncat(s_browser_fat_path, fat_p,
+                    31 - strlen(s_browser_fat_path));
+        }
+        s_browser_fat_path[31] = '\0';
+        len = strlen(s_browser_fat_path);
+        if (len > 1 && s_browser_fat_path[len - 1] == '/') {
+            s_browser_fat_path[len - 1] = '\0';
+        }
+    } else {
+        return 0;
+    }
+
+    if (!filt) {
+        s_browser_filter[0] = '\0';
+    }
+    ui_browser_refresh_directory(filt);
+    return 1;
+}
+#endif
+
+static void format_browser_title(char *buf, const char *op_str)
+{
+#ifdef __CPM__
+    char *p = buf;
+    while (*op_str) *p++ = *op_str++;
+    strcpy(p, " (DIRECTORY - DRIVE ");
+    p += 20;
+    if (s_browser_is_fat) {
+        *p++ = 'U';
+        if (s_browser_fat_unit != 0xFF) {
+            *p++ = (char)('0' + s_browser_fat_unit);
+        }
+        *p++ = ':';
+        strcpy(p, s_browser_fat_path);
+        p += strlen(p);
+        if (*(p - 1) != '/') {
+            *p++ = '/';
+        }
+    } else {
+        *p++ = s_browser_drive;
+        if (s_browser_user >= 10) {
+            *p++ = '1';
+            *p++ = (char)('0' + (s_browser_user - 10));
+        } else if (s_browser_user > 0) {
+            *p++ = (char)('0' + s_browser_user);
+        }
+        *p++ = ':';
+    }
+    if (s_browser_filter[0]) {
+        *p++ = ' ';
+        *p++ = '[';
+        strcpy(p, s_browser_filter);
+        p += strlen(p);
+        *p++ = ']';
+    }
+    *p++ = ')';
+    *p = '\0';
+#else
+    snprintf(buf, 80, "%s (DIRECTORY)", op_str);
+#endif
+}
+
+static void render_browser_screen(const char *op_str, const char *prompt_txt)
+{
+    uint8_t grid_rows, file_rows, prompt_rows, body_rows;
+    uint8_t r, col, screen_row, tlen, title_spaces;
+    int avail;
+
+    hal_console_hide_cursor();
+    format_browser_title(s_title_buf, op_str);
+
+    if (s_cur_page >= s_total_pages) s_cur_page = s_total_pages - 1;
+    if (s_cur_page < 0) s_cur_page = 0;
+    s_page_start = s_cur_page * s_files_per_page;
+    s_page_files = s_browser_count - s_page_start;
+    if (s_page_files < 0) s_page_files = 0;
+    if (s_page_files > s_files_per_page) {
+        s_page_files = s_files_per_page;
+    }
+
+    grid_rows = (s_page_files > 0)
+        ? (uint8_t)((s_page_files + s_num_cols - 1) / s_num_cols) : 0;
+    file_rows = (s_page_files == 0) ? 2 : (uint8_t)(grid_rows + 1);
+    prompt_rows = (uint8_t)(3 + ((s_total_pages >= 2) ? 1 : 0) +
+                            (s_is_save ? 1 : 0));
+    body_rows = (uint8_t)(file_rows + prompt_rows);
+    avail = (int)g_active_rows - 4 - (int)body_rows;
+    s_top_pad = (avail > 0) ? (uint8_t)(avail / 2) : 0;
+
+    for (r = 1; r <= s_top_pad; r++) {
+        draw_tilde_row(r);
+        hal_console_clear_eol();
+    }
+
+    screen_row = (uint8_t)(s_top_pad + 1);
+    draw_rule_row(screen_row, '=');
+
+    screen_row++;
+    draw_tilde_row(screen_row);
+    tlen = (uint8_t)strlen(s_title_buf);
+    title_spaces = (g_active_cols > tlen + 2)
+        ? (uint8_t)(((g_active_cols - tlen) / 2) - 1) : 1;
+    for (r = 0; r < title_spaces; r++) hal_console_putc(' ');
+    hal_console_puts(s_title_buf);
+    hal_console_clear_eol();
+
+    screen_row++;
+    draw_rule_row(screen_row, '=');
+
+    if (s_page_files == 0) {
+        screen_row++;
+        emit_left_pad(screen_row);
+#ifdef __CPM__
+        hal_console_puts("[No files found on current drive]");
+#else
+        hal_console_puts("[No files found in directory]");
+#endif
+        hal_console_clear_eol();
+    } else {
+        uint8_t idx = 0;
+        for (r = 0; r < grid_rows; r++) {
+            screen_row++;
+            emit_left_pad(screen_row);
+            for (col = 0; col < s_num_cols; col++) {
+                if (idx < (uint8_t)s_page_files) {
+                    puts_padded(get_entry_name(s_page_start + idx),
+                                s_col_width);
+                    idx++;
+                }
+            }
+            hal_console_clear_eol();
+        }
+    }
+
+    screen_row++;
+    draw_tilde_row(screen_row);
+    hal_console_clear_eol();
+
+    screen_row++;
+    draw_rule_row(screen_row, '-');
+
+    if (s_total_pages >= 2) {
+        screen_row++;
+        emit_left_pad(screen_row);
+#ifdef __CPM__
+        {
+            char *p = s_page_buf;
+            strcpy(p, "[Page "); p += 6;
+            p = se_append_u16(p, (uint16_t)(s_cur_page + 1));
+            *p++ = '/';
+            p = se_append_u16(p, (uint16_t)s_total_pages);
+            strcpy(p, "]  <PgUp>/<PgDn>=Page");
+        }
+#else
+        snprintf(s_page_buf, 40,
+                 "[Page %d/%d]  <PgUp>/<PgDn>=Page",
+                 (int)(uint8_t)(s_cur_page + 1),
+                 (int)(uint8_t)s_total_pages);
+#endif
+        hal_console_puts(s_page_buf);
+        hal_console_clear_eol();
+    }
+
+    if (s_is_save) {
+        screen_row++;
+        draw_save_fmt_row(screen_row);
+    }
+
+    screen_row++;
+    emit_left_pad(screen_row);
+#ifdef __CPM__
+    hal_console_puts(
+        "[ESC]=Cancel  Enter [d:][u:][pattern] to list "
+        "(e.g. B:, C1:, 1C:, *.TXT)");
+#else
+    hal_console_puts(
+        "[ESC]=Cancel  Enter [path/][pattern] to list "
+        "(e.g. src/, *.c, *.txt)");
+#endif
+    hal_console_clear_eol();
+
+    screen_row++;
+    s_prompt_row = screen_row;
+    render_browser_prompt(prompt_txt);
+
+    for (r = (uint8_t)(s_prompt_row + 1); r < g_active_rows; r++) {
+        draw_tilde_row(r);
+        hal_console_clear_eol();
+    }
+
+    render_status_bar();
+
+    if (s_hl_auto_mode != 0 && s_page_files > 0) {
+        uint8_t target = (s_hl_auto_mode == 1)
+            ? 0 : (uint8_t)(s_page_files - 1);
+        s_hl_auto_mode = 0;
+        activate_hl_at(target);
+    } else if (s_hl_active && s_page_files > 0) {
+        if (s_hl_index >= (uint8_t)s_page_files) {
+            s_hl_index = (uint8_t)(s_page_files - 1);
+        }
+        hal_console_hide_cursor();
+        draw_hl_cell(1);
+    } else {
+        s_hl_active = 0;
+        s_hl_auto_mode = 0;
+        locate_input_cursor();
+    }
+}
+
+static int browser_handle_enter(int mode, char *selected_filename,
+                                size_t max_len)
+{
+#ifdef __CPM__
+    uint8_t u_unit = 0xFF;
+    const char *fat_p = cpm_parse_fat_path(s_in_buf, &u_unit);
+    if (fat_p != NULL) {
+        if (plugin_find_vfs() < 0) {
+            plugin_alert_fat_missing();
+            return -1;
+        }
+        while (*fat_p == ' ') fat_p++;
+        s_browser_is_fat = 1;
+        if (u_unit != 0xFF) s_browser_fat_unit = u_unit;
+    } else if (s_browser_is_fat) {
+        uint8_t cpm_drv = 0, cpm_usr = 0xFF;
+        const char *cpm_rest = cpm_parse_prefix(s_in_buf, &cpm_drv, &cpm_usr);
+        if (cpm_rest > s_in_buf && cpm_drv != 0) {
+            s_browser_is_fat = 0;
+            s_browser_drive = (char)('A' + cpm_drv - 1);
+            s_browser_user = (cpm_usr != 0xFF) ? cpm_usr : 0;
+            s_browser_filter[0] = '\0';
+            ui_browser_refresh_directory(NULL);
+            return -1;
+        }
+        fat_p = s_in_buf;
+    }
+
+    if (s_browser_is_fat && fat_p != NULL) {
+        if (handle_fat_nav(fat_p)) {
+            return -1;
+        }
+        format_fat_selection(selected_filename, fat_p);
+        return 1;
+    }
+
+    {
+        uint8_t drv = 0, usr = 0xFF;
+        const char *rest = cpm_parse_prefix(s_in_buf, &drv, &usr);
+        int orig_u;
+        uint8_t exists;
+
+        while (*rest == ' ') rest++;
+        if (rest > s_in_buf) {
+            if (drv != 0) s_browser_drive = (char)('A' + drv - 1);
+            if (usr != 0xFF) s_browser_user = usr;
+        }
+
+        if (g_ramdrive_char != 0 &&
+            g_config.ramdrive_mode != RAMDRV_MODE_PROTECTED &&
+            s_browser_drive == g_ramdrive_char) {
+            modal_alert("RAM Drive Unavailable",
+                        "Drive is used for editor memory.", NULL);
+            return -1;
+        }
+
+        if (*rest == '\0') {
+            if (rest > s_in_buf) {
+                s_browser_filter[0] = '\0';
+                ui_browser_refresh_directory(NULL);
+                return -1;
+            }
+            return 0;
+        }
+
+        if (strchr(rest, '*') || strchr(rest, '?')) {
+            ui_browser_refresh_directory(set_browser_filter(rest));
+            return -1;
+        }
+
+        if (mode == BROWSER_MODE_LOAD_PLUGIN) {
+            char plug_fn[24];
+            int slot;
+            format_drv_usr_str(plug_fn, s_browser_drive, s_browser_user, rest);
+            slot = plugin_load_by_name(plug_fn);
+            if (slot < 0) {
+                modal_alert_file_not_found(rest);
+                return -1;
+            }
+            return slot;
+        }
+
+        file_populate_fcb(rest, (cpm_fcb_t *)s_dir_fcb);
+        s_dir_fcb[0] = (uint8_t)(s_browser_drive - 'A' + 1);
+        orig_u = bdos(32, 0xFF);
+        bdos(32, s_browser_user);
+        exists = (uint8_t)bdos(15, (int)s_dir_fcb);
+        if (exists != 0xFF) {
+            bdos(16, (int)s_dir_fcb);
+        }
+        bdos(32, orig_u);
+
+        if (mode == BROWSER_MODE_OPEN || mode == BROWSER_MODE_INSERT) {
+            if (exists == 0xFF) {
+                modal_alert_file_not_found(rest);
+                return -1;
+            }
+        } else if (exists != 0xFF) {
+            if (modal_confirm_overwrite() != MODAL_RES_OK) {
+                return 0;
+            }
+        }
+
+        format_drv_usr_str(selected_filename, s_browser_drive, s_browser_user,
+                           rest);
+        (void)max_len;
+        return 1;
+    }
+#else
+    if (strchr(s_in_buf, '*') || strchr(s_in_buf, '?')) {
+        ui_browser_refresh_directory(s_in_buf);
+        return -1;
+    }
+#ifdef __linux__
+    if (s_in_buf[strlen(s_in_buf) - 1] == '/') {
+        hal_linux_scan_directory(s_in_buf);
+        s_in_buf[0] = '\0';
+        return -1;
+    }
+#endif
+    {
+        char check_path[256];
+        resolve_linux_path(s_in_buf, check_path, sizeof(check_path), NULL);
+        if (mode == BROWSER_MODE_OPEN || mode == BROWSER_MODE_INSERT) {
+            FILE *fp_check = fopen(check_path, "rb");
+            if (!fp_check) {
+                modal_alert_file_not_found(check_path);
+                return -1;
+            }
+            fclose(fp_check);
+        } else {
+            FILE *fp_check = fopen(check_path, "rb");
+            if (fp_check) {
+                fclose(fp_check);
+                if (modal_confirm_overwrite() != MODAL_RES_OK) {
+                    return -1;
+                }
+            }
+        }
+    }
+    strncpy(selected_filename, s_in_buf, max_len - 1);
+    selected_filename[max_len - 1] = '\0';
+    return 1;
+#endif
 }
 
 static int ui_browser_workspace(int mode, char *selected_filename,
@@ -392,29 +914,53 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                           mode == BROWSER_MODE_SAVE_BLOCK);
     g_is_splash_screen = 1;
 
-    if (mode == BROWSER_MODE_OPEN) {
-        op_str = "OPEN FILE";
-        prompt_txt = "Enter filename to open:";
-    } else if (mode == BROWSER_MODE_INSERT) {
-        op_str = "INSERT FILE";
-        prompt_txt = "Enter filename to insert:";
-    } else if (mode == BROWSER_MODE_LOAD_PLUGIN) {
-        op_str = "LOAD PLUGIN";
-        prompt_txt = "Load Plugin (.PRL/.OVL):";
-    } else if (mode == BROWSER_MODE_SAVE_BLOCK) {
-        op_str = "SAVE BLOCK";
-        prompt_txt = "Enter filename to save:";
-    } else {
-        op_str = "SAVE FILE";
-        prompt_txt = "Enter filename to save:";
+    {
+        static const char *s_mode_ops[] = {
+            "OPEN FILE", "INSERT FILE", "SAVE FILE",
+            "SAVE BLOCK", "LOAD PLUGIN"
+        };
+        static const char *s_mode_prompts[] = {
+            "Enter filename to open:", "Enter filename to insert:",
+            "Enter filename to save:", "Enter filename to save:",
+            "Load Plugin (.PRL/.OVL):"
+        };
+        op_str = s_mode_ops[mode];
+        prompt_txt = s_mode_prompts[mode];
     }
 
 #ifdef __CPM__
+    if (g_doc_is_fat) {
+        char *last_slash;
+        s_browser_is_fat = 1;
+        s_browser_fat_unit = g_doc_fat_unit;
+        strcpy(s_browser_fat_path, g_doc_fat_path);
+        last_slash = strrchr(s_browser_fat_path, '/');
+        if (last_slash && last_slash != s_browser_fat_path) {
+            *(last_slash + 1) = '\0';
+        } else {
+            strcpy(s_browser_fat_path, "/");
+        }
+    } else {
+        s_browser_is_fat = 0;
+        s_browser_fat_unit = 0xFF;
+        strcpy(s_browser_fat_path, "/");
+    }
     s_browser_drive = g_doc_drive ? (char)('A' + g_doc_drive - 1)
                                   : (char)('A' + bdos(25, 0));
     s_browser_user = g_doc_drive ? g_doc_user : (uint8_t)bdos(32, 0xFF);
     s_browser_filter[0] = '\0';
-    {
+    if (s_browser_is_fat) {
+        if (mode == BROWSER_MODE_SAVE && g_doc_is_fat &&
+            g_doc_fat_path[0] != '\0') {
+            s_in_buf[0] = 'U';
+            s_in_buf[1] = (char)('0' + g_doc_fat_unit);
+            s_in_buf[2] = ':';
+            strncpy(s_in_buf + 3, g_doc_fat_path, IN_BUF_CAP - 4);
+            s_in_buf[IN_BUF_CAP - 1] = '\0';
+        } else {
+            reset_browser_input_prefix();
+        }
+    } else {
         const char *bare = "";
         if (mode == BROWSER_MODE_SAVE && g_current_filename[0] != '\0') {
             const char *col = strchr(g_current_filename, ':');
@@ -447,178 +993,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             : 1;
 
         if (need_full_render) {
-            uint8_t grid_rows, file_rows, prompt_rows, body_rows;
-            uint8_t r, col, screen_row, tlen, title_spaces;
-            int avail;
-
-            hal_console_hide_cursor();
-#ifdef __CPM__
-            strcpy(s_title_buf, op_str);
-            strcat(s_title_buf, " (DIRECTORY - DRIVE ");
-            tlen = (uint8_t)strlen(s_title_buf);
-            s_title_buf[tlen++] = s_browser_drive;
-            if (s_browser_user >= 10) {
-                s_title_buf[tlen++] = '1';
-                s_title_buf[tlen++] = (char)('0' + (s_browser_user - 10));
-            } else if (s_browser_user > 0) {
-                s_title_buf[tlen++] = (char)('0' + s_browser_user);
-            }
-            s_title_buf[tlen++] = ':';
-            s_title_buf[tlen] = '\0';
-            if (s_browser_filter[0] != '\0') {
-                strcat(s_title_buf, " [");
-                strcat(s_title_buf, s_browser_filter);
-                strcat(s_title_buf, "]");
-            }
-            strcat(s_title_buf, ")");
-#else
-            snprintf(s_title_buf, 80, "%s (DIRECTORY)", op_str);
-#endif
-
-            if (s_cur_page >= s_total_pages) s_cur_page = s_total_pages - 1;
-            if (s_cur_page < 0) s_cur_page = 0;
-            s_page_start = s_cur_page * s_files_per_page;
-            s_page_files = s_browser_count - s_page_start;
-            if (s_page_files < 0) s_page_files = 0;
-            if (s_page_files > s_files_per_page) {
-                s_page_files = s_files_per_page;
-            }
-
-            grid_rows = (s_page_files > 0)
-                ? (uint8_t)((s_page_files + s_num_cols - 1) / s_num_cols) : 0;
-            file_rows = (s_page_files == 0) ? 2 : (uint8_t)(grid_rows + 1);
-            prompt_rows = (uint8_t)(3 + ((s_total_pages >= 2) ? 1 : 0) +
-                                    (s_is_save ? 1 : 0));
-            body_rows = (uint8_t)(file_rows + prompt_rows);
-            avail = (int)g_active_rows - 4 - (int)body_rows;
-            s_top_pad = (avail > 0) ? (uint8_t)(avail / 2) : 0;
-
-            for (r = 1; r <= s_top_pad; r++) {
-                draw_tilde_row(r);
-                hal_console_clear_eol();
-            }
-
-            screen_row = (uint8_t)(s_top_pad + 1);
-            draw_rule_row(screen_row, '=');
-
-            screen_row++;
-            draw_tilde_row(screen_row);
-            tlen = (uint8_t)strlen(s_title_buf);
-            title_spaces = (g_active_cols > tlen + 2)
-                ? (uint8_t)(((g_active_cols - tlen) / 2) - 1) : 1;
-            for (r = 0; r < title_spaces; r++) hal_console_putc(' ');
-            hal_console_puts(s_title_buf);
-            hal_console_clear_eol();
-
-            screen_row++;
-            draw_rule_row(screen_row, '=');
-
-            if (s_page_files == 0) {
-                screen_row++;
-                emit_left_pad(screen_row);
-#ifdef __CPM__
-                hal_console_puts("[No files found on current drive]");
-#else
-                hal_console_puts("[No files found in directory]");
-#endif
-                hal_console_clear_eol();
-            } else {
-                uint8_t idx = 0;
-                for (r = 0; r < grid_rows; r++) {
-                    screen_row++;
-                    emit_left_pad(screen_row);
-                    for (col = 0; col < s_num_cols; col++) {
-                        if (idx < (uint8_t)s_page_files) {
-                            puts_padded(
-                                get_entry_name(s_page_start + idx),
-                                s_col_width);
-                            idx++;
-                        }
-                    }
-                    hal_console_clear_eol();
-                }
-            }
-
-            screen_row++;
-            draw_tilde_row(screen_row);
-            hal_console_clear_eol();
-
-            screen_row++;
-            draw_rule_row(screen_row, '-');
-
-            if (s_total_pages >= 2) {
-                screen_row++;
-                emit_left_pad(screen_row);
-#ifdef __CPM__
-                {
-                    uint8_t pi = 0;
-                    uint8_t cp = (uint8_t)(s_cur_page + 1);
-                    uint8_t tp = (uint8_t)s_total_pages;
-                    memcpy(s_page_buf, "[Page ", 6);
-                    pi = 6;
-                    if (cp >= 10) s_page_buf[pi++] = (char)('0' + cp / 10);
-                    s_page_buf[pi++] = (char)('0' + cp % 10);
-                    s_page_buf[pi++] = '/';
-                    if (tp >= 10) s_page_buf[pi++] = (char)('0' + tp / 10);
-                    s_page_buf[pi++] = (char)('0' + tp % 10);
-                    strcpy(s_page_buf + pi, "]  <PgUp>/<PgDn>=Page");
-                }
-#else
-                snprintf(s_page_buf, 40,
-                         "[Page %d/%d]  <PgUp>/<PgDn>=Page",
-                         (int)(uint8_t)(s_cur_page + 1),
-                         (int)(uint8_t)s_total_pages);
-#endif
-                hal_console_puts(s_page_buf);
-                hal_console_clear_eol();
-            }
-
-            if (s_is_save) {
-                screen_row++;
-                draw_save_fmt_row(screen_row);
-            }
-
-            screen_row++;
-            emit_left_pad(screen_row);
-#ifdef __CPM__
-            hal_console_puts(
-                "[ESC]=Cancel  Enter [d:][u:][pattern] to list "
-                "(e.g. B:, C1:, 1C:, *.TXT)");
-#else
-            hal_console_puts(
-                "[ESC]=Cancel  Enter [path/][pattern] to list "
-                "(e.g. src/, *.c, *.txt)");
-#endif
-            hal_console_clear_eol();
-
-            screen_row++;
-            s_prompt_row = screen_row;
-            render_browser_prompt(prompt_txt);
-
-            for (r = (uint8_t)(s_prompt_row + 1); r < g_active_rows; r++) {
-                draw_tilde_row(r);
-                hal_console_clear_eol();
-            }
-
-            render_status_bar();
-
-            if (s_hl_auto_mode != 0 && s_page_files > 0) {
-                uint8_t target = (s_hl_auto_mode == 1)
-                    ? 0 : (uint8_t)(s_page_files - 1);
-                s_hl_auto_mode = 0;
-                activate_hl_at(target);
-            } else if (s_hl_active && s_page_files > 0) {
-                if (s_hl_index >= (uint8_t)s_page_files) {
-                    s_hl_index = (uint8_t)(s_page_files - 1);
-                }
-                hal_console_hide_cursor();
-                draw_hl_cell(1);
-            } else {
-                s_hl_active = 0;
-                s_hl_auto_mode = 0;
-                locate_input_cursor();
-            }
-
+            render_browser_screen(op_str, prompt_txt);
             need_full_render = 0;
         }
 
@@ -668,176 +1043,26 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 need_full_render = 1;
             }
         } else if (k == KEY_ENTER || k == '\n' || k == '\r') {
+            int res;
             hal_console_show_cursor();
             g_need_screen_render = 1;
             if (s_in_buf[0] == '\0') {
                 g_is_splash_screen = prev_splash;
                 return MODAL_RES_CANCEL;
             }
-#ifdef __CPM__
-            {
-                uint8_t drv = 0, usr = 0xFF;
-                char target_drv;
-                const char *rest = cpm_parse_prefix(s_in_buf, &drv, &usr);
-                while (*rest == ' ') rest++;
-                target_drv = (rest > s_in_buf && drv != 0)
-                    ? (char)('A' + drv - 1) : s_browser_drive;
-                if (g_ramdrive_char != 0 &&
-                    g_config.ramdrive_mode != RAMDRV_MODE_PROTECTED &&
-                    target_drv == g_ramdrive_char) {
-                    modal_alert("RAM Drive Unavailable",
-                                "Drive is used for editor memory.", NULL);
-                    need_full_render = 1;
-                    continue;
-                }
-
-                if (rest > s_in_buf && *rest == '\0') {
-                    if (drv != 0) s_browser_drive = (char)('A' + drv - 1);
-                    s_browser_user = (usr != 0xFF) ? usr : 0;
-                    s_browser_filter[0] = '\0';
-                    ui_browser_refresh_directory(NULL);
-                    goto reset_view;
-                }
-
-                if (strchr(rest, '*') || strchr(rest, '?')) {
-                    uint8_t fi = 0;
-                    if (rest > s_in_buf) {
-                        if (drv != 0) s_browser_drive = (char)('A' + drv - 1);
-                        s_browser_user = (usr != 0xFF) ? usr : 0;
-                    }
-                    while (rest[fi] && rest[fi] != ' ' &&
-                           fi + 1 < sizeof(s_browser_filter)) {
-                        char ch = rest[fi];
-                        if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 32);
-                        s_browser_filter[fi++] = ch;
-                    }
-                    s_browser_filter[fi] = '\0';
-                    if (strcmp(s_browser_filter, "*.*") == 0) {
-                        s_browser_filter[0] = '\0';
-                    }
-                    ui_browser_refresh_directory(s_browser_filter);
-reset_view:
-                    s_cur_page = 0;
-                    s_hl_active = 0;
-                    s_hl_index = 0;
-                    s_hl_auto_mode = 0;
-                    s_cursor_pos = (uint8_t)strlen(s_in_buf);
-                    need_full_render = 1;
-                    continue;
-                }
-
-                if (*rest == '\0') {
-                    g_is_splash_screen = prev_splash;
-                    return MODAL_RES_CANCEL;
-                }
-
-                {
-                    char eff_drv = s_browser_drive;
-                    uint8_t eff_usr = s_browser_user;
-                    int orig_u;
-                    uint8_t exists;
-
-                    if (rest > s_in_buf) {
-                        if (drv != 0) eff_drv = (char)('A' + drv - 1);
-                        if (usr != 0xFF) eff_usr = usr;
-                    }
-                    if (mode == BROWSER_MODE_LOAD_PLUGIN) {
-                        char plug_fn[24];
-                        int slot;
-                        format_drv_usr_str(plug_fn, eff_drv, eff_usr, rest);
-                        slot = plugin_load_by_name(plug_fn);
-                        if (slot < 0) {
-                            modal_alert_file_not_found(rest);
-                            need_full_render = 1;
-                            continue;
-                        }
-                        g_is_splash_screen = prev_splash;
-                        return slot;
-                    }
-                    file_populate_fcb(rest, (cpm_fcb_t *)s_dir_fcb);
-                    s_dir_fcb[0] = (uint8_t)(eff_drv - 'A' + 1);
-                    orig_u = bdos(32, 0xFF);
-                    bdos(32, eff_usr);
-                    exists = (uint8_t)bdos(15, (int)s_dir_fcb);
-                    if (exists != 0xFF) {
-                        bdos(16, (int)s_dir_fcb);
-                    }
-                    bdos(32, orig_u);
-
-                    if (mode == BROWSER_MODE_OPEN ||
-                        mode == BROWSER_MODE_INSERT) {
-                        if (exists == 0xFF) {
-                            modal_alert_file_not_found(rest);
-                            need_full_render = 1;
-                            continue;
-                        }
-                    } else if (exists != 0xFF) {
-                        if (modal_confirm_overwrite() != MODAL_RES_OK) {
-                            g_need_screen_render = 1;
-                            g_is_splash_screen = prev_splash;
-                            return MODAL_RES_CANCEL;
-                        }
-                    }
-
-                    format_drv_usr_str(selected_filename, eff_drv, eff_usr,
-                                       rest);
-                    (void)max_len;
-                    g_is_splash_screen = prev_splash;
-                    return MODAL_RES_OK;
-                }
+            res = browser_handle_enter(mode, selected_filename, max_len);
+            if (res >= 0) {
+                g_is_splash_screen = prev_splash;
+                return (res == 1) ? MODAL_RES_OK :
+                       ((res == 0) ? MODAL_RES_CANCEL : res);
             }
-#else
-            if (strchr(s_in_buf, '*') || strchr(s_in_buf, '?')) {
-                ui_browser_refresh_directory(s_in_buf);
-                s_cur_page = 0;
-                s_hl_active = 0;
-                s_hl_index = 0;
-                s_hl_auto_mode = 0;
-                s_cursor_pos = (uint8_t)strlen(s_in_buf);
-                need_full_render = 1;
-                continue;
-            }
-#ifdef __linux__
-            if (s_in_buf[strlen(s_in_buf) - 1] == '/') {
-                hal_linux_scan_directory(s_in_buf);
-                s_cur_page = 0;
-                s_hl_active = 0;
-                s_hl_index = 0;
-                s_hl_auto_mode = 0;
-                s_in_buf[0] = '\0';
-                s_cursor_pos = 0;
-                need_full_render = 1;
-                continue;
-            }
-#endif
-            {
-                char check_path[256];
-                resolve_linux_path(s_in_buf, check_path,
-                                   sizeof(check_path), NULL);
-                if (mode == BROWSER_MODE_OPEN || mode == BROWSER_MODE_INSERT) {
-                    FILE *fp_check = fopen(check_path, "rb");
-                    if (!fp_check) {
-                        modal_alert_file_not_found(check_path);
-                        need_full_render = 1;
-                        continue;
-                    }
-                    fclose(fp_check);
-                } else {
-                    FILE *fp_check = fopen(check_path, "rb");
-                    if (fp_check) {
-                        fclose(fp_check);
-                        if (modal_confirm_overwrite() != MODAL_RES_OK) {
-                            need_full_render = 1;
-                            continue;
-                        }
-                    }
-                }
-            }
-            strncpy(selected_filename, s_in_buf, max_len - 1);
-            selected_filename[max_len - 1] = '\0';
-            g_is_splash_screen = prev_splash;
-            return MODAL_RES_OK;
-#endif
+            reset_browser_input_prefix();
+            s_cur_page = 0;
+            s_hl_active = 0;
+            s_hl_index = 0;
+            s_hl_auto_mode = 0;
+            need_full_render = 1;
+            continue;
         } else if (s_hl_active) {
             uint8_t new_idx = s_hl_index;
             if (k == KEY_LEFT && s_hl_index > 0) {
@@ -859,30 +1084,30 @@ reset_view:
             }
         } else if (k == KEY_BACKSPACE || k == '\b' || k == 8) {
             if (s_cursor_pos > 0) {
-                memmove(&s_in_buf[s_cursor_pos - 1], &s_in_buf[s_cursor_pos],
-                        strlen(&s_in_buf[s_cursor_pos]) + 1);
                 s_cursor_pos--;
+                strcpy(&s_in_buf[s_cursor_pos], &s_in_buf[s_cursor_pos + 1]);
                 refresh_browser_box();
             }
         } else if (k == KEY_DEL || k == KEY_CTRL_D || k == KEY_CTRL_G) {
-            if (s_cursor_pos < (uint8_t)strlen(s_in_buf)) {
-                memmove(&s_in_buf[s_cursor_pos], &s_in_buf[s_cursor_pos + 1],
-                        strlen(&s_in_buf[s_cursor_pos + 1]) + 1);
+            if (s_in_buf[s_cursor_pos]) {
+                strcpy(&s_in_buf[s_cursor_pos], &s_in_buf[s_cursor_pos + 1]);
                 refresh_browser_box();
             }
-        } else if (k == KEY_LEFT || k == KEY_CTRL_S || k == KEY_RIGHT ||
-                   k == KEY_HOME || k == KEY_CTRL_A ||
-                   k == KEY_END || k == KEY_CTRL_E) {
-            uint8_t in_len = (uint8_t)strlen(s_in_buf);
-            if ((k == KEY_LEFT || k == KEY_CTRL_S) && s_cursor_pos > 0) {
+        } else if (k == KEY_LEFT || k == KEY_CTRL_S) {
+            if (s_cursor_pos > 0) {
                 s_cursor_pos--;
-            } else if (k == KEY_RIGHT && s_cursor_pos < in_len) {
-                s_cursor_pos++;
-            } else if (k == KEY_HOME || k == KEY_CTRL_A) {
-                s_cursor_pos = 0;
-            } else if (k == KEY_END || k == KEY_CTRL_E) {
-                s_cursor_pos = in_len;
+                locate_input_cursor();
             }
+        } else if (k == KEY_RIGHT) {
+            if (s_in_buf[s_cursor_pos]) {
+                s_cursor_pos++;
+                locate_input_cursor();
+            }
+        } else if (k == KEY_HOME || k == KEY_CTRL_A) {
+            s_cursor_pos = 0;
+            locate_input_cursor();
+        } else if (k == KEY_END || k == KEY_CTRL_E) {
+            s_cursor_pos = (uint8_t)strlen(s_in_buf);
             locate_input_cursor();
         } else if (k >= 32 && k <= 126) {
             uint8_t in_len = (uint8_t)strlen(s_in_buf);

@@ -1,3 +1,4 @@
+#include "../include/buffer.h"
 /*==============================================================================
  * MEMORY.C: Virtual Slot Allocator, Paging Engine & Far RAM Abstraction
  *

@@ -432,45 +432,37 @@ int do_move_block(void)
 
 int do_block_menu_popup(void)
 {
-    uint8_t width = 50;
-    uint8_t height = 7;
-    uint8_t top = (uint8_t)(((g_active_rows - height) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - width) / 2) + 1);
+    uint8_t top, left;
     char metrics[32];
     char fname[32];
-    const char *pre;
     int key;
 
     normalize_block_bounds();
-
-    hal_console_hide_cursor();
-    modal_draw_frame(top, left, width, height, "Block Operations");
+    modal_init_7row(&top, &left, "Block Operations");
 
     /* Line 4: Dynamic Selection / Block count */
-    pre = (g_block_mode == BLOCK_MODE_SOLIDIFIED) ?
-          "Marked Block: " : "Selection: ";
     {
         uint16_t cnt;
-        const char *unit;
         char *p;
+        strcpy(metrics, (g_block_mode == BLOCK_MODE_SOLIDIFIED) ?
+               "Marked Block: " : "Selection: ");
         if (g_norm_start_row == g_norm_end_row) {
             cnt = (g_norm_end_col >= g_norm_start_col) ?
                   (g_norm_end_col - g_norm_start_col) : 0;
-            unit = (cnt == 1) ? " char" : " chars";
         } else {
             cnt = g_norm_end_row - g_norm_start_row +
                   ((g_norm_end_col > 0) ? 1 : 0);
-            unit = (cnt == 1) ? " line" : " lines";
         }
-        strcpy(metrics, pre);
         p = se_append_u16(metrics + strlen(metrics), cnt);
-        strcpy(p, unit);
+        strcpy(p, (g_norm_start_row == g_norm_end_row) ?
+               ((cnt == 1) ? " char" : " chars") :
+               ((cnt == 1) ? " line" : " lines"));
     }
-    modal_draw_row_centered(top + 3, left, width, metrics);
+    modal_draw_row_centered(top + 3, left, 50, metrics);
 
     /* Line 5: Primary Actions (Dynamic vs Solidified) */
     modal_draw_row_centered(
-        top + 4, left, width,
+        top + 4, left, 50,
         (g_block_mode == BLOCK_MODE_SOLIDIFIED) ?
         "[^C]=Copy Block      [^X]=Move Block" :
         "[Enter]=Lock/Set    [^C]=Copy    [^X]=Move"
@@ -478,36 +470,39 @@ int do_block_menu_popup(void)
 
     /* Line 6: Commands */
     modal_draw_row_centered(
-        top + 5, left, width,
+        top + 5, left, 50,
         "[^D]=Del  [^S]=Save  [^B]=Clear  [ESC]=Close"
     );
 
     while (1) {
         key = hal_console_getkey();
+        if (key >= 'a' && key <= 'z') {
+            key -= 32;
+        }
         if (key == KEY_ESC) {
             break;
-        } else if (key == KEY_ENTER) {
-            solidify_block();
-            break;
-        } else if (key == KEY_CTRL_B || key == 'b' || key == 'B') {
+        }
+        if (key == KEY_CTRL_B || key == 'B') {
             cancel_block();
             break;
-        } else if (key == KEY_CTRL_C || key == 'c' || key == 'C') {
-            solidify_block();
+        }
+        solidify_block();
+        if (key == KEY_ENTER) {
+            break;
+        }
+        if (key == KEY_CTRL_C || key == 'C') {
             do_copy_block();
             break;
-        } else if (key == KEY_CTRL_X || key == 'x' || key == 'X' ||
-                   key == 'm' || key == 'M') {
-            solidify_block();
+        }
+        if (key == KEY_CTRL_X || key == 'X' || key == 'M') {
             do_move_block();
             break;
-        } else if (key == KEY_CTRL_D || key == 'd' || key == 'D' ||
-                   key == KEY_DEL) {
-            solidify_block();
+        }
+        if (key == KEY_CTRL_D || key == 'D' || key == KEY_DEL) {
             do_delete_block();
             break;
-        } else if (key == KEY_CTRL_S || key == 's' || key == 'S') {
-            solidify_block();
+        }
+        if (key == KEY_CTRL_S || key == 'S') {
             normalize_block_bounds();
             fname[0] = '\0';
             if (ui_browser_save_block_dialog(fname, sizeof(fname)) ==
@@ -516,8 +511,8 @@ int do_block_menu_popup(void)
                                 g_norm_end_row, g_file_format);
             }
             break;
-        } else if (key == KEY_CTRL_O || key == 'r' || key == 'R') {
-            solidify_block();
+        }
+        if (key == KEY_CTRL_O || key == 'R') {
             fname[0] = '\0';
             if (ui_browser_insert_dialog(fname, sizeof(fname)) ==
                 MODAL_RES_OK && fname[0]) {

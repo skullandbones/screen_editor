@@ -101,6 +101,9 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
 
     {
         uint8_t in_inv = 0;
+#define SET_INV(w) do { uint8_t _w = (uint8_t)(w); if (_w != in_inv) { \
+    if (_w) hal_console_inverse_on(); else hal_console_inverse_off(); \
+    in_inv = _w; } } while (0)
         for (i = 0; i < len && vis_col < g_horiz_pan_offset + max_content_cols;
              i++) {
             char c = line_buf[i];
@@ -114,12 +117,7 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
                                        vis_col + 1 == g_horiz_pan_offset +
                                                       max_content_cols &&
                                        (vis_col + 1 < next_tab || i + 1 < len));
-                        uint8_t want_inv = (uint8_t)(in_blk || cont_hl);
-                        if (want_inv != in_inv) {
-                            if (want_inv) hal_console_inverse_on();
-                            else hal_console_inverse_off();
-                            in_inv = want_inv;
-                        }
+                        SET_INV(in_blk || cont_hl);
                         hal_console_putc(' ');
                     }
                     vis_col++;
@@ -130,17 +128,13 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
                                    vis_col + 1 == g_horiz_pan_offset +
                                                   max_content_cols &&
                                    i + 1 < len);
-                    uint8_t want_inv = (uint8_t)(in_blk || cont_hl);
-                    if (want_inv != in_inv) {
-                        if (want_inv) hal_console_inverse_on();
-                        else hal_console_inverse_off();
-                        in_inv = want_inv;
-                    }
+                    SET_INV(in_blk || cont_hl);
                     hal_console_putc(c);
                 }
                 vis_col++;
             }
         }
+#undef SET_INV
         if (in_inv) {
             hal_console_inverse_off();
         }
@@ -229,7 +223,7 @@ void render_status_bar(void)
     char *sbuf = g_scratch_line_buf + 50;
     char *core = g_scratch_line_buf + 68;
     const char *f4 = "^K: Editor keys";
-    uint8_t pad, right_pad, i;
+    uint8_t pad, right_pad;
     uint16_t vis_col = 0;
     char *p;
 
@@ -249,14 +243,14 @@ void render_status_bar(void)
         strncpy(raw_name, g_current_filename, 16);
         raw_name[16] = '\0';
     }
-    i = (uint8_t)strlen(raw_name);
+    pad = (uint8_t)strlen(raw_name);
     if (g_doc_modified) {
-        if (i > 13) {
-            i = 13;
+        if (pad > 13) {
+            pad = 13;
         }
-        raw_name[i] = '*';
-        raw_name[i + 1] = '\0';
-    } else if (i > 14) {
+        raw_name[pad] = '*';
+        raw_name[pad + 1] = '\0';
+    } else if (pad > 14) {
         raw_name[14] = '\0';
     }
 
@@ -316,20 +310,18 @@ void render_status_bar(void)
         strcpy(p, " | Line    1/---- Col 0   |");
     } else {
         char nbuf[8];
-        uint8_t nl;
+        char *endp;
         memcpy(p, (g_file_format == FMT_CPM) ? "CP/M  | " : "Linux | ", 8);
         p += 8;
         p = copy_padded(p, f4, 15);
         memcpy(p, " | Line ", 8);
         p += 8;
-        append_u16(nbuf, (uint16_t)(g_cur_doc_row + 1));
-        nl = (uint8_t)strlen(nbuf);
-        while (nl < 4) {
+        endp = append_u16(nbuf, (uint16_t)(g_cur_doc_row + 1));
+        for (pad = (uint8_t)(endp - nbuf); pad < 4; pad++) {
             *p++ = ' ';
-            nl++;
         }
         strcpy(p, nbuf);
-        p += strlen(nbuf);
+        p += (uint8_t)(endp - nbuf);
         *p++ = '/';
         append_u16(nbuf, g_doc_total_lines);
         p = copy_padded(p, nbuf, 4);
@@ -346,11 +338,11 @@ void render_status_bar(void)
 
     hal_console_locate(g_active_rows, 1);
     hal_console_inverse_on();
-    for (i = 0; i < pad; i++) {
+    while (pad--) {
         hal_console_putc(' ');
     }
     hal_console_puts(core);
-    for (i = 0; i < right_pad; i++) {
+    while (right_pad--) {
         hal_console_putc(' ');
     }
     hal_console_inverse_off();
@@ -502,7 +494,13 @@ static void render_tier1_workspace_screen(const char **lines,
         hal_console_putc('~');
         if (r >= top_row && r < top_row + count) {
             line_idx = r - top_row;
-            if (lines[line_idx][0] != '\0') {
+            char ch = lines[line_idx][0];
+            if ((ch == '=' || ch == '-') && lines[line_idx][1] == '\0') {
+                uint8_t c;
+                for (c = 1; c < g_active_cols - 1; c++) {
+                    hal_console_putc(ch);
+                }
+            } else if (ch != '\0') {
                 hal_console_locate(r, left_col);
                 hal_console_puts(lines[line_idx]);
             }
@@ -594,6 +592,37 @@ static void render_splash_content(void)
     render_tier1_workspace_screen(s_splash_lines, base + 4, 40);
 }
 
+static int splash_confirm_save(void)
+{
+    if (g_doc_modified) {
+        g_is_splash_screen = 0;
+        clear_screen();
+        render_screen();
+        if (modal_confirm_save_changes() != MODAL_RES_OK) {
+            return 0;
+        }
+        g_is_splash_screen = 1;
+    }
+    return 1;
+}
+
+static void apply_screen_mode(uint8_t mode)
+{
+    clear_screen();
+    g_config.screen_mode = mode;
+    if (mode == MODE_120X40) {
+        g_active_cols = SCREEN_COLS_120;
+        g_active_rows = SCREEN_ROWS_40;
+    } else {
+        g_active_cols = SCREEN_COLS_80;
+        g_active_rows = SCREEN_ROWS_24;
+        if (g_cur_doc_row >= g_top_doc_row + 23) {
+            g_cur_doc_row = (uint16_t)(g_top_doc_row + 22);
+            checkout_active_line(g_cur_doc_row);
+        }
+    }
+}
+
 void show_splash_screen(void)
 {
     int k;
@@ -616,45 +645,25 @@ void show_splash_screen(void)
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }
+        if (k >= 'a' && k <= 'z') k -= 32;
 
-        if (k == 'q' || k == 'Q' || k == KEY_CTRL_Q) {
-            if (g_doc_modified) {
-                g_is_splash_screen = 0;
-                clear_screen();
-                render_screen();
-                if (modal_confirm_save_changes() != MODAL_RES_OK) {
-                    break;
-                }
+        if (k == 'Q' || k == KEY_CTRL_Q) {
+            if (!splash_confirm_save()) {
+                break;
             }
             g_editor_exit_flag = 1;
             break;
-        } else if (k == 'e' || k == 'E' || k == KEY_ENTER) {
+        } else if (k == 'E' || k == KEY_ENTER) {
             break;
-        } else if (k == 'n' || k == 'N') {
-            if (g_doc_modified) {
-                g_is_splash_screen = 0;
-                clear_screen();
-                render_screen();
-                if (modal_confirm_save_changes() != MODAL_RES_OK) {
-                    break;
-                }
+        } else if (k == 'N') {
+            if (!splash_confirm_save()) {
+                break;
             }
             init_empty_document();
             g_current_filename[0] = '\0';
             break;
-        } else if (k == 'o' || k == 'O' || k == KEY_CTRL_O) {
-            if (g_doc_modified) {
-                g_is_splash_screen = 0;
-                clear_screen();
-                render_screen();
-                if (modal_confirm_save_changes() != MODAL_RES_OK) {
-                    break;
-                }
-                dlg_fname[0] = '\0';
-                if (ui_browser_open_dialog(dlg_fname, 24) ==
-                    MODAL_RES_OK && dlg_fname[0]) {
-                    file_load(dlg_fname);
-                }
+        } else if (k == 'O' || k == KEY_CTRL_O) {
+            if (!splash_confirm_save()) {
                 break;
             }
             dlg_fname[0] = '\0';
@@ -664,27 +673,21 @@ void show_splash_screen(void)
                 break;
             }
             need_render = 1;
-        } else if (k == 's' || k == 'S' || k == KEY_CTRL_S) {
+        } else if (k == 'S' || k == KEY_CTRL_S) {
             strcpy(dlg_fname, g_current_filename);
             if (ui_browser_save_dialog(dlg_fname, 24) ==
                 MODAL_RES_OK && dlg_fname[0]) {
                 file_save(dlg_fname, g_file_format);
             }
             need_render = 1;
-        } else if (k == 'w' || k == 'W' || k == KEY_CTRL_W) {
-            if (g_doc_modified) {
-                g_is_splash_screen = 0;
-                clear_screen();
-                render_screen();
-                if (modal_confirm_save_changes() != MODAL_RES_OK) {
-                    break;
-                }
-                g_is_splash_screen = 1;
+        } else if (k == 'W' || k == KEY_CTRL_W) {
+            if (!splash_confirm_save()) {
+                break;
             }
             init_empty_document();
             g_current_filename[0] = '\0';
             need_render = 1;
-        } else if (k == 'l' || k == 'L' || k == KEY_CTRL_L) {
+        } else if (k == 'L' || k == KEY_CTRL_L) {
             dlg_fname[0] = '\0';
             if (modal_goto_line(dlg_fname, 16) == MODAL_RES_OK &&
                 dlg_fname[0]) {
@@ -695,16 +698,16 @@ void show_splash_screen(void)
                 }
             }
             need_render = 1;
-        } else if (k == 'c' || k == 'C') {
+        } else if (k == 'C') {
             show_config_screen();
             need_render = 1;
-        } else if (k == 'a' || k == 'A') {
+        } else if (k == 'A') {
             show_about_screen();
             need_render = 1;
-        } else if (k == 'm' || k == 'M') {
+        } else if (k == 'M') {
             show_mem_info_screen();
             need_render = 1;
-        } else if (k == 'p' || k == 'P') {
+        } else if (k == 'P') {
             plugin_manager_ui();
             if (!g_is_splash_screen) {
                 break;
@@ -716,21 +719,8 @@ void show_splash_screen(void)
                 break;
             }
             need_render = 1;
-        } else if (k == '1') {
-            clear_screen();
-            g_config.screen_mode = MODE_80X24;
-            g_active_cols = SCREEN_COLS_80;
-            g_active_rows = SCREEN_ROWS_24;
-            if (g_cur_doc_row >= g_top_doc_row + 23) {
-                g_cur_doc_row = (uint16_t)(g_top_doc_row + 22);
-                checkout_active_line(g_cur_doc_row);
-            }
-            need_render = 1;
-        } else if (k == '2') {
-            clear_screen();
-            g_config.screen_mode = MODE_120X40;
-            g_active_cols = SCREEN_COLS_120;
-            g_active_rows = SCREEN_ROWS_40;
+        } else if (k == '1' || k == '2') {
+            apply_screen_mode((k == '2') ? MODE_120X40 : MODE_80X24);
             need_render = 1;
 #ifndef __CPM__
         } else if (k == '3') {
@@ -757,26 +747,32 @@ void show_splash_screen(void)
     g_need_screen_render = 1;
 }
 
-static const char s_help_eq[] =
-    "========================================"
-    "======================================";
-static const char s_help_dash[] =
-    "----------------------------------------"
-    "--------------------------------------";
+#ifdef __CPM__
+static const char *s_help_lines[6] = {
+  "=",
+  "                               EDITOR MODE KEYS",
+  "=",
+  "^O Open   ^S Save   ^W Close   ^Q Quit   ^K Help   ^P Plugins   ^Z Manager",
+  "-",
+  "                          Press any key to continue"
+};
 
+static const char *s_about_lines[5] = {
+    "               SE - Screen Editor",
+    "         version 1.1.5 (2026-10-21) (C)",
+    "                 by Dean Jenkins",
+    "",
+    "            Press any key to continue"
+};
+#else
 static const char *s_help_lines[22] = {
   s_help_eq,
   "                               EDITOR MODE KEYS",
   s_help_eq,
   "  FILE & SYSTEM:",
   "    Ctrl+O           Open file screen      Ctrl+S         Save file screen",
-#ifdef __CPM__
-  "    Ctrl+W           Close file to splash  Ctrl+Q         Quit to CP/M",
-  "    Ctrl+K           Help / Solidify block Ctrl+P          Plugins pop-up",
-#else
   "    Ctrl+W           Close file to splash  Ctrl+Q         Quit to OS",
   "    Ctrl+K           Help / Solidify block Ctrl+P         Plugins pop-up",
-#endif
   "    Ctrl+Z           Plugin Manager        Ctrl+Y         Beautify text",
   "  NAVIGATION & SEARCH:",
   "    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line",
@@ -805,20 +801,21 @@ static const char *s_about_lines[9] = {
     "",
     "            Press any key to continue"
 };
+#endif
 
-void show_help_screen(void)
+static void show_tier1_screen(const char **lines, size_t count,
+                              size_t width, uint8_t ctx)
 {
     int k;
     uint8_t prev_splash = g_is_splash_screen;
     g_is_splash_screen = 1;
     hal_console_hide_cursor();
     while (1) {
-        render_tier1_workspace_screen(s_help_lines, 22, 78);
-        while ((k = hal_console_getkey()) <= 0) {
-            /* Wait for user keystroke */
-        }
+        render_tier1_workspace_screen(lines, count, width);
+        while ((k = hal_console_getkey()) <= 0);
         if (k == KEY_CTRL_P) {
-            show_plugin_palette_ctx(PLUG_CTX_HELP);
+            show_plugin_palette_ctx(ctx);
+            if (!g_is_splash_screen) return;
             continue;
         }
         break;
@@ -829,39 +826,28 @@ void show_help_screen(void)
         hal_console_show_cursor();
     }
     g_need_screen_render = 1;
+}
+
+void show_help_screen(void)
+{
+#ifdef __CPM__
+    show_tier1_screen(s_help_lines, 6, 78, PLUG_CTX_HELP);
+#else
+    show_tier1_screen(s_help_lines, 22, 78, PLUG_CTX_HELP);
+#endif
 }
 
 void show_about_screen(void)
 {
-    int k;
-    uint8_t prev_splash = g_is_splash_screen;
-    g_is_splash_screen = 1;
-    hal_console_hide_cursor();
-    while (1) {
-        render_tier1_workspace_screen(s_about_lines, 9, 48);
-        while ((k = hal_console_getkey()) <= 0) {
-            /* Wait for user keystroke */
-        }
-        if (k == KEY_CTRL_P) {
-            show_plugin_palette_ctx(PLUG_CTX_ABOUT);
-            continue;
-        }
-        break;
-    }
-    clear_screen();
-    g_is_splash_screen = prev_splash;
-    if (!g_is_splash_screen) {
-        hal_console_show_cursor();
-    }
-    g_need_screen_render = 1;
+#ifdef __CPM__
+    show_tier1_screen(s_about_lines, 5, 48, PLUG_CTX_ABOUT);
+#else
+    show_tier1_screen(s_about_lines, 9, 48, PLUG_CTX_ABOUT);
+#endif
 }
 
 static const char *s_cfg_lines[11] = {
-#ifdef __CPM__
-    "            SE - Screen Editor Configuration",
-#else
-    "            SE - Configuration Manager",
-#endif
+    "SE - Configuration Manager",
     "",
     NULL,
     "",
@@ -871,53 +857,40 @@ static const char *s_cfg_lines[11] = {
     NULL,
     NULL,
     "",
-    "  [1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit"
+    "[1-5]=Toggle Option  [S]=Save Config  [ESC]=Exit"
 };
 
 static void render_config_content(void)
 {
     s_cfg_lines[2] = s_cfg_saved_flag ?
-        "         Config Status: Saved to local drive" :
+        "Config Status: Saved to disk" :
         (g_config_loaded ?
-         "         Config Status: Loaded from SE.CFG" :
-         "         Config Status: Defaults");
-    if (g_config.screen_mode == MODE_120X40) {
-        s_cfg_lines[4] = "         1. Screen Geometry  : 120x40 (Wide)";
-#ifndef __CPM__
-    } else if (g_config.screen_mode == MODE_NATIVE) {
-        s_cfg_lines[4] = "         1. Screen Geometry  : Native";
-#endif
-    } else {
-        s_cfg_lines[4] = "         1. Screen Geometry  : 80x24 (Classic)";
-    }
-    if (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) {
-        s_cfg_lines[5] = "         2. RAM Drive Mode   : "
-                         "[Overwrite (Sacrifice Drive, 384KB)]";
-    } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
-        s_cfg_lines[5] = "         2. RAM Drive Mode   : "
-                         "[Hibernate (Backup/Restore, 384KB)]";
-    } else {
-        s_cfg_lines[5] = "         2. RAM Drive Mode   : "
-                         "[Preserve (RAM Drive Active, 128KB)]";
-    }
+         "Config Status: Loaded from SE.CFG" :
+         "Config Status: Defaults");
+    s_cfg_lines[4] = (g_config.screen_mode == MODE_120X40) ?
+        "1. Screen Geometry  : 120x40" :
+        "1. Screen Geometry  : 80x24";
+    s_cfg_lines[5] = (g_config.ramdrive_mode == RAMDRV_MODE_ENABLED) ?
+        "2. RAM Drive Mode   : Overwrite" :
+        ((g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) ?
+         "2. RAM Drive Mode   : Hibernate" :
+         "2. RAM Drive Mode   : Protected");
     s_cfg_lines[6] = (g_config.lines_mode == 1) ?
-        "         3. Max Doc Lines    : 32K" :
-        "         3. Max Doc Lines    : 16K";
+        "3. Max Doc Lines    : 32K" :
+        "3. Max Doc Lines    : 16K";
     s_cfg_lines[7] = (g_config.tab_width == 8) ?
-        "         4. Tab Width        : 8" :
-        "         4. Tab Width        : 4";
+        "4. Tab Width        : 8" :
+        "4. Tab Width        : 4";
 #ifdef __CPM__
-    if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
-        s_cfg_lines[8] = "         5. Plugin Manager   : Demand";
-    } else if (g_config.plugin_mode == PLUGIN_MODE_DISABLED) {
-        s_cfg_lines[8] = "         5. Plugin Manager   : Disabled";
-    } else {
-        s_cfg_lines[8] = "         5. Plugin Manager   : Autoload";
-    }
+    s_cfg_lines[8] = (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) ?
+        "5. Plugin Manager   : Demand" :
+        ((g_config.plugin_mode == PLUGIN_MODE_DISABLED) ?
+         "5. Plugin Manager   : Disabled" :
+         "5. Plugin Manager   : Autoload");
 #else
-    s_cfg_lines[8] = "         5. Plugin Manager   : Builtin";
+    s_cfg_lines[8] = "5. Plugin Manager   : Builtin";
 #endif
-    render_tier1_workspace_screen(s_cfg_lines, 11, 50);
+    render_tier1_workspace_screen(s_cfg_lines, 11, 48);
 }
 
 void show_config_screen(void)
@@ -939,8 +912,9 @@ void show_config_screen(void)
         while ((k = hal_console_getkey()) <= 0) {
             /* Wait for user keystroke */
         }
+        if (k >= 'a' && k <= 'z') k -= 32;
 
-        if (k == KEY_ESC || k == KEY_ENTER || k == 'q' || k == 'Q') {
+        if (k == KEY_ESC || k == KEY_ENTER || k == 'Q') {
             break;
         } else if (k == KEY_CTRL_P) {
             show_plugin_palette_ctx(PLUG_CTX_CONFIG);
@@ -949,57 +923,26 @@ void show_config_screen(void)
             }
             need_render = 1;
         } else if (k == '1') {
-            clear_screen();
-            if (g_config.screen_mode == MODE_80X24) {
-                g_config.screen_mode = MODE_120X40;
-                g_active_cols = SCREEN_COLS_120;
-                g_active_rows = SCREEN_ROWS_40;
-#ifndef __CPM__
-            } else if (g_config.screen_mode == MODE_120X40) {
-                uint8_t ncols = 0, nrows = 0;
-                g_config.screen_mode = MODE_NATIVE;
-                if (hal_console_get_native_size(&ncols, &nrows) == 0 &&
-                    ncols >= SCREEN_COLS_80 && nrows >= SCREEN_ROWS_24) {
-                    g_active_cols = ncols;
-                    g_active_rows = nrows;
-                } else {
-                    g_active_cols = SCREEN_COLS_80;
-                    g_active_rows = nrows;
-                }
-#endif
-            } else {
-                g_config.screen_mode = MODE_80X24;
-                g_active_cols = SCREEN_COLS_80;
-                g_active_rows = SCREEN_ROWS_24;
-            }
+            apply_screen_mode((g_config.screen_mode == MODE_80X24) ?
+                              MODE_120X40 : MODE_80X24);
             need_render = 1;
         } else if (k == '2') {
-            if (g_config.ramdrive_mode == RAMDRV_MODE_PROTECTED) {
-                g_config.ramdrive_mode = RAMDRV_MODE_HIBERNATE;
-            } else if (g_config.ramdrive_mode == RAMDRV_MODE_HIBERNATE) {
-                g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;
-            } else {
-                g_config.ramdrive_mode = RAMDRV_MODE_PROTECTED;
-            }
+            g_config.ramdrive_mode = (g_config.ramdrive_mode == 0) ? 2 :
+                                     ((g_config.ramdrive_mode == 2) ? 1 : 0);
             need_render = 1;
         } else if (k == '3') {
-            g_config.lines_mode = (g_config.lines_mode == 0) ? 1 : 0;
+            g_config.lines_mode ^= 1;
             need_render = 1;
         } else if (k == '4') {
             g_config.tab_width = (g_config.tab_width == 4) ? 8 : 4;
             need_render = 1;
 #ifdef __CPM__
         } else if (k == '5') {
-            if (g_config.plugin_mode == PLUGIN_MODE_AUTOLOAD) {
-                g_config.plugin_mode = PLUGIN_MODE_ONDEMAND;
-            } else if (g_config.plugin_mode == PLUGIN_MODE_ONDEMAND) {
-                g_config.plugin_mode = PLUGIN_MODE_DISABLED;
-            } else {
-                g_config.plugin_mode = PLUGIN_MODE_AUTOLOAD;
-            }
+            g_config.plugin_mode = (g_config.plugin_mode == 1) ? 2 :
+                                   ((g_config.plugin_mode == 2) ? 0 : 1);
             need_render = 1;
 #endif
-        } else if (k == 's' || k == 'S') {
+        } else if (k == 'S') {
             config_save();
             s_cfg_saved_flag = 1;
             need_render = 1;
@@ -1013,37 +956,30 @@ void show_config_screen(void)
     g_need_screen_render = 1;
 }
 
-static void render_mem_info_content(void)
+#ifdef __CPM__
+static const char *s_mem_lines[9] = {
+    "SE.COM - Extended Memory Map",
+    "HBIOS: RomWBW v3.4 | OS: CP/M 2.2 | RAM: 512K | SE: 192K",
+    "",
+    "Bank Phys Size System / OS Role      SE.COM Usage",
+    "00   80h  32K  HBIOS Firmware        Protected HBIOS",
+    "01   81h  32K  RAM Disk (MD0:)       Preserved Active",
+    "13   8Dh  32K  Application Memory    16K Line Slot Table",
+    "14   8Eh  32K  CP/M 2.2 TPA & Base   SE Program & Cache",
+    "Press any key to continue"
+};
+#endif
+
+void show_mem_info_screen(void)
 {
 #ifdef __CPM__
-    uint8_t r;
-    clear_screen();
-    hal_console_puts(
-        "~\r\n"
-        "~                         SE.COM - Extended Memory Map\r\n"
-        "~   HBIOS: RomWBW v3.4  |  OS: CP/M 2.2  |  "
-        "RAM: 512 KB (16x32K)  |  SE: 192 KB\r\n"
-        "~\r\n"
-        "~   Bank  Phys   Size   System / OS Role        "
-        "SE.COM Usage\r\n"
-        "~   00    80h    32K    HBIOS System Firmware   "
-        "Reserved: Protected HBIOS\r\n"
-        "~   01    81h    32K    RAM Disk (MD0:)         "
-        "Preserved: RAM Disk Active\r\n"
-        "~   13    8Dh    32K    Application Memory      "
-        "Active: 16K Line Slot Table\r\n"
-        "~   14    8Eh    32K    CP/M 2.2 TPA & Base     "
-        "Active: SE Program & Cache\r\n");
-    for (r = 0; r < 13; r++) {
-        hal_console_puts("~\r\n");
-    }
-    hal_console_puts(
-        "~                          Press any key to continue\r\n");
-    render_status_bar();
+    show_tier1_screen(s_mem_lines, 9, 56, PLUG_CTX_MEM_INFO);
 #else
     char line1[44];
     char line2[44];
     const char *mem_lines[6];
+    int k;
+    uint8_t prev_splash = g_is_splash_screen;
     snprintf(line1, sizeof(line1), "       Free Virtual Slots: %u",
              (unsigned)mem_get_free_slots());
     snprintf(line2, sizeof(line2), "       Free Document Buffer: %u KB",
@@ -1054,38 +990,8 @@ static void render_mem_info_content(void)
     mem_lines[3] = line2;
     mem_lines[4] = "";
     mem_lines[5] = "          Press any key to continue";
-    render_tier1_workspace_screen(mem_lines, 6, 46);
+    show_tier1_screen(mem_lines, 6, 46, PLUG_CTX_MEM_INFO);
 #endif
-}
-
-void show_mem_info_screen(void)
-{
-    int k;
-    uint8_t prev_splash = g_is_splash_screen;
-
-    g_is_splash_screen = 1;
-    hal_console_hide_cursor();
-
-    while (1) {
-        render_mem_info_content();
-        while ((k = hal_console_getkey()) <= 0) {
-            /* Wait for user keystroke */
-        }
-        if (k == KEY_CTRL_P) {
-            show_plugin_palette_ctx(PLUG_CTX_MEM_INFO);
-            if (!g_is_splash_screen) {
-                return;
-            }
-            continue;
-        }
-        break;
-    }
-    clear_screen();
-    g_is_splash_screen = prev_splash;
-    if (!g_is_splash_screen) {
-        hal_console_show_cursor();
-    }
-    g_need_screen_render = 1;
 }
 
 void redraw_base_screen(uint8_t ctx)
@@ -1101,10 +1007,20 @@ void redraw_base_screen(uint8_t ctx)
     } else if (ctx == PLUG_CTX_CONFIG) {
         render_config_content();
     } else if (ctx == PLUG_CTX_MEM_INFO) {
-        render_mem_info_content();
+#ifdef __CPM__
+        render_tier1_workspace_screen(s_mem_lines, 9, 56);
+#endif
     } else if (ctx == PLUG_CTX_HELP) {
+#ifdef __CPM__
+        render_tier1_workspace_screen(s_help_lines, 6, 78);
+#else
         render_tier1_workspace_screen(s_help_lines, 22, 78);
+#endif
     } else if (ctx == PLUG_CTX_ABOUT) {
+#ifdef __CPM__
+        render_tier1_workspace_screen(s_about_lines, 5, 48);
+#else
         render_tier1_workspace_screen(s_about_lines, 9, 48);
+#endif
     }
 }

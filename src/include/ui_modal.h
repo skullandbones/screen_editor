@@ -29,6 +29,7 @@ extern "C" {
 #define MODAL_RES_DISCARD       3
 
 /* Modal Drawing & Interaction Functions */
+void modal_init_7row(uint8_t *top, uint8_t *left, const char *title);
 void modal_draw_frame(uint8_t top, uint8_t left,
                       uint8_t width, uint8_t height,
                       const char *title);
