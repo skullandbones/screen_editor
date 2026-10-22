@@ -46,6 +46,13 @@ void modal_puts_centered(uint8_t row, uint8_t left,
 }
 #endif
 
+static void put_spaces(uint8_t count)
+{
+    while (count--) {
+        hal_console_putc(' ');
+    }
+}
+
 void modal_draw_row_centered(uint8_t row, uint8_t left,
                              uint8_t width, const char *str)
 {
@@ -59,15 +66,11 @@ void modal_draw_row_centered(uint8_t row, uint8_t left,
     pad = (uint8_t)((interior_w - len) / 2);
     hal_console_locate(row, left);
     hal_console_putc('|');
-    for (i = 0; i < pad; i++) {
-        hal_console_putc(' ');
-    }
+    put_spaces(pad);
     for (i = 0; i < len; i++) {
         hal_console_putc(str[i]);
     }
-    for (i = pad + (uint8_t)len; i < interior_w; i++) {
-        hal_console_putc(' ');
-    }
+    put_spaces((uint8_t)(interior_w - pad - (uint8_t)len));
     hal_console_putc('|');
 }
 
@@ -96,10 +99,10 @@ void modal_draw_row_left(uint8_t row, uint8_t left,
 
 static void draw_horiz_border(uint8_t row, uint8_t left, uint8_t width)
 {
-    uint8_t c;
+    uint8_t c = (uint8_t)(width - 2);
     hal_console_locate(row, left);
     hal_console_putc('+');
-    for (c = 1; c < width - 1; c++) {
+    while (c--) {
         hal_console_putc('-');
     }
     hal_console_putc('+');
@@ -423,7 +426,7 @@ int modal_confirm_save_changes(void)
 
     res = modal_confirm("Unsaved Modifications",
                         "Any unsaved edits will be lost if discarded.",
-                        "Save changes?", NULL);
+                        NULL, NULL);
     if (res == MODAL_RES_YES) {
         if (!g_current_filename[0]) {
 #ifdef __CPM__
@@ -447,8 +450,7 @@ int modal_confirm_save_changes(void)
         }
         return MODAL_RES_OK;
     } else if (res == MODAL_RES_NO) {
-        init_empty_document();
-        g_current_filename[0] = '\0';
+        g_doc_modified = 0;
         return MODAL_RES_OK;
     }
     return MODAL_RES_CANCEL;

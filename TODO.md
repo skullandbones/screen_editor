@@ -5243,6 +5243,23 @@ have been resolved and archived.
       pass the 16-byte `FatVfsRequest` pointer in `DE` within
       `hal_far_exec_call()` in `src/hal/cpm/hal_cpm_memory.c`, and maintain
       strict CCP headroom ($BSS\_END \le 0xD000$).
+  - [x] **Bug 2.8.60: Premature Document Wipe on Discard During Open File**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.1 (`lines 1735-1755`),
+      `tests/test_editor_headless.py` (Step 54).
+    - *Issue*: In `src/core/ui_modal.c` (`modal_confirm_save_changes`),
+      selecting `[N]o` (discard unsaved edits) erroneously called
+      `init_empty_document()` and erased `g_current_filename[0] = '\0'`. When
+      invoking Open File (`Ctrl+O`) while editing an unsaved document and
+      choosing `[N]o`, the active document was prematurely destroyed prior to
+      the user selecting a new file. Canceling Open File via `ESC` left the
+      user in an empty `(Untitled)` buffer rather than preserving the existing
+      file buffer.
+    - *Resolution*: In `modal_confirm_save_changes()`, when
+      `res == MODAL_RES_NO`, only clear `g_doc_modified = 0` and return
+      `MODAL_RES_OK`. The caller (`KEY_CTRL_W` or splash `[W]`/`[N]`) resets
+      document state if closing, while Open File (`Ctrl+O`) loads into the
+      buffer only upon file selection and leaves the active buffer intact if
+      file selection is canceled.
 
 ---
 
