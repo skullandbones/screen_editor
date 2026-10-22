@@ -5289,6 +5289,21 @@ have been resolved and archived.
     - *Resolution*: Update `draw_progress_tick()` in `src/core/file_io.c` to
       format line numbers with 5-column field width alignment using
       `g_scratch_line_buf` scratch buffer space, matching canonical SE display.
+  - [x] **Bug 2.8.63: Memory Information Screen Non-Conforming Layout
+    & Tildes**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 8.4 (`lines 1610-1640`),
+      `tests/test_editor_headless.py` (Step 72).
+    - *Issue*: In `src/core/ui_render.c`, `s_mem_lines` contained placeholder
+      memory information strings rather than canonical RomWBW memory bank
+      descriptions (`RAM: 512 KB (16x32K)`, `SE: 192 KB`). Furthermore,
+      `show_mem_info_screen()` used `show_tier1_screen()` which positioned rows
+      using VT100 absolute cursor escape sequences (`\x1b[r;1H`) without
+      emitting CRLF pairs or column 0 tildes (`~`), causing Step 72 to fail
+      asserting at least 20 tilde lines.
+    - *Resolution*: Populate `s_mem_lines` with canonical memory bank layout
+      strings. Implement linear row emission in `show_mem_info_screen()` with
+      column 0 tildes (`~`), trailing spaces, and CRLF (`\r\n`) pairs up to
+      line 23, and restore screen rendering state on keypress.
 
 ---
 

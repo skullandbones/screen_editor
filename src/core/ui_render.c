@@ -79,6 +79,15 @@ void set_status_msg(const char *msg)
 }
 #endif
 
+static void set_inv(uint8_t *in_inv, uint8_t w)
+{
+    if (w != *in_inv) {
+        if (w) hal_console_inverse_on();
+        else hal_console_inverse_off();
+        *in_inv = w;
+    }
+}
+
 static void render_row_content(uint8_t screen_row, uint16_t doc_row)
 {
     char *line_buf = g_scratch_line_buf;
@@ -101,23 +110,20 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
 
     {
         uint8_t in_inv = 0;
-#define SET_INV(w) do { uint8_t _w = (uint8_t)(w); if (_w != in_inv) { \
-    if (_w) hal_console_inverse_on(); else hal_console_inverse_off(); \
-    in_inv = _w; } } while (0)
-        for (i = 0; i < len && vis_col < g_horiz_pan_offset + max_content_cols;
-             i++) {
+        uint16_t r_edge = (uint16_t)(g_horiz_pan_offset + max_content_cols);
+        uint16_t r_edge_1 = (uint16_t)(r_edge - 1);
+        for (i = 0; i < len && vis_col < r_edge; i++) {
             char c = line_buf[i];
-            int in_blk = check_cursor_in_block(doc_row, i);
+            int in_blk = (g_block_mode != BLOCK_MODE_OFF) ?
+                         check_cursor_in_block(doc_row, i) : 0;
             if (c == '\t') {
                 uint16_t next_tab = (uint16_t)((vis_col / tab_w + 1) * tab_w);
-                while (vis_col < next_tab &&
-                       vis_col < g_horiz_pan_offset + max_content_cols) {
+                while (vis_col < next_tab && vis_col < r_edge) {
                     if (vis_col >= g_horiz_pan_offset) {
                         int cont_hl = (g_block_mode == BLOCK_MODE_OFF &&
-                                       vis_col + 1 == g_horiz_pan_offset +
-                                                      max_content_cols &&
+                                       vis_col == r_edge_1 &&
                                        (vis_col + 1 < next_tab || i + 1 < len));
-                        SET_INV(in_blk || cont_hl);
+                        set_inv(&in_inv, (uint8_t)(in_blk || cont_hl));
                         hal_console_putc(' ');
                     }
                     vis_col++;
@@ -125,16 +131,13 @@ static void render_row_content(uint8_t screen_row, uint16_t doc_row)
             } else {
                 if (vis_col >= g_horiz_pan_offset) {
                     int cont_hl = (g_block_mode == BLOCK_MODE_OFF &&
-                                   vis_col + 1 == g_horiz_pan_offset +
-                                                  max_content_cols &&
-                                   i + 1 < len);
-                    SET_INV(in_blk || cont_hl);
+                                   vis_col == r_edge_1 && i + 1 < len);
+                    set_inv(&in_inv, (uint8_t)(in_blk || cont_hl));
                     hal_console_putc(c);
                 }
                 vis_col++;
             }
         }
-#undef SET_INV
         if (in_inv) {
             hal_console_inverse_off();
         }
@@ -505,7 +508,6 @@ static void render_tier1_workspace_screen(const char **lines,
                 hal_console_puts(lines[line_idx]);
             }
         }
-        hal_console_clear_eol();
     }
 
     /* Universal Status Bar presence on Row HOST_ROWS */
@@ -747,61 +749,47 @@ void show_splash_screen(void)
     g_need_screen_render = 1;
 }
 
-#ifdef __CPM__
-static const char *s_help_lines[6] = {
-  "=",
-  "                               EDITOR MODE KEYS",
-  "=",
-  "^O Open   ^S Save   ^W Close   ^Q Quit   ^K Help   ^P Plugins   ^Z Manager",
-  "-",
-  "                          Press any key to continue"
-};
+static const char s_press_any_key[] =
+    "                          Press any key to continue";
+static const char s_eq[] = "=";
+static const char s_dash[] = "-";
 
-static const char *s_about_lines[5] = {
-    "               SE - Screen Editor",
-    "         version 1.1.5 (2026-10-21) (C)",
-    "                 by Dean Jenkins",
-    "",
-    "            Press any key to continue"
-};
-#else
 static const char *s_help_lines[22] = {
-  s_help_eq,
+  s_eq,
   "                               EDITOR MODE KEYS",
-  s_help_eq,
-  "  FILE & SYSTEM:",
-  "    Ctrl+O           Open file screen      Ctrl+S         Save file screen",
-  "    Ctrl+W           Close file to splash  Ctrl+Q         Quit to OS",
-  "    Ctrl+K           Help / Solidify block Ctrl+P         Plugins pop-up",
-  "    Ctrl+Z           Plugin Manager        Ctrl+Y         Beautify text",
-  "  NAVIGATION & SEARCH:",
-  "    Arrow Keys      Move cursor            Ctrl+A / Home  Start of line",
-  "    Ctrl+U / PgUp   Page Up                Ctrl+E / End   End of line",
-  "    Ctrl+V / PgDn   Page Down              Ctrl+T / ^Home Top of file",
-  "    Ctrl+L          Goto line number       Ctrl+G / ^End  Bottom of file",
-  "    Ctrl+F          Find text              Ctrl+N         Find next",
-  "    Ctrl+R          Search and Replace     Ctrl+I / Tab   Toggle find case",
-  "  EDITING & BLOCK:",
-  "    Insert          Toggle Insert/Ovr      Enter          New line / Lock",
-  "    ASCII 32..126   Insert/Overwrite text  Backspace      Delete left/join",
-  "    Delete / Ctrl+D Delete char or block   Ctrl+B         Start/Toggle blk",
-  "    Ctrl+C / Ctrl+X Copy / Move block      ESC            Clear block",
-  s_help_dash,
-  "                          Press any key to continue"
+  s_eq,
+  " FILE:",
+  "    Ctrl+O: Open File Ctrl+S: Save",
+  "    Ctrl+W: Close  Ctrl+Q: Quit",
+  "    Ctrl+K: Help   Ctrl+P: Plugins",
+  "    Ctrl+Z Plugin Manager Ctrl+Y Beautify text",
+  " NAV & SEARCH:",
+  "    Arrows Ctrl+A / Home: Start",
+  "    Ctrl+U / PgUp Ctrl+E / End",
+  "    Ctrl+V / PgDn Ctrl+T: Top",
+  "    Ctrl+L: Line  Ctrl+G: End",
+  "    Ctrl+F: Find  Ctrl+N: Next",
+  "    Ctrl+R: Repl  Ctrl+I: Case",
+  " EDIT & BLOCK:",
+  "    Ins: Insert   New line / Lock",
+  "    Delete / Ctrl+D  Ctrl+B: Blk",
+  "    Ctrl+C / Ctrl+X Copy / Move block",
+  "",
+  s_dash,
+  s_press_any_key
 };
 
 static const char *s_about_lines[9] = {
-    "               SE - Screen Editor",
-    "         version 1.1.5 (2026-10-21) (C)",
-    "                 by Dean Jenkins",
+    "           SE - Screen Editor",
+    "     version 1.1.5 (2026-10-21) (C)",
+    "             by Dean Jenkins",
     "",
     "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
     "",
     "   Open source software under the MIT License",
     "",
-    "            Press any key to continue"
+    s_press_any_key
 };
-#endif
 
 static void show_tier1_screen(const char **lines, size_t count,
                               size_t width, uint8_t ctx)
@@ -830,20 +818,12 @@ static void show_tier1_screen(const char **lines, size_t count,
 
 void show_help_screen(void)
 {
-#ifdef __CPM__
-    show_tier1_screen(s_help_lines, 6, 78, PLUG_CTX_HELP);
-#else
     show_tier1_screen(s_help_lines, 22, 78, PLUG_CTX_HELP);
-#endif
 }
 
 void show_about_screen(void)
 {
-#ifdef __CPM__
-    show_tier1_screen(s_about_lines, 5, 48, PLUG_CTX_ABOUT);
-#else
     show_tier1_screen(s_about_lines, 9, 48, PLUG_CTX_ABOUT);
-#endif
 }
 
 static const char *s_cfg_lines[11] = {
@@ -959,21 +939,36 @@ void show_config_screen(void)
 #ifdef __CPM__
 static const char *s_mem_lines[9] = {
     "SE.COM - Extended Memory Map",
-    "HBIOS: RomWBW v3.4 | OS: CP/M 2.2 | RAM: 512K | SE: 192K",
+    "HBIOS: RomWBW v3.4 | OS: CP/M 2.2 | RAM: 512 KB (16x32K) | SE: 192 KB",
     "",
-    "Bank Phys Size System / OS Role      SE.COM Usage",
-    "00   80h  32K  HBIOS Firmware        Protected HBIOS",
-    "01   81h  32K  RAM Disk (MD0:)       Preserved Active",
-    "13   8Dh  32K  Application Memory    16K Line Slot Table",
-    "14   8Eh  32K  CP/M 2.2 TPA & Base   SE Program & Cache",
-    "Press any key to continue"
+    "Bank  Phys   Size   System / OS Role        SE.COM Usage",
+    "00    80h    32K    HBIOS System Firmware   Reserved: Protected HBIOS",
+    "01    81h    32K    RAM Disk (MD0:)         Preserved: RAM Disk Active",
+    "13    8Dh    32K    Application Memory      Active: 16K Line Slot Table",
+    "14    8Eh    32K    CP/M 2.2 TPA & Base     Active: SE Program & Cache",
+    s_press_any_key
 };
 #endif
 
 void show_mem_info_screen(void)
 {
 #ifdef __CPM__
-    show_tier1_screen(s_mem_lines, 9, 56, PLUG_CTX_MEM_INFO);
+    uint8_t r;
+    clear_screen();
+    for (r = 0; r < 9; r++) {
+        hal_console_putc('~');
+        hal_console_putc(' ');
+        hal_console_puts(s_mem_lines[r]);
+        hal_console_puts("\r\n");
+    }
+    for (; r < 23; r++) {
+        hal_console_puts("~\r\n");
+    }
+    render_status_bar();
+    while (hal_console_getkey() <= 0) {
+    }
+    clear_screen();
+    g_need_screen_render = 1;
 #else
     char line1[44];
     char line2[44];
@@ -1011,16 +1006,8 @@ void redraw_base_screen(uint8_t ctx)
         render_tier1_workspace_screen(s_mem_lines, 9, 56);
 #endif
     } else if (ctx == PLUG_CTX_HELP) {
-#ifdef __CPM__
-        render_tier1_workspace_screen(s_help_lines, 6, 78);
-#else
         render_tier1_workspace_screen(s_help_lines, 22, 78);
-#endif
     } else if (ctx == PLUG_CTX_ABOUT) {
-#ifdef __CPM__
-        render_tier1_workspace_screen(s_about_lines, 5, 48);
-#else
         render_tier1_workspace_screen(s_about_lines, 9, 48);
-#endif
     }
 }
