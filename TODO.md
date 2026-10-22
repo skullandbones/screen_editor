@@ -5278,6 +5278,17 @@ have been resolved and archived.
       `src/core/memory.c`. Remove unused CLI help in `src/sec_cpm.c`. Enable
       `-pragma-output:noprotectmsdos=1` in `Makefile`. Achieved
       `BSS_END <= 0xD000` with positive headroom preserving CCP 100%.
+  - [x] **Bug 2.8.62: Missing Right-Justification on File Progress Ticks**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` Section 9.2 (`lines 1780-1795`),
+      `tests/test_editor_headless.py` (Step 68).
+    - *Issue*: In `src/core/file_io.c` (`draw_progress_tick`), progress line
+      counts were formatted as `"Line 100"` with a single space. Canonical
+      `SE.COM` right-justifies line numbers within a 5-column field width
+      (`"Line   100"` for `< 1000`, `"Line  1000"` for `>= 1000`), causing
+      automated headless assertions expecting canonical line strings to fail.
+    - *Resolution*: Update `draw_progress_tick()` in `src/core/file_io.c` to
+      format line numbers with 5-column field width alignment using
+      `g_scratch_line_buf` scratch buffer space, matching canonical SE display.
 
 ---
 

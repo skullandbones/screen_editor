@@ -223,21 +223,25 @@ static void cpm_commit_loaded_line(uint16_t row, uint16_t col)
     set_line_slot(row, slot_id);
 }
 
+static uint8_t s_prog_top;
+static uint8_t s_prog_left;
+
 static void draw_progress_tick(uint16_t lines)
 {
-    char lbuf[16];
-    char *p = lbuf;
-    uint8_t top = (uint8_t)(((g_active_rows - 7) / 2) + 1);
-    uint8_t left = (uint8_t)(((g_active_cols - 50) / 2) + 1);
-    strcpy(p, "Line "); p += 5;
-    se_append_u16(p, lines);
-    modal_draw_row_centered(top + 4, left, 50, lbuf);
+    char *p = g_scratch_line_buf + 64;
+    uint8_t off = 7;
+    strcpy(p, "Line   ");
+    if (lines >= 1000) {
+        p[5] = '\0';
+        off = 6;
+    }
+    se_append_u16(p + off, lines);
+    modal_draw_row_centered(s_prog_top + 4, s_prog_left, 50, p);
 }
 
 static void draw_progress_modal(const char *title, uint8_t is_loading)
 {
     char *fbuf = g_scratch_line_buf;
-    uint8_t top, left;
     uint8_t r;
 
     if (is_loading) {
@@ -247,14 +251,14 @@ static void draw_progress_modal(const char *title, uint8_t is_loading)
         }
         render_status_bar();
     }
-    modal_init_7row(&top, &left, title);
+    modal_init_7row(&s_prog_top, &s_prog_left, title);
     strcpy(fbuf, "File: ");
     strncpy(fbuf + 6,
             g_current_filename[0] ? g_current_filename : "(Untitled)", 28);
     fbuf[34] = '\0';
-    modal_draw_row_centered(top + 3, left, 50, fbuf);
+    modal_draw_row_centered(s_prog_top + 3, s_prog_left, 50, fbuf);
     draw_progress_tick(is_loading ? 1 : 0);
-    modal_draw_row_centered(top + 5, left, 50, "Please wait...");
+    modal_draw_row_centered(s_prog_top + 5, s_prog_left, 50, "Please wait...");
 }
 
 static int file_read_op(const char *filename, uint8_t is_insert)
