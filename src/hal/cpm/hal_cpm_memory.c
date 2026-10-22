@@ -513,6 +513,10 @@ void plugin_tramp_dummy_anchor(void)
     PUBLIC _g_host_api_rows
     PUBLIC _g_host_api_mgr_slot
     PUBLIC _tramp_far_bdos
+    PUBLIC _g_cpm_dma_buf
+    defc _g_cpm_dma_buf = $0080
+    PUBLIC _g_cpm_fcb
+    defc _g_cpm_fcb = $005C
 
 _g_plugin_host_api:
     defb 'S', 'E'

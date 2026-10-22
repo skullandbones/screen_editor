@@ -33,8 +33,7 @@ static uint16_t s_line_slots[MAX_DOC_LINES];
 /* Global Active Line Buffer & Document State */
 char     g_active_line_buf[MAX_ACTIVE_LINE_STRIDE];
 char     g_scratch_line_buf[MAX_ACTIVE_LINE_STRIDE];
-#ifdef __CPM__
-uint8_t   g_cpm_dma_buf[128];
+#ifndef __CPM__
 cpm_fcb_t g_cpm_fcb;
 #endif
 uint16_t g_active_line_len = 0;

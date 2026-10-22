@@ -81,12 +81,12 @@ static void parse_config_line(char *line)
         if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 32);
     }
     if (key[0] == 'S') {
-        g_config.screen_mode = (val[0] == '8' || val[0] == '1') ?
-                               MODE_80X24 : MODE_120X40;
+        g_config.screen_mode = (val[0] == '1' && val[1] == '2') ?
+                               MODE_120X40 : MODE_80X24;
     } else if (key[0] == 'T') {
         g_config.tab_width = (val[0] == '8') ? 8 : 4;
     } else if (key[0] == 'L') {
-        g_config.lines_mode = (val[0] == '3' || val[0] == '1') ? 1 : 0;
+        g_config.lines_mode = (val[0] == '3') ? 1 : 0;
     } else if (key[0] == 'R') {
         if (val[0] == 'O' && val[1] != 'F') {
             g_config.ramdrive_mode = RAMDRV_MODE_ENABLED;

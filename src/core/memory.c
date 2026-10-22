@@ -56,17 +56,19 @@ void mem_init_paging(void)
 
 uint16_t mem_alloc_slot(void)
 {
+    uint16_t idx = s_free_slot_hint;
     uint16_t i;
     for (i = 0; i < MAX_ACTIVE_SLOTS; i++) {
-        uint16_t idx = (s_free_slot_hint + i) % MAX_ACTIVE_SLOTS;
         if (!is_slot_allocated(idx)) {
             set_slot_allocated(idx);
-            s_slot_io.next_slot = SLOT_TERM;
-            memset(s_slot_io.payload, 0, FAR_SLOT_PAYLOAD);
-            hal_mem_write_slot(idx, (const uint8_t *)&s_slot_io);
-            s_free_slot_hint = (idx + 1) % MAX_ACTIVE_SLOTS;
+            s_free_slot_hint = (uint16_t)((idx + 1 < MAX_ACTIVE_SLOTS) ?
+                                          (idx + 1) : 0);
             s_total_allocations++;
             return idx;
+        }
+        idx++;
+        if (idx >= MAX_ACTIVE_SLOTS) {
+            idx = 0;
         }
     }
     return SLOT_TERM;
@@ -170,9 +172,11 @@ int mem_write_line(uint16_t *start_slot, const char *text, uint16_t len)
             chunk_len = FAR_SLOT_PAYLOAD;
         }
 
-        memset(&s_slot_io, 0, sizeof(far_slot_t));
         s_slot_io.next_slot = SLOT_TERM;
         memcpy(s_slot_io.payload, text + offset, chunk_len);
+        if (chunk_len < FAR_SLOT_PAYLOAD) {
+            s_slot_io.payload[chunk_len] = '\0';
+        }
         hal_mem_write_slot(cur_slot, (const uint8_t *)&s_slot_io);
 
         bytes_remaining -= chunk_len;

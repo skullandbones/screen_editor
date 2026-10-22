@@ -5260,6 +5260,24 @@ have been resolved and archived.
       document state if closing, while Open File (`Ctrl+O`) loads into the
       buffer only upon file selection and leaves the active buffer intact if
       file selection is canceled.
+  - [x] **Bug 2.8.61: CCP Stack Clearance and Memory Footprint Optimization**:
+    - *Reference*: `docs/HARDWARE_COMPATIBILITY.md` Section 3,
+      `docs/ARCHITECTURE.md` Section 5, `check_ccp.py`.
+    - *Issue*: With `REGISTER_SP=0xD000` to preserve the CP/M Console Command
+      Processor (CCP base at `0xD000`), insufficient headroom existed between
+      `BSS_END` (`0xCFB8`) and `0xD000` (72 bytes). Subroutine call chains
+      and registry initialization (`memset(g_plugin_registry, 0, 256)`)
+      corrupted their own activation records on the downward-growing stack,
+      causing returning functions to jump to `0x0000` (warm boot).
+    - *Resolution*: Map CP/M DMA buffer `g_cpm_dma_buf` (128 bytes) to CP/M
+      default DMA buffer at `0x0080` and `g_cpm_fcb` (36 bytes) to CP/M default
+      FCB at `0x005C` in `src/hal/cpm/hal_cpm_memory.c`, removing them from
+      BSS in `src/core/buffer.c`. Deduplicate block save and insert dialogs in
+      `src/core/block.c`, `src/core/editor.c`, and `src/include/block.h`.
+      Remove redundant memory slot write and modulo operations in
+      `src/core/memory.c`. Remove unused CLI help in `src/sec_cpm.c`. Enable
+      `-pragma-output:noprotectmsdos=1` in `Makefile`. Achieved
+      `BSS_END <= 0xD000` with positive headroom preserving CCP 100%.
 
 ---
 

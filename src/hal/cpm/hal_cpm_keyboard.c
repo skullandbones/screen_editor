@@ -77,6 +77,10 @@ static int cpm_read_byte_timeout(uint16_t max_loops)
     return -1;
 }
 
+static const uint16_t s_arrow_keys[4] = {
+    KEY_UP, KEY_DOWN, KEY_RIGHT, KEY_LEFT
+};
+
 int hal_console_getkey(void)
 {
     unsigned char c = (unsigned char)bios_conin();
@@ -121,12 +125,11 @@ int hal_console_getkey(void)
             }
 
             /* Terminal character dispatch */
-            if (b >= 'A' && b <= 'D') {
-                return (modifier == 2) ? (KEY_SHIFT_UP + (b - 'A'))
-                                       : (KEY_UP + (b - 'A'));
-            }
             if (b >= 'a' && b <= 'd') {
-                return KEY_SHIFT_UP + (b - 'a');
+                return s_arrow_keys[b - 'a'] + 9;
+            }
+            if (b >= 'A' && b <= 'D') {
+                return s_arrow_keys[b - 'A'] + ((modifier == 2) ? 9 : 0);
             }
             if (b == 'H') return (modifier == 5) ? KEY_CTRL_T : KEY_HOME;
             if (b == 'F') return (modifier == 5) ? KEY_CTRL_G : KEY_END;
@@ -162,7 +165,9 @@ int hal_console_getkey(void)
         } else if (b1 == 'O') {
             /* SS3 sequence: \033O... */
             int b2 = cpm_read_byte_timeout(20000);
-            if (b2 >= 'A' && b2 <= 'D') return KEY_UP + (b2 - 'A');
+            if (b2 >= 'A' && b2 <= 'D') {
+                return s_arrow_keys[b2 - 'A'];
+            }
             if (b2 == 'H') return KEY_HOME;
             if (b2 == 'F') return KEY_END;
             return 0;

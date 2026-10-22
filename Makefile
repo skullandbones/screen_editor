@@ -101,7 +101,7 @@ $(TARGET_SEC): $(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
 		-pragma-define:CLIB_FOPEN_MAX=0 \
 		-pragma-define:CRT_ENABLE_STDIO=0 \
 		-pragma-define:CRT_ON_EXIT=0 \
-		-pragma-define:PROTECT_MSDOS=0 \
+		-pragma-output:noprotectmsdos=1 \
 		-Isrc/include -o $(TARGET_SEC) \
 		$(CPM_MAIN_SRC) $(C_CORE_SRCS) $(C_HAL_CPM_SRCS)
 	@echo "==> Auditing $(TARGET_SEC) CCP preservation..."

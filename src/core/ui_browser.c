@@ -107,7 +107,7 @@ static void format_drv_usr_str(char *dst, char drv, uint8_t usr,
     if (usr >= 10) {
         *dst++ = '1';
         *dst++ = (char)('0' + (usr - 10));
-    } else {
+    } else if (usr > 0) {
         *dst++ = (char)('0' + usr);
     }
     *dst++ = ':';
@@ -352,6 +352,12 @@ static void draw_tilde_row(uint8_t row)
 {
     hal_console_locate(row, 1);
     hal_console_putc('~');
+}
+
+static void draw_tilde_eol(uint8_t row)
+{
+    draw_tilde_row(row);
+    hal_console_clear_eol();
 }
 
 static void emit_left_pad(uint8_t row)
@@ -629,8 +635,7 @@ static void render_browser_screen(const char *op_str, const char *prompt_txt)
     s_top_pad = (avail > 0) ? (uint8_t)(avail / 2) : 0;
 
     for (r = 1; r <= s_top_pad; r++) {
-        draw_tilde_row(r);
-        hal_console_clear_eol();
+        draw_tilde_eol(r);
     }
 
     screen_row = (uint8_t)(s_top_pad + 1);
@@ -674,8 +679,7 @@ static void render_browser_screen(const char *op_str, const char *prompt_txt)
     }
 
     screen_row++;
-    draw_tilde_row(screen_row);
-    hal_console_clear_eol();
+    draw_tilde_eol(screen_row);
 
     screen_row++;
     draw_rule_row(screen_row, '-');
@@ -725,8 +729,7 @@ static void render_browser_screen(const char *op_str, const char *prompt_txt)
     render_browser_prompt(prompt_txt);
 
     for (r = (uint8_t)(s_prompt_row + 1); r < g_active_rows; r++) {
-        draw_tilde_row(r);
-        hal_console_clear_eol();
+        draw_tilde_eol(r);
     }
 
     render_status_bar();
@@ -772,14 +775,14 @@ static int browser_handle_enter(int mode, char *selected_filename,
             s_browser_user = (cpm_usr != 0xFF) ? cpm_usr : 0;
             s_browser_filter[0] = '\0';
             ui_browser_refresh_directory(NULL);
-            return -1;
+            return -2;
         }
         fat_p = s_in_buf;
     }
 
     if (s_browser_is_fat && fat_p != NULL) {
         if (handle_fat_nav(fat_p)) {
-            return -1;
+            return -2;
         }
         format_fat_selection(selected_filename, fat_p);
         return 1;
@@ -809,14 +812,14 @@ static int browser_handle_enter(int mode, char *selected_filename,
             if (rest > s_in_buf) {
                 s_browser_filter[0] = '\0';
                 ui_browser_refresh_directory(NULL);
-                return -1;
+                return -2;
             }
             return 0;
         }
 
         if (strchr(rest, '*') || strchr(rest, '?')) {
             ui_browser_refresh_directory(set_browser_filter(rest));
-            return -1;
+            return -2;
         }
 
         if (mode == BROWSER_MODE_LOAD_PLUGIN) {
@@ -919,13 +922,14 @@ static int ui_browser_workspace(int mode, char *selected_filename,
             "OPEN FILE", "INSERT FILE", "SAVE FILE",
             "SAVE BLOCK", "LOAD PLUGIN"
         };
-        static const char *s_mode_prompts[] = {
-            "Enter filename to open:", "Enter filename to insert:",
-            "Enter filename to save:", "Enter filename to save:",
-            "Load Plugin (.PRL/.OVL):"
-        };
         op_str = s_mode_ops[mode];
-        prompt_txt = s_mode_prompts[mode];
+        prompt_txt = (mode == BROWSER_MODE_OPEN)
+            ? "Enter filename to open:"
+            : ((mode == BROWSER_MODE_INSERT)
+               ? "Enter filename to insert:"
+               : ((mode == BROWSER_MODE_LOAD_PLUGIN)
+                  ? "Load Plugin (.PRL/.OVL):"
+                  : "Enter filename to save:"));
     }
 
 #ifdef __CPM__
@@ -1056,11 +1060,14 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 return (res == 1) ? MODAL_RES_OK :
                        ((res == 0) ? MODAL_RES_CANCEL : res);
             }
-            reset_browser_input_prefix();
+            if (res == -2) {
+                reset_browser_input_prefix();
+            }
             s_cur_page = 0;
             s_hl_active = 0;
             s_hl_index = 0;
             s_hl_auto_mode = 0;
+            s_cursor_pos = (uint8_t)strlen(s_in_buf);
             need_full_render = 1;
             continue;
         } else if (s_hl_active) {

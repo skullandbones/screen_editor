@@ -430,11 +430,36 @@ int do_move_block(void)
     return 0;
 }
 
+int do_block_save_dialog(void)
+{
+    char fname[24];
+    normalize_block_bounds();
+    fname[0] = '\0';
+    if (ui_browser_save_block_dialog(fname, sizeof(fname)) ==
+        MODAL_RES_OK && fname[0]) {
+        file_save_block(fname, g_norm_start_row,
+                        g_norm_end_row, g_file_format);
+        return 1;
+    }
+    return 0;
+}
+
+int do_block_insert_dialog(void)
+{
+    char fname[24];
+    fname[0] = '\0';
+    if (ui_browser_insert_dialog(fname, sizeof(fname)) ==
+        MODAL_RES_OK && fname[0]) {
+        file_insert(fname);
+        return 1;
+    }
+    return 0;
+}
+
 int do_block_menu_popup(void)
 {
     uint8_t top, left;
     char metrics[32];
-    char fname[32];
     int key;
 
     normalize_block_bounds();
@@ -503,21 +528,11 @@ int do_block_menu_popup(void)
             break;
         }
         if (key == KEY_CTRL_S || key == 'S') {
-            normalize_block_bounds();
-            fname[0] = '\0';
-            if (ui_browser_save_block_dialog(fname, sizeof(fname)) ==
-                MODAL_RES_OK && fname[0]) {
-                file_save_block(fname, g_norm_start_row,
-                                g_norm_end_row, g_file_format);
-            }
+            do_block_save_dialog();
             break;
         }
         if (key == KEY_CTRL_O || key == 'R') {
-            fname[0] = '\0';
-            if (ui_browser_insert_dialog(fname, sizeof(fname)) ==
-                MODAL_RES_OK && fname[0]) {
-                file_insert(fname);
-            }
+            do_block_insert_dialog();
             break;
         }
     }

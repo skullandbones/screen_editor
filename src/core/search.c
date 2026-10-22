@@ -527,7 +527,7 @@ int do_ctrl_r_replace(void)
             uint8_t top, left;
             modal_init_7row(&top, &left, "Replace Confirmation");
             modal_draw_row_centered(top + 3, left, 50,
-                                    "Match found for search pattern in text");
+                                    "Pattern matched");
             modal_draw_row_centered(top + 4, left, 50,
                                     "Replace this occurrence?");
             modal_draw_row_centered(
@@ -609,7 +609,7 @@ int do_ctrl_r_replace(void)
 
 void show_popup_not_found(void)
 {
-    modal_alert("Pattern Not Found", "Pattern not found in file.", NULL);
+    modal_alert("Pattern Not Found", "Pattern not found.", NULL);
 }
 
 void show_popup_search_completed(void)
@@ -619,10 +619,9 @@ void show_popup_search_completed(void)
 
 void show_popup_replace_done(uint16_t count)
 {
-    char msg[36];
-    char *p;
-    strcpy(msg, "Replace done: ");
-    p = se_append_u16(msg + 14, count);
+    char *p = g_scratch_line_buf + 64;
+    strcpy(p, "Replace done: ");
+    p = se_append_u16(p + 14, count);
     strcpy(p, " replacement(s).");
-    modal_alert("Replace Done", msg, NULL);
+    modal_alert("Replace Done", g_scratch_line_buf + 64, NULL);
 }
