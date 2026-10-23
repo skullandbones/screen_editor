@@ -473,7 +473,52 @@ to `CPM_USER_BANK`, invokes the host routine in `SE.COM`, and restores
 * `+0x4C` (`+76`, `JP TRAMP_HIDE_CURSOR`) & `+0x4F` (`+79`,
   `JP TRAMP_SHOW_CURSOR`): Hide/show hardware terminal cursor.
 
-### 7.7 Linux 64-Bit Plugin Mechanism (`x86_64` & `ARM64` / `aarch64`)
+### 7.7 Foreign Filesystem & Virtual Filesystem (VFS) Architecture
+
+The Screen Editor supports foreign filesystems residing outside standard CP/M
+BDOS disk allocations (such as FAT12/16/32 partitions and native NextZXOS
+host drives) without polluting Base TPA memory:
+
+1. **Virtual Filesystem (VFS) Plugin Protocol (`CAP_HAS_VFS`)**:
+   Plugins exporting VFS capability set bit 8 (`CAP_HAS_VFS = 0x0100`) in
+   their descriptor capability mask and expose an Action 3 entry vector
+   at offset `ENTRY + 9`:
+   - `+0x00`: Action 0 (Interactive User Interface / Browser).
+   - `+0x03`: Action 1 (Modal About Dialog).
+   - `+0x06`: Action 2 (Configuration Dialog).
+   - `+0x09`: Action 3 (Headless VFS Request Dispatcher).
+   When an editor subsystem requires foreign drive access, it prepares a
+   16-byte `VFS_REQ_PKT` in Upper Common RAM (`DE = VFS_REQ_PKT`) and invokes
+   Action 3 via `VFS_EXEC_REQUEST`.
+2. **RomWBW HBIOS Implementation (`FATFS.PRL`)**:
+   On RomWBW CP/M platforms, `FATFS.PRL` accesses hardware block devices via
+   HBIOS `RST 08H` disk I/O routines (`BF_DIOREAD` / `BF_DIOWRITE`). Logical
+   units `U0:`..`U7:` and default unit `U:` are mapped to physical IDE, CF, or
+   SD card interfaces.
+3. **NextCPM Native Host Filesystem Implementation (`NEXTFS.PRL`)**:
+   On the ZX Spectrum Next under NextCPM, `SE_NEXT.COM` cannot use standard
+   CP/M BDOS disk calls (Functions 14, 17, 18) for native NextZXOS drives
+   such as `C:` (the FAT32 SD card partition) and `M:` (the NextZXOS RAM
+   drive). Doing so triggers a fatal BDOS Select Error crashing to the CP/M
+   prompt.
+   Instead, `SE_NEXT.COM` utilizes `NEXTFS.PRL`:
+   - **Drive Auto-Detection**: Dynamically queries NextCPM BIOS Function 30
+     (USERF) with `C=2` to obtain the 16-byte CP/M-to-NextZXOS and
+     NextZXOS-to-CP/M drive mapping tables. Entries with value `0xFF` in the
+     NextZXOS-to-CP/M table represent NextZXOS-only native drives. The editor
+     auto-detects these drives without requiring hardcoded drive letters.
+   - **NextZXOS Inter-Mode Kernel Bridge**: `NEXTFS.PRL` communicates with
+     NextZXOS filesystem routines across the CP/M boundary using USERF `C=1`
+     (the identical call gate used by NextCPM's `IMPORT.COM` and `EXPORT.COM`
+     utilities): `IY` specifies the NextZXOS / +3DOS function ID, registers
+     are exchanged via alternate register sets and `IX`, and buffers are staged
+     in Upper Memory (`$8000..$BFFF`).
+   - **File Operations**: Directory listing, file open, read, write, and
+     streaming operate transparently across NextZXOS drives, allowing users to
+     open, edit, and save files on SD card `C:` or RAM drive `M:` just like
+     standard CP/M disk images.
+
+### 7.8 Linux 64-Bit Plugin Mechanism (`x86_64` & `ARM64` / `aarch64`)
 
 On 64-bit Linux systems (`x86_64` and `ARM64` / `aarch64`), all `SE` port
 implementations (C `se-linux`, Python `se-py`, Rust `se-rs`, Ada `se-ada`,

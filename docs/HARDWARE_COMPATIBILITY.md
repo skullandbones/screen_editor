@@ -192,8 +192,52 @@ platform across both CP/M emulation and native NextZXOS operating environments.
    - Under NextCPM (`SE_NEXT.COM`), standard CP/M BDOS console calls (Functions
      1, 2, 6, 9) and BIOS vectors are routed to the NextCPM 80-column console
      driver with Sinclair keyboard translation.
+   - Storage under NextCPM is split into CP/M disk container images (`.P3D` /
+     `.DSK`, mounted as CP/M drives) and NextZXOS native host drives (such as
+     the primary FAT32 SD card partition `C:` and NextZXOS RAM drive `M:`).
 
-### 5.3 Verified Next Emulators
+### 5.3 NextCPM Native Host Drive Access & VFS Subsystem (`NEXTFS.PRL`)
+
+Standard CP/M BDOS disk calls (e.g. Function 14 `Select Disk` and Functions 17/
+18 `Search First/Next`) cannot be performed on native NextZXOS drives such as
+`C:` (the FAT32 SD card partition) or `M:` (the NextZXOS RAM disk). In NextCPM,
+issuing standard BDOS calls on native NextOS drives triggers a fatal BDOS
+Select Error or warm boot back to the CP/M prompt (`A>`).
+
+To enable seamless, crash-free access to NextZXOS native drives across all
+editor file operations (Open, Save, Insert, Save Block, Load Plugin):
+
+1. **Dynamic Drive Auto-Detection**:
+   `SE_NEXT.COM` avoids hardcoded drive letters (`C:`, `M:`, etc.). Instead, it
+   queries the NextCPM BIOS USERF API (BIOS function 30, `C=2`):
+   - Returns pointer `HL` to the 16-byte CP/M-to-NextZXOS drive map table.
+   - Returns pointer `BC` to the 16-byte NextZXOS-to-CP/M drive table.
+   In the `BC` table (indexing NextZXOS drives `A..P`), an entry of `0xFF`
+   signifies a NextZXOS-only native drive (e.g. SD card `C:`, RAM disk `M:`),
+   an entry of `'A'..'P'` indicates a CP/M drive mounted on that letter, and
+   `0` indicates non-existence. The editor automatically recognizes whether any
+   drive selected by the user is a CP/M container drive or a NextZXOS drive.
+2. **Dedicated Next VFS Far RAM Plugin (`NEXTFS.PRL`)**:
+   Paralleling RomWBW's `FATFS.PRL` plugin, `SE_NEXT.COM` utilizes a dedicated
+   Next-specific Far RAM VFS plugin (`NEXTFS.PRL`). Running in a banked Far RAM
+   page, `NEXTFS.PRL` implements the canonical Headless VFS request protocol
+   via Action 3 (`ENTRY + 9`, `VFS_REQ_PKT`, `CAP_HAS_VFS`).
+3. **NextZXOS Inter-Mode Kernel Bridge (USERF `C=1`)**:
+   `NEXTFS.PRL` interacts with NextZXOS native filesystem services using the
+   exact inter-mode call gate utilized by NextCPM's `IMPORT.COM` and
+   `EXPORT.COM` utilities:
+   - BIOS Function 30 (USERF), `C=1`: Invokes NextZXOS / +3DOS kernel functions
+     via `IY = call_id` with registers passed in alternate register sets and
+     `IX`, and transfer buffers staged within `$8000..$BFFF`.
+   - Supports file streaming (`F_OPEN`, `F_CLOSE`, `F_READ`, `F_WRITE`) and
+     directory enumeration directly on NextZXOS partitions without CP/M BDOS
+     involvement.
+4. **Transparent File UI Integration**:
+   File browser screens (`ui_browser.asm`) detect NextZXOS drives and route
+   directory collection, file loading, and saving through the VFS plugin
+   request packet (`VFS_REQ_PKT`) rather than calling CP/M BDOS Function 14.
+
+### 5.4 Verified Next Emulators
 
 - **CSpect** (by Mike Dailly):
   - Recommended launch flags: `-w3 -zxnext -nextrom -mmc=<next_sd.img>`

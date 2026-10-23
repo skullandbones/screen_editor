@@ -410,7 +410,7 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 2 Open (Bugs 2.2.18, 2.2.19 Open;
+- **Status**: Active / 3 Open (Bugs 2.2.18, 2.2.19, 2.2.29 Open;
   21 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
   2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23, 2.2.24, 2.2.25,
   2.2.26, 2.2.27, 2.2.28 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
@@ -978,6 +978,58 @@ have been resolved and archived.
       `SHOW_MEM_INFO_SCREEN` and `EXIT_PROGRAM` in `src/se_next_cpm.asm` to
       dynamically select the `SE_NEXT.COM` or `SE.COM` strings according to
       `EXEC_IS_SE_COM`. Validated via `tests/test_bug_2_2_28.py`.
+  - [ ] **Bug 2.2.29: Crash to Prompt on Accessing NextOS Native Drives (C:, M:,
+    etc.) From File Screens in `SE_NEXT.COM`**:
+    - *Reference*: `docs/HARDWARE_COMPATIBILITY.md` Section 5.4;
+      `docs/ARCHITECTURE.md` Section 7.5, 7.8; `docs/UI_UX_DESIGN.md`
+      Section 7.9, 14.1.
+    - *Issue*: In `SE_NEXT.COM`, attempting to open, save, insert, save block,
+      or load plugin from drive `C:` (NextZXOS FAT32 SD card partition) or
+      drive `M:` (NextZXOS RAM drive), or any non-CP/M NextOS drive, crashes
+      `SE_NEXT.COM` back to the CP/M command prompt (`A>`).
+    - *Root Cause*: Under NextCPM on ZX Spectrum Next, only mapped container
+      drives (`.P3D` / `.DSK` files such as `CPM-A.P3D`, `CPM-B.P3D`) possess
+      CP/M Disk Parameter Blocks (DPB/DPH) accessible via standard CP/M BDOS
+      calls. Drives such as `C:` (SD card FAT32 filesystem) and `M:` (NextOS
+      RAM drive) are native NextZXOS / +3DOS drives. When entering `C:`, `M:`,
+      or any NextOS drive letter in file browser screens (`READ_DIRECTORY`,
+      `CHANGE_DRIVE`, `COLLECT_DIR_ENTRIES`), `SE_NEXT.COM` unconditionally
+      invokes CP/M BDOS Function 14 (Select Disk) and BDOS Function 17/18
+      (Search First/Next). Because `C:` or `M:` are not mounted CP/M BDOS
+      drives, the BDOS triggers a fatal "BDOS Select Error" or warm boot,
+      crashing the editor immediately to the prompt.
+    - *Required Fix*:
+      1. **Drive Auto-Detection (No Hardcoded Drive Letters)**: Do not rely on
+         hardcoded drive letters `C:` or `M:`. Query the NextCPM BIOS USERF API
+         (BIOS function 30, `C=2`: Obtain NextZXOS drive mappings). This returns
+         pointers to two 16-byte tables:
+         - `HL` = CP/M -> NextZXOS drive mapping table (for CP/M drives `A..P`,
+           indicates mapped NextZXOS drive letter or `0` if not present).
+         - `BC` = NextZXOS -> CP/M drive mapping table (for NextZXOS drives
+           `A..P`, indicates `0` if not present, CP/M letter if mounted, or
+           `0xFF` if it is a NextZXOS-only native drive such as FAT32 SD or RAM
+           drive).
+         Use this dynamic mapping to auto-detect whether any selected drive
+         letter is a native CP/M BDOS container drive or a NextZXOS drive.
+      2. **Next-Specific VFS Plugin Architecture (`NEXTFS.PRL`)**:
+         Just like RomWBW HBIOS FAT access is delegated to `FATFS.PRL`,
+         implement a dedicated Next-specific Far RAM VFS plugin (`NEXTFS.PRL`)
+         exporting Headless VFS operations via Action 3 (`ENTRY + 9`,
+         `VFS_REQ_PKT`, `CAP_HAS_VFS`).
+      3. **NextZXOS Inter-Mode File APIs**:
+         In `NEXTFS.PRL`, interface with NextZXOS filesystem services across
+         the CP/M boundary using the exact NextCPM BIOS USERF call gate
+         (`C=1`: Perform NextZXOS call via `IY = call_id`, registers in
+         alternate bank and `IX`, buffer located in `$8000..$BFFF`) utilized
+         by NextCPM's `IMPORT.COM` and `EXPORT.COM` utilities:
+         - `F_OPEN` / `F_CLOSE` / `F_READ` / `F_WRITE` for file data streaming.
+         - Directory reading and catalog traversal for browsing NextOS files
+           and subdirectories without crashing BDOS.
+      4. **Host VFS Routing**:
+         In `src/core/ui_browser.asm` and `src/core/plugin_mgr.asm`, when a
+         NextZXOS drive is detected, route all directory collection, file
+         opening, saving, and block operations through the VFS plugin interface
+         instead of issuing CP/M BDOS Function 14 / FCB calls.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and
