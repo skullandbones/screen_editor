@@ -845,6 +845,7 @@ static int browser_handle_enter(int mode, char *selected_filename,
         bdos(32, orig_u);
 
         if (mode == BROWSER_MODE_OPEN || mode == BROWSER_MODE_INSERT) {
+            /* (uint8_t)bdos(15, (int)s_dir_fcb) == 0xFF */
             if (exists == 0xFF) {
                 modal_alert_file_not_found(rest);
                 return -1;

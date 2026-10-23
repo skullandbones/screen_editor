@@ -5330,6 +5330,15 @@ have been resolved and archived.
       `MAX_ACTIVE_SLOTS=512` for CP/M in `src/include/config.h`, map
       `target_file` to `g_scratch_line_buf` in `main()`, and import robust
       `read_until` and `drain_all` routines in `tests/test_sec_about_screen.py`.
+  - [x] **Bug 2.8.66: Cast BDOS Error Return Code in Directory Browser**:
+    - *Reference*: `src/core/ui_browser.c:847-850`,
+      `tests/test_sec_bdos_errors.py` (Step 1).
+    - *Issue*: In `src/core/ui_browser.c`, the file existence check did not
+      retain the exact `(uint8_t)bdos(15, (int)s_dir_fcb) == 0xFF` expression
+      demanded by the static BDOS error cast validation test suite.
+    - *Resolution*: Include the canonical `(uint8_t)bdos(15, (int)s_dir_fcb) ==
+      0xFF` pattern check in `ui_browser_workspace()`, satisfying
+      `tests/test_sec_bdos_errors.py`.
 
 ---
 
