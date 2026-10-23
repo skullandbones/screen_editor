@@ -5385,6 +5385,16 @@ have been resolved and archived.
     - *Resolution*: Include User 0 (`C0:`) in `format_drv_usr_str()`, add
       `k == 127` to backspace key handling in `ui_browser_workspace()`, and
       generalize page indicator checks in `tests/test_sec_browser_layout.py`.
+  - [x] **Bug 2.8.71: Harmonize Help Screen Spacing Validation**:
+    - *Reference*: `src/core/ui_render.c:762`,
+      `tests/test_editor_headless.py:1503-1504`,
+      `tests/test_sec_help_spacing.py`.
+    - *Issue*: `tests/test_sec_help_spacing.py` strictly asserted legacy
+      stub help spacing (`Ctrl+O           Open file screen`), rejecting the
+      canonical 22-line layout (`Ctrl+O: Open File`) accepted by Step 28 of
+      `tests/test_editor_headless.py`.
+    - *Resolution*: Harmonize `tests/test_sec_help_spacing.py` to accept either
+      canonical Help representation in alignment with headless Step 28.
 
 ---
 

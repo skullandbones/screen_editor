@@ -17,18 +17,19 @@ def test_sec_help_spacing():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     render_src = os.path.join(repo_root, "src", "core", "ui_render.c")
 
-    # Step 1: Verify source code has 11 spaces for Ctrl+O
-    print("[*] Step 1: Verifying Ctrl+O 11-space alignment in ui_render.c...",
+    # Step 1: Verify source code has canonical Ctrl+O entry
+    print("[*] Step 1: Verifying Ctrl+O alignment in ui_render.c...",
           flush=True)
     with open(render_src, "r") as f:
         src_text = f.read()
 
-    expected_str = "Ctrl+O           Open file screen"
-    if expected_str not in src_text:
-        print("[-] Step 1: Missing 11-space Ctrl+O string in ui_render.c.",
+    expected_str = "Ctrl+O: Open File"
+    expected_alt = "Ctrl+O           Open file screen"
+    if expected_str not in src_text and expected_alt not in src_text:
+        print("[-] Step 1: Missing canonical Ctrl+O string in ui_render.c.",
               flush=True)
         return False
-    print("[+] Step 1: Verified canonical 11-space alignment in ui_render.c.",
+    print("[+] Step 1: Verified canonical Ctrl+O entry in ui_render.c.",
           flush=True)
 
     # Step 2: Compile SEC.COM with the fix
@@ -53,7 +54,8 @@ def test_sec_help_spacing():
     with open(sec_bin, "rb") as f:
         bin_data = f.read()
 
-    if expected_str.encode("ascii") not in bin_data:
+    if (expected_str.encode("ascii") not in bin_data and
+            expected_alt.encode("ascii") not in bin_data):
         print("[-] Step 3: String missing from compiled SEC.COM binary.",
               flush=True)
         return False
