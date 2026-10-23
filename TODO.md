@@ -410,11 +410,11 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 3 Open (Bugs 2.2.18, 2.2.19, 2.2.29 Open;
-  21 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
+- **Status**: Active / 2 Open (Bugs 2.2.18, 2.2.19 Open;
+  22 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
   2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23, 2.2.24, 2.2.25,
-  2.2.26, 2.2.27, 2.2.28 Resolved; Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6
-  Rejected).
+  2.2.26, 2.2.27, 2.2.28, 2.2.29 Resolved;
+  Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
     - *Reference*: `docs/UI_UX_DESIGN.md` Section 4.3, 4.4, 13.2.
@@ -978,7 +978,7 @@ have been resolved and archived.
       `SHOW_MEM_INFO_SCREEN` and `EXIT_PROGRAM` in `src/se_next_cpm.asm` to
       dynamically select the `SE_NEXT.COM` or `SE.COM` strings according to
       `EXEC_IS_SE_COM`. Validated via `tests/test_bug_2_2_28.py`.
-  - [ ] **Bug 2.2.29: Crash to Prompt on Accessing NextOS Native Drives (C:, M:,
+  - [x] **Bug 2.2.29: Crash to Prompt on Accessing NextOS Native Drives (C:, M:,
     etc.) From File Screens in `SE_NEXT.COM`**:
     - *Reference*: `docs/HARDWARE_COMPATIBILITY.md` Section 5.4;
       `docs/ARCHITECTURE.md` Section 7.5, 7.8; `docs/UI_UX_DESIGN.md`
@@ -1030,6 +1030,28 @@ have been resolved and archived.
          NextZXOS drive is detected, route all directory collection, file
          opening, saving, and block operations through the VFS plugin interface
          instead of issuing CP/M BDOS Function 14 / FCB calls.
+    - *Resolution*: Implemented full dynamic NextZXOS drive detection and VFS
+      routing in `SE_NEXT.COM` and `NEXTFS.PRL`:
+      - Extended `tools/mkprl.py` with `CAP_HAS_VFS = 0x0100` and `--has-vfs`.
+      - Authored `plugins/nextfs.asm` (`NEXTFS.PRL`, 8K slot, caps `0x017A`)
+        implementing all 10 VFS commands using NextCPM BIOS USERF inter-mode
+        calls (`DOS_OPEN`, `DOS_READ`, `DOS_WRITE`, `DOS_CLOSE`, `DOS_CATALOG`).
+      - In `src/hal/next_cpm/hal_nextcpm_storage.asm`, implemented
+        `NEXTCPM_INIT_DRV_TABLES` (BIOS USERF `C=2`) and
+        `NEXTCPM_CLASSIFY_DRIVE` returning Carry=1 for native NextZXOS drives
+        and Carry=0 for CP/M container drives.
+      - In `src/core/plugin_tramp.asm`, exposed `TRAMP_NEXTCPM_USERF` and drive
+        mapping table pointers at `PLUGIN_HOST_API + 82`.
+      - In `src/core/plugin_mgr.asm`, updated `VFS_EXEC_REQUEST` for Next MMU
+        banking (`NEXT_BNKCALL`), `ENSURE_VFS_PLUGIN_LOADED` to auto-load
+        `NEXTFS.PRL` under `TARGET_NEXT_CPM`, and `PARSE_FAT_PATH` to classify
+        native drives.
+      - In `src/core/ui_browser.asm`, hooked `HODS_OK` and `HSDS_DRIVE_OK` to
+        seamlessly switch into VFS mode on selecting native NextZXOS drives,
+        and prevented false RAM drive unavailable errors in
+        `CHECK_TARGET_DRIVE_UNAVAILABLE`.
+      - Preserved 100% byte-for-byte binary invariance of RomWBW `SE.COM`.
+      - Verified via `tests/test_bug_2_2_29.py` and `check_ccp.py`.
 
 ### 2.3 Profile 3: Native ZX Spectrum Next (`SE.NEX` & `.se` Dot Command)
 - **Target Platform**: NextZXOS / ESXDOS standalone browser executable and

@@ -2045,7 +2045,11 @@ VFS_EXEC_REQUEST:
 
 	; Interrupts disabled during inter-bank call
 	DI
+	IFDEF TARGET_NEXT
+	CALL NEXT_BNKCALL
+	ELSE
 	CALL 0FFF9H			; HB_BNKCALL at 0xFFF9
+	ENDIF
 	EI
 
 	PUSH AF
@@ -2098,11 +2102,42 @@ PARSE_FAT_PATH:
 PFP_SKIP_SPACES:
 	LD A,(HL)
 	CP ' '
-	JR NZ,PFP_CHECK_U
+	JR NZ,PFP_CHECK_PREFIX
 	INC HL
 	JR PFP_SKIP_SPACES
 
-PFP_CHECK_U:
+PFP_CHECK_PREFIX:
+	IFDEF TARGET_NEXT_CPM
+	; Check if string starts with NextZXOS drive letter: [A-P]: or [a-p]:
+	LD A,(HL)
+	CALL TO_UPPER
+	CP 'A'
+	JR C,PFP_TRY_U
+	CP 'P'+1
+	JR NC,PFP_TRY_U
+	INC HL
+	LD A,(HL)
+	DEC HL
+	CP ':'
+	JR NZ,PFP_TRY_U
+	; It has drive spec format <drive>: ! Test if NextZXOS native drive:
+	LD A,(HL)
+	CALL NEXTCPM_CLASSIFY_DRIVE
+	JR NC,PFP_TRY_U			; CP/M container drive -> not FAT
+	; Native NextZXOS drive detected!
+	LD A,(HL)
+	CALL TO_UPPER
+	SUB 'A'				; A = unit 0..15
+	LD C,A
+	INC HL				; Past drive letter
+	INC HL				; Past ':'
+	POP AF				; Discard saved initial HL
+	LD A,C				; A = unit 0..15
+	SCF				; Carry = 1 (VFS path detected)
+	RET
+PFP_TRY_U:
+	ENDIF
+
 	CALL TO_UPPER
 	CP 'U'
 	JR NZ,PFP_NOT_FAT
@@ -2241,7 +2276,11 @@ EBF_COPY_DONE:
 ENSURE_VFS_PLUGIN_LOADED:
 	CALL VFS_FIND_PLUGIN
 	RET NC				; Already resident
+	IFDEF TARGET_NEXT_CPM
+	LD DE,STR_NEXTFS_PRL
+	ELSE
 	LD DE,STR_FATFS_PRL
+	ENDIF
 	CALL LOAD_PLUGIN_BY_NAME
 	RET
 
@@ -2274,9 +2313,26 @@ CHECK_FAT_INPUT_OPEN:
 	CALL PARSE_FAT_PATH
 	JR NC,CFIO_NOT_FAT
 
+	IFDEF TARGET_NEXT_CPM
+	; If remainder after ':' is empty/spaces, this is a drive switch
+CFIO_CHECK_EMPTY:
+	LD A,(HL)
+	OR A
+	JR Z,CFIO_NOT_FAT
+	CP ' '
+	JR NZ,CFIO_NOT_EMPTY
+	INC HL
+	JR CFIO_CHECK_EMPTY
+
+CFIO_NOT_EMPTY:
+	; FAT path detected! Check if plugin is loaded
+	CALL ENSURE_VFS_PLUGIN_LOADED
+	JR C,CFIO_NO_PLUGIN
+	ELSE
 	; FAT path detected! Check if plugin is loaded
 	CALL VFS_FIND_PLUGIN
 	JR C,CFIO_NO_PLUGIN
+	ENDIF
 
 	; Plugin is loaded! Return Carry=0, NZ
 	XOR A
@@ -2316,9 +2372,26 @@ CHECK_FAT_INPUT_SAVE:
 	CALL PARSE_FAT_PATH
 	JR NC,CFIS_NOT_FAT
 
+	IFDEF TARGET_NEXT_CPM
+	; If remainder after ':' is empty/spaces, this is a drive switch
+CFIS_CHECK_EMPTY:
+	LD A,(HL)
+	OR A
+	JR Z,CFIS_NOT_FAT
+	CP ' '
+	JR NZ,CFIS_NOT_EMPTY
+	INC HL
+	JR CFIS_CHECK_EMPTY
+
+CFIS_NOT_EMPTY:
+	; FAT path detected! Check if plugin is loaded
+	CALL ENSURE_VFS_PLUGIN_LOADED
+	JR C,CFIS_NO_PLUGIN
+	ELSE
 	; FAT path detected! Check if plugin is loaded
 	CALL VFS_FIND_PLUGIN
 	JR C,CFIS_NO_PLUGIN
+	ENDIF
 
 	; Plugin is loaded! Return Carry=0, NZ
 	XOR A

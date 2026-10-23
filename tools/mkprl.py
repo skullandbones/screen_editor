@@ -48,6 +48,7 @@ CAP_SIZE_8K    = 0x0040
 CAP_SIZE_16K   = 0x0080
 CAP_SIZE_32K   = 0x00C0
 CAP_SIZE_MASK  = 0x00C0
+CAP_HAS_VFS    = 0x0100
 
 SIZE_MAP = {
     "4k": CAP_SIZE_4K,
@@ -190,6 +191,8 @@ def main():
                         help="Implements embedded About screen")
     parser.add_argument("--has-config", action="store_true", default=False,
                         help="Implements embedded Configuration screen")
+    parser.add_argument("--has-vfs", action="store_true", default=False,
+                        help="Implements Headless VFS (Action 3 at ENTRY+9)")
     parser.add_argument("--caps", type=lambda x: int(x, 0), default=None,
                         help="Explicit 16-bit capabilities bitmask override")
 
@@ -269,6 +272,8 @@ def main():
             caps |= CAP_HAS_ABOUT
         if args.has_config:
             caps |= CAP_HAS_CONFIG
+        if args.has_vfs:
+            caps |= CAP_HAS_VFS
 
         caps = (caps & ~CAP_SIZE_MASK) | SIZE_MAP[size]
 
@@ -286,7 +291,10 @@ def main():
     with open(args.output, "wb") as f:
         f.write(result)
 
-    print(f"[+] Successfully wrote {len(result)} bytes to {args.output} (Name: {args.name}, Size: {size.upper()}, Caps: 0x{caps:04X})")
+    print(
+        f"[+] Successfully wrote {len(result)} bytes to {args.output} "
+        f"(Name: {args.name}, Size: {size.upper()}, Caps: 0x{caps:04X})"
+    )
 
 if __name__ == "__main__":
     main()

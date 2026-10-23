@@ -321,6 +321,30 @@ def main():
                     os.path.join(plugin_dir, "helpnext_100.bin"),
                     os.path.join(plugin_dir, "helpnext_200.bin")], check=True)
 
+    # 11. Build NEXTFS.PRL (8KB Far RAM NextZXOS VFS Plugin)
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'nextfs_100.bin')}",
+                    os.path.join(plugin_dir, "nextfs.asm")], check=True)
+
+    nextfs_200_asm = os.path.join(plugin_dir, "nextfs_200.asm")
+    with open(os.path.join(plugin_dir, "nextfs.asm"), "r") as f:
+        src = f.read().replace("ORG\t0100H", "ORG\t0200H")
+    with open(nextfs_200_asm, "w") as f:
+        f.write(src)
+
+    subprocess.run([z80asm_bin, "-b",
+                    f"-o={os.path.join(plugin_dir, 'nextfs_200.bin')}",
+                    nextfs_200_asm], check=True)
+    if os.path.exists(nextfs_200_asm):
+        os.remove(nextfs_200_asm)
+
+    subprocess.run([sys.executable, mkprl_bin, "-n", "NEXTFS",
+                    "-o", os.path.join(plugin_dir, "NEXTFS.PRL"),
+                    "--size", "8k", "--far", "--modal", "--has-about",
+                    "--has-config", "--has-vfs",
+                    os.path.join(plugin_dir, "nextfs_100.bin"),
+                    os.path.join(plugin_dir, "nextfs_200.bin")], check=True)
+
     # Clean up temporary binaries
     for tmp in ["rot13_100.bin", "rot13_200.bin", "wordcnt.bin",
                 "beautify_100.bin", "beautify_200.bin",
@@ -330,7 +354,8 @@ def main():
                 "plugin_100.bin", "plugin_200.bin",
                 "hibern_100.bin", "hibern_200.bin",
                 "help_100.bin", "help_200.bin",
-                "helpnext_100.bin", "helpnext_200.bin"]:
+                "helpnext_100.bin", "helpnext_200.bin",
+                "nextfs_100.bin", "nextfs_200.bin"]:
         p = os.path.join(plugin_dir, tmp)
         if os.path.exists(p):
             os.remove(p)
@@ -363,6 +388,7 @@ def main():
     print(f"    - {os.path.join(plugin_dir, 'HIBERN.OVL')}")
     print(f"    - {os.path.join(plugin_dir, 'HELP.OVL')}")
     print(f"    - {os.path.join(plugin_dir, 'HELPNEXT.OVL')}")
+    print(f"    - {os.path.join(plugin_dir, 'NEXTFS.PRL')}")
 
 if __name__ == "__main__":
     main()
