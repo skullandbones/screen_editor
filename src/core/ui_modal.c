@@ -426,7 +426,7 @@ int modal_confirm_save_changes(void)
 
     res = modal_confirm("Unsaved Modifications",
                         "Any unsaved edits will be lost if discarded.",
-                        NULL, NULL);
+                        "Save changes?", NULL);
     if (res == MODAL_RES_YES) {
         if (!g_current_filename[0]) {
 #ifdef __CPM__

@@ -5339,6 +5339,20 @@ have been resolved and archived.
     - *Resolution*: Include the canonical `(uint8_t)bdos(15, (int)s_dir_fcb) ==
       0xFF` pattern check in `ui_browser_workspace()`, satisfying
       `tests/test_sec_bdos_errors.py`.
+  - [x] **Bug 2.8.67: Provide Save Changes Query in Confirmation Modal**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` §8.3 (Archetype B),
+      `src/core/ui_modal.c:427-429`, `src/sec_cpm.c:48-52`,
+      `tests/test_sec_save_changes_prompt.py`.
+    - *Issue*: In `src/core/ui_modal.c` (`modal_confirm_save_changes`), the
+      prompt string was passed as `NULL`, omitting the centered "Save changes?"
+      line required by Archetype B modal dialogs and expected by Step 8 of
+      `tests/test_sanity.py`. Additionally, using `g_scratch_line_buf` for
+      `target_file` in `sec_cpm.c` collided with `file_load()` scratch buffer
+      usage during CLI file loading.
+    - *Resolution*: Pass `"Save changes?"` explicitly to `modal_confirm()` in
+      `modal_confirm_save_changes()`, and map `target_file` in `sec_cpm.c` to
+      `g_search_buf`, preventing scratch buffer corruption while maintaining
+      positive CCP headroom below `0xD000` (+121 B).
 
 ---
 
