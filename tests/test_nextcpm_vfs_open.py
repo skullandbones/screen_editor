@@ -108,6 +108,36 @@ class MockNextOSFileSystem:
         self.next_handle = 1
         # Log of executed NextZXOS DOS calls for verification
         self.call_log = []
+        # Simulated directory catalogs: (drv_idx, path) -> list of 13B entries
+        self.catalogs = {}
+        self.cat_cursors = {}
+
+    def add_dir_entry(self, drv_idx: int, path: str, name: str, ext: str,
+                      is_dir: bool = False):
+        """Register a catalog entry on NextZXOS filesystem."""
+        key = (drv_idx, path.strip("/").upper())
+        if key not in self.catalogs:
+            self.catalogs[key] = []
+        name_bytes = name.upper().ljust(8)[:8].encode("ascii")
+        ext_bytes = ext.upper().ljust(3)[:3].encode("ascii")
+        attr = 0x10 if is_dir else 0x00
+        # 13 bytes: 8 name + 3 ext + attr + reserved
+        entry = name_bytes + ext_bytes + bytes([attr, 0x00])
+        self.catalogs[key].append(entry)
+
+    def dos_catalog(self, drv_idx: int, path: str,
+                    continuation: bool = False, batch_size: int = 10):
+        """Simulate NextZXOS DOS_CATALOG ($011E) batch enumeration."""
+        self.call_log.append(("DOS_CATALOG", drv_idx, path, continuation))
+        key = (drv_idx, path.strip("/").upper())
+        entries = self.catalogs.get(key, [])
+        if not continuation:
+            self.cat_cursors[key] = 0
+        cur = self.cat_cursors.get(key, 0)
+        batch = entries[cur : cur + batch_size]
+        self.cat_cursors[key] = cur + len(batch)
+        has_more = self.cat_cursors[key] < len(entries)
+        return batch, has_more
 
     def add_file(self, filespec: str, content: bytes):
         self.files[filespec.upper()] = content
@@ -151,6 +181,8 @@ class MockHostEditor:
     def __init__(self):
         self.lines = []
         self.active_line_buf = bytearray(1024)
+        self.dir_names_buf = bytearray(255 * 13)
+        self.dir_file_count = 0
 
     def host_clear_document(self):
         self.lines.clear()
@@ -164,6 +196,92 @@ class MockHostEditor:
             while len(self.lines) < line_num:
                 self.lines.append(b"")
             self.lines.append(line_bytes)
+
+
+def vfs_list_dir(fs: MockNextOSFileSystem, host: MockHostEditor,
+                 unit: int, path: str, max_entries: int = 255):
+    """
+    Simulates NEXTFS.PRL VFS_LIST_DIR (Action 3, VFS_CMD_LIST_DIR).
+    Outputs 13-byte formatted records into host.dir_names_buf.
+    """
+    drv_idx = unit
+    cur_count = 0
+    out_buf = bytearray()
+    clean_path = path.strip()
+    is_subdir = bool(clean_path and clean_path not in ("/", "\\"))
+
+    # Synthesize parent directory entry if browsing subdirectory
+    if is_subdir:
+        parent_rec = b"..      /   \x00"
+        out_buf.extend(parent_rec)
+        cur_count += 1
+
+    continuation = False
+    while cur_count < max_entries:
+        batch, has_more = fs.dos_catalog(
+            drv_idx, clean_path, continuation=continuation
+        )
+        if not batch:
+            break
+        for entry in batch:
+            if cur_count >= max_entries:
+                break
+            name = entry[0:8]
+            ext = entry[8:11]
+            attr = entry[11]
+
+            # Skip invalid / deleted
+            if name[0] in (0x00, 0xE5, ord("."), ord(" ")):
+                continue
+
+            is_dir = bool(attr & 0x10)
+            sep = b"/" if is_dir else b"."
+            clean_ext = bytes([b & 0x7F for b in ext])
+            record = name + sep + clean_ext + b"\x00"
+            assert len(record) == 13
+            out_buf.extend(record)
+            cur_count += 1
+
+        if not has_more:
+            break
+        continuation = True
+
+    host.dir_names_buf[: len(out_buf)] = out_buf
+    host.dir_file_count = cur_count
+    return {"status": VFS_STAT_OK, "count": cur_count}
+
+
+def filter_fat_dir_entries(host: MockHostEditor, pattern_ext: str):
+    """
+    Simulates FILTER_FAT_DIR_ENTRIES in src/core/plugin_mgr.asm.
+    Preserves all directories (byte 8 == '/') and matches extension.
+    """
+    kept_records = bytearray()
+    kept_count = 0
+    pat_ext = pattern_ext.upper().ljust(3)[:3].encode("ascii")
+
+    for i in range(host.dir_file_count):
+        offset = i * 13
+        record = host.dir_names_buf[offset : offset + 13]
+        sep = record[8:9]
+        if sep == b"/":
+            # Always keep directories
+            kept_records.extend(record)
+            kept_count += 1
+        else:
+            # Check extension (bytes 9..11)
+            ext = record[9:12]
+            match = True
+            for p_byte, e_byte in zip(pat_ext, ext):
+                if p_byte != ord("?") and p_byte != e_byte:
+                    match = False
+                    break
+            if match:
+                kept_records.extend(record)
+                kept_count += 1
+
+    host.dir_names_buf[: len(kept_records)] = kept_records
+    host.dir_file_count = kept_count
 
 
 class TestNextCPMVFSOpen(unittest.TestCase):
@@ -439,6 +557,161 @@ class TestNextCPMVFSOpen(unittest.TestCase):
         status = VFS_STAT_NOT_FOUND
         self.assertEqual(status, 1)
         print("    [+] Non-existent file returned VFS_STAT_NOT_FOUND")
+
+    def test_07_vfs_list_dir_c_root(self):
+        """Verify directory listing of NextOS C: drive root (C:/)."""
+        # Populate C: root with files and subdirectories
+        # drive 2 = Unit 2 = Drive C:
+        self.fs.add_dir_entry(2, "/", "NEXTZXOS", "ROM", is_dir=False)
+        self.fs.add_dir_entry(2, "/", "CONFIG", "SYS", is_dir=False)
+        self.fs.add_dir_entry(2, "/", "AUTOEXEC", "BAS", is_dir=False)
+        self.fs.add_dir_entry(2, "/", "CP_M", "", is_dir=True)
+        self.fs.add_dir_entry(2, "/", "DOCS", "", is_dir=True)
+        self.fs.add_dir_entry(2, "/", "GAMES", "", is_dir=True)
+
+        res = vfs_list_dir(self.fs, self.editor, unit=2, path="/")
+        self.assertEqual(res["status"], VFS_STAT_OK)
+        self.assertEqual(res["count"], 6)
+        self.assertEqual(self.editor.dir_file_count, 6)
+
+        # Parse 13-byte records from dir_names_buf
+        records = []
+        for i in range(6):
+            rec = bytes(self.editor.dir_names_buf[i * 13 : (i + 1) * 13])
+            records.append(rec)
+
+        # Expected records:
+        # Files: 8 chars name + '.' + 3 chars ext + '\0'
+        # Dirs: 8 chars name + '/' + 3 chars spaces + '\0'
+        self.assertEqual(records[0], b"NEXTZXOS.ROM\x00")
+        self.assertEqual(records[1], b"CONFIG  .SYS\x00")
+        self.assertEqual(records[2], b"AUTOEXEC.BAS\x00")
+        self.assertEqual(records[3], b"CP_M    /   \x00")
+        self.assertEqual(records[4], b"DOCS    /   \x00")
+        self.assertEqual(records[5], b"GAMES   /   \x00")
+
+        # Root directory MUST NOT contain ".." parent directory entry
+        for rec in records:
+            self.assertFalse(rec.startswith(b".."))
+
+        print(
+            "    [+] VFS_CMD_LIST_DIR on C:/ enumerated 6 records "
+            "(3 files, 3 directories)"
+        )
+
+    def test_08_vfs_list_dir_c_subdirectory(self):
+        """Verify directory listing of NextOS C: subdirectory (C:/DOCS)."""
+        # Populate C:/DOCS subdirectory
+        self.fs.add_dir_entry(2, "DOCS", "MANUAL", "TXT", is_dir=False)
+        self.fs.add_dir_entry(2, "DOCS", "README", "DOC", is_dir=False)
+        self.fs.add_dir_entry(2, "DOCS", "NOTES", "TXT", is_dir=False)
+
+        res = vfs_list_dir(self.fs, self.editor, unit=2, path="/DOCS")
+        self.assertEqual(res["status"], VFS_STAT_OK)
+        # 1 parent entry + 3 files = 4
+        self.assertEqual(res["count"], 4)
+        self.assertEqual(self.editor.dir_file_count, 4)
+
+        records = [
+            bytes(self.editor.dir_names_buf[i * 13 : (i + 1) * 13])
+            for i in range(4)
+        ]
+
+        # First entry must be synthesized parent ".." record
+        self.assertEqual(records[0], b"..      /   \x00")
+        self.assertEqual(records[1], b"MANUAL  .TXT\x00")
+        self.assertEqual(records[2], b"README  .DOC\x00")
+        self.assertEqual(records[3], b"NOTES   .TXT\x00")
+
+        print(
+            "    [+] VFS_CMD_LIST_DIR on C:/DOCS synthesized parent '..' "
+            "and 3 files"
+        )
+
+    def test_09_vfs_list_dir_c_filtering(self):
+        """Verify wildcard filtering of C: directory entries (*.TXT)."""
+        # Populate C:/DOCS subdirectory
+        self.fs.add_dir_entry(2, "DOCS", "MANUAL", "TXT", is_dir=False)
+        self.fs.add_dir_entry(2, "DOCS", "README", "DOC", is_dir=False)
+        self.fs.add_dir_entry(2, "DOCS", "NOTES", "TXT", is_dir=False)
+
+        # Enumerate C:/DOCS (.. / , MANUAL.TXT, README.DOC, NOTES.TXT)
+        vfs_list_dir(self.fs, self.editor, unit=2, path="/DOCS")
+        self.assertEqual(self.editor.dir_file_count, 4)
+
+        # Apply filter "*.TXT" (pattern "TXT")
+        filter_fat_dir_entries(self.editor, pattern_ext="TXT")
+
+        # Must keep:
+        # 1. "..      /   \0" (directories are always preserved)
+        # 2. "MANUAL  .TXT\0"
+        # 3. "NOTES   .TXT\0"
+        # "README  .DOC\0" must be filtered out!
+        self.assertEqual(self.editor.dir_file_count, 3)
+
+        records = [
+            bytes(self.editor.dir_names_buf[i * 13 : (i + 1) * 13])
+            for i in range(3)
+        ]
+        self.assertEqual(records[0], b"..      /   \x00")
+        self.assertEqual(records[1], b"MANUAL  .TXT\x00")
+        self.assertEqual(records[2], b"NOTES   .TXT\x00")
+
+        print(
+            "    [+] FILTER_FAT_DIR_ENTRIES on C: preserved directory '..' "
+            "and matched *.TXT"
+        )
+
+    def test_10_vfs_list_dir_c_multi_batch_pagination(self):
+        """Verify multi-batch catalog enumeration on C: drive."""
+        # Add 25 files to C:/BIN
+        for i in range(1, 26):
+            self.fs.add_dir_entry(
+                2, "BIN", f"CMD{i:02d}", "BIN", is_dir=False
+            )
+
+        res = vfs_list_dir(self.fs, self.editor, unit=2, path="/BIN")
+        self.assertEqual(res["status"], VFS_STAT_OK)
+        # 1 parent entry + 25 files = 26 records
+        self.assertEqual(res["count"], 26)
+        self.assertEqual(self.editor.dir_file_count, 26)
+
+        # Verify all 25 files present in sequential order
+        records = [
+            bytes(self.editor.dir_names_buf[i * 13 : (i + 1) * 13])
+            for i in range(26)
+        ]
+        self.assertEqual(records[0], b"..      /   \x00")
+        for i in range(1, 26):
+            expected_name = f"CMD{i:02d}".ljust(8).encode("ascii")
+            expected_rec = expected_name + b".BIN\x00"
+            self.assertEqual(records[i], expected_rec)
+
+        print(
+            "    [+] Multi-batch DOS_CATALOG on C:/BIN retrieved all "
+            "26 records seamlessly"
+        )
+
+    def test_11_vfs_list_dir_c_empty_directory(self):
+        """Verify reading an empty directory off C: drive."""
+        # C:/EMPTY has no files or subdirectories
+        res = vfs_list_dir(self.fs, self.editor, unit=2, path="/EMPTY")
+        self.assertEqual(res["status"], VFS_STAT_OK)
+        # Subdirectory has 1 parent entry ".."
+        self.assertEqual(res["count"], 1)
+        self.assertEqual(self.editor.dir_file_count, 1)
+
+        rec = bytes(self.editor.dir_names_buf[0:13])
+        self.assertEqual(rec, b"..      /   \x00")
+
+        # Root empty directory
+        empty_fs = MockNextOSFileSystem()
+        empty_editor = MockHostEditor()
+        res_root = vfs_list_dir(empty_fs, empty_editor, unit=2, path="/")
+        self.assertEqual(res_root["status"], VFS_STAT_OK)
+        self.assertEqual(res_root["count"], 0)
+        self.assertEqual(empty_editor.dir_file_count, 0)
+        print("    [+] Empty directory on C: returned 0 entries cleanly")
 
 
 def main():
