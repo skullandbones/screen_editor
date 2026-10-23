@@ -77,6 +77,9 @@ CMDLINE_IS_FAT:		DB	0	; 1 if startup argument was FAT file
 CMDLINE_FAT_UNIT:	DB	0FFH	; Unit from command line argument
 STR_SLASH:		DB	"/",0
 STR_FATFS_PRL:		DB	"FATFS.PRL",0	; Plugin filename for auto-load
+IFDEF TARGET_NEXT_CPM
+STR_NEXTFS_PRL:		DB	"NEXTFS.PRL",0	; Next VFS plugin filename
+ENDIF
 STR_TITLE_PAREN_CRLF:	DB	")",13,10,0	; Title closing parenthesis
 
 ALIGN 2
@@ -144,6 +147,11 @@ HOST_API_MGR_SLOT:
 	JP TRAMP_RENDER_STATUS_BAR	; +73: Call RENDER_STATUS_BAR
 	JP TRAMP_HIDE_CURSOR		; +76: Call TERM_HIDE_CURSOR
 	JP TRAMP_SHOW_CURSOR		; +79: Call TERM_SHOW_CURSOR
+	IFDEF TARGET_NEXT_CPM
+	JP TRAMP_NEXTCPM_USERF		; +82: Call NextCPM BIOS USERF gate
+	DW NEXTCPM_CPM_TO_NEXT		; +85: Ptr to CP/M -> Next table
+	DW NEXTCPM_NEXT_TO_CPM		; +87: Ptr to Next -> CP/M table
+	ENDIF
 
 ;------------------------------------------------------------------------------
 ; TRAMP_CHECKOUT_LINE: Host API trampoline for line checkout across memory banks
@@ -755,6 +763,59 @@ TRAMP_SHOW_CURSOR:
 	JP Z,TERM_SHOW_CURSOR
 	LD HL,TERM_SHOW_CURSOR
 	JR TRAMP_FAR_CALL
+
+	IFDEF TARGET_NEXT_CPM
+;------------------------------------------------------------------------------
+; TRAMP_NEXTCPM_USERF: Host API trampoline for NextCPM BIOS USERF calls
+;
+; Purpose:
+;   Executes NextCPM BIOS Function 30 (USERF) across memory banks. Handles
+;   switching to user bank (CPM_USER_BANK), executing USERF with alternate
+;   register sets if C=1, and restoring caller Far RAM bank before returning.
+;------------------------------------------------------------------------------
+TRAMP_NEXTCPM_USERF:
+	PUSH AF
+	LD A,(CPM_USER_BANK)
+	CALL NEXT_BNKSEL
+	POP AF
+
+	; If C == 2, direct BIOS USERF call; if C == 1, inter-mode call
+	PUSH AF
+	LD A,C
+	CP 2
+	JR Z,TNU_CALL_C2
+	POP AF
+
+	; C == 1: Inter-mode NextZXOS / +3DOS call
+	EXX
+	EX AF,AF'
+	LD C,1
+	CALL NEXTCPM_CALL_USERF
+	AND A
+	JR Z,TNU_C1_OK
+
+	; USERF error
+	EX AF,AF'
+	EXX
+	OR A				; Carry = 0 (error)
+	JR TNU_RESTORE_FAR
+
+TNU_C1_OK:
+	EX AF,AF'
+	EXX
+	JR TNU_RESTORE_FAR
+
+TNU_CALL_C2:
+	POP AF
+	CALL NEXTCPM_CALL_USERF
+
+TNU_RESTORE_FAR:
+	PUSH AF
+	LD A,(PLUGIN_FAR_BANK)
+	CALL NEXT_BNKSEL
+	POP AF
+	RET
+	ENDIF
 
 	IFDEF TARGET_NEXT
 ;------------------------------------------------------------------------------

@@ -212,6 +212,8 @@ image: $(IMAGE) $(TARGET) $(TARGET_SEC) $(TARGET_NEXT_CPM) plugins
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/BIGPLUG.PRL 0:BIGPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:FATFS.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/fat/FATFS.PRL 0:FATFS.PRL
+	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:NEXTFS.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/NEXTFS.PRL 0:NEXTFS.PRL
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:FATTEST.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_0 $(IMAGE) plugins/fat/FATTEST.COM 0:FATTEST.COM
 	$(CPMRM) -f wbw_hd1k_0 $(IMAGE) 0:VFSTEST.COM 2>/dev/null || true
@@ -249,6 +251,8 @@ image: $(IMAGE) $(TARGET) $(TARGET_SEC) $(TARGET_NEXT_CPM) plugins
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/BIGPLUG.PRL 0:BIGPLUG.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:FATFS.PRL 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/fat/FATFS.PRL 0:FATFS.PRL
+	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:NEXTFS.PRL 2>/dev/null || true
+	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/NEXTFS.PRL 0:NEXTFS.PRL
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:FATTEST.COM 2>/dev/null || true
 	$(CPMCP) -f wbw_hd1k_3 $(IMAGE) plugins/fat/FATTEST.COM 0:FATTEST.COM
 	$(CPMRM) -f wbw_hd1k_3 $(IMAGE) 0:VFSTEST.COM 2>/dev/null || true

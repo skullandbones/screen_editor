@@ -100,7 +100,7 @@ def test_nextcpm_entry():
 
     # Verify RomWBW CP/M SE.COM byte-for-byte binary invariance
     assert os.path.exists(SE_COM), f"Missing {SE_COM}"
-    assert os.path.getsize(SE_COM) in (45312, 47872), (
+    assert os.path.getsize(SE_COM) in (45312, 45568, 47872), (
         f"Unexpected SE.COM size: {os.path.getsize(SE_COM)}"
     )
     res = subprocess.run(

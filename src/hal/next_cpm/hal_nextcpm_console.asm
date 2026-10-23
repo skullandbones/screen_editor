@@ -140,6 +140,15 @@ INIT_BIOS_JUMPS:
 	LD (BIOS_CONST_VEC),HL
 	LD HL,NEXTCPM_CONIN
 	LD (BIOS_CONIN_VEC),HL
+
+	; Resolve NextCPM BIOS USERF vector (Function 30: WBOOT + 87)
+	LD HL,(0001H)			; Address of BIOS WBOOT
+	LD DE,87			; USERF offset = 3 * (30 - 1)
+	ADD HL,DE
+	LD (NEXTCPM_USERF_VEC),HL
+
+	; Query NextZXOS dynamic drive mapping tables via USERF C=2
+	CALL NEXTCPM_INIT_DRV_TABLES
 	RET
 
 ;------------------------------------------------------------------------------
