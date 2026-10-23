@@ -356,6 +356,7 @@ int modal_prompt_text(const char *title, const char *prompt,
 
 int modal_goto_line(char *buffer, size_t max_len)
 {
+    /* height = 7; width = 50; (Canonical Archetype C 50x7 framing) */
     uint8_t top, left;
     size_t len = 0;
     int k;

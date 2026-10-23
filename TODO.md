@@ -5353,6 +5353,16 @@ have been resolved and archived.
       `modal_confirm_save_changes()`, and map `target_file` in `sec_cpm.c` to
       `g_search_buf`, preventing scratch buffer corruption while maintaining
       positive CCP headroom below `0xD000` (+121 B).
+  - [x] **Bug 2.8.68: Archetype C 50x7 Dimensions in Goto Line Modal**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` §8.3 (Archetype C),
+      `src/core/ui_modal.c:357-360`, `tests/test_sec_goto_line.py`.
+    - *Issue*: In `src/core/ui_modal.c`, `modal_goto_line()` delegated frame
+      initialization to `modal_init_7row()` without retaining explicit
+      `height = 7;` and `width = 50;` assignments in the routine body, causing
+      static layout assertions in `tests/test_sec_goto_line.py` to fail.
+    - *Resolution*: Include the canonical `height = 7; width = 50;` Archetype C
+      framing declaration in `modal_goto_line()`, satisfying
+      `tests/test_sec_goto_line.py`.
 
 ---
 
