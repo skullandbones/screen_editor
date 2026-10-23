@@ -410,10 +410,10 @@ have been resolved and archived.
   console (80-column text mode), Next keyboard matrix mapping, NextCPM banked
   memory extensions.
 - **Build Target**: `make se-next-cpm` (produces `SE_NEXT.COM`).
-- **Status**: Active / 4 Open (Bugs 2.2.18, 2.2.19, 2.2.30, 2.2.31 Open;
-  22 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
+- **Status**: Active / 3 Open (Bugs 2.2.18, 2.2.19, 2.2.31 Open;
+  23 Bugs 2.2.2, 2.2.7, 2.2.8, 2.2.9, 2.2.10, 2.2.11, 2.2.12, 2.2.13, 2.2.14,
   2.2.15, 2.2.16, 2.2.17, 2.2.20, 2.2.21, 2.2.22, 2.2.23, 2.2.24, 2.2.25,
-  2.2.26, 2.2.27, 2.2.28, 2.2.29 Resolved;
+  2.2.26, 2.2.27, 2.2.28, 2.2.29, 2.2.30 Resolved;
   Bugs 2.2.1, 2.2.3, 2.2.4, 2.2.5, 2.2.6 Rejected).
 - **Active Defects & Issue Tracking (UI_UX_DESIGN.md Conformance)**:
   - [x] **Bug 2.2.1: Status Bar Field Squatting & Layout [REJECTED]**:
@@ -1052,7 +1052,7 @@ have been resolved and archived.
         `CHECK_TARGET_DRIVE_UNAVAILABLE`.
       - Preserved 100% byte-for-byte binary invariance of RomWBW `SE.COM`.
       - Verified via `tests/test_bug_2_2_29.py` and `check_ccp.py`.
-  - [ ] **Bug 2.2.30: NextOS C: Drive Directory Listing Shows "No files found"
+  - [x] **Bug 2.2.30: NextOS C: Drive Directory Listing Shows "No files found"
     in `NEXTFS.PRL`**:
     - *Reference*: `plugins/nextfs.asm:457-485`;
       `docs/HARDWARE_COMPATIBILITY.md` Section 5.4; Bug 2.2.29.
@@ -1060,23 +1060,38 @@ have been resolved and archived.
       selecting or opening native NextOS drive `C:` displays the empty status
       message `"No files found on current drive"` in the file browser directory
       listing even when files and directories are present on drive `C:`.
-    - *Root Cause*: In `plugins/nextfs.asm` (`VFS_LIST_DIR`, lines 457-463), the
-      13-byte parameter block passed in `DE` to `DOS_CATALOG` (`$011E`) is
-      cleared entirely to zeroes via `VLD_CLR_PARAM`. Per the +3DOS / NextZXOS
-      specification, `DOS_CATALOG` expects Entry 0 in the parameter block to
-      contain a search mask string (e.g. `"*.*"` or `"???????????"`) terminated
-      with `0xFF`. Supplying all zeroes matches a filename starting with null
-      byte `\0`, returning 0 entries. Furthermore, `JP NC, VLD_CHECK_EMPTY` at
-      line 485 assumes error semantics on Carry=0, but the return convention of
-      `DOS_CATALOG` and buffer status handling must correctly interpret entry
-      counts and NextZXOS return codes.
+    - *Root Cause*: In `plugins/nextfs.asm` (`VFS_LIST_DIR`), the staging
+      buffer pointer passed in `DE` to `DOS_CATALOG` (`$011E`) was placed at an
+      arbitrary offset (`ACTIVE_LINE_BUF + 512`), while directory entries were
+      read from `ACTIVE_LINE_BUF` in `HL`, which was never populated by the DOS
+      call. Furthermore, `DOS_CATALOG` returned entries starting at Entry 1
+      (`buffer + 13`), while Entry 0 served as the search key / preload entry.
     - *Required Fix*:
-      1. Populate the 13-byte parameter block passed to `DOS_CATALOG` with a
-         wildcard search pattern (e.g. `"*.*"` or `"???????????"` terminated
-         with `0xFF`) rather than clearing the parameter block to zeroes.
-      2. Properly validate and map NextZXOS `DOS_CATALOG` return registers and
-         entry counters into `vfs_dir_buf` to display all files and directories
-         on drive `C:`.
+      1. Directly pass `ACTIVE_LINE_BUF` in `DE` with Entry 0 initialized to
+         13 zeroes for start-of-catalog enumeration.
+      2. Handle `DOS_CATALOG` return registers (Carry=1 on success, `B` =
+         entry count), reading entries starting at Entry 1 (`CAT_BUF_PTR + 13`).
+      3. Support subdirectory detection via character 7 bit 7 and byte 11
+         attribute (`0x10`), and strip bit 7 from all filename characters.
+      4. Support multi-batch pagination across buffer limits.
+    - *Resolution*: Re-engineered `VFS_LIST_DIR` in `plugins/nextfs.asm` to
+      conform to the official +3DOS / NextZXOS `DOS_CATALOG` (`$011E`) calling
+      conventions:
+      1. Directly passed `ACTIVE_LINE_BUF` in `DE` with Entry 0 initialized to
+         13 zeroes, matching `IMPORT.COM` for start-of-catalog enumeration.
+      2. Set buffer size `B = 33` (`CAT_BUF_ENTRIES`) for 32 entries + Entry 0.
+      3. Handled `DOS_CATALOG` return conventions (Carry=1 on success, `B` =
+         entry count), reading entries starting at Entry 1 (`CAT_BUF_PTR + 13`).
+      4. Correctly detected subdirectories via bit 7 of character 7 (NextZXOS
+         AM_DIR convention) and byte 11 attribute (AM_DIR = 0x10), setting
+         separator `'/'` for directories and `'.'` for files.
+      5. Stripped bit 7 from all filename and extension characters via
+         `RES 7, A`.
+      6. Implemented multi-batch pagination by copying Entry 32 into Entry 0
+         and requesting continuation batches until fewer than 32 entries
+         are returned.
+      Validated via `tests/test_bug_2_2_30.py` and
+      `tests/test_nextcpm_vfs_open.py`.
   - [ ] **Bug 2.2.31: Opening NextOS M: Drive (RAM Disk) Crashes With BDOS
     "Invalid drive" Error in `SE_NEXT.COM`**:
     - *Reference*: `src/core/ui_browser.asm:73`;

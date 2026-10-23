@@ -64,6 +64,9 @@ DOS_READ		EQU	0112H
 DOS_WRITE		EQU	0115H
 DOS_CATALOG		EQU	011EH
 
+CAT_BATCH_SIZE		EQU	32
+CAT_BUF_ENTRIES		EQU	CAT_BATCH_SIZE + 1	; 33 entries (429 bytes)
+
 ;------------------------------------------------------------------------------
 ; Action 0: Main Execution / Info
 ;------------------------------------------------------------------------------
@@ -441,42 +444,36 @@ VLD_SYNTH_PARENT:
 	LD	(CAT_CUR_COUNT),A
 
 VLD_START_CAT:
-	; Prepare 13-byte parameter block of zeroes in Upper Memory
-	; Use ACTIVE_LINE_BUF + 512 as parameter block
+	; Staging buffer for catalog entries in Upper Memory: ACTIVE_LINE_BUF
 	LD	HL,(HOST_API_PTR)
 	LD	DE,4
 	ADD	HL,DE
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)			; DE = ACTIVE_LINE_BUF
-	LD	HL,512
-	ADD	HL,DE			; HL = ACTIVE_LINE_BUF + 512
-	LD	(CAT_PARAM_PTR),HL
-	PUSH	HL
-	EX	DE,HL
+	LD	(CAT_BUF_PTR),DE
+
+	; Initialize Entry 0 (13 bytes) with zeroes to start from beginning
+	EX	DE,HL			; HL = CAT_BUF_PTR
 	XOR	A
 	LD	B,13
-VLD_CLR_PARAM:
-	LD	(DE),A
-	INC	DE
-	DJNZ	VLD_CLR_PARAM
-	POP	DE			; DE = Parameter buffer
-
-	; Staging buffer for catalog entries: ACTIVE_LINE_BUF
-	LD	HL,(HOST_API_PTR)
-	LD	BC,4
-	ADD	HL,BC
-	LD	C,(HL)
+VLD_CLR_ENTRY0:
+	LD	(HL),A
 	INC	HL
-	LD	B,(HL)
-	PUSH	BC
-	POP	HL			; HL = ACTIVE_LINE_BUF (Catalog buffer)
-	LD	(CAT_BUF_PTR),HL
+	DJNZ	VLD_CLR_ENTRY0
 
-	; Initial catalog request: B = 0xFF, C = drive_index
+VLD_REQ_BATCH:
+	; Set up DOS_CATALOG ($011E) parameters:
+	;   DE = Pointer to catalog buffer (Entry 0 at CAT_BUF_PTR)
+	;   HL = Upper Memory scratch buffer (CAT_BUF_PTR)
+	;   B  = CAT_BUF_ENTRIES (33 entries: Entry 0 parameter + 32 entries)
+	;   C  = Target drive index
+	;   IY = DOS_CATALOG ($011E)
+	LD	DE,(CAT_BUF_PTR)
+	LD	HL,(CAT_BUF_PTR)
 	LD	A,(CAT_DRV_IDX)
 	LD	C,A
-	LD	B,0FFH
+	LD	B,CAT_BUF_ENTRIES
 	LD	IY,DOS_CATALOG
 	PUSH	BC
 	LD	C,1
@@ -485,13 +482,17 @@ VLD_CLR_PARAM:
 	JP	NC,VLD_CHECK_EMPTY
 
 VLD_PROCESS_BATCH:
-	; B = entries returned in this batch, HL = catalog buffer
+	; DOS_CATALOG returns Carry=1 on success.
+	; B = entries returned in this batch (0..CAT_BATCH_SIZE)
 	LD	A,B
 	OR	A
-	JR	Z,VLD_FINISH
+	JP	Z,VLD_FINISH
+	LD	(CAT_BATCH_COUNT),A
 
-	PUSH	AF			; Save continuation flag / count
+	; Returned catalog entries start at Entry 1 (CAT_BUF_PTR + 13)
 	LD	HL,(CAT_BUF_PTR)
+	LD	DE,13
+	ADD	HL,DE			; HL = First returned entry
 
 VLD_ENTRY_LOOP:
 	; Check if maximum entries reached
@@ -499,7 +500,7 @@ VLD_ENTRY_LOOP:
 	LD	C,A
 	LD	A,(CAT_MAX_ENTRIES)
 	CP	C
-	JR	Z,VLD_BATCH_DONE
+	JP	Z,VLD_FINISH
 
 	; Inspect entry at HL (13 bytes: 8 name + 3 ext + attributes)
 	LD	A,(HL)
@@ -512,44 +513,53 @@ VLD_ENTRY_LOOP:
 	CP	' '
 	JR	Z,VLD_SKIP_ENTRY
 
-	; Copy to output buffer
+	; Check if directory:
+	;   NextZXOS: bit 7 of char 7 (HL + 7) is AM_DIR
+	;   FAT: bit 4 of byte 11 (HL + 11) is AM_DIR (0x10)
 	PUSH	BC
 	PUSH	HL
+	LD	DE,7
+	ADD	HL,DE			; HL = entry + 7
+	BIT	7,(HL)
+	JR	NZ,VLD_IS_DIR
+	INC	HL
+	INC	HL
+	INC	HL
+	INC	HL			; HL = entry + 11
+	BIT	4,(HL)			; AM_DIR (0x10)
+	JR	NZ,VLD_IS_DIR
+
+	; File: separator '.'
+	LD	A,'.'
+	JR	VLD_SET_SEP
+
+VLD_IS_DIR:
+	; Directory: separator '/'
+	LD	A,'/'
+
+VLD_SET_SEP:
+	LD	(CAT_DIR_SEP),A
+	POP	HL			; HL = start of entry (byte 0)
+	PUSH	HL
+
 	LD	DE,(CAT_OUT_PTR)
 
-	; Copy 8 bytes filename
+	; Copy 8 bytes filename, stripping high attribute bits (RES 7, A)
 	LD	B,8
 VLD_CP_NAME:
 	LD	A,(HL)
+	RES	7,A			; Strip directory bit on byte 7
 	LD	(DE),A
 	INC	HL
 	INC	DE
 	DJNZ	VLD_CP_NAME
 
-	; Check attribute in byte 11 for directory flag (0x10)
-	PUSH	HL
-	INC	HL
-	INC	HL
-	INC	HL			; HL points to byte 11
-	LD	A,(HL)
-	AND	010H			; AM_DIR
-	POP	HL
-	JR	NZ,VLD_IS_DIR
-
-	; File: separator '.'
-	LD	A,'.'
-	LD	(DE),A
-	INC	DE
-	JR	VLD_CP_EXT
-
-VLD_IS_DIR:
-	; Directory: separator '/'
-	LD	A,'/'
+	; Emit directory/file separator
+	LD	A,(CAT_DIR_SEP)
 	LD	(DE),A
 	INC	DE
 
-VLD_CP_EXT:
-	; Copy 3 bytes extension
+	; Copy 3 bytes extension, stripping high attribute bits
 	LD	B,3
 VLD_CP_EXT_LOOP:
 	LD	A,(HL)
@@ -569,31 +579,39 @@ VLD_CP_EXT_LOOP:
 	LD	HL,CAT_CUR_COUNT
 	INC	(HL)
 
-	POP	HL
-	POP	BC
+	POP	HL			; HL = start of entry (byte 0)
+	POP	BC			; BC = loop counter
 
 VLD_SKIP_ENTRY:
 	LD	DE,13
 	ADD	HL,DE			; Next catalog entry
-	DJNZ	VLD_ENTRY_LOOP
+	DEC	B
+	JP	NZ,VLD_ENTRY_LOOP
 
 VLD_BATCH_DONE:
-	POP	AF			; Restore continuation flag
-	CP	0FFH
+	; If fewer than CAT_BATCH_SIZE entries returned, end reached
+	LD	A,(CAT_BATCH_COUNT)
+	CP	CAT_BATCH_SIZE
 	JR	NZ,VLD_FINISH
 
-	; Request next batch: B = 1, C = drive_index
-	LD	A,(CAT_DRV_IDX)
-	LD	C,A
-	LD	B,1
+	; Batch was full (CAT_BATCH_SIZE entries returned).
+	; Copy Entry 32 (at offset CAT_BATCH_SIZE * 13 = 416) into Entry 0
 	LD	HL,(CAT_BUF_PTR)
-	LD	DE,(CAT_PARAM_PTR)
-	LD	IY,DOS_CATALOG
-	PUSH	BC
-	LD	C,1
-	CALL	CALL_USERF_GATE
-	POP	BC
-	JR	C,VLD_PROCESS_BATCH
+	LD	DE,416			; CAT_BATCH_SIZE * 13
+	ADD	HL,DE			; HL = Last returned entry (Entry 32)
+	LD	DE,(CAT_BUF_PTR)	; DE = Entry 0
+	LD	BC,13
+	LDIR
+
+	; Check if maximum entries reached
+	LD	A,(CAT_CUR_COUNT)
+	LD	C,A
+	LD	A,(CAT_MAX_ENTRIES)
+	CP	C
+	JR	Z,VLD_FINISH
+
+	; Request next batch from NextZXOS
+	JP	VLD_REQ_BATCH
 
 VLD_FINISH:
 	; Store total count into req->count at +10
@@ -1110,8 +1128,9 @@ CAT_DRV_IDX:		DB	0
 CAT_OUT_PTR:		DW	0
 CAT_MAX_ENTRIES:	DB	0
 CAT_CUR_COUNT:		DB	0
-CAT_PARAM_PTR:		DW	0
 CAT_BUF_PTR:		DW	0
+CAT_BATCH_COUNT:	DB	0
+CAT_DIR_SEP:		DB	0
 
 LOAD_LINE_NUM:		DW	0
 LOAD_LINE_POS:		DW	0

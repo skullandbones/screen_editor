@@ -234,10 +234,12 @@ def vfs_list_dir(fs: MockNextOSFileSystem, host: MockHostEditor,
             if name[0] in (0x00, 0xE5, ord("."), ord(" ")):
                 continue
 
-            is_dir = bool(attr & 0x10)
+            # Check if directory: NextZXOS bit 7 of name[7] or attr 0x10
+            is_dir = bool((name[7] & 0x80) or (attr & 0x10))
             sep = b"/" if is_dir else b"."
+            clean_name = bytes([b & 0x7F for b in name])
             clean_ext = bytes([b & 0x7F for b in ext])
-            record = name + sep + clean_ext + b"\x00"
+            record = clean_name + sep + clean_ext + b"\x00"
             assert len(record) == 13
             out_buf.extend(record)
             cur_count += 1
