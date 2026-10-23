@@ -17,7 +17,6 @@
 #include "include/buffer.h"
 #include "include/editor.h"
 #include "include/ui.h"
-#include "include/search.h"
 #include "include/file_io.h"
 #include "include/plugin.h"
 #include "include/hal.h"
@@ -49,8 +48,8 @@ static int parse_target_filename(char *out_buf, size_t max_len)
 
 int main(int argc, char **argv)
 {
-    char *target_file = g_search_buf;
-    int has_target = parse_target_filename(target_file, sizeof(g_search_buf));
+    char target_file[32];
+    int has_target = parse_target_filename(target_file, sizeof(target_file));
     (void)argc;
     (void)argv;
 
@@ -100,7 +99,6 @@ int main(int argc, char **argv)
         show_splash_screen();
     }
 
-    g_search_buf[0] = '\0';
     editor_main_loop();
 
     /* Clean exit: Clear screen and restore terminal */

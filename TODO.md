@@ -5350,9 +5350,9 @@ have been resolved and archived.
       `target_file` in `sec_cpm.c` collided with `file_load()` scratch buffer
       usage during CLI file loading.
     - *Resolution*: Pass `"Save changes?"` explicitly to `modal_confirm()` in
-      `modal_confirm_save_changes()`, and map `target_file` in `sec_cpm.c` to
-      `g_search_buf`, preventing scratch buffer corruption while maintaining
-      positive CCP headroom below `0xD000` (+121 B).
+      `modal_confirm_save_changes()`, and retain local `target_file[32]` in
+      `sec_cpm.c` with 512-slot capacity, preventing scratch buffer corruption
+      while maintaining positive CCP headroom below `0xD000` (+126 B).
   - [x] **Bug 2.8.68: Archetype C 50x7 Dimensions in Goto Line Modal**:
     - *Reference*: `docs/UI_UX_DESIGN.md` §8.3 (Archetype C),
       `src/core/ui_modal.c:357-360`, `tests/test_sec_goto_line.py`.
