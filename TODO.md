@@ -1060,34 +1060,42 @@ have been resolved and archived.
       selecting or opening native NextOS drive `C:` displays the empty status
       message `"No files found on current drive"` in the file browser directory
       listing even when files and directories are present on drive `C:`.
-    - *Root Cause*: In `plugins/nextfs.asm` (`VFS_LIST_DIR`), the staging
-      buffer pointer passed in `DE` to `DOS_CATALOG` (`$011E`) was placed at an
-      arbitrary offset (`ACTIVE_LINE_BUF + 512`), while directory entries were
-      read from `ACTIVE_LINE_BUF` in `HL`, which was never populated by the DOS
-      call. Furthermore, `DOS_CATALOG` returned entries starting at Entry 1
-      (`buffer + 13`), while Entry 0 served as the search key / preload entry.
+    - *Root Cause*: Three distinct defects prevented directory reading on C::
+      1. In `plugins/nextfs.asm`, `CALL_USERF_GATE` computed the host vector
+         via `LD DE, 82; ADD HL, DE`, permanently corrupting register `DE` and
+         passing `DE = 82` to NextZXOS instead of the buffer pointer.
+      2. In `src/core/plugin_tramp.asm`, `TRAMP_NEXTCPM_USERF` tested
+         `LD A, C; CP 2; JR Z, TNU_CALL_C2`. Because Drive C: has unit index
+         `2` (`C = 2`), it mistook the NextZXOS call for BIOS USERF function 2
+         (Query Drive Tables) instead of invoking NextZXOS.
+      3. Callers in `nextfs.asm` previously loaded `C = 1` or restored `BC`
+         via `POP BC`, overwriting `CAT_DRV_IDX` (diverting calls from C: to
+         B:) and discarding the entry count returned in `B`.
     - *Required Fix*:
-      1. Directly pass `ACTIVE_LINE_BUF` in `DE` with Entry 0 initialized to
-         13 zeroes for start-of-catalog enumeration.
-      2. Handle `DOS_CATALOG` return registers (Carry=1 on success, `B` =
-         entry count), reading entries starting at Entry 1 (`CAT_BUF_PTR + 13`).
-      3. Support subdirectory detection via character 7 bit 7 and byte 11
-         attribute (`0x10`), and strip bit 7 from all filename characters.
-      4. Support multi-batch pagination across buffer limits.
-    - *Resolution*: Re-engineered `VFS_LIST_DIR` in `plugins/nextfs.asm` to
-      conform to the official +3DOS / NextZXOS `DOS_CATALOG` (`$011E`) calling
-      conventions:
-      1. Directly passed `ACTIVE_LINE_BUF` in `DE` with Entry 0 initialized to
-         13 zeroes, matching `IMPORT.COM` for start-of-catalog enumeration.
-      2. Set buffer size `B = 33` (`CAT_BUF_ENTRIES`) for 32 entries + Entry 0.
-      3. Handled `DOS_CATALOG` return conventions (Carry=1 on success, `B` =
-         entry count), reading entries starting at Entry 1 (`CAT_BUF_PTR + 13`).
-      4. Correctly detected subdirectories via bit 7 of character 7 (NextZXOS
+      1. Re-engineer `CALL_USERF_GATE` in `plugins/nextfs.asm` to preserve all
+         input registers (`AF`, `BC`, `DE`, `HL`) through to the trampoline.
+      2. In `src/core/plugin_tramp.asm`, eliminate the `CP 2` check in
+         `TRAMP_NEXTCPM_USERF`, directly invoking USERF function 1 with the
+         alternate register set and passing `C` (drive index) cleanly.
+      3. Remove caller `LD C, 1` overrides in `nextfs.asm`.
+      4. Directly pass `ACTIVE_LINE_BUF` in `DE` with Entry 0 initialized to
+         13 zeroes, set buffer size `B = 33`, read entries from Entry 1, and
+         detect subdirectories via character 7 bit 7 and byte 11 attribute.
+    - *Resolution*: Re-engineered `CALL_USERF_GATE` in `plugins/nextfs.asm` and
+      `TRAMP_NEXTCPM_USERF` in `src/core/plugin_tramp.asm`:
+      1. Fixed `CALL_USERF_GATE` to preserve `DE` and `HL` via stack swapping
+         so `DE` accurately points to `CAT_BUF_PTR` (`ACTIVE_LINE_BUF`).
+      2. Removed `CP 2` from `TRAMP_NEXTCPM_USERF` so drive index `C = 2` (C:)
+         is correctly passed into `C'` for NextZXOS `DOS_CATALOG` (`$011E`).
+      3. Removed caller `LD C, 1` overrides across `plugins/nextfs.asm`.
+      4. Set buffer size `B = 33` (`CAT_BUF_ENTRIES`) for 32 entries + Entry 0.
+      5. Read returned entries starting at Entry 1 (`CAT_BUF_PTR + 13`).
+      6. Correctly detected subdirectories via bit 7 of character 7 (NextZXOS
          AM_DIR convention) and byte 11 attribute (AM_DIR = 0x10), setting
          separator `'/'` for directories and `'.'` for files.
-      5. Stripped bit 7 from all filename and extension characters via
+      7. Stripped bit 7 from all filename and extension characters via
          `RES 7, A`.
-      6. Implemented multi-batch pagination by copying Entry 32 into Entry 0
+      8. Implemented multi-batch pagination by copying Entry 32 into Entry 0
          and requesting continuation batches until fewer than 32 entries
          are returned.
       Validated via `tests/test_bug_2_2_30.py` and

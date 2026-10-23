@@ -770,8 +770,9 @@ TRAMP_SHOW_CURSOR:
 ;
 ; Purpose:
 ;   Executes NextCPM BIOS Function 30 (USERF) across memory banks. Handles
-;   switching to user bank (CPM_USER_BANK), executing USERF with alternate
-;   register sets if C=1, and restoring caller Far RAM bank before returning.
+;   switching to user bank (CPM_USER_BANK), executing USERF C=1 with alternate
+;   register sets, and restoring caller Far RAM bank before returning.
+;   Passes AF, BC, DE, HL cleanly through to NextZXOS.
 ;------------------------------------------------------------------------------
 TRAMP_NEXTCPM_USERF:
 	PUSH AF
@@ -779,14 +780,8 @@ TRAMP_NEXTCPM_USERF:
 	CALL NEXT_BNKSEL
 	POP AF
 
-	; If C == 2, direct BIOS USERF call; if C == 1, inter-mode call
-	PUSH AF
-	LD A,C
-	CP 2
-	JR Z,TNU_CALL_C2
-	POP AF
-
-	; C == 1: Inter-mode NextZXOS / +3DOS call
+	; Inter-mode NextZXOS / +3DOS call (BIOS USERF Function 1)
+	; Caller passes arguments in AF, BC, DE, HL and call ID in IY.
 	EXX
 	EX AF,AF'
 	LD C,1
@@ -794,20 +789,16 @@ TRAMP_NEXTCPM_USERF:
 	AND A
 	JR Z,TNU_C1_OK
 
-	; USERF error
+	; USERF error: clear carry flag
 	EX AF,AF'
 	EXX
 	OR A				; Carry = 0 (error)
 	JR TNU_RESTORE_FAR
 
 TNU_C1_OK:
+	; USERF success: restore NextZXOS return registers and flags
 	EX AF,AF'
 	EXX
-	JR TNU_RESTORE_FAR
-
-TNU_CALL_C2:
-	POP AF
-	CALL NEXTCPM_CALL_USERF
 
 TNU_RESTORE_FAR:
 	PUSH AF

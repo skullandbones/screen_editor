@@ -138,6 +138,24 @@ def main():
               flush=True)
         return False
 
+    # Verify CALL_USERF_GATE preserves DE (PUSH DE / PUSH HL ... POP DE / EX)
+    gate_preserve = b"\xD5\xE5"
+    gate_ret = b"\xD1\xE3\xEB\xC9"
+    if gate_preserve not in code or gate_ret not in code:
+        print("[-] Step 2: CALL_USERF_GATE register preservation missing.",
+              flush=True)
+        return False
+
+    # Verify SE_NEXT.COM TRAMP_NEXTCPM_USERF does not divert C=2
+    with open(os.path.join(PROJECT_DIR, "SE_NEXT.COM"), "rb") as f_next:
+        next_data = f_next.read()
+    # Check that TRAMP_NEXTCPM_USERF has EXX / EX AF,AF' / LD C,1 / CALL
+    tramp_seq = b"\xD9\x08\x0E\x01\xCD"
+    if tramp_seq not in next_data:
+        print("[-] Step 2: TRAMP_NEXTCPM_USERF inter-mode sequence missing.",
+              flush=True)
+        return False
+
     print("[+] Step 2: NEXTFS.PRL binary contains verified DOS_CATALOG "
           "sequences.", flush=True)
 

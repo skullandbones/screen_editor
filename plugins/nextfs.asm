@@ -238,19 +238,23 @@ VFS_SET_STATUS_ERR:
 ;------------------------------------------------------------------------------
 ; CALL_USERF_GATE: Call NextCPM BIOS USERF via host trampoline at HOST_API+82
 ; Inputs:
-;   C = 1 (NextZXOS call) or 2 (Drive map tables)
-;   IY = Call ID (e.g. DOS_OPEN, DOS_READ, etc.)
-;   Registers prepared for inter-mode call
+;   IY = Call ID (e.g. DOS_OPEN, DOS_READ, DOS_CATALOG, etc.)
+;   Registers prepared for inter-mode call (AF, BC, DE, HL)
 ; Outputs:
 ;   Results returned from NextZXOS / BIOS
+; Preserves:
+;   All input registers passed through cleanly to NextZXOS
 ;------------------------------------------------------------------------------
 CALL_USERF_GATE:
-	PUSH	HL
+	PUSH	DE			; Preserve DE
+	PUSH	HL			; Preserve HL
 	LD	HL,(HOST_API_PTR)
 	LD	DE,82			; Offset to JP TRAMP_NEXTCPM_USERF
-	ADD	HL,DE
-	EX	(SP),HL
-	RET				; Jumps to TRAMP_NEXTCPM_USERF
+	ADD	HL,DE			; HL = target address
+	POP	DE			; DE = original HL
+	EX	(SP),HL			; (SP) = target, HL = original DE
+	EX	DE,HL			; DE = original DE, HL = original HL
+	RET				; Jump to trampoline with registers OK
 
 ;------------------------------------------------------------------------------
 ; NORMALIZE_DRV_UNIT: Extract 0-based drive index (0..15 for A..P)
@@ -475,10 +479,7 @@ VLD_REQ_BATCH:
 	LD	C,A
 	LD	B,CAT_BUF_ENTRIES
 	LD	IY,DOS_CATALOG
-	PUSH	BC
-	LD	C,1
 	CALL	CALL_USERF_GATE
-	POP	BC
 	JP	NC,VLD_CHECK_EMPTY
 
 VLD_PROCESS_BATCH:
@@ -648,7 +649,6 @@ VFS_LOAD_FILE:
 	LD	DE,0002H		; Open existing file
 	LD	BC,0001H		; File 0, mode read
 	LD	IY,DOS_OPEN
-	LD	C,1
 	CALL	CALL_USERF_GATE
 	JR	C,VLF_OPEN_OK
 
@@ -692,7 +692,6 @@ VLF_READ_LOOP:
 	LD	DE,128			; Request 128 bytes
 	LD	BC,0003H		; File 0, page 3
 	LD	IY,DOS_READ
-	LD	C,1
 	CALL	CALL_USERF_GATE
 
 	; Bytes read = 128 - DE
@@ -790,7 +789,6 @@ VLF_COMMIT_FINAL:
 VLF_CLOSE_FILE:
 	LD	B,0
 	LD	IY,DOS_CLOSE
-	LD	C,1
 	CALL	CALL_USERF_GATE
 
 	; Set req->count = total lines loaded
@@ -854,7 +852,6 @@ VFS_SAVE_RANGE:
 	LD	DE,0204H		; Replace if exists, create if not
 	LD	BC,0002H		; File 0, mode write
 	LD	IY,DOS_OPEN
-	LD	C,1
 	CALL	CALL_USERF_GATE
 	JR	C,VSR_OPEN_OK
 
@@ -950,7 +947,6 @@ VSR_DO_LINE:
 	POP	DE			; DE = Byte count (BC)
 	LD	BC,0003H		; File 0, page 3
 	LD	IY,DOS_WRITE
-	LD	C,1
 	CALL	CALL_USERF_GATE
 
 VSR_WRITE_CRLF:
@@ -970,7 +966,6 @@ VSR_WRITE_CRLF:
 	LD	DE,2			; 2 bytes
 	LD	BC,0003H
 	LD	IY,DOS_WRITE
-	LD	C,1
 	CALL	CALL_USERF_GATE
 
 	LD	HL,(SAVE_WRITTEN_CNT)
@@ -985,7 +980,6 @@ VSR_WRITE_CRLF:
 VSR_CLOSE_FILE:
 	LD	B,0
 	LD	IY,DOS_CLOSE
-	LD	C,1
 	CALL	CALL_USERF_GATE
 
 	; Set req->count = lines written
@@ -1009,7 +1003,6 @@ VFS_OPEN_FILE:
 	; Close active stream first
 	LD	B,0
 	LD	IY,DOS_CLOSE
-	LD	C,1
 	CALL	CALL_USERF_GATE
 	XOR	A
 	LD	(STREAM_IS_OPEN),A
@@ -1019,7 +1012,6 @@ VOF_DO_OPEN:
 	LD	DE,0002H		; Open existing
 	LD	BC,0001H		; File 0, read
 	LD	IY,DOS_OPEN
-	LD	C,1
 	CALL	CALL_USERF_GATE
 	JR	C,VOF_OPEN_OK
 
@@ -1067,7 +1059,6 @@ VRC_HAVE_STREAM:
 	POP	HL			; HL = Destination buffer
 	LD	BC,0003H		; File 0, page 3
 	LD	IY,DOS_READ
-	LD	C,1
 	CALL	CALL_USERF_GATE
 
 	; Bytes read = CHUNK_REQ_SIZE - DE
@@ -1108,7 +1099,6 @@ VFS_CLOSE_FILE:
 	LD	(STREAM_IS_OPEN),A
 	LD	B,0
 	LD	IY,DOS_CLOSE
-	LD	C,1
 	CALL	CALL_USERF_GATE
 VCF_DONE:
 	XOR	A
