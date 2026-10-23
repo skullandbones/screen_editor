@@ -308,6 +308,20 @@ How:
       - Test scripts and emulators must never point to the vendor golden
         image for read-write execution.
 
+11. **Prohibition of First-Person Speech (MANDATORY & ENFORCED)**:
+    * Agents must NEVER use first-person speech or pronouns such as "I",
+      "me", "my", "mine", "myself", "we", "us", "our", or "ours".
+    * All communications with the user, progress updates, status reports,
+      commit messages, test logs, code comments, and documentation must be
+      phrased strictly in objective, third-person, passive, or imperative voice
+      (e.g., "The test suite passed", "SEC.COM has been verified", "Applying
+      patch to buffer.c", "The merge completed successfully").
+    * **Rationale**:
+      - Enforces professional, impersonal, and objective engineering standards
+        across all agent interactions, commits, and logs.
+      - Keeps conversation logs concise, factual, and free of anthropomorphic
+        affectations or subjective framing.
+
 ---
 
 ## 3. Prohibited Linux Commands (STRICTLY FORBIDDEN)
