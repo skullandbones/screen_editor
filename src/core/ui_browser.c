@@ -684,7 +684,7 @@ static void render_browser_screen(const char *op_str, const char *prompt_txt)
     screen_row++;
     draw_rule_row(screen_row, '-');
 
-    if (s_total_pages >= 2) {
+    if (s_total_pages >= 2) { /* } else if (total_pages > 1) { */
         screen_row++;
         emit_left_pad(screen_row);
 #ifdef __CPM__

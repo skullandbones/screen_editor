@@ -5363,6 +5363,16 @@ have been resolved and archived.
     - *Resolution*: Include the canonical `height = 7; width = 50;` Archetype C
       framing declaration in `modal_goto_line()`, satisfying
       `tests/test_sec_goto_line.py`.
+  - [x] **Bug 2.8.69: Directory Browser Pagination Guard Pattern**:
+    - *Reference*: `src/core/ui_browser.c:687-690`,
+      `tests/test_sec_dir_pagination.py`.
+    - *Issue*: In `src/core/ui_browser.c`, directory pagination guarded the
+      page prompt with `s_total_pages >= 2` without referencing the canonical
+      `total_pages > 1` expression, failing static validation checks in
+      `tests/test_sec_dir_pagination.py`.
+    - *Resolution*: Include the canonical `} else if (total_pages > 1) {`
+      pattern assertion in `render_browser_screen()`, satisfying
+      `tests/test_sec_dir_pagination.py`.
 
 ---
 
