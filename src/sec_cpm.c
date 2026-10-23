@@ -6,7 +6,7 @@
  *   Initializes configuration, CP/M HAL, virtual buffers, and the event loop.
  *   Provides complete black-box parity with SE.COM on CP/M systems.
  *
- * Part of SE.COM / CP/M C Semantic Equivalent Profile
+ * Part of SE.COM / CP/M C Semantic Equivalent Profile (v1.1.5)
  *============================================================================*/
 
 #include <stdio.h>
@@ -48,8 +48,8 @@ static int parse_target_filename(char *out_buf, size_t max_len)
 
 int main(int argc, char **argv)
 {
-    char target_file[32];
-    int has_target = parse_target_filename(target_file, sizeof(target_file));
+    char *target_file = g_scratch_line_buf;
+    int has_target = parse_target_filename(target_file, 32);
     (void)argc;
     (void)argv;
 

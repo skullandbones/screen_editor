@@ -46,7 +46,7 @@ extern "C" {
 #define MAX_DOC_LINES_32K       16384
 #define MAX_DOC_LINES           16384
 #define MAX_VIRTUAL_SLOTS       2048
-#define MAX_ACTIVE_SLOTS        1024
+#define MAX_ACTIVE_SLOTS        512
 #define CLIPBOARD_MAX_CHARS     128
 #else
 #define MAX_ACTIVE_LINE_STRIDE  1024

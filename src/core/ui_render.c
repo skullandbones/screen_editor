@@ -508,6 +508,7 @@ static void render_tier1_workspace_screen(const char **lines,
                 hal_console_puts(lines[line_idx]);
             }
         }
+        hal_console_clear_eol();
     }
 
     /* Universal Status Bar presence on Row HOST_ROWS */
@@ -780,15 +781,15 @@ static const char *s_help_lines[22] = {
 };
 
 static const char *s_about_lines[9] = {
-    "           SE - Screen Editor",
-    "     version 1.1.5 (2026-10-21) (C)",
-    "             by Dean Jenkins",
+    "               SE - Screen Editor",
+    "         version 1.1.5 (2026-10-21) (C)",
+    "                 by Dean Jenkins",
     "",
     "Google Antigravity 2.23.0 & Gemini 4 Argon Medium",
     "",
     "   Open source software under the MIT License",
     "",
-    s_press_any_key
+    s_press_any_key + 14
 };
 
 static void show_tier1_screen(const char **lines, size_t count,

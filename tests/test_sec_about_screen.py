@@ -15,6 +15,8 @@ import sys
 import time
 import tty
 
+from test_editor_common import drain_all, read_until
+
 
 def find_emu_paths(repo_root):
     workspace_root = os.path.abspath(os.path.join(repo_root, "..", ".."))
@@ -49,24 +51,6 @@ def find_emu_paths(repo_root):
     if os.path.isfile(diskdefs) and "DISKDEFS" not in os.environ:
         os.environ["DISKDEFS"] = diskdefs
     return emu_bin, rom_file, img_file, cpmcp_bin, cpmrm_bin
-
-
-def read_until(master, target, timeout=10.0):
-    buf = b""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        r, _, _ = select.select([master], [], [], 0.05)
-        if r:
-            try:
-                chunk = os.read(master, 4096)
-                if not chunk:
-                    break
-                buf += chunk
-                if target in buf:
-                    break
-            except OSError:
-                break
-    return buf
 
 
 def test_sec_about_screen():
@@ -189,13 +173,22 @@ def test_sec_about_screen():
             print(f"[-] Step 5: B> prompt timeout. "
                   f"Buffer: {repr(out_b[-300:])}", flush=True)
             return False
-        time.sleep(0.3)
+        time.sleep(0.5)
         os.write(master, b"c:\r")
-        read_until(master, b"C>", timeout=10.0)
-        time.sleep(0.3)
+        out_c = read_until(master, b"C>", timeout=10.0)
+        if b"C>" not in out_c:
+            print(f"[-] Step 5: C> prompt timeout. "
+                  f"Buffer: {repr(out_c[-300:])}", flush=True)
+            return False
+        time.sleep(0.5)
+        drain_all(master)
         os.write(master, b"sec\r")
-        read_until(master, b"Col 0", timeout=25.0)
-        time.sleep(0.3)
+        out_splash = read_until(master, b"Col 0", timeout=40.0)
+        if b"Col 0" not in out_splash:
+            print(f"[-] Step 5: Splash timeout. "
+                  f"Buffer: {repr(out_splash[-300:])}", flush=True)
+            return False
+        time.sleep(0.5)
 
         os.write(master, b"a")
         out_about = read_until(

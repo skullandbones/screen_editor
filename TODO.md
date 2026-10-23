@@ -5315,6 +5315,21 @@ have been resolved and archived.
     - *Resolution*: Increase the Step 57 `read_until` timeout from 100.0s to
       450.0s in `tests/test_editor_headless.py`, allowing complete loading
       and status bar verification under full CPU emulation.
+  - [x] **Bug 2.8.65: About Screen Centering, Clear EOL & Stack Headroom**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` §7.12 & §15.2, `src/sec_cpm.c`,
+      `src/core/ui_render.c`, `tests/test_sec_about_screen.py`.
+    - *Issue*: In `src/sec_cpm.c`, the header lacked the `(v1.1.5)` version tag
+      tested by `test_sec_about_screen.py`. In `src/core/ui_render.c`,
+      `s_about_lines` did not have canonical 48-column centering spaces and
+      tier 1 rendering omitted `hal_console_clear_eol()` (`\x1b[K`) on blank
+      rows. Furthermore, stack-allocated `target_file[32]` and 1024 slot bitmap
+      consumed scarce stack space below `0xD000`.
+    - *Resolution*: Add `(v1.1.5)` version tag to `src/sec_cpm.c`, set canonical
+      centering padding in `s_about_lines` and call `hal_console_clear_eol()`
+      after rendering each tier 1 row in `src/core/ui_render.c`, configure
+      `MAX_ACTIVE_SLOTS=512` for CP/M in `src/include/config.h`, map
+      `target_file` to `g_scratch_line_buf` in `main()`, and import robust
+      `read_until` and `drain_all` routines in `tests/test_sec_about_screen.py`.
 
 ---
 
