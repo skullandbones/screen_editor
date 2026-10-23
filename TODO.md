@@ -5373,6 +5373,18 @@ have been resolved and archived.
     - *Resolution*: Include the canonical `} else if (total_pages > 1) {`
       pattern assertion in `render_browser_screen()`, satisfying
       `tests/test_sec_dir_pagination.py`.
+  - [x] **Bug 2.8.70: User 0 Preload, Backspace 0x7F & Multi-Page Checks**:
+    - *Reference*: `docs/UI_UX_DESIGN.md` §7.5, `src/core/ui_browser.asm:4440`,
+      `src/core/ui_browser.c:107,1093`, `tests/test_sec_browser_layout.py`.
+    - *Issue*: In `src/core/ui_browser.c`, `format_drv_usr_str()` omitted User 0
+      digits, preloading `C:` instead of canonical `C0:` as specified in
+      `ui_browser.asm:4440`. Additionally, backspace input handling omitted
+      `0x7F` (ASCII 127), breaking character deletion in PTY terminals, and
+      `test_sec_browser_layout.py` hardcoded `[Page 1/2]` failing disks with
+      three pages.
+    - *Resolution*: Include User 0 (`C0:`) in `format_drv_usr_str()`, add
+      `k == 127` to backspace key handling in `ui_browser_workspace()`, and
+      generalize page indicator checks in `tests/test_sec_browser_layout.py`.
 
 ---
 

@@ -107,7 +107,7 @@ static void format_drv_usr_str(char *dst, char drv, uint8_t usr,
     if (usr >= 10) {
         *dst++ = '1';
         *dst++ = (char)('0' + (usr - 10));
-    } else if (usr > 0) {
+    } else {
         *dst++ = (char)('0' + usr);
     }
     *dst++ = ':';
@@ -1090,7 +1090,7 @@ static int ui_browser_workspace(int mode, char *selected_filename,
                 draw_hl_cell(1);
                 apply_hl_to_box();
             }
-        } else if (k == KEY_BACKSPACE || k == '\b' || k == 8) {
+        } else if (k == KEY_BACKSPACE || k == '\b' || k == 8 || k == 127) {
             if (s_cursor_pos > 0) {
                 s_cursor_pos--;
                 strcpy(&s_in_buf[s_cursor_pos], &s_in_buf[s_cursor_pos + 1]);

@@ -197,9 +197,15 @@ def test_sec_browser_layout():
             print(f"[-] Step 4: Missing top padding '~' row at Row 1. "
                   f"Buffer: {repr(out_open[:500])}", flush=True)
             return False
-        if b"[Page 1/2]  <PgUp>/<PgDn>=Page" not in out_open:
-            print(f"[-] Step 4: Missing '[Page 1/2]  <PgUp>/<PgDn>=Page' row."
-                  f" Buffer: {repr(out_open[-400:])}", flush=True)
+        if (
+            b"[Page 1/" not in out_open
+            or b"]  <PgUp>/<PgDn>=Page" not in out_open
+        ):
+            print(
+                "[-] Step 4: Missing '[Page 1/N]  <PgUp>/<PgDn>=Page' row. "
+                f"Buffer: {repr(out_open[-400:])}",
+                flush=True,
+            )
             return False
         expected_guide = (
             b"~  [ESC]=Cancel  Enter [d:][u:][pattern] to list "
