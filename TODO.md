@@ -5395,6 +5395,17 @@ have been resolved and archived.
       `tests/test_editor_headless.py`.
     - *Resolution*: Harmonize `tests/test_sec_help_spacing.py` to accept either
       canonical Help representation in alignment with headless Step 28.
+  - [x] **Bug 2.8.72: Align Step 5 Open Cancel With Canonical Behavior**:
+    - *Reference*: `src/se.asm:2024-2035`, `tests/test_editor_headless.py:3349`,
+      `tests/test_sec_bugs_2_8_52_to_57.py:370-420`.
+    - *Issue*: In `tests/test_sec_bugs_2_8_52_to_57.py` Step 5, canceling Open
+      File (`Ctrl+O` -> `[N]o` -> `ESC`) was asserted to wipe the document and
+      reset the filename to `(Untitled)`. Per Bug 2.8.60 and canonical assembly
+      behavior (`se.asm:2024-2035` and headless Step 54), canceling Open File
+      preserves the active document buffer, while `Ctrl+W` closes to splash.
+    - *Resolution*: Align Step 5 assertions in `test_sec_bugs_2_8_52_to_57.py`
+      to verify that canceling Open File preserves the active document, and
+      verify that `Ctrl+W` resets the document to `(Untitled)`.
 
 ---
 

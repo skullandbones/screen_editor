@@ -367,9 +367,10 @@ def main():
             return False
         drain_pty(master, 0.3)
 
-        # Test Bug 2.8.56: Clear block with ESC, then press Ctrl+O ->
+        # Test Bug 2.8.60: Clear block with ESC, then press Ctrl+O ->
         # Save changes? -> 'n' -> ESC in Open dialog ->
-        # verify status bar shows | (Untitled)     | and Line    1/1!
+        # verify active document C:T2853.TXT is preserved per canonical
+        # se.asm:2024-2035 and test_editor_headless.py Step 54!
         os.write(master, b"\x1b")
         ok, out = read_until(master, b"^K: Editor keys", timeout=6.0)
         if not ok:
@@ -400,11 +401,23 @@ def main():
             return False
         drain_pty(master, 0.2)
         os.write(master, b"\x1b")
-        ok, out_disc = read_until(master, b"Line    1/1", timeout=8.0)
-        if not ok or b"| (Untitled)     |" not in out_disc:
+        ok, out_disc = read_until(master, b"| C:T2853.TXT    |", timeout=8.0)
+        if not ok:
             print(
-                f"[-] Step 5: Discarding changes did not reset filename to "
-                f"(Untitled) (Bug 2.8.56). Buffer: {repr(out_disc[-300:])}",
+                f"[-] Step 5: Open cancel did not preserve file buffer "
+                f"(Bug 2.8.60). Buffer: {repr(out_disc[-300:])}",
+                flush=True,
+            )
+            return False
+        drain_pty(master, 0.2)
+
+        # Now test Bug 2.8.56: Ctrl+W closes document to splash with (Untitled)
+        os.write(master, b"\x17")
+        ok, out_close = read_until(master, b"| (Untitled)     |", timeout=8.0)
+        if not ok:
+            print(
+                f"[-] Step 5: Ctrl+W did not reset filename to "
+                f"(Untitled) (Bug 2.8.56). Buffer: {repr(out_close[-300:])}",
                 flush=True,
             )
             return False
